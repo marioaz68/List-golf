@@ -1,0 +1,414 @@
+﻿gender,member_type,member_number,first_name,last_name,club,city,email,phone,handicap_registration_type,handicap_registry_number,handicap_index,handicap_torneo,shirt_size,shoe_size_us
+M,member,UA128,Octavio,Pérez Quintana,Club Campestre de Queretaro,Querétaro,sumaqopq@yahoo.com.mx,4421816893,ghin,2917397,9.60,9.60,L,9
+F,member,CA02401,Lucia,Morelos Zaragoza Olivares,Club Campestre de Queretaro,Querétaro,lucia.morelos@hotmail.com,4421489787,ghin,11332412,17.90,17.90,S,8
+F,member,UA235,Eréndira,Nateras Moreno,Club Campestre de Queretaro,Querétaro,ere_nat@yahoo.com.mx,4421251951,ghin,11714299,33.50,33.50,M,7
+F,member,UA100,Gabriela,Aristoy Torres,Club Campestre de Queretaro,Querétaro,gabaristoy@gmail.com,4423227501,ghin,11673308,34,34.00,L,8
+M,member,UB002,Edgar,Nucamendi Barranco,Club Campestre de Queretaro,Querétaro,enucamendi@spimexlatinoamerica.com,4422523789,ghin,590021,11.50,11.50,M,10
+M,member,UA-100,Fernando,Ponce Campos,Club Campestre de Queretaro,Querétaro,fponcec@hotmail.com,4423227483,ghin,11673307,17.90,17.90,XL,10
+M,member,UB092,Oscar,Samaniego,Club Campestre de Queretaro,Querétaro,oscarsamaniego1@gmail.com,4426481842,ghin,2601449,12.60,12.60,L,10
+M,member,B.353,Enrique,Alcocer Pérez,Club Campestre de Queretaro,Querétaro,enalpe1@hotmail.com,14422261526,ghin,584078,14.10,14.10,L,9
+M,member,B052,Faro,Niembro,Club Campestre de Queretaro,Querétaro,fniembro@psiconsultores.com.mx,4422500293,ghin,10261367,13.70,13.70,XL,10
+F,member,UA110001,Lucia,Pérez Silva,Club Campestre de Queretaro,Querétaro,lucypsh@hotmail.com,4422646923,ghin,10696412,20,20.00,M,8
+M,member,UA110001-1,Roberto Carlos,Gutiérrez Cuspinera,Club Campestre de Queretaro,Querétaro,roberto.gutierrez.cn@hotmail.com,4424405159,ghin,9150968,13,13.00,M,11
+M,member,B354,Elias Enrique,Maqueda Morales,Club Campestre de Queretaro,Querétaro,eliasmaqueda80@hotmail.com,4423228041,ghin,11172939,14.10,14.10,XL,12
+M,member,B034,Aaron Roberto,Bolaños Ortiz,Club Campestre de Queretaro,Querétaro,aaronbolor@gmail.com,5512982155,ghin,12730583,29,29.00,L,8
+M,member,UA 552,Leonardo,Lavalle Moreno,Club Campestre de Queretaro,Querétaro,leolavalle@hotmail.com,5537201037,ghin,2770430,10.10,10.10,XL,13
+M,guest,,Santiago Guillermo,Riddle Rodriguez,San Gil,Querétaro,santiagoriddle@hotmail.com,4424088063,ghin,11105739,11.00,11.00,M,9
+F,member,A313,Daniela,de Echavarri Ramon,Club Campestre de Queretaro,Querétaro,1daniela.echavarri14@gmail.com,4424717105,ghin,130844272,6.10,6.10,XS,7
+M,member,A-313,Arturo,de Echavarri Larrondo,Club Campestre de Queretaro,Querétaro,arturo.echavarri14@gmail.com,14421690033,ghin,586965,7.20,7.20,L,8
+F,member,A355,Gabriela,Osornio Alvarez,Club Campestre de Queretaro,Querétaro,igram@infinitummail.com,4421251665,ghin,11126992,20.70,20.70,S,9
+F,member,UA335,Laura,Guerrero Vera,Club Campestre de Queretaro,Querétaro,mostoscafe@hotmail.com,4421486347,ghin,12990347,30.10,30.10,XS,7
+F,member,B071,Nohemi,Pegueros Olvera,Club Campestre de Queretaro,Querétaro,nohemipegueros@hotmail.com,4424711657,ghin,12117707,32,32.00,S,7
+M,guest,,Eduardo,Pliego Baltazar,Balvanera,Querétaro,eduardopliegob@gmail.com,4421140459,ghin,11230727,17.70,17.70,M,12
+M,member,B217,Ruy,Trinidad Morales,Club Campestre de Queretaro,Querétaro,ruy@trend-it.com.mx,5514731099,ghin,590921,17.20,17.20,M,8
+M,member,B037,Oscar,Vázquez Montes,Club Campestre de Queretaro,Querétaro,arq.ovazquez.grupogava@gmail.com,4422363490,ghin,2999556,9.80,9.80,M,11
+F,member,B 037,Erica,Garduño Sosa,Club Campestre de Queretaro,Querétaro,e.garduno.s@hotmail.com,4423226753,ghin,11218814,23,23.00,XS,11
+M,member,UA 514,Israel,Pacheco Gonzalez,Club Campestre de Queretaro,Querétaro,ipg16servicios@gmail.com,4425923962,ghin,11713294,5.30,5.30,L,10
+M,member,B326,Armando,Pardo Perez,Club Campestre de Queretaro,Querétaro,armandopardo63@gmail.com,4421400591,ghin,590143,10.90,10.90,L,11
+M,member,B367,Alejandro Rogelio,Padilla Gomez,Club Campestre de Queretaro,Querétaro,arpadilla@ricsa.com.mx,4423592395,ghin,660067,11.50,11.50,L,11
+M,member,UA-136,Luis Arturo,Nava Alvarado,Club Campestre de Queretaro,Querétaro,luisarturonava@yahoo.com.mx,4421301077,ghin,589919,3.20,3.20,M,10
+M,guest,,José,González Gelabert,Yucatan Country Club,Mérida,gelabert01@gmail.com,9993578898,ghin,568339,19,19.00,L,11
+M,member,B109,Jorge Luis,Gutierrez Garrido,Club Campestre de Queretaro,Querétaro,jorgecache@hotmail.com,4422261873,ghin,589112,5.50,5.50,XXL,11
+F,member,UA.87,Maria Elena,Arroyo,Club Campestre de Queretaro,Querétaro,elenaarroyo@hotmail.com,4421250598,ghin,591402,20.30,20.30,S,8
+M,member,CB103-01,Eduardo,Vera González,Club Campestre de Queretaro,Querétaro,everaglez@gmail.com,4421579985,ghin,12944220,14.80,14.80,M,8
+M,member,B-353,Mauricio,Alcocer Estrada,Club Campestre de Queretaro,Querétaro,enalpe@hotmail.com,24422261526,ghin,11059909,6.90,6.90,M,9
+M,member,UB439,Miguel,Díaz Hernández,Club Campestre de Queretaro,Querétaro,mdiaz0714@yahoo.com,4424791975,ghin,604261,1.70,1.70,XXXL,13
+M,member,UB132,Alejandro,Sosa Pichardo,Club Campestre de Queretaro,Querétaro,alexsosapichardo@gmail.com,4422310078,ghin,12028668,8.20,8.20,L,10
+M,guest,,Oscar,Ronces Jimenez,FMG,Estado de Mexico,ronces.oscar@ronces.mx,3141162225,ghin,323319,15.90,15.90,XL,10
+M,member,B151,Joaquín,Macías González,Club Campestre de Queretaro,Querétaro,joaxmg@gmail.com,4422190846,ghin,11653371,21.10,21.10,M,9
+M,member,UB.439,Ignacio Alejandro,Díaz Hérnandez,Club Campestre de Queretaro,Querétaro,nacho_xla@hotmail.com,4423949674,ghin,604260,2.10,2.10,L,10
+M,member,UA321001,Víctor Andrés,Covarrubias González,Club Campestre de Queretaro,Querétaro,gonzalezandres600@gmail.com,4422703333,ghin,586382,5.10,5.10,L,12
+F,member,B 409,Alejandra,Ceballos Alba,Club Campestre de Queretaro,Querétaro,aleceballosalba@gmail.com,4421869320,ghin,591383,17,17.00,XL,10
+M,member,B091,Rogelio,Molina Alvarez Icaza,Club Campestre de Queretaro,Querétaro,rogmai@hotmail.com,4421223170,ghin,2942807,12.10,12.10,M,9
+M,member,UA110A,Mario,García Isita,Club Campestre de Queretaro,Querétaro,direccion@ktoseguridad.com,5521428968,ghin,11235032,9.90,9.90,S,9
+M,member,A111A,Mauricio,Borja Garfias,Club Campestre de Queretaro,Querétaro,maurbo@hotmail.com,4421864272,ghin,1241561,10.90,10.90,M,10
+M,member,B400,Enrique,Mata Pastrana,Club Campestre de Queretaro,Querétaro,emata@pchomesecurity.mx,4423427981,ghin,3141756,14.60,14.60,L,11
+F,member,A400,Anhelí,Azuri De La Torre,Club Campestre de Queretaro,Querétaro,azuriqueen@hotmail.com,4421272179,ghin,3141760,18.00,18.00,S,7
+M,member,UA528,Alejandro,Reyes Iñiguez,Club Campestre de Queretaro,Querétaro,areyesiniguez@gmail.com,4421900756,ghin,3054245,14.40,14.40,L,10
+M,member,B.109,Jorge,Gutierrez Arroyo,Club Campestre de Queretaro,Querétaro,jorge92010@hotmail.com,4427474510,ghin,401321,2.70,2.70,XL,11
+M,guest,,Felipe,Bustamante,Club Campestre de Tijuana,Tijuana,felipe.bustamantea@hotmail.com,6641883485,ghin,266970,10.20,10.20,M,10
+M,member,UA362,Jorge A,Muñoz Izunsa,Club Campestre de Queretaro,Querétaro,jm.saff90@gmail.com,4424984129,ghin,589874,13.90,13.90,XL,11
+M,guest,,José Carlos,Muñoz Izunza,sin club,Querétaro,jcmi8707@gmail.com,4421275860,other,801D5A84,13.70,13.70,XL,12
+M,member,B011,José Antonio,Galindo Vaqueiro,Club Campestre de Queretaro,Querétaro,jagalindov@gmail.com,4423594334,ghin,3205991,9.90,9.90,M,10
+F,member,A49,Elda Nora,Esponda Morales,Club Campestre de Queretaro,Querétaro,1bidasoa13@hotmail.com,4423592310,ghin,591565,8.00,8.00,L,8
+M,member,B128,Exau Conrado,Piña Tasabia,Club Campestre de Queretaro,Querétaro,tasabia@me.com,4421230450,ghin,2516595,10.70,10.70,M,10
+M,member,A49-1,Joan María,Bonet Lozano,Club Campestre de Queretaro,Querétaro,2bidasoa13@hotmail.com,4424262867,ghin,12139178,14.40,14.40,M,8
+M,member,UA253,Mario Arturo,Urquiza Vargas,Club Campestre de Queretaro,Querétaro,murquiza023@gmail.com,5515104840,ghin,1908775,9.60,9.60,M,10
+M,guest,,Ignacio,San Martín,Real Golf Club de San Sebastián,San Sebastián España,sanmartinaki@gmail.com,34609276301,other,VB01623003,6.20,6.20,L,11
+F,guest,,Arantxa,Olaizola,Real Golf Club de San Sebastián,San Sebastián España,aolaizolagarrido@gmail.com,34616443612,other,VB01724715,28,28.00,S,8
+M,guest,,Apolinar,Roman López,Paraiso Country Club,Cuernavaca,apolinar.roman1972@gmail.com,7771548343,ghin,2048526,4.30,4.30,XL,11
+F,member,A61,Yuyes,Soto,Club Campestre de Queretaro,Querétaro,yuca_sg2000@hotmail.com,4422693893,ghin,591709,10.60,10.60,M,9
+F,member,B28,Jessica,Barreda,Club Campestre de Queretaro,Querétaro,jessibarreda12@gmail.com,4422009383,ghin,591410,11.60,11.60,L,11
+F,member,A243,Laura,Suárez,Club Campestre de Queretaro,Querétaro,lasu@pridigy.net.mx,4422009208,ghin,591733,14.10,14.10,M,8
+M,member,A423,Rafael,Pizarro Suárez Sañudo,Club Campestre de Queretaro,Querétaro,rafaelpizarro18@yahoo.com.mx,4423216050,ghin,2164628,14.90,14.90,L,10
+M,member,A424,José Alfonso,Suarez de Villasante,Club Campestre de Queretaro,Querétaro,suarezjosealfonso@gmail.com,4424675863,ghin,590885,4,4.00,M,10
+M,member,UB278,Fabio,Zaragoza Tapia,Club Campestre de Queretaro,Querétaro,toofaztco@yahoo.com.mx,4421818102,ghin,2941537,13.40,13.40,L,10
+M,guest,,Jun,Moo Lee,Zibata,Querétaro,leeyb20056@gmail.com,4424750214,ghin,11604670,7.20,7.20,L,9
+M,member,A100B,Renato,López Otamendi,Club Campestre de Queretaro,Querétaro,renatolopezo@gmail.com,4422192294,ghin,10246832,17.90,17.90,L,11
+M,guest,,Raúl,Ayluardo Jurado,Paraíso Country Club,Cuernavaca,raul@daproducciones.com.mx,5518509335,ghin,10763489,19.20,19.20,M,10
+M,member,B198,Sergio,Morelos Zaragoza González,Club Campestre de Queretaro,Querétaro,sergiomorelos@gmail.com,4421572770,ghin,0589853,13.70,13.70,M,10
+M,member,UA006,Juan Diego,Pimentel Vera,Club Campestre de Queretaro,Querétaro,juandiegov96@gmail.com,3328440004,ghin,12060878,10.60,10.60,XL,10
+M,guest,,Luis Alejandro,Rojas GarcÍa,La Vista Country Club,PUEBLA,no_tejidos@hotmail.com,2226144102,ghin,11753779,31.40,31.40,XXXL,11
+M,guest,,Héctor,Campos Aldape,Balvanera,Querétaro,hectorcam1993@gmail.com,4421467867,ghin,11332578,9.40,9.40,M,10
+M,guest,,Gerardo Arturo,Razo Santiago,Yucatan Country Club,Mérida,1grazo@prodigy.net.mx,9999002319,ghin,570487,12.40,12.40,XXL,12
+F,guest,,Damaris,Espadas Pech,Yucatán Country Club,Mérida,2grazo@prodigy.net.mx,9999550960,ghin,572592,16.20,16.20,M,9
+M,member,UA 336,Pablo Alberto,Méndez Dorado,Club Campestre de Queretaro,Querétaro,pmdorado@gmail.com,4423278834,ghin,661072,11.70,11.70,L,11
+F,guest,,Hyun,Mi Jang,Balvanera,Querétaro,luisa.jang@gmail.com,4461336588,ghin,11293372,20,20.00,M,7
+M,member,UA053,Horacio,Ovando González,Club Campestre de Queretaro,Querétaro,torosalvaje1@hotmail.com,6641513170,ghin,2922603,14.70,14.70,L,9
+M,member,UA053-1,Horacio,Ovando Flores,Club Campestre de Queretaro,Querétaro,horacioovandof@gmail.com,9999601737,ghin,2922630,3.40,3.40,S,9
+M,guest,,Rodolfo,Amieva Narr,Balvanera,Querétaro,rodolfoamieva@gmail.com,4421780227,ghin,11218244,3.50,3.50,S,9
+M,guest,,Franco,González Olivares,Campestre de Celaya,Celaya,gonzalezf@coresba.com.mx,461230049,ghin,1234430,3.80,3.80,M,9
+M,guest,,Franco,González Villarreal,Campestre de Celaya,Celaya,fgonzalez1534@gmail.com,4611800769,ghin,1234459,12,12.00,L,10
+M,member,A 26,Francisco,Pérez Rojas,Club Campestre de Queretaro,Querétaro,1lic.franciscoperez@hotmail.com,14423593900,ghin,590180,110.00,110.00,XL,10
+M,member,A26,Francisco,Pérez Loarca,Club Campestre de Queretaro,Querétaro,2lic.franciscoperez@hotmail.com,24423593900,ghin,12468323,30.60,30.60,M,8
+M,member,UB386,Jorge Luis,Vargas Herrera,Club Campestre de Queretaro,Querétaro,jo_vahe@hotmail.com,4424469541,ghin,2032489,11.80,11.80,XL,10
+M,member,V 209,Carlos,Garza Adame,Club Campestre de Queretaro,Querétaro,amerlatint@gmail.com,4423652199,ghin,588367,10.10,10.10,M,10
+M,guest,,Juan Luis,Urías,Juriquilla,Querétaro,jlurias@gmail.com,5545402316,ghin,1721367,12,12.00,XL,12
+M,member,UA 315,Mario Alberto,Fernandez Garduño,Club Campestre de Queretaro,Querétaro,mario.fernandez.acn@gmail.com,4425691777,ghin,2835417,9.20,9.20,M,9
+M,guest,,Javier,Flores Infante,Juriquilla,Querétaro,javi@puntomediatalent.com,5551040405,ghin,11537226,12.60,12.60,S,8
+M,member,B-351,Salvador,García Musiate,Club Campestre de Queretaro,Querétaro,sganot28@gmail.com,4421498420,ghin,588231,5.70,5.70,S,8
+M,guest,,Joel Ivan,Orozco García,Balvanera,Querétaro,ivan.orozco1108@gmail.com,4421495193,ghin,11034656,8.30,8.30,M,8
+F,member,A 243,Carolina,Suárez de Villasante,Club Campestre de Queretaro,Querétaro,carosdev24@gmail.com,4422052377,ghin,1162276,11.60,11.60,S,8
+M,guest,,Julio Alejandro,Rodriguez,Club Campestre de Tijuana,Tijuana,juliorr2011@hotmail.com,6644405154,ghin,9745174,11.60,11.60,L,10
+F,member,A.25,Diana Gabriela,Pérez López,Club Campestre de Queretaro,Querétaro,grupoartheria@yahoo.com.mx,4426683018,ghin,3141752,12.80,12.80,S,7
+M,guest,,Victor,Sánchez Aguilar,Campestre de San Luis,San Luis Potosi,victorsa1979@outlook.com,4448296893,ghin,12049620,15.50,15.50,XL,11
+M,guest,,Gerardo,Sosa Pichardo,Sin club,Querétaro,sosapgerardo@gmail.com,5541444433,other,16.50,16.50,16.50,M,10
+M,member,B403,Miguel Angel,Magaña Morales,Club Campestre de Queretaro,Querétaro,mammorales@hotmail.com,4422502298,ghin,3080844,8.70,8.70,S,9
+M,guest,,José Luis,Ortega Reyes,Juriquilla,Querétaro,joseluisortega@galga.mx,7757849489,ghin,11704787,15.20,15.20,S,10
+M,guest,,Jose Francisco,Hernández Vázquez Mellado,Balvanera,Querétaro,pacohvm1984@gmail.com,4423245458,ghin,11596756,1.20,1.20,S,8
+M,member,A549,Luis,Sosa Obregón,Club Campestre de Queretaro,Querétaro,luis_sosa16@hotmail.com,4422580738,ghin,590818,2.10,2.10,M,11
+M,member,UA345,Luis Cesar,Valencia García,Club Campestre de Queretaro,Querétaro,garciav55@hotmail.com,4424673192,ghin,12689256,9.20,9.20,S,11
+M,member,UA061,Manuel Roberto,Sosa Calderon,Club Campestre de Queretaro,Querétaro,rsosa47@gmail.com,5541413613,other,33.50,33.50,33.50,L,9
+M,member,CA36601,Miguel,Alcocer Morelos Zaragoza,Club Campestre de Queretaro,Querétaro,miguelalcocer@hotmail.com,4423426207,ghin,584001,8.10,8.10,XL,11
+M,member,A513,Andres,Morelos Zaragoza,Club Campestre de Queretaro,Querétaro,andresmorelosz@gmail.com,4422727356,ghin,589771,1.6,1.60,S,9
+M,member,B119,Jose Antonio,Magaña Aguilar,Club Campestre de Queretaro,Querétaro,miguelmamo20@gmail.com,4422847143,ghin,3054246,14.20,14.20,M,9
+M,guest,,Antonio,Quintanilla Coronel,San Gil,Querétaro,antonioquinta@hotmail.com,4422264244,ghin,11261919,20.10,20.10,M,11
+M,member,B212,Jaime,Velazquez Sánchez,Club Campestre de Queretaro,Querétaro,jaimevelsan@gmail.com,4424750516,other,75A9CA40,33,33.00,L,12
+M,member,UA127D,Yairo,Marina Alcocer,Club Campestre de Queretaro,Querétaro,yairoma@hotmail.com,4424999142,other,335F2CDD,28.10,28.10,L,9
+M,guest,,Salvador,García Gabriel,Zibata,Querétaro,salvador58garciag@gmail.com,4423320978,ghin,12151278,20.60,20.60,M,8
+M,member,UB319,Samuel,Sandoval Osorio,Club Campestre de Queretaro,Querétaro,sandovalsam@icloud.com,4423549014,ghin,10246834,7.90,7.90,M,12
+M,guest,,Leonardo,Beltrán Carrera,Juriquilla,Querétaro,leonardobeltran09@gmail.com,4425593481,ghin,12327256,13.80,13.80,S,8
+M,guest,,Marco Antonio,Galindo Madrigal,Pulgas Pandas,Aguascalientes,magalindo@kpmg.com.mx,4491554959,ghin,979279,16.50,16.50,L,11
+M,member,B164,Manuel,Ochoa Aguilar,Club Campestre de Queretaro,Querétaro,ochoino@hotmail.com,4424679453,ghin,12110512,15.70,15.70,S,10
+M,member,B064,Juan Pablo,Cardenas Palacios,Club Campestre de Queretaro,Querétaro,juanpablocardenas1@hotmail.com,4422470512,ghin,585944,9.00,9.00,M,10
+M,guest,,Juan Manuel,Rivera Esquivel,FMG,Estado de Mexico,jmrivera@gruporiva.com,5543504205,ghin,987692,15.40,15.40,M,9
+M,member,UA068,Nicolás,González Arestegui,Club Campestre de Queretaro,Querétaro,narestegui@icloud.com,4423295805,ghin,12745521,30.30,30.30,L,10
+M,guest,,Sergio,Cruz Fernandez,Club de Golf Vallescondido,Ciudad de  México,scf1306@hotmail.com,5579703202,ghin,2497674,7.30,7.30,L,9
+M,guest,,Marcos,Rivera Ocampo,Juriquilla,Querétaro,mrivera2222@msn.com,4421435602,ghin,1124129,14.60,14.60,XL,9
+M,guest,,Ricky,Allen,Juriquilla,Querétaro,ricky.allen@mail.com,4425533339,ghin,153520,9.70,9.70,XL,12
+M,guest,,Mauricio,Álvarez Zerecero,El Campanario,Querétaro,mauricio@mg-arquitectos.com,4422076140,ghin,658042,6.20,6.20,L,11
+M,member,UA118,Humberto,Montaño Bacca,Club Campestre de Queretaro,Querétaro,hhmontano@yahoo.com,4424691000,ghin,2607389,13.30,13.30,M,10
+M,guest,,Fidel,Alegria Hernandez,San Gil,San Juan del Río,fidel18077alegria@gmail.com,4271030125,ghin,11264390,,0.00,L,9
+M,member,B093,Manuel Mauricio,Ramírez Herrejon,Club Campestre de Queretaro,Querétaro,mramirez@manopco.com,4423593711,ghin,2032325,6.40,6.40,XL,11
+M,member,UA255,Isaías Daniel,Rico Garcia,Club Campestre de Queretaro,Querétaro,isaiasdanielrico@gmail.com,4422732026,ghin,12110513,18.20,18.20,M,8
+M,guest,,Edgar,Padrón,Zibata,Querétaro,eddpp1013@gmail.com,5539023235,ghin,12120535,7,7.00,M,9
+M,guest,,Joshue,Gross Saavedra,Club Campestre de Tijuana,Tijuana,joshuegross@hotmail.com,6644794124,ghin,9672686,2.80,2.80,M,10
+M,member,UB361,Carlos José,Hernández Olivera,Club Campestre de Queretaro,Querétaro,reroca25@gmail.com,4421865277,ghin,11174596,22.50,22.50,L,11
+M,member,UA-108,José Pablo,Alcocer Cano,Club Campestre de Queretaro,Querétaro,josepabloac2004@gmail.com,4423311218,ghin,10825841,12.10,12.10,XL,10
+F,member,CB16002,Alejandra,Olvera Septién,Club Campestre de Queretaro,Querétaro,alejandra@notaria21qro.mx,4423228156,ghin,591602,9.70,9.70,M,10
+F,member,A543,Adriana Guadalupe,Álvarez López,Club Campestre de Queretaro,Querétaro,facturas1975@hotmail.com,4421279373,ghin,591395,7.80,7.80,M,10
+M,guest,,Edgar,Balseca Morales,La Huerta,Puebla,ebm.consultoria.litigio@gmail.com,2211723824,ghin,11232272,6.40,6.40,M,8
+M,member,A039,Alfonso Santiago,González Ramos,Club Campestre de Queretaro,Querétaro,alfonossantiaglezr@gmail.com,4422734917,ghin,10912052,6.20,6.20,M,10
+M,guest,,José Manuel,Figueroa Herbert,San Gil,Querétaro,chemiux@gmail.com,4271210503,ghin,11413376,7.60,7.60,M,10
+F,guest,,Bertha,Balderas Schoofield,El Campanario,Querétaro,beckybs@outlook.es,4421817066,ghin,661915,11.80,11.80,S,9
+F,guest,,Ma. Eugenia,Muñoz de Rivera,El Campanario,Querétaro,eugeniamunoz@me.com,4423784241,ghin,662937,12.30,12.30,M,8
+M,guest,,César,Peralta Vergara,Zibatá,Querétaro,cesarpmx@yahoo.com.mx,5543606045,other,77A25A15,20.10,20.10,L,9
+M,member,B077,Juan Carlos,Arroyo de Haene,Club Campestre de Queretaro,Querétaro,borision@yahoo.com,4421482560,ghin,584728,12,12.00,XL,11
+M,member,UA331,Rene,Cerecer,Club Campestre de Queretaro,Querétaro,cerecervi@hotmail.com,4423839799,ghin,2339095,20.50,20.50,M,10
+M,guest,,Patricio,Maccise Pérez,El Campanario,Querétaro,patriciomaccise@gmail.com,4424714444,ghin,12219117,4.70,4.70,L,10
+M,member,B83,Julian,Urquiza Fernández,Club Campestre de Queretaro,Querétaro,julianurquiza@me.com,4422390175,other,C7C4ABB9,20,20.00,XXL,12
+M,guest,,José Miguel,Del Llano Montoya,Juriquilla,Querétaro,josdelllano@hotmail.com,4423808329,ghin,12020450,26.40,26.40,XL,12
+M,member,UA354,Jose Alberto,Prieto Andrade,Club Campestre de Queretaro,Querétaro,jprieto@capa3.com.mx,4421860000,ghin,3017461,17,17.00,L,10
+M,guest,,Sergio Ivan,Huerta Luna,Bellavista,Ciudad de  México,shuertaluna@gmail.com,5515108044,ghin,2529258,4.30,4.30,L,10
+M,member,B365,Luis R,Velázquez Déciga,Club Campestre de Queretaro,Querétaro,lrvelazquez@velazquezdeciga.com.mx,4423227307,other,A346C42B,25.40,25.40,M,10
+F,member,A553,Mónica,Ochoa Aguilar,Club Campestre de Queretaro,Querétaro,m8a.a@hotmail.com,4422392987,ghin,11458469,14.10,14.10,S,8
+M,guest,,Luis Fernando,Duberty Batalla González,Juriquilla,Querétaro,duberty.b@gmail.com,4426689766,ghin,13098948,18,18.00,L,11
+M,member,A111D,José Alberto,Fernández Chávez,Club Campestre de Queretaro,Querétaro,osofernandez@icloud.com,4422076874,ghin,587393,8.60,8.60,S,9
+F,member,A.111D,Sonia,Rodríguez Esqueda,Club Campestre de Queretaro,Querétaro,fdez.sonia@hotmail.com,4421235500,ghin,3165910,20.70,20.70,XS,6
+M,member,A406,José Carlos,Borbolla Garcia,Club Campestre de Queretaro,Querétaro,jocamamex@hotmail.com,4423155961,ghin,585125,21.80,21.80,XL,11
+M,guest,,Juan Pablo,Rangel Contreras,El Campanario,Querétaro,jprclibertad@gmail.com,4421442620,ghin,590329,11.10,11.10,M,8
+M,guest,,Carlos,Villamor Ramirez,Club Campestre de Tijuana,Tijuana,carlosvillamor@hotmail.com,6642045824,ghin,8035262,16.30,16.30,L,9
+F,member,UB067,Dorina,Osorio Lara,Club Campestre de Queretaro,Querétaro,dorinaosorio@hotmail.com,4424613044,ghin,0591606,14.10,14.10,L,9
+M,member,B 304,Javier,Urquiza Padilla,Club Campestre de Queretaro,Querétaro,jup0791@gmail.com,4422192541,ghin,591048,2.70,2.70,S,9
+M,guest,,Matias,Reyes Herrera,Club Campestre de Queretaro,Querétaro,mreyesh11@icloud.com,4421713542,other,906415DB,14,14.00,L,13
+F,member,UA364,Concepción,Vega Urquiza,Club Campestre de Queretaro,Querétaro,conyvegaurquiza@hotmail.com,4422758508,ghin,591808,9.80,9.80,L,10
+M,guest,,Eduardo,Herbert Alvarez,San Gil,San Juan del Rio,eduardo-herbert@hotmail.com,4271215265,ghin,11499329,8.00,8.00,L,10
+F,member,H12,María Cristina,Urquiza Escobar,Club Campestre de Queretaro,Querétaro,saloneltrebol@hotmail.com,4424452679,ghin,591789,15,15.00,L,11
+M,guest,,Sergio,Villa Alcaraz,Juriquilla,Querétaro,jr-villaa@hotmail.com,4495524879,ghin,2829409,1.4,1.40,M,12
+M,member,B.18,Gonzalo,Alvárez Septien,Club Campestre de Queretaro,Querétaro,gonzalo@mg-arquitectos.com,4421301925,ghin,584487,14,14.00,M,9
+M,member,B030,Juan Pablo,Borja,Club Campestre de Queretaro,Querétaro,jborjagar@gmail.com,4422581693,ghin,585344,2,2.00,M,9
+M,member,B348,Antonio L,Recamier Mayer,Club Campestre de Queretaro,Querétaro,arecamier@club campestre de queretaro.mx,4428079296,ghin,590335,4.90,4.90,M,8
+M,guest,,Oscar,Bolaños Rojas,Bajamar,Tijuana,oscarbolanosrojas@gmail.com,6647827440,ghin,13180615,28.20,28.20,L,9
+M,member,A441,Sergio,Borbolla Diaz,Club Campestre de Queretaro,Querétaro,licsergioborbolladiaz@gmail.com,4421579836,ghin,585127,0.80,0.80,M,11
+M,guest,,Fernando,Montiel Campos,Club Campestre de Tijuana,Tijuana,1fernandomleyva@gmail.com,16644259626,ghin,0207653,16.40,16.40,L,11
+M,member,UA091,Armando A,Gomez Guzman,Club Campestre de Queretaro,Querétaro,vivesanovivemejor@gmail.com,4422584066,ghin,588498,5,5.00,M,10
+M,member,CA20401,José  Ernesto,Hernández Ruiz,Club Campestre de Queretaro,Querétaro,joseerhr@gmail.com,4422633376,ghin,589199,6.10,6.10,M,10
+M,member,A-204,Juan Pablo,Hernández Ruiz,Club Campestre de Queretaro,Querétaro,jphr1103@gmail.com,4422633377,ghin,12060874,3.90,3.90,M,10
+M,member,CB39101,Raúl Guillermo,Hernández Suarez,Club Campestre de Queretaro,Querétaro,rgh@tsl.com.mx,4422633356,ghin,589207,2.10,2.10,S,10
+M,member,A.205,Salvador,Hernández Felix,Club Campestre de Queretaro,Querétaro,chavadxl@gmail.com,4422633315,ghin,589180,2.50,2.50,M,11
+M,guest,,José de Jesús,Alcocer Castro,Juriquilla,Querétaro,jjac_1986@hotmail.com,4421573190,ghin,583997,3.60,3.60,XL,12
+M,member,UA254,Pedro Antonio,Camino Herrera,Club Campestre de Queretaro,Querétaro,pacamino71@gmail.com,4421480502,ghin,585666,3.60,3.60,M,10
+M,member,B93,Manuel,Ramírez Rincón,Club Campestre de Queretaro,Querétaro,manuelrmz2701@gmail.com,4422742709,ghin,3080841,8.20,8.20,XL,11
+M,member,B90,José Eduardo,Juárez Rios,Club Campestre de Queretaro,Querétaro,ejuarez@grupogalvan.com.mx,4421250509,ghin,589293,8,8.00,L,10
+F,guest,,Susana,Martínez Sánchez,El Campanario,Querétaro,susa30@hotmail.com,4422199741,ghin,662737,9.30,9.30,S,8
+M,member,B012,Emilio,Torres Peresandi,Club Campestre de Queretaro,Querétaro,emilioperesandi@gmail.com,4422472330,ghin,590918,13.20,13.20,M,11
+M,guest,,Francisco Sergio,Chávez Curiel,Altozano Tabasco,Villahermosa,labchontalpa@hotmail.com,9933300654,ghin,2533331,20.00,20.00,S,7
+M,guest,,Miguel Ángel,Miyar Laris,Bosque Real Country Club,Ciudad de  México,mmiyar@hotmail.com,5541927795,ghin,399287,17.90,17.90,S,8
+F,guest,,Claudia Guadalupe,Miranda Palacios,Altozano Tabasco,Villahermosa,rh-sureste@hotmail.com,9932199612,ghin,11407068,24.60,24.60,M,8
+M,member,A 314,Julio,Larrondo García,Club Campestre de Queretaro,Querétaro,jlarrondo@gruponr.mx,5520690223,ghin,11149524,13.80,13.80,M,10
+M,guest,,José Eduardo,Calzada Rovirosa,Juriquilla,Querétaro,ppymconsulting@gmail.com,4422301797,ghin,12131832,16.40,16.40,L,10
+M,guest,,José,Solórzano Herrejon,Tres Marías,Morelia,jsolorzanoh@hotmail.com,4433280727,ghin,2968588,15.30,15.30,L,10
+M,member,V214,Jorge Alberto,Muñoz Bonilla,Club Campestre de Queretaro,Querétaro,jmbkansas@icloud.com,4421867200,ghin,589871,27,27.00,XL,13
+M,member,B325,José Luis,Lelo de Larrea Clouthier,Club Campestre de Queretaro,Querétaro,jlldlc@gmail.com,4422379177,ghin,589320,6.30,6.30,XXL,9
+F,guest,,Liliana,Mier,El Campanario,Querétaro,limia0104@hotmail.com,4421489539,ghin,662825,16.80,16.80,L,9
+M,member,UB045,Regis,René Bigorgne,Club Campestre de Queretaro,Querétaro,bigonulla@gmail.com,4499111006,ghin,10320829,8.90,8.90,XXL,11
+M,member,UB-045,Sebastian,Bigorgne Rodríguez,Club Campestre de Queretaro,Querétaro,sebabas.gerard@gmail.com,4421570955,ghin,10320835,12.30,12.30,XXL,12
+M,member,UA232,Fernando,Blanco,Club Campestre de Queretaro,Querétaro,ferblancor@icloud.com,4427214564,ghin,12130855,6,6.00,XL,12
+M,guest,,Victor Alejandro,Ramos Sarabia,Country Club Playa Palmas,Ciudad del Carmen campeche,vars_ramos@hotmail.com,9381325256,ghin,10755002,10.70,10.70,M,9
+M,member,A256,Jaime,García Campos,Club Campestre de Queretaro,Querétaro,jgar_c@solaqro.com,4422474249,ghin,13185824,15.30,15.30,M,10
+M,guest,,Federico,Gutiérrez Garrido,El Campanario,Querétaro,fg_crach@hotmail.com,4421258470,ghin,659610,2.70,2.70,L,10
+M,guest,,Sebastián,Gutiérrez Mier,El Campanario,Querétaro,sebaspachon19@hotmail.com,4422393186,ghin,659631,1.50,1.50,L,11
+M,member,B221,Jorge,Cárdenas Palacios,Club Campestre de Queretaro,Querétaro,palacioscardenas@hotmail.com,4421705414,ghin,585903,9.60,9.60,S,10
+M,member,B271,Carlos,Escobar Villarreal,Club Campestre de Queretaro,Querétaro,caresvil@gmail.com,4422075870,ghin,2636559,8.70,8.70,S,9
+M,guest,,Francisco,García Arriola,El Campanario,Querétaro,frangarriola@gmail.com,4422362360,ghin,659486,0.4,0.40,M,10
+M,member,CA51501,Victor Roberto,Vega Alvarez,Club Campestre de Queretaro,Querétaro,virobeal@hotmail.com,4423225857,ghin,10785369,16.70,16.70,M,11
+M,member,B299,José Antonio,Romero Altamirano,Club Campestre de Queretaro,Querétaro,aromeroa21@hotmail.com,4422395230,ghin,590571,20.50,20.50,M,9
+M,guest,,Miguel Angel,Trejo Lopez,Juriquilla,Querétaro,miguel_atl@outlook.com,4421701681,ghin,12195041,25.20,25.20,XXL,12
+M,member,B265,Eugenio,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,eugenio_ag1@icloud.com,4427908952,ghin,10677069,6.10,6.10,M,11
+M,guest,,Oscar Gustavo,Enciso Lopez,Sin Club,Querétaro,segper.enciso@yahoo.com,4422006471,other,97EECD67,13.30,13.30,L,10
+F,member,B.265,Ana Victoria,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,anavialv@gmail.com,4421144915,ghin,106769444,4.60,4.60,M,9
+M,member,B 265,Mario,Álvarez Zerecero,Club Campestre de Queretaro,Querétaro,mario.alvarez@onaxis.mx,14421490361,ghin,584513,1.20,1.20,L,11
+F,member,B_265,María Teresa,Goyeneche Besoy,Club Campestre de Queretaro,Querétaro,mariate@portalito.com,24421490361,ghin,591574,16.60,16.60,S,9
+M,member,B-265,Mario,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,mario_ag1@icloud.com,34421490361,ghin,106677068,0.40,0.40,M,11
+M,guest,,Carlos,Flores Ortega,San Carlos,Metepec,cflores_o@yahoo.com.mx,7222090093,other,475409,12.90,12.90,S,7
+M,member,A.355,Eduardo,Carrillo Osornio,Club Campestre de Queretaro,Querétaro,ec2997544@gmail.com,4427407382,ghin,11127011,2.30,2.30,L,13
+M,member,UA 364,Gerardo,Concepcion Vega,Club Campestre de Queretaro,Querétaro,gerardoconcepcionv@gmail.com,4424957644,ghin,10260296,2.70,2.70,XL,14
+M,member,UA 364 -1,Gerardo,Concepción Valverde,Club Campestre de Queretaro,Querétaro,gerardoconcepcionvalverde@gmail.com,4421279228,ghin,586154,14.80,14.80,L,11
+M,member,CB29802,Diego,García González,Club Campestre de Queretaro,Querétaro,diego31194@gmail.com,4421605809,ghin,588056,1.70,1.70,S,9
+M,member,B171,Fernando,Noriega Castro,Club Campestre de Queretaro,Querétaro,noriega.fer@gmail.com,4423644715,ghin,12104222,15.50,15.50,XL,11
+M,member,A25,Arturo,Carrillo Hernández,Club Campestre de Queretaro,Querétaro,vinedosfacturacion@yahoo.com.mx,4421296961,ghin,401314,17.70,17.70,S,9
+M,member,UB445,Arturo,Espinosa Mayorga,Club Campestre de Queretaro,Querétaro,aespinosa@grupo-novatech.mx,4422596883,ghin,2603474,16.40,16.40,L,10
+M,member,UA364-2,Eugenio,Concepción Vega,Club Campestre de Queretaro,Querétaro,eugenioconcepcionv@gmail.com,4461008781,ghin,10731099,1.30,1.30,XL,13
+M,member,CA34601,Francisco Jose,Maciel Urquiza,Club Campestre de Queretaro,Querétaro,franmaciel24@hotmail.com,4425594837,ghin,589484,0.20,0.20,L,12
+M,member,B81,Eduardo,Urbiola Sanchez,Club Campestre de Queretaro,Querétaro,eurbiolas1@gmail.com,4422302425,ghin,590925,5,5.00,M,10
+F,member,B-81,Cecilia,Mosti Olea,Club Campestre de Queretaro,Querétaro,ceciliamosti1@gmail.com,4421865535,ghin,591596,20.70,20.70,M,8
+M,member,B422,Luis Felipe,López Sánchez,Club Campestre de Queretaro,Querétaro,luisfelipe@logoro.com.mx,4421863598,ghin,2254875,2.20,2.20,XL,10
+M,guest,,Diego,Vega Urquiza,Zibata,Querétaro,diegovegaurquiza@gmail.com,4422199853,ghin,11240985,7.20,7.20,L,11
+M,member,B-170,Luis Gabriel,Serrano Rodriguez,Club Campestre de Queretaro,Querétaro,lserrano5647@gmail.com,4421549018,ghin,10643252,1.10,1.10,M,8
+M,guest,,Bruno,Guerrero Gómez,Juriquilla,Querétaro,bruno.guerrerogomez@gmail.com,4422064838,ghin,11699458,8.20,8.20,S,8
+M,member,A437,Rodrigo,Soto Pesquera,Club Campestre de Queretaro,Querétaro,1rsoto@trailermechanic.com,14421867018,ghin,590851,3.20,3.20,L,11
+F,guest,,Hazel Susana,Martinez Silva,El Campanario,Querétaro,hazelsusana@yahoo.com.mx,4424944939,ghin,2240138,26.90,26.90,L,6
+M,member,B072,Fernando,Ruíz Alcocer,Club Campestre de Queretaro,Querétaro,fernandoruizalcocer@hotmail.com,4422583846,ghin,12684487,20.20,20.20,M,8
+M,guest,,Jorge,Rangel Cobo,Los Amigos Golf Club,California,jorge.rangelcobo@gmail.com,4423290120,ghin,12648995,16.50,16.50,M,10
+M,member,V002,Jorge,Alvarez Septien,Club Campestre de Queretaro,Querétaro,pelayo_alvarez@hotmail.com,4422741605,ghin,584494,14,14.00,L,11
+M,member,A.27,Rodrigo,Urquiza Escobar,Club Campestre de Queretaro,Querétaro,jrurquiza@gmail.com,4421868815,ghin,590993,1,1.00,XL,12
+M,guest,,Luis Enrique,Sánchez Rucobo y Huerdo,Bellavista,Ciudad de  México,lesrh77@gmail.com,5615817434,ghin,650709,5,5.00,L,12
+F,member,UA502,Daniela,Rivera Vázquez,Club Campestre de Queretaro,Querétaro,danielariverav@icloud.com,5522990065,ghin,12712649,26.30,26.30,XS,6
+M,guest,,Fernando Adolfo,Montiel Leyva,Tijuana Campestre,Tijuana,2fernandomleyva@gmail.com,26644259626,ghin,1330069,10.30,10.30,L,10
+M,guest,,Juan Francisco,Boiles Torres Landa,Juriquilla,Querétaro,franciscob@provinciajuriquilla.mx,4423229561,ghin,10226586,11.00,11.00,L,11
+M,member,A 307,Darío,Malpica Basurto,Club Campestre de Queretaro,Querétaro,dario.malpica@me.com,4423228125,ghin,589514,12.60,12.60,M,11
+M,guest,,Sergio,Avila Martínez,Juriquilla,Querétaro,saavilamartinez@gmail.com,5515108622,ghin,2199675,14.50,14.50,L,9
+M,guest,,Bruno,Brieño Damián,El Campanario,Querétaro,bruno.brieno@icloud.com,4422499368,ghin,12170382,19.00,19.00,L,10
+M,member,B 422,Luis Felipe,López Niembro,Club Campestre de Queretaro,Querétaro,pipeloni2007@gmail.com,4427124495,ghin,1121883,5.50,5.50,S,10
+M,member,A130,Christian Alejandro,Salgado Arzate,Club Campestre de Queretaro,Querétaro,chsagado@gmail.com,4422267990,ghin,2904377,13.20,13.20,M,11
+M,guest,,Oscar Alfonso,Álvarez Martinez,Bosque Real Country Club,Huixquilcan Edo de México,oalvarez_cornfields@hotmail.com,5554145048,ghin,363028,30.40,30.40,L,10
+M,member,B387,Carlos,Garza Urquiza,Club Campestre de Queretaro,Querétaro,cgarzau@gmail.com,4425064753,ghin,588449,6.40,6.40,M,11
+M,member,B295,Enrique,Cárdenas,Club Campestre de Queretaro,Querétaro,ecb@gismexico.com.mx,4424122415,ghin,585860,6.60,6.60,L,9
+M,member,A338,Arturo,Alcocer Muñoz,Club Campestre de Queretaro,Querétaro,tutoalmu@gmail.com,4422810151,ghin,13086523,12.50,12.50,L,11
+M,guest,,Luis Fernando,Sánchez Piña,Balvanera,Querétaro,mig16.tar.gz@gmail.com,5568101982,ghin,10644208,9.70,9.70,S,8
+M,guest,,Cesar,Peralta Rodriguez,Zibata,Querétaro,cesper025@gmail.com,5515112871,other,DE0291EB,18,18.00,S,10
+M,guest,,Alain,Avena,Balvanera,Querétaro,alain.avena@gmail.com,4424468892,ghin,12480667,14.20,14.20,L,13
+M,guest,,Carlos Octavio,Gonzalez Cardone,Club Campestre El Copal,Ciudad de  México,carlosgcardone@hotmail.com,5555057108,ghin,10904260,11.80,11.80,L,11
+M,member,CA111C,Carlos Adrian,Alcocer Bost,Club Campestre de Queretaro,Querétaro,carlosadrianalcocer1987@outlook.es,4423594844,ghin,10604492,6.60,6.60,M,11
+F,guest,,María del Carmen,Ruiz Moreno,Club Campestre Lourdes,Saltillo Coahuila,cruizlxv@gmail.com,8441787584,ghin,12680579,31.30,31.30,XXL,9
+M,guest,,Jose Alejandro,Archundia Buendia,Madeiras Country Club,Ciudad de  México,alexarchundia@studioproshop.com.mx,5565746174,ghin,2072802,16.40,16.40,M,9
+M,guest,,Enrique,Garibay Badillo,San Gil,Querétaro,enriquegaribay21@gmail.com,5519483644,ghin,10583396,14.10,14.10,XXL,11
+F,member,UB_045,Miriam Carolina,Rodriguez Barrientos,Club Campestre de Queretaro,Querétaro,caro.la.invasora@gmail.com,4499304760,ghin,11161083,27.80,27.80,M,9
+M,member,A331,Nicolas,Cerecer Lira,Club Campestre de Queretaro,Querétaro,nicolasceli18@icloud.com,4422589626,ghin,12655997,10,10.00,S,8
+M,guest,,Antonio,Udave Alonso,Juriquilla,Querétaro,antoniioudave@gmail.com,4423623823,ghin,12020456,14.50,14.50,S,8
+M,guest,,Fernan,Gonzalez Perez,El Campanario,Querétaro,fernangonp@gmail.com,4421388030,ghin,12496649,18.30,18.30,M,11
+M,guest,,Jorge,Udave Alonso,Juriquilla,Querétaro,uda.jor@hotmail.com,4423236392,ghin,12020454,7.30,7.30,M,9
+M,guest,,Bernardo,Espinosa Hernández,Club de Golf Palma Real,Zihuatanejo,berny_92@me.com,7555570239,other,9,9,9.00,M,9
+M,guest,,Audel,Camarena Barrera,Club de Golf Palma Real,Zihuatanejo,tiburon_cb@hotmail.com,7555576737,other,8,8,8.00,M,9
+M,guest,,Jose,S Oregon,El Cid,Mazatlan,joregong@gmail.com,6691229771,other,11316929,17,17.00,L,12
+F,guest,,Jessica,Perez Rojano,El Campanario,Querétaro,jessispr@hotmail.com,4424752333,ghin,663366,8,8.00,M,8
+M,guest,,Juan Ignacio,Toxqui González,San gil,San Juan del Río,nachotox27@icloud.com,4273047685,ghin,12661892,15.80,15.80,XS,9
+M,guest,,Maximino,Suárez Zarate,Campestre de Celaya,CELAYA,administracion@pmsmetalmuebles.com,4611079301,ghin,1235324,20.90,20.90,XL,9
+M,member,A086,Alfonso,Soto Pesquera,Club Campestre de Queretaro,Querétaro,ponmil@hotmail.com,4422501340,ghin,590852,1.60,1.60,XL,12
+F,member,B.151,Anaid,Galindo Morales,Club Campestre de Queretaro,Querétaro,anaidgalindo@gmail.com,4421244032,ghin,12309736,28.60,28.60,XS,5
+M,member,B.096,José Agustín de Jesús,González del Real,Club Campestre de Queretaro,Querétaro,glezreal@gmail.com,5544889711,ghin,11800401,28.10,28.10,M,8
+M,member,B411,Rodrigo,Castro Villar,Club Campestre de Queretaro,Querétaro,rodrigocastro10@hotmail.com,4421584400,ghin,585989,5,5.00,M,9
+M,member,UB 316,Carlos,Macias Medina,Club Campestre de Queretaro,Querétaro,cmacias@costco.com.mx,4422197346,ghin,589412,8.70,8.70,L,9
+M,guest,,Jorge,Torres Soto,Santa Sofía Country Club,El Arenal Jalisco,wazu_007@hotmail.com,3317643205,other,,11.00,11.00,,9
+M,guest,,Arturo,Ramírez Balderas,El Campanario,Querétaro,arturorb98@outlook.com,4423432683,ghin,660233,5.60,5.60,,12
+M,guest,,Carlos Alberto,Trejo Flores,San Gil,Querétaro,c.trejo@absi2070.com,4428248057,ghin,11411847,12.60,12.60,,13
+M,guest,,José Omar,Maldonado Rodríguez,Balvanera,Querétaro,maldonado.omar550@gmail.com,4427122924,ghin,12712660,0.10,0.10,,10
+M,member,UA 515,Luis Carlos,Icazbalceta Valle,Club Campestre de Queretaro,Querétaro,luis.icaz@outlook.com,4422810694,ghin,12062276,20.70,20.70,,10
+M,guest,,Carlo Augusto,Álvarez García,San Gil,San Juan del Rio,alvarez_carlo@yahoo.com,4423560186,ghin,2914366,11.60,11.60,,10
+M,guest,,Mark,Seifert Espinosa,Sin club,Querétaro,markseifertespinosa@gmail.com,4424254730,ghin,12246582,12.40,12.40,,9
+M,guest,,Modesto,Quezada,Club Campestre de Queretaro,Querétaro,coninpark@yahoo.com,4427479577,other,234768,26,26.00,,8
+M,guest,,Sergio,Cruz Elvira,Pagni,San Diego ca,scruzcindsupply@aol.com,16192891498,ghin,619 2891498,19.60,19.60,,10
+M,member,A339,Samuel,Cardenas Palacios,Club Campestre de Queretaro,Querétaro,sam_cp7@hotmail.com,4424674697,ghin,585945,22.50,22.50,,10
+M,guest,,Werner,Emil Heinze Meade,Campestre de San Luis,San Luis Potosí,werner.heinze@banorte.com,4444813922,ghin,727083,2.20,2.20,,10
+M,guest,,Rolando,Peña Castro,Club Campestre de Tijuana,Tijuana,yaqui_mexico@hotmail.com,6641881614,ghin,178962,7.10,7.10,,9
+M,member,UA203,Arturo,Marina Vega,Club Campestre de Queretaro,Querétaro,arturomarina@gmail.com,4423911248,ghin,2889569,6,6.00,,7
+F,member,V 240,María Esther,Perusquia Zarazua,Club Campestre de Queretaro,Querétaro,guerasanudo@hotmail.com,4423560884,ghin,591639,12.40,12.40,,7
+M,guest,,Israel,Gijón Ortega,Balvanera,Querétaro,i.gijon@hotmail.com,4422691640,ghin,10235283,16.60,16.60,,11
+M,guest,,Víctor Arturo,Mata Casas,Balvanera,Querétaro,cparturomata@gmail.com,4272198851,ghin,11230722,24,24.00,,8
+M,member,X010,Jaime,García Olivares,Club Campestre de Queretaro,Querétaro,jaime.garciaolivares@gmail.com,4422300720,ghin,588268,15.20,15.20,,9
+M,member,B065,Juan Salvador,Llosa Fernández Riverol,Club Campestre de Queretaro,Querétaro,juans.llosa@gmail.com,4442755632,ghin,589356,2.80,2.80,,10
+M,member,X012,Jorge,Cárdenas Vázquez,Club Campestre de Queretaro,Querétaro,jcardenasv_qro@hotmail.com,4421125974,ghin,585965,18.70,18.70,,10
+M,member,X008,César,Jimenez Arreola,Club Campestre de Queretaro,Querétaro,cesarnotaria2qro@hotmail.com,4421570438,ghin,589290,10.70,10.70,,10
+M,member,A326,Jorge,Lois Rodriguez,Club Campestre de Queretaro,Querétaro,jorge.lois@notaria9qro.mx,4422191152,ghin,589362,9.90,9.90,,8
+M,guest,,Agustín,Buenrostro Massieu,Juriquilla,Querétaro,agustinbuenrostro73@hotmail.com,5513849405,ghin,13230856,11.70,11.70,,10
+M,guest,,Juan Antonio Francisco,Hernández Vázquez Mellado,Balvanera,Querétaro,vazquezmelladotono@gmail.com,4424575619,ghin,11656849,5.60,5.60,,9
+M,guest,,Leonardo,Ruiz Valdez,Balvanera,Querétaro,l.ruiz014@ebc.edu.mx,4422867810,ghin,11224578,5.60,5.60,,10
+F,member,UA521,Esperanza,Kim,Club Campestre de Queretaro,Querétaro,esperanzapark@gmail.com,4421242971,ghin,591582,17,17.00,,8
+F,member,UA91,Paulina,Septién Lomelí,Club Campestre de Queretaro,Querétaro,paulinaseptien2@hotmail.com,4422393977,ghin,591652,20.30,20.30,,9
+M,guest,,Ivan,Martinez Olvera,Zibata,Querétaro,ivan.marolv.90@gmail.com,4423560300,ghin,12262000,14.60,14.60,,10
+M,member,B031,Arturo,Septién Moreno,Club Campestre de Queretaro,Querétaro,arturoseptien@prodigy.net.mx,4422302621,ghin,590768,0.20,0.20,,11
+M,member,B-133,Javier,Cárdenas Bolio,Club Campestre de Queretaro,Querétaro,jcardenas@montacargasbolio.com.mx,4421804752,ghin,585864,10.80,10.80,,9
+M,guest,,Juan,Martinez Salcido,Cantalagua,Michoacan,j_m_salcido@yahoo.com.mx,7223011844,ghin,483037,8.80,8.80,,12
+M,member,B140,Gonzalo,Alvarez Zerecero,Club Campestre de Queretaro,Querétaro,gonzoaz1@aol.com,4422010822,ghin,584540,4.70,4.70,,9
+M,guest,,Jesús A.,Trujillo Juangorena,Club Campestre de Tuxtla,Tuxtla Gutierrez,jtrujillo@isocie.com,6674312193,other,,28,28.00,,10
+M,guest,,Juan Arturo,Hernández Luna,Balvanera,Querétaro,jarturohluna@gmail.com,5513315103,ghin,2903814,14.20,14.20,XS,10
+M,guest,,Baldomero,Barrios,Springbrook golf course,Chicago,nazabarrios@yahoo.com,16303193300,ghin,10206142,16.10,16.10,,10
+M,guest,,Miguel,García,Glendwoodei,Chicago,2012miguelgarcia@gmail.com,17085439499,ghin,10053372,13.40,13.40,,9
+F,guest,,Martha,de la Fuente,Club La Rosita,Torreon,martha_idelafuente@hotmail.com,8711044386,ghin,1125835,28.70,28.70,,6
+M,guest,,Raúl,López Máynez,San Carlos,Metepec,lopezmaynez@gmail.com,7222612332,ghin,12711751,5.80,5.80,,9
+M,guest,,Raúl,López  Alvarado,San Carlos,Metepec,rlarla54@gmail.com,5612007232,ghin,479963,19.90,19.90,,9
+M,guest,,Josué,de la Garza Roa,Juriquilla,Querétaro,nuevoespaciodc@gmail.com,4421905688,ghin,2649495,15.20,15.20,,9
+M,guest,,Javier,Romero Flores,Santa Anita,Guadalajara,1gia.seguridad@icloud.com,13335966070,ghin,12649587,7.30,7.30,,10
+M,guest,,J. Antonio,Jalili,Lagunas de Miralta,Altamira,jjalili@hotmail.com,8331000731,ghin,987074,11.20,11.20,,10
+M,guest,,Alfredo Pablo,Estrada Romero,Juriquilla,Querétaro,ap_estradaromero@hotmail.com,4461522978,ghin,1123902,5.90,5.90,,8
+M,guest,,Sergio,Salmón,Juriquilla,Querétaro,caseriocaserio@gmail.com,4423294837,ghin,12916672,28.10,28.10,,11
+M,guest,,Melitón,Martínez Salcido,Mazatlan,Mazatlan,meli_salcido@hotmail.com,6691234027,ghin,5855045,8.00,8.00,,9
+M,guest,,Eduardo,Galdeano Valle,El Campanario,Querétaro,eduardogaldeano@gmail.com,4421282993,ghin,2952496,16.90,16.90,,11
+M,guest,,Mauricio,Carbajo Arteaga,Malanquin,San Miguel de Allende,mauriciocarbajo@hotmail.com,4151670951,ghin,1126216,6.60,6.60,,10
+M,guest,,Antonio,Garcia,Springbrook golf course,Chicago,tonys8311@gmail.com,17734504877,ghin,10053365,16,16.00,,11
+M,guest,,Fernando,Ayala Hernandez,La Vista Country Club,Puebla,fdo_ayala86@hotmail.com,2225507589,ghin,1444185,3.90,3.90,,11
+M,member,UA134,José,Cassaretto Fernández,Club Campestre de Queretaro,Querétaro,jcassaretto@manopco.com,4424679950,ghin,585966,8,8.00,,10
+M,member,A437-1,Rodrigo,Soto Franco,Club Campestre de Queretaro,Querétaro,2rsoto@trailermechanic.com,24421867018,ghin,12227200,3.90,3.90,,11
+M,member,UA369,Alberto Enrique,Martinez Mendoza,Club Campestre de Queretaro,Querétaro,bepawet@gmail.com,4423304570,ghin,11278618,22.80,22.80,,8
+M,guest,,Miguel,Vázquez Vargas,Bellavista,Ciudad de México,miguel74.jr@hotmail.com,5554025773,ghin,2730574,19.30,19.30,,9
+M,guest,,Martin,Maciel,Olympia Fields Country,Chicago,pendiente@pendiente.com,17738517150,ghin,10032234,12.20,12.20,,9
+M,guest,,Juan Roberto,Jiménez Villarreal,San Gil,San Juan Del Rio,juanrobertojimenez@yahoo.com.mx,4425595103,ghin,2349700,12,12.00,,6
+M,guest,,Santiago,Gómez Urquiza,Campestre de San Luis,San Luis Potosí,santigomez01@hotmail.com,4442043078,ghin,3155081,6.40,6.40,,11
+M,guest,,Rafael,Trejo Flores,San Gil,San Juan del Río,rafa19_30@hotmail.com,4271210689,ghin,11550882,19.80,19.80,,11
+M,guest,,Salim,Abud,Campestre de San Luis,San luis Potosi,salim021@icloud.com,4441419148,ghin,10232903,0.40,0.40,,10
+M,guest,,Said,Abud Goldaracena,Campestre de San Luis,San Luis Potosi,said.abgo@hotmail.com,4442040159,ghin,10233713,1.30,1.30,,12
+M,guest,,Roberto,Abud Barrett,Campestre de San Luis,San Luis Potosí,rabud_@hotmail.com,4441650706,ghin,10754921,6.40,6.40,,12
+M,guest,,Alejandro,De La Flor Lopez,Campanario,Querétaro,alexdelaflor@gmail.com,4425594833,ghin,11246256,8.00,8.00,,11
+M,guest,,Carlos,Sánchez Salman,Bosque Real Country Club,Ciudad de México,csalman7@hotmail.com,5565654277,ghin,11179907,23.50,23.50,,9
+M,guest,,Patricio,Sánchez Salman F,Bosque Real Country Club,Ciudad de México,pato.salman@hotmail.com,5529194249,ghin,12115424,27.90,27.90,,9
+M,guest,,Horacio,Roman Hernández,Bellavista,Ciudad de México,horaciotercero72@gmail.com,5542458169,ghin,2908958,5.40,5.40,,9
+M,member,B 139,Eduardo,Loyola A,Club Campestre de Queretaro,Querétaro,eloyola63@gmail.com,4422502449,ghin,589384,5.90,5.90,,9
+M,guest,,Isidro,Romero  Alcántara,San Gil,San Juan del Rio,1rome_rey@yahoo.com,17731476205,ghin,11396334,,0.00,,10
+M,guest,,Rosalio,Lizarraga Tiznado,Campestre Mazatlan,Mazatlan,2rome_rey@yahoo.com,27731476205,ghin,,,0.00,,9
+M,guest,,José Antón,Salcedo López,Juriquilla,Querétaro,joseantoniosalcedo16@gmail.com,4424666432,ghin,13204664,27.90,27.90,,12
+M,guest,,Luis Enrique,Tafolla Lopez,Zibatá,Querétaro,luistafolla2004@gmail.com,4521269580,ghin,12699072,8,8.00,,11
+M,guest,,SERGIO,MASSIEU,SIN CLUB,Querétaro,semaga2015@gmail.com,4424710731,ghin,589705,18,18.00,,9
+M,member,UB098,Oscar,Peralta Casares,Club Campestre de Queretaro,Querétaro,oscarpc@me.com,4272268429,ghin,11732893,15.50,15.50,,9
+M,guest,,Fernando,Palomares Souza,Juriquilla,Querétaro,palomaressouza@gmail.com,5554090095,ghin,2308538,1.80,1.80,,10
+M,guest,,Diego,Day,Bear Creek Golf Club,Murrieta California,2gia.seguridad@icloud.com,23335966070,ghin,11416066,1.80,1.80,,11
+M,member,B.071,Marco Antonio,Ortiz Paz,Club Campestre de Queretaro,Querétaro,maopmx@me.com,4422192192,ghin,2516590,12.30,12.30,,10
+M,member,UB240,David,Navarro Ledesma,Club Campestre de Queretaro,Querétaro,d.navarroledezma@gmail.com,4423375052,ghin,297248,11.50,11.50,,9
+M,guest,,Sebastian,Carrera,Zibata,Querétaro,sebas_carre92@yahoo.com,4422192723,ghin,10260441,3.60,3.60,,10
+F,member,B139,Eva María,Loyola De los Cobos,Club Campestre de Queretaro,Querétaro,evaloyola20@gmail.com,4422472803,ghin,977703,3,3.00,,7
+M,guest,,Enrique,Vázquez Albarran,Bellavista,Ciudad de México,silsa_07@infinitummail.com,5559595689,ghin,2162418,8.30,8.30,,9
+F,member,UB359,Myriam,Rodríguez Maldonado,Club Campestre de Queretaro,Querétaro,myris55@hotmail.com,5559514789,ghin,12682083,27.10,27.10,,8
+M,guest,,Eleazar,Alvarado Soria,Malanquin,San Miguel de Allende,karlacarter@hormail.com,4151680041,other,,,0.00,,10
+M,member,B038,Alfonso,Vera Hernández,Club Campestre de Queretaro,Querétaro,alfonsovh@hotmail.com,4422196516,ghin,10915061,9.40,9.40,,10
+M,guest,,Enrique,Fernández Martínez García,Malanquin,San Miguel de Allende,efmg18@yahoo.com,4151383828,ghin,12548832,12.80,12.80,,11
+F,member,A.313,Camila,de Echavarri Ramón,Club Campestre de Queretaro,Querétaro,2daniela.echavarri14@gmail.com,24421690033,ghin,10711422,3.7,3.70,,8
+M,guest,,Fred Saúl,Bravo Reyes,Las fuentes,Puebla,vaferssi@gmail.com,9982925446,ghin,12690026,22.80,22.80,,7
+M,guest,,Isaac Abraham,de la Barreda Pineda,Club de golf las fuentes,Puebla,abrahamdlbp@gmail.com,2224513504,ghin,1903980,3.30,3.30,,8
+M,guest,,Juan Pablo,Layseca,San Gil,San Juan del Río,jlaysecam@hotmail.com,4274886774,ghin,426910,5.50,5.50,,10
+M,guest,,Diego,Dorantes Ojeda,El Campanario,Querétaro,diegodo10@hotmail.com,4424671868,ghin,22.20,22.60,22.60,,10
+M,guest,,Carlos Antonio,Jalili Alfaro,Lagunas de Miralta,Altamira,cjalili@hotmail.com,8331880960,ghin,987071,2.20,2.20,,8
+M,member,CA54501,Luis Miguel,Correa Olivares,Club Campestre de Queretaro,Querétaro,luismcorrea@outlook.es,4422300705,ghin,2296037,8.20,8.20,,9
+M,member,V222,Luis Felipe,Garcia Alcocer,Club Campestre de Queretaro,Querétaro,atilagarcia357@gmail.com,4423691679,ghin,587879,14.30,14.30,,9
+M,member,V216,Jose Guadalupe,Toscano,Club Campestre de Queretaro,Querétaro,pillolac@palmalac.com.mx,4422075921,ghin,590919,17,17.00,,11
+M,member,UA142,John Christian,Poulsen Bremont,Club Campestre de Queretaro,Querétaro,glastore.qro@outlook.com,4427210453,ghin,590250,16.50,16.50,,12
+M,member,B344,Sergio,Serrano Padilla,Club Campestre de Queretaro,Querétaro,sergio.serrano@me.com,4422582018,ghin,590790,12.80,12.80,,10
+M,member,B220,Eduardo,Caturegli,Club Campestre de Queretaro,Querétaro,ecaturegli@yahoo.com,4423337095,ghin,586010,11.70,11.70,,12
+M,guest,,Emilio,Emilio Cano Pérez,Juriquilla,Querétaro,emilio.cano@iivsa.com.mx,4424796520,ghin,12743817,9.30,9.30,,9
+M,guest,,Juan Pablo,Ruiz Segura,Campestre de Celaya,Celaya,jpablo.ruiz14@gmail.com,4612068544,ghin,11216472,11.30,11.30,,9
+M,guest,,Juan Pablo,Ríos Castañon,Campestre de Celaya,Celaya,jprios1319@gmail.com,4612307638,ghin,1235224,12.90,12.90,,10
+M,guest,,Franco Alejandro,Sánchez Ocampo,Bellavista,Ciudad de México,franco.so7749@gmail.com,5541303563,ghin,10696071,5.50,5.50,,10
+M,member,A421,Sergio Antonio,Reyes García,Club Campestre de Queretaro,Querétaro,pilloreyesg@gmail.com,4422190097,ghin,pendiente,22,22.00,,11
+M,member,B156,Gerardo,Suarez Carrillo,Club Campestre de Queretaro,Querétaro,gsuarez@gruponr.mx,4422261412,ghin,590876,15.60,15.60,,9
+M,member,V247,Carlos,Fernandez de la Isla,Club Campestre de Queretaro,Querétaro,carlos53delaisla@gmail.com,4421162790,ghin,587442,11,11.00,,11
+M,guest,,Jose Luis,de Larrea Saldaña,Bellavista,Ciudad de México,joseluis@jladvisor.com,4422497701,ghin,589321,2.80,2.80,,9
+M,member,B.170,Diego,Serrano Rodriguez,Club Campestre de Queretaro,Querétaro,diego.serranordz07@gmail.com,4426539616,ghin,10696410,2.3,2.30,,11
+F,member,B.177,Angelina,Feregrino Vega,Club Campestre de Queretaro,Querétaro,gelyfevega@gmail.com,4461382186,ghin,593588,20.70,20.70,,9
+M,member,UA104B,ALBERTO,REYES GALVÁN,Club Campestre de Queretaro,Querétaro,alreyes@me.com,4422197248,ghin,2908939,13.40,13.40,,10
+M,guest,,Hector,ibar Cruz Boy,El Campanario,Querétaro,hector920@hotmail.com,4422472115,ghin,11570003,16.20,16.20,,8
+M,guest,,Alejandro,López Pérez,Club  Sta. Margarita,Irapuato,alejandro-lope@hotmail.com,4621076357,ghin,1229590,10.30,10.30,,9
+M,guest,,Jorge Cesar,Pacheco Gonzalez,Malanquin,San miguel de Allende,cpc.jorgepacheco@gmail.com,4771305785,ghin,11454913,4.90,4.90,,10
+M,member,B370,Julián,González De Cossio Urquiza,Club Campestre de Queretaro,Querétaro,juliangcu@hotmail.com,4423818868,ghin,2153589,12.10,12.10,,10
+M,member,B183,Alejandro Bernardo,De los Cobos y Vega,Club Campestre de Queretaro,Querétaro,cobos3406@hotmail.com,4426322073,ghin,2903835,10.40,10.40,,10
+M,member,UB158,Hugo,Burgos Garcia,Club Campestre de Queretaro,Querétaro,diezmo@yahoo.com,4421862539,ghin,11652603,27.80,27.80,,10
+M,member,A438,Juan Carlos,Reyes Garcia,Club Campestre de Queretaro,Querétaro,juancarlosreyes@pinar.mx,4423382332,ghin,590340,9,9.00,,10
+M,guest,,Alejandro,Escalante Camino,Juriquilla,Querétaro,a.escalante@webuild.mx,4422393726,ghin,12181087,18,18.00,,10
+M,member,Ua319,Francisco javier,Fernández Calzada,Club Campestre de Queretaro,Querétaro,pacofdz9@gmail.com,4421279638,ghin,587377,10.00,10.00,,11
+M,guest,,JOSE,SAYAVEDRA,Zirandaro,Querétaro,jose.sayavedra@gmail.com,4421216960,other,14,14,14.00,,10
+M,guest,,Armando,Bucio,Zibata,Querétaro,a.bucio@webuild.mx,4422811644,other,43ED2608,16.30,16.30,,12
+M,guest,,Mario,Vargas Guerra,Club de Golf La Hacienda,Ciudad de México,mario-vargas1@live.com.mx,5542614838,ghin,11664405,6.60,6.60,,10
+M,member,UB292,Francisco,Niembro,Club Campestre de Queretaro,Querétaro,quiconiembro@gmail.com,4421863086,ghin,11990750,7.70,7.70,,9
+M,guest,,Jose Esteban,Estrada Romero,Zibata,Querétaro,estradajoseesteban@gmail.com,4422066998,ghin,11080189,7.70,7.70,,8
+M,guest,,Paulo,Padrón Ibarra,Bosque Real Ejecutivo,Ciudad de México,apoyin28@yahoo.com.mx,5551047635,other,84AGF878,10,10.00,,9
+M,guest,,Marco Aurelio,Paulin Perea,Juriquilla,Querétaro,mpaulin@bankaool.com,4422655130,other,2164638,12.30,12.30,,10
+M,member,H008,Mario,Ramirez Retolaza,Club Campestre de Queretaro,Querétaro,sincorreo@correo.com,4461390084,ghin,590307,11,11.00,,10
+M,member,B227,Alejandro,Rodriguez Vieyra,Club Campestre de Queretaro,Querétaro,alejandrorv@arovi.com,4424469673,ghin,590474,7.30,7.30,,9
+F,guest,,karla,Carter Díaz,Malanquin,san miguel de allende,karlacarter007@gmail.com,4151533555,ghin,11228207,10.90,10.90,,8
+M,guest,,Rafael,Helfon Daniel,Bellavista,Ciudad de México,rhd@alhel.com.mx,5518002632,ghin,488745,10.10,10.10,,9
+M,member,B078,Alfonso,Becerril Arechiga,Club Campestre de Queretaro,Querétaro,alanbecar1@hotmail.com,5554364330,ghin,584903,25.20,25.20,,11
+M,guest,,Gregorio,Leon,Zibata,Querétaro,gregorio.leon.db@gmail.com,4461382838,other,51AD708D,29.10,29.10,,9
+M,guest,,Oscar Leopoldo,Domínguez Mateos,Pachuca,Querétaro,oscardom57@gmail.com,4423342037,ghin,45CF53DF,23.30,23.30,,8
+M,member,B130,Ricardo,Gonzalez Marquez,Club Campestre de Queretaro,Querétaro,gomarquez2000@yahoo.com.mx,4646451466,ghin,3122837,22,22.00,,9
+M,member,A348,Napoleón José,Chapa Estrada,Club Campestre de Queretaro,Querétaro,napochapa@gmail.com,4421731412,ghin,586058,19.30,19.30,,12
+M,guest,,Oscar Alfonso,Rangel Montes,Campestre de San Luis,San Luis Potosí,arangelm1@hotmail.com,4421528406,other,19,16,16.00,,8
+M,guest,,Ivan,Jimenez Rodriguez,Chiluca,Atizapan,ivan@cis-mex.net,5541456484,ghin,10664782,23.50,23.50,,10
+M,guest,,JUAN ALVARO,ENRIQUEZ LOZANO,Club de Golf La Hacienda,ATIZAPAN DE ZARAGOZA ESTADO DE MEXICO,aenriquez@enriquezlozano.com.mx,5512683785,ghin,307263,21.30,21.30,,8
+M,guest,,Roque Manuel,Mercado Portillo,Balvanera,Querétaro,parrilladasargentinasceo@gmail.com,4421561009,ghin,12743849,25.70,25.70,,10
+M,guest,,Roberto,Arena Elizondo,Campestre de León,León,arena_robertoc@hotmail.com,4772663754,ghin,574072,4.40,4.40,,11
+M,guest,,Víctor,González Guerrero,zibata,Querétaaro,victor.gonzalez@srmsistemas.com,5522190286,ghin,12241162,23.40,23.40,,9
+M,guest,,Juan Arturo,Torreslanda Cabrera,Juriquilla,Querétaro,jarturotlc@gmail.com,1111111111,ghin,,8,8.00,,10
+M,guest,,Juan Carlos,Rodríguez Jiménez,Santa margarita,Irapuato,jcrmex@outlook.com,4611897016,ghin,12807587,6.40,6.40,,9
+M,member,B176,Eduardo,Cabrera,Club Campestre de Queretaro,Querétaro,lalocabrera5@hotmail.com,4421862736,ghin,585513,6,6.00,,11
+M,member,B 097,Luis Angel,Aranda,Club Campestre de Queretaro,Querétaro,cortesia@cortesia.com,4423614702,ghin,PENDIENTE,24,24.00,,8
+M,guest,,Alfredo,Salinas Tager,La Vista Country Club,Puebla,faridtager@icloud.com,5578513188,ghin,10783748,14.80,14.80,,9
+M,guest,,Juan Carlos,Autrique Benasini,Amanali Country Club,Tepeji del Río,jautrique@icloud.com,5560663033,ghin,983259,17.60,17.60,,11
+M,guest,,Francisco Javier,Huerta Romero,Álamo Country Club,Celaya,javierh2002@hotmail.com,4611171614,ghin,11673001,15.20,15.20,,9
+M,guest,,Juan Arturo,Torreslanda Urquiza,Juriquilla,Querétaro,j.arturo@grupotl.com,1234567890,ghin,1124181,8.60,8.60,,11
+M,guest,,JOSE LUIS,SIMBECK ESCOBEDO,Los Tabachines,Cuernavaca,golfsimbeck@yahoo.com.mx,5539389772,ghin,1138298,13.60,13.60,,11
+M,guest,,Melesio,Reyes Hernández,Álamo Country Club,Celaya,r_melesio@hotmail.com,4773260220,ghin,109115767,14.60,14.60,,11
+M,member,UA326,Ricardo,de la Vega Serrano,Club Campestre de Queretaro,Queretaro,delav@quitopa.com.mx,4421902844,ghin,586773,4.60,4.60,,10
+M,guest,,Carlos Alberto,Sierra Cárdenas,Balvanera,CORREGIDORA,sierra.cardenas.carlos@gmail.com,7821310664,ghin,2255630,14.90,14.90,,8
+M,member,A309,Luis Felipe,Zamorano,Club Campestre de Queretaro,Queretaro,lzamoranog@hotmail.com,5510681418,ghin,10584230,21.10,21.10,,10
+M,guest,,RICARDO,URQUIZA DOMENGE,CAMPANARIO,QUERETARO,ricardoud@live.com.mx,4421751636,ghin,590963,2.50,2.50,,12
+F,guest,,Marybel,Rodríguez Espinoza,La Hacienda,Ciudad de México,meyita.mr@gmail.com,5517783678,ghin,11664404,21.40,21.40,,8
+M,guest,,Mario Arturo,Trejo López,SIN CLUB,Querétaro,mtrejo@corporativolegas.com,4423676554,other,DE46484E,24.40,24.40,,10
+M,guest,,Juan Camilo,Villa Aristizabal,Zirandaro,San Miguel Allende,cvillaa@gmail.com,5514414080,ghin,11466116,9.10,9.10,,11
+M,member,UA 087,Miguel,García Arroyo,Club Campestre de Queretaro,Querétaro,miguelgarcia071008@gmail.com,4427727634,ghin,10696408,1,1.00,,9
