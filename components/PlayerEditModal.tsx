@@ -16,7 +16,7 @@ type Player = {
   id: string;
   first_name: string | null;
   last_name: string | null;
-  gender: "M" | "F" | null;
+  gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
   handicap_torneo: number | null;
   phone: string | null;
@@ -109,7 +109,7 @@ export default function PlayerEditModal({
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [gender, setGender] = useState<"M" | "F">("M");
+  const [gender, setGender] = useState<"M" | "F" | "X">("M");
   const [handicapIndex, setHandicapIndex] = useState<string>("");
   const [handicapTorneo, setHandicapTorneo] = useState<string>("");
   const [phone, setPhone] = useState("");
@@ -131,7 +131,9 @@ export default function PlayerEditModal({
     async function loadInitialData() {
       setFirstName(player?.first_name ?? "");
       setLastName(player?.last_name ?? "");
-      setGender(player?.gender === "F" ? "F" : "M");
+      setGender(
+        player?.gender === "F" ? "F" : player?.gender === "X" ? "X" : "M"
+      );
       setHandicapIndex(player?.handicap_index == null ? "" : String(player.handicap_index));
       setHandicapTorneo(
         player?.handicap_torneo == null ? "" : String(player.handicap_torneo)
@@ -415,11 +417,12 @@ export default function PlayerEditModal({
               Género
               <select
                 value={gender}
-                onChange={(e) => setGender(e.target.value as "M" | "F")}
+                onChange={(e) => setGender(e.target.value as "M" | "F" | "X")}
                 style={fieldStyle}
               >
                 <option value="M">Caballeros</option>
                 <option value="F">Damas</option>
+                <option value="X">Mixto</option>
               </select>
             </label>
 

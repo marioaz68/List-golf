@@ -662,7 +662,8 @@ export async function generateGroupsByCategory(formData: FormData) {
     return av - bv;
   });
 
-  const groupedChunks: typeof resolved[][] = [];
+  type EntryGroupItem = (typeof resolved)[number];
+  const groupedChunks: EntryGroupItem[][] = [];
 
   for (const k of catKeys) {
     const list = byCat.get(k)!;

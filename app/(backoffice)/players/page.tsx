@@ -60,7 +60,7 @@ type Player = {
   phone: string | null;
   email: string | null;
   club_id: string | null;
-  clubs: ClubRef | null;
+  clubs: ClubRef[] | null;
   birth_year: number | null;
 };
 
@@ -112,7 +112,8 @@ function categoryForPlayer(
   return relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null;
 }
 
-function clubLabelFromClub(club: ClubRef | null | undefined) {
+function clubLabelFromClub(clubs: ClubRef[] | null | undefined) {
+  const club = Array.isArray(clubs) ? (clubs[0] ?? null) : null;
   const v = (club?.name ?? club?.short_name ?? "").trim();
   return v || "—";
 }
@@ -304,7 +305,7 @@ export default async function PlayersPage(props: {
     );
   }
 
-  const players = (playersData ?? []) as Player[];
+  const players = (playersData ?? []) as unknown as Player[];
 
   const playersWithCategory: PlayerWithCategory[] = players.map((p) => {
     const g = normalizeGender(p.gender);
@@ -480,50 +481,54 @@ export default async function PlayersPage(props: {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((p) => (
-              <tr key={String(p.id)} className="bg-white">
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "—"}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {genderLabel(normalizeGender(p.gender))}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.handicap_index ?? "—"}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.birth_year ?? "—"}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.categoryLabel}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.teeLabel}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {clubLabelFromClub(p.clubs)}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.email ?? "—"}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  <PlayerRowActions
-                    player={{
-                      id: String(p.id),
-                      first_name: p.first_name,
-                      last_name: p.last_name,
-                      gender: p.gender,
-                      handicap_index: p.handicap_index,
-                      handicap_torneo: p.handicap_torneo,
-                      phone: p.phone,
-                      email: p.email,
-                      club: p.clubs?.name ?? null,
-                      club_id: p.club_id ?? null,
-                    }}
-                  />
-                </td>
-              </tr>
-            ))}
+            {sorted.map((p) => {
+              const club = Array.isArray(p.clubs) ? (p.clubs[0] ?? null) : null;
+
+              return (
+                <tr key={String(p.id)} className="bg-white">
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "—"}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {genderLabel(normalizeGender(p.gender))}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.handicap_index ?? "—"}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.birth_year ?? "—"}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.categoryLabel}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.teeLabel}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {clubLabelFromClub(p.clubs)}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.email ?? "—"}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    <PlayerRowActions
+                      player={{
+                        id: String(p.id),
+                        first_name: p.first_name,
+                        last_name: p.last_name,
+                        gender: p.gender,
+                        handicap_index: p.handicap_index,
+                        handicap_torneo: p.handicap_torneo,
+                        phone: p.phone,
+                        email: p.email,
+                        club: club?.name ?? null,
+                        club_id: p.club_id ?? null,
+                      }}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
 
             {sorted.length === 0 ? (
               <tr>

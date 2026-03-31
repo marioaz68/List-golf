@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   LayoutDashboard,
@@ -41,7 +41,11 @@ type TournamentMini = {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+
+  const searchParams = useMemo(() => {
+    if (typeof window === "undefined") return new URLSearchParams();
+    return new URLSearchParams(window.location.search);
+  }, [pathname]);
 
   const tournamentId = searchParams.get("tournament_id");
 

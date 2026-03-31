@@ -1,5 +1,7 @@
 import NewPlayerForm from "../NewPlayerForm";
 
+export const dynamic = "force-dynamic";
+
 type SP = {
   returnTournament?: string;
 };

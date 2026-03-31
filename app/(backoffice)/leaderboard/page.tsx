@@ -57,6 +57,8 @@ type LeaderboardRow = {
   round_scores: Record<number, number>;
 };
 
+type LeaderboardBaseRow = Omit<LeaderboardRow, "pos">;
+
 type CategoryTable = {
   key: string;
   category_id: string | null;
@@ -76,14 +78,14 @@ function numOrNull(v: unknown) {
   return Number.isFinite(n) ? n : null;
 }
 
-function compareLeaderboard(a: LeaderboardRow, b: LeaderboardRow) {
+function compareLeaderboard(a: LeaderboardBaseRow, b: LeaderboardBaseRow) {
   if (a.total_gross !== b.total_gross) return a.total_gross - b.total_gross;
   if (a.rounds_played !== b.rounds_played) return b.rounds_played - a.rounds_played;
   return a.name.localeCompare(b.name, "es");
 }
 
-function withPositions(rows: Omit<LeaderboardRow, "pos">[]): LeaderboardRow[] {
-  const sorted = [...rows].sort(compareLeaderboard);
+function withPositions(rows: LeaderboardBaseRow[]): LeaderboardRow[] {
+  const sorted: LeaderboardBaseRow[] = [...rows].sort(compareLeaderboard);
 
   let lastScore: number | null = null;
   let lastPos = 0;
@@ -352,7 +354,7 @@ export default async function LeaderboardPage(props: {
     scoresByPlayer.set(rs.player_id, current);
   }
 
-  const overallBase: Omit<LeaderboardRow, "pos">[] = entries.map((entry) => {
+  const overallBase: LeaderboardBaseRow[] = entries.map((entry) => {
     const player = playersById.get(entry.player_id);
     const category = entry.category_id
       ? categoriesById.get(entry.category_id)
@@ -376,7 +378,7 @@ export default async function LeaderboardPage(props: {
   const scoredBase = overallBase.filter((x) => x.rounds_played > 0);
   const overallRows = withPositions(scoredBase);
 
-  const categoryGroups = new Map<string, Omit<LeaderboardRow, "pos">[]>();
+  const categoryGroups = new Map<string, LeaderboardBaseRow[]>();
 
   for (const row of scoredBase) {
     const key = row.category_id ?? "sin-categoria";

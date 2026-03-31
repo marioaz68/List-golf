@@ -26,13 +26,13 @@ type ClubRef = {
   short_name: string | null;
 };
 
-type PlayerBase = {
+type PlayerBaseRaw = {
   id: string;
   first_name: string;
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
-  clubs: ClubRef | null;
+  clubs: ClubRef[] | null;
 };
 
 type Player = {
@@ -44,20 +44,30 @@ type Player = {
   club_label: string | null;
 };
 
+type EntryPlayerRaw = {
+  first_name: string | null;
+  last_name: string | null;
+  gender: "M" | "F" | "X" | null;
+  handicap_index: number | null;
+  handicap_torneo: number | null;
+  phone: string | null;
+  email: string | null;
+  club: string | null;
+  club_id: string | null;
+  clubs: ClubRef[] | null;
+};
+
+type EntryCategoryRaw = {
+  code: string | null;
+  name: string | null;
+};
+
 type EntryRowBase = {
   id: string;
   player_id: string;
   handicap_index: number | null;
-  players: {
-    first_name: string | null;
-    last_name: string | null;
-    email?: string | null;
-    clubs: ClubRef | null;
-  } | null;
-  categories: {
-    code: string | null;
-    name: string | null;
-  } | null;
+  players: EntryPlayerRaw[] | null;
+  categories: EntryCategoryRaw[] | null;
 };
 
 type EntryRow = {
@@ -67,8 +77,14 @@ type EntryRow = {
   players: {
     first_name: string | null;
     last_name: string | null;
+    gender: "M" | "F" | "X" | null;
+    handicap_index: number | null;
+    handicap_torneo: number | null;
+    phone: string | null;
+    email: string | null;
+    club: string | null;
+    club_id: string | null;
     club_label: string | null;
-    email?: string | null;
   } | null;
   categories: {
     code: string | null;
@@ -81,6 +97,10 @@ type EntriesTab = "manual" | "bulk" | "entries" | "summary";
 function normalizeClubLabel(value: string | null | undefined) {
   const v = value?.trim();
   return v ? v : null;
+}
+
+function firstOrNull<T>(value: T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] ?? null : null;
 }
 
 function clubLabelFromClub(club: ClubRef | null | undefined) {
@@ -168,14 +188,16 @@ export default async function EntriesPage({
       name: c.name,
     }));
 
-  const players: Player[] = ((playersRes.data ?? []) as PlayerBase[]).map((p) => ({
-    id: p.id,
-    first_name: p.first_name,
-    last_name: p.last_name,
-    gender: p.gender,
-    handicap_index: p.handicap_index,
-    club_label: clubLabelFromClub(p.clubs),
-  }));
+  const players: Player[] = ((playersRes.data ?? []) as unknown as PlayerBaseRaw[]).map(
+    (p) => ({
+      id: p.id,
+      first_name: p.first_name,
+      last_name: p.last_name,
+      gender: p.gender,
+      handicap_index: p.handicap_index,
+      club_label: clubLabelFromClub(firstOrNull(p.clubs)),
+    })
+  );
 
   let entries: EntryRow[] = [];
 
@@ -189,7 +211,13 @@ export default async function EntriesPage({
         players:players (
           first_name,
           last_name,
+          gender,
+          handicap_index,
+          handicap_torneo,
+          phone,
           email,
+          club,
+          club_id,
           clubs:clubs (
             name,
             short_name
@@ -207,25 +235,36 @@ export default async function EntriesPage({
       throw new Error(`Error leyendo tournament_entries: ${entriesRes.error.message}`);
     }
 
-    entries = ((entriesRes.data ?? []) as EntryRowBase[]).map((e) => ({
-      id: e.id,
-      player_id: e.player_id,
-      handicap_index: e.handicap_index,
-      players: e.players
-        ? {
-            first_name: e.players.first_name,
-            last_name: e.players.last_name,
-            email: e.players.email ?? null,
-            club_label: clubLabelFromClub(e.players.clubs),
-          }
-        : null,
-      categories: e.categories
-        ? {
-            code: e.categories.code,
-            name: e.categories.name,
-          }
-        : null,
-    }));
+    entries = ((entriesRes.data ?? []) as unknown as EntryRowBase[]).map((e) => {
+      const player = firstOrNull(e.players);
+      const category = firstOrNull(e.categories);
+
+      return {
+        id: e.id,
+        player_id: e.player_id,
+        handicap_index: e.handicap_index,
+        players: player
+          ? {
+              first_name: player.first_name,
+              last_name: player.last_name,
+              gender: player.gender,
+              handicap_index: player.handicap_index,
+              handicap_torneo: player.handicap_torneo,
+              phone: player.phone,
+              email: player.email,
+              club: player.club,
+              club_id: player.club_id,
+              club_label: clubLabelFromClub(firstOrNull(player.clubs)),
+            }
+          : null,
+        categories: category
+          ? {
+              code: category.code,
+              name: category.name,
+            }
+          : null,
+      };
+    });
   }
 
   return (

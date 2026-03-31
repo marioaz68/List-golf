@@ -42,28 +42,24 @@ type CapturedRoundRow = {
   scores: Record<number, number>;
 };
 
+type EntryPlayerRow = {
+  id: string;
+  player_number: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  handicap_index: number | null;
+};
+
 type EntryJoinRow = {
   player_id: string;
   handicap_index: number | null;
-  player: {
-    id: string;
-    player_number: number | null;
-    first_name: string | null;
-    last_name: string | null;
-    handicap_index: number | null;
-  } | null;
+  player: EntryPlayerRow[] | null;
 };
 
 type ValidEntryRow = {
   player_id: string;
   handicap_index: number | null;
-  player: {
-    id: string;
-    player_number: number | null;
-    first_name: string | null;
-    last_name: string | null;
-    handicap_index: number | null;
-  };
+  player: EntryPlayerRow[];
 };
 
 function normalizeText(s: string) {
@@ -88,7 +84,8 @@ function buildDefaultHoles(): HoleRow[] {
 }
 
 function isValidEntry(row: EntryJoinRow): row is ValidEntryRow {
-  return !!row.player?.id;
+  const player = row.player?.[0] ?? null;
+  return !!player?.id;
 }
 
 export default async function ScoreEntryPage(props: {
@@ -196,26 +193,29 @@ export default async function ScoreEntryPage(props: {
     if (entryErr) {
       errorMsg = entryErr.message;
     } else {
-      const rawEntries = (entryRows ?? []) as EntryJoinRow[];
+      const rawEntries = (entryRows ?? []) as unknown as EntryJoinRow[];
       const entries = rawEntries.filter(isValidEntry);
 
       if (isNumeric) {
         const wanted = Number(searchRaw);
-        const found = entries.find(
-          (row) =>
-            row.player.player_number != null &&
-            Number(row.player.player_number) === wanted
-        );
+        const found = entries.find((row) => {
+          const p = row.player?.[0] ?? null;
+          return p?.player_number != null && Number(p.player_number) === wanted;
+        });
 
         if (found) {
-          player = {
-            id: found.player.id,
-            player_number: found.player.player_number,
-            first_name: found.player.first_name,
-            last_name: found.player.last_name,
-            handicap_index: found.player.handicap_index,
-            handicap_torneo: found.handicap_index,
-          };
+          const p = found.player?.[0] ?? null;
+
+          if (p) {
+            player = {
+              id: p.id,
+              player_number: p.player_number,
+              first_name: p.first_name,
+              last_name: p.last_name,
+              handicap_index: p.handicap_index,
+              handicap_torneo: found.handicap_index,
+            };
+          }
         }
       }
 
@@ -223,24 +223,31 @@ export default async function ScoreEntryPage(props: {
         const q = searchRaw.toLowerCase();
 
         const found = entries.find((row) => {
-          const full = playerFullName(row.player);
+          const p = row.player?.[0] ?? null;
+          if (!p) return false;
+
+          const full = playerFullName(p);
 
           return (
             full.includes(q) ||
-            (row.player.first_name ?? "").toLowerCase().includes(q) ||
-            (row.player.last_name ?? "").toLowerCase().includes(q)
+            (p.first_name ?? "").toLowerCase().includes(q) ||
+            (p.last_name ?? "").toLowerCase().includes(q)
           );
         });
 
         if (found) {
-          player = {
-            id: found.player.id,
-            player_number: found.player.player_number,
-            first_name: found.player.first_name,
-            last_name: found.player.last_name,
-            handicap_index: found.player.handicap_index,
-            handicap_torneo: found.handicap_index,
-          };
+          const p = found.player?.[0] ?? null;
+
+          if (p) {
+            player = {
+              id: p.id,
+              player_number: p.player_number,
+              first_name: p.first_name,
+              last_name: p.last_name,
+              handicap_index: p.handicap_index,
+              handicap_torneo: found.handicap_index,
+            };
+          }
         }
       }
     }

@@ -13,6 +13,12 @@ type Entry = {
     last_name: string | null;
     club_label: string | null;
     email?: string | null;
+    gender?: "M" | "F" | "X" | null;
+    handicap_index?: number | null;
+    handicap_torneo?: number | null;
+    phone?: string | null;
+    club?: string | null;
+    club_id?: string | null;
   } | null;
   categories: {
     code: string | null;
@@ -38,7 +44,9 @@ export default function EntriesListPanel({
       if (e.players?.club_label) set.add(e.players.club_label);
     });
 
-    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, "es", { sensitivity: "base" })
+    );
   }, [entries]);
 
   const categories = useMemo(() => {
@@ -48,7 +56,9 @@ export default function EntriesListPanel({
       if (e.categories?.code) set.add(e.categories.code);
     });
 
-    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, "es", { sensitivity: "base" })
+    );
   }, [entries]);
 
   const filtered = useMemo(() => {
@@ -60,9 +70,7 @@ export default function EntriesListPanel({
 
       const clubText = (e.players?.club_label ?? "").toLowerCase();
 
-      const matchesSearch =
-        !q || name.includes(q) || clubText.includes(q);
-
+      const matchesSearch = !q || name.includes(q) || clubText.includes(q);
       const matchesClub = !club || e.players?.club_label === club;
       const matchesCategory = !category || e.categories?.code === category;
 
@@ -197,9 +205,15 @@ export default function EntriesListPanel({
                           e.players
                             ? {
                                 id: e.player_id,
-                                first_name: e.players.first_name,
-                                last_name: e.players.last_name,
+                                first_name: e.players.first_name ?? null,
+                                last_name: e.players.last_name ?? null,
+                                gender: e.players.gender ?? null,
+                                handicap_index: e.players.handicap_index ?? null,
+                                handicap_torneo: e.players.handicap_torneo ?? null,
+                                phone: e.players.phone ?? null,
                                 email: e.players.email ?? null,
+                                club: e.players.club ?? null,
+                                club_id: e.players.club_id ?? null,
                               }
                             : null
                         }
