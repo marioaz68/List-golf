@@ -1,0 +1,555 @@
+﻿gender,member_type,member_number,first_name,last_name,Club,city,email,phone,handicap_registration_type,handicap_registry_number,handicap_Index,handicap_torneo,shirt_size,shoe_size_us,notes,
+M,member,CA12501,Jose Alejandro,Borbolla Galvan,Club Campestre de Queretaro,Queretaro,jaborbollagalvan@gmail.com, 442 471 0564,ghin,11143617,15.80,15.80,S,0,1. 27 junio  Transferencia Santander A-0174558,0
+M,guest,NA,Alonso Fernando ,Pedrero García,Bosque Real Country Club,CDMX,pedreroaf@gmail.com, 55 1951 5674,ghin,12759739,2.30,2.30,L,11,18 AGO  A-176905,11
+M,guest,NA,Juan José,Ruiz Esparza,San Diego,San Diego,jruiz@kimgomezfranco.com, 664 425 9626,ghin,0178967,16,16.00,L,11,29 AGO  A-0177151,11
+M,guest,NA,Luis Eduardo,Noval Preciado,Hacienda Cantalagua Country Club,San Mateo Atenco,lnoval@outlook.com, 55 5930 1090,ghin,2326360,10.00,10.00,L,12,22 SEP A-0178380,12
+M,member,B307,Pablo,Urquiza,Club Campestre de Queretaro,Querétaro,pablourquiza92@gmail.com, 442 385 3629,ghin,590927,4.90,4.90,M,9,"1. 02 sep  caja Club Campestre de Queretaro A-0177236
+2. 07 OCT A-0178836",9
+M,member,B-032,Álvaro,Larrondo,Club Campestre de Queretaro,Querétaro,serviciomiuras@gmail.com, 55 4880 2975,ghin,11171962,19.10,19.10,M,10,"1. 26 jun... caja Club Campestre de Queretaro A-0174543
+2. 11 ago... caja Club Campestre de Queretaro A-176614
+3. 30 ago    caja Club Campestre de Queretaro   A-0177175",10
+F,guest,NA,Leticia, Sosa Rodríguez,Lagunas de Miralta,Altamira,Michell.94@hotmail.com, 833 4463993,ghin,987264,10.80,10.80,L,8,30 junio transferencia A-0175962,8
+M,member,CA32701,Jose Pablo,Michelena Davila Galindo,Club Campestre de Queretaro,Querétaro,jppmichelena@gmail.com, 442 173 0803,ghin,2339094,8,8.00,S,9,"1. 06 SEP  A-0177619
+30 SEP A-0178543",9
+M,member,A125,Arturo ,Borbolla García,Club Campestre de Queretaro,Querétaro,69arturob@gmail.com, 442 467 7469,ghin,585200,5.20,5.20,L,10,"1. 26 junio   Caja Club Campestre de Queretaro A-01745553
+2. 01 ago  caja Club Campestre de Queretaro  A-0175962
+3. 27 ago  caja Club Campestre de Queretaro A-0177077",10
+M,member,UA128,Octavio,Pérez Quintana,Club Campestre de Queretaro,Querétaro,sumaqopq@yahoo.com.mx, 442 181 6893,ghin,2917397,9.60,9.60,L,9,08 OCT A-0179057,9
+F,member,CA02401,Lucia ,Morelos Zaragoza Olivares,Club Campestre de Queretaro,Querétaro,lucia.morelos@hotmail.com, 442 148 9787,ghin,11332412,17.90,17.90,S,8,1. 28 junio terminal A-0174734,8
+F,member,UA235,Eréndira ,Nateras Moreno,Club Campestre de Queretaro,Querétaro,ere_nat@yahoo.com.mx, 442 125 1951,ghin,11714299,33.50,33.50,M,7,"1. 27 junio  Caja Club Campestre de Queretaro A-0174552
+2 29 ago Caja Club Campestre de Queretaro A-0177147",7
+F,member,UA100,Gabriela,Aristoy Torres,Club Campestre de Queretaro,Querétaro,gabaristoy@gmail.com, 442 322 7501,ghin,11673308,34,34.00,L,8,"1. 27 junio   Transferencia BBVA A-0174556
+2. 29 julio   caja Club Campestre de Queretaro A-0175893
+3. 28 ago  A-0177129",8
+M,member,UB002,Edgar,Nucamendi Barranco,Club Campestre de Queretaro,Querétaro,enucamendi@spimexlatinoamerica.com, 442 252 3789,ghin,590021,11.50,11.50,M,10,"1. 27 junio Transferencia Mercado Pago A-0174575
+2. 29 agosto A-0177155",10
+M,member,UA-100,Fernando,Ponce Campos,Club Campestre de Queretaro,Querétaro,fponcec@hotmail.com, 442 322 7483,ghin,11673307,17.90,17.90,XL,10,"1. 27 junio  Transferencia BBVA  A-0174557
+2. 29 julio... caja efectivo Club Campestre de Queretaro  A-01758933. 
+3. 28 ago  A-0177130",10
+M,member,UB092,Oscar ,Samaniego,Club Campestre de Queretaro,Querétaro,oscarsamaniego1@gmail.com, 442 648 1842,ghin,2601449,12.60,12.60,L,10,"1. 30 julio A-0175917 (Nat)
+2. 01 OCT  A-017591",10
+M,member,B.353,Enrique,Alcocer Pérez,Club Campestre de Queretaro,Querétaro,enalpe1@hotmail.com, 442 226 1526,ghin,584078,14.10,14.10,L,9,"1. 02 jul  caja Club Campestre de Queretaro tarjeta A-0174721
+2. 07 OCT A-0178940",9
+M,member,B052,Faro,Niembro,Club Campestre de Queretaro,Querétaro,fniembro@psiconsultores.com.mx, 442 250 0293,ghin,10261367,13.70,13.70,XL,10,"1. 08 de julio ... Caja Club Campestre de Queretaro  A-0175095
+2. 29 SEP  A-0178486
+3. 07 OCT A-0178839",10
+F,member,UA110001,Lucia,Pérez Silva,Club Campestre de Queretaro,Querétaro,lucypsh@hotmail.com, 442 264 6923,ghin,10696412,20,20.00,M,8,"1. 06 OCT  A-0178733
+2. 07 OCT A-0178948
+3. 13 OCT A-0179494",8
+M,member,UA110001-1,Roberto Carlos,Gutiérrez Cuspinera,Club Campestre de Queretaro,Querétaro,roberto.gutierrez.cn@hotmail.com, 442 440 5159,ghin,9150968,13,13.00,M,11,19 SEP  A-0178332,11
+M,member,B354,Elias Enrique ,Maqueda Morales,Club Campestre de Queretaro,Querétaro,eliasmaqueda80@hotmail.com, 442 322 8041,ghin,11172939,14.10,14.10,XL,12,"1. 27 junio - Caja Club A-0174554
+2. 30 jul Caja Club Campestre de Queretaro A-0175915
+4. 39 ago A-0177173",12
+M,member,B034,Aaron Roberto ,Bolaños Ortiz,Club Campestre de Queretaro,Querétaro,aaronbolor@gmail.com, 55 1298 2155,ghin,12730583,29,29.00,L,8,"1. 27 junio Caja Club Campestre de Queretaro  A-0174555                                                                                2.  11 ago A-0176657
+3. 30 ago A-0177161",8
+M,member,UA 552,Leonardo ,Lavalle Moreno,Club Campestre de Queretaro,Querétaro,Leolavalle@hotmail.com, 55 3720 1037,ghin,2770430,10.10,10.10,XL,13,1. 27 junio caja Club Campestre de Queretaro  A-0174563                                                                                         2. 07 AGO A-0176337,12
+M,guest,NA,Santiago Guillermo ,Riddle Rodriguez,San Gil,Querétaro,santiagoriddle@hotmail.com, 442 408 8063,ghin,11105739,11.00,11.00,M,9,15 sep   A-0178273,9
+F,member,A313,Daniela ,de Echavarri Ramon,Club Campestre de Queretaro,Querétaro,daniela.echavarri14@gmail.com, 442 471 7105,ghin,130844272,6.10,6.10,XS,7,"1. 27 junio caja efectivo A-0174565
+2. 30 agosto Caja A-0177177",7
+M,member,A-313,Arturo ,de Echavarri Larrondo,Club Campestre de Queretaro,Querétaro,daniela.echavarri14@gmail.com, 442 169 0033,ghin,586965,7.20,7.20,L,8,"1. 27 junio caja efectivo A-0174565
+2. 30 agosto Caja A-0177177",8
+F,member,A355,Gabriela,Osornio Alvarez,Club Campestre de Queretaro,Querétaro,igram@infinitummail.com, 442 125 1665,ghin,11126992,20.70,20.70,S,9,"1. 27 junio  2 pagos en caja 1000 A-0174573 y A-0174574
+2. 08 julio  caja Club Campestre de Queretaro efectivo A-0175117
+3. 11 AGO  caja Club Campestre de Queretaro Tarjeta A-0176598
+4. 30 ago Caja Club Campestre de Queretaro A-0177173",9
+F,member,UA335,Laura ,Guerrero Vera,Club Campestre de Queretaro,Querétaro,mostoscafe@hotmail.com, 442 148 6347,ghin,12990347,30.10,30.10,XS,7,"05 SEP CAJA Club Campestre de Queretaro  A-0177556
+30 SEP A-0178507",7
+F,member,B071,Nohemi ,Pegueros Olvera,Club Campestre de Queretaro,Querétaro,Nohemipegueros@hotmail.com, 442 471 1657,ghin,12117707,32,32.00,S,7,"1. 27 junio    Caja Club Campestre de Queretaro  A-0174580
+2. 30 SEP Club Campestre de Queretaro A-0178524",7
+M,guest,NA,Eduardo,Pliego Baltazar,Balvanera,Querétaro,eduardopliegob@gmail.com, 442 114 0459,ghin,11230727,17.70,17.70,M,12,04 SEP   A-0177450,12
+M,member,B217,Ruy,Trinidad Morales,Club Campestre de Queretaro,Querétaro,Ruy@trend-it.com.mx, 55 1473 1099,ghin,590921,17.20,17.20,M,8,"1. 02 julio  transferencia BBVA  extra inscripción Lucia
+1. 02 julio  transferencia BBVA  A-0174578",8
+M,member,B037,Oscar,Vázquez Montes,Club Campestre de Queretaro,Querétaro,arq.ovazquez.grupogava@gmail.com, 442 236 3490,ghin,2999556,9.80,9.80,M,11,"1. 28 junio  caja Club Campestre de Queretaro efectivo  A-0174583
+2. 28 junio  de Erica 
+3. 30 ago  caja Club Campestre de Queretaro A-0177163",11
+F,member,B 037,Erica ,Garduño Sosa,Club Campestre de Queretaro,Querétaro,e.garduno.s@hotmail.com, 442 322 6753,ghin,11218814,23,23.00,XS,11,"1. 28 junio  caja Club Campestre de Queretaro efectivo  A-0174583 (se paso a Oscar Vazquez)
+2. 30 SEP A-0178529",11
+M,member,UA 514,Israel ,Pacheco Gonzalez,Club Campestre de Queretaro,Querétaro,Ipg16servicios@gmail.com, 442 592 3962,ghin,11713294,5.30,5.30,L,10,"1. 14 julio.... caja Club Campestre de Queretaro A-0175634                                                                                 2.  12 Ago  efectivo   A-0176707
+3. 21 AG  A0177000
+4. 24 SEP  A-0178410
+5. 30 sep A-0178523",10
+M,member,B326,Armando ,Pardo Perez,Club Campestre de Queretaro,Querétaro,armandopardo63@gmail.com, 442 140 0591,ghin,590143,10.90,10.90,L,11,1. 30 junio tarjeta A-0174594,11
+M,member,B367,Alejandro Rogelio ,Padilla Gomez,Club Campestre de Queretaro,Querétaro,arpadilla@ricsa.com.mx, 442 359 2395,ghin,660067,11.50,11.50,L,11,16 julio...Pago en Caja Club Campestre de Queretaro  A-0175732,11
+M,member,UA-136,Luis Arturo ,Nava Alvarado,Club Campestre de Queretaro,Querétaro,luisarturonava@yahoo.com.mx, 442 130 1077,ghin,589919,3.20,3.20,M,10,"27 AGO caja Club Campestre de Queretaro A-0177094
+1 OCT a-01601
+3. 07 OCT A-0178893",10
+M,guest,NA,José ,González Gelabert,Yucatan Country Club,Mérida,gelabert01@gmail.com, 999 357 8898,ghin,568339,19,19.00,L,11,"1. 20 ago    A-176990
+2. 20 sep  A-178358
+3.30 SEP A-0178514",11
+M,member,B109,Jorge Luis,Gutierrez Garrido,Club Campestre de Queretaro,Querétaro,Jorgecache@hotmail.com, 442 226 1873,ghin,589112,5.50,5.50,XXL,11,"1.29 ago a-0177149
+2. 05 AGO... CAJA Club Campestre de Queretaro A-0176076 (JORGE JR Gano Calcuta)
+3. 30 SEP A-0178526",11
+F,member,UA.87,Maria Elena ,Arroyo,Club Campestre de Queretaro,Querétaro,elenaarroyo@hotmail.com, 442 125 0598,ghin,591402,20.30,20.30,S,8,"31 julio A-0175943
+29 SEP A-0178497
+10 OCT  A-0179224",8
+M,member,CB103-01,Eduardo ,Vera González,Club Campestre de Queretaro,Querétaro,everaglez@gmail.com, 442 157 9985,ghin,12944220,14.80,14.80,M,8,24 SEP A-0178414,8
+M,member,B-353,Mauricio,Alcocer Estrada,Club Campestre de Queretaro,Querétaro,Enalpe@hotmail.com, 442 226 1526,ghin,11059909,6.90,6.90,M,9,"1. 02 de julio    caja Club Campestre de Queretaro tarjeta A-0174721
+2. 07 OCT A-0178940",9
+M,member,UB439,Miguel ,Díaz Hernández,Club Campestre de Queretaro,Querétaro,mdiaz0714@yahoo.com, 442 479 1975,ghin,604261,1.70,1.70,XXXL,13,10 SEP A-0177989,13
+M,member,UB132,Alejandro,Sosa Pichardo,Club Campestre de Queretaro,Querétaro,alexsosapichardo@gmail.com, 442 231 0078,ghin,12028668,8.20,8.20,L,10,"1. 20 ago  A-0176976
+2. 29 SEP A-0178487",10
+M,guest,NA,Oscar,Ronces Jimenez,FMG,Estado de Mexico,ronces.oscar@ronces.mx, 314 116 2225,ghin,323319,15.90,15.90,XL,10,01 SEP  a-017724,10
+M,member,B151,Joaquín ,Macías González,Club Campestre de Queretaro,Querétaro,joaxmg@gmail.com, 442 219 0846,ghin,11653371,21.10,21.10,M,9,1. 02 SEP  CAJA Club Campestre de Queretaro A-0177323,9
+M,member,UB.439,Ignacio Alejandro ,Díaz Hérnandez,Club Campestre de Queretaro,Querétaro,nacho_xla@hotmail.com, 442 394 9674,ghin,604260,2.10,2.10,L,10,10 SEP A-017800,10
+M,member,UA321001,Víctor Andrés,Covarrubias González,Club Campestre de Queretaro,Querétaro,gonzalezandres600@gmail.com, 442 270 3333,ghin,586382,5.10,5.10,L,12,1. 17 oct A-0179578,12
+F,member,B 409,Alejandra ,Ceballos Alba,Club Campestre de Queretaro,Querétaro,aleceballosalba@gmail.com, 442 186 9320,ghin,591383,17,17.00,XL,10,29 SEP A-0178496,10
+M,member,B091,Rogelio,Molina Alvarez Icaza,Club Campestre de Queretaro,Querétaro,rogmai@hotmail.com, 442 122 3170,ghin,2942807,12.10,12.10,M,9,"24 SEP A-0178408
+2. 10 OCT A-0179331",9
+M,member,UA110A,Mario ,García Isita,Club Campestre de Queretaro,Querétaro,direccion@ktoseguridad.com, 55 2142 8968,ghin,11235032,9.90,9.90,S,9,"15 ago  Caja Club Campestre de Queretaro A-0176920
+30 sep A-0178558",9
+M,member,A111A,Mauricio ,Borja Garfias,Club Campestre de Queretaro,Querétaro,maurbo@hotmail.com, 442 186 4272,ghin,1241561,10.90,10.90,M,10,"11 sep   A-0178173
+2. 11 OCT A-0179401",10
+M,member,B400,Enrique ,Mata Pastrana,Club Campestre de Queretaro,Querétaro,emata@pchomesecurity.mx, 442 342 7981,ghin,3141756,14.60,14.60,L,11,10 SEP A-0177897,11
+F,member,A400,Anhelí ,Azuri De La Torre,Club Campestre de Queretaro,Querétaro,azuriqueen@hotmail.com, 442 127 2179,ghin,3141760,18.00,18.00,S,7,1. 04 OCT  A-0178769,7
+M,member,UA528,Alejandro ,Reyes Iñiguez,Club Campestre de Queretaro,Querétaro,areyesiniguez@gmail.com, 442 190 0756,ghin,3054245,14.40,14.40,L,10,1. 08 jul.... pagado caja A-0175079,10
+M,member,B.109,Jorge ,Gutierrez Arroyo,Club Campestre de Queretaro,Querétaro,jorge92010@hotmail.com, 442 747 4510,ghin,401321,2.70,2.70,XL,11,CALCUTA,11
+M,guest,NA,Felipe,Bustamante,Club Campestre de Tijuana,Tijuana,felipe.bustamantea@hotmail.com, 664 188 3485,ghin,266970,10.20,10.20,M,10,1. 24 jul.... Factura A-175850,10
+M,member,UA362,Jorge A ,Muñoz Izunsa,Club Campestre de Queretaro,Querétaro,jm.saff90@gmail.com, 442 498 4129,ghin,589874,13.90,13.90,XL,11,"1. 24 julio  A-0175842
+2. 17 SEP A-178286",11
+M,guest,NA,José Carlos ,Muñoz Izunza,sin club,Querétaro,jcmi8707@gmail.com, 442 127 5860,other,801D5A84,13.70,13.70,XL,12,"1. 15 julio... transferencia BBVA A-0175924
+2. 30 sep A-0178513",12
+M,member,B011,José Antonio ,Galindo Vaqueiro,Club Campestre de Queretaro,Querétaro,jagalindov@gmail.com, 442 359 4334,ghin,3205991,9.90,9.90,M,10,10 SEP A-0177990,10
+F,member,A49,Elda Nora ,Esponda Morales,Club Campestre de Queretaro,Querétaro,bidasoa13@hotmail.com, 442 359 2310,ghin,591565,8.00,8.00,L,8,"1. 16 de julio ... Transferencia BBVA A-0175734
+2. 02 OCT  A-0178759",8
+M,member,B128,Exau Conrado ,Piña Tasabia,Club Campestre de Queretaro,Querétaro,tasabia@me.com, 442 123 0450,ghin,2516595,10.70,10.70,M,10,22 julio...Pago en Caja Club Campestre de Queretaro  A-0175806,10
+M,member,A49-1,Joan María ,Bonet Lozano,Club Campestre de Queretaro,Querétaro,bidasoa13@hotmail.com, 442 426 2867,ghin,12139178,14.40,14.40,M,8,"1. 16 de julio.... Transferencia BBVA  A-0175735
+2. 02 OCT  A-0178759",8
+M,member,UA253,Mario Arturo ,Urquiza Vargas,Club Campestre de Queretaro,Querétaro,murquiza023@gmail.com, 55 1510 4840,ghin,1908775,9.60,9.60,M,10,CALCUTA,10
+M,guest,NA,Ignacio ,San Martín,Real Golf Club de San Sebastián,San Sebastián España,sanmartinaki@gmail.com,34 609 276 301,other,VB01623003,6.20,6.20,L,11,22 julio pago en linea A-0175913,11
+F,guest,NA,Arantxa,Olaizola,Real Golf Club de San Sebastián,San Sebastián España,aolaizolagarrido@gmail.com,34 616 443 612,other,VB01724715,28,28.00,S,8,22 julio pago en linea A-0175913,8
+M,guest,NA,Apolinar ,Roman López,Paraiso Country Club,Cuernavaca,apolinar.roman1972@gmail.com, 777 154 8343,ghin,2048526,4.30,4.30,XL,11,30 julio A-0175925,11
+F,member,A61,Yuyes ,Soto,Club Campestre de Queretaro,Querétaro,yuca_sg2000@hotmail.com, 442 269 3893,ghin,591709,10.60,10.60,M,9,03 OCT A-0178679,9
+F,member,B28,Jessica,Barreda,Club Campestre de Queretaro,Querétaro,jessibarreda12@gmail.com, 442 200 9383,ghin,591410,11.60,11.60,L,11,CAPISTRANO,11
+F,member,A243,Laura ,Suárez,Club Campestre de Queretaro,Querétaro,Lasu@pridigy.net.mx, 442 200 9208,ghin,591733,14.10,14.10,M,8,1 sep   caja Club Campestre de Queretaro A-0177227,8
+M,member,A423,Rafael ,Pizarro Suárez Sañudo,Club Campestre de Queretaro,Querétaro,rafaelpizarro18@yahoo.com.mx, 442 321 6050,ghin,2164628,14.90,14.90,L,10,18 julio...Pago en Caja Club Campestre de Queretaro A-0175763,10
+M,member,A424,José Alfonso ,Suarez de Villasante,Club Campestre de Queretaro,Querétaro,SUAREZJOSEALFONSO@GMAIL.COM, 442 467 5863,ghin,590885,4,4.00,M,10,27 AGO caja Club Campestre de Queretaro A-0177082,10
+M,member,UB278,Fabio,Zaragoza Tapia,Club Campestre de Queretaro,Querétaro,toofaztco@yahoo.com.mx, 442 181 8102,ghin,2941537,13.40,13.40,L,10,"12 Ago  A-0176698
+23 sept  A-0178389",10
+M,guest,NA,Jun ,Moo Lee,Zibata,Querétaro,leeyb20056@gmail.com, 442 475 0214,ghin,11604670,7.20,7.20,L,9,30 julio A-0175926,9
+M,member,A100B,Renato ,López Otamendi,Club Campestre de Queretaro,Querétaro,renatolopezo@gmail.com, 442 219 2294,ghin,10246832,17.90,17.90,L,11,"1. 24 julio  A-0175844
+2. 29 SEP A-0178491",11
+M,guest,NA,Raúl ,Ayluardo Jurado,Paraíso Country Club,Cuernavaca,raul@daproducciones.com.mx, 55 1850 9335,ghin,10763489,19.20,19.20,M,10,21 de julio... transferencia 15000 y 1000 banorte A-0175818,10
+M,member,B198,Sergio ,Morelos Zaragoza González,Club Campestre de Queretaro,Querétaro,sergiomorelos@gmail.com, 442 157 2770,ghin,0589853,13.70,13.70,M,10,10 sep  A-0177994,10
+M,member,UA006,Juan Diego ,Pimentel Vera,Club Campestre de Queretaro,Querétaro,Juandiegov96@gmail.com, 33 2844 0004,ghin,12060878,10.60,10.60,XL,10,"17 sep  A_0178288
+10 oct a-0179173",10
+M,guest,NA,Luis Alejandro ,Rojas GarcÍa,La Vista Country Club,PUEBLA,no_tejidos@hotmail.com, 222 614 4102,ghin,11753779,31.40,31.40,XXXL,11,05 ago... Efectivo BanBajio A-0176893,11
+M,guest,NA,Héctor,Campos Aldape,Balvanera,Querétaro,hectorcam1993@gmail.com, 442 146 7867,ghin,11332578,9.40,9.40,M,10,22 julio.. Multipagos A-0175820,10
+M,guest,NA,Gerardo Arturo ,Razo Santiago,Yucatan Country Club,Mérida,grazo@prodigy.net.mx, 999 900 2319,ghin,570487,12.40,12.40,XXL,12,30 julio A-0175928,12
+F,guest,NA,Damaris ,Espadas Pech,Yucatán Country Club,Mérida,grazo@prodigy.net.mx, 999 955 0960,ghin,572592,16.20,16.20,M,9,30 julio A-0175927,9
+M,member,UA 336,Pablo Alberto ,Méndez Dorado,Club Campestre de Queretaro,Querétaro,pmdorado@gmail.com, 442 3278834,ghin,661072,11.70,11.70,L,11,"1. 24 JUL... CAJA Club Campestre de Queretaro  A-0175832
+2. 25 jul... caja Club Campestre de Queretaro  A-0175879
+3. 08 OCT A-0179070",11
+F,guest,NA,Hyun ,Mi Jang,Balvanera,Querétaro,luisa.jang@gmail.com, 446 133 6588,ghin,11293372,20,20.00,M,7,30 julio A-0175929,7
+M,member,UA053,Horacio ,Ovando González,Club Campestre de Queretaro,Querétaro,torosalvaje1@hotmail.com, 664 151 3170,ghin,2922603,14.70,14.70,L,9,04 sep  en sucursal A-0177421,9
+M,member,UA053-1,Horacio,Ovando Flores,Club Campestre de Queretaro,Querétaro,horacioovandof@gmail.com, 999 960 1737,ghin,2922630,3.40,3.40,S,9,"1. 04 sep   SUCURSAL A-0177421
+2. 8 OCT A-0178977",9
+M,guest,NA,Rodolfo ,Amieva Narr,Balvanera,Querétaro,Rodolfoamieva@gmail.com, 442 178 0227,ghin,11218244,3.50,3.50,S,9,31 julio A-0175931,9
+M,guest,NA,Franco ,González Olivares,Campestre de Celaya,Celaya,gonzalezf@coresba.com.mx, 461 230 049,ghin,1234430,3.80,3.80,M,9,18 AGO  A-176952,9
+M,guest,NA,Franco ,González Villarreal,Campestre de Celaya,Celaya,fgonzalez1534@gmail.com, 461 180 0769,ghin,1234459,12,12.00,L,10,30 JUL ...A-0175932,10
+M,member,A 26,Francisco,Pérez Rojas,Club Campestre de Queretaro,Querétaro,lic.franciscoperez@hotmail.com, 442 359 3900,ghin,590180,110.00,110.00,XL,10,NOTARIA 2,10
+M,member,A26,Francisco,Pérez Loarca,Club Campestre de Queretaro,Querétaro,lic.franciscoperez@hotmail.com, 442 359 3900,ghin,12468323,30.60,30.60,M,8,NOTARIA2,8
+M,member,UB386,Jorge Luis ,Vargas Herrera,Club Campestre de Queretaro,Querétaro,jo_vahe@hotmail.com, 442 446 9541,ghin,2032489,11.80,11.80,XL,10,"1. 09 ago... pago caja A-0176542
+2. 06 SEP  A-0177584
+3. 27 sep  A-0178482",10
+M,member,V 209,Carlos ,Garza Adame,Club Campestre de Queretaro,Querétaro,amerlatint@gmail.com, 442 365 2199,ghin,588367,10.10,10.10,M,10,"1. 31 jul  caja Club Campestre de Queretaro A-0175955
+2. 15 ago Caja Club Campestre de Queretaro A0176929
+3. 04 sep  caja Club Campestre de Queretaro A-0177411",10
+M,guest,NA,Juan Luis ,Urías,Juriquilla,Querétaro,jlurias@gmail.com, 55 4540 2316,ghin,1721367,12,12.00,XL,12,13 SEP A-0178252,12
+M,member,UA 315,Mario Alberto ,Fernandez Garduño,Club Campestre de Queretaro,Querétaro,mario.fernandez.acn@gmail.com, 442 569 1777,ghin,2835417,9.20,9.20,M,9,"CORTESIA PRESIDENCIA
+27 AGO  A-0177099",9
+M,guest,NA,Javier ,Flores Infante,Juriquilla,Querétaro,javi@puntomediatalent.com, 55 5104 0405,ghin,11537226,12.60,12.60,S,8,1. 30 julio A-0175923,8
+M,member,B-351,Salvador ,García Musiate,Club Campestre de Queretaro,Querétaro,sganot28@gmail.com, 442 149 8420,ghin,588231,5.70,5.70,S,8,08 ago.... caja Club Campestre de Queretaro  A-0176417,8
+M,guest,NA,Joel Ivan,Orozco García,Balvanera,Querétaro,ivan.orozco1108@gmail.com, 442 149 5193,ghin,11034656,8.30,8.30,M,8,"26 Ago  A-0177070
+2. 1 OCT A-0178590",8
+F,member,A 243,Carolina ,Suárez de Villasante,Club Campestre de Queretaro,Querétaro,Carosdev24@gmail.com, 442 205 2377,ghin,1162276,11.60,11.60,S,8,"DAMAS 
+1. 04 ago ... transferencia BBVA A-0176050",8
+M,guest,NA,Julio Alejandro ,Rodriguez,Club Campestre de Tijuana,Tijuana,juliorr2011@hotmail.com, 664 440 5154,ghin,9745174,11.60,11.60,L,10,22 ago  A-0177023,10
+F,member,A.25,Diana Gabriela ,Pérez López,Club Campestre de Queretaro,Querétaro,grupoartheria@yahoo.com.mx, 442 668 3018,ghin,3141752,12.80,12.80,S,7,"1. 05 sep Caja Club Campestre de Queretaro -0177525
+03 OCT A-0178730",7
+M,guest,NA,Victor ,Sánchez Aguilar,Campestre de San Luis,San Luis Potosi,victorsa1979@outlook.com, 444 829 6893,ghin,12049620,15.50,15.50,XL,11,09 SEP A-01778444,11
+M,guest,NA,Gerardo ,Sosa Pichardo,Sin club,Querétaro,sosapgerardo@gmail.com, 55 4144 4433,other,16.50,16.50,16.50,M,10,14 ago  A-0176896,10
+M,member,B403,Miguel Angel ,Magaña Morales,Club Campestre de Queretaro,Querétaro,mammorales@hotmail.com, 442 250 2298,ghin,3080844,8.70,8.70,S,9,19 SEP A-0178338,9
+M,guest,NA,José Luis,Ortega Reyes,Juriquilla,Querétaro,Joseluisortega@galga.mx, 775 784 9489,ghin,11704787,15.20,15.20,S,10,08 Ago A-0176487,10
+M,guest,NA,Jose Francisco ,Hernández Vázquez Mellado,Balvanera,Querétaro,pacohvm1984@gmail.com, 442 324 5458,ghin,11596756,1.20,1.20,S,8,08 AGO A-0176484,8
+M,member,A549,Luis ,Sosa Obregón,Club Campestre de Queretaro,Querétaro,luis_sosa16@hotmail.com, 442 258 0738,ghin,590818,2.10,2.10,M,11,"1. 12 SEP A-0178069
+2. 30 SEP A-0178542",11
+M,member,UA345,Luis Cesar ,Valencia García,Club Campestre de Queretaro,Querétaro,garciav55@hotmail.com, 442 467 3192,ghin,12689256,9.20,9.20,S,11,13 SEP  A-0178248,11
+M,member,UA061,Manuel Roberto,Sosa Calderon,Club Campestre de Queretaro,Querétaro,rsosa47@gmail.com, 55 4141 3613,other,33.50,33.50,33.50,L,9,15 AGO  CAJA Club Campestre de QueretaroA-0176930,9
+M,member,CA36601,Miguel ,Alcocer Morelos Zaragoza,Club Campestre de Queretaro,Querétaro,miguelalcocer@hotmail.com, 442 342 6207,ghin,584001,8.10,8.10,XL,11,1 sep   A-0177222,11
+M,member,A513,Andres ,Morelos Zaragoza,Club Campestre de Queretaro,Querétaro,Andresmorelosz@gmail.com, 442 272 7356,ghin,589771,1.6,1.60,S,9,PRESIDENCIA CORTESIA,9
+M,member,B119,Jose Antonio ,Magaña Aguilar,Club Campestre de Queretaro,Querétaro,miguelmamo20@gmail.com, 442 284 7143,ghin,3054246,14.20,14.20,M,9,09 SEP A-0177842,9
+M,guest,NA,Antonio ,Quintanilla Coronel,San Gil,Querétaro,antonioquinta@hotmail.com, 442 226 4244,ghin,11261919,20.10,20.10,M,11,1 sep   A-0177225,11
+M,member,B212,Jaime,Velazquez Sánchez,Club Campestre de Queretaro,Querétaro,jaimevelsan@gmail.com, 442 475 0516,other,75A9CA40,33,33.00,L,12,17 SEP  A.0178293,12
+M,member,UA127D,Yairo ,Marina Alcocer,Club Campestre de Queretaro,Querétaro,yairoma@hotmail.com, 442 499 9142,other,335F2CDD,28.10,28.10,L,9,CLUB CAR,9
+M,guest,NA,Salvador ,García Gabriel,Zibata,Querétaro,Salvador58garciag@gmail.com, 442 332 0978,ghin,12151278,20.60,20.60,M,8,14 ago A-0176894,8
+M,member,UB319,Samuel,Sandoval Osorio,Club Campestre de Queretaro,Querétaro,Sandovalsam@icloud.com, 442 354 9014,ghin,10246834,7.90,7.90,M,12,13 AGO   A-0176862,12
+M,guest,NA,Leonardo ,Beltrán Carrera,Juriquilla,Querétaro,leonardobeltran09@gmail.com, 442 559 3481,ghin,12327256,13.80,13.80,S,8,14 ago...  A0176895,8
+M,guest,NA,Marco Antonio ,Galindo Madrigal,Pulgas Pandas,Aguascalientes,Magalindo@kpmg.com.mx, 449 155 4959,ghin,979279,16.50,16.50,L,11,25 SEP  A-0178442,11
+M,member,B164,Manuel ,Ochoa Aguilar,Club Campestre de Queretaro,Querétaro,ochoino@hotmail.com, 442 467 9453,ghin,12110512,15.70,15.70,S,10,26 AGO  Caja Club Campestre de Queretaro A-0177055,10
+M,member,B064,Juan Pablo ,Cardenas Palacios,Club Campestre de Queretaro,Querétaro,juanpablocardenas1@hotmail.com, 442 247 0512,ghin,585944,9.00,9.00,M,10,19 ago  caja Club Campestre de QueretaroA-0176963,10
+M,guest,NA,Juan Manuel ,Rivera Esquivel,FMG,Estado de Mexico,jmrivera@gruporiva.com, 55 4350 4205,ghin,987692,15.40,15.40,M,9,19 SEP A-0178326,9
+M,member,UA068,Nicolás ,González Arestegui,Club Campestre de Queretaro,Querétaro,narestegui@icloud.com, 442 329 5805,ghin,12745521,30.30,30.30,L,10,"1. 13 agosto.... caja Club Campestre de Queretaro  - A-0176874
+2. 09 sep    caja Club Campestre de Queretaro A-0177804",10
+M,guest,NA,Sergio ,Cruz Fernandez,Club de Golf Vallescondido,Ciudad de  México,scf1306@hotmail.com, 55 7970 3202,ghin,2497674,7.30,7.30,L,9,25 SEP  A-0178443,9
+M,guest,NA,Marcos ,Rivera Ocampo,Juriquilla,Querétaro,mrivera2222@msn.com, 442 143 5602,ghin,1124129,14.60,14.60,XL,9,14 ago  A0176897,9
+M,guest,NA,Ricky ,Allen,Juriquilla,Querétaro,Ricky.Allen@mail.com, 442 553 3339,ghin,153520,9.70,9.70,XL,12,18 AGO  A-176952,12
+M,guest,NA,Mauricio ,Álvarez Zerecero,El Campanario,Querétaro,mauricio@mg-arquitectos.com, 442 207 6140,ghin,658042,6.20,6.20,L,11,25 AGO A-0177040,11
+M,member,UA118,Humberto ,Montaño Bacca,Club Campestre de Queretaro,Querétaro,hhmontano@yahoo.com, 442 469 1000,ghin,2607389,13.30,13.30,M,10,"1. 1 sep  A-0177193
+30 sep a-0178534
+3. 08 OCT A-0179062",10
+M,guest,NA,Fidel ,Alegria Hernandez,San Gil,San Juan del Río,Fidel18077alegria@gmail.com, 427 103 0125,ghin,11264390,,0.00,L,9,04 SEP   A-0177447,9
+M,member,B093,Manuel Mauricio,Ramírez Herrejon,Club Campestre de Queretaro,Querétaro,mramirez@manopco.com, 442 359 3711,ghin,2032325,6.40,6.40,XL,11,PRESIDENCIA CORTESIA,11
+M,member,UA255,Isaías Daniel ,Rico Garcia,Club Campestre de Queretaro,Querétaro,Isaiasdanielrico@gmail.com, 442 273 2026,ghin,12110513,18.20,18.20,M,8,18 AGO  A-176957,8
+M,guest,NA,Edgar ,Padrón,Zibata,Querétaro,Eddpp1013@gmail.com, 55 3902 3235,ghin,12120535,7,7.00,M,9,29 SEP A-0178505,9
+M,guest,NA,Joshue ,Gross Saavedra,Club Campestre de Tijuana,Tijuana,Joshuegross@hotmail.com, 664 479 4124,ghin,9672686,2.80,2.80,M,10,18 AGO  A-176952,10
+M,member,UB361,Carlos José ,Hernández Olivera,Club Campestre de Queretaro,Querétaro,reroca25@gmail.com, 442 186 5277,ghin,11174596,22.50,22.50,L,11,18 ago... A-0176956,11
+M,member,UA-108,José Pablo,Alcocer Cano,Club Campestre de Queretaro,Querétaro,josepabloac2004@gmail.com, 442 331 1218,ghin,10825841,12.10,12.10,XL,10,"1. 06 sep  caja Club Campestre de Queretaro A-0177612
+2. 02 oct A-0178646",10
+F,member,CB16002,Alejandra ,Olvera Septién,Club Campestre de Queretaro,Querétaro,alejandra@notaria21qro.mx, 442 322 8156,ghin,591602,9.70,9.70,M,10,03 OCT  A-0178697,10
+F,member,A543,Adriana Guadalupe ,Álvarez López,Club Campestre de Queretaro,Querétaro,Facturas1975@hotmail.com, 442 127 9373,ghin,591395,7.80,7.80,M,10,DAMAS,10
+M,guest,NA,Edgar ,Balseca Morales,La Huerta,Puebla,ebm.consultoria.litigio@gmail.com, 221 172 3824,ghin,11232272,6.40,6.40,M,8,09 SEP A-0177816,8
+M,member,A039,Alfonso Santiago ,González Ramos,Club Campestre de Queretaro,Querétaro,alfonossantiaglezr@gmail.com, 442 273 4917,ghin,10912052,6.20,6.20,M,10,18 AGO  A-176955,10
+M,guest,NA,José Manuel ,Figueroa Herbert,San Gil,Querétaro,chemiux@gmail.com, 427 121 0503,ghin,11413376,7.60,7.60,M,10,22 SEP A-0178373,10
+F,guest,NA,Bertha,Balderas Schoofield,El Campanario,Querétaro,beckybs@outlook.es, 442 181 7066,ghin,661915,11.80,11.80,S,9,18 AGO  A-176952,9
+F,guest,NA,Ma. Eugenia ,Muñoz de Rivera,El Campanario,Querétaro,eugeniamunoz@me.com, 442 378 4241,ghin,662937,12.30,12.30,M,8,18 AGO  A-176952,8
+M,guest,NA,César,Peralta Vergara,Zibatá,Querétaro,cesarpmx@yahoo.com.mx, 55 4360 6045,other,77A25A15,20.10,20.10,L,9,12 SEP  A-0178198,9
+M,member,B077,Juan Carlos,Arroyo de Haene,Club Campestre de Queretaro,Querétaro,borision@yahoo.com, 442 148 2560,ghin,584728,12,12.00,XL,11,"1. 21 AGO  CAJA Club Campestre de Queretaro A-176999
+2. 23 SEP A-0178396
+3. 29 SEP A-0178510",11
+M,member,UA331,Rene ,Cerecer,Club Campestre de Queretaro,Querétaro,cerecervi@hotmail.com, 442 383 9799,ghin,2339095,20.50,20.50,M,10,"26 SEP A-01788454
+03 OCT A-0178713",10
+M,guest,NA,Patricio,Maccise Pérez,El Campanario,Querétaro,patriciomaccise@gmail.com, 442 471 4444,ghin,12219117,4.70,4.70,L,10,18 AGO  A-176952,10
+M,member,B83,Julian ,Urquiza Fernández,Club Campestre de Queretaro,Querétaro,julianurquiza@me.com, 442 239 0175,other,C7C4ABB9,20,20.00,XXL,12,11 SEP  A-0178078,12
+M,guest,NA,José Miguel ,Del Llano Montoya,Juriquilla,Querétaro,josdelllano@hotmail.com, 442 380 8329,ghin,12020450,26.40,26.40,XL,12,"1. 26 agosto  A0177048
+2. 11 sep A-0178110",12
+M,member,UA354,Jose Alberto,Prieto Andrade,Club Campestre de Queretaro,Querétaro,jprieto@capa3.com.mx, 442 186 0000,ghin,3017461,17,17.00,L,10,"26 SEP A-0178452
+30 sep A-0178554
+3. 08 OCT A-0178998",10
+M,guest,NA,Sergio Ivan ,Huerta Luna,Bellavista,Ciudad de  México,shuertaluna@gmail.com, 55 1510 8044,ghin,2529258,4.30,4.30,L,10,25 Ago     A-0177039,10
+M,member,B365,Luis R ,Velázquez Déciga,Club Campestre de Queretaro,Querétaro,lrvelazquez@velazquezdeciga.com.mx, 442 322 7307,other,A346C42B,25.40,25.40,M,10,"1. 22 AGO  A-0177011
+30 SEP A-0178560
+3. 01 OCT A-0178625",10
+F,member,A553,Mónica,Ochoa Aguilar,Club Campestre de Queretaro,Querétaro,m8a.a@hotmail.com, 442 239 2987,ghin,11458469,14.10,14.10,S,8,04 SEP   A-0177445,8
+M,guest,NA,Luis Fernando ,Duberty Batalla González,Juriquilla,Querétaro,duberty.b@gmail.com, 442 668 9766,ghin,13098948,18,18.00,L,11,"1. 06 sep  A-0177620
+2. 26 SEP A-0178449
+3. 30 SEP A-0178563",11
+M,member,A111D,José Alberto,Fernández Chávez,Club Campestre de Queretaro,Querétaro,osofernandez@icloud.com, 442 207 6874,ghin,587393,8.60,8.60,S,9,"1. 20 ago  Caja Club Campestre de Queretaro A-176980
+2. 30 SEP A-0178564",9
+F,member,A.111D,Sonia ,Rodríguez Esqueda,Club Campestre de Queretaro,Querétaro,fdez.sonia@hotmail.com, 442 123 5500,ghin,3165910,20.70,20.70,XS,6,"1. 20 agosto A-176981
+2. 3o sep A-0178564",6
+M,member,A406,José Carlos,Borbolla Garcia,Club Campestre de Queretaro,Querétaro,jocamamex@hotmail.com, 442 315 5961,ghin,585125,21.80,21.80,XL,11,H. SAN JOSE,11
+M,guest,NA,Juan Pablo ,Rangel Contreras,El Campanario,Querétaro,Jprclibertad@gmail.com, 442 144 2620,ghin,590329,11.10,11.10,M,8,10 SEP A-0177985,8
+M,guest,NA,Carlos,Villamor Ramirez,Club Campestre de Tijuana,Tijuana,carlosvillamor@hotmail.com, 664 204 5824,ghin,8035262,16.30,16.30,L,9,26 Ago  A-0177069,9
+F,member,UB067,Dorina ,Osorio Lara,Club Campestre de Queretaro,Querétaro,dorinaosorio@hotmail.com, 442 461 3044,ghin,0591606,14.10,14.10,L,9,"1. 30 Ago   Caja A-0177178
+2.07 oct A-0178911",9
+M,member,B 304,Javier ,Urquiza Padilla,Club Campestre de Queretaro,Querétaro,jup0791@gmail.com, 442 219 2541,ghin,591048,2.70,2.70,S,9,26 Ago  A-0177067,9
+M,guest,NA,Matias ,Reyes Herrera,Club Campestre de Queretaro,Querétaro,mreyesh11@icloud.com,4421713542,other,906415DB,14,14.00,L,13,26 Ago  A-0177068,13
+F,member,UA364,Concepción,Vega Urquiza,Club Campestre de Queretaro,Querétaro,conyvegaurquiza@hotmail.com, 442 275 8508,ghin,591808,9.80,9.80,L,10,"1-18 SEP  A-0178319
+2. 30 SEP A-017850
+3. 8 OCT A-0179071",10
+M,guest,NA,Eduardo ,Herbert Alvarez,San Gil,San Juan del Rio,eduardo-herbert@hotmail.com, 427 121 5265,ghin,11499329,8.00,8.00,L,10,20 AGO A-176979,10
+F,member,H12,María Cristina ,Urquiza Escobar,Club Campestre de Queretaro,Querétaro,Saloneltrebol@hotmail.com, 442 445 2679,ghin,591789,15,15.00,L,11,"1. 20 AGO  CAJA Club Campestre de Queretaro  A-176994
+30 SEP A-0178548
+3. 11 OCT  A-0179423
+4. 14 oct  A-0179510",11
+M,guest,NA,Sergio ,Villa Alcaraz,Juriquilla,Querétaro,Jr-villaa@hotmail.com, 449 552 4879,ghin,2829409,1.4,1.40,M,12,05 sep  A-0177473,12
+M,member,B.18,Gonzalo ,Alvárez Septien,Club Campestre de Queretaro,Querétaro,gonzalo@mg-arquitectos.com, 442 130 1925,ghin,584487,14,14.00,M,9,26 AGO  A-0177076,9
+M,member,B030,Juan Pablo ,Borja,Club Campestre de Queretaro,Querétaro,jborjagar@gmail.com,4422581693,ghin,585344,2,2.00,M,9,"11 SEP  A-0178101
+30 SEP A-0178522",9
+M,member,B348,Antonio L,Recamier Mayer,Club Campestre de Queretaro,Querétaro,arecamier@Club Campestre de Queretaro.mx, 442 807 9296,ghin,590335,4.90,4.90,M,8,3 sep  A-0177354,8
+M,guest,NA,Oscar ,Bolaños Rojas,Bajamar,Tijuana,oscarbolanosrojas@gmail.com, 664 782 7440,ghin,13180615,28.20,28.20,L,9,26 AGO  A-0177075,9
+M,member,A441,Sergio,Borbolla Diaz,Club Campestre de Queretaro,Querétaro,Licsergioborbolladiaz@gmail.com, 442 157 9836,ghin,585127,0.80,0.80,M,11,1. Sep  caja  A-0177249,11
+M,guest,NA,Fernando ,Montiel Campos,Club Campestre de Tijuana,Tijuana,fernandomleyva@gmail.com, 664 425 9626,ghin,0207653,16.40,16.40,L,11,26 AGO  A-0177074,11
+M,member,UA091,Armando A ,Gomez Guzman,Club Campestre de Queretaro,Querétaro,vivesanovivemejor@gmail.com, 442 258 4066,ghin,588498,5,5.00,M,10,"09 SEP  A-0177855
+01 OCT A-0178627",10
+M,member,CA20401,José  Ernesto ,Hernández Ruiz,Club Campestre de Queretaro,Querétaro,joseerhr@gmail.com, 442 263 3376,ghin,589199,6.10,6.10,M,10,22 ago    A-0177014,10
+M,member,A-204,Juan Pablo ,Hernández Ruiz,Club Campestre de Queretaro,Querétaro,jphr1103@gmail.com, 442 263 3377,ghin,12060874,3.90,3.90,M,10,22 Ago  A0177013,10
+M,member,CB39101,Raúl Guillermo ,Hernández Suarez,Club Campestre de Queretaro,Querétaro,rgh@tsl.com.mx, 442 263 3356,ghin,589207,2.10,2.10,S,10,CLUB CAR,10
+M,member,A.205,Salvador,Hernández Felix,Club Campestre de Queretaro,Querétaro,chavadxl@gmail.com, 442 263 3315,ghin,589180,2.50,2.50,M,11,CLUB CAR,11
+M,guest,NA,José de Jesús ,Alcocer Castro,Juriquilla,Querétaro,jjac_1986@hotmail.com, 442 157 3190,ghin,583997,3.60,3.60,XL,12,"22 AGO caja Club Campestre de Queretaro A-0177012
+27 AGO caja Club Campestre de Queretaro A-0177100",12
+M,member,UA254,Pedro Antonio ,Camino Herrera,Club Campestre de Queretaro,Querétaro,pacamino71@gmail.com, 442 148 0502,ghin,585666,3.60,3.60,M,10,08 SEP A-01777706,10
+M,member,B93,Manuel ,Ramírez Rincón,Club Campestre de Queretaro,Querétaro,manuelrmz2701@gmail.com, 442 274 2709,ghin,3080841,8.20,8.20,XL,11,"1. 22 AGO  A-0177016
+2. 02 sep A-0177297
+]3. 30 SEP A-0178546",11
+M,member,B90,José Eduardo,Juárez Rios,Club Campestre de Queretaro,Querétaro,ejuarez@grupogalvan.com.mx, 442 125 0509,ghin,589293,8,8.00,L,10,27 ago  caja Club Campestre de Queretaro  A-0177078,10
+F,guest,NA,Susana,Martínez Sánchez,El Campanario,Querétaro,susa30@hotmail.com, 442 219 9741,ghin,662737,9.30,9.30,S,8,27 ago A-0177090,8
+M,member,B012,Emilio ,Torres Peresandi,Club Campestre de Queretaro,Querétaro,emilioperesandi@gmail.com,4422472330,ghin,590918,13.20,13.20,M,11,"1. 25 AGO A-0177043
+2. 08 SEP A-01777649
+3. 04 OCT A-0178770
+4- 07 OCT  A-0178948",11
+M,guest,NA,Francisco Sergio ,Chávez Curiel,Altozano Tabasco,Villahermosa,labchontalpa@hotmail.com, 993 330 0654,ghin,2533331,20.00,20.00,S,7,29 AGO  A-0177152,7
+M,guest,NA,Miguel Ángel,Miyar Laris,Bosque Real Country Club,Ciudad de  México,mmiyar@hotmail.com, 55 4192 7795,ghin,399287,17.90,17.90,S,8,1 sep   A-0177228,8
+F,guest,NA,Claudia Guadalupe ,Miranda Palacios,Altozano Tabasco,Villahermosa,rh-sureste@hotmail.com, 993 219 9612,ghin,11407068,24.60,24.60,M,8,29 AGO  A-0177153,8
+M,member,A 314,Julio ,Larrondo García,Club Campestre de Queretaro,Querétaro,jlarrondo@gruponr.mx, 55 2069 0223,ghin,11149524,13.80,13.80,M,10,GRUPONR,10
+M,guest,NA,José Eduardo ,Calzada Rovirosa,Juriquilla,Querétaro,ppymconsulting@gmail.com, 442 230 1797,ghin,12131832,16.40,16.40,L,10,NOTARIA2,10
+M,guest,NA,José ,Solórzano Herrejon,Tres Marías,Morelia,jsolorzanoh@hotmail.com, 443 328 0727,ghin,2968588,15.30,15.30,L,10,1 sep   A-0177223,10
+M,member,V214,Jorge Alberto ,Muñoz Bonilla,Club Campestre de Queretaro,Querétaro,jmbkansas@icloud.com, 442 186 7200,ghin,589871,27,27.00,XL,13,1 OCT A-017826,13
+M,member,B325,José Luis ,Lelo de Larrea Clouthier,Club Campestre de Queretaro,Querétaro,jlldlc@gmail.com, 442 237 9177,ghin,589320,6.30,6.30,XXL,9,27 ago A-0177088,9
+F,guest,NA,Liliana,Mier,El Campanario,Querétaro,limia0104@hotmail.com, 442 148 9539,ghin,662825,16.80,16.80,L,9,29 AGO   A-0177137,9
+M,member,UB045,Regis ,René Bigorgne,Club Campestre de Queretaro,Querétaro,Bigonulla@gmail.com, 449 911 1006,ghin,10320829,8.90,8.90,XXL,11,04 SEP   A-0177446,11
+M,member,UB-045,Sebastian,Bigorgne Rodríguez,Club Campestre de Queretaro,Querétaro,Sebabas.gerard@gmail.com, 442 157 0955,ghin,10320835,12.30,12.30,XXL,12,28 AGO  A-0177116,12
+M,member,UA232,Fernando ,Blanco,Club Campestre de Queretaro,Querétaro,Ferblancor@icloud.com, 442 721 4564,ghin,12130855,6,6.00,XL,12,BOXTO,12
+M,guest,NA,Victor Alejandro ,Ramos Sarabia,Country Club Playa Palmas,Ciudad del Carmen campeche,Vars_ramos@hotmail.com, 938 132 5256,ghin,10755002,10.70,10.70,M,9,30 SEP A-0178512,9
+M,member,A256,Jaime,García Campos,Club Campestre de Queretaro,Querétaro,jgar_c@solaqro.com, 442 247 4249,ghin,13185824,15.30,15.30,M,10,28 AGO  A-0177119,10
+M,guest,NA,Federico,Gutiérrez Garrido,El Campanario,Querétaro,fg_crach@hotmail.com, 442 125 8470,ghin,659610,2.70,2.70,L,10,25 AGO caja Club Campestre de Queretaro A-0177041,10
+M,guest,NA,Sebastián,Gutiérrez Mier,El Campanario,Querétaro,sebaspachon19@hotmail.com, 442 239 3186,ghin,659631,1.50,1.50,L,11,25 AGO caja Club Campestre de Queretaro A-0177042,11
+M,member,B221,Jorge,Cárdenas Palacios,Club Campestre de Queretaro,Querétaro,palacioscardenas@hotmail.com, 442 170 5414,ghin,585903,9.60,9.60,S,10,28 AGO  A-0177120,10
+M,member,B271,Carlos ,Escobar Villarreal,Club Campestre de Queretaro,Querétaro,caresvil@gmail.com, 442 207 5870,ghin,2636559,8.70,8.70,S,9,28 AGO  A-0177121,9
+M,guest,NA,Francisco,García Arriola,El Campanario,Querétaro,frangarriola@gmail.com,4422362360,ghin,659486,0.4,0.40,M,10,28 AGO  A-0177122,10
+M,member,CA51501,Victor Roberto,Vega Alvarez,Club Campestre de Queretaro,Querétaro,virobeal@hotmail.com, 442 322 5857,ghin,10785369,16.70,16.70,M,11,"26 AGO  A-0177060
+24 SEP A-0178421
+29 SEP A-0178473",11
+M,member,B299,José Antonio,Romero Altamirano,Club Campestre de Queretaro,Querétaro,aromeroa21@hotmail.com, 442 239 5230,ghin,590571,20.50,20.50,M,9,26 AGO  Caja Club Campestre de Queretaro A-0177054,9
+M,guest,NA,Miguel Angel ,Trejo Lopez,Juriquilla,Querétaro,miguel_atl@outlook.com, 442 170 1681,ghin,12195041,25.20,25.20,XXL,12,"10 SEP  A-0177986
+DESCUENTO PATROCINADOR",12
+M,member,B265,Eugenio ,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,eugenio_ag1@icloud.com, 442 790 8952,ghin,10677069,6.10,6.10,M,11,11 SEP    A-0178170,11
+M,guest,NA,Oscar Gustavo,Enciso Lopez,Sin Club,Querétaro,segper.enciso@yahoo.com, 442 200 6471,other,97EECD67,13.30,13.30,L,10,"13 SEP A-0178246
+13 OCT A-0179463
+
+8,000 GORRAS TORNEO",10
+F,member,B.265,Ana Victoria,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,anavialv@gmail.com, 442 114 4915,ghin,106769444,4.60,4.60,M,9,11 SEP    A-0178170,9
+M,member,B 265,Mario ,Álvarez Zerecero,Club Campestre de Queretaro,Querétaro,mario.alvarez@onaxis.mx, 442 149 0361,ghin,584513,1.20,1.20,L,11,11 SEP    A-0178170,11
+F,member,B_265,María Teresa ,Goyeneche Besoy,Club Campestre de Queretaro,Querétaro,mariate@portalito.com, 442 149 0361,ghin,591574,16.60,16.60,S,9,11 SEP    A-0178170,9
+M,member,B-265,Mario ,Álvarez Goyeneche,Club Campestre de Queretaro,Querétaro,mario_ag1@icloud.com, 442 149 0361,ghin,106677068,0.40,0.40,M,11,11 SEP    A-0178170,11
+M,guest,NA,Carlos,Flores Ortega,San Carlos,Metepec,cflores_o@yahoo.com.mx, 722 209 0093,other,475409,12.90,12.90,S,7,30 SEP A-0178531,7
+M,member,A.355,Eduardo,Carrillo Osornio,Club Campestre de Queretaro,Querétaro,ec2997544@gmail.com, 442 740 7382,ghin,11127011,2.30,2.30,L,13,"1. 26 AGO CAJA Club Campestre de Queretaro A-0177053
+2. 30 ago Caja Club Campestre de Queretaro A-0177170",13
+M,member,UA 364,Gerardo,Concepcion Vega,Club Campestre de Queretaro,Querétaro,gerardoconcepcionv@gmail.com, 442 495 7644,ghin,10260296,2.70,2.70,XL,14,"18 SEP  A-0178319
+2. 30 SEP A-017850
+3. 8 OCT A-0179071",13
+M,member,UA 364 -1,Gerardo ,Concepción Valverde,Club Campestre de Queretaro,Querétaro,gerardoconcepcionvalverde@gmail.com, 442 127 9228,ghin,586154,14.80,14.80,L,11,"13 SEP  A-0178251
+09 oct A-0179124",11
+M,member,CB29802,Diego ,García González,Club Campestre de Queretaro,Querétaro,diego31194@gmail.com, 442 160 5809,ghin,588056,1.70,1.70,S,9,VETEALABURGER,9
+M,member,B171,Fernando,Noriega Castro,Club Campestre de Queretaro,Querétaro,Noriega.fer@gmail.com, 442 364 4715,ghin,12104222,15.50,15.50,XL,11,25 SEP  A-0178427,11
+M,member,A25,Arturo ,Carrillo Hernández,Club Campestre de Queretaro,Querétaro,vinedosfacturacion@yahoo.com.mx, 442 129 6961,ghin,401314,17.70,17.70,S,9,2 SEP  A-0177241,9
+M,member,UB445,Arturo ,Espinosa Mayorga,Club Campestre de Queretaro,Querétaro,aespinosa@grupo-novatech.mx, 442 259 6883,ghin,2603474,16.40,16.40,L,10,"1. 08 SEP A-0177678
+2. 29 sep A-0178492",10
+M,member,UA364-2,Eugenio ,Concepción Vega,Club Campestre de Queretaro,Querétaro,eugenioconcepcionv@gmail.com, 446 100 8781,ghin,10731099,1.30,1.30,XL,13,"18 SEP  A-0178319
+2. 30 SEP A-017850
+3. 8 OCT A-0179071",13
+M,member,CA34601,Francisco Jose ,Maciel Urquiza,Club Campestre de Queretaro,Querétaro,franmaciel24@hotmail.com, 442 559 4837,ghin,589484,0.20,0.20,L,12,"25 SEP  A-0178438
+29 sep a-0178494",12
+M,member,B81,Eduardo ,Urbiola Sanchez,Club Campestre de Queretaro,Querétaro,eurbiolas1@gmail.com, 442 230 2425,ghin,590925,5,5.00,M,10,CODIGOQRO,10
+F,member,B-81,Cecilia ,Mosti Olea,Club Campestre de Queretaro,Querétaro,ceciliamosti1@gmail.com, 442 186 5535,ghin,591596,20.70,20.70,M,8,CODIGOQRO,8
+M,member,B422,Luis Felipe ,López Sánchez,Club Campestre de Queretaro,Querétaro,luisfelipe@logoro.com.mx, 442 186 3598,ghin,2254875,2.20,2.20,XL,10,02 SEP  A-0177242,10
+M,guest,NA,Diego ,Vega Urquiza,Zibata,Querétaro,diegovegaurquiza@gmail.com, 442 219 9853,ghin,11240985,7.20,7.20,L,11,29 AGO  CAJA Club Campestre de Queretaro   A0177138,11
+M,member,B-170,Luis Gabriel,Serrano Rodriguez,Club Campestre de Queretaro,Querétaro,lserrano5647@gmail.com, 442 154 9018,ghin,10643252,1.10,1.10,M,8,"27 AGO caja Club Campestre de Queretaro A-0177101
+11 SEP A-0178116",8
+M,guest,NA,Bruno ,Guerrero Gómez,Juriquilla,Querétaro,bruno.guerrerogomez@gmail.com, 442 206 4838,ghin,11699458,8.20,8.20,S,8,1 sep   A-0177226,8
+M,member,A437,Rodrigo ,Soto Pesquera,Club Campestre de Queretaro,Querétaro,rsoto@trailermechanic.com, 442 186 7018,ghin,590851,3.20,3.20,L,11,TMI,11
+F,guest,NA,Hazel Susana ,Martinez Silva,El Campanario,Querétaro,hazelsusana@yahoo.com.mx, 442 494 4939,ghin,2240138,26.90,26.90,L,6,08 SEP A-01777712,6
+M,member,B072,Fernando ,Ruíz Alcocer,Club Campestre de Queretaro,Querétaro,fernandoruizalcocer@hotmail.com, 442 258 3846,ghin,12684487,20.20,20.20,M,8,"1. 28 AGO   caja Club Campestre de Queretaro  A-0177118
+2. 29 sep A.0178488",8
+M,guest,NA,Jorge ,Rangel Cobo,Los Amigos Golf Club,California,jorge.rangelcobo@gmail.com, 442 329 0120,ghin,12648995,16.50,16.50,M,10,"1. 02 SEP  CAJA Club Campestre de Queretaro A-0177299
+30 SEP A-0178545",10
+M,member,V002,Jorge,Alvarez Septien,Club Campestre de Queretaro,Querétaro,pelayo_alvarez@hotmail.com, 442 274 1605,ghin,584494,14,14.00,L,11,09 sep A-0177800,11
+M,member,A.27,Rodrigo ,Urquiza Escobar,Club Campestre de Queretaro,Querétaro,jrurquiza@gmail.com, 442 186 8815,ghin,590993,1,1.00,XL,12,LOS SENDEROS,12
+M,guest,NA,Luis Enrique ,Sánchez Rucobo y Huerdo,Bellavista,Ciudad de  México,Lesrh77@gmail.com, 56 1581 7434,ghin,650709,5,5.00,L,12,03 sep  A-0177353,12
+F,member,UA502,Daniela ,Rivera Vázquez,Club Campestre de Queretaro,Querétaro,danielariverav@icloud.com, 55 2299 0065,ghin,12712649,26.30,26.30,XS,6,DAMAS,5
+M,guest,NA,Fernando Adolfo ,Montiel Leyva,Tijuana Campestre,Tijuana,fernandomleyva@gmail.com, 664 425 9626,ghin,1330069,10.30,10.30,L,10,04 sep  A-0177397,10
+M,guest,NA,Juan Francisco ,Boiles Torres Landa,Juriquilla,Querétaro,franciscob@provinciajuriquilla.mx, 442 322 9561,ghin,10226586,11.00,11.00,L,11,08 AGO A-01777697,11
+M,member,A 307,Darío,Malpica Basurto,Club Campestre de Queretaro,Querétaro,dario.malpica@me.com, 442 322 8125,ghin,589514,12.60,12.60,M,11,29 AGO  CAJA Club Campestre de Queretaro   A0177139,11
+M,guest,NA,Sergio,Avila Martínez,Juriquilla,Querétaro,saavilamartinez@gmail.com, 55 1510 8622,ghin,2199675,14.50,14.50,L,9,30 SEP A-0178538,9
+M,guest,NA,Bruno ,Brieño Damián,El Campanario,Querétaro,bruno.brieno@icloud.com, 442 249 9368,ghin,12170382,19.00,19.00,L,10,BOCHA,10
+M,member,B 422,Luis Felipe,López Niembro,Club Campestre de Queretaro,Querétaro,pipeloni2007@gmail.com, 442 712 4495,ghin,1121883,5.50,5.50,S,10,"1. 30 ago A-0177164
+2. 12 SEP  A-0178233",10
+M,member,A130,Christian Alejandro ,Salgado Arzate,Club Campestre de Queretaro,Querétaro,chsagado@gmail.com, 442 226 7990,ghin,2904377,13.20,13.20,M,11,4 sep  A-0177444,11
+M,guest,NA,Oscar Alfonso ,Álvarez Martinez,Bosque Real Country Club,Huixquilcan Edo de México,oalvarez_cornfields@hotmail.com, 55 5414 5048,ghin,363028,30.40,30.40,L,10,05 SEP  A-0177531,10
+M,member,B387,Carlos ,Garza Urquiza,Club Campestre de Queretaro,Querétaro,cgarzau@gmail.com, 442 506 4753,ghin,588449,6.40,6.40,M,11,1. 1 sep  caja A-0177194,11
+M,member,B295,Enrique,Cárdenas,Club Campestre de Queretaro,Querétaro,ecb@gismexico.com.mx, 442 412 2415,ghin,585860,6.60,6.60,L,9,1. 30 ago  Caja A-0177169,9
+M,member,A338,Arturo,Alcocer Muñoz,Club Campestre de Queretaro,Querétaro,tutoalmu@gmail.com, 442 281 0151,ghin,13086523,12.50,12.50,L,11,04 SEP   A-0177451,11
+M,guest,NA,Luis Fernando ,Sánchez Piña,Balvanera,Querétaro,mig16.tar.gz@gmail.com, 55 6810 1982,ghin,10644208,9.70,9.70,S,8,19 SEP  A-0178333,8
+M,guest,NA,Cesar ,Peralta Rodriguez,Zibata,Querétaro,cesper025@gmail.com, 55 1511 2871,other,DE0291EB,18,18.00,S,10,12 SEP  A-0178198,10
+M,guest,NA,Alain,Avena,Balvanera,Querétaro,Alain.avena@gmail.com, 442 446 8892,ghin,12480667,14.20,14.20,L,13,04 sep  A-0177441,12
+M,guest,NA,Carlos Octavio ,Gonzalez Cardone,Club Campestre El Copal,Ciudad de  México,carlosgcardone@hotmail.com, 55 5505 7108,ghin,10904260,11.80,11.80,L,11,08 AGO A-01777698,11
+M,member,CA111C,Carlos Adrian ,Alcocer Bost,Club Campestre de Queretaro,Querétaro,carlosadrianalcocer1987@outlook.es, 442 359 4844,ghin,10604492,6.60,6.60,M,11,"1. Mercado Pago A-0177313
+2. 1 OCT A-0178628",11
+F,guest,NA,María del Carmen ,Ruiz Moreno,Club Campestre Lourdes,Saltillo Coahuila,cruizlxv@gmail.com, 844 178 7584,ghin,12680579,31.30,31.30,XXL,9,04 SEP   A-0177449,9
+M,guest,NA,Jose Alejandro ,Archundia Buendia,Madeiras Country Club,Ciudad de  México,alexarchundia@studioproshop.com.mx, 55 6574 6174,ghin,2072802,16.40,16.40,M,9,04 SEP   A-0177448,9
+M,guest,NA,Enrique ,Garibay Badillo,San Gil,Querétaro,enriquegaribay21@gmail.com, 55 1948 3644,ghin,10583396,14.10,14.10,XXL,11,1. 09 OCT  A-0179091,11
+F,member,UB_045,Miriam Carolina ,Rodriguez Barrientos,Club Campestre de Queretaro,Querétaro,Caro.la.invasora@gmail.com, 449 930 4760,ghin,11161083,27.80,27.80,M,9,4 SEP  A-0177452,9
+M,member,A331,Nicolas,Cerecer Lira,Club Campestre de Queretaro,Querétaro,nicolasceli18@icloud.com, 442 258 9626,ghin,12655997,10,10.00,S,8,"26 SEP A-0178454
+03 OCT A-0178713",8
+M,guest,NA,Antonio ,Udave Alonso,Juriquilla,Querétaro,antoniioudave@gmail.com, 442 362 3823,ghin,12020456,14.50,14.50,S,8,03 sep A-0177344,8
+M,guest,NA,Fernan ,Gonzalez Perez,El Campanario,Querétaro,fernangonp@gmail.com, 442 138 8030,ghin,12496649,18.30,18.30,M,11,03 sep A-0177344,11
+M,guest,NA,Jorge ,Udave Alonso,Juriquilla,Querétaro,uda.jor@hotmail.com, 442 323 6392,ghin,12020454,7.30,7.30,M,9,03 sep A-0177344,9
+M,guest,NA,Bernardo ,Espinosa Hernández,Club de Golf Palma Real,Zihuatanejo,berny_92@me.com, 755 557 0239,other,9,9,9.00,M,9,11 SEP   A-0178121,9
+M,guest,NA,Audel ,Camarena Barrera,Club de Golf Palma Real,Zihuatanejo,tiburon_cb@hotmail.com, 755 557 6737,other,8,8,8.00,M,9,13 sep A-178253,9
+M,guest,NA,Jose ,S Oregon,El Cid,Mazatlan,joregong@gmail.com, 669 122 9771,other,11316929,17,17.00,L,12,08 AGO A-01777699,12
+F,guest,NA,Jessica ,Perez Rojano,El Campanario,Querétaro,jessispr@hotmail.com, 442 475 2333,ghin,663366,8,8.00,M,8,08 SEP   A-017770,8
+M,guest,NA,Juan Ignacio ,Toxqui González,San gil,San Juan del Río,nachotox27@icloud.com, 427 304 7685,ghin,12661892,15.80,15.80,XS,9,08 AGO A-01777700,9
+M,guest,NA,Maximino ,Suárez Zarate,Campestre de Celaya,CELAYA,administracion@pmsmetalmuebles.com, 461 107 9301,ghin,1235324,20.90,20.90,XL,9,03 sep  transferencia A-0177386,9
+M,member,A086,Alfonso,Soto Pesquera,Club Campestre de Queretaro,Querétaro,ponmil@hotmail.com, 442 250 1340,ghin,590852,1.60,1.60,XL,12,EXPRESIDENTE,12
+F,member,B.151,Anaid ,Galindo Morales,Club Campestre de Queretaro,Querétaro,anaidgalindo@gmail.com, 442 124 4032,ghin,12309736,28.60,28.60,XS,5,6 sep   A-0177460,5
+M,member,B.096,José Agustín de Jesús ,González del Real,Club Campestre de Queretaro,Querétaro,glezreal@gmail.com, 55 4488 9711,ghin,11800401,28.10,28.10,M,8,03 SEP  A-0177340,8
+M,member,B411,Rodrigo ,Castro Villar,Club Campestre de Queretaro,Querétaro,rodrigocastro10@hotmail.com, 442 158 4400,ghin,585989,5,5.00,M,9,03 SEP  A-177343,9
+M,member,UB 316,Carlos ,Macias Medina,Club Campestre de Queretaro,Querétaro,cmacias@costco.com.mx, 442 219 7346,ghin,589412,8.70,8.70,L,9,03 SEP CAJA A-0177351,9
+M,guest,NA,Jorge ,Torres Soto,Santa Sofía Country Club,El Arenal Jalisco,wazu_007@hotmail.com, 33 1764 3205,other,,11.00,11.00,,9,09 SEP A-0177820,9
+M,guest,NA,Arturo,Ramírez Balderas,El Campanario,Querétaro,Arturorb98@outlook.com, 442 343 2683,ghin,660233,5.60,5.60,,12,08 AGO A-01777701,12
+M,guest,NA,Carlos Alberto ,Trejo Flores,San Gil,Querétaro,C.trejo@absi2070.com, 442 824 8057,ghin,11411847,12.60,12.60,,13,10 SEP  A-0177986,13
+M,guest,NA,José Omar ,Maldonado Rodríguez,Balvanera,Querétaro,Maldonado.omar550@gmail.com, 442 712 2924,ghin,12712660,0.10,0.10,,10,30 sep  A-0178500,10
+M,member,UA 515,Luis Carlos,Icazbalceta Valle,Club Campestre de Queretaro,Querétaro,Luis.icaz@outlook.com, 442 281 0694,ghin,12062276,20.70,20.70,,10,03 AGO  CAJA Club Campestre de Queretaro A-0177396,10
+M,guest,NA,Carlo Augusto,Álvarez García,San Gil,San Juan del Rio,alvarez_carlo@yahoo.com, 442 356 0186,ghin,2914366,11.60,11.60,,10,SAN GIL,10
+M,guest,NA,Mark,Seifert Espinosa,Sin club,Querétaro,Markseifertespinosa@gmail.com, 442 425 4730,ghin,12246582,12.40,12.40,,9,18 SEP  A-0178317,9
+M,guest,NA,Modesto,Quezada,Club Campestre de Queretaro,Querétaro,coninpark@yahoo.com, 442 747 9577,other,234768,26,26.00,,8,"18 sep  A-0178298
+18 sep  A-0178311",8
+M,guest,NA,Sergio ,Cruz Elvira,Pagni,San Diego ca,Scruzcindsupply@aol.com,1 619 289 1498,ghin,619 2891498,19.60,19.60,,10,15 sep   A-0178270,10
+M,member,A339,Samuel ,Cardenas Palacios,Club Campestre de Queretaro,Querétaro,sam_cp7@hotmail.com, 442 467 4697,ghin,585945,22.50,22.50,,10,11 SEP  A-0178113,10
+M,guest,NA,Werner ,Emil Heinze Meade,Campestre de San Luis,San Luis Potosí,Werner.heinze@banorte.com, 444 481 3922,ghin,727083,2.20,2.20,,10,10 SEP A-0177991,10
+M,guest,NA,Rolando ,Peña Castro,Club Campestre de Tijuana,Tijuana,yaqui_mexico@hotmail.com, 664 188 1614,ghin,178962,7.10,7.10,,9,15 sep   A-0178269,9
+M,member,UA203,Arturo ,Marina Vega,Club Campestre de Queretaro,Querétaro,arturomarina@gmail.com, 442 391 1248,ghin,2889569,6,6.00,,7,"1. 11 SEP  A-0178076
+2. 30 sep  A-0178515",7
+F,member,V 240,María Esther ,Perusquia Zarazua,Club Campestre de Queretaro,Querétaro,guerasanudo@hotmail.com, 442 356 0884,ghin,591639,12.40,12.40,,7,10 SEP A-0177988,7
+M,guest,NA,Israel ,Gijón Ortega,Balvanera,Querétaro,i.gijon@hotmail.com, 442 269 1640,ghin,10235283,16.60,16.60,,11,10 SEP  A-017784,11
+M,guest,NA,Víctor Arturo ,Mata Casas,Balvanera,Querétaro,cparturomata@gmail.com, 427 219 8851,ghin,11230722,24,24.00,,8,27 SEP  A-0178480,8
+M,member,X010,Jaime,García Olivares,Club Campestre de Queretaro,Querétaro,jaime.garciaolivares@gmail.com, 442 230 0720,ghin,588268,15.20,15.20,,9,EXPRESIDENTE,9
+M,member,B065,Juan Salvador,Llosa Fernández Riverol,Club Campestre de Queretaro,Querétaro,juans.llosa@gmail.com, 444 275 5632,ghin,589356,2.80,2.80,,10,TREND IT,10
+M,member,X012,Jorge ,Cárdenas Vázquez,Club Campestre de Queretaro,Querétaro,jcardenasv_qro@hotmail.com, 442 112 5974,ghin,585965,18.70,18.70,,10,EXPRESIDENTE,10
+M,member,X008,César ,Jimenez Arreola,Club Campestre de Queretaro,Querétaro,cesarnotaria2qro@hotmail.com, 442 157 0438,ghin,589290,10.70,10.70,,10,EXPRESIDENTE,10
+M,member,A326,Jorge ,Lois Rodriguez,Club Campestre de Queretaro,Querétaro,jorge.lois@notaria9qro.mx, 442 219 1152,ghin,589362,9.90,9.90,,8,08 AGO A-01777722,8
+M,guest,NA,Agustín ,Buenrostro Massieu,Juriquilla,Querétaro,agustinbuenrostro73@hotmail.com, 55 1384 9405,ghin,13230856,11.70,11.70,,10,12 SEP A-017197,10
+M,guest,NA,Juan Antonio Francisco ,Hernández Vázquez Mellado,Balvanera,Querétaro,vazquezmelladotono@gmail.com, 442 457 5619,ghin,11656849,5.60,5.60,,9,08 OCT A-0178859,9
+M,guest,NA,Leonardo ,Ruiz Valdez,Balvanera,Querétaro,l.ruiz014@ebc.edu.mx, 442 286 7810,ghin,11224578,5.60,5.60,,10,10 SEP A-0178008,10
+F,member,UA521,Esperanza ,Kim,Club Campestre de Queretaro,Querétaro,Esperanzapark@gmail.com, 442 124 2971,ghin,591582,17,17.00,,8,09 SEP A-0177861,8
+F,member,UA91,Paulina,Septién Lomelí,Club Campestre de Queretaro,Querétaro,paulinaseptien2@hotmail.com, 442 239 3977,ghin,591652,20.30,20.30,,9,"1. 09 SEP ... A-0177856
+2. 01 OCT A-0178627",9
+M,guest,NA,Ivan ,Martinez Olvera,Zibata,Querétaro,ivan.marolv.90@gmail.com, 442 356 0300,ghin,12262000,14.60,14.60,,10,18 SEP  A-0178320,10
+M,member,B031,Arturo ,Septién Moreno,Club Campestre de Queretaro,Querétaro,arturoseptien@prodigy.net.mx, 442 230 2621,ghin,590768,0.20,0.20,,11,1.  16 OCT A-0179553,11
+M,member,B-133,Javier,Cárdenas Bolio,Club Campestre de Queretaro,Querétaro,jcardenas@montacargasbolio.com.mx, 442 180 4752,ghin,585864,10.80,10.80,,9,15 sep   A-0178272,9
+M,guest,NA,Juan ,Martinez Salcido,Cantalagua,Michoacan,j_m_salcido@yahoo.com.mx, 722 301 1844,ghin,483037,8.80,8.80,,12,18 SEP  A-0178316,12
+M,member,B140,Gonzalo ,Alvarez Zerecero,Club Campestre de Queretaro,Querétaro,gonzoaz1@aol.com, 442 201 0822,ghin,584540,4.70,4.70,,9,10 sep  A-0177917,9
+M,guest,NA,Jesús A. ,Trujillo Juangorena,Club Campestre de Tuxtla,Tuxtla Gutierrez,jtrujillo@isocie.com, 667 431 2193,other,,28,28.00,,10,11 SEP  A-0178065,10
+M,guest,NA,Juan Arturo ,Hernández Luna,Balvanera,Querétaro,jarturohluna@gmail.com, 55 1331 5103,ghin,2903814,14.20,14.20,XS,10,"11 SEP  A-0178175
+Oscar Omar Aceves no podra asístir y solicito el cambio con carta de cesion.",10
+M,guest,NA,Baldomero ,Barrios,Springbrook golf course,Chicago,Nazabarrios@yahoo.com,1 630 319 3300,ghin,10206142,16.10,16.10,,10,14 OCT A-0179173,10
+M,guest,NA,Miguel,García,Glendwoodei,Chicago,2012Miguelgarcia@gmail.com,1 7085439499,ghin,10053372,13.40,13.40,,9,1. 13 SEP A-0179486,9
+F,guest,NA,Martha ,de la Fuente,Club La Rosita,Torreon,Martha_idelafuente@hotmail.com, 871 104 4386,ghin,1125835,28.70,28.70,,6,13 OCT A-0179486,6
+M,guest,NA,Raúl,López Máynez,San Carlos,Metepec,lopezmaynez@gmail.com, 722 261 2332,ghin,12711751,5.80,5.80,,9,25 sep A-0178423,9
+M,guest,NA,Raúl ,López  Alvarado,San Carlos,Metepec,rlarla54@gmail.com, 56 1200 7232,ghin,479963,19.90,19.90,,9,A-0178423,9
+M,guest,NA,Josué,de la Garza Roa,Juriquilla,Querétaro,nuevoespaciodc@gmail.com, 442 190 5688,ghin,2649495,15.20,15.20,,9,HACIENDA SAN MIGUEL,9
+M,guest,NA,Javier,Romero Flores,Santa Anita,Guadalajara,gia.seguridad@icloud.com, 33 3596 6070,ghin,12649587,7.30,7.30,,10,22 SEP A-0178375,10
+M,guest,NA,J. Antonio ,Jalili,Lagunas de Miralta,Altamira,jjalili@hotmail.com, 833 100 0731,ghin,987074,11.20,11.20,,10,17 sep  A-0178295,10
+M,guest,NA,Alfredo Pablo,Estrada Romero,Juriquilla,Querétaro,ap_estradaromero@hotmail.com, 446 152 2978,ghin,1123902,5.90,5.90,,8,17 sep A-0178294,8
+M,guest,NA,Sergio ,Salmón,Juriquilla,Querétaro,caseriocaserio@gmail.com, 442 329 4837,ghin,12916672,28.10,28.10,,11,CASERIO,11
+M,guest,NA,Melitón ,Martínez Salcido,Mazatlan,Mazatlan,meli_salcido@hotmail.com, 669 123 4027,ghin,5855045,8.00,8.00,,9,12 SEP  A-0178219,9
+M,guest,NA,Eduardo,Galdeano Valle,El Campanario,Querétaro,eduardogaldeano@gmail.com, 442 128 2993,ghin,2952496,16.90,16.90,,11,PIJO,11
+M,guest,NA,Mauricio ,Carbajo Arteaga,Malanquin,San Miguel de Allende,mauriciocarbajo@hotmail.com, 415 167 0951,ghin,1126216,6.60,6.60,,10,PRESIDENCIA CORTESÍA,10
+M,guest,NA,Antonio ,Garcia,Springbrook golf course,Chicago,Tonys8311@gmail.com,17734504877,ghin,10053365,16,16.00,,11,14 OCT  1-0179513,11
+M,guest,NA,Fernando,Ayala Hernandez,La Vista Country Club,Puebla,fdo_ayala86@hotmail.com, 222 550 7589,ghin,1444185,3.90,3.90,,11,19 SEP  A-0178335,11
+M,member,UA134,José ,Cassaretto Fernández,Club Campestre de Queretaro,Querétaro,jcassaretto@manopco.com, 442 467 9950,ghin,585966,8,8.00,,10,17 sep   A-0178289,10
+M,member,A437-1,Rodrigo,Soto Franco,Club Campestre de Queretaro,Querétaro,rsoto@trailermechanic.com, 442 186 7018,ghin,12227200,3.90,3.90,,11,25 SEP  A-0178437,11
+M,member,UA369,Alberto Enrique ,Martinez Mendoza,Club Campestre de Queretaro,Querétaro,bepawet@gmail.com, 442 330 4570,ghin,11278618,22.80,22.80,,8,1. 4 OCT 0178768,8
+M,guest,NA,Miguel , Vázquez Vargas,Bellavista,Ciudad de México,miguel74.jr@hotmail.com, 55 5402 5773,ghin,2730574,19.30,19.30,,9,29 SEP A-0178499,9
+M,guest,NA,Martin ,Maciel,Olympia Fields Country,Chicago,pendiente@pendiente.com,1 773 851 7150,ghin,10032234,12.20,12.20,,9,1. 14 OCT  A-0179515,9
+M,guest,NA,Juan Roberto ,Jiménez Villarreal,San Gil,San Juan Del Rio,juanrobertojimenez@yahoo.com.mx, 442 559 5103,ghin,2349700,12,12.00,,6,22 SEP A-0178372,6
+M,guest,NA,Santiago ,Gómez Urquiza,Campestre de San Luis,San Luis Potosí,Santigomez01@hotmail.com, 444 204 3078,ghin,3155081,6.40,6.40,,11,19 SEP  A-017334,11
+M,guest,NA,Rafael,Trejo Flores,San Gil,San Juan del Río,rafa19_30@hotmail.com, 427 121 0689,ghin,11550882,19.80,19.80,,11,19 SEP  A-0178336,11
+M,guest,NA,Salim ,Abud,Campestre de San Luis,San luis Potosi,Salim021@icloud.com, 444 141 9148,ghin,10232903,0.40,0.40,,10,17 sep  A_0178291,10
+M,guest,NA,Said ,Abud Goldaracena,Campestre de San Luis,San Luis Potosi,Said.abgo@hotmail.com, 444 204 0159,ghin,10233713,1.30,1.30,,12,17 sep  A_0178290,12
+M,guest,NA,Roberto ,Abud Barrett,Campestre de San Luis,San Luis Potosí,rabud_@hotmail.com, 444 165 0706,ghin,10754921,6.40,6.40,,12,22 SEP A-0178374,12
+M,guest,NA,Alejandro ,De La Flor Lopez,Campanario,Querétaro,alexdelaflor@gmail.com, 442 559 4833,ghin,11246256,8.00,8.00,,11,13 SEP A-0179495,11
+M,guest,NA,Carlos,Sánchez Salman,Bosque Real Country Club,Ciudad de México,csalman7@hotmail.com, 55 6565 4277,ghin,11179907,23.50,23.50,,9,22 SEP A-0178366,9
+M,guest,NA,Patricio ,Sánchez Salman F,Bosque Real Country Club,Ciudad de México,pato.salman@hotmail.com, 55 2919 4249,ghin,12115424,27.90,27.90,,9,22 SEP A-0178365,9
+M,guest,NA,Horacio ,Roman Hernández,Bellavista,Ciudad de México,horaciotercero72@gmail.com, 55 4245 8169,ghin,2908958,5.40,5.40,,9,24 SEP A-0178418,9
+M,member,B 139,Eduardo ,Loyola A,Club Campestre de Queretaro,Querétaro,eloyola63@gmail.com, 442 250 2449,ghin,589384,5.90,5.90,,9,GASNIETO,9
+M,guest,NA,Isidro ,Romero  Alcántara,San Gil,San Juan del Rio,rome_rey@yahoo.com, 773 147 6205,ghin,11396334,,0.00,,10,"30 SEP A-0178527
+06 OCT  A-0178780",10
+M,guest,NA,Rosalio ,Lizarraga Tiznado,Campestre Mazatlan,Mazatlan,rome_rey@yahoo.com, 773 147 6205,ghin,,,0.00,,9,"A-0178525
+ 06 OCT  A-0178780",9
+M,guest,NA,José Antón ,Salcedo López,Juriquilla,Querétaro,joseantoniosalcedo16@gmail.com, 442 466 6432,ghin,13204664,27.90,27.90,,12,19 SEP  A-0178321,12
+M,guest,NA,Luis Enrique ,Tafolla Lopez,Zibatá,Querétaro,luistafolla2004@gmail.com, 452 126 9580,ghin,12699072,8,8.00,,11,22 SEP A-0178367,11
+M,guest,NA,SERGIO ,MASSIEU,SIN CLUB,Querétaro,semaga2015@gmail.com, 442 471 0731,ghin,589705,18,18.00,,9,MASSIEU,9
+M,member,UB098,Oscar,Peralta Casares,Club Campestre de Queretaro,Querétaro,oscarpc@me.com,4272268429,ghin,11732893,15.50,15.50,,9,IBERICO,9
+M,guest,NA,Fernando,Palomares Souza,Juriquilla,Querétaro,palomaressouza@gmail.com, 55 5409 0095,ghin,2308538,1.80,1.80,,10,25 SEP  A-0178432,10
+M,guest,NA,Diego,Day,Bear Creek Golf Club,Murrieta California,gia.seguridad@icloud.com,3335966070,ghin,11416066,1.80,1.80,,11,22 SEP A-0178364,11
+M,member,B.071,Marco Antonio,Ortiz Paz,Club Campestre de Queretaro,Querétaro,maopmx@me.com, 442 2192 192,ghin,2516590,12.30,12.30,,10,IBERICO,10
+M,member,UB240,David ,Navarro Ledesma,Club Campestre de Queretaro,Querétaro,d.navarroledezma@gmail.com, 442 337 5052,ghin,297248,11.50,11.50,,9,30 SEP A-0178518,9
+M,guest,NA,Sebastian,Carrera,Zibata,Querétaro,sebas_carre92@yahoo.com, 442 219 2723,ghin,10260441,3.60,3.60,,10,18 SEP A-0178315,10
+F,member,B139,Eva María ,Loyola De los Cobos,Club Campestre de Queretaro,Querétaro,evaloyola20@gmail.com, 442 247 2803,ghin,977703,3,3.00,,7,1. 7 OCT A0178896,7
+M,guest,NA,Enrique ,Vázquez Albarran,Bellavista,Ciudad de México,silsa_07@infinitummail.com, 55 5959 5689,ghin,2162418,8.30,8.30,,9,22 SEP  A-0178363,9
+F,member,UB359,Myriam,Rodríguez Maldonado,Club Campestre de Queretaro,Querétaro,myris55@hotmail.com, 55 5951 4789,ghin,12682083,27.10,27.10,,8,19 SEP  A-0178351,8
+M,guest,NA,Eleazar ,Alvarado Soria,Malanquin,San Miguel de Allende,Karlacarter@hormail.com, 415 168 0041,other,,,0.00,,10,1 OCT A-0178584,10
+M,member,B038,Alfonso,Vera Hernández,Club Campestre de Queretaro,Querétaro,alfonsovh@hotmail.com, 442 219 6516,ghin,10915061,9.40,9.40,,10,"20 SEP  A-0178362
+30 SEP A-0178561",10
+M,guest,NA,Enrique,Fernández Martínez García,Malanquin,San Miguel de Allende,efmg18@yahoo.com, 415 138 3828,ghin,12548832,12.80,12.80,,11,25 SEP  A-0178431,11
+F,member,A.313,Camila ,de Echavarri Ramón,Club Campestre de Queretaro,Querétaro,daniela.echavarri14@gmail.com, 442 169 0033,ghin,10711422,3.7,3.70,,8,CORTESIA PRESIDENCIA,8
+M,guest,NA,Fred Saúl ,Bravo Reyes,Las fuentes,Puebla,Vaferssi@gmail.com, 998 292 5446,ghin,12690026,22.80,22.80,,7,25 SEP  A-0178434,7
+M,guest,NA,Isaac Abraham ,de la Barreda Pineda,Club de golf las fuentes,Puebla,abrahamdlbp@gmail.com, 222 451 3504,ghin,1903980,3.30,3.30,,8,23 SEP A-0178404,8
+M,guest,NA,Juan Pablo,Layseca,San Gil,San Juan del Río,jlaysecam@hotmail.com, 427 488 6774,ghin,426910,5.50,5.50,,10,CORTESIAPRESIDENCIA,10
+M,guest,NA,Diego ,Dorantes Ojeda,El Campanario,Querétaro,Diegodo10@hotmail.com, 442 467 1868,ghin,22.20,22.60,22.60,,10,"23 SEP A-0178405
+25 sep A-0178441",10
+M,guest,NA,Carlos Antonio ,Jalili Alfaro,Lagunas de Miralta,Altamira,cjalili@hotmail.com, 833 188 0960,ghin,987071,2.20,2.20,,8,22 SEP A-0178369,8
+M,member,CA54501,Luis Miguel ,Correa Olivares,Club Campestre de Queretaro,Querétaro,luismcorrea@outlook.es, 442 230 0705,ghin,2296037,8.20,8.20,,9,23 Sep A-0178401,9
+M,member,V222,Luis Felipe ,Garcia Alcocer,Club Campestre de Queretaro,Querétaro,atilagarcia357@gmail.com, 442 369 1679,ghin,587879,14.30,14.30,,9,EXPRESIDENTE,9
+M,member,V216,Jose Guadalupe,Toscano,Club Campestre de Queretaro,Querétaro,pillolac@palmalac.com.mx, 442 207 5921,ghin,590919,17,17.00,,11,PALMALAC,11
+M,member,UA142,John Christian ,Poulsen Bremont,Club Campestre de Queretaro,Querétaro,glastore.qro@outlook.com, 442 721 0453,ghin,590250,16.50,16.50,,12,"1. 1 OCT  A-178576
+2. 30 SEP A-178552",12
+M,member,B344,Sergio ,Serrano Padilla,Club Campestre de Queretaro,Querétaro,sergio.serrano@me.com, 442 258 2018,ghin,590790,12.80,12.80,,10,25 de SEP A-0178444,10
+M,member,B220,Eduardo ,Caturegli,Club Campestre de Queretaro,Querétaro,ecaturegli@yahoo.com, 442 333 7095,ghin,586010,11.70,11.70,,12,26 SEP A-0178475,12
+M,guest,NA,Emilio ,Emilio Cano Pérez,Juriquilla,Querétaro,emilio.cano@iivsa.com.mx, 442 479 6520,ghin,12743817,9.30,9.30,,9,29 SEP A-0178502,9
+M,guest,NA,Juan Pablo,Ruiz Segura,Campestre de Celaya,Celaya,jpablo.ruiz14@gmail.com, 461 206 8544,ghin,11216472,11.30,11.30,,9,23 SEP A-0178406,9
+M,guest,NA,Juan Pablo ,Ríos Castañon,Campestre de Celaya,Celaya,jprios1319@gmail.com, 461 230 7638,ghin,1235224,12.90,12.90,,10,30 SEP A-0178511,10
+M,guest,NA,Franco Alejandro ,Sánchez Ocampo,Bellavista,Ciudad de México,franco.so7749@gmail.com, 55 4130 3563,ghin,10696071,5.50,5.50,,10,26 SEP A-0178476,10
+M,member,A421,Sergio Antonio,Reyes García,Club Campestre de Queretaro,Querétaro,pilloreyesg@gmail.com,4422190097,ghin,pendiente,22,22.00,,11,PRESIDENCIA CORTESIA,11
+M,member,B156,Gerardo  ,Suarez Carrillo,Club Campestre de Queretaro,Querétaro,gsuarez@gruponr.mx, 442 226 1412,ghin,590876,15.60,15.60,,9,GRUPONR,9
+M,member,V247,Carlos ,Fernandez de la Isla,Club Campestre de Queretaro,Querétaro,carlos53delaisla@gmail.com, 442 116 2790,ghin,587442,11,11.00,,11,23 DE SEP  A-0178396,11
+M,guest,NA,Jose Luis ,de Larrea Saldaña,Bellavista,Ciudad de México,joseluis@jladvisor.com, 442 249 7701,ghin,589321,2.80,2.80,,9,1. 160CT A-0179543,9
+M,member,B.170,Diego ,Serrano Rodriguez,Club Campestre de Queretaro,Querétaro,diego.serranordz07@gmail.com, 442 653 9616,ghin,10696410,2.3,2.30,,11,CAMPEON2024,11
+F,member,B.177,Angelina ,Feregrino Vega,Club Campestre de Queretaro,Querétaro,gelyfevega@gmail.com, 446 138 2186,ghin,593588,20.70,20.70,,9,26 SEP A-0178365,9
+M,member,UA104B,ALBERTO ,REYES GALVÁN,Club Campestre de Queretaro,Querétaro,alreyes@me.com, 442 219 7248,ghin,2908939,13.40,13.40,,10,26 SEP A-0178470,10
+M,guest,NA,Hector ,ibar Cruz Boy,El Campanario,Querétaro,hector920@hotmail.com, 442 247 2115,ghin,11570003,16.20,16.20,,8,29 SEP A-0178498,8
+M,guest,NA,Alejandro,López Pérez,Club  Sta. Margarita,Irapuato,alejandro-lope@hotmail.com, 462 107 6357,ghin,1229590,10.30,10.30,,9,06 oct A-0178779,9
+M,guest,NA,Jorge Cesar,Pacheco Gonzalez,Malanquin,San miguel de Allende,cpc.jorgepacheco@gmail.com, 477 130 5785,ghin,11454913,4.90,4.90,,10,11 OCT A-0179370,10
+M,member,B370,Julián ,González De Cossio Urquiza,Club Campestre de Queretaro,Querétaro,Juliangcu@hotmail.com, 442 381 8868,ghin,2153589,12.10,12.10,,10,"26 SEP A-0178450
+30 sep A-0187569",10
+M,member,B183,Alejandro Bernardo,De los Cobos y Vega,Club Campestre de Queretaro,Querétaro,Cobos3406@hotmail.com, 442 632 2073,ghin,2903835,10.40,10.40,,10,09 OCT A-0179115,10
+M,member,UB158,Hugo ,Burgos Garcia,Club Campestre de Queretaro,Querétaro,diezmo@yahoo.com, 442 186 2539,ghin,11652603,27.80,27.80,,10,"24 SEP A-0178417
+25 SEP A-A178429",10
+M,member,A438,Juan Carlos ,Reyes Garcia,Club Campestre de Queretaro,Querétaro,juancarlosreyes@pinar.mx, 442 338 2332,ghin,590340,9,9.00,,10,CORTESIA PRESIDENCIA,10
+M,guest,NA,Alejandro ,Escalante Camino,Juriquilla,Querétaro,a.escalante@webuild.mx, 442 239 3726,ghin,12181087,18,18.00,,10,LANDROVER,10
+M,member,Ua319,Francisco javier ,Fernández Calzada,Club Campestre de Queretaro,Querétaro,Pacofdz9@gmail.com, 442 127 9638,ghin,587377,10.00,10.00,,11,30 SEP A-0178542,11
+M,guest,NA,JOSE ,SAYAVEDRA,Zirandaro,Querétaro,jose.sayavedra@gmail.com, 442 121 6960,other,14,14,14.00,,10,1. 15 OCT A-0179534,10
+M,guest,NA,Armando ,Bucio,Zibata,Querétaro,a.bucio@webuild.mx,4422811644,other,43ED2608,16.30,16.30,,12,LANDROVER,12
+M,guest,NA,Mario ,Vargas Guerra,Club de Golf La Hacienda,Ciudad de México,Mario-vargas1@live.com.mx, 55 4261 4838,ghin,11664405,6.60,6.60,,10,26 SEP A-0178456,10
+M,member,UB292,Francisco,Niembro,Club Campestre de Queretaro,Querétaro,quiconiembro@gmail.com, 442 186 3086,ghin,11990750,7.70,7.70,,9,"26 SEP  A-0178469
+27 SEP A-0178483",9
+M,guest,NA,Jose Esteban ,Estrada Romero,Zibata,Querétaro,Estradajoseesteban@gmail.com, 442 206 6998,ghin,11080189,7.70,7.70,,8,26 SEP A-0178463,8
+M,guest,NA,Paulo,Padrón Ibarra,Bosque Real Ejecutivo,Ciudad de México,Apoyin28@yahoo.com.mx, 55 5104 7635,other,84AGF878,10,10.00,,9,30 sep A-0178537,9
+M,guest,NA,Marco Aurelio ,Paulin Perea,Juriquilla,Querétaro,mpaulin@bankaool.com, 442 265 5130,other,2164638,12.30,12.30,,10,"02 OCT A-0178652
+DESCUENTO PATROCINADOR",10
+M,member,H008,Mario ,Ramirez Retolaza,Club Campestre de Queretaro,Querétaro,sincorreo@correo.com,4461390084,ghin,590307,11,11.00,,10,GABINETE CORPORATIVO,10
+M,member,B227,Alejandro ,Rodriguez Vieyra,Club Campestre de Queretaro,Querétaro,alejandrorv@arovi.com, 442 446 9673,ghin,590474,7.30,7.30,,9,VIAJES LEGRAND,9
+F,guest,NA,karla ,Carter Díaz,Malanquin,san miguel de allende,karlacarter007@gmail.com, 415 153 3555,ghin,11228207,10.90,10.90,,8,30 SEP A-0178539,8
+M,guest,NA,Rafael ,Helfon Daniel,Bellavista,Ciudad de México,rhd@alhel.com.mx, 55 1800 2632,ghin,488745,10.10,10.10,,9,1 OCT A-0178587,9
+M,member,B078,Alfonso,Becerril Arechiga,Club Campestre de Queretaro,Querétaro,alanbecar1@hotmail.com, 55 5436 4330,ghin,584903,25.20,25.20,,11,1.  02 OCT  A-0178658,11
+M,guest,NA,Gregorio ,Leon,Zibata,Querétaro,Gregorio.leon.db@gmail.com, 446 138 2838,other,51AD708D,29.10,29.10,,9,1 OCT A-0178585,9
+M,guest,NA,Oscar Leopoldo,Domínguez Mateos,Pachuca,Querétaro,oscardom57@gmail.com, 442 334 2037,ghin,45CF53DF,23.30,23.30,,8,3 oct A-0178667,8
+M,member,B130,Ricardo,Gonzalez Marquez,Club Campestre de Queretaro,Querétaro,gomarquez2000@yahoo.com.mx, 464 645 1466,ghin,3122837,22,22.00,,9,07 oct A-0178843,9
+M,member,A348,Napoleón José ,Chapa Estrada,Club Campestre de Queretaro,Querétaro,napochapa@gmail.com, 442 173 1412,ghin,586058,19.30,19.30,,12,02 OCT A-0178632,12
+M,guest,NA,Oscar Alfonso ,Rangel Montes,Campestre de San Luis,San Luis Potosí,arangelm1@hotmail.com, 442 152 8406,other,19,16,16.00,,8,26 SEP  A-0178477,8
+M,guest,NA,Ivan ,Jimenez Rodriguez,Chiluca,Atizapan,ivan@cis-mex.net, 55 4145 6484,ghin,10664782,23.50,23.50,,10,9 OCT A-0179141,10
+M,guest,NA,JUAN ALVARO ,ENRIQUEZ LOZANO,Club de Golf La Hacienda,ATIZAPAN DE ZARAGOZA ESTADO DE MEXICO,aenriquez@enriquezlozano.com.mx, 55 1268 3785,ghin,307263,21.30,21.30,,8,27 SEP A-0178478,8
+M,guest,NA,Roque Manuel ,Mercado Portillo,Balvanera,Querétaro,Parrilladasargentinasceo@gmail.com, 442 156 1009,ghin,12743849,25.70,25.70,,10,PARRILLADASARGENTINAS,10
+M,guest,NA,Roberto,Arena Elizondo,Campestre de León,León,arena_robertoc@hotmail.com, 477 266 3754,ghin,574072,4.40,4.40,,11,1. 06 OCT A-0178774,11
+M,guest,NA,Víctor,González Guerrero,zibata,Querétaaro,victor.gonzalez@srmsistemas.com, 55 2219 0286,ghin,12241162,23.40,23.40,,9,03 OCT A-0178702,9
+M,guest,NA,Juan Arturo,Torreslanda Cabrera,Juriquilla,Querétaro,jarturotlc@gmail.com,1111111111,ghin,,8,8.00,,10,CORTESIA PRESIDENCIA,10
+M,guest,NA,Juan Carlos ,Rodríguez Jiménez,Santa margarita,Irapuato,Jcrmex@outlook.com, 461 189 7016,ghin,12807587,6.40,6.40,,9,15 OCT A-0179528,9
+M,member,B176,Eduardo,Cabrera,Club Campestre de Queretaro,Querétaro,lalocabrera5@hotmail.com, 442 186 2736,ghin,585513,6,6.00,,11,1. A-0179150,11
+M,member,B 097,Luis Angel ,Aranda,Club Campestre de Queretaro,Querétaro,cortesia@cortesia.com,4423614702,ghin,PENDIENTE,24,24.00,,8,CORTESIA PRESIDENCIA,8
+M,guest,NA,Alfredo ,Salinas Tager,La Vista Country Club,Puebla,faridtager@icloud.com, 55 7851 3188,ghin,10783748,14.80,14.80,,9,KJ,9
+M,guest,NA,Juan Carlos ,Autrique Benasini,Amanali Country Club,Tepeji del Río,jautrique@icloud.com, 55 6066 3033,ghin,983259,17.60,17.60,,11,PIJO,11
+M,guest,NA,Francisco Javier ,Huerta Romero,Álamo Country Club,"Celaya, Gto.",javierh2002@hotmail.com, 461 117 1614,ghin,11673001,15.20,15.20,,9,A-0178781   Deposito Señor Isidro,9
+M,guest,NA,Juan Arturo ,Torreslanda Urquiza,Juriquilla,Querétaro,j.arturo@grupotl.com,1234567890,ghin,1124181,8.60,8.60,,11,PRESIDENCIA CORTESIA,11
+M,guest,NA,JOSE LUIS,SIMBECK ESCOBEDO,Los Tabachines,Cuernavaca,golfsimbeck@yahoo.com.mx, 55 3938 9772,ghin,1138298,13.60,13.60,,11,13 OCT A-0179462,11
+M,guest,NA,Melesio,Reyes Hernández,Álamo Country Club,Celaya,r_melesio@hotmail.com, 477 326 0220,ghin,109115767,14.60,14.60,,11,1. 08 OCT A-0179033,11
+M,member,UA326,Ricardo ,de la Vega Serrano,Club Campestre de Queretaro,Queretaro,delav@quitopa.com.mx, 442 190 2844,ghin,586773,4.60,4.60,,10,"
+2.14 oct  A-1079518",10
+M,guest,NA,Carlos Alberto,Sierra Cárdenas,Balvanera,CORREGIDORA,sierra.cardenas.carlos@gmail.com, 782 131 0664,ghin,2255630,14.90,14.90,,8,09 OCT A-179137,8
+M,member,A309,Luis Felipe,Zamorano,Club Campestre de Queretaro,Queretaro,lzamoranog@hotmail.com, 55 1068 1418,ghin,10584230,21.10,21.10,,10,1. 07 OCT A-0178950,10
+M,guest,NA,RICARDO ,URQUIZA DOMENGE,CAMPANARIO,QUERETARO,ricardoud@live.com.mx, 442 175 1636,ghin,590963,2.50,2.50,,12,09 OCT A-0179165,12
+F,guest,.,Marybel ,Rodríguez Espinoza,La Hacienda,Ciudad de México,meyita.mr@gmail.com, 55 1778 3678,ghin,11664404,21.40,21.40,,8,15 0CT A-0179527,8
+M,guest,NA,Mario Arturo,Trejo López,SIN CLUB,Querétaro,mtrejo@corporativolegas.com, 442 367 6554,other,DE46484E,24.40,24.40,,10,REDWINGS,10
+M,guest,NA,Juan Camilo,Villa Aristizabal,Zirandaro,San Miguel Allende,cvillaa@gmail.com, 55 1441 4080,ghin,11466116,9.10,9.10,,11,17 OCT A-0179579,11
+M,member,UA 087,Miguel,García Arroyo,Club Campestre de Queretaro,Querétaro,miguelgarcia071008@gmail.com, 442 772 7634,ghin,10696408,1,1.00,,9,CORTESIA PRESIDENCIA,9
+,,,,,,,,,,,,,,,,

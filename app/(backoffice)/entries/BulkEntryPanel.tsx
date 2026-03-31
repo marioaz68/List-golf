@@ -9,7 +9,7 @@ type Player = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
-  club: string | null;
+  club_label: string | null;
 };
 
 function categoryFromHandicap(h: number | null) {
@@ -40,10 +40,10 @@ export default function BulkEntryPanel({
     const set = new Set<string>();
 
     players.forEach((p) => {
-      if (p.club) set.add(p.club);
+      if (p.club_label) set.add(p.club_label);
     });
 
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b));
   }, [players]);
 
   const filtered = useMemo(() => {
@@ -51,13 +51,17 @@ export default function BulkEntryPanel({
 
     return players.filter((p) => {
       const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.toLowerCase();
-      const matchesName = !q || name.includes(q);
-      const matchesClub = !club || p.club === club;
+      const clubText = (p.club_label ?? "").toLowerCase();
+
+      const matchesSearch =
+        !q || name.includes(q) || clubText.includes(q);
+
+      const matchesClub = !club || p.club_label === club;
 
       const cat = categoryFromHandicap(p.handicap_index);
       const matchesCategory = !category || cat === category;
 
-      return matchesName && matchesClub && matchesCategory;
+      return matchesSearch && matchesClub && matchesCategory;
     });
   }, [players, search, club, category]);
 
@@ -100,7 +104,7 @@ export default function BulkEntryPanel({
 
           <div className="flex flex-wrap items-center gap-1">
             <input
-              placeholder="Buscar nombre..."
+              placeholder="Buscar nombre o club..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-7 min-w-[160px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black placeholder:text-gray-400"
@@ -113,7 +117,9 @@ export default function BulkEntryPanel({
             >
               <option value="">Todos los clubs</option>
               {clubs.map((c) => (
-                <option key={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
             </select>
 
@@ -204,11 +210,11 @@ export default function BulkEntryPanel({
                     </td>
 
                     <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      {p.last_name} {p.first_name}
+                      {`${p.last_name ?? ""} ${p.first_name ?? ""}`.trim()}
                     </td>
 
                     <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      {p.club ?? "-"}
+                      {p.club_label ?? "-"}
                     </td>
 
                     <td className="border border-gray-300 px-1.5 py-[3px] leading-none">

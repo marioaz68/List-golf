@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -52,7 +52,7 @@ type ClubRow = {
 };
 
 async function getActiveClubByIdOrThrow(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   club_id: string
 ) {
   const { data, error } = await supabase
@@ -80,7 +80,7 @@ async function getActiveClubByIdOrThrow(
 }
 
 async function findClubByNormalizedName(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   normalized_name: string
 ) {
   const { data, error } = await supabase
@@ -99,7 +99,7 @@ async function findClubByNormalizedName(
 }
 
 async function resolveClubForCreateCourse(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   formData: FormData
 ) {
   const club_mode = String(formData.get("club_mode") ?? "existing").trim();
@@ -176,7 +176,7 @@ function revalidateAll() {
 }
 
 export async function createCourse(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const name = reqStr(formData, "name");
   const short_name = optStr(formData, "short_name");
@@ -201,7 +201,7 @@ export async function createCourse(formData: FormData) {
 }
 
 export async function updateCourse(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const course_id = reqStr(formData, "course_id");
   const name = reqStr(formData, "name");
@@ -227,7 +227,7 @@ export async function updateCourse(formData: FormData) {
 }
 
 export async function saveCourseHoles(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const course_id = reqStr(formData, "course_id");
 
@@ -256,7 +256,7 @@ export async function saveCourseHoles(formData: FormData) {
 }
 
 export async function saveCourseTeeSets(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const course_id = reqStr(formData, "course_id");
   const rowsRaw = reqStr(formData, "rows_json");

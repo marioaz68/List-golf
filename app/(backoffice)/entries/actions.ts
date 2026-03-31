@@ -407,6 +407,78 @@ export async function autoCategorizeEntries(formData: FormData) {
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
 
+export async function enrollExcelPlayersToTournament(formData: FormData) {
+  const supabase = await createClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  await ensureEntriesAccess(tournament_id);
+
+  const rawLimit = Number(formData.get("limit") ?? 30);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.floor(rawLimit)
+      : 30;
+
+  const t = await getTournamentData(supabase, tournament_id);
+  const cats = await getTournamentCats(supabase, tournament_id);
+
+  const { data: players, error: pErr } = await supabase
+    .from("players")
+    .select("id, gender, handicap_torneo, handicap_index")
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+
+  if (pErr) throw new Error("Error leyendo players: " + pErr.message);
+
+  const { data: existing, error: eErr } = await supabase
+    .from("tournament_entries")
+    .select("player_id")
+    .eq("tournament_id", tournament_id);
+
+  if (eErr) throw new Error("Error leyendo entries existentes: " + eErr.message);
+
+  const existingSet = new Set((existing ?? []).map((x: any) => x.player_id));
+
+  const rows =
+    (players ?? [])
+      .filter((p: any) => !existingSet.has(p.id))
+      .slice(0, limit)
+      .map((p: any) => {
+        const playerGender = String(p.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+
+        const handicap =
+          p.handicap_torneo != null
+            ? Number(p.handicap_torneo)
+            : p.handicap_index != null
+              ? Number(p.handicap_index)
+              : null;
+
+        const category_id =
+          handicap != null && Number.isFinite(handicap)
+            ? pickCategoryId({ cats, playerGender, handicap })
+            : null;
+
+        return {
+          org_id: t.org_id,
+          tournament_id,
+          player_id: p.id,
+          handicap_index: handicap,
+          category_id,
+          status: "confirmed",
+        };
+      }) || [];
+
+  if (rows.length > 0) {
+    for (const batch of chunkArray(rows, 100)) {
+      const { error: insErr } = await supabase.from("tournament_entries").insert(batch);
+      if (insErr) throw new Error("Error insertando entries: " + insErr.message);
+    }
+  }
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}`);
+}
+
 export async function enrollAllPlayersToTournament(formData: FormData) {
   const supabase = await createClient();
 

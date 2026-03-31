@@ -12,7 +12,9 @@ type Props = {
 type ClubOption = {
   id: string;
   name: string;
+  short_name: string | null;
   normalized_name: string;
+  is_active?: boolean | null;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -56,6 +58,10 @@ function normalizeClubName(value: string) {
     .replace(/\s+/g, " ");
 }
 
+function clubLabel(option: Pick<ClubOption, "name" | "short_name">) {
+  return option.name.trim();
+}
+
 export default function NewPlayerForm({
   onCreated,
   returnTournament,
@@ -71,6 +77,7 @@ export default function NewPlayerForm({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [club, setClub] = useState("");
+  const [clubId, setClubId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -127,14 +134,17 @@ export default function NewPlayerForm({
 
       const { data, error } = await supabase
         .from("clubs")
-        .select("id,name,normalized_name")
-        .ilike("name", `%${term}%`)
+        .select("id,name,short_name,normalized_name,is_active")
+        .eq("is_active", true)
+        .or(`name.ilike.%${term}%,short_name.ilike.%${term}%`)
         .order("name", { ascending: true })
         .limit(8);
 
       if (!error) {
         setClubSuggestions((data as ClubOption[]) ?? []);
         setClubDropdownOpen(true);
+      } else {
+        setClubSuggestions([]);
       }
 
       setClubSearchLoading(false);
@@ -144,17 +154,22 @@ export default function NewPlayerForm({
     return () => clearTimeout(timer);
   }, [club]);
 
-  const selectClub = (name: string) => {
-    setClub(name);
+  const selectClub = (selected: ClubOption) => {
+    setClub(selected.name);
+    setClubId(selected.id);
     setClubDropdownOpen(false);
     setSelectedClubIndex(-1);
   };
 
   const exactMatchExists = clubSuggestions.some(
-    (c) => c.normalized_name === normalizedTypedClub
+    (c) =>
+      c.normalized_name === normalizedTypedClub ||
+      normalizeClubName(c.name) === normalizedTypedClub
   );
 
-  const ensureClubExists = async (rawClub: string) => {
+  const ensureClubExists = async (
+    rawClub: string
+  ): Promise<{ id: string | null; name: string | null } | null> => {
     const trimmed = rawClub.trim();
     if (!trimmed) return null;
 
@@ -162,48 +177,76 @@ export default function NewPlayerForm({
 
     const { data: existing, error: existingError } = await supabase
       .from("clubs")
-      .select("id,name")
+      .select("id,name,short_name,is_active")
       .eq("normalized_name", normalized_name)
+      .eq("is_active", true)
       .maybeSingle();
 
     if (existingError) {
       throw new Error(existingError.message);
     }
 
-    if (existing?.name && existing.name !== trimmed) {
-      setClub(existing.name);
-      return existing.name;
+    if (existing?.id) {
+      setClub(existing.name ?? trimmed);
+      setClubId(existing.id);
+      return {
+        id: existing.id,
+        name: existing.name ?? trimmed,
+      };
     }
 
-    if (!existing) {
-      const { error: insertClubError } = await supabase.from("clubs").insert({
-        name: trimmed,
-        normalized_name,
-      });
+    const insertPayload = {
+      name: trimmed,
+      short_name: trimmed,
+      normalized_name,
+      is_active: true,
+    };
 
-      if (insertClubError && insertClubError.code !== "23505") {
-        throw new Error(insertClubError.message);
+    const { data: inserted, error: insertClubError } = await supabase
+      .from("clubs")
+      .insert(insertPayload)
+      .select("id,name,short_name,is_active")
+      .single();
+
+    if (insertClubError && insertClubError.code !== "23505") {
+      throw new Error(insertClubError.message);
+    }
+
+    if (inserted?.id) {
+      setClub(inserted.name ?? trimmed);
+      setClubId(inserted.id);
+      return {
+        id: inserted.id,
+        name: inserted.name ?? trimmed,
+      };
+    }
+
+    if (insertClubError?.code === "23505") {
+      const { data: retryExisting, error: retryError } = await supabase
+        .from("clubs")
+        .select("id,name,short_name,is_active")
+        .eq("normalized_name", normalized_name)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (retryError) {
+        throw new Error(retryError.message);
       }
 
-      if (insertClubError?.code === "23505") {
-        const { data: retryExisting, error: retryError } = await supabase
-          .from("clubs")
-          .select("name")
-          .eq("normalized_name", normalized_name)
-          .maybeSingle();
-
-        if (retryError) {
-          throw new Error(retryError.message);
-        }
-
-        if (retryExisting?.name) {
-          setClub(retryExisting.name);
-          return retryExisting.name;
-        }
+      if (retryExisting?.id) {
+        setClub(retryExisting.name ?? trimmed);
+        setClubId(retryExisting.id);
+        return {
+          id: retryExisting.id,
+          name: retryExisting.name ?? trimmed,
+        };
       }
     }
 
-    return trimmed;
+    return {
+      id: null,
+      name: trimmed,
+    };
   };
 
   const createPlayer = async (e: React.FormEvent) => {
@@ -244,7 +287,14 @@ export default function NewPlayerForm({
     setLoading(true);
 
     try {
-      const finalClub = await ensureClubExists(club);
+      let finalClubText: string | null = null;
+      let finalClubId: string | null = clubId;
+
+      if (club.trim()) {
+        const ensured = await ensureClubExists(club);
+        finalClubText = ensured?.name?.trim() || null;
+        finalClubId = ensured?.id ?? finalClubId ?? null;
+      }
 
       const res = await supabase
         .from("players")
@@ -258,7 +308,8 @@ export default function NewPlayerForm({
             birth_year: by,
             phone: phone.trim() || null,
             email: email.trim().toLowerCase() || null,
-            club: finalClub?.trim() || null,
+            club: finalClubText,
+            club_id: finalClubId,
           },
         ])
         .select("id")
@@ -297,6 +348,7 @@ export default function NewPlayerForm({
       setPhone("");
       setEmail("");
       setClub("");
+      setClubId(null);
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -502,6 +554,7 @@ export default function NewPlayerForm({
               value={club}
               onChange={(e) => {
                 setClub(e.target.value);
+                setClubId(null);
                 setClubDropdownOpen(true);
               }}
               onFocus={() => {
@@ -542,9 +595,12 @@ export default function NewPlayerForm({
                   e.preventDefault();
 
                   if (selectedClubIndex < clubSuggestions.length) {
-                    selectClub(clubSuggestions[selectedClubIndex].name);
+                    selectClub(clubSuggestions[selectedClubIndex]);
                   } else if (!exactMatchExists && club.trim()) {
-                    selectClub(club.trim());
+                    setClub(club.trim());
+                    setClubId(null);
+                    setClubDropdownOpen(false);
+                    setSelectedClubIndex(-1);
                   }
                 }
 
@@ -583,7 +639,12 @@ export default function NewPlayerForm({
 
               {!clubSearchLoading && clubSuggestions.length === 0 && club.trim() && (
                 <div
-                  onMouseDown={() => selectClub(club.trim())}
+                  onMouseDown={() => {
+                    setClub(club.trim());
+                    setClubId(null);
+                    setClubDropdownOpen(false);
+                    setSelectedClubIndex(-1);
+                  }}
                   style={{
                     padding: "8px 10px",
                     cursor: "pointer",
@@ -602,7 +663,7 @@ export default function NewPlayerForm({
                 clubSuggestions.map((item, index) => (
                   <div
                     key={item.id}
-                    onMouseDown={() => selectClub(item.name)}
+                    onMouseDown={() => selectClub(item)}
                     style={{
                       padding: "8px 10px",
                       cursor: "pointer",
@@ -626,7 +687,12 @@ export default function NewPlayerForm({
                 clubSuggestions.length > 0 &&
                 club.trim() && (
                   <div
-                    onMouseDown={() => selectClub(club.trim())}
+                    onMouseDown={() => {
+                      setClub(club.trim());
+                      setClubId(null);
+                      setClubDropdownOpen(false);
+                      setSelectedClubIndex(-1);
+                    }}
                     style={{
                       padding: "8px 10px",
                       cursor: "pointer",

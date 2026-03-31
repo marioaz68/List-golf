@@ -7,8 +7,8 @@ type Entry = {
   players: {
     first_name: string | null;
     last_name: string | null;
-    club: string | null;
-  };
+    club_label: string | null;
+  } | null;
   categories: {
     code: string | null;
     name: string | null;
@@ -35,7 +35,7 @@ export default function EntriesSummaryPanel({
     const map: Record<string, number> = {};
 
     entries.forEach((e) => {
-      const club = e.players?.club ?? "Sin club";
+      const club = e.players?.club_label ?? "Sin club";
       map[club] = (map[club] ?? 0) + 1;
     });
 

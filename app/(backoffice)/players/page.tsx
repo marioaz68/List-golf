@@ -45,16 +45,22 @@ type TeeRule = {
   handicap_max: number | null;
 };
 
+type ClubRef = {
+  name: string | null;
+  short_name: string | null;
+};
+
 type Player = {
   id: number | string;
   first_name: string | null;
   last_name: string | null;
   gender: "M" | "F" | null;
   handicap_index: number | null;
+  handicap_torneo: number | null;
   phone: string | null;
   email: string | null;
-  club: string | null;
-  handicap_torneo: number | null;
+  club_id: string | null;
+  clubs: ClubRef | null;
   birth_year: number | null;
 };
 
@@ -104,6 +110,11 @@ function categoryForPlayer(
   );
 
   return relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null;
+}
+
+function clubLabelFromClub(club: ClubRef | null | undefined) {
+  const v = (club?.name ?? club?.short_name ?? "").trim();
+  return v || "—";
 }
 
 export default async function PlayersPage(props: {
@@ -249,9 +260,22 @@ export default async function PlayersPage(props: {
 
   let playersQuery = supabase
     .from("players")
-    .select(
-      "id, first_name, last_name, gender, handicap_index, phone, email, club, handicap_torneo, birth_year"
-    );
+    .select(`
+      id,
+      first_name,
+      last_name,
+      gender,
+      handicap_index,
+      handicap_torneo,
+      phone,
+      email,
+      birth_year,
+      club_id,
+      clubs:clubs (
+        name,
+        short_name
+      )
+    `);
 
   if (q) {
     playersQuery = playersQuery.or(
@@ -477,7 +501,7 @@ export default async function PlayersPage(props: {
                   {p.teeLabel}
                 </td>
                 <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                  {p.club ?? "—"}
+                  {clubLabelFromClub(p.clubs)}
                 </td>
                 <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                   {p.email ?? "—"}
@@ -488,7 +512,13 @@ export default async function PlayersPage(props: {
                       id: String(p.id),
                       first_name: p.first_name,
                       last_name: p.last_name,
+                      gender: p.gender,
+                      handicap_index: p.handicap_index,
+                      handicap_torneo: p.handicap_torneo,
+                      phone: p.phone,
                       email: p.email,
+                      club: p.clubs?.name ?? null,
+                      club_id: p.club_id ?? null,
                     }}
                   />
                 </td>

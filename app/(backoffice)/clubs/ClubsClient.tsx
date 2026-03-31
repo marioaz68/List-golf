@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createClub, toggleClubActive, updateClub } from "./actions";
+import { useRouter } from "next/navigation";
+import {
+  createClub,
+  mergeClubIntoWinner,
+  toggleClubActive,
+  updateClub,
+} from "./actions";
 
 type ClubRow = {
   id: string;
@@ -77,6 +83,18 @@ const inputStyle: React.CSSProperties = {
   lineHeight: 1.2,
 };
 
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  padding: "8px 10px",
+  fontSize: 13,
+  outline: "none",
+  background: "#ffffff",
+  color: "#111827",
+  lineHeight: 1.2,
+};
+
 const secondaryButtonStyle: React.CSSProperties = {
   border: "1px solid #94a3b8",
   background: "#f8fafc",
@@ -134,41 +152,64 @@ function emptyForm(): FormState {
 }
 
 export default function ClubsClient({ clubs }: Props) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState<FormState>(emptyForm());
   const [editForm, setEditForm] = useState<FormState>(emptyForm());
   const [errorMsg, setErrorMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return clubs;
 
     return clubs.filter((club) =>
-      [club.name ?? "", club.short_name ?? ""].join(" ").toLowerCase().includes(q)
+      [club.name ?? "", club.short_name ?? "", club.normalized_name ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [clubs, query]);
 
-  function beginEdit(club: ClubRow) {
+  const inactiveClubs = useMemo(
+    () => clubs.filter((club) => club.is_active === false),
+    [clubs]
+  );
+
+  const activeClubs = useMemo(
+    () => clubs.filter((club) => club.is_active !== false),
+    [clubs]
+  );
+
+  function clearMessages() {
     setErrorMsg("");
-    setEditingId(club.id);
+    setInfoMsg("");
+  }
+
+  function beginEdit(club: ClubRow) {
+    clearMessages();
     setEditForm({
       id: club.id,
       name: club.name ?? "",
       short_name: club.short_name ?? "",
       is_active: club.is_active !== false,
     });
+    setEditingId(club.id);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditForm(emptyForm());
-    setErrorMsg("");
+    clearMessages();
   }
 
   function submitCreate() {
-    setErrorMsg("");
+    clearMessages();
 
     const fd = new FormData();
     fd.set("name", createForm.name);
@@ -177,8 +218,13 @@ export default function ClubsClient({ clubs }: Props) {
 
     startTransition(async () => {
       try {
-        await createClub(fd);
+        const saved = await createClub(fd);
+        if (!saved?.id) {
+          throw new Error("No se confirmó el alta del club.");
+        }
         setCreateForm(emptyForm());
+        setInfoMsg("Club creado correctamente.");
+        router.refresh();
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : "Error creando club");
       }
@@ -186,9 +232,12 @@ export default function ClubsClient({ clubs }: Props) {
   }
 
   function submitEdit() {
-    if (!editForm.id) return;
+    if (!editForm.id) {
+      setErrorMsg("No se encontró el club a editar.");
+      return;
+    }
 
-    setErrorMsg("");
+    clearMessages();
 
     const fd = new FormData();
     fd.set("club_id", editForm.id);
@@ -198,8 +247,22 @@ export default function ClubsClient({ clubs }: Props) {
 
     startTransition(async () => {
       try {
-        await updateClub(fd);
-        cancelEdit();
+        const saved = await updateClub(fd);
+
+        if (!saved?.id) {
+          throw new Error("No se confirmó la actualización del club.");
+        }
+
+        if ((saved.short_name ?? null) !== (editForm.short_name.trim() || null)) {
+          throw new Error(
+            "La base no regresó el short name esperado. No se guardó correctamente."
+          );
+        }
+
+        setEditingId(null);
+        setEditForm(emptyForm());
+        setInfoMsg("Club actualizado correctamente.");
+        router.refresh();
       } catch (err) {
         setErrorMsg(
           err instanceof Error ? err.message : "Error actualizando club"
@@ -209,7 +272,7 @@ export default function ClubsClient({ clubs }: Props) {
   }
 
   function submitToggle(club: ClubRow) {
-    setErrorMsg("");
+    clearMessages();
 
     const fd = new FormData();
     fd.set("club_id", club.id);
@@ -217,11 +280,52 @@ export default function ClubsClient({ clubs }: Props) {
 
     startTransition(async () => {
       try {
-        await toggleClubActive(fd);
+        const saved = await toggleClubActive(fd);
+        if (!saved?.id) {
+          throw new Error("No se confirmó el cambio de estatus.");
+        }
+        setInfoMsg(
+          club.is_active !== false
+            ? "Club desactivado correctamente."
+            : "Club activado correctamente."
+        );
+        router.refresh();
       } catch (err) {
         setErrorMsg(
           err instanceof Error ? err.message : "Error cambiando estatus"
         );
+      }
+    });
+  }
+
+  function submitMerge() {
+    clearMessages();
+
+    if (!mergeSourceId || !mergeTargetId) {
+      setErrorMsg("Selecciona club duplicado y club destino.");
+      return;
+    }
+
+    if (mergeSourceId === mergeTargetId) {
+      setErrorMsg("El club duplicado y el destino no pueden ser el mismo.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("source_club_id", mergeSourceId);
+    fd.set("target_club_id", mergeTargetId);
+
+    startTransition(async () => {
+      try {
+        await mergeClubIntoWinner(fd);
+        setMergeSourceId("");
+        setMergeTargetId("");
+        setInfoMsg(
+          "Fusión aplicada. Se movieron los courses al club destino y el club duplicado quedó inactivo."
+        );
+        router.refresh();
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Error fusionando club");
       }
     });
   }
@@ -270,6 +374,21 @@ export default function ClubsClient({ clubs }: Props) {
           }}
         >
           {errorMsg}
+        </div>
+      ) : null}
+
+      {!errorMsg && infoMsg ? (
+        <div
+          style={{
+            border: "1px solid #bbf7d0",
+            background: "#f0fdf4",
+            color: "#166534",
+            borderRadius: 8,
+            padding: "10px 12px",
+            fontSize: 13,
+          }}
+        >
+          {infoMsg}
         </div>
       ) : null}
 
@@ -346,6 +465,68 @@ export default function ClubsClient({ clubs }: Props) {
         </div>
       </section>
 
+      <section
+        style={{
+          ...cardStyle,
+          padding: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+          Fusionar club duplicado
+        </div>
+
+        <div style={{ fontSize: 12, color: "#4b5563" }}>
+          Mueve los courses del club duplicado al club bueno y deja el duplicado
+          inactivo. No borra el registro origen.
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(220px,1fr) minmax(220px,1fr) auto",
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <select
+            value={mergeSourceId}
+            onChange={(e) => setMergeSourceId(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="">Club duplicado / origen</option>
+            {inactiveClubs.map((club) => (
+              <option key={club.id} value={club.id}>
+                {(club.name ?? "—") + ` · courses: ${club.courses_count}`}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={mergeTargetId}
+            onChange={(e) => setMergeTargetId(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="">Club bueno / destino</option>
+            {activeClubs.map((club) => (
+              <option key={club.id} value={club.id}>
+                {(club.name ?? "—") + ` · courses: ${club.courses_count}`}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={submitMerge}
+            disabled={isPending}
+            style={primaryButtonStyle}
+          >
+            {isPending ? "Fusionando..." : "Fusionar"}
+          </button>
+        </div>
+      </section>
+
       <section style={tableWrapStyle}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -369,10 +550,10 @@ export default function ClubsClient({ clubs }: Props) {
               filtered.map((club) => {
                 const isEditing = editingId === club.id;
 
-                if (isEditing) {
-                  return (
-                    <tr key={club.id}>
-                      <td style={tdStyle}>
+                return (
+                  <tr key={club.id}>
+                    <td style={tdStyle}>
+                      {isEditing ? (
                         <input
                           value={editForm.name}
                           onChange={(e) =>
@@ -383,9 +564,22 @@ export default function ClubsClient({ clubs }: Props) {
                           }
                           style={inputStyle}
                         />
-                      </td>
+                      ) : (
+                        <div>
+                          <div style={{ fontWeight: 600, color: "#111827" }}>
+                            {club.name || "—"}
+                          </div>
+                          {club.normalized_name ? (
+                            <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                              {club.normalized_name}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
 
-                      <td style={tdStyle}>
+                    <td style={tdStyle}>
+                      {isEditing ? (
                         <input
                           value={editForm.short_name}
                           onChange={(e) =>
@@ -396,11 +590,15 @@ export default function ClubsClient({ clubs }: Props) {
                           }
                           style={inputStyle}
                         />
-                      </td>
+                      ) : (
+                        club.short_name || "—"
+                      )}
+                    </td>
 
-                      <td style={tdStyle}>{club.courses_count}</td>
+                    <td style={tdStyle}>{club.courses_count}</td>
 
-                      <td style={tdStyle}>
+                    <td style={tdStyle}>
+                      {isEditing ? (
                         <label
                           style={{
                             display: "inline-flex",
@@ -422,9 +620,27 @@ export default function ClubsClient({ clubs }: Props) {
                           />
                           Activo
                         </label>
-                      </td>
+                      ) : (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "3px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            border: "1px solid #d1d5db",
+                            background:
+                              club.is_active !== false ? "#dcfce7" : "#f3f4f6",
+                            color: "#111827",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {club.is_active !== false ? "Activo" : "Inactivo"}
+                        </span>
+                      )}
+                    </td>
 
-                      <td style={tdStyle}>
+                    <td style={tdStyle}>
+                      {isEditing ? (
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
                             type="button"
@@ -432,7 +648,7 @@ export default function ClubsClient({ clubs }: Props) {
                             disabled={isPending}
                             style={primaryButtonStyle}
                           >
-                            Guardar
+                            {isPending ? "Guardando..." : "Guardar"}
                           </button>
 
                           <button
@@ -444,65 +660,31 @@ export default function ClubsClient({ clubs }: Props) {
                             Cancelar
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                }
+                      ) : (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            onClick={() => beginEdit(club)}
+                            disabled={isPending}
+                            style={secondaryButtonStyle}
+                          >
+                            Editar
+                          </button>
 
-                return (
-                  <tr key={club.id}>
-                    <td style={tdStyle}>
-                      <div style={{ fontWeight: 600, color: "#111827" }}>
-                        {club.name || "—"}
-                      </div>
-                    </td>
-
-                    <td style={tdStyle}>{club.short_name || "—"}</td>
-
-                    <td style={tdStyle}>{club.courses_count}</td>
-
-                    <td style={tdStyle}>
-                      <span
-                        style={{
-                          display: "inline-block",
-                          padding: "3px 8px",
-                          borderRadius: 999,
-                          fontSize: 12,
-                          border: "1px solid #d1d5db",
-                          background:
-                            club.is_active !== false ? "#dcfce7" : "#f3f4f6",
-                          color: "#111827",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {club.is_active !== false ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
-
-                    <td style={tdStyle}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={() => beginEdit(club)}
-                          disabled={isPending}
-                          style={secondaryButtonStyle}
-                        >
-                          Editar
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => submitToggle(club)}
-                          disabled={isPending}
-                          style={
-                            club.is_active !== false
-                              ? redButtonStyle
-                              : greenButtonStyle
-                          }
-                        >
-                          {club.is_active !== false ? "Desactivar" : "Activar"}
-                        </button>
-                      </div>
+                          <button
+                            type="button"
+                            onClick={() => submitToggle(club)}
+                            disabled={isPending}
+                            style={
+                              club.is_active !== false
+                                ? redButtonStyle
+                                : greenButtonStyle
+                            }
+                          >
+                            {club.is_active !== false ? "Desactivar" : "Activar"}
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

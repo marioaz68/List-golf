@@ -8,7 +8,7 @@ type Player = {
   first_name: string;
   last_name: string;
   handicap_index: number | null;
-  club: string | null;
+  club_label: string | null;
 };
 
 export default function SinglePlayerEntryPanel({
@@ -25,7 +25,7 @@ export default function SinglePlayerEntryPanel({
 
     return players.filter((p) => {
       const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.toLowerCase();
-      const club = (p.club ?? "").toLowerCase();
+      const club = (p.club_label ?? "").toLowerCase();
 
       return name.includes(q) || club.includes(q);
     });
@@ -89,7 +89,7 @@ export default function SinglePlayerEntryPanel({
                   </td>
 
                   <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                    {p.club ?? "-"}
+                    {p.club_label ?? "-"}
                   </td>
 
                   <td className="border border-gray-300 px-1.5 py-[3px] leading-none">

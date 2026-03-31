@@ -11,7 +11,7 @@ type Entry = {
   players: {
     first_name: string | null;
     last_name: string | null;
-    club: string | null;
+    club_label: string | null;
     email?: string | null;
   } | null;
   categories: {
@@ -35,10 +35,10 @@ export default function EntriesListPanel({
     const set = new Set<string>();
 
     entries.forEach((e) => {
-      if (e.players?.club) set.add(e.players.club);
+      if (e.players?.club_label) set.add(e.players.club_label);
     });
 
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
   }, [entries]);
 
   const categories = useMemo(() => {
@@ -48,101 +48,94 @@ export default function EntriesListPanel({
       if (e.categories?.code) set.add(e.categories.code);
     });
 
-    return [...set].sort();
+    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
   }, [entries]);
 
   const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+
     return entries.filter((e) => {
       const name =
         `${e.players?.first_name ?? ""} ${e.players?.last_name ?? ""}`.toLowerCase();
 
-      const matchesName = !search || name.includes(search.toLowerCase());
-      const matchesClub = !club || e.players?.club === club;
+      const clubText = (e.players?.club_label ?? "").toLowerCase();
+
+      const matchesSearch =
+        !q || name.includes(q) || clubText.includes(q);
+
+      const matchesClub = !club || e.players?.club_label === club;
       const matchesCategory = !category || e.categories?.code === category;
 
-      return matchesName && matchesClub && matchesCategory;
+      return matchesSearch && matchesClub && matchesCategory;
     });
   }, [entries, search, club, category]);
 
   return (
-    <section className="space-y-3 rounded-lg border border-gray-300 bg-white p-3 text-black shadow-sm">
-      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
-        <div className="grid gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-gray-700">
+    <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
+      <div className="flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1">
+        <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
             Jugadores inscritos
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.5fr)_minmax(180px,1fr)_minmax(170px,1fr)_110px] xl:items-end">
-            <div className="grid gap-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.04em] text-gray-600">
-                Buscar jugador
-              </label>
-              <input
-                placeholder="Nombre del jugador..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-black placeholder:text-gray-400"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <input
+              placeholder="Buscar jugador o club..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black placeholder:text-gray-400"
+            />
 
-            <div className="grid gap-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.04em] text-gray-600">
-                Club
-              </label>
-              <select
-                value={club}
-                onChange={(e) => setClub(e.target.value)}
-                className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-black"
-              >
-                <option value="">Todos los clubs</option>
-                {clubs.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={club}
+              onChange={(e) => setClub(e.target.value)}
+              className="h-7 min-w-[130px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
+            >
+              <option value="">Todos los clubs</option>
+              {clubs.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
 
-            <div className="grid gap-1.5">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.04em] text-gray-600">
-                Categoría
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-[12px] text-black"
-              >
-                <option value="">Todas categorías</option>
-                {categories.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </div>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-7 min-w-[110px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
+            >
+              <option value="">Todas cat.</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
 
-            <div className="flex items-end">
-              <div className="inline-flex h-9 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-[11px] font-medium text-gray-700">
-                {filtered.length} / {entries.length}
-              </div>
+            <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
+              {filtered.length} / {entries.length}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="max-h-[560px] overflow-auto rounded-lg border border-gray-300">
-        <table className="w-full min-w-[780px] border-collapse text-[12px] text-black">
+      <div className="max-h-[560px] overflow-auto rounded border border-gray-300">
+        <table className="w-full min-w-[720px] border-collapse text-[11px] text-black">
           <thead className="sticky top-0 z-10 bg-gray-200 text-black">
             <tr>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 Jugador
               </th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 Club
               </th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold whitespace-nowrap">
+              <th className="w-[72px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 Hcp torneo
               </th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+              <th className="w-[58px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 Cat
               </th>
-              <th className="border border-gray-300 px-3 py-2 text-left font-semibold">
+              <th className="w-[220px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 Acciones
               </th>
             </tr>
@@ -156,24 +149,24 @@ export default function EntriesListPanel({
 
               return (
                 <tr key={e.id} className="bg-white align-top">
-                  <td className="border border-gray-300 px-3 py-3 leading-snug">
-                    <div className="font-medium leading-snug">{fullName}</div>
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {fullName}
                   </td>
 
-                  <td className="border border-gray-300 px-3 py-3 leading-snug">
-                    {e.players?.club ?? "-"}
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {e.players?.club_label ?? "-"}
                   </td>
 
-                  <td className="border border-gray-300 px-3 py-3 leading-snug">
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
                     {e.handicap_index ?? "-"}
                   </td>
 
-                  <td className="border border-gray-300 px-3 py-3 leading-snug">
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
                     {e.categories?.code ?? "-"}
                   </td>
 
-                  <td className="border border-gray-300 px-3 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <td className="border border-gray-300 px-1.5 py-[3px]">
+                    <div className="flex flex-wrap items-center gap-1">
                       <form
                         action={deleteEntry}
                         onSubmit={(ev) => {
@@ -192,7 +185,7 @@ export default function EntriesListPanel({
                         />
 
                         <button
-                          className="inline-flex min-h-8 items-center justify-center rounded-md border border-red-700 bg-red-700 px-3 text-[11px] font-medium text-white hover:bg-red-800"
+                          className="inline-flex min-h-6 items-center justify-center rounded border border-red-700 bg-red-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-red-800"
                           type="submit"
                         >
                           Quitar
@@ -220,7 +213,7 @@ export default function EntriesListPanel({
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  className="border border-gray-300 px-3 py-4 text-[12px] text-gray-700"
+                  className="border border-gray-300 px-2 py-2 text-[11px] text-gray-700"
                   colSpan={5}
                 >
                   Sin resultados

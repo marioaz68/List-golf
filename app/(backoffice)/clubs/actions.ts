@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -36,8 +36,15 @@ type ClubCheckRow = {
   is_active: boolean | null;
 };
 
+function revalidateAll() {
+  revalidatePath("/clubs");
+  revalidatePath("/courses");
+  revalidatePath("/tournaments");
+  revalidatePath("/", "layout");
+}
+
 async function getClubById(club_id: string) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("clubs")
@@ -45,18 +52,34 @@ async function getClubById(club_id: string) {
     .eq("id", club_id)
     .maybeSingle();
 
-  if (error) {
-    throw new Error(`Error leyendo club: ${error.message}`);
-  }
-
+  if (error) throw new Error(`Error leyendo club: ${error.message}`);
   return (data as ClubCheckRow | null) ?? null;
+}
+
+async function getDuplicatesByNormalizedName(
+  normalized_name: string,
+  excludeId?: string
+) {
+  const supabase = createAdminClient();
+
+  let query = supabase
+    .from("clubs")
+    .select("id, name, short_name, normalized_name, is_active")
+    .eq("normalized_name", normalized_name);
+
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Error buscando duplicados: ${error.message}`);
+
+  return (data ?? []) as ClubCheckRow[];
 }
 
 async function getActiveDuplicatesByNormalizedName(
   normalized_name: string,
   excludeId?: string
 ) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let query = supabase
     .from("clubs")
@@ -64,17 +87,31 @@ async function getActiveDuplicatesByNormalizedName(
     .eq("normalized_name", normalized_name)
     .eq("is_active", true);
 
-  if (excludeId) {
-    query = query.neq("id", excludeId);
-  }
+  if (excludeId) query = query.neq("id", excludeId);
 
   const { data, error } = await query;
-
   if (error) {
-    throw new Error(`Error buscando duplicados: ${error.message}`);
+    throw new Error(`Error buscando duplicados activos: ${error.message}`);
   }
 
   return (data ?? []) as ClubCheckRow[];
+}
+
+async function ensureUniqueNormalizedName(
+  clubId: string | null,
+  normalized_name: string
+) {
+  const duplicates = await getDuplicatesByNormalizedName(
+    normalized_name,
+    clubId ?? undefined
+  );
+
+  if (duplicates.length > 0) {
+    const existing = duplicates[0];
+    throw new Error(
+      `Ya existe un club con nombre equivalente: "${existing?.name ?? "Club existente"}".`
+    );
+  }
 }
 
 async function ensureUniqueActiveNormalizedName(
@@ -87,36 +124,26 @@ async function ensureUniqueActiveNormalizedName(
   );
 
   if (duplicates.length > 0) {
-    const winner = duplicates[0];
+    const existing = duplicates[0];
     throw new Error(
-      `Ya existe otro club activo con nombre equivalente: "${winner?.name ?? "Club existente"}".`
+      `Ya existe otro club activo con nombre equivalente: "${existing?.name ?? "Club existente"}".`
     );
   }
 }
 
-function revalidateAll() {
-  revalidatePath("/clubs");
-  revalidatePath("/courses");
-  revalidatePath("/tournaments");
-  revalidatePath("/", "layout");
-}
-
 export async function createClub(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const name = reqStr(formData, "name");
   const short_name = optStr(formData, "short_name");
   const is_active = boolFromForm(formData, "is_active");
-
   const normalized_name = normalizeText(name);
 
   if (!normalized_name) {
     throw new Error("Falta nombre válido del club.");
   }
 
-  if (is_active) {
-    await ensureUniqueActiveNormalizedName(null, normalized_name);
-  }
+  await ensureUniqueNormalizedName(null, normalized_name);
 
   const { data, error } = await supabase
     .from("clubs")
@@ -126,29 +153,23 @@ export async function createClub(formData: FormData) {
       normalized_name,
       is_active,
     })
-    .select("id, name, short_name, is_active, normalized_name")
-    .maybeSingle();
+    .select("id, name, short_name, normalized_name, is_active")
+    .single();
 
-  if (error) {
-    throw new Error(`Error creando club: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error(
-      "No se pudo crear el club. Revisa permisos RLS de INSERT en Supabase."
-    );
-  }
+  if (error) throw new Error(`Error creando club: ${error.message}`);
 
   revalidateAll();
+  return data;
 }
 
 export async function updateClub(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const club_id = reqStr(formData, "club_id");
   const name = reqStr(formData, "name");
   const short_name = optStr(formData, "short_name");
   const is_active = boolFromForm(formData, "is_active");
+  const normalized_name = normalizeText(name);
 
   const existingClub = await getClubById(club_id);
 
@@ -158,10 +179,15 @@ export async function updateClub(formData: FormData) {
     );
   }
 
-  const normalized_name = normalizeText(name);
-
   if (!normalized_name) {
     throw new Error("Falta nombre válido del club.");
+  }
+
+  const previousNormalized = normalizeText(existingClub.name || "");
+  const normalizedChanged = normalized_name !== previousNormalized;
+
+  if (normalizedChanged) {
+    await ensureUniqueNormalizedName(club_id, normalized_name);
   }
 
   if (is_active) {
@@ -177,24 +203,17 @@ export async function updateClub(formData: FormData) {
       is_active,
     })
     .eq("id", club_id)
-    .select("id, name, short_name, is_active, normalized_name")
-    .maybeSingle();
+    .select("id, name, short_name, normalized_name, is_active")
+    .single();
 
-  if (error) {
-    throw new Error(`Error actualizando club: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error(
-      "No se pudo actualizar el club. Revisa permisos RLS de UPDATE en Supabase."
-    );
-  }
+  if (error) throw new Error(`Error actualizando club: ${error.message}`);
 
   revalidateAll();
+  return data;
 }
 
 export async function toggleClubActive(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const club_id = reqStr(formData, "club_id");
   const next_active = boolFromForm(formData, "next_active");
@@ -223,18 +242,71 @@ export async function toggleClubActive(formData: FormData) {
       is_active: next_active,
     })
     .eq("id", club_id)
-    .select("id, name, short_name, is_active")
-    .maybeSingle();
+    .select("id, name, short_name, normalized_name, is_active")
+    .single();
 
-  if (error) {
-    throw new Error(`Error cambiando estatus del club: ${error.message}`);
+  if (error) throw new Error(`Error cambiando estatus del club: ${error.message}`);
+
+  revalidateAll();
+  return data;
+}
+
+export async function mergeClubIntoWinner(formData: FormData) {
+  const supabase = createAdminClient();
+
+  const source_club_id = reqStr(formData, "source_club_id");
+  const target_club_id = reqStr(formData, "target_club_id");
+
+  if (source_club_id === target_club_id) {
+    throw new Error("El club origen y el club destino no pueden ser el mismo.");
   }
 
-  if (!data) {
+  const [sourceClub, targetClub] = await Promise.all([
+    getClubById(source_club_id),
+    getClubById(target_club_id),
+  ]);
+
+  if (!sourceClub) throw new Error("No se encontró el club duplicado/origen.");
+  if (!targetClub) throw new Error("No se encontró el club destino.");
+
+  const targetNormalized = normalizeText(targetClub.name || "");
+  if (!targetNormalized) throw new Error("El club destino no tiene nombre válido.");
+
+  await ensureUniqueActiveNormalizedName(target_club_id, targetNormalized);
+
+  const { error: moveCoursesError } = await supabase
+    .from("courses")
+    .update({ club_id: target_club_id })
+    .eq("club_id", source_club_id);
+
+  if (moveCoursesError) {
     throw new Error(
-      "No se pudo cambiar estatus del club. Revisa permisos RLS de UPDATE en Supabase."
+      `Error moviendo courses al club destino: ${moveCoursesError.message}`
+    );
+  }
+
+  const { error: deactivateSourceError } = await supabase
+    .from("clubs")
+    .update({ is_active: false })
+    .eq("id", source_club_id);
+
+  if (deactivateSourceError) {
+    throw new Error(
+      `Error desactivando club origen: ${deactivateSourceError.message}`
+    );
+  }
+
+  const { error: activateTargetError } = await supabase
+    .from("clubs")
+    .update({ is_active: true })
+    .eq("id", target_club_id);
+
+  if (activateTargetError) {
+    throw new Error(
+      `Error activando club destino: ${activateTargetError.message}`
     );
   }
 
   revalidateAll();
+  return { ok: true };
 }

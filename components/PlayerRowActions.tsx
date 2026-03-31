@@ -5,13 +5,21 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import PlayerEditModal from "./PlayerEditModal";
 
+type PlayerModalData = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  gender: "M" | "F" | null;
+  handicap_index: number | null;
+  handicap_torneo: number | null;
+  phone: string | null;
+  email: string | null;
+  club: string | null;
+  club_id: string | null;
+};
+
 type PlayerRowActionsProps = {
-  player: {
-    id?: string | null;
-    first_name?: string | null;
-    last_name?: string | null;
-    email?: string | null;
-  } | null;
+  player: PlayerModalData | null;
 };
 
 export default function PlayerRowActions({
@@ -50,7 +58,7 @@ export default function PlayerRowActions({
     });
   }
 
-  if (!playerId) {
+  if (!playerId || !player) {
     return (
       <div className="flex flex-wrap items-center gap-1">
         <button

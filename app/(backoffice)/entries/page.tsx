@@ -1,19 +1,38 @@
 import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
-import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
+import HeaderBar from "@/components/ui/HeaderBar";
 import SinglePlayerEntryPanel from "./SinglePlayerEntryPanel";
 import BulkEntryPanel from "./BulkEntryPanel";
 import EntriesListPanel from "./EntriesListPanel";
 import EntriesSummaryPanel from "./EntriesSummaryPanel";
+import EnrollExcelButton from "./EnrollExcelButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type SP = { [key: string]: string | string[] | undefined };
-
 type Tournament = {
   id: string;
   name: string | null;
+  status: string | null;
+};
+
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+};
+
+type ClubRef = {
+  name: string | null;
+  short_name: string | null;
+};
+
+type PlayerBase = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  gender: "M" | "F" | "X" | null;
+  handicap_index: number | null;
+  clubs: ClubRef | null;
 };
 
 type Player = {
@@ -22,7 +41,23 @@ type Player = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
-  club: string | null;
+  club_label: string | null;
+};
+
+type EntryRowBase = {
+  id: string;
+  player_id: string;
+  handicap_index: number | null;
+  players: {
+    first_name: string | null;
+    last_name: string | null;
+    email?: string | null;
+    clubs: ClubRef | null;
+  } | null;
+  categories: {
+    code: string | null;
+    name: string | null;
+  } | null;
 };
 
 type EntryRow = {
@@ -32,255 +67,272 @@ type EntryRow = {
   players: {
     first_name: string | null;
     last_name: string | null;
-    club: string | null;
-  };
+    club_label: string | null;
+    email?: string | null;
+  } | null;
   categories: {
     code: string | null;
     name: string | null;
   } | null;
 };
 
-const tabBaseClass =
-  "inline-flex min-h-8 items-center justify-center rounded-md border px-3 text-[11px] font-medium";
-const tabIdleClass =
-  `${tabBaseClass} border-gray-300 bg-white text-gray-700 hover:bg-gray-50`;
-const tabActiveClass =
-  `${tabBaseClass} border-blue-700 bg-blue-700 text-white`;
+type EntriesTab = "manual" | "bulk" | "entries" | "summary";
 
-export default async function EntriesPage(props: {
-  searchParams?: SP | Promise<SP>;
+function normalizeClubLabel(value: string | null | undefined) {
+  const v = value?.trim();
+  return v ? v : null;
+}
+
+function clubLabelFromClub(club: ClubRef | null | undefined) {
+  return normalizeClubLabel(club?.short_name ?? club?.name ?? null);
+}
+
+function normalizeTab(value: string | string[] | undefined): EntriesTab {
+  const tab = typeof value === "string" ? value : "";
+  if (tab === "bulk") return "bulk";
+  if (tab === "entries") return "entries";
+  if (tab === "summary") return "summary";
+  return "manual";
+}
+
+function tabHref(tournamentId: string, tab: EntriesTab) {
+  const params = new URLSearchParams();
+  if (tournamentId) params.set("tournament_id", tournamentId);
+  params.set("tab", tab);
+  return `/entries?${params.toString()}`;
+}
+
+function tabClasses(active: boolean) {
+  return active
+    ? "inline-flex min-h-7 items-center justify-center rounded border border-gray-800 bg-gray-800 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm"
+    : "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 hover:bg-gray-50";
+}
+
+export default async function EntriesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const params = (await searchParams) ?? {};
+  const requestedTournamentId =
+    typeof params.tournament_id === "string" ? params.tournament_id : "";
+  const activeTab = normalizeTab(params.tab);
+
   const supabase = await createClient();
-  const sp = props.searchParams ? await props.searchParams : {};
 
-  const view = typeof sp.view === "string" ? sp.view.trim() : "single";
-  const tournament_id =
-    typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
-
-  const { data: tournaments, error: tErr } = await supabase
-    .from("tournaments")
-    .select("id, name, created_at")
-    .order("created_at", { ascending: false });
-
-  if (tErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-base font-semibold text-white">
-          Inscripciones
-        </h1>
-        <p className="text-xs text-red-200">
-          Error cargando torneos: {tErr.message}
-        </p>
-      </div>
-    );
-  }
-
-  if (!tournaments || tournaments.length === 0) {
-    return (
-      <div className="space-y-2 p-3">
-        <h1 className="text-base font-semibold text-white">
-          Inscripciones
-        </h1>
-
-        <div className="rounded border border-yellow-300 bg-yellow-50 p-2 text-yellow-900">
-          <div className="text-xs font-semibold">
-            Primero necesitas crear un torneo
-          </div>
-
-          <div className="mt-1 text-xs leading-5">
-            Todavía no existe ningún torneo. Crea uno primero y después podrás
-            inscribir jugadores.
-          </div>
-
-          <div className="mt-2">
-            <a
-              href="/tournaments/new"
-              className="inline-flex min-h-8 items-center justify-center rounded-md border border-gray-700 bg-gray-700 px-3 text-[11px] font-semibold text-white shadow"
-            >
-              Ir a nuevo torneo
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const typedTournaments = (tournaments ?? []) as Tournament[];
-  const effectiveTournamentId = tournament_id || (typedTournaments[0]?.id ?? "");
-
-  if (!tournament_id && effectiveTournamentId) {
-    redirect(
-      `/entries?view=${encodeURIComponent(view)}&tournament_id=${effectiveTournamentId}`
-    );
-  }
-
-  await requireTournamentAccess({
-    tournamentId: effectiveTournamentId,
-    allowedRoles: [
-      "super_admin",
-      "club_admin",
-      "tournament_director",
-      "checkin",
-    ],
-  });
-
-  const { data: players, error: pErr } = await supabase
-    .from("players")
-    .select("id, first_name, last_name, gender, handicap_index, club")
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true });
-
-  if (pErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-base font-semibold text-white">
-          Inscripciones
-        </h1>
-        <p className="text-xs text-red-200">
-          Error cargando players: {pErr.message}
-        </p>
-      </div>
-    );
-  }
-
-  const { data: rawEntries, error: eErr } = await supabase
-    .from("tournament_entries")
-    .select(
-      `
-      id,
-      player_id,
-      handicap_index,
-      players:players (
+  const [tournamentsRes, playersRes, categoriesRes] = await Promise.all([
+    supabase.from("tournaments").select("id, name, status").order("name"),
+    supabase
+      .from("players")
+      .select(`
+        id,
         first_name,
         last_name,
-        club
-      ),
-      categories:categories (
-        code,
-        name
-      )
-    `
-    )
-    .eq("tournament_id", effectiveTournamentId)
-    .order("created_at", { ascending: true });
+        gender,
+        handicap_index,
+        clubs:clubs (
+          name,
+          short_name
+        )
+      `)
+      .order("last_name")
+      .order("first_name"),
+    supabase
+      .from("categories")
+      .select("id, code, name, tournament_id")
+      .order("sort_order", { ascending: true }),
+  ]);
 
-  if (eErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-base font-semibold text-white">
-          Inscripciones
-        </h1>
-        <p className="text-xs text-red-200">
-          Error cargando inscritos: {eErr.message}
-        </p>
-      </div>
-    );
+  if (tournamentsRes.error) {
+    throw new Error(`Error leyendo tournaments: ${tournamentsRes.error.message}`);
   }
 
-  const typedPlayers = (players ?? []) as Player[];
-  const typedEntries = (rawEntries ?? []) as EntryRow[];
+  if (playersRes.error) {
+    throw new Error(`Error leyendo players: ${playersRes.error.message}`);
+  }
 
-  const enrolledPlayerIds = new Set(typedEntries.map((e) => e.player_id));
-  const availablePlayers = typedPlayers.filter(
-    (p) => !enrolledPlayerIds.has(p.id)
-  );
+  if (categoriesRes.error) {
+    throw new Error(`Error leyendo categories: ${categoriesRes.error.message}`);
+  }
+
+  const tournaments = (tournamentsRes.data ?? []) as Tournament[];
+  const selectedTournamentId = requestedTournamentId || tournaments[0]?.id || "";
+
+  const categories = ((categoriesRes.data ?? []) as Array<
+    Category & { tournament_id?: string | null }
+  >)
+    .filter((c) => !selectedTournamentId || c.tournament_id === selectedTournamentId)
+    .map((c) => ({
+      id: c.id,
+      code: c.code,
+      name: c.name,
+    }));
+
+  const players: Player[] = ((playersRes.data ?? []) as PlayerBase[]).map((p) => ({
+    id: p.id,
+    first_name: p.first_name,
+    last_name: p.last_name,
+    gender: p.gender,
+    handicap_index: p.handicap_index,
+    club_label: clubLabelFromClub(p.clubs),
+  }));
+
+  let entries: EntryRow[] = [];
+
+  if (selectedTournamentId) {
+    const entriesRes = await supabase
+      .from("tournament_entries")
+      .select(`
+        id,
+        player_id,
+        handicap_index,
+        players:players (
+          first_name,
+          last_name,
+          email,
+          clubs:clubs (
+            name,
+            short_name
+          )
+        ),
+        categories:categories (
+          code,
+          name
+        )
+      `)
+      .eq("tournament_id", selectedTournamentId)
+      .order("created_at", { ascending: false });
+
+    if (entriesRes.error) {
+      throw new Error(`Error leyendo tournament_entries: ${entriesRes.error.message}`);
+    }
+
+    entries = ((entriesRes.data ?? []) as EntryRowBase[]).map((e) => ({
+      id: e.id,
+      player_id: e.player_id,
+      handicap_index: e.handicap_index,
+      players: e.players
+        ? {
+            first_name: e.players.first_name,
+            last_name: e.players.last_name,
+            email: e.players.email ?? null,
+            club_label: clubLabelFromClub(e.players.clubs),
+          }
+        : null,
+      categories: e.categories
+        ? {
+            code: e.categories.code,
+            name: e.categories.name,
+          }
+        : null,
+    }));
+  }
 
   return (
-    <div className="space-y-3 p-3">
-      <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-3">
-        <div className="grid gap-3 xl:grid-cols-[auto_1fr] xl:items-end">
-          <div className="text-[13px] font-semibold uppercase tracking-[0.04em] text-white">
-            Inscripciones
+    <main className="space-y-2 p-2">
+      <HeaderBar title="Entries">
+        <div className="flex flex-wrap items-center gap-1">
+          {selectedTournamentId ? (
+            <EnrollExcelButton tournament_id={selectedTournamentId} />
+          ) : null}
+        </div>
+      </HeaderBar>
+
+      <section className="rounded border border-gray-300 bg-white p-1.5 shadow-sm">
+        <form className="flex flex-wrap items-end gap-1.5" action="/entries">
+          <input type="hidden" name="tab" value={activeTab} />
+
+          <div className="grid gap-1">
+            <label className="text-[10px] font-semibold uppercase tracking-[0.03em] text-gray-600">
+              Torneo
+            </label>
+            <select
+              name="tournament_id"
+              defaultValue={selectedTournamentId}
+              className="h-7 min-w-[260px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black"
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name ?? "Sin nombre"}
+                  {t.status ? ` (${t.status})` : ""}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[minmax(260px,320px)_auto] xl:justify-end">
-            <form
-              action="/entries"
-              method="GET"
-              className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_auto] sm:items-end"
-            >
-              <input type="hidden" name="view" value={view} />
+          <button
+            type="submit"
+            className="inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
+          >
+            Cargar
+          </button>
+        </form>
+      </section>
 
-              <div className="grid gap-1">
-                <label className="text-[10px] font-semibold uppercase tracking-[0.04em] text-white/80">
-                  Torneo
-                </label>
-                <select
-                  name="tournament_id"
-                  defaultValue={effectiveTournamentId}
-                  className="h-8 min-w-[240px] rounded-md border border-gray-300 bg-white px-2.5 text-[12px] text-black"
-                >
-                  {typedTournaments.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name || `Torneo ${t.id.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="inline-flex min-h-8 items-center justify-center rounded-md border border-gray-700 bg-gray-700 px-3 text-[11px] font-medium text-white shadow-sm hover:bg-gray-800"
-              >
-                Cambiar
-              </button>
-            </form>
-
-            <div className="flex flex-wrap gap-2 xl:justify-end">
+      {selectedTournamentId ? (
+        <>
+          <section className="rounded border border-gray-300 bg-white p-1.5 shadow-sm">
+            <div className="flex flex-wrap items-center gap-1">
               <a
-                href={`/entries?view=single&tournament_id=${effectiveTournamentId}`}
-                className={view === "single" ? tabActiveClass : tabIdleClass}
+                href={tabHref(selectedTournamentId, "manual")}
+                className={tabClasses(activeTab === "manual")}
               >
-                Nuevo jugador
+                Manual
               </a>
 
               <a
-                href={`/entries?view=bulk&tournament_id=${effectiveTournamentId}`}
-                className={view === "bulk" ? tabActiveClass : tabIdleClass}
+                href={tabHref(selectedTournamentId, "bulk")}
+                className={tabClasses(activeTab === "bulk")}
               >
-                Masivo
+                Masiva
               </a>
 
               <a
-                href={`/entries?view=list&tournament_id=${effectiveTournamentId}`}
-                className={view === "list" ? tabActiveClass : tabIdleClass}
+                href={tabHref(selectedTournamentId, "entries")}
+                className={tabClasses(activeTab === "entries")}
               >
                 Inscritos
               </a>
 
               <a
-                href={`/entries?view=summary&tournament_id=${effectiveTournamentId}`}
-                className={view === "summary" ? tabActiveClass : tabIdleClass}
+                href={tabHref(selectedTournamentId, "summary")}
+                className={tabClasses(activeTab === "summary")}
               >
                 Resumen
               </a>
             </div>
-          </div>
-        </div>
-      </div>
+          </section>
 
-      {view === "single" && (
-        <SinglePlayerEntryPanel
-          tournamentId={effectiveTournamentId}
-          players={availablePlayers}
-        />
+          {activeTab === "manual" ? (
+            <SinglePlayerEntryPanel
+              players={players}
+              tournamentId={selectedTournamentId}
+            />
+          ) : null}
+
+          {activeTab === "bulk" ? (
+            <BulkEntryPanel
+              players={players}
+              tournamentId={selectedTournamentId}
+            />
+          ) : null}
+
+          {activeTab === "entries" ? (
+            <EntriesListPanel
+              entries={entries}
+              tournamentId={selectedTournamentId}
+            />
+          ) : null}
+
+          {activeTab === "summary" ? (
+            <EntriesSummaryPanel entries={entries} />
+          ) : null}
+        </>
+      ) : (
+        <section className="rounded border border-gray-300 bg-white p-3 text-[12px] text-gray-700 shadow-sm">
+          No hay torneo seleccionado.
+        </section>
       )}
-
-      {view === "bulk" && (
-        <BulkEntryPanel
-          tournamentId={effectiveTournamentId}
-          players={availablePlayers}
-        />
-      )}
-
-      {view === "list" && (
-        <EntriesListPanel
-          entries={typedEntries}
-          tournamentId={effectiveTournamentId}
-        />
-      )}
-
-      {view === "summary" && <EntriesSummaryPanel entries={typedEntries} />}
-    </div>
+    </main>
   );
 }
