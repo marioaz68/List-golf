@@ -271,7 +271,7 @@ export default function ScoreEntryClient({
           onClick={() => setActiveIndex(idx)}
           onChange={(e) => handleChange(h.hole_number, idx, e)}
           onKeyDown={(e) => handleKeyDown(h.hole_number, idx, e)}
-          className={`h-8 w-full min-w-0 rounded border px-0 py-0 text-center text-xs outline-none ${
+          className={`h-8 w-full min-w-0 rounded border bg-white px-0 py-0 text-center text-xs text-black outline-none ${
             activeIndex === idx
               ? "border-green-600 ring-2 ring-green-200"
               : "border-gray-300 focus:border-green-600"
@@ -307,7 +307,7 @@ export default function ScoreEntryClient({
 
       <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
-          <div className="font-semibold">
+          <div className="font-semibold text-black">
             #{player.player_number ?? "-"} · {playerName || "Jugador sin nombre"}
           </div>
           <div className="text-gray-600">HCP: {playerHcp ?? "-"}</div>
@@ -330,7 +330,7 @@ export default function ScoreEntryClient({
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed border-collapse text-[10px] md:text-xs">
+            <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
               <thead>
                 <tr className="bg-gray-50">
                   <th className="w-16 border-b border-gray-200 px-1 py-1 text-left font-semibold">
@@ -421,7 +421,7 @@ export default function ScoreEntryClient({
       )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-        <table className="w-full table-fixed border-collapse text-[10px] md:text-xs">
+        <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
           <thead>
             <tr className="bg-gray-50">
               <th className="w-12 border-b border-gray-200 px-1 py-1 text-left font-semibold">

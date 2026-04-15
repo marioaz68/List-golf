@@ -43,7 +43,7 @@ export default function BulkEntryPanel({
       if (p.club_label) set.add(p.club_label);
     });
 
-    return [...set].sort((a, b) => a.localeCompare(b));
+    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
   }, [players]);
 
   const filtered = useMemo(() => {
@@ -53,9 +53,7 @@ export default function BulkEntryPanel({
       const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.toLowerCase();
       const clubText = (p.club_label ?? "").toLowerCase();
 
-      const matchesSearch =
-        !q || name.includes(q) || clubText.includes(q);
-
+      const matchesSearch = !q || name.includes(q) || clubText.includes(q);
       const matchesClub = !club || p.club_label === club;
 
       const cat = categoryFromHandicap(p.handicap_index);
@@ -93,6 +91,7 @@ export default function BulkEntryPanel({
   }
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
+  const selectedVisibleCount = filtered.filter((p) => selected[p.id] === true).length;
 
   return (
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
@@ -163,6 +162,10 @@ export default function BulkEntryPanel({
 
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
             Seleccionados: {selectedCount}
+          </div>
+
+          <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
+            Seleccionados visibles: {selectedVisibleCount}
           </div>
         </div>
       </div>

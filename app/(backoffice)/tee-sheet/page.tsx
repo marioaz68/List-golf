@@ -166,23 +166,29 @@ export default async function TeeSheetPage(props: {
   const membersRaw = (mData ?? []) as any[];
 
   const membersByGroup = new Map<string, MemberUI[]>();
+for (const row of membersRaw) {
+  const gid = row.group_id as string;
 
-  for (const row of membersRaw) {
-    const gid = row.group_id as string;
-    const player = row.tournament_entries?.players;
+  const te = Array.isArray(row.tournament_entries)
+    ? row.tournament_entries[0] ?? null
+    : row.tournament_entries ?? null;
 
-    const item: MemberUI = {
-      entry_id: row.entry_id,
-      group_id: gid,
-      position: Number(row.position ?? 0),
-      first_name: player?.first_name ?? null,
-      last_name: player?.last_name ?? null,
-      handicap_index: row.tournament_entries?.handicap_index ?? null,
-    };
+  const player = Array.isArray(te?.players)
+    ? te.players[0] ?? null
+    : te?.players ?? null;
 
-    if (!membersByGroup.has(gid)) membersByGroup.set(gid, []);
-    membersByGroup.get(gid)!.push(item);
-  }
+  const item: MemberUI = {
+    entry_id: row.entry_id,
+    group_id: gid,
+    position: Number(row.position ?? 0),
+    first_name: player?.first_name ?? null,
+    last_name: player?.last_name ?? null,
+    handicap_index: te?.handicap_index ?? null,
+  };
+
+  if (!membersByGroup.has(gid)) membersByGroup.set(gid, []);
+  membersByGroup.get(gid)!.push(item);
+}
 
   const groupsForUI: GroupUI[] = groups.map((g) => ({
     ...g,

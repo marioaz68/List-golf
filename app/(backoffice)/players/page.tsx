@@ -54,6 +54,7 @@ type Player = {
   id: number | string;
   first_name: string | null;
   last_name: string | null;
+  initials: string | null;
   gender: "M" | "F" | null;
   handicap_index: number | null;
   handicap_torneo: number | null;
@@ -265,6 +266,7 @@ export default async function PlayersPage(props: {
       id,
       first_name,
       last_name,
+      initials,
       gender,
       handicap_index,
       handicap_torneo,
@@ -280,7 +282,7 @@ export default async function PlayersPage(props: {
 
   if (q) {
     playersQuery = playersQuery.or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`
+      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,initials.ilike.%${q}%`
     );
   }
 
@@ -466,10 +468,11 @@ export default async function PlayersPage(props: {
       <NewPlayerSection />
 
       <section className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
-        <table className="min-w-[1180px] w-full border-collapse text-[11px] leading-none">
+        <table className="min-w-[1260px] w-full border-collapse text-[11px] leading-none">
           <thead>
             <tr className="bg-gray-200 text-left text-gray-900">
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">Nombre</th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Iniciales</th>
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">Género</th>
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">Handicap</th>
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">Año Nac.</th>
@@ -488,6 +491,9 @@ export default async function PlayersPage(props: {
                 <tr key={String(p.id)} className="bg-white">
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "—"}
+                  </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {p.initials ?? "—"}
                   </td>
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {genderLabel(normalizeGender(p.gender))}
@@ -516,6 +522,7 @@ export default async function PlayersPage(props: {
                         id: String(p.id),
                         first_name: p.first_name,
                         last_name: p.last_name,
+                        initials: p.initials,
                         gender: p.gender,
                         handicap_index: p.handicap_index,
                         handicap_torneo: p.handicap_torneo,
@@ -532,7 +539,7 @@ export default async function PlayersPage(props: {
 
             {sorted.length === 0 ? (
               <tr>
-                <td className="border border-gray-300 px-2 py-2 text-[11px] text-black" colSpan={9}>
+                <td className="border border-gray-300 px-2 py-2 text-[11px] text-black" colSpan={10}>
                   Sin resultados
                 </td>
               </tr>

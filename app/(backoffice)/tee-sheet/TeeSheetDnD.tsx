@@ -127,7 +127,10 @@ export default function TeeSheetDnD({
     setCategory(initialCategory || "ALL");
   }, [initialCategory]);
 
-  const groupsSorted = useMemo(() => [...groups].sort((a, b) => a.group_no - b.group_no), [groups]);
+  const groupsSorted = useMemo(
+    () => [...groups].sort((a, b) => a.group_no - b.group_no),
+    [groups]
+  );
 
   const membersCountByGroup = useMemo(() => {
     const m = new Map<string, number>();
@@ -235,8 +238,12 @@ export default function TeeSheetDnD({
     fd.set("to_group_id", toGroupId);
     fd.set("target_position", String(targetPos));
 
-    await moveEntryToGroupPosition(fd);
-    router.refresh();
+    try {
+      await moveEntryToGroupPosition(fd);
+      router.refresh();
+    } catch (e: any) {
+      setLastError(e?.message ?? "Error moviendo jugador");
+    }
   }
 
   async function runAutoBalanceRPC() {
@@ -310,7 +317,11 @@ export default function TeeSheetDnD({
             />
 
             <label className="flex items-center gap-1 text-xs select-none">
-              <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={onlyOpen}
+                onChange={(e) => setOnlyOpen(e.target.checked)}
+              />
               Huecos
             </label>
 
@@ -375,7 +386,9 @@ export default function TeeSheetDnD({
             className="border rounded px-2 py-1 text-xs"
             onClick={() =>
               startTransition(() => {
-                runAutoBalanceRPC().catch((e: any) => setLastError(e?.message ?? "Error auto-balance"));
+                runAutoBalanceRPC().catch((e: any) =>
+                  setLastError(e?.message ?? "Error auto-balance")
+                );
               })
             }
           >
@@ -426,7 +439,9 @@ export default function TeeSheetDnD({
             <div className="bg-white shadow-lg rounded border px-2 py-1 touch-none min-w-[180px]">
               <div className="flex items-center gap-2 text-[11px] leading-none whitespace-nowrap overflow-hidden">
                 <div className="w-4 shrink-0">{activeDrag.position}</div>
-                <div className="min-w-0 flex-1 truncate font-medium">{nameOf(activeDrag)}</div>
+                <div className="min-w-0 flex-1 truncate font-medium">
+                  {nameOf(activeDrag)}
+                </div>
                 <div className="w-8 shrink-0 text-right text-[10px] text-gray-600">
                   {activeDrag.handicap_index ?? "-"}
                 </div>
@@ -472,85 +487,119 @@ function DroppableGroupCard({
       title="Suelta aquí para mandar al final del grupo"
     >
       <div className="border rounded-sm px-2 py-1 bg-gray-50">
-        <div className="flex items-center gap-2 text-[11px] leading-none whitespace-nowrap overflow-hidden">
-          <div className="w-8 shrink-0 font-semibold">G{group.group_no}</div>
-          <div className="w-8 shrink-0 text-gray-700">H{group.starting_hole ?? "-"}</div>
-          <div className="min-w-0 flex-1 truncate text-gray-700">
-            {(group.notes ?? "SIN CATEGORÍA").trim()}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="text-[11px] font-semibold text-slate-400">
+              G{group.group_no}
+            </div>
+
+            <div className="text-sm font-semibold text-slate-900">
+              {group.tee_time ? group.tee_time : "--:--"}
+            </div>
+
+            <div className="text-sm font-semibold text-slate-700">
+              H{group.starting_hole ?? "-"}
+            </div>
+
+            <div className="min-w-0 truncate text-sm text-slate-700">
+              {group.notes ?? "SIN CATEGORÍA"}
+            </div>
           </div>
-          <div className="w-10 shrink-0 text-right text-gray-600">
+
+          <div className="shrink-0 text-sm font-semibold text-slate-600">
             {mem.length}/{maxGroupSize}
           </div>
         </div>
-      </div>
 
-      <div className="mt-1 max-h-[220px] overflow-auto pr-1">
-        <DroppableLine id={dropId(group.id, 1)} />
+        <div className="mt-2 space-y-1">
+          {mem.map((m, idx) => (
+            <React.Fragment key={m.entry_id}>
+              <DropSlot groupId={group.id} pos={idx + 1} />
+              <PlayerRow member={m} qn={qn} />
+            </React.Fragment>
+          ))}
 
-        <ul className="space-y-1 mt-1">
-          {mem.map((m, idx) => {
-            const posAfter = idx + 2;
-            const isMatch = qn ? norm(nameOf(m)).includes(qn) : false;
-
-            return (
-              <li key={m.entry_id} className="space-y-1">
-                <DraggableMember id={entryDragId(m.entry_id)} member={m} highlight={isMatch} />
-                <DroppableLine id={dropId(group.id, posAfter)} />
-              </li>
-            );
-          })}
-        </ul>
+          <DropSlot groupId={group.id} pos={mem.length + 1} finalSlot />
+        </div>
       </div>
     </div>
   );
 }
 
-function DroppableLine({ id }: { id: string }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
+function DropSlot({
+  groupId,
+  pos,
+  finalSlot = false,
+}: {
+  groupId: string;
+  pos: number;
+  finalSlot?: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId(groupId, pos),
+  });
 
   return (
     <div
       ref={setNodeRef}
       className={[
-        "h-2 rounded-sm border border-dashed",
-        isOver ? "bg-black border-black" : "bg-gray-50 border-gray-300",
+        "rounded border border-dashed px-2 transition-all",
+        finalSlot ? "py-4" : "py-2",
+        isOver ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-white",
       ].join(" ")}
-      title="Suelta aquí para insertar"
-    />
+    >
+      <div className="text-center text-[11px] text-slate-500">
+        {finalSlot ? "Suelta aquí para mandar al final del grupo" : ""}
+      </div>
+    </div>
   );
 }
 
-function DraggableMember({
-  id,
+function PlayerRow({
   member,
-  highlight,
+  qn,
 }: {
-  id: string;
   member: MemberUI;
-  highlight?: boolean;
+  qn: string;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useDraggable({
+      id: entryDragId(member.entry_id),
+    });
 
-  const label = nameOf(member);
+  const style: React.CSSProperties = {
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
+    transition,
+    opacity: isDragging ? 0.45 : 1,
+  };
+
+  const fullName = nameOf(member);
+  const isMatch = qn ? norm(fullName).includes(qn) : false;
 
   return (
     <div
       ref={setNodeRef}
+      style={style}
+      className={[
+        "rounded border border-red-500 bg-yellow-100 px-2 py-2",
+        isMatch ? "ring-2 ring-black" : "",
+      ].join(" ")}
       {...listeners}
       {...attributes}
-      className={[
-        "border rounded-sm px-2 py-1 select-none touch-none",
-        "cursor-grab active:cursor-grabbing",
-        "text-[11px] leading-none",
-        isDragging ? "opacity-40" : "",
-        highlight ? "bg-yellow-50 border-yellow-300" : "",
-      ].join(" ")}
       title="Arrastra para mover"
     >
-      <div className="flex items-center gap-2 whitespace-nowrap overflow-hidden">
-        <div className="w-4 shrink-0 text-gray-600">{member.position}</div>
-        <div className="min-w-0 flex-1 truncate font-medium">{label}</div>
-        <div className="w-8 shrink-0 text-right text-[10px] text-gray-600">
+      <div className="flex items-center gap-2 text-[14px] leading-5">
+        <div className="w-6 shrink-0 font-bold text-blue-700">
+          {member.position}
+        </div>
+
+       <div className="min-w-0 flex-1 font-medium text-slate-900 whitespace-normal break-words">
+  {fullName}
+</div>
+
+        <div className="w-12 shrink-0 text-right font-bold text-green-700">
           {member.handicap_index ?? "-"}
         </div>
       </div>

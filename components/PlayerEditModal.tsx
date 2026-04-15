@@ -16,6 +16,7 @@ type Player = {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  initials: string | null;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
   handicap_torneo: number | null;
@@ -32,6 +33,16 @@ function normalizeClubName(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeInitials(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-zÑñ]/g, "")
+    .toUpperCase()
+    .trim()
+    .slice(0, 6);
 }
 
 const overlayStyle: React.CSSProperties = {
@@ -109,6 +120,7 @@ export default function PlayerEditModal({
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [initials, setInitials] = useState("");
   const [gender, setGender] = useState<"M" | "F" | "X">("M");
   const [handicapIndex, setHandicapIndex] = useState<string>("");
   const [handicapTorneo, setHandicapTorneo] = useState<string>("");
@@ -131,10 +143,13 @@ export default function PlayerEditModal({
     async function loadInitialData() {
       setFirstName(player?.first_name ?? "");
       setLastName(player?.last_name ?? "");
+      setInitials(player?.initials ?? "");
       setGender(
         player?.gender === "F" ? "F" : player?.gender === "X" ? "X" : "M"
       );
-      setHandicapIndex(player?.handicap_index == null ? "" : String(player.handicap_index));
+      setHandicapIndex(
+        player?.handicap_index == null ? "" : String(player.handicap_index)
+      );
       setHandicapTorneo(
         player?.handicap_torneo == null ? "" : String(player.handicap_torneo)
       );
@@ -326,6 +341,12 @@ export default function PlayerEditModal({
 
     const hi = toNumberOrNull(handicapIndex);
     const ht = toNumberOrNull(handicapTorneo);
+    const cleanInitials = normalizeInitials(initials);
+
+    if (cleanInitials && cleanInitials.length < 2) {
+      alert("Iniciales debe tener entre 2 y 6 letras.");
+      return;
+    }
 
     setSaving(true);
 
@@ -345,6 +366,7 @@ export default function PlayerEditModal({
         .update({
           first_name: firstName.trim(),
           last_name: lastName.trim(),
+          initials: cleanInitials || null,
           gender,
           handicap_index: hi,
           handicap_torneo: ht,
@@ -409,6 +431,17 @@ export default function PlayerEditModal({
                 onChange={(e) => setLastName(e.target.value)}
                 placeholder="Apellido"
                 required
+                style={fieldStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Iniciales
+              <input
+                value={initials}
+                onChange={(e) => setInitials(normalizeInitials(e.target.value))}
+                placeholder="Ej. MAZ"
+                maxLength={6}
                 style={fieldStyle}
               />
             </label>

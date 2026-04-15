@@ -32,7 +32,7 @@ type PlayerBaseRaw = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
-  clubs: ClubRef[] | null;
+  clubs: ClubRef | ClubRef[] | null;
 };
 
 type Player = {
@@ -54,7 +54,7 @@ type EntryPlayerRaw = {
   email: string | null;
   club: string | null;
   club_id: string | null;
-  clubs: ClubRef[] | null;
+  clubs: ClubRef | ClubRef[] | null;
 };
 
 type EntryCategoryRaw = {
@@ -65,15 +65,19 @@ type EntryCategoryRaw = {
 type EntryRowBase = {
   id: string;
   player_id: string;
+  player_number: number | null;
   handicap_index: number | null;
-  players: EntryPlayerRaw[] | null;
-  categories: EntryCategoryRaw[] | null;
+  status: string | null;
+  players: EntryPlayerRaw | EntryPlayerRaw[] | null;
+  categories: EntryCategoryRaw | EntryCategoryRaw[] | null;
 };
 
 type EntryRow = {
   id: string;
   player_id: string;
+  player_number: number | null;
   handicap_index: number | null;
+  status: string | null;
   players: {
     first_name: string | null;
     last_name: string | null;
@@ -93,18 +97,22 @@ type EntryRow = {
 };
 
 type EntriesTab = "manual" | "bulk" | "entries" | "summary";
+type BulkStatus = "success" | "warning" | "error" | null;
 
 function normalizeClubLabel(value: string | null | undefined) {
   const v = value?.trim();
   return v ? v : null;
 }
 
-function firstOrNull<T>(value: T[] | null | undefined): T | null {
-  return Array.isArray(value) ? value[0] ?? null : null;
+function oneOrNull<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value;
 }
 
-function clubLabelFromClub(club: ClubRef | null | undefined) {
-  return normalizeClubLabel(club?.short_name ?? club?.name ?? null);
+function clubLabelFromClub(club: ClubRef | ClubRef[] | null | undefined) {
+  const c = oneOrNull(club);
+  return normalizeClubLabel(c?.short_name ?? c?.name ?? null);
 }
 
 function normalizeTab(value: string | string[] | undefined): EntriesTab {
@@ -128,6 +136,30 @@ function tabClasses(active: boolean) {
     : "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 hover:bg-gray-50";
 }
 
+function normalizeBulkStatus(value: string | string[] | undefined): BulkStatus {
+  const v = typeof value === "string" ? value : "";
+  if (v === "success" || v === "warning" || v === "error") return v;
+  return null;
+}
+
+function parseCount(value: string | string[] | undefined) {
+  const v = typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(v) ? v : null;
+}
+
+function feedbackClasses(status: BulkStatus) {
+  if (status === "success") {
+    return "rounded border border-green-300 bg-green-50 px-3 py-2 text-[12px] text-green-800 shadow-sm";
+  }
+  if (status === "warning") {
+    return "rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 shadow-sm";
+  }
+  if (status === "error") {
+    return "rounded border border-red-300 bg-red-50 px-3 py-2 text-[12px] text-red-800 shadow-sm";
+  }
+  return "hidden";
+}
+
 export default async function EntriesPage({
   searchParams,
 }: {
@@ -137,6 +169,13 @@ export default async function EntriesPage({
   const requestedTournamentId =
     typeof params.tournament_id === "string" ? params.tournament_id : "";
   const activeTab = normalizeTab(params.tab);
+
+  const bulkStatus = normalizeBulkStatus(params.bulk_status);
+  const bulkMessage =
+    typeof params.bulk_message === "string" ? params.bulk_message.trim() : "";
+  const bulkAdded = parseCount(params.bulk_added);
+  const bulkSkipped = parseCount(params.bulk_skipped);
+  const bulkSelected = parseCount(params.bulk_selected);
 
   const supabase = await createClient();
 
@@ -195,7 +234,7 @@ export default async function EntriesPage({
       last_name: p.last_name,
       gender: p.gender,
       handicap_index: p.handicap_index,
-      club_label: clubLabelFromClub(firstOrNull(p.clubs)),
+      club_label: clubLabelFromClub(p.clubs),
     })
   );
 
@@ -207,7 +246,9 @@ export default async function EntriesPage({
       .select(`
         id,
         player_id,
+        player_number,
         handicap_index,
+        status,
         players:players (
           first_name,
           last_name,
@@ -229,20 +270,22 @@ export default async function EntriesPage({
         )
       `)
       .eq("tournament_id", selectedTournamentId)
-      .order("created_at", { ascending: false });
+      .order("player_number", { ascending: true, nullsFirst: false });
 
     if (entriesRes.error) {
       throw new Error(`Error leyendo tournament_entries: ${entriesRes.error.message}`);
     }
 
     entries = ((entriesRes.data ?? []) as unknown as EntryRowBase[]).map((e) => {
-      const player = firstOrNull(e.players);
-      const category = firstOrNull(e.categories);
+      const player = oneOrNull(e.players);
+      const category = oneOrNull(e.categories);
 
       return {
         id: e.id,
         player_id: e.player_id,
+        player_number: e.player_number,
         handicap_index: e.handicap_index,
+        status: e.status,
         players: player
           ? {
               first_name: player.first_name,
@@ -254,7 +297,7 @@ export default async function EntriesPage({
               email: player.email,
               club: player.club,
               club_id: player.club_id,
-              club_label: clubLabelFromClub(firstOrNull(player.clubs)),
+              club_label: clubLabelFromClub(player.clubs),
             }
           : null,
         categories: category
@@ -310,6 +353,34 @@ export default async function EntriesPage({
 
       {selectedTournamentId ? (
         <>
+          {activeTab === "bulk" && bulkStatus && bulkMessage ? (
+            <section className={feedbackClasses(bulkStatus)}>
+              <div className="font-semibold">{bulkMessage}</div>
+
+              {bulkSelected !== null || bulkAdded !== null || bulkSkipped !== null ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                  {bulkSelected !== null ? (
+                    <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
+                      Seleccionados: {bulkSelected}
+                    </span>
+                  ) : null}
+
+                  {bulkAdded !== null ? (
+                    <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
+                      Agregados: {bulkAdded}
+                    </span>
+                  ) : null}
+
+                  {bulkSkipped !== null ? (
+                    <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
+                      Ya inscritos: {bulkSkipped}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <section className="rounded border border-gray-300 bg-white p-1.5 shadow-sm">
             <div className="flex flex-wrap items-center gap-1">
               <a

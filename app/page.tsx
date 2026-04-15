@@ -1,166 +1,284 @@
-import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
+import { createClient } from "@/utils/supabase/server";
+
+type SearchParams = Promise<{
+  club?: string | string[];
+}>;
+
+type TournamentRow = {
+  id: string;
+  name: string | null;
+  start_date: string | null;
+  poster_path: string | null;
+  club_id: string | null;
+};
+
+type ClubRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+};
+
+type TournamentCard = TournamentRow & {
+  club_label: string | null;
+};
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-type Tournament = {
-  id: string;
-  name: string | null;
-  status: string | null;
-};
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
-export default async function Home() {
+function formatDate(date: string | null) {
+  if (!date) return "Fecha por definir";
+
+  return new Date(date).toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function buildPosterUrl(posterPath: string | null) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!posterPath || !baseUrl) return null;
+
+  return `${baseUrl}/storage/v1/object/public/tournament-posters/${posterPath}`;
+}
+
+function getTournamentStatus(startDate: string | null) {
+  if (!startDate) {
+    return {
+      label: "Por definir",
+      className: "bg-white/10 text-slate-300",
+    };
+  }
+
+  const today = new Date();
+  const target = new Date(startDate);
+
+  if (target > today) {
+    return {
+      label: "Próximo",
+      className: "bg-cyan-400/10 text-cyan-300",
+    };
+  }
+
+  return {
+    label: "Finalizado",
+    className: "bg-white/10 text-slate-300",
+  };
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const selectedClub = firstValue(params.club).trim();
+
   const supabase = await createClient();
 
-  const [
-    tournamentsRes,
-    playersRes,
-    entriesRes,
-    categoriesRes,
-  ] = await Promise.all([
-    supabase
-      .from("tournaments")
-      .select("id,name,status")
-      .order("name"),
+  const { data: tournamentsData, error: tournamentsError } = await supabase
+    .from("tournaments")
+    .select("id,name,start_date,poster_path,club_id")
+    .eq("is_public", true)
+    .eq("is_archived", false);
 
-    supabase
-      .from("players")
-      .select("id", { count: "exact", head: true }),
+  if (tournamentsError) {
+    throw new Error(
+      `Error leyendo torneos públicos: ${tournamentsError.message}`
+    );
+  }
 
-    supabase
-      .from("tournament_entries")
-      .select("id", { count: "exact", head: true }),
+  const tournamentRows = (tournamentsData ?? []) as TournamentRow[];
 
-    supabase
-      .from("categories")
-      .select("id", { count: "exact", head: true }),
-  ]);
+  const clubIds = Array.from(
+    new Set(
+      tournamentRows
+        .map((item) => item.club_id)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
 
-  const tournaments = (tournamentsRes.data ?? []) as Tournament[];
-  const totalPlayers = playersRes.count ?? 0;
-  const totalEntries = entriesRes.count ?? 0;
-  const totalCategories = categoriesRes.count ?? 0;
+  let clubsMap = new Map<string, ClubRow>();
 
-  const statCard =
-    "rounded-xl border border-white/20 bg-white/10 p-4 shadow";
+  if (clubIds.length > 0) {
+    const { data: clubsData, error: clubsError } = await supabase
+      .from("clubs")
+      .select("id,name,short_name")
+      .in("id", clubIds);
+
+    if (clubsError) {
+      throw new Error(`Error leyendo clubs: ${clubsError.message}`);
+    }
+
+    clubsMap = new Map(
+      ((clubsData ?? []) as ClubRow[]).map((clubItem) => [
+        clubItem.id,
+        clubItem,
+      ])
+    );
+  }
+
+  const allTournaments: TournamentCard[] = tournamentRows.map((item) => {
+    const clubRow = item.club_id ? clubsMap.get(item.club_id) : null;
+
+    return {
+      ...item,
+      club_label:
+        clubRow?.short_name?.trim() || clubRow?.name?.trim() || null,
+    };
+  });
+
+  const tournaments = allTournaments
+    .filter((item) => {
+      if (selectedClub && item.club_id !== selectedClub) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aHasPoster = a.poster_path ? 1 : 0;
+      const bHasPoster = b.poster_path ? 1 : 0;
+
+      if (aHasPoster !== bHasPoster) {
+        return bHasPoster - aHasPoster;
+      }
+
+      const aTime = a.start_date
+        ? new Date(a.start_date).getTime()
+        : Number.MAX_SAFE_INTEGER;
+      const bTime = b.start_date
+        ? new Date(b.start_date).getTime()
+        : Number.MAX_SAFE_INTEGER;
+
+      return aTime - bTime;
+    });
+
+  const availableClubs = Array.from(
+    new Map(
+      allTournaments
+        .map((item) => {
+          if (!item.club_id || !item.club_label) return null;
+
+          return [
+            item.club_id,
+            {
+              id: item.club_id,
+              label: item.club_label,
+            },
+          ] as const;
+        })
+        .filter(Boolean) as [string, { id: string; label: string }][]
+    ).values()
+  ).sort((a, b) => a.label.localeCompare(b.label, "es-MX"));
 
   return (
-    <main className="p-10 space-y-6">
+    <main className="min-h-screen bg-[#08111f] text-white">
+      <section className="border-b border-white/10 bg-[#08111f]">
+        <div className="mx-auto max-w-[1700px] px-4 py-4">
+          <form
+            method="GET"
+            action="/"
+            className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+          >
+            <div className="mr-2">
+              <h1 className="text-xl font-bold">Torneos</h1>
+              <p className="text-xs text-slate-400">Posters públicos</p>
+            </div>
 
-      <h1 className="text-3xl font-bold text-white">
-        Sistema de Torneos de Golf
-      </h1>
+            <select
+              name="club"
+              defaultValue={selectedClub}
+              className="h-10 rounded-lg border border-white/10 bg-[#0c1728] px-3 text-sm"
+            >
+              <option value="">Todos los clubs</option>
+              {availableClubs.map((clubItem) => (
+                <option key={clubItem.id} value={clubItem.id}>
+                  {clubItem.label}
+                </option>
+              ))}
+            </select>
 
-      {/* BOTONES PRINCIPALES */}
+            <button
+              type="submit"
+              className="h-10 rounded-lg bg-cyan-400 px-4 text-sm font-semibold text-[#08111f]"
+            >
+              Buscar
+            </button>
 
-      <div className="flex gap-3 flex-wrap">
+            <Link
+              href="/"
+              className="flex h-10 items-center rounded-lg border border-white/10 px-4 text-sm"
+            >
+              Todos
+            </Link>
 
-        <Link href="/players" className="btn3d">
-          Players
-        </Link>
-
-        <Link href="/entries" className="btn3d-blue">
-          Inscripciones
-        </Link>
-
-        <Link href="/categories" className="btn3d">
-          Categorías
-        </Link>
-
-        <Link href="/tee-sheet" className="btn3d">
-          Tee Sheet
-        </Link>
-
-        <Link href="/leaderboard" className="btn3d-green">
-          Leaderboard
-        </Link>
-
-      </div>
-
-      {/* MÉTRICAS */}
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-        <div className={statCard}>
-          <p className="text-sm text-white/70">Torneos</p>
-          <div className="text-3xl font-bold text-white">
-            {tournaments.length}
-          </div>
+            <div className="ml-auto rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold">
+              {tournaments.length} torneo{tournaments.length === 1 ? "" : "s"}
+            </div>
+          </form>
         </div>
-
-        <div className={statCard}>
-          <p className="text-sm text-white/70">Jugadores</p>
-          <div className="text-3xl font-bold text-white">
-            {totalPlayers}
-          </div>
-        </div>
-
-        <div className={statCard}>
-          <p className="text-sm text-white/70">Inscripciones</p>
-          <div className="text-3xl font-bold text-white">
-            {totalEntries}
-          </div>
-        </div>
-
-        <div className={statCard}>
-          <p className="text-sm text-white/70">Categorías</p>
-          <div className="text-3xl font-bold text-white">
-            {totalCategories}
-          </div>
-        </div>
-
       </section>
 
-      {/* LISTA DE TORNEOS */}
+      <section className="bg-[#0b1526]">
+        <div className="mx-auto max-w-[1700px] px-4 py-5">
+          {tournaments.length === 0 ? (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+              No hay torneos.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+              {tournaments.map((t) => {
+                const posterUrl = buildPosterUrl(t.poster_path);
+                const status = getTournamentStatus(t.start_date);
 
-      <section className="rounded-lg border border-white/20 bg-white/10 p-5">
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/torneos/${t.id}`}
+                    className="group block overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-cyan-400/40"
+                  >
+                    <div className="relative h-[260px] bg-black">
+                      {posterUrl ? (
+                        <img
+                          src={posterUrl}
+                          alt={`Poster de ${t.name ?? "torneo"}`}
+                          className="absolute inset-0 h-full w-full object-cover bg-black transition duration-300 group-hover:scale-[1.02]"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-400">
+                          Sin poster
+                        </div>
+                      )}
 
-        <h2 className="text-xl font-semibold text-white mb-3">
-          Torneos
-        </h2>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-2.5">
+                        <div className="flex items-end justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-300">
+                              {t.club_label ?? "Sin club"}
+                            </div>
+                            <div className="mt-1 text-[11px] text-slate-300">
+                              {formatDate(t.start_date)}
+                            </div>
+                          </div>
 
-        {tournaments.length === 0 ? (
-
-          <p className="text-white">
-            No hay torneos todavía.
-          </p>
-
-        ) : (
-
-          <ul className="space-y-2">
-
-            {tournaments.map((t) => (
-
-              <li key={t.id}>
-
-                <Link
-                  href={`/entries?tournament_id=${t.id}`}
-                  className="block rounded-md border border-white/10 bg-black/10 p-3 hover:bg-white/10"
-                >
-
-                  <span className="font-medium text-white">
-                    {t.name}
-                  </span>
-
-                  {t.status && (
-                    <span className="text-sm text-white/70 ml-2">
-                      ({t.status})
-                    </span>
-                  )}
-
-                </Link>
-
-              </li>
-
-            ))}
-
-          </ul>
-
-        )}
-
+                          <div
+                            className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold ${status.className}`}
+                          >
+                            {status.label}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
-
     </main>
   );
 }

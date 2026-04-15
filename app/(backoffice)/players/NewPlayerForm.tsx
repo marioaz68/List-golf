@@ -58,6 +58,16 @@ function normalizeClubName(value: string) {
     .replace(/\s+/g, " ");
 }
 
+function normalizeInitials(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-zÑñ]/g, "")
+    .toUpperCase()
+    .trim()
+    .slice(0, 6);
+}
+
 function clubLabel(option: Pick<ClubOption, "name" | "short_name">) {
   return option.name.trim();
 }
@@ -70,6 +80,7 @@ export default function NewPlayerForm({
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [initials, setInitials] = useState("");
   const [gender, setGender] = useState<"M" | "F">("M");
   const [handicapIndex, setHandicapIndex] = useState("");
   const [handicapTorneo, setHandicapTorneo] = useState("");
@@ -259,6 +270,11 @@ export default function NewPlayerForm({
     const hi = toNumberOrNull(handicapIndex);
     const ht = toNumberOrNull(handicapTorneo);
     const by = toIntOrNull(birthYear);
+    const cleanInitials = normalizeInitials(initials);
+
+    if (cleanInitials && cleanInitials.length < 2) {
+      return setMsg("Iniciales debe tener entre 2 y 6 letras.");
+    }
 
     if (hi === "NaN") {
       return setMsg("handicap_index debe ser número (ej. -1.2, 0, 12.5).");
@@ -302,6 +318,7 @@ export default function NewPlayerForm({
           {
             first_name: firstName.trim(),
             last_name: lastName.trim(),
+            initials: cleanInitials || null,
             gender,
             handicap_index: hi,
             handicap_torneo: ht,
@@ -341,6 +358,7 @@ export default function NewPlayerForm({
 
       setFirstName("");
       setLastName("");
+      setInitials("");
       setGender("M");
       setHandicapIndex("");
       setHandicapTorneo("");
@@ -432,6 +450,24 @@ export default function NewPlayerForm({
           <input
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
+            style={fieldStyle}
+          />
+        </label>
+
+        <label
+          style={{
+            color: "#111827",
+            fontWeight: 500,
+            fontSize: 11,
+            lineHeight: 1.1,
+          }}
+        >
+          Iniciales
+          <input
+            value={initials}
+            onChange={(e) => setInitials(normalizeInitials(e.target.value))}
+            placeholder="Ej. MAZ"
+            maxLength={6}
             style={fieldStyle}
           />
         </label>

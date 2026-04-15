@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { createTournamentAndMaybeCopyCategories } from "../actions";
 
@@ -10,10 +10,17 @@ type TournamentOption = {
   created_at?: string;
 };
 
+type ClubOption = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+  is_active: boolean | null;
+};
+
 type CourseOption = {
   id: string;
   name: string;
-  club_name: string | null;
+  club_id: string | null;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -41,19 +48,24 @@ const fieldStyle: React.CSSProperties = {
   color: "#111827",
 };
 
+function clubLabel(club: ClubOption) {
+  return club.short_name?.trim() || club.name?.trim() || "Club";
+}
+
 export default function NewTournamentPage() {
   const [tournaments, setTournaments] = useState<TournamentOption[]>([]);
+  const [clubs, setClubs] = useState<ClubOption[]>([]);
   const [courses, setCourses] = useState<CourseOption[]>([]);
 
   const [loadingTournaments, setLoadingTournaments] = useState(true);
+  const [loadingClubs, setLoadingClubs] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(true);
 
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [status, setStatus] = useState("draft");
-  const [clubName, setClubName] = useState("");
+  const [clubId, setClubId] = useState("");
   const [courseId, setCourseId] = useState("");
-  const [courseName, setCourseName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [copyFromTournamentId, setCopyFromTournamentId] = useState("");
 
@@ -62,26 +74,45 @@ export default function NewTournamentPage() {
 
     async function load() {
       setLoadingTournaments(true);
+      setLoadingClubs(true);
       setLoadingCourses(true);
 
-      const { data: tData } = await supabase
-        .from("tournaments")
-        .select("id, name, created_at")
-        .order("created_at", { ascending: false })
-        .limit(100);
+      const [tournamentsRes, clubsRes, coursesRes] = await Promise.all([
+        supabase
+          .from("tournaments")
+          .select("id, name, created_at")
+          .order("created_at", { ascending: false })
+          .limit(100),
 
-      const { data: cData } = await supabase
-        .from("courses")
-        .select("id, name, club_name")
-        .order("name", { ascending: true });
+        supabase
+          .from("clubs")
+          .select("id, name, short_name, is_active")
+          .eq("is_active", true)
+          .order("name", { ascending: true }),
 
-      if (!cancelled) {
-        if (tData) setTournaments(tData as TournamentOption[]);
-        if (cData) setCourses(cData as CourseOption[]);
+        supabase
+          .from("courses")
+          .select("id, name, club_id")
+          .order("name", { ascending: true }),
+      ]);
 
-        setLoadingTournaments(false);
-        setLoadingCourses(false);
+      if (cancelled) return;
+
+      if (tournamentsRes.data) {
+        setTournaments(tournamentsRes.data as TournamentOption[]);
       }
+
+      if (clubsRes.data) {
+        setClubs(clubsRes.data as ClubOption[]);
+      }
+
+      if (coursesRes.data) {
+        setCourses(coursesRes.data as CourseOption[]);
+      }
+
+      setLoadingTournaments(false);
+      setLoadingClubs(false);
+      setLoadingCourses(false);
     }
 
     load();
@@ -90,6 +121,16 @@ export default function NewTournamentPage() {
       cancelled = true;
     };
   }, []);
+
+  const clubsMap = useMemo(
+    () => new Map(clubs.map((club) => [club.id, club])),
+    [clubs]
+  );
+
+  const availableCourses = useMemo(() => {
+    if (!clubId) return courses;
+    return courses.filter((course) => course.club_id === clubId);
+  }, [courses, clubId]);
 
   return (
     <div className="p-6 space-y-6">
@@ -146,13 +187,34 @@ export default function NewTournamentPage() {
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Club
-            <input
-              name="club_name"
-              value={clubName}
-              onChange={(e) => setClubName(e.target.value)}
-              placeholder="Ej. Club Campestre de Querétaro"
+            <select
+              name="club_id"
+              value={clubId}
+              onChange={(e) => {
+                const nextClubId = e.target.value;
+                setClubId(nextClubId);
+
+                if (
+                  courseId &&
+                  courses.find((c) => c.id === courseId)?.club_id !== nextClubId
+                ) {
+                  setCourseId("");
+                }
+              }}
               style={fieldStyle}
-            />
+              disabled={loadingClubs}
+              required
+            >
+              <option value="">
+                {loadingClubs ? "Cargando clubs..." : "Seleccionar club"}
+              </option>
+
+              {clubs.map((club) => (
+                <option key={club.id} value={club.id}>
+                  {clubLabel(club)}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
@@ -160,36 +222,36 @@ export default function NewTournamentPage() {
             <select
               name="course_id"
               value={courseId}
-              onChange={(e) => {
-                const id = e.target.value;
-                setCourseId(id);
-
-                const c = courses.find((x) => x.id === id);
-                if (c) {
-                  setCourseName(c.name);
-                  if (!clubName && c.club_name) {
-                    setClubName(c.club_name);
-                  }
-                } else {
-                  setCourseName("");
-                }
-              }}
+              onChange={(e) => setCourseId(e.target.value)}
               style={fieldStyle}
-              disabled={loadingCourses}
+              disabled={loadingCourses || !clubId}
             >
               <option value="">
-                {loadingCourses ? "Cargando campos..." : "Seleccionar campo"}
+                {!clubId
+                  ? "Primero selecciona club"
+                  : loadingCourses
+                  ? "Cargando campos..."
+                  : "Seleccionar campo"}
               </option>
 
-              {courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} {c.club_name ? `(${c.club_name})` : ""}
+              {availableCourses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
                 </option>
               ))}
             </select>
           </label>
 
-          <input type="hidden" name="course_name" value={courseName} />
+          <div
+            style={{
+              marginTop: -4,
+              fontSize: 12,
+              color: "#6b7280",
+            }}
+          >
+            Club seleccionado:{" "}
+            {clubId ? clubLabel(clubsMap.get(clubId) as ClubOption) : "—"}
+          </div>
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Fecha inicio
@@ -200,6 +262,26 @@ export default function NewTournamentPage() {
               onChange={(e) => setStartDate(e.target.value)}
               style={fieldStyle}
             />
+          </label>
+
+          <label style={{ color: "#111827", fontWeight: 600 }}>
+            Póster del torneo
+            <input
+              type="file"
+              name="poster"
+              accept="image/png,image/jpeg,image/webp"
+              style={fieldStyle}
+            />
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                fontWeight: 400,
+                color: "#6b7280",
+              }}
+            >
+              Imagen recomendada: vertical, ligera y de buena calidad.
+            </div>
           </label>
 
           <label style={{ color: "#111827", fontWeight: 600 }}>

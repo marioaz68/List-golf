@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
+import { createClient as createSupabaseAdminClient } from "@supabase/supabase-js";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 
 export type SaveScoresState = {
@@ -11,10 +12,10 @@ export type SaveScoresState = {
 
 function asInt(v: FormDataEntryValue | null) {
   const raw = String(v ?? "").trim();
-  if (!raw) return 0;
+  if (!raw) return null;
 
   const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 
 function supabaseErrText(err: unknown) {
@@ -37,8 +38,26 @@ function supabaseErrText(err: unknown) {
     .join(" | ");
 }
 
-async function getTournamentIdFromRoundId(supabase: any, roundId: string) {
-  const { data, error } = await supabase
+function getAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en variables de entorno."
+    );
+  }
+
+  return createSupabaseAdminClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+async function getTournamentIdFromRoundId(admin: ReturnType<typeof getAdminClient>, roundId: string) {
+  const { data, error } = await admin
     .from("rounds")
     .select("id, tournament_id")
     .eq("id", roundId)
@@ -57,6 +76,7 @@ export async function savePlayerScores(
 ): Promise<SaveScoresState> {
   try {
     const supabase = await createClient();
+    const admin = getAdminClient();
 
     const roundId = String(formData.get("round_id") ?? "").trim();
     const playerId = String(formData.get("player_id") ?? "").trim();
@@ -70,7 +90,7 @@ export async function savePlayerScores(
       return { ok: false, message: "Falta player_id" };
     }
 
-    const tournamentId = await getTournamentIdFromRoundId(supabase, roundId);
+    const tournamentId = await getTournamentIdFromRoundId(admin, roundId);
 
     await requireTournamentAccess({
       tournamentId,
@@ -87,6 +107,7 @@ export async function savePlayerScores(
     for (let hole = 1; hole <= 18; hole++) {
       const strokes = asInt(formData.get(`hole_${hole}`));
 
+      if (strokes == null) continue;
       if (strokes <= 0) continue;
 
       if (strokes > 15) {
@@ -99,9 +120,12 @@ export async function savePlayerScores(
       grossScores.push({ hole_number: hole, strokes });
     }
 
-    const grossTotal = grossScores.reduce((acc, x) => acc + x.strokes, 0);
+    const grossTotal =
+      grossScores.length > 0
+        ? grossScores.reduce((acc, x) => acc + x.strokes, 0)
+        : null;
 
-    const { data: existingRoundScore, error: existingErr } = await supabase
+    const { data: existingRoundScore, error: existingErr } = await admin
       .from("round_scores")
       .select("id")
       .eq("round_id", roundId)
@@ -118,12 +142,12 @@ export async function savePlayerScores(
     let roundScoreId = existingRoundScore?.id as string | undefined;
 
     if (!roundScoreId) {
-      const { data: inserted, error: insertErr } = await supabase
+      const { data: inserted, error: insertErr } = await admin
         .from("round_scores")
         .insert({
           round_id: roundId,
           player_id: playerId,
-          gross_score: grossTotal || null,
+          gross_score: grossTotal,
         })
         .select("id")
         .single();
@@ -137,10 +161,10 @@ export async function savePlayerScores(
 
       roundScoreId = inserted.id;
     } else {
-      const { error: updateErr } = await supabase
+      const { error: updateErr } = await admin
         .from("round_scores")
         .update({
-          gross_score: grossTotal || null,
+          gross_score: grossTotal,
         })
         .eq("id", roundScoreId);
 
@@ -160,7 +184,7 @@ export async function savePlayerScores(
     }
 
     if (grossScores.length === 0) {
-      const { error: deleteAllErr } = await supabase
+      const { error: deleteAllErr } = await admin
         .from("hole_scores")
         .delete()
         .eq("round_score_id", roundScoreId);
@@ -172,7 +196,7 @@ export async function savePlayerScores(
         };
       }
 
-      const { error: resetTotalErr } = await supabase
+      const { error: resetTotalErr } = await admin
         .from("round_scores")
         .update({ gross_score: null })
         .eq("id", roundScoreId);
@@ -199,9 +223,11 @@ export async function savePlayerScores(
       ...(tournamentDayId ? { tournament_day_id: tournamentDayId } : {}),
     }));
 
-    const { error: upsertErr } = await supabase.from("hole_scores").upsert(rows, {
-      onConflict: "round_score_id,hole_number",
-    });
+    const { error: upsertErr } = await admin
+      .from("hole_scores")
+      .upsert(rows, {
+        onConflict: "round_score_id,hole_number",
+      });
 
     if (upsertErr) {
       return {
@@ -213,7 +239,7 @@ export async function savePlayerScores(
     const keepHoleNumbers = grossScores.map((x) => x.hole_number);
     const keepList = `(${keepHoleNumbers.join(",")})`;
 
-    const { error: deleteRemovedErr } = await supabase
+    const { error: deleteRemovedErr } = await admin
       .from("hole_scores")
       .delete()
       .eq("round_score_id", roundScoreId)
@@ -226,10 +252,10 @@ export async function savePlayerScores(
       };
     }
 
-    const { error: finalUpdateErr } = await supabase
+    const { error: finalUpdateErr } = await admin
       .from("round_scores")
       .update({
-        gross_score: grossTotal || null,
+        gross_score: grossTotal,
       })
       .eq("id", roundScoreId);
 

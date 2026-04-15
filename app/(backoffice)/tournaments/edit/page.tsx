@@ -13,15 +13,24 @@ type TournamentRow = {
   name: string | null;
   short_name: string | null;
   status: string | null;
+  club_id: string | null;
   club_name: string | null;
+  course_id: string | null;
   course_name: string | null;
   start_date: string | null;
+};
+
+type ClubRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+  is_active: boolean | null;
 };
 
 type CourseRow = {
   id: string;
   name: string | null;
-  club_name: string | null;
+  club_id: string | null;
 };
 
 const pageWrap: React.CSSProperties = {
@@ -149,6 +158,10 @@ function normalizeDateInput(value: string | null) {
   return value.slice(0, 10);
 }
 
+function clubLabel(club: ClubRow) {
+  return club.short_name?.trim() || club.name?.trim() || "Club";
+}
+
 export default async function EditTournamentPage({
   searchParams,
 }: {
@@ -163,16 +176,25 @@ export default async function EditTournamentPage({
 
   const supabase = await createClient();
 
-  const [{ data: tournament, error: tournamentError }, { data: courses }] =
+  const [{ data: tournament, error: tournamentError }, { data: clubs }, { data: courses }] =
     await Promise.all([
       supabase
         .from("tournaments")
-        .select("id, name, short_name, status, club_name, course_name, start_date")
+        .select(
+          "id, name, short_name, status, club_id, club_name, course_id, course_name, start_date"
+        )
         .eq("id", tournament_id)
         .single(),
+
+      supabase
+        .from("clubs")
+        .select("id, name, short_name, is_active")
+        .eq("is_active", true)
+        .order("name", { ascending: true }),
+
       supabase
         .from("courses")
-        .select("id, name, club_name")
+        .select("id, name, club_id")
         .order("name", { ascending: true }),
     ]);
 
@@ -183,7 +205,12 @@ export default async function EditTournamentPage({
   }
 
   const row = tournament as TournamentRow;
-  const courseOptions = (courses ?? []) as CourseRow[];
+  const clubOptions = (clubs ?? []) as ClubRow[];
+  const allCourses = (courses ?? []) as CourseRow[];
+
+  const filteredCourses = row.club_id
+    ? allCourses.filter((course) => course.club_id === row.club_id)
+    : allCourses;
 
   return (
     <div style={pageWrap}>
@@ -255,33 +282,35 @@ export default async function EditTournamentPage({
           <div style={twoColGrid}>
             <div style={fieldGrid}>
               <label style={labelStyle}>Club</label>
-              <input
-                name="club_name"
-                defaultValue={row.club_name ?? ""}
+              <select
+                name="club_id"
+                defaultValue={row.club_id ?? ""}
                 style={fieldStyle}
-                placeholder="Ej. Club Campestre de Querétaro"
-              />
+                required
+              >
+                <option value="">Seleccionar club</option>
+                {clubOptions.map((club) => (
+                  <option key={club.id} value={club.id}>
+                    {clubLabel(club)}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div style={fieldGrid}>
               <label style={labelStyle}>Campo</label>
-              <input
-                name="course_name"
-                defaultValue={row.course_name ?? ""}
+              <select
+                name="course_id"
+                defaultValue={row.course_id ?? ""}
                 style={fieldStyle}
-                placeholder="Nombre del campo"
-                list="courses-list"
-              />
-              <datalist id="courses-list">
-                {courseOptions.map((course) => (
-                  <option
-                    key={course.id}
-                    value={course.name ?? ""}
-                  >{`${course.name ?? ""}${
-                    course.club_name ? ` (${course.club_name})` : ""
-                  }`}</option>
+              >
+                <option value="">Seleccionar campo</option>
+                {filteredCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name ?? ""}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
           </div>
 

@@ -147,6 +147,174 @@ async function renumberPositions(supabase: any, group_id: string) {
   }
 }
 
+async function applyOrderedPositions(
+  supabase: any,
+  group_id: string,
+  orderedEntryIds: string[]
+) {
+  const { data, error } = await supabase
+    .from("pairing_group_members")
+    .select("id, entry_id, position")
+    .eq("group_id", group_id);
+
+  if (error) {
+    throw new Error("Error leyendo miembros para reordenar: " + error.message);
+  }
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    entry_id: string;
+    position: number | null;
+  }>;
+
+  const rowByEntryId = new Map(rows.map((r) => [r.entry_id, r]));
+
+  for (let i = 0; i < orderedEntryIds.length; i++) {
+    const entryId = orderedEntryIds[i];
+    const row = rowByEntryId.get(entryId);
+    if (!row) continue;
+
+    const desired = i + 1;
+    if (Number(row.position ?? 0) === desired) continue;
+
+    const { error: upErr } = await supabase
+      .from("pairing_group_members")
+      .update({ position: desired })
+      .eq("id", row.id);
+
+    if (upErr) {
+      throw new Error("Error actualizando posiciones: " + upErr.message);
+    }
+  }
+}
+
+async function compactGroupsForRound(supabase: any, round_id: string) {
+  const { data: groups, error: gErr } = await supabase
+    .from("pairing_groups")
+    .select("id, group_no")
+    .eq("round_id", round_id)
+    .order("group_no", { ascending: true });
+
+  if (gErr) throw new Error("Error leyendo grupos para compactar: " + gErr.message);
+
+  const list = (groups ?? []) as Array<{ id: string; group_no: number }>;
+  if (list.length === 0) return;
+
+  const ids = list.map((g) => g.id);
+
+  const { data: members, error: mErr } = await supabase
+    .from("pairing_group_members")
+    .select("group_id")
+    .in("group_id", ids);
+
+  if (mErr) throw new Error("Error leyendo miembros para compactar: " + mErr.message);
+
+  const countByGroupId = new Map<string, number>();
+  for (const id of ids) countByGroupId.set(id, 0);
+
+  for (const row of (members ?? []) as Array<{ group_id: string }>) {
+    countByGroupId.set(row.group_id, (countByGroupId.get(row.group_id) ?? 0) + 1);
+  }
+
+  const emptyIds = list
+    .filter((g) => (countByGroupId.get(g.id) ?? 0) === 0)
+    .map((g) => g.id);
+
+  if (emptyIds.length > 0) {
+    const { error: delErr } = await supabase
+      .from("pairing_groups")
+      .delete()
+      .in("id", emptyIds);
+
+    if (delErr) throw new Error("Error borrando grupos vacíos: " + delErr.message);
+  }
+
+  const { data: aliveGroups, error: aliveErr } = await supabase
+    .from("pairing_groups")
+    .select("id, group_no")
+    .eq("round_id", round_id)
+    .order("group_no", { ascending: true });
+
+  if (aliveErr) throw new Error("Error leyendo grupos vivos: " + aliveErr.message);
+
+  const alive = (aliveGroups ?? []) as Array<{ id: string; group_no: number }>;
+
+  for (let i = 0; i < alive.length; i++) {
+    const desired = i + 1;
+    if (Number(alive[i].group_no) === desired) continue;
+
+    const { error: upErr } = await supabase
+      .from("pairing_groups")
+      .update({ group_no: desired })
+      .eq("id", alive[i].id);
+
+    if (upErr) throw new Error("Error renumerando group_no: " + upErr.message);
+  }
+}
+
+async function recalcStartsForRound(supabase: any, round_id: string) {
+  const { data: r, error: rErr } = await supabase
+    .from("rounds")
+    .select("id, start_type, start_time, interval_minutes")
+    .eq("id", round_id)
+    .single();
+
+  if (rErr || !r) throw new Error("No se pudo leer round para recalcular salidas: " + (rErr?.message ?? ""));
+
+  const { data: groups, error: gErr } = await supabase
+    .from("pairing_groups")
+    .select("id, group_no")
+    .eq("round_id", round_id)
+    .order("group_no", { ascending: true });
+
+  if (gErr) throw new Error("Error leyendo grupos para recalcular salidas: " + gErr.message);
+
+  const list = (groups ?? []) as Array<{ id: string; group_no: number }>;
+
+  if (r.start_type === "tee_times") {
+    const baseMinutes = typeof r.start_time === "string" ? parseHHMM(r.start_time) : null;
+    const interval = r.interval_minutes == null ? null : Number(r.interval_minutes);
+
+    if (baseMinutes == null) return;
+    if (interval == null || !Number.isFinite(interval) || interval <= 0) return;
+
+    for (const g of list) {
+      const groupNo = Number(g.group_no);
+      const tee_time = formatHHMM(baseMinutes + (groupNo - 1) * interval);
+
+      const { error } = await supabase
+        .from("pairing_groups")
+        .update({
+          tee_time,
+          starting_hole: null,
+        })
+        .eq("id", g.id);
+
+      if (error) throw new Error("Error recalculando tee_time: " + error.message);
+    }
+
+    return;
+  }
+
+  if (r.start_type === "shotgun") {
+    const total = list.length;
+
+    for (let i = 0; i < list.length; i++) {
+      const hole = computeShotgunHole(i, total);
+
+      const { error } = await supabase
+        .from("pairing_groups")
+        .update({
+          starting_hole: hole,
+          tee_time: null,
+        })
+        .eq("id", list[i].id);
+
+      if (error) throw new Error("Error recalculando starting_hole: " + error.message);
+    }
+  }
+}
+
 export async function clearGroups(formData: FormData) {
   const supabase = await createClient();
 
@@ -165,10 +333,18 @@ export async function clearGroups(formData: FormData) {
   const ids = (oldGroups ?? []).map((x: any) => x.id);
 
   if (ids.length > 0) {
-    const { error: delM } = await supabase.from("pairing_group_members").delete().in("group_id", ids);
+    const { error: delM } = await supabase
+      .from("pairing_group_members")
+      .delete()
+      .in("group_id", ids);
+
     if (delM) throw new Error("Error borrando miembros: " + delM.message);
 
-    const { error: delG } = await supabase.from("pairing_groups").delete().eq("round_id", round_id);
+    const { error: delG } = await supabase
+      .from("pairing_groups")
+      .delete()
+      .eq("round_id", round_id);
+
     if (delG) throw new Error("Error borrando grupos: " + delG.message);
   }
 
@@ -315,26 +491,79 @@ export async function moveEntryToGroupPosition(formData: FormData) {
     const supabase = await createClient();
 
     reqStr(formData, "tournament_id");
-    reqStr(formData, "round_id");
+    const round_id = reqStr(formData, "round_id");
 
     const entry_id = reqStr(formData, "entry_id");
     const to_group_id = reqStr(formData, "to_group_id");
     const target_position = reqInt(formData, "target_position");
 
-    if (target_position < 1) throw new Error("target_position debe ser >= 1");
+    if (target_position < 1) {
+      throw new Error("target_position debe ser >= 1");
+    }
 
-    const { error } = await supabase.rpc("move_entry_to_group_position", {
-      p_entry_id: entry_id,
-      p_to_group_id: to_group_id,
-      p_target_position: target_position,
-    });
+    // 🔥 1. ELIMINAR DE TODOS LOS GRUPOS (evita duplicados)
+    const { error: deleteErr } = await supabase
+      .from("pairing_group_members")
+      .delete()
+      .eq("entry_id", entry_id);
 
-    if (error) throw new Error("Error moviendo jugador (posición): " + error.message);
+    if (deleteErr) {
+      throw new Error("Error limpiando grupos previos: " + deleteErr.message);
+    }
+
+    // 🔥 2. LEER DESTINO
+    const { data: rows, error: err } = await supabase
+      .from("pairing_group_members")
+      .select("entry_id, position")
+      .eq("group_id", to_group_id)
+      .order("position", { ascending: true });
+
+    if (err) {
+      throw new Error("Error leyendo grupo destino: " + err.message);
+    }
+
+    const ordered = (rows ?? []).map((r: any) => r.entry_id);
+
+    const insertAt = Math.min(
+      Math.max(target_position - 1, 0),
+      ordered.length
+    );
+
+    ordered.splice(insertAt, 0, entry_id);
+
+    // 🔥 3. LIMPIAR GRUPO DESTINO
+    const { error: delGroupErr } = await supabase
+      .from("pairing_group_members")
+      .delete()
+      .eq("group_id", to_group_id);
+
+    if (delGroupErr) {
+      throw new Error("Error limpiando grupo destino: " + delGroupErr.message);
+    }
+
+    // 🔥 4. INSERTAR ORDENADO
+    const insertData = ordered.map((id, i) => ({
+      group_id: to_group_id,
+      entry_id: id,
+      position: i + 1,
+    }));
+
+    const { error: insErr } = await supabase
+      .from("pairing_group_members")
+      .insert(insertData);
+
+    if (insErr) {
+      throw new Error("Error insertando orden: " + insErr.message);
+    }
+
+    // 🔥 5. LIMPIAR GRUPOS VACÍOS + RECORRER
+    await compactGroupsForRound(supabase, round_id);
+    await recalcStartsForRound(supabase, round_id);
 
     revalidatePath("/tee-sheet");
     return { ok: true };
   } catch (e: any) {
-    throw new Error(e?.message ? String(e.message) : "Error moviendo jugador");
+    throw new Error(e?.message ?? "Error moviendo jugador");
   }
 }
 
@@ -357,14 +586,12 @@ export async function moveEntryToGroup(formData: FormData) {
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
-    .select("id, tournament_id, org_id")
+    .select("id, tournament_id")
     .eq("id", round_id)
     .single();
 
-  if (rErr || !r) throw new Error("No se pudo leer round (org_id): " + (rErr?.message ?? ""));
+  if (rErr || !r) throw new Error("No se pudo leer round: " + (rErr?.message ?? ""));
   if (r.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
-
-  const org_id = r.org_id as string;
 
   const { error: delErr } = await supabase
     .from("pairing_group_members")
@@ -387,7 +614,6 @@ export async function moveEntryToGroup(formData: FormData) {
   const newPos = Number(lastPos) + 1;
 
   const { error: insErr } = await supabase.from("pairing_group_members").insert({
-    org_id,
     group_id: to_group_id,
     entry_id,
     position: newPos,
@@ -397,6 +623,8 @@ export async function moveEntryToGroup(formData: FormData) {
 
   await renumberPositions(supabase, from_group_id);
   await renumberPositions(supabase, to_group_id);
+  await compactGroupsForRound(supabase, round_id);
+  await recalcStartsForRound(supabase, round_id);
 
   revalidatePath("/tee-sheet");
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
@@ -436,14 +664,13 @@ export async function generateGroupsByCategory(formData: FormData) {
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
-    .select("id, org_id, tournament_id, start_type, start_time, interval_minutes")
+    .select("id, tournament_id, start_type, start_time, interval_minutes")
     .eq("id", round_id)
     .single();
 
   if (rErr || !r) throw new Error("No se pudo leer round: " + (rErr?.message ?? ""));
   if (r.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
 
-  const org_id = r.org_id as string;
   const startType = (r.start_type as "tee_times" | "shotgun") ?? "tee_times";
 
   const baseMinutes = typeof r.start_time === "string" ? parseHHMM(r.start_time) : null;
@@ -711,8 +938,6 @@ export async function generateGroupsByCategory(formData: FormData) {
     const { data: pg, error: insG } = await supabase
       .from("pairing_groups")
       .insert({
-        org_id,
-        tournament_id,
         round_id,
         group_no: groupNo,
         tee_time,
@@ -727,7 +952,6 @@ export async function generateGroupsByCategory(formData: FormData) {
     const group_id = pg.id;
 
     const members = g.map((e, idx) => ({
-      org_id,
       group_id,
       entry_id: e.id,
       position: idx + 1,

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import { togglePublic, toggleArchive } from "./actions";
+import PosterUploadInline from "./PosterUploadInline";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,6 +17,9 @@ type TournamentRow = {
   start_date: string | null;
   course_name: string | null;
   club_name: string | null;
+  is_public: boolean | null;
+  is_archived: boolean | null;
+  poster_path: string | null;
 };
 
 type CourseRow = {
@@ -138,6 +143,45 @@ const scoreButtonStyle: React.CSSProperties = {
   fontSize: 11,
 };
 
+const publicButtonStyle: React.CSSProperties = {
+  height: 28,
+  padding: "0 10px",
+  border: "1px solid #0ea5e9",
+  borderRadius: 8,
+  background: "#eff6ff",
+  color: "#075985",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+};
+
+const miniActionButtonStyle: React.CSSProperties = {
+  height: 28,
+  padding: "0 10px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  background: "#fff",
+  color: "#0f172a",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+};
+
+const inlineFormStyle: React.CSSProperties = {
+  display: "inline-flex",
+  margin: 0,
+};
+
 const actionsRowStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -149,6 +193,7 @@ const actionsRowStyle: React.CSSProperties = {
 const actionCellStyle: React.CSSProperties = {
   ...tdStyle,
   whiteSpace: "nowrap",
+  minWidth: 580,
 };
 
 const nameLinkStyle: React.CSSProperties = {
@@ -156,6 +201,7 @@ const nameLinkStyle: React.CSSProperties = {
   textDecoration: "none",
   fontWeight: 700,
   display: "inline-block",
+  lineHeight: 1.25,
 };
 
 const filtersFormStyle: React.CSSProperties = {
@@ -318,6 +364,60 @@ const statusBadge = (status: string | null): React.CSSProperties => {
   };
 };
 
+function visibilityBadge(
+  isPublic: boolean | null,
+  isArchived: boolean | null
+): React.CSSProperties {
+  if (isArchived) {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      minHeight: 24,
+      padding: "0 9px",
+      borderRadius: 999,
+      fontSize: 11,
+      fontWeight: 800,
+      border: "1px solid #cbd5e1",
+      background: "#f1f5f9",
+      color: "#475569",
+    };
+  }
+
+  if (isPublic) {
+    return {
+      display: "inline-flex",
+      alignItems: "center",
+      minHeight: 24,
+      padding: "0 9px",
+      borderRadius: 999,
+      fontSize: 11,
+      fontWeight: 800,
+      border: "1px solid #bbf7d0",
+      background: "#f0fdf4",
+      color: "#166534",
+    };
+  }
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    minHeight: 24,
+    padding: "0 9px",
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: 800,
+    border: "1px solid #fecaca",
+    background: "#fef2f2",
+    color: "#991b1b",
+  };
+}
+
+function visibilityLabel(isPublic: boolean | null, isArchived: boolean | null) {
+  if (isArchived) return "Archivado";
+  if (isPublic) return "Público";
+  return "Oculto";
+}
+
 function countLinkStyle(n: number): React.CSSProperties {
   return {
     display: "inline-flex",
@@ -397,7 +497,9 @@ export default async function TournamentsPage({
 
   let tournamentsQuery = supabase
     .from("tournaments")
-    .select("id, name, short_name, status, created_at, start_date, course_name, club_name")
+    .select(
+      "id, name, short_name, status, created_at, start_date, course_name, club_name, is_public, is_archived, poster_path"
+    )
     .order("start_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -451,9 +553,11 @@ export default async function TournamentsPage({
   const clubs = (clubsRes.data ?? []) as ClubRow[];
 
   const clubOptions = uniqueClubOptions(
-    ((clubsFilterRes.data ?? []) as Array<{ club_name: string | null }>).map((row) => ({
-      club_name: row.club_name,
-    }))
+    ((clubsFilterRes.data ?? []) as Array<{ club_name: string | null }>).map(
+      (row) => ({
+        club_name: row.club_name,
+      })
+    )
   );
 
   const categoriesByTournament = countByTournament(categoriesRes.data);
@@ -475,9 +579,19 @@ export default async function TournamentsPage({
             <p style={subStyle}>Control maestro de operación</p>
           </div>
 
-          <Link href="/tournaments/new" style={buttonStyle}>
-            Nuevo torneo
-          </Link>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/" style={ghostButtonStyle}>
+              Home pública
+            </Link>
+
+            <Link href="/#torneos" style={ghostButtonStyle}>
+              Torneos públicos
+            </Link>
+
+            <Link href="/tournaments/new" style={buttonStyle}>
+              Nuevo torneo
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -598,6 +712,7 @@ export default async function TournamentsPage({
                 <th style={thStyle}>Fecha</th>
                 <th style={thStyle}>Torneo</th>
                 <th style={thStyle}>Estatus</th>
+                <th style={thStyle}>Público</th>
                 <th style={thStyle}>Club</th>
                 <th style={thStyle}>Campo</th>
                 <th style={thStyle}>Hoyos</th>
@@ -613,17 +728,93 @@ export default async function TournamentsPage({
 
             <tbody>
               {tournaments.map((t) => {
+                const isPublic = t.is_public ?? true;
+                const isArchived = t.is_archived ?? false;
+
+                const posterUrl = t.poster_path
+                  ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tournament-posters/${t.poster_path}`
+                  : null;
+
                 return (
                   <tr key={t.id}>
-                    <td style={tdStyle}>{formatDate(t.start_date ?? t.created_at)}</td>
+                    <td style={tdStyle}>
+                      {formatDate(t.start_date ?? t.created_at)}
+                    </td>
 
                     <td style={tdStyle}>
-                      <Link
-                        href={`/tournaments/edit?tournament_id=${t.id}`}
-                        style={nameLinkStyle}
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 12,
+                          alignItems: "flex-start",
+                          minWidth: 0,
+                        }}
                       >
-                        {displayTournamentName(t)}
-                      </Link>
+                        {posterUrl ? (
+                          <div
+                            style={{
+                              width: 112,
+                              height: 160,
+                              flexShrink: 0,
+                              overflow: "hidden",
+                              borderRadius: 16,
+                              border: "1px solid #dbe2ea",
+                              background: "#f8fafc",
+                              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+                            }}
+                          >
+                            <img
+                              src={posterUrl}
+                              alt={displayTournamentName(t)}
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                display: "block",
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              width: 112,
+                              height: 160,
+                              flexShrink: 0,
+                              overflow: "hidden",
+                              borderRadius: 16,
+                              border: "1px dashed #cbd5e1",
+                              background: "#f8fafc",
+                              color: "#64748b",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              textAlign: "center",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: 8,
+                            }}
+                          >
+                            Sin poster
+                          </div>
+                        )}
+
+                        <div style={{ minWidth: 0 }}>
+                          <Link
+                            href={`/tournaments/edit?tournament_id=${t.id}`}
+                            style={nameLinkStyle}
+                          >
+                            {displayTournamentName(t)}
+                          </Link>
+
+                          <p style={subStyle}>
+                            Club: {displayClubName(t.club_name, clubs)}
+                          </p>
+
+                          <p style={subStyle}>
+                            Campo: {displayCourseName(t.course_name, courses)}
+                          </p>
+                        </div>
+                      </div>
                     </td>
 
                     <td style={tdStyle}>
@@ -638,8 +829,12 @@ export default async function TournamentsPage({
                     </td>
 
                     <td style={tdStyle}>
-                      {displayClubName(t.club_name, clubs)}
+                      <span style={visibilityBadge(isPublic, isArchived)}>
+                        {visibilityLabel(isPublic, isArchived)}
+                      </span>
                     </td>
+
+                    <td style={tdStyle}>{displayClubName(t.club_name, clubs)}</td>
 
                     <td style={tdStyle}>
                       {displayCourseName(t.course_name, courses)}
@@ -696,6 +891,17 @@ export default async function TournamentsPage({
 
                     <td style={actionCellStyle}>
                       <div style={actionsRowStyle}>
+                        {isPublic && !isArchived ? (
+                          <Link
+                            href={`/torneos/${t.id}`}
+                            style={publicButtonStyle}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Pública
+                          </Link>
+                        ) : null}
+
                         <Link
                           href={`/tournaments/edit?tournament_id=${t.id}`}
                           style={ghostButtonStyle}
@@ -716,6 +922,29 @@ export default async function TournamentsPage({
                         >
                           Scores
                         </Link>
+
+                        <PosterUploadInline
+                          tournamentId={t.id}
+                          hasPoster={Boolean(t.poster_path)}
+                        />
+
+                        <form
+                          action={togglePublic.bind(null, t.id)}
+                          style={inlineFormStyle}
+                        >
+                          <button type="submit" style={miniActionButtonStyle}>
+                            {isPublic ? "Ocultar" : "Mostrar"}
+                          </button>
+                        </form>
+
+                        <form
+                          action={toggleArchive.bind(null, t.id)}
+                          style={inlineFormStyle}
+                        >
+                          <button type="submit" style={miniActionButtonStyle}>
+                            {isArchived ? "Reactivar" : "Archivar"}
+                          </button>
+                        </form>
                       </div>
                     </td>
                   </tr>
@@ -724,7 +953,7 @@ export default async function TournamentsPage({
 
               {tournaments.length === 0 ? (
                 <tr>
-                  <td style={tdStyle} colSpan={13}>
+                  <td style={tdStyle} colSpan={14}>
                     No hay torneos registrados con esos filtros.
                   </td>
                 </tr>

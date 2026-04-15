@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -42,15 +42,22 @@ type TournamentMini = {
 export default function Sidebar() {
   const pathname = usePathname();
 
-  const searchParams = useMemo(() => {
-    if (typeof window === "undefined") return new URLSearchParams();
-    return new URLSearchParams(window.location.search);
-  }, [pathname]);
-
-  const tournamentId = searchParams.get("tournament_id");
-
+  const [tournamentId, setTournamentId] = useState<string | null>(null);
+  const [searchMap, setSearchMap] = useState<Record<string, string>>({});
   const [tournament, setTournament] = useState<TournamentMini | null>(null);
   const [loadingTournament, setLoadingTournament] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const map: Record<string, string> = {};
+    for (const [key, value] of params.entries()) {
+      map[key] = value;
+    }
+
+    setSearchMap(map);
+    setTournamentId(params.get("tournament_id"));
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,14 +76,15 @@ export default function Sidebar() {
         .eq("id", tournamentId)
         .single();
 
-      if (!cancelled) {
-        if (!error && data) {
-          setTournament(data as TournamentMini);
-        } else {
-          setTournament(null);
-        }
-        setLoadingTournament(false);
+      if (cancelled) return;
+
+      if (!error && data) {
+        setTournament(data as TournamentMini);
+      } else {
+        setTournament(null);
       }
+
+      setLoadingTournament(false);
     }
 
     loadTournament();
@@ -100,18 +108,9 @@ export default function Sidebar() {
     { name: "Players", href: "/players", icon: Users, requiresTournament: true },
     { name: "Entries", href: "/entries", icon: ClipboardList, requiresTournament: true },
 
-    {
-      name: "Editar torneo",
-      href: "/tournaments/edit",
-      icon: FilePenLine,
-      requiresTournament: true,
-    },
-    {
-      name: "Setup torneo",
-      href: "/tournaments/setup",
-      icon: Settings,
-      requiresTournament: true,
-    },
+    { name: "Editar torneo", href: "/tournaments/edit", icon: FilePenLine, requiresTournament: true },
+    { name: "Setup torneo", href: "/tournaments/setup", icon: Settings, requiresTournament: true },
+
     {
       name: "Categorías",
       href: "/categories",
@@ -151,84 +150,98 @@ export default function Sidebar() {
 
     if (item.query) {
       for (const [key, value] of Object.entries(item.query)) {
-        if (searchParams.get(key) !== value) return false;
+        if (searchMap[key] !== value) return false;
       }
     }
 
     return true;
   }
 
+  const visibleMenu = menu.filter(
+    (item) => !item.requiresTournament || !!tournamentId
+  );
+
+  // Ocultar sidebar solo en la página pública home
+  if (pathname === "/") {
+    return null;
+  }
+
   return (
-    <aside className="w-64 bg-[#1C252D] text-white min-h-screen flex flex-col">
-      <div className="px-6 py-6 border-b border-white/10">
-        <Image
-          src="/branding/logo/list-golf-logo.png"
-          alt="list.golf"
-          width={150}
-          height={40}
-        />
+    <aside className="flex min-h-screen w-64 flex-col bg-[#1C252D] text-white">
+      <div className="border-b border-white/10 px-6 py-6">
+        <Link href="/tournaments" className="flex items-center">
+          <Image
+            src="/logo-main.png"
+            alt="List.golf"
+            width={150}
+            height={48}
+            priority
+          />
+        </Link>
       </div>
 
-      {tournamentId && (
-        <div className="px-4 py-4 border-b border-white/10">
-          <div className="text-[11px] uppercase tracking-[0.12em] text-white/40 mb-1">
-            Torneo activo
-          </div>
-
-          <div className="text-sm font-semibold leading-5 text-white">
-            {loadingTournament
-              ? "Cargando torneo..."
-              : tournament?.name || "Torneo sin nombre"}
-          </div>
-
-          {tournament?.status && (
-            <div className="mt-2">
-              <span className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/70">
-                {tournament.status}
-              </span>
+      <div className="border-b border-white/10 px-4 py-4">
+        {tournamentId ? (
+          <>
+            <div className="text-xs uppercase tracking-wide text-white/40">
+              Torneo activo
             </div>
-          )}
-        </div>
-      )}
 
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {menu
-          .filter((item) => !item.requiresTournament || !!tournamentId)
-          .map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item);
+            <div className="text-sm font-semibold">
+              {loadingTournament
+                ? "Cargando..."
+                : tournament?.name || "Sin nombre"}
+            </div>
 
-            return (
-              <Link
-                key={`${item.name}-${item.href}-${JSON.stringify(item.query ?? {})}`}
-                href={buildHref(item)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm ${
-                  active
-                    ? "bg-[#63BC46] text-black"
-                    : "hover:bg-white/10 text-white/80"
-                }`}
-              >
-                <Icon size={18} />
-                {item.name}
-              </Link>
-            );
-          })}
+            {tournament?.status && (
+              <div className="mt-2 text-[10px] uppercase text-white/60">
+                {tournament.status}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-xs text-white/35">
+            Sin torneo seleccionado
+          </div>
+        )}
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {visibleMenu.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item);
+
+          return (
+            <Link
+              key={`${item.name}-${item.href}`}
+              href={buildHref(item)}
+              className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm ${
+                active
+                  ? "bg-[#63BC46] text-black"
+                  : "text-white/80 hover:bg-white/10"
+              }`}
+            >
+              <Icon size={18} />
+              {item.name}
+            </Link>
+          );
+        })}
       </nav>
 
-      <div className="p-4 border-t border-white/10 space-y-2">
+      <div className="border-t border-white/10 p-4">
         <Link
           href="/tournaments"
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm ${
+          className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm ${
             pathname === "/tournaments"
               ? "bg-[#63BC46] text-black"
-              : "bg-[#111827] hover:bg-[#0b1220] text-white"
+              : "text-white hover:bg-white/10"
           }`}
         >
           <ArrowLeftCircle size={18} />
           Listado de torneos
         </Link>
 
-        <div className="text-xs text-white/40 pt-2">list.golf</div>
+        <div className="mt-3 text-xs text-white/40">List.golf</div>
       </div>
     </aside>
   );

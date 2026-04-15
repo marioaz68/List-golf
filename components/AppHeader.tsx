@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function AppHeader() {
@@ -8,52 +9,67 @@ export default async function AppHeader() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let displayName = user?.email ?? "Usuario";
+  const displayName = user?.email ?? "Usuario";
+  const initial = displayName.charAt(0).toUpperCase();
+
+  const pillBase =
+    "inline-flex h-12 items-center justify-center rounded-[18px] border border-white/10 bg-white/[0.03] px-5 text-base font-semibold text-white transition hover:bg-white/10";
 
   return (
-    <header className="border-b border-white/20 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
+    <header className="border-b border-white/10 bg-[#08111f]/80 backdrop-blur">
+      <div className="mx-auto flex max-w-[1700px] items-center justify-between px-4 py-4">
 
-        <Link href="/" className="text-lg font-bold text-gray-900">
-          Golf Torneos
+        {/* LOGO */}
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/logo-main.png"
+            alt="List.golf"
+            width={150}
+            height={50}
+            priority
+            className="h-auto w-auto max-w-[150px]"
+          />
         </Link>
 
         <div className="flex items-center gap-3">
 
-          {user ? (
+          {/* 🔓 NO LOGUEADO */}
+          {!user && (
+            <Link href="/login" className={pillBase}>
+              Entrar
+            </Link>
+          )}
+
+          {/* 🔒 LOGUEADO */}
+          {user && (
             <>
-              <Link
-                href="/users"
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
+              {/* 🔥 NUEVO BOTÓN */}
+              <Link href="/tournaments" className={pillBase}>
+                Torneos
+              </Link>
+
+              <Link href="/users" className={pillBase}>
                 Usuarios
               </Link>
 
-              <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 shadow-sm">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-700 text-sm font-bold text-white">
-                  {displayName.charAt(0).toUpperCase()}
+              {/* USER BADGE */}
+              <div className="inline-flex h-12 items-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-4 text-white">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-[#08111f]">
+                  {initial}
                 </div>
 
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="whitespace-nowrap text-base font-semibold">
                   {displayName}
                 </span>
               </div>
 
               <form action="/auth/signout" method="post">
-                <button className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-black">
+                <button type="submit" className={pillBase}>
                   Salir
                 </button>
               </form>
             </>
-          ) : (
-            <Link
-              href="/login"
-              className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-semibold text-white"
-            >
-              Login
-            </Link>
           )}
-
         </div>
       </div>
     </header>

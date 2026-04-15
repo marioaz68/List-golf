@@ -14,8 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Golf Torneos",
+  title: "List.golf",
   description: "Sistema de administración de torneos de golf",
+  icons: {
+    icon: "/logo-main.png",
+    shortcut: "/logo-main.png",
+    apple: "/logo-main.png",
+  },
 };
 
 export default function RootLayout({
@@ -28,14 +33,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="min-h-screen bg-[#065f46]">
-          
-          {/* HEADER GLOBAL */}
+        <div className="min-h-screen bg-[#08111f]">
           <AppHeader />
-
-          {/* CONTENIDO */}
           <main>{children}</main>
-
         </div>
       </body>
     </html>

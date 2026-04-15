@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
@@ -73,10 +73,39 @@ function chunkArray<T>(arr: T[], size: number) {
   return chunks;
 }
 
+function buildEntriesRedirect(params: {
+  tournamentId: string;
+  tab?: string;
+  bulkStatus?: "success" | "warning" | "error";
+  bulkMessage?: string;
+  addedCount?: number;
+  skippedCount?: number;
+  selectedCount?: number;
+}) {
+  const search = new URLSearchParams();
+
+  search.set("tournament_id", params.tournamentId);
+  search.set("tab", params.tab ?? "bulk");
+
+  if (params.bulkStatus) search.set("bulk_status", params.bulkStatus);
+  if (params.bulkMessage) search.set("bulk_message", params.bulkMessage);
+  if (typeof params.addedCount === "number") {
+    search.set("bulk_added", String(params.addedCount));
+  }
+  if (typeof params.skippedCount === "number") {
+    search.set("bulk_skipped", String(params.skippedCount));
+  }
+  if (typeof params.selectedCount === "number") {
+    search.set("bulk_selected", String(params.selectedCount));
+  }
+
+  return `/entries?${search.toString()}`;
+}
+
 async function getTournamentData(supabase: any, tournament_id: string) {
   const { data, error } = await supabase
     .from("tournaments")
-    .select("id, org_id")
+    .select("id")
     .eq("id", tournament_id)
     .single();
 
@@ -84,7 +113,7 @@ async function getTournamentData(supabase: any, tournament_id: string) {
     throw new Error("Torneo no encontrado: " + (error?.message ?? ""));
   }
 
-  return data as { id: string; org_id: string };
+  return data as { id: string };
 }
 
 async function getTournamentCats(supabase: any, tournament_id: string) {
@@ -110,8 +139,107 @@ async function ensureEntriesAccess(tournament_id: string) {
   });
 }
 
+async function getEntryOrThrow(admin: any, entryId: string) {
+  const { data, error } = await admin
+    .from("tournament_entries")
+    .select("id, tournament_id, player_id, status")
+    .eq("id", entryId)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Entry no encontrado: " + (error?.message ?? ""));
+  }
+
+  return data as {
+    id: string;
+    tournament_id: string;
+    player_id: string;
+    status: string | null;
+  };
+}
+
+async function getTournamentRoundIds(admin: any, tournamentId: string) {
+  const { data, error } = await admin
+    .from("rounds")
+    .select("id")
+    .eq("tournament_id", tournamentId);
+
+  if (error) {
+    throw new Error("Error leyendo rondas del torneo: " + error.message);
+  }
+
+  return ((data ?? []) as Array<{ id: string }>).map((x) => x.id);
+}
+
+async function getLatestTournamentRound(admin: any, tournamentId: string) {
+  const { data, error } = await admin
+    .from("rounds")
+    .select("id, round_no, round_date")
+    .eq("tournament_id", tournamentId)
+    .order("round_date", { ascending: false, nullsFirst: false })
+    .order("round_no", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Error leyendo ronda del torneo: " + error.message);
+  }
+
+  return (data ?? null) as
+    | {
+        id: string;
+        round_no: number | null;
+        round_date: string | null;
+      }
+    | null;
+}
+
+async function getRoundScoresForPlayerInTournament(
+  admin: any,
+  params: { tournamentId: string; playerId: string }
+) {
+  const roundIds = await getTournamentRoundIds(admin, params.tournamentId);
+  if (roundIds.length === 0) return [];
+
+  const { data, error } = await admin
+    .from("round_scores")
+    .select("id, round_id, gross_score, player_id")
+    .eq("player_id", params.playerId)
+    .in("round_id", roundIds);
+
+  if (error) {
+    throw new Error("Error leyendo round_scores del jugador: " + error.message);
+  }
+
+  return (data ?? []) as Array<{
+    id: string;
+    round_id: string | null;
+    gross_score: number | null;
+    player_id: string | null;
+  }>;
+}
+
+async function getHoleScoresCountForRoundScoreIds(
+  admin: any,
+  roundScoreIds: string[]
+) {
+  if (roundScoreIds.length === 0) return 0;
+
+  const { count, error } = await admin
+    .from("hole_scores")
+    .select("id", { count: "exact", head: true })
+    .in("round_score_id", roundScoreIds);
+
+  if (error) {
+    throw new Error("Error leyendo hole_scores: " + error.message);
+  }
+
+  return count ?? 0;
+}
+
 export async function addEntry(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -119,7 +247,7 @@ export async function addEntry(formData: FormData) {
   const player_id = reqStr(formData, "player_id");
   const handicap_index_input = optNum(formData, "handicap_index");
 
-  const t = await getTournamentData(supabase, tournament_id);
+  await getTournamentData(supabase, tournament_id);
 
   const { data: p, error: pErr } = await supabase
     .from("players")
@@ -134,14 +262,15 @@ export async function addEntry(formData: FormData) {
   const handicap = handicap_index_input ?? playerHI;
 
   if (handicap === null) {
-    throw new Error("El jugador no tiene handicap_index y no se capturó handicap torneo.");
+    throw new Error(
+      "El jugador no tiene handicap_index y no se capturó handicap torneo."
+    );
   }
 
   const cats = await getTournamentCats(supabase, tournament_id);
   const category_id = pickCategoryId({ cats, playerGender, handicap });
 
-  const { error } = await supabase.from("tournament_entries").insert({
-    org_id: t.org_id,
+  const { error } = await admin.from("tournament_entries").insert({
     tournament_id,
     player_id,
     handicap_index: handicap,
@@ -158,6 +287,7 @@ export async function addEntry(formData: FormData) {
 
 export async function createPlayerAndAddEntry(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -173,7 +303,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
   const phone = optStr(formData, "phone");
   const member_type = optStr(formData, "member_type");
 
-  const t = await getTournamentData(supabase, tournament_id);
+  await getTournamentData(supabase, tournament_id);
   const cats = await getTournamentCats(supabase, tournament_id);
 
   const { data: newPlayer, error: pErr } = await supabase
@@ -202,8 +332,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
       ? pickCategoryId({ cats, playerGender, handicap })
       : null;
 
-  const { error: eErr } = await supabase.from("tournament_entries").insert({
-    org_id: t.org_id,
+  const { error: eErr } = await admin.from("tournament_entries").insert({
     tournament_id,
     player_id: newPlayer.id,
     handicap_index: handicap,
@@ -220,6 +349,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
 
 export async function addSelectedEntries(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -228,10 +358,20 @@ export async function addSelectedEntries(formData: FormData) {
   const playerIds = [...new Set(playerIdsRaw.map((x) => String(x)).filter(Boolean))];
 
   if (playerIds.length === 0) {
-    throw new Error("No seleccionaste jugadores.");
+    redirect(
+      buildEntriesRedirect({
+        tournamentId: tournament_id,
+        tab: "bulk",
+        bulkStatus: "warning",
+        bulkMessage: "No seleccionaste jugadores.",
+        selectedCount: 0,
+        addedCount: 0,
+        skippedCount: 0,
+      })
+    );
   }
 
-  const t = await getTournamentData(supabase, tournament_id);
+  await getTournamentData(supabase, tournament_id);
   const cats = await getTournamentCats(supabase, tournament_id);
 
   const chunks = chunkArray(playerIds, 100);
@@ -286,7 +426,6 @@ export async function addSelectedEntries(formData: FormData) {
             : null;
 
         return {
-          org_id: t.org_id,
           tournament_id,
           player_id: p.id,
           handicap_index: handicap,
@@ -295,35 +434,238 @@ export async function addSelectedEntries(formData: FormData) {
         };
       }) || [];
 
-  if (rows.length > 0) {
-    for (const batch of chunkArray(rows, 100)) {
-      const { error: insErr } = await supabase.from("tournament_entries").insert(batch);
-      if (insErr) {
-        throw new Error("Error insertando entries seleccionados: " + insErr.message);
-      }
+  const addedCount = rows.length;
+  const selectedCount = playerIds.length;
+  const skippedCount = Math.max(selectedCount - addedCount, 0);
+
+  if (addedCount === 0) {
+    revalidatePath("/entries");
+    redirect(
+      buildEntriesRedirect({
+        tournamentId: tournament_id,
+        tab: "bulk",
+        bulkStatus: "warning",
+        bulkMessage: "Todos los jugadores seleccionados ya estaban inscritos.",
+        selectedCount,
+        addedCount,
+        skippedCount,
+      })
+    );
+  }
+
+  for (const batch of chunkArray(rows, 100)) {
+    const { error: insErr } = await admin.from("tournament_entries").insert(batch);
+
+    if (insErr) {
+      throw new Error("Error insertando entries seleccionados: " + insErr.message);
     }
   }
 
   revalidatePath("/entries");
-  redirect(`/entries?tournament_id=${tournament_id}`);
+  revalidatePath("/players");
+
+  redirect(
+    buildEntriesRedirect({
+      tournamentId: tournament_id,
+      tab: "bulk",
+      bulkStatus: "success",
+      bulkMessage:
+        skippedCount > 0
+          ? `Se inscribieron ${addedCount} jugadores. ${skippedCount} ya estaban inscritos.`
+          : `Se inscribieron ${addedCount} jugadores correctamente.`,
+      selectedCount,
+      addedCount,
+      skippedCount,
+    })
+  );
 }
 
 export async function deleteEntry(formData: FormData) {
-  const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
 
-  const { error } = await supabase.from("tournament_entries").delete().eq("id", id);
+  const entry = await getEntryOrThrow(admin, id);
+
+  const roundScores = await getRoundScoresForPlayerInTournament(admin, {
+    tournamentId: tournament_id,
+    playerId: entry.player_id,
+  });
+
+  const roundScoreIds = roundScores.map((x) => x.id);
+  const holeScoresCount = await getHoleScoresCountForRoundScoreIds(
+    admin,
+    roundScoreIds
+  );
+
+  if (holeScoresCount > 0) {
+    for (const rs of roundScores) {
+      const { error: updateErr } = await admin
+        .from("round_scores")
+        .update({ gross_score: 400 })
+        .eq("id", rs.id);
+
+      if (updateErr) {
+        throw new Error("Error actualizando round_scores a DQ: " + updateErr.message);
+      }
+    }
+
+    const { error: entryErr } = await admin
+      .from("tournament_entries")
+      .update({ status: "dq" })
+      .eq("id", entry.id);
+
+    if (entryErr) {
+      throw new Error("Error marcando entry como dq: " + entryErr.message);
+    }
+
+    revalidatePath("/entries");
+    revalidatePath("/leaderboard");
+    revalidatePath("/score-entry");
+    redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+  }
+
+  if (roundScoreIds.length > 0) {
+    const { error: deleteRoundScoresErr } = await admin
+      .from("round_scores")
+      .delete()
+      .in("id", roundScoreIds);
+
+    if (deleteRoundScoresErr) {
+      throw new Error(
+        "Error eliminando tarjetas vacías del jugador: " +
+          deleteRoundScoresErr.message
+      );
+    }
+  }
+
+  const { error } = await admin
+    .from("tournament_entries")
+    .delete()
+    .eq("id", entry.id);
+
   if (error) throw new Error(error.message);
 
   revalidatePath("/entries");
-  redirect(`/entries?tournament_id=${tournament_id}`);
+  revalidatePath("/leaderboard");
+  revalidatePath("/score-entry");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+}
+
+export async function withdrawEntry(formData: FormData) {
+  const admin = await createAdminClient();
+
+  const id = reqStr(formData, "id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  await ensureEntriesAccess(tournament_id);
+
+  await getEntryOrThrow(admin, id);
+
+  const { error } = await admin
+    .from("tournament_entries")
+    .update({ status: "withdrawn" })
+    .eq("id", id);
+
+  if (error) throw new Error("Error dando de baja entry: " + error.message);
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+}
+
+export async function disqualifyEntry(formData: FormData) {
+  const admin = await createAdminClient();
+
+  const id = reqStr(formData, "id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  await ensureEntriesAccess(tournament_id);
+
+  const entry = await getEntryOrThrow(admin, id);
+  const round = await getLatestTournamentRound(admin, tournament_id);
+
+  if (!round) {
+    throw new Error("No hay rondas creadas en este torneo para marcar DQ.");
+  }
+
+  const { data: existingRoundScore, error: roundScoreErr } = await admin
+    .from("round_scores")
+    .select("id")
+    .eq("player_id", entry.player_id)
+    .eq("round_id", round.id)
+    .maybeSingle();
+
+  if (roundScoreErr) {
+    throw new Error("Error leyendo round_score actual: " + roundScoreErr.message);
+  }
+
+  let roundScoreId = existingRoundScore?.id ?? null;
+
+  if (roundScoreId) {
+    const { error: updateErr } = await admin
+      .from("round_scores")
+      .update({ gross_score: 400 })
+      .eq("id", roundScoreId);
+
+    if (updateErr) {
+      throw new Error("Error actualizando DQ en round_scores: " + updateErr.message);
+    }
+  } else {
+    const { data: inserted, error: insertErr } = await admin
+      .from("round_scores")
+      .insert({
+        player_id: entry.player_id,
+        round_id: round.id,
+        gross_score: 400,
+      })
+      .select("id")
+      .single();
+
+    if (insertErr) {
+      throw new Error("Error creando DQ en round_scores: " + insertErr.message);
+    }
+
+    roundScoreId = inserted.id;
+  }
+
+  const { error: entryErr } = await admin
+    .from("tournament_entries")
+    .update({ status: "dq" })
+    .eq("id", entry.id);
+
+  if (entryErr) {
+    throw new Error("Error marcando entry como dq: " + entryErr.message);
+  }
+
+  revalidatePath("/entries");
+  revalidatePath("/leaderboard");
+  revalidatePath("/score-entry");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+}
+
+export async function restoreEntry(formData: FormData) {
+  const admin = await createAdminClient();
+
+  const id = reqStr(formData, "id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  await ensureEntriesAccess(tournament_id);
+
+  const { error } = await admin
+    .from("tournament_entries")
+    .update({ status: "confirmed" })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error("Error restaurando entry: " + error.message);
+  }
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
 }
 
 export async function updateEntryHandicap(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
@@ -345,7 +687,7 @@ export async function updateEntryHandicap(formData: FormData) {
   const cats = await getTournamentCats(supabase, tournament_id);
   const category_id = pickCategoryId({ cats, playerGender, handicap });
 
-  const { error } = await supabase
+  const { error } = await admin
     .from("tournament_entries")
     .update({ handicap_index: handicap, category_id })
     .eq("id", id);
@@ -358,6 +700,7 @@ export async function updateEntryHandicap(formData: FormData) {
 
 export async function autoCategorizeEntries(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -386,14 +729,15 @@ export async function autoCategorizeEntries(formData: FormData) {
   for (const e of entries) {
     const playerGender = String(e.players?.gender ?? "X").toUpperCase() as "M" | "F" | "X";
     const hEntry = e.handicap_index == null ? null : Number(e.handicap_index);
-    const hPlayer = e.players?.handicap_index == null ? null : Number(e.players.handicap_index);
+    const hPlayer =
+      e.players?.handicap_index == null ? null : Number(e.players.handicap_index);
     const handicap = hEntry ?? hPlayer;
 
     if (handicap == null || !Number.isFinite(handicap)) continue;
 
     const category_id = pickCategoryId({ cats, playerGender, handicap });
 
-    const { error } = await supabase
+    const { error } = await admin
       .from("tournament_entries")
       .update({ category_id, handicap_index: hEntry ?? handicap })
       .eq("id", e.id);
@@ -409,17 +753,15 @@ export async function autoCategorizeEntries(formData: FormData) {
 
 export async function enrollExcelPlayersToTournament(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
 
   const rawLimit = Number(formData.get("limit") ?? 30);
-  const limit =
-    Number.isFinite(rawLimit) && rawLimit > 0
-      ? Math.floor(rawLimit)
-      : 30;
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 30;
 
-  const t = await getTournamentData(supabase, tournament_id);
+  await getTournamentData(supabase, tournament_id);
   const cats = await getTournamentCats(supabase, tournament_id);
 
   const { data: players, error: pErr } = await supabase
@@ -459,7 +801,6 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
             : null;
 
         return {
-          org_id: t.org_id,
           tournament_id,
           player_id: p.id,
           handicap_index: handicap,
@@ -470,7 +811,7 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
 
   if (rows.length > 0) {
     for (const batch of chunkArray(rows, 100)) {
-      const { error: insErr } = await supabase.from("tournament_entries").insert(batch);
+      const { error: insErr } = await admin.from("tournament_entries").insert(batch);
       if (insErr) throw new Error("Error insertando entries: " + insErr.message);
     }
   }
@@ -481,11 +822,12 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
 
 export async function enrollAllPlayersToTournament(formData: FormData) {
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
 
-  const t = await getTournamentData(supabase, tournament_id);
+  await getTournamentData(supabase, tournament_id);
   const cats = await getTournamentCats(supabase, tournament_id);
 
   const { data: players, error: pErr } = await supabase
@@ -524,7 +866,6 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
             : null;
 
         return {
-          org_id: t.org_id,
           tournament_id,
           player_id: p.id,
           handicap_index: handicap,
@@ -535,7 +876,7 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
 
   if (rows.length > 0) {
     for (const batch of chunkArray(rows, 100)) {
-      const { error: insErr } = await supabase.from("tournament_entries").insert(batch);
+      const { error: insErr } = await admin.from("tournament_entries").insert(batch);
       if (insErr) throw new Error("Error insertando entries: " + insErr.message);
     }
   }
