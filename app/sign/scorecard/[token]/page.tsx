@@ -5,7 +5,7 @@ import {
   getSignatureRequestByTokenAction,
 } from "@/app/(backoffice)/scorecards/actions";
 import ScorecardPreview from "@/components/scorecards/ScorecardPreview";
-import RemoteSignForm from "@/components/scorecards/RemoteSignForm";
+import RemoteSignForm from "@/lib/scorecards/RemoteSignForm";
 
 export const dynamic = "force-dynamic";
 

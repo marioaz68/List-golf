@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import {
   createTemplate,
@@ -84,6 +84,23 @@ const inputStyle: CSSProperties = {
   fontSize: "11px",
 };
 
+function HeaderBlock({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <HeaderBar title={title} actions={actions} />
+      {children ? <div>{children}</div> : null}
+    </div>
+  );
+}
+
 export default async function CategoryTemplatesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
@@ -153,8 +170,8 @@ export default async function CategoryTemplatesPage(props: {
         Plantillas de categorías
       </h1>
 
-      <form method="GET" action="/category-templates">
-        <HeaderBar
+      <form method="GET" action="/category-templates" className="space-y-2">
+        <HeaderBlock
           title="PLANTILLA"
           actions={
             <button type="submit" style={buttonStyle}>
@@ -176,11 +193,11 @@ export default async function CategoryTemplatesPage(props: {
               ))}
             </select>
           </div>
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
-      <form action={createTemplate}>
-        <HeaderBar
+      <form action={createTemplate} className="space-y-2">
+        <HeaderBlock
           title="NUEVA PLANTILLA"
           actions={
             <button type="submit" style={buttonStyle}>
@@ -205,7 +222,7 @@ export default async function CategoryTemplatesPage(props: {
               Activa
             </label>
           </div>
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
       {selectedTemplate ? (

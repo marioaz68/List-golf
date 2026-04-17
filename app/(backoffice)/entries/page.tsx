@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import HeaderBar from "@/components/ui/HeaderBar";
 import SinglePlayerEntryPanel from "./SinglePlayerEntryPanel";
@@ -160,6 +161,23 @@ function feedbackClasses(status: BulkStatus) {
   return "hidden";
 }
 
+function HeaderBlock({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <HeaderBar title={title} actions={actions} />
+      {children ? <div>{children}</div> : null}
+    </div>
+  );
+}
+
 export default async function EntriesPage({
   searchParams,
 }: {
@@ -312,13 +330,13 @@ export default async function EntriesPage({
 
   return (
     <main className="space-y-2 p-2">
-      <HeaderBar title="Entries">
+      <HeaderBlock title="Entries">
         <div className="flex flex-wrap items-center gap-1">
           {selectedTournamentId ? (
             <EnrollExcelButton tournament_id={selectedTournamentId} />
           ) : null}
         </div>
-      </HeaderBar>
+      </HeaderBlock>
 
       <section className="rounded border border-gray-300 bg-white p-1.5 shadow-sm">
         <form className="flex flex-wrap items-end gap-1.5" action="/entries">

@@ -54,10 +54,7 @@ export default function PosterUploadInline({
     canvas.height = targetHeight;
 
     // 🔥 CROP INTELIGENTE
-    const scale = Math.max(
-      targetWidth / img.width,
-      targetHeight / img.height
-    );
+    const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
 
     const newWidth = img.width * scale;
     const newHeight = img.height * scale;
@@ -68,9 +65,15 @@ export default function PosterUploadInline({
     ctx.drawImage(img, dx, dy, newWidth, newHeight);
 
     // 🔥 COMPRESIÓN
-    const blob: Blob = await new Promise((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.82)
-    );
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (!result) {
+          reject(new Error("No se pudo generar el blob del poster"));
+          return;
+        }
+        resolve(result);
+      }, "image/jpeg", 0.82);
+    });
 
     return new File([blob], "poster.jpg", {
       type: "image/jpeg",

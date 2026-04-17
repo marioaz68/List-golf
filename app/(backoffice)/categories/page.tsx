@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { applyCategoryTemplate, deleteCategoryTemplate } from "./actions";
 import { redirect } from "next/navigation";
@@ -131,6 +131,23 @@ function normalizeItem(row: TemplateItemRow): PreviewItem {
     handicap_max: Number(row.handicap_max ?? 0),
     is_active: row.is_active ?? true,
   };
+}
+
+function HeaderBlock({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <HeaderBar title={title} actions={actions} />
+      {children ? <div>{children}</div> : null}
+    </div>
+  );
 }
 
 export default async function CategoriesPage(props: {
@@ -269,8 +286,8 @@ export default async function CategoriesPage(props: {
         </a>
       </div>
 
-      <form method="GET" action="/categories">
-        <HeaderBar
+      <form method="GET" action="/categories" className="space-y-2">
+        <HeaderBlock
           title="TORNEO"
           actions={<button style={buttonStyle}>Cambiar</button>}
         >
@@ -293,11 +310,11 @@ export default async function CategoriesPage(props: {
               ))}
             </select>
           </div>
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
-      <form method="GET" action="/categories">
-        <HeaderBar
+      <form method="GET" action="/categories" className="space-y-2">
+        <HeaderBlock
           title="PLANTILLA DE CATEGORÍAS"
           actions={<button style={buttonStyle}>Ver</button>}
         >
@@ -326,7 +343,7 @@ export default async function CategoriesPage(props: {
               )}
             </select>
           </div>
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
       <div style={cardStyle}>
@@ -424,7 +441,7 @@ export default async function CategoriesPage(props: {
         </div>
       )}
 
-      <HeaderBar
+      <HeaderBlock
         title="CATEGORÍAS DEL TORNEO"
         actions={
           <div className="flex gap-1.5">
@@ -451,7 +468,7 @@ export default async function CategoriesPage(props: {
           Las categorías del torneo siguen siendo editables y ahora también las
           puedes guardar como plantilla.
         </div>
-      </HeaderBar>
+      </HeaderBlock>
 
       <div className="pb-4">
         <CategoryTemplateEditor

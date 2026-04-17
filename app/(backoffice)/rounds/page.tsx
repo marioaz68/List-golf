@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
@@ -98,6 +98,23 @@ const fieldWrapClass = "grid gap-1 min-w-[150px]";
 const newRoundGridClass =
   "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[100px_150px_150px_130px_130px_auto] xl:items-end";
 
+function HeaderBlock({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <HeaderBar title={title} actions={actions} />
+      {children ? <div>{children}</div> : null}
+    </div>
+  );
+}
+
 export default async function RoundsPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
@@ -182,8 +199,8 @@ export default async function RoundsPage(props: {
         </p>
       </header>
 
-      <form method="GET" action="/rounds">
-        <HeaderBar
+      <form method="GET" action="/rounds" className="space-y-2">
+        <HeaderBlock
           title="TORNEO"
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
@@ -213,7 +230,7 @@ export default async function RoundsPage(props: {
               </select>
             </div>
           )}
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
       <section className={cardClass}>

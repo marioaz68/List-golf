@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import TeeSetsEditor from "./TeeSetsEditor";
@@ -51,6 +51,23 @@ const selectStyle: CSSProperties = {
   padding: "0 8px",
   fontSize: "11px",
 };
+
+function HeaderBlock({
+  title,
+  actions,
+  children,
+}: {
+  title: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <HeaderBar title={title} actions={actions} />
+      {children ? <div>{children}</div> : null}
+    </div>
+  );
+}
 
 export default async function TeeSetsPage(props: {
   searchParams?: SP | Promise<SP>;
@@ -138,8 +155,8 @@ export default async function TeeSetsPage(props: {
         </a>
       </div>
 
-      <form method="GET" action="/tee-sets">
-        <HeaderBar
+      <form method="GET" action="/tee-sets" className="space-y-2">
+        <HeaderBlock
           title="TORNEO"
           actions={<button style={buttonStyle}>Cambiar</button>}
         >
@@ -157,7 +174,7 @@ export default async function TeeSetsPage(props: {
               ))}
             </select>
           </div>
-        </HeaderBar>
+        </HeaderBlock>
       </form>
 
       <TeeSetsEditor tournamentId={effectiveTournamentId} rows={rows} />

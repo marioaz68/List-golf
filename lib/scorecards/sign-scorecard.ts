@@ -69,7 +69,7 @@ export function signScorecard(
   let marker_signed_at = current.marker_signed_at ?? null;
   let witness_signed_at = current.witness_signed_at ?? null;
 
-  let nextStatus = current.status;
+  let nextStatus: ScorecardStatus = current.status;
 
   if (input.role === "player") {
     player_signed_at = signedAt;

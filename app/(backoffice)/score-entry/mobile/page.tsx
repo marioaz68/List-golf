@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type HoleNumber =
@@ -497,7 +497,7 @@ function HoleDots({
   );
 }
 
-export default function MobileScoreEntryPage() {
+function MobileScoreEntryContent() {
   const searchParams = useSearchParams();
   const groupId = searchParams.get("group_id");
 
@@ -1019,5 +1019,11 @@ export default function MobileScoreEntryPage() {
         )}
       </div>
     </div>
+  );
+} export default function MobileScoreEntryPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm">Cargando...</div>}>
+      <MobileScoreEntryContent />
+    </Suspense>
   );
 }

@@ -562,7 +562,7 @@ function PlayerRow({
   member: MemberUI;
   qn: string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: entryDragId(member.entry_id),
     });
@@ -571,7 +571,6 @@ function PlayerRow({
     transform: transform
       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
       : undefined,
-    transition,
     opacity: isDragging ? 0.45 : 1,
   };
 
@@ -595,9 +594,9 @@ function PlayerRow({
           {member.position}
         </div>
 
-       <div className="min-w-0 flex-1 font-medium text-slate-900 whitespace-normal break-words">
-  {fullName}
-</div>
+        <div className="min-w-0 flex-1 font-medium text-slate-900 whitespace-normal break-words">
+          {fullName}
+        </div>
 
         <div className="w-12 shrink-0 text-right font-bold text-green-700">
           {member.handicap_index ?? "-"}
