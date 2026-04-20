@@ -28,6 +28,24 @@ type PlayerMatch = {
   club: string | null;
 };
 
+type PlayerFull = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  initials: string | null;
+  gender: "M" | "F" | null;
+  handicap_index: number | null;
+  handicap_torneo: number | null;
+  birth_year: number | null;
+  phone: string | null;
+  email: string | null;
+  club: string | null;
+  club_id: string | null;
+  ghin_number: string | null;
+  shirt_size: string | null;
+  shoe_size: string | null;
+};
+
 const buttonStyle: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -132,6 +150,7 @@ function buildMatchScore(params: {
   if (normalizedPhone && candidatePhone === normalizedPhone) score += 100;
   if (cleanEmail && candidateEmail === cleanEmail) score += 90;
   if (cleanGhin && candidateGhin === cleanGhin) score += 80;
+
   if (
     normalizedFirstName &&
     normalizedLastName &&
@@ -140,8 +159,12 @@ function buildMatchScore(params: {
   ) {
     score += 40;
   } else {
-    if (normalizedFirstName && candidateFirst.includes(normalizedFirstName)) score += 10;
-    if (normalizedLastName && candidateLast.includes(normalizedLastName)) score += 10;
+    if (normalizedFirstName && candidateFirst.includes(normalizedFirstName)) {
+      score += 10;
+    }
+    if (normalizedLastName && candidateLast.includes(normalizedLastName)) {
+      score += 10;
+    }
   }
 
   return score;
@@ -179,6 +202,7 @@ export default function NewPlayerForm({
   const [playerMatches, setPlayerMatches] = useState<PlayerMatch[]>([]);
   const [searchingPlayers, setSearchingPlayers] = useState(false);
   const [usingExistingPlayerId, setUsingExistingPlayerId] = useState<string | null>(null);
+  const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
 
@@ -198,6 +222,29 @@ export default function NewPlayerForm({
     const n = Number(t);
     if (!Number.isFinite(n)) return "NaN" as const;
     return Math.trunc(n);
+  };
+
+  const resetForm = () => {
+    setFirstName("");
+    setLastName("");
+    setInitials("");
+    setGender("M");
+    setHandicapIndex("");
+    setHandicapTorneo("");
+    setBirthYear("");
+    setPhone("");
+    setEmail("");
+    setClub("");
+    setClubId(null);
+    setGhinNumber("");
+    setShirtSize("");
+    setShoeSize("");
+    setClubSuggestions([]);
+    setClubDropdownOpen(false);
+    setSelectedClubIndex(-1);
+    setPlayerMatches([]);
+    setSelectedExistingPlayerId(null);
+    setMsg(null);
   };
 
   useEffect(() => {
@@ -259,9 +306,9 @@ export default function NewPlayerForm({
     const cleanGhin = ghinNumber.trim() || null;
 
     const canSearch =
-      normalizedPhone ||
-      cleanEmail ||
-      cleanGhin ||
+      !!normalizedPhone ||
+      !!cleanEmail ||
+      !!cleanGhin ||
       (trimmedFirst.length >= 2 && trimmedLast.length >= 2);
 
     if (!canSearch) {
@@ -275,22 +322,12 @@ export default function NewPlayerForm({
 
       const conditions: string[] = [];
 
-      if (normalizedPhone) {
-        conditions.push(`phone.eq.${normalizedPhone}`);
-      }
-
-      if (cleanEmail) {
-        conditions.push(`email.eq.${cleanEmail}`);
-      }
-
-      if (cleanGhin) {
-        conditions.push(`ghin_number.eq.${cleanGhin}`);
-      }
-
+      if (normalizedPhone) conditions.push(`phone.eq.${normalizedPhone}`);
+      if (cleanEmail) conditions.push(`email.eq.${cleanEmail}`);
+      if (cleanGhin) conditions.push(`ghin_number.eq.${cleanGhin}`);
       if (trimmedFirst.length >= 2) {
         conditions.push(`first_name.ilike.%${trimmedFirst}%`);
       }
-
       if (trimmedLast.length >= 2) {
         conditions.push(`last_name.ilike.%${trimmedLast}%`);
       }
@@ -314,6 +351,7 @@ export default function NewPlayerForm({
       }
 
       const ranked = (data as PlayerMatch[])
+        .filter((candidate) => candidate.id !== selectedExistingPlayerId)
         .map((candidate) => ({
           candidate,
           score: buildMatchScore({
@@ -334,7 +372,7 @@ export default function NewPlayerForm({
     }, 280);
 
     return () => clearTimeout(timer);
-  }, [firstName, lastName, phone, email, ghinNumber]);
+  }, [firstName, lastName, phone, email, ghinNumber, selectedExistingPlayerId]);
 
   const selectClub = (selected: ClubOption) => {
     setClub(selected.name);
@@ -431,57 +469,92 @@ export default function NewPlayerForm({
     };
   };
 
+  const ensureEntryIfNeeded = async (
+    playerId: string,
+    hi: number | null | "NaN",
+    ht: number | null | "NaN"
+  ) => {
+    if (!returnTournament) return;
+
+    const { data: existingEntry, error: existingEntryError } = await supabase
+      .from("tournament_entries")
+      .select("id")
+      .eq("tournament_id", returnTournament)
+      .eq("player_id", playerId)
+      .maybeSingle();
+
+    if (existingEntryError) {
+      throw new Error(existingEntryError.message);
+    }
+
+    if (!existingEntry?.id) {
+      const handicapForEntry =
+        ht !== "NaN" && typeof ht === "number"
+          ? ht
+          : hi !== "NaN" && typeof hi === "number"
+            ? hi
+            : null;
+
+      const entryRes = await supabase.from("tournament_entries").insert({
+        tournament_id: returnTournament,
+        player_id: playerId,
+        handicap_index: handicapForEntry,
+        status: "confirmed",
+      });
+
+      if (entryRes.error) {
+        throw new Error(entryRes.error.message);
+      }
+    }
+  };
+
   const useExistingPlayer = async (player: PlayerMatch) => {
     setMsg(null);
     setUsingExistingPlayerId(player.id);
 
     try {
-      if (returnTournament) {
-        const { data: existingEntry, error: existingEntryError } = await supabase
-          .from("tournament_entries")
-          .select("id")
-          .eq("tournament_id", returnTournament)
-          .eq("player_id", player.id)
-          .maybeSingle();
+      const { data, error } = await supabase
+        .from("players")
+        .select(
+          "id, first_name, last_name, initials, gender, handicap_index, handicap_torneo, birth_year, phone, email, club, club_id, ghin_number, shirt_size, shoe_size"
+        )
+        .eq("id", player.id)
+        .single();
 
-        if (existingEntryError) {
-          throw new Error(existingEntryError.message);
-        }
-
-        if (!existingEntry?.id) {
-          const hi = toNumberOrNull(handicapIndex);
-          const ht = toNumberOrNull(handicapTorneo);
-
-          const entryRes = await supabase.from("tournament_entries").insert({
-            tournament_id: returnTournament,
-            player_id: player.id,
-            handicap_index: ht === "NaN" ? hi === "NaN" ? null : hi : ht,
-            status: "confirmed",
-          });
-
-          if (entryRes.error) {
-            throw new Error(entryRes.error.message);
-          }
-
-          setMsg("✅ Jugador existente inscrito al torneo");
-        } else {
-          setMsg("ℹ️ Ese jugador ya estaba inscrito en este torneo");
-        }
-
-        router.replace(`/entries?view=single&tournament_id=${returnTournament}`);
-        return;
+      if (error) {
+        throw new Error(error.message);
       }
 
-      setMsg("✅ Usando jugador existente");
-      router.push("/players");
+      const full = data as PlayerFull;
+
+      setSelectedExistingPlayerId(full.id);
+      setFirstName(full.first_name || "");
+      setLastName(full.last_name || "");
+      setInitials(full.initials || "");
+      setGender(full.gender === "F" ? "F" : "M");
+      setHandicapIndex(
+        typeof full.handicap_index === "number" ? String(full.handicap_index) : ""
+      );
+      setHandicapTorneo(
+        typeof full.handicap_torneo === "number" ? String(full.handicap_torneo) : ""
+      );
+      setBirthYear(typeof full.birth_year === "number" ? String(full.birth_year) : "");
+      setPhone(full.phone || "");
+      setEmail(full.email || "");
+      setClub(full.club || "");
+      setClubId(full.club_id || null);
+      setGhinNumber(full.ghin_number || "");
+      setShirtSize(full.shirt_size || "");
+      setShoeSize(full.shoe_size || "");
+      setMsg("ℹ️ Jugador existente cargado. Puedes modificar y guardar.");
     } catch (err: any) {
-      setMsg(`❌ ${err?.message ?? "Error usando jugador existente"}`);
+      setMsg(`❌ ${err?.message ?? "Error cargando jugador existente"}`);
     } finally {
       setUsingExistingPlayerId(null);
     }
   };
 
-  const createPlayer = async (e: React.FormEvent) => {
+  const savePlayer = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
 
@@ -532,11 +605,17 @@ export default function NewPlayerForm({
 
     try {
       if (normalizedPhone) {
-        const { data: existingByPhone, error } = await supabase
+        let query = supabase
           .from("players")
           .select("id, first_name, last_name")
           .eq("phone", normalizedPhone)
           .limit(1);
+
+        if (selectedExistingPlayerId) {
+          query = query.neq("id", selectedExistingPlayerId);
+        }
+
+        const { data: existingByPhone, error } = await query;
 
         if (error) throw new Error(error.message);
 
@@ -548,11 +627,17 @@ export default function NewPlayerForm({
       }
 
       if (cleanEmail) {
-        const { data: existingByEmail, error } = await supabase
+        let query = supabase
           .from("players")
           .select("id, first_name, last_name")
           .eq("email", cleanEmail)
           .limit(1);
+
+        if (selectedExistingPlayerId) {
+          query = query.neq("id", selectedExistingPlayerId);
+        }
+
+        const { data: existingByEmail, error } = await query;
 
         if (error) throw new Error(error.message);
 
@@ -564,11 +649,17 @@ export default function NewPlayerForm({
       }
 
       if (cleanGhin) {
-        const { data: existingByGhin, error } = await supabase
+        let query = supabase
           .from("players")
           .select("id, first_name, last_name")
           .eq("ghin_number", cleanGhin)
           .limit(1);
+
+        if (selectedExistingPlayerId) {
+          query = query.neq("id", selectedExistingPlayerId);
+        }
+
+        const { data: existingByGhin, error } = await query;
 
         if (error) throw new Error(error.message);
 
@@ -588,77 +679,76 @@ export default function NewPlayerForm({
         finalClubId = ensured?.id ?? finalClubId ?? null;
       }
 
-      const res = await supabase
-        .from("players")
-        .insert([
-          {
-            first_name: firstName.trim(),
-            last_name: lastName.trim(),
-            initials: cleanInitials || null,
-            gender,
-            handicap_index: hi,
-            handicap_torneo: ht,
-            birth_year: by,
-            phone: normalizedPhone,
-            email: cleanEmail,
-            club: finalClubText,
-            club_id: finalClubId,
-            ghin_number: cleanGhin,
-            shirt_size: shirtSize || null,
-            shoe_size: shoeSize || null,
-          },
-        ])
-        .select("id")
-        .single();
+      const payload = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        initials: cleanInitials || null,
+        gender,
+        handicap_index: hi === "NaN" ? null : hi,
+        handicap_torneo: ht === "NaN" ? null : ht,
+        birth_year: by === "NaN" ? null : by,
+        phone: normalizedPhone,
+        email: cleanEmail,
+        club: finalClubText,
+        club_id: finalClubId,
+        ghin_number: cleanGhin,
+        shirt_size: shirtSize || null,
+        shoe_size: shoeSize || null,
+      };
 
-      if (res.error) {
-        setMsg(`❌ ${res.error.message} (code: ${res.error.code ?? "n/a"})`);
-        return;
-      }
+      if (selectedExistingPlayerId) {
+        const updateRes = await supabase
+          .from("players")
+          .update(payload)
+          .eq("id", selectedExistingPlayerId)
+          .select("id")
+          .single();
 
-      if (returnTournament) {
-        const entryRes = await supabase.from("tournament_entries").insert({
-          tournament_id: returnTournament,
-          player_id: res.data.id,
-          handicap_index: ht ?? hi,
-          status: "confirmed",
-        });
-
-        if (entryRes.error) {
+        if (updateRes.error) {
           setMsg(
-            `❌ ${entryRes.error.message} (code: ${entryRes.error.code ?? "n/a"})`
+            `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
           );
           return;
         }
 
+        await ensureEntryIfNeeded(selectedExistingPlayerId, hi, ht);
+
+        if (returnTournament) {
+          router.replace(`/entries?view=single&tournament_id=${returnTournament}`);
+          return;
+        }
+
+        setMsg("✅ Jugador actualizado");
+        onCreated?.();
+        router.refresh();
+        return;
+      }
+
+      const insertRes = await supabase
+        .from("players")
+        .insert([payload])
+        .select("id")
+        .single();
+
+      if (insertRes.error) {
+        setMsg(
+          `❌ ${insertRes.error.message} (code: ${insertRes.error.code ?? "n/a"})`
+        );
+        return;
+      }
+
+      if (returnTournament) {
+        await ensureEntryIfNeeded(insertRes.data.id, hi, ht);
         router.replace(`/entries?view=single&tournament_id=${returnTournament}`);
         return;
       }
 
-      setFirstName("");
-      setLastName("");
-      setInitials("");
-      setGender("M");
-      setHandicapIndex("");
-      setHandicapTorneo("");
-      setBirthYear("");
-      setPhone("");
-      setEmail("");
-      setClub("");
-      setClubId(null);
-      setGhinNumber("");
-      setShirtSize("");
-      setShoeSize("");
-      setClubSuggestions([]);
-      setClubDropdownOpen(false);
-      setSelectedClubIndex(-1);
-      setPlayerMatches([]);
-
+      resetForm();
       setMsg("✅ Jugador creado");
       onCreated?.();
       router.refresh();
     } catch (err: any) {
-      setMsg(`❌ ${err?.message ?? "Error creando jugador (catch)"}`);
+      setMsg(`❌ ${err?.message ?? "Error guardando jugador"}`);
     } finally {
       setLoading(false);
     }
@@ -666,7 +756,7 @@ export default function NewPlayerForm({
 
   return (
     <form
-      onSubmit={createPlayer}
+      onSubmit={savePlayer}
       style={{
         border: "1px solid #d1d5db",
         padding: 10,
@@ -684,7 +774,7 @@ export default function NewPlayerForm({
           lineHeight: 1,
         }}
       >
-        Nuevo jugador
+        {selectedExistingPlayerId ? "Editar jugador existente" : "Nuevo jugador"}
       </h2>
 
       {(searchingPlayers || playerMatches.length > 0) && (
@@ -760,10 +850,40 @@ export default function NewPlayerForm({
                     flexShrink: 0,
                   }}
                 >
-                  {usingExistingPlayerId === p.id ? "Usando..." : "Usar existente"}
+                  {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
                 </button>
               </div>
             ))}
+        </div>
+      )}
+
+      {selectedExistingPlayerId && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "#1f2937",
+            }}
+          >
+            Modo edición de jugador existente
+          </div>
+
+          <button
+            type="button"
+            onClick={resetForm}
+            style={secondaryButtonStyle}
+          >
+            Nuevo jugador
+          </button>
         </div>
       )}
 
@@ -911,8 +1031,8 @@ export default function NewPlayerForm({
           >
             <option value="">Seleccionar</option>
             {[
-              1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5,
-              9, 9.5, 10, 10.5, 11, 11.5, 12,
+              1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6,
+              6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12,
             ].map((n) => (
               <option key={n} value={String(n)}>
                 {n}
@@ -1107,15 +1227,22 @@ export default function NewPlayerForm({
         >
           {loading
             ? "Guardando..."
-            : returnTournament
-              ? "Crear jugador e inscribir"
-              : "Crear jugador"}
+            : selectedExistingPlayerId
+              ? returnTournament
+                ? "Actualizar e inscribir"
+                : "Actualizar jugador"
+              : returnTournament
+                ? "Crear jugador e inscribir"
+                : "Crear jugador"}
         </button>
 
         {msg && (
           <div
             style={{
-              color: msg.startsWith("✅") || msg.startsWith("ℹ️") ? "#166534" : "#b91c1c",
+              color:
+                msg.startsWith("✅") || msg.startsWith("ℹ️")
+                  ? "#166534"
+                  : "#b91c1c",
               fontSize: 11,
               fontWeight: 500,
               lineHeight: 1.2,
