@@ -698,19 +698,24 @@ export default function NewPlayerForm({
       };
 
       if (selectedExistingPlayerId) {
-        const updateRes = await supabase
-          .from("players")
-          .update(payload)
-          .eq("id", selectedExistingPlayerId)
-          .select("id")
-          .single();
+       const updateRes = await supabase
+       .from("players")
+        .update(payload)
+       .eq("id", selectedExistingPlayerId)
+        .select("id")
+       .maybeSingle();
 
-        if (updateRes.error) {
-          setMsg(
-            `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
-          );
-          return;
-        }
+      if (updateRes.error) {
+  setMsg(
+    `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
+  );
+  return;
+      }
+
+      if (!updateRes.data?.id) {
+  setMsg("❌ No se pudo actualizar el jugador. Revisa RLS/permisos o si el registro ya no existe.");
+  return;
+      }
 
         await ensureEntryIfNeeded(selectedExistingPlayerId, hi, ht);
 
