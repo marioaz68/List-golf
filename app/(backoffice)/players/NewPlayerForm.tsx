@@ -89,6 +89,9 @@ export default function NewPlayerForm({
   const [email, setEmail] = useState("");
   const [club, setClub] = useState("");
   const [clubId, setClubId] = useState<string | null>(null);
+  const [ghinNumber, setGhinNumber] = useState("");
+  const [shirtSize, setShirtSize] = useState("");
+  const [shoeSize, setShoeSize] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -327,6 +330,9 @@ export default function NewPlayerForm({
             email: email.trim().toLowerCase() || null,
             club: finalClubText,
             club_id: finalClubId,
+            ghin_number: ghinNumber.trim() || null,
+            shirt_size: shirtSize || null,
+            shoe_size: shoeSize || null,
           },
         ])
         .select("id")
@@ -367,6 +373,9 @@ export default function NewPlayerForm({
       setEmail("");
       setClub("");
       setClubId(null);
+      setGhinNumber("");
+      setShirtSize("");
+      setShoeSize("")
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -574,6 +583,48 @@ export default function NewPlayerForm({
             placeholder="correo@ejemplo.com"
             style={fieldStyle}
           />
+        </label>
+        <label style={{ fontSize: 11 }}>
+  GHIN
+  <input
+    value={ghinNumber}
+    onChange={(e) => setGhinNumber(e.target.value)}
+    style={fieldStyle}
+  />
+</label>
+
+<label style={{ fontSize: 11 }}>
+  Talla Playera
+  <select
+    value={shirtSize}
+    onChange={(e) => setShirtSize(e.target.value)}
+    style={fieldStyle}
+  >
+    <option value="">Seleccionar</option>
+    <option>S</option>
+    <option>M</option>
+    <option>L</option>
+    <option>XL</option>
+    <option>XXL</option>
+  </select>
+</label>
+
+<label style={{ fontSize: 11 }}>
+  Talla Zapatos
+  <select
+    value={shoeSize}
+    onChange={(e) => setShoeSize(e.target.value)}
+    style={fieldStyle}
+  >
+          <option value="">Seleccionar</option>
+          <option>6</option>
+          <option>7</option>
+          <option>8</option>
+          <option>9</option>
+           <option>10</option>
+          <option>11</option>
+          <option>12</option>
+        </select>
         </label>
 
         <div ref={clubBoxRef} style={{ position: "relative" }}>
