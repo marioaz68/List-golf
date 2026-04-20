@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
@@ -46,7 +47,7 @@ type PlayerFull = {
   shoe_size: string | null;
 };
 
-const buttonStyle: React.CSSProperties = {
+const buttonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
@@ -65,7 +66,7 @@ const buttonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const secondaryButtonStyle: React.CSSProperties = {
+const secondaryButtonStyle: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
@@ -83,7 +84,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const fieldStyle: React.CSSProperties = {
+const fieldStyle: CSSProperties = {
   width: "100%",
   height: 28,
   padding: "0 8px",
@@ -96,7 +97,7 @@ const fieldStyle: React.CSSProperties = {
   lineHeight: 1,
 };
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   color: "#111827",
   fontWeight: 500,
   fontSize: 11,
@@ -471,8 +472,8 @@ export default function NewPlayerForm({
 
   const ensureEntryIfNeeded = async (
     playerId: string,
-    hi: number | null | "NaN",
-    ht: number | null | "NaN"
+    hi: number | null,
+    ht: number | null
   ) => {
     if (!returnTournament) return;
 
@@ -489,11 +490,11 @@ export default function NewPlayerForm({
 
     if (!existingEntry?.id) {
       const handicapForEntry =
-        ht !== "NaN" && typeof ht === "number"
-          ? ht
-          : hi !== "NaN" && typeof hi === "number"
-            ? hi
-            : null;
+       typeof ht === "number"
+       ? ht
+       : typeof hi === "number"
+       ? hi
+      : null;
 
       const entryRes = await supabase.from("tournament_entries").insert({
         tournament_id: returnTournament,
@@ -554,7 +555,7 @@ export default function NewPlayerForm({
     }
   };
 
-  const savePlayer = async (e: React.FormEvent) => {
+  const savePlayer = async (e: FormEvent) => {
     e.preventDefault();
     setMsg(null);
 
@@ -680,20 +681,20 @@ export default function NewPlayerForm({
       }
 
       const payload = {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        initials: cleanInitials || null,
-        gender,
-        handicap_index: hi === "NaN" ? null : hi,
-        handicap_torneo: ht === "NaN" ? null : ht,
-        birth_year: by === "NaN" ? null : by,
-        phone: normalizedPhone,
-        email: cleanEmail,
-        club: finalClubText,
-        club_id: finalClubId,
-        ghin_number: cleanGhin,
-        shirt_size: shirtSize || null,
-        shoe_size: shoeSize || null,
+          first_name: firstName.trim(),
+           last_name: lastName.trim(),
+            initials: cleanInitials || null,
+             gender,
+           handicap_index: hi,
+           handicap_torneo: ht,
+           birth_year: by,
+           phone: normalizedPhone,
+           email: cleanEmail,
+           club: finalClubText,
+          club_id: finalClubId,
+           ghin_number: cleanGhin,
+          shirt_size: shirtSize || null,
+           shoe_size: shoeSize || null,
       };
 
       if (selectedExistingPlayerId) {
