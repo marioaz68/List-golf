@@ -49,6 +49,13 @@ const fieldStyle: React.CSSProperties = {
   lineHeight: 1,
 };
 
+const labelStyle: React.CSSProperties = {
+  color: "#111827",
+  fontWeight: 500,
+  fontSize: 11,
+  lineHeight: 1.1,
+};
+
 function normalizeClubName(value: string) {
   return value
     .trim()
@@ -66,10 +73,6 @@ function normalizeInitials(value: string) {
     .toUpperCase()
     .trim()
     .slice(0, 6);
-}
-
-function clubLabel(option: Pick<ClubOption, "name" | "short_name">) {
-  return option.name.trim();
 }
 
 export default function NewPlayerForm({
@@ -375,7 +378,7 @@ export default function NewPlayerForm({
       setClubId(null);
       setGhinNumber("");
       setShirtSize("");
-      setShoeSize("")
+      setShoeSize("");
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -409,10 +412,7 @@ export default function NewPlayerForm({
           fontWeight: 700,
           lineHeight: 1,
         }}
-         >
-        <div style={{ background: "red", color: "white", padding: 10 }}>
-          FORM NUEVO ACTIVO
-      </div>
+      >
         Nuevo jugador
       </h2>
 
@@ -434,14 +434,7 @@ export default function NewPlayerForm({
           gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
         }}
       >
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Nombre
           <input
             value={firstName}
@@ -450,14 +443,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Apellido
           <input
             value={lastName}
@@ -466,14 +452,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Iniciales
           <input
             value={initials}
@@ -484,14 +463,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Género
           <select
             value={gender}
@@ -503,14 +475,7 @@ export default function NewPlayerForm({
           </select>
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Handicap Index
           <input
             value={handicapIndex}
@@ -520,14 +485,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Handicap Torneo
           <input
             value={handicapTorneo}
@@ -537,14 +495,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Año nacimiento
           <input
             value={birthYear}
@@ -555,14 +506,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Teléfono
           <input
             value={phone}
@@ -571,14 +515,7 @@ export default function NewPlayerForm({
           />
         </label>
 
-        <label
-          style={{
-            color: "#111827",
-            fontWeight: 500,
-            fontSize: 11,
-            lineHeight: 1.1,
-          }}
-        >
+        <label style={labelStyle}>
           Email
           <input
             value={email}
@@ -587,58 +524,52 @@ export default function NewPlayerForm({
             style={fieldStyle}
           />
         </label>
-        <label style={{ fontSize: 11 }}>
-  GHIN
-  <input
-    value={ghinNumber}
-    onChange={(e) => setGhinNumber(e.target.value)}
-    style={fieldStyle}
-  />
-</label>
 
-<label style={{ fontSize: 11 }}>
-  Talla Playera
-  <select
-    value={shirtSize}
-    onChange={(e) => setShirtSize(e.target.value)}
-    style={fieldStyle}
-  >
-    <option value="">Seleccionar</option>
-    <option>S</option>
-    <option>M</option>
-    <option>L</option>
-    <option>XL</option>
-    <option>XXL</option>
-  </select>
-</label>
+        <label style={labelStyle}>
+          GHIN
+          <input
+            value={ghinNumber}
+            onChange={(e) => setGhinNumber(e.target.value)}
+            style={fieldStyle}
+          />
+        </label>
 
-<label style={{ fontSize: 11 }}>
-  Talla Zapatos
-  <select
-    value={shoeSize}
-    onChange={(e) => setShoeSize(e.target.value)}
-    style={fieldStyle}
-  >
-          <option value="">Seleccionar</option>
-          <option>6</option>
-          <option>7</option>
-          <option>8</option>
-          <option>9</option>
-           <option>10</option>
-          <option>11</option>
-          <option>12</option>
-        </select>
+        <label style={labelStyle}>
+          Talla Playera
+          <select
+            value={shirtSize}
+            onChange={(e) => setShirtSize(e.target.value)}
+            style={fieldStyle}
+          >
+            <option value="">Seleccionar</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
+            <option value="XXL">XXL</option>
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          Talla Zapatos
+          <select
+            value={shoeSize}
+            onChange={(e) => setShoeSize(e.target.value)}
+            style={fieldStyle}
+          >
+            <option value="">Seleccionar</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+          </select>
         </label>
 
         <div ref={clubBoxRef} style={{ position: "relative" }}>
-          <label
-            style={{
-              color: "#111827",
-              fontWeight: 500,
-              fontSize: 11,
-              lineHeight: 1.1,
-            }}
-          >
+          <label style={labelStyle}>
             Club
             <input
               value={club}
