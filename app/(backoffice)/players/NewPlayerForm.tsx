@@ -209,19 +209,19 @@ export default function NewPlayerForm({
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
-  const toNumberOrNull = (v: string) => {
+  const toNumberOrNull = (v: string): number | null | "NaN" => {
     const t = v.trim();
     if (!t) return null;
     const n = Number(t.replace(",", "."));
-    if (Number.isNaN(n)) return "NaN" as const;
+    if (Number.isNaN(n)) return "NaN";
     return n;
   };
 
-  const toIntOrNull = (v: string) => {
+  const toIntOrNull = (v: string): number | null | "NaN" => {
     const t = v.trim();
     if (!t) return null;
     const n = Number(t);
-    if (!Number.isFinite(n)) return "NaN" as const;
+    if (!Number.isFinite(n)) return "NaN";
     return Math.trunc(n);
   };
 
@@ -245,6 +245,7 @@ export default function NewPlayerForm({
     setSelectedClubIndex(-1);
     setPlayerMatches([]);
     setSelectedExistingPlayerId(null);
+    setUsingExistingPlayerId(null);
     setMsg(null);
   };
 
@@ -490,11 +491,11 @@ export default function NewPlayerForm({
 
     if (!existingEntry?.id) {
       const handicapForEntry =
-       typeof ht === "number"
-       ? ht
-       : typeof hi === "number"
-       ? hi
-      : null;
+        typeof ht === "number"
+          ? ht
+          : typeof hi === "number"
+            ? hi
+            : null;
 
       const entryRes = await supabase.from("tournament_entries").insert({
         tournament_id: returnTournament,
@@ -681,41 +682,34 @@ export default function NewPlayerForm({
       }
 
       const payload = {
-          first_name: firstName.trim(),
-           last_name: lastName.trim(),
-            initials: cleanInitials || null,
-             gender,
-           handicap_index: hi,
-           handicap_torneo: ht,
-           birth_year: by,
-           phone: normalizedPhone,
-           email: cleanEmail,
-           club: finalClubText,
-          club_id: finalClubId,
-           ghin_number: cleanGhin,
-          shirt_size: shirtSize || null,
-           shoe_size: shoeSize || null,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        initials: cleanInitials || null,
+        gender,
+        handicap_index: hi,
+        handicap_torneo: ht,
+        birth_year: by,
+        phone: normalizedPhone,
+        email: cleanEmail,
+        club: finalClubText,
+        club_id: finalClubId,
+        ghin_number: cleanGhin,
+        shirt_size: shirtSize || null,
+        shoe_size: shoeSize || null,
       };
 
       if (selectedExistingPlayerId) {
-       const updateRes = await supabase
-       .from("players")
-        .update(payload)
-       .eq("id", selectedExistingPlayerId)
-        .select("id")
-       .maybeSingle();
+        const updateRes = await supabase
+          .from("players")
+          .update(payload)
+          .eq("id", selectedExistingPlayerId);
 
-      if (updateRes.error) {
-  setMsg(
-    `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
-  );
-  return;
-      }
-
-      if (!updateRes.data?.id) {
-  setMsg("❌ No se pudo actualizar el jugador. Revisa RLS/permisos o si el registro ya no existe.");
-  return;
-      }
+        if (updateRes.error) {
+          setMsg(
+            `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
+          );
+          return;
+        }
 
         await ensureEntryIfNeeded(selectedExistingPlayerId, hi, ht);
 
@@ -736,15 +730,23 @@ export default function NewPlayerForm({
         .select("id")
         .single();
 
-      if (insertRes.error) {
+      const insertError = insertRes.error;
+      const insertedPlayerId = insertRes.data?.id;
+
+      if (insertError) {
         setMsg(
-          `❌ ${insertRes.error.message} (code: ${insertRes.error.code ?? "n/a"})`
+          `❌ ${insertError.message} (code: ${insertError.code ?? "n/a"})`
         );
         return;
       }
 
+      if (!insertedPlayerId) {
+        setMsg("❌ No se pudo crear el jugador.");
+        return;
+      }
+
       if (returnTournament) {
-        await ensureEntryIfNeeded(insertRes.data.id, hi, ht);
+        await ensureEntryIfNeeded(insertedPlayerId, hi, ht);
         router.replace(`/entries?view=single&tournament_id=${returnTournament}`);
         return;
       }
