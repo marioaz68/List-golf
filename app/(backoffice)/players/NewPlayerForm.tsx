@@ -283,6 +283,13 @@ export default function NewPlayerForm({
     const by = toIntOrNull(birthYear);
     const cleanInitials = normalizeInitials(initials);
 
+    const normalizedPhone = phone.trim()
+      ? normalizePhoneToE164(phone, "MX")
+      : null;
+
+    const cleanEmail = email.trim().toLowerCase() || null;
+    const cleanGhin = ghinNumber.trim() || null;
+
     if (cleanInitials && cleanInitials.length < 2) {
       return setMsg("Iniciales debe tener entre 2 y 6 letras.");
     }
@@ -314,6 +321,54 @@ export default function NewPlayerForm({
     setLoading(true);
 
     try {
+      if (normalizedPhone) {
+        const { data: existingByPhone, error } = await supabase
+          .from("players")
+          .select("id, first_name, last_name")
+          .eq("phone", normalizedPhone)
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+
+        if (existingByPhone && existingByPhone.length > 0) {
+          return setMsg(
+            `⚠️ Ya existe jugador con ese teléfono: ${existingByPhone[0].first_name} ${existingByPhone[0].last_name}`
+          );
+        }
+      }
+
+      if (cleanEmail) {
+        const { data: existingByEmail, error } = await supabase
+          .from("players")
+          .select("id, first_name, last_name")
+          .eq("email", cleanEmail)
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+
+        if (existingByEmail && existingByEmail.length > 0) {
+          return setMsg(
+            `⚠️ Ya existe jugador con ese email: ${existingByEmail[0].first_name} ${existingByEmail[0].last_name}`
+          );
+        }
+      }
+
+      if (cleanGhin) {
+        const { data: existingByGhin, error } = await supabase
+          .from("players")
+          .select("id, first_name, last_name")
+          .eq("ghin_number", cleanGhin)
+          .limit(1);
+
+        if (error) throw new Error(error.message);
+
+        if (existingByGhin && existingByGhin.length > 0) {
+          return setMsg(
+            `⚠️ Ya existe jugador con ese GHIN: ${existingByGhin[0].first_name} ${existingByGhin[0].last_name}`
+          );
+        }
+      }
+
       let finalClubText: string | null = null;
       let finalClubId: string | null = clubId;
 
@@ -334,13 +389,11 @@ export default function NewPlayerForm({
             handicap_index: hi,
             handicap_torneo: ht,
             birth_year: by,
-            phone: phone.trim()
-             ? normalizePhoneToE164(phone, "MX")
-             : null,
-            email: email.trim().toLowerCase() || null,
+            phone: normalizedPhone,
+            email: cleanEmail,
             club: finalClubText,
             club_id: finalClubId,
-            ghin_number: ghinNumber.trim() || null,
+            ghin_number: cleanGhin,
             shirt_size: shirtSize || null,
             shoe_size: shoeSize || null,
           },
@@ -516,11 +569,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Teléfono
           <input
-             value={phone}
-             onChange={(e) => setPhone(e.target.value)}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
             placeholder="4421490361"
-             style={fieldStyle}
-            />
+            style={fieldStyle}
+          />
         </label>
 
         <label style={labelStyle}>
@@ -567,8 +620,8 @@ export default function NewPlayerForm({
           >
             <option value="">Seleccionar</option>
             {[
-              1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6,
-              6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12,
+              1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5,
+              9, 9.5, 10, 10.5, 11, 11.5, 12,
             ].map((n) => (
               <option key={n} value={String(n)}>
                 {n}
