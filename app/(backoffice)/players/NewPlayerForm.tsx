@@ -409,7 +409,10 @@ export default function NewPlayerForm({
           fontWeight: 700,
           lineHeight: 1,
         }}
-      >
+         >
+        <div style={{ background: "red", color: "white", padding: 10 }}>
+          FORM NUEVO ACTIVO
+      </div>
         Nuevo jugador
       </h2>
 
