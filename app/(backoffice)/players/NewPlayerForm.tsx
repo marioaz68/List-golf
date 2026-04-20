@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { normalizePhoneToE164 } from "@/utils/phone";
 
 type Props = {
   onCreated?: () => void;
@@ -333,7 +334,9 @@ export default function NewPlayerForm({
             handicap_index: hi,
             handicap_torneo: ht,
             birth_year: by,
-            phone: phone.trim() || null,
+            phone: phone.trim()
+             ? normalizePhoneToE164(phone, "MX")
+             : null,
             email: email.trim().toLowerCase() || null,
             club: finalClubText,
             club_id: finalClubId,
@@ -513,10 +516,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Teléfono
           <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            style={fieldStyle}
-          />
+             value={phone}
+             onChange={(e) => setPhone(e.target.value)}
+            placeholder="4421490361"
+             style={fieldStyle}
+            />
         </label>
 
         <label style={labelStyle}>
