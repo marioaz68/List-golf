@@ -681,7 +681,7 @@ export default function NewPlayerForm({
         finalClubId = ensured?.id ?? finalClubId ?? null;
       }
 
-      const payload = {
+      const payload: any = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         initials: cleanInitials || null,
@@ -694,9 +694,10 @@ export default function NewPlayerForm({
         club: finalClubText,
         club_id: finalClubId,
         ghin_number: cleanGhin,
-        shirt_size: shirtSize || null,
-        shoe_size: shoeSize || null,
       };
+
+      if (shirtSize) payload.shirt_size = shirtSize;
+      if (shoeSize) payload.shoe_size = shoeSize;
 
       if (selectedExistingPlayerId) {
         const updateRes = await supabase
