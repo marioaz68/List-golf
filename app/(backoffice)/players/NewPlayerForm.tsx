@@ -75,6 +75,10 @@ function normalizeInitials(value: string) {
     .slice(0, 6);
 }
 
+function clubLabel(option: Pick<ClubOption, "name" | "short_name">) {
+  return option.name.trim();
+}
+
 export default function NewPlayerForm({
   onCreated,
   returnTournament,
@@ -542,11 +546,11 @@ export default function NewPlayerForm({
             style={fieldStyle}
           >
             <option value="">Seleccionar</option>
-            <option value="S">S</option>
-            <option value="M">M</option>
-            <option value="L">L</option>
-            <option value="XL">XL</option>
-            <option value="XXL">XXL</option>
+            <option>S</option>
+            <option>M</option>
+            <option>L</option>
+            <option>XL</option>
+            <option>XXL</option>
           </select>
         </label>
 
@@ -558,13 +562,14 @@ export default function NewPlayerForm({
             style={fieldStyle}
           >
             <option value="">Seleccionar</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-            <option value="11">11</option>
-            <option value="12">12</option>
+            {[
+              1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6,
+              6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12,
+            ].map((n) => (
+              <option key={n} value={String(n)}>
+                {n}
+              </option>
+            ))}
           </select>
         </label>
 
