@@ -11,10 +11,15 @@ export async function POST(req: Request) {
     const message = body.message;
 
     if (message) {
-      const chatId = message.chat.id;
-      const text = message.text;
+      const chatId = String(message.chat?.id ?? "");
+      const text = String(message.text ?? "");
+      const fromId = String(message.from?.id ?? "");
+      const username = message.from?.username ?? "";
+      const firstName = message.from?.first_name ?? "";
+      const lastName = message.from?.last_name ?? "";
 
-      // respuesta simple
+      const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+
       await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         method: "POST",
         headers: {
@@ -22,7 +27,13 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           chat_id: chatId,
-          text: `Recibí tu mensaje: ${text}`,
+          text:
+            `Mensaje recibido.\n\n` +
+            `Texto: ${text || "(sin texto)"}\n` +
+            `chat_id: ${chatId || "(vacío)"}\n` +
+            `from_id: ${fromId || "(vacío)"}\n` +
+            `username: ${username || "(sin username)"}\n` +
+            `nombre: ${fullName || "(sin nombre)"}`,
         }),
       });
     }
