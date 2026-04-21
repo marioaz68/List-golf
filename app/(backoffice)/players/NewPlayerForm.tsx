@@ -5,6 +5,7 @@ import type { CSSProperties, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
+import { savePlayerAction } from "@/app/(backoffice)/players/actions";
 
 type Props = {
   onCreated?: () => void;
@@ -700,15 +701,13 @@ export default function NewPlayerForm({
       if (shoeSize) payload.shoe_size = shoeSize;
 
       if (selectedExistingPlayerId) {
-        const updateRes = await supabase
-          .from("players")
-          .update(payload)
-          .eq("id", selectedExistingPlayerId);
+        const updateRes = await savePlayerAction({
+          id: selectedExistingPlayerId,
+          ...payload,
+        });
 
-        if (updateRes.error) {
-          setMsg(
-            `❌ ${updateRes.error.message} (code: ${updateRes.error.code ?? "n/a"})`
-          );
+        if (!updateRes.ok) {
+          setMsg(`❌ ${updateRes.message}`);
           return;
         }
 
@@ -725,21 +724,14 @@ export default function NewPlayerForm({
         return;
       }
 
-      const insertRes = await supabase
-        .from("players")
-        .insert([payload])
-        .select("id")
-        .single();
+      const insertRes = await savePlayerAction(payload);
 
-      const insertError = insertRes.error;
-      const insertedPlayerId = insertRes.data?.id;
-
-      if (insertError) {
-        setMsg(
-          `❌ ${insertError.message} (code: ${insertError.code ?? "n/a"})`
-        );
+      if (!insertRes.ok) {
+        setMsg(`❌ ${insertRes.message}`);
         return;
       }
+
+      const insertedPlayerId = insertRes.id;
 
       if (!insertedPlayerId) {
         setMsg("❌ No se pudo crear el jugador.");

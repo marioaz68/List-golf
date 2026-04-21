@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { savePlayerAction } from "@/app/(backoffice)/players/actions";
 
 type ClubOption = {
   id: string;
@@ -24,6 +25,8 @@ type Player = {
   email: string | null;
   club: string | null;
   club_id?: string | null;
+  shirt_size?: string | null;
+  shoe_size?: string | number | null;
 };
 
 function normalizeClubName(value: string) {
@@ -128,6 +131,8 @@ export default function PlayerEditModal({
   const [email, setEmail] = useState("");
   const [club, setClub] = useState("");
   const [clubId, setClubId] = useState<string | null>(null);
+  const [shirtSize, setShirtSize] = useState("");
+  const [shoeSize, setShoeSize] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
@@ -157,6 +162,10 @@ export default function PlayerEditModal({
       setEmail(player?.email ?? "");
       setClub(player?.club ?? "");
       setClubId(player?.club_id ?? null);
+      setShirtSize(player?.shirt_size ?? "");
+      setShoeSize(
+        player?.shoe_size == null ? "" : String(player.shoe_size)
+      );
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -360,25 +369,24 @@ export default function PlayerEditModal({
         finalClubId = ensured?.id ?? finalClubId ?? null;
       }
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("players")
-        .update({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          initials: cleanInitials || null,
-          gender,
-          handicap_index: hi,
-          handicap_torneo: ht,
-          phone: phone.trim() || null,
-          email: email.trim().toLowerCase() || null,
-          club: finalClubText,
-          club_id: finalClubId,
-        })
-        .eq("id", player.id);
+      const result = await savePlayerAction({
+        id: player.id,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        initials: cleanInitials || null,
+        gender,
+        handicap_index: hi,
+        handicap_torneo: ht,
+        phone: phone.trim() || null,
+        email: email.trim().toLowerCase() || null,
+        club: finalClubText,
+        club_id: finalClubId,
+        shirt_size: shirtSize.trim() || null,
+        shoe_size: shoeSize.trim() || null,
+      });
 
-      if (error) {
-        alert("Error al guardar: " + error.message);
+      if (!result.ok) {
+        alert("Error al guardar: " + result.message);
         return;
       }
 
@@ -501,6 +509,26 @@ export default function PlayerEditModal({
               />
             </label>
 
+            <label style={labelStyle}>
+              Shirt Size
+              <input
+                value={shirtSize}
+                onChange={(e) => setShirtSize(e.target.value)}
+                placeholder="Ej. S, M, L, XL"
+                style={fieldStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Shoe Size
+              <input
+                value={shoeSize}
+                onChange={(e) => setShoeSize(e.target.value)}
+                placeholder="Ej. 8, 9, 10"
+                style={fieldStyle}
+              />
+            </label>
+
             <div ref={clubBoxRef} style={{ position: "relative" }}>
               <label style={labelStyle}>
                 Club
@@ -527,7 +555,11 @@ export default function PlayerEditModal({
                       ? clubSuggestions.length
                       : clubSuggestions.length + (club.trim() ? 1 : 0);
 
-                    if (!clubDropdownOpen && e.key === "ArrowDown" && totalOptions > 0) {
+                    if (
+                      !clubDropdownOpen &&
+                      e.key === "ArrowDown" &&
+                      totalOptions > 0
+                    ) {
                       setClubDropdownOpen(true);
                       setSelectedClubIndex(0);
                       return;
@@ -545,7 +577,11 @@ export default function PlayerEditModal({
                       setSelectedClubIndex((prev) => (prev > 0 ? prev - 1 : 0));
                     }
 
-                    if (e.key === "Enter" && clubDropdownOpen && selectedClubIndex >= 0) {
+                    if (
+                      e.key === "Enter" &&
+                      clubDropdownOpen &&
+                      selectedClubIndex >= 0
+                    ) {
                       e.preventDefault();
 
                       if (selectedClubIndex < clubSuggestions.length) {
