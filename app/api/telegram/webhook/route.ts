@@ -10,6 +10,12 @@ const supabase =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+function normalizeText(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase();
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -21,6 +27,8 @@ export async function POST(req: Request) {
     if (message) {
       const chatId = String(message.chat?.id ?? "");
       const fromId = String(message.from?.id ?? "");
+      const text = String(message.text ?? "");
+      const command = normalizeText(text);
 
       let replyText = "No pude procesar tu mensaje.";
 
@@ -31,7 +39,9 @@ export async function POST(req: Request) {
       } else {
         const { data: player, error } = await supabase
           .from("players")
-          .select("id, first_name, last_name, telegram_user_id, telegram_chat_id")
+          .select(
+            "id, first_name, last_name, club, telegram_user_id, telegram_chat_id"
+          )
           .eq("telegram_user_id", fromId)
           .maybeSingle();
 
@@ -47,7 +57,21 @@ export async function POST(req: Request) {
             .join(" ")
             .trim();
 
-          replyText = `Hola ${playerName || "jugador"}, ya te identifiqué correctamente.`;
+          if (command === "HOLA") {
+            replyText = `Hola ${playerName || "jugador"}, ya te identifiqué correctamente.`;
+          } else if (command === "INICIO") {
+            replyText =
+              `Jugador: ${playerName || "(sin nombre)"}\n` +
+              `ID jugador: ${player.id}\n` +
+              `Club: ${player.club || "(sin club)"}\n` +
+              `Estado: cuenta de Telegram vinculada correctamente`;
+          } else {
+            replyText =
+              `Hola ${playerName || "jugador"}.\n` +
+              `Comandos disponibles:\n` +
+              `HOLA\n` +
+              `INICIO`;
+          }
         }
       }
 
