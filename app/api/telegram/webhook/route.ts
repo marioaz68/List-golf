@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       } else if (!fromId) {
         replyText = "No llegó el identificador de Telegram.";
       } else {
-        const { data: player, error } = await supabase
+        const { data: player, error: playerError } = await supabase
           .from("players")
           .select(
             "id, first_name, last_name, club, telegram_user_id, telegram_chat_id"
@@ -45,8 +45,8 @@ export async function POST(req: Request) {
           .eq("telegram_user_id", fromId)
           .maybeSingle();
 
-        if (error) {
-          console.error("TELEGRAM PLAYER LOOKUP ERROR:", error);
+        if (playerError) {
+          console.error("TELEGRAM PLAYER LOOKUP ERROR:", playerError);
           replyText = "Ocurrió un error buscando tu jugador.";
         } else if (!player) {
           replyText =
@@ -60,11 +60,47 @@ export async function POST(req: Request) {
           if (command === "HOLA") {
             replyText = `Hola ${playerName || "jugador"}, ya te identifiqué correctamente.`;
           } else if (command === "INICIO") {
-            replyText =
-              `Jugador: ${playerName || "(sin nombre)"}\n` +
-              `ID jugador: ${player.id}\n` +
-              `Club: ${player.club || "(sin club)"}\n` +
-              `Estado: cuenta de Telegram vinculada correctamente`;
+            const { data: entry, error: entryError } = await supabase
+              .from("tournament_entries")
+              .select(
+                `
+                id,
+                tournament_id,
+                tournaments (
+                  id,
+                  name
+                )
+              `
+              )
+              .eq("player_id", player.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (entryError) {
+              console.error("TELEGRAM ENTRY LOOKUP ERROR:", entryError);
+              replyText =
+                `Jugador: ${playerName || "(sin nombre)"}\n` +
+                `ID jugador: ${player.id}\n` +
+                `Club: ${player.club || "(sin club)"}\n` +
+                `Estado: cuenta de Telegram vinculada correctamente\n` +
+                `Torneo: error buscando inscripción`;
+            } else {
+              const tournamentRow = Array.isArray(entry?.tournaments)
+                ? entry.tournaments[0]
+                : entry?.tournaments;
+
+              const tournamentName = tournamentRow?.name ?? "(sin torneo)";
+              const entryId = entry?.id ?? null;
+
+              replyText =
+                `Jugador: ${playerName || "(sin nombre)"}\n` +
+                `ID jugador: ${player.id}\n` +
+                `Club: ${player.club || "(sin club)"}\n` +
+                `Estado: cuenta de Telegram vinculada correctamente\n` +
+                `Torneo: ${entryId ? tournamentName : "sin inscripción"}\n` +
+                `Entry ID: ${entryId || "(sin entry)"}`;
+            }
           } else {
             replyText =
               `Hola ${playerName || "jugador"}.\n` +
