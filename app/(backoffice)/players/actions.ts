@@ -13,6 +13,7 @@ type SavePlayerInput = {
   handicap_torneo?: number | string | null;
   birth_year?: number | string | null;
   phone?: string | null;
+  whatsapp_phone_e164?: string | null;
   email?: string | null;
   club?: string | null;
   club_id?: string | null;
@@ -54,7 +55,8 @@ function buildPlayerPayload(input: SavePlayerInput) {
     handicap_index: toNullableNumber(input.handicap_index),
     handicap_torneo: toNullableNumber(input.handicap_torneo),
     birth_year: toNullableNumber(input.birth_year),
-    phone: toNullableString(input.phone),
+   phone: toNullableString(input.phone),
+    whatsapp_phone_e164: toNullableString(input.whatsapp_phone_e164),
     email: toNullableString(input.email),
     club: toNullableString(input.club),
     club_id: toNullableString(input.club_id),
