@@ -244,6 +244,23 @@ export default function EntriesListPanel({
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
                     <div className="flex min-w-[360px] items-center gap-2 whitespace-nowrap">
                       <div className={SLOT_SM}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            runAction(
+                              deleteEntry,
+                              e.id,
+                              "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados."
+                            )
+                          }
+                          disabled={isPending}
+                          className="w-full h-6 bg-red-700 text-white text-[10px] rounded"
+                        >
+                          ELIMINAR
+                        </button>
+                      </div>
+
+                      <div className={SLOT_SM}>
                         {isWithdrawn ? (
                           <button
                             type="button"
@@ -339,23 +356,6 @@ export default function EntriesListPanel({
                               : null
                           }
                         />
-                      </div>
-
-                      <div className={SLOT_MD}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            runAction(
-                              deleteEntry,
-                              e.id,
-                              "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados. Si ya tiene scores reales, deberás usar DQ."
-                            )
-                          }
-                          disabled={isPending}
-                          className={`${BTN_BASE} w-full border-black bg-black`}
-                        >
-                          Eliminar
-                        </button>
                       </div>
                     </div>
                   </td>
