@@ -25,6 +25,7 @@ type PlayerMatch = {
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
+  whatsapp_phone_e164: string | null;
   email: string | null;
   ghin_number: string | null;
   club: string | null;
@@ -143,13 +144,13 @@ function buildMatchScore(params: {
 
   let score = 0;
 
-  const candidatePhone = (candidate.phone || "").trim();
+  const candidateWhatsappPhone = (candidate.whatsapp_phone_e164 || "").trim();
   const candidateEmail = (candidate.email || "").trim().toLowerCase();
   const candidateGhin = (candidate.ghin_number || "").trim();
   const candidateFirst = (candidate.first_name || "").trim().toLowerCase();
   const candidateLast = (candidate.last_name || "").trim().toLowerCase();
 
-  if (normalizedPhone && candidatePhone === normalizedPhone) score += 100;
+  if (normalizedPhone && candidateWhatsappPhone === normalizedPhone) score += 100;
   if (cleanEmail && candidateEmail === cleanEmail) score += 90;
   if (cleanGhin && candidateGhin === cleanGhin) score += 80;
 
@@ -325,7 +326,9 @@ export default function NewPlayerForm({
 
       const conditions: string[] = [];
 
-      if (normalizedPhone) conditions.push(`phone.eq.${normalizedPhone}`);
+      if (normalizedPhone) {
+        conditions.push(`whatsapp_phone_e164.eq.${normalizedPhone}`);
+      }
       if (cleanEmail) conditions.push(`email.eq.${cleanEmail}`);
       if (cleanGhin) conditions.push(`ghin_number.eq.${cleanGhin}`);
       if (trimmedFirst.length >= 2) {
@@ -343,7 +346,9 @@ export default function NewPlayerForm({
 
       const { data, error } = await supabase
         .from("players")
-        .select("id, first_name, last_name, phone, email, ghin_number, club")
+        .select(
+          "id, first_name, last_name, phone, whatsapp_phone_e164, email, ghin_number, club"
+        )
         .or(conditions.join(","))
         .limit(8);
 
@@ -611,7 +616,7 @@ export default function NewPlayerForm({
         let query = supabase
           .from("players")
           .select("id, first_name, last_name")
-          .eq("phone", normalizedPhone)
+          .eq("whatsapp_phone_e164", normalizedPhone)
           .limit(1);
 
         if (selectedExistingPlayerId) {
@@ -624,7 +629,7 @@ export default function NewPlayerForm({
 
         if (existingByPhone && existingByPhone.length > 0) {
           return setMsg(
-            `⚠️ Ya existe jugador con ese teléfono: ${existingByPhone[0].first_name} ${existingByPhone[0].last_name}`
+            `⚠️ Ya existe jugador con ese WhatsApp: ${existingByPhone[0].first_name} ${existingByPhone[0].last_name}`
           );
         }
       }
@@ -690,7 +695,8 @@ export default function NewPlayerForm({
         handicap_index: hi,
         handicap_torneo: ht,
         birth_year: by,
-        phone: normalizedPhone,
+        phone: phone.trim() || null,
+        whatsapp_phone_e164: normalizedPhone,
         email: cleanEmail,
         club: finalClubText,
         club_id: finalClubId,

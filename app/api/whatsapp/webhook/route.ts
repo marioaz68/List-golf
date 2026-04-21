@@ -166,18 +166,12 @@ async function findPlayerByPhone(
   normalizedPhone: string
 ): Promise<PlayerRow | null> {
   const plusPhone = normalizedPhone ? `+${normalizedPhone}` : "";
-  const last10 =
-    normalizedPhone.length >= 10
-      ? normalizedPhone.slice(normalizedPhone.length - 10)
-      : normalizedPhone;
 
   const { data, error } = await supabase
     .from("players")
     .select("id, first_name, last_name, phone, whatsapp_phone_e164, initials")
     .or(
       [
-        `phone.eq.${normalizedPhone}`,
-        `phone.eq.${plusPhone}`,
         `whatsapp_phone_e164.eq.${normalizedPhone}`,
         `whatsapp_phone_e164.eq.${plusPhone}`,
       ].join(",")
@@ -190,21 +184,7 @@ async function findPlayerByPhone(
   }
 
   const rows = (data ?? []) as PlayerRow[];
-  if (rows.length > 0) return rows[0];
-
-  const { data: looseData, error: looseError } = await supabase
-    .from("players")
-    .select("id, first_name, last_name, phone, whatsapp_phone_e164, initials")
-    .or([`phone.ilike.%${last10}%`, `whatsapp_phone_e164.ilike.%${last10}%`].join(","))
-    .limit(10);
-
-  if (looseError) {
-    console.error("PLAYER SEARCH LOOSE ERROR:", looseError);
-    return null;
-  }
-
-  const looseRows = (looseData ?? []) as PlayerRow[];
-  return looseRows[0] ?? null;
+  return rows[0] ?? null;
 }
 
 async function resolveContext(
