@@ -63,6 +63,9 @@ type Player = {
   club_id: string | null;
   clubs: ClubRef[] | null;
   birth_year: number | null;
+  ghin_number: string | null;
+  shirt_size: string | null;
+  shoe_size: string | number | null;
 };
 
 type PlayerWithCategory = Player & {
@@ -95,6 +98,14 @@ function normalizeName(p: Player) {
   return `${ln} ${fn}`.trim().toLowerCase();
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizeGender(g: unknown): "M" | "F" {
   return g === "F" ? "F" : "M";
 }
@@ -110,13 +121,29 @@ function categoryForPlayer(
     (c) => c.gender === playerGender || c.gender === "X"
   );
 
-  return relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null;
+  return (
+    relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null
+  );
 }
 
 function clubLabelFromClub(clubs: ClubRef[] | null | undefined) {
   const club = Array.isArray(clubs) ? (clubs[0] ?? null) : null;
-  const v = (club?.name ?? club?.short_name ?? "").trim();
+  const v = (club?.short_name ?? club?.name ?? "").trim();
   return v || "—";
+}
+
+function findPreferredTournament(tournaments: Tournament[]) {
+  const preferred = tournaments.find((t) =>
+    normalizeText(t.name).includes("torneo prueba 2")
+  );
+
+  return preferred ?? tournaments[0] ?? null;
+}
+
+function displayCell(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  const text = String(value).trim();
+  return text.length ? text : "—";
 }
 
 export default async function PlayersPage(props: {
@@ -151,8 +178,10 @@ export default async function PlayersPage(props: {
   }
 
   const tournaments: Tournament[] = (tData ?? []) as Tournament[];
+  const preferredTournament = findPreferredTournament(tournaments);
+
   const effectiveTournamentId =
-    tournamentIdParam || (tournaments.length > 0 ? tournaments[0].id : "");
+    tournamentIdParam || preferredTournament?.id || "";
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -187,7 +216,9 @@ export default async function PlayersPage(props: {
     handicap_min: Number(c.handicap_min),
     handicap_max: Number(c.handicap_max),
     handicap_percent_override:
-      c.handicap_percent_override === null ? null : Number(c.handicap_percent_override),
+      c.handicap_percent_override === null
+        ? null
+        : Number(c.handicap_percent_override),
     default_prize_count:
       c.default_prize_count === null ? null : Number(c.default_prize_count),
   }));
@@ -233,7 +264,9 @@ export default async function PlayersPage(props: {
     return (
       <div className="p-3">
         <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
-        <p className="text-sm text-red-600">Error reglas de salidas: {rulesErr.message}</p>
+        <p className="text-sm text-red-600">
+          Error reglas de salidas: {rulesErr.message}
+        </p>
       </div>
     );
   }
@@ -246,7 +279,9 @@ export default async function PlayersPage(props: {
     age_min: r.age_min === null ? null : Number(r.age_min),
     age_max: r.age_max === null ? null : Number(r.age_max),
     gender:
-      r.gender === null ? null : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
+      r.gender === null
+        ? null
+        : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
     handicap_min: r.handicap_min === null ? null : Number(r.handicap_min),
     handicap_max: r.handicap_max === null ? null : Number(r.handicap_max),
   }));
@@ -260,9 +295,7 @@ export default async function PlayersPage(props: {
     ? categoriesForFilter.find((c) => c.code === cat) ?? null
     : null;
 
-  let playersQuery = supabase
-    .from("players")
-    .select(`
+  let playersQuery = supabase.from("players").select(`
       id,
       first_name,
       last_name,
@@ -273,6 +306,9 @@ export default async function PlayersPage(props: {
       phone,
       email,
       birth_year,
+      ghin_number,
+      shirt_size,
+      shoe_size,
       club_id,
       clubs:clubs (
         name,
@@ -282,7 +318,14 @@ export default async function PlayersPage(props: {
 
   if (q) {
     playersQuery = playersQuery.or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,initials.ilike.%${q}%`
+      [
+        `first_name.ilike.%${q}%`,
+        `last_name.ilike.%${q}%`,
+        `email.ilike.%${q}%`,
+        `initials.ilike.%${q}%`,
+        `phone.ilike.%${q}%`,
+        `ghin_number.ilike.%${q}%`,
+      ].join(",")
     );
   }
 
@@ -377,7 +420,9 @@ export default async function PlayersPage(props: {
           <h1 className="text-lg font-bold leading-none text-white">Players</h1>
           <p className="mt-1 text-[11px] leading-snug text-white/90">
             Mostrando {sorted.length} jugadores {q ? `(búsqueda: "${q}")` : ""}
-            {effectiveTournamentId ? ` (torneo: ${effectiveTournamentId.slice(0, 8)})` : ""}
+            {effectiveTournamentId
+              ? ` (torneo: ${effectiveTournamentId.slice(0, 8)})`
+              : ""}
             {genderFilter !== "ALL"
               ? ` (${genderFilter === "M" ? "Caballeros" : "Damas"})`
               : ""}
@@ -387,8 +432,6 @@ export default async function PlayersPage(props: {
 
         <div className="flex flex-wrap items-start gap-2">
           <form action="/players" method="GET" className="flex flex-wrap gap-1.5">
-            <input type="hidden" name="sort" value={sort} />
-
             <select
               name="tournament_id"
               defaultValue={effectiveTournamentId}
@@ -468,21 +511,54 @@ export default async function PlayersPage(props: {
       <NewPlayerSection />
 
       <section className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
-        <table className="min-w-[1260px] w-full border-collapse text-[11px] leading-none">
+        <table className="min-w-[1900px] w-full border-collapse text-[11px] leading-none">
           <thead>
             <tr className="bg-gray-200 text-left text-gray-900">
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Nombre</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Iniciales</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Género</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Handicap</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Año Nac.</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Categoría</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Salida</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Club</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Email</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Acciones</th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Nombre
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Iniciales
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Género
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Handicap
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Año Nac.
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Categoría
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Salida
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Teléfono
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                GHIN
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Talla Playera
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Talla Zapatos
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Club
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Email
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Acciones
+              </th>
             </tr>
           </thead>
+
           <tbody>
             {sorted.map((p) => {
               const club = Array.isArray(p.clubs) ? (p.clubs[0] ?? null) : null;
@@ -492,30 +568,55 @@ export default async function PlayersPage(props: {
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "—"}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.initials ?? "—"}
+                    {displayCell(p.initials)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {genderLabel(normalizeGender(p.gender))}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.handicap_index ?? "—"}
+                    {displayCell(p.handicap_index)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.birth_year ?? "—"}
+                    {displayCell(p.birth_year)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.categoryLabel}
+                    {displayCell(p.categoryLabel)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.teeLabel}
+                    {displayCell(p.teeLabel)}
                   </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.phone)}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.ghin_number)}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.shirt_size)}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.shoe_size)}
+                  </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {clubLabelFromClub(p.clubs)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.email ?? "—"}
+                    {displayCell(p.email)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     <PlayerRowActions
                       player={{
@@ -530,6 +631,10 @@ export default async function PlayersPage(props: {
                         email: p.email,
                         club: club?.name ?? null,
                         club_id: p.club_id ?? null,
+                        shirt_size:
+                          p.shirt_size == null ? null : String(p.shirt_size),
+                        shoe_size:
+                          p.shoe_size == null ? null : String(p.shoe_size),
                       }}
                     />
                   </td>
@@ -539,7 +644,10 @@ export default async function PlayersPage(props: {
 
             {sorted.length === 0 ? (
               <tr>
-                <td className="border border-gray-300 px-2 py-2 text-[11px] text-black" colSpan={10}>
+                <td
+                  className="border border-gray-300 px-2 py-2 text-[11px] text-black"
+                  colSpan={14}
+                >
                   Sin resultados
                 </td>
               </tr>
