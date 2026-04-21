@@ -1021,6 +1021,7 @@ export default function NewPlayerForm({
             style={fieldStyle}
           >
             <option value="">Seleccionar</option>
+            <option>XS</option>
             <option>S</option>
             <option>M</option>
             <option>L</option>
@@ -1039,7 +1040,7 @@ export default function NewPlayerForm({
             <option value="">Seleccionar</option>
             {[
               1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6,
-              6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12,
+              6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14
             ].map((n) => (
               <option key={n} value={String(n)}>
                 {n}

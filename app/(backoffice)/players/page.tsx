@@ -39,7 +39,7 @@ type Player = {
   phone: string | null;
   email: string | null;
   club_id: string | null;
-  clubs: ClubRef[] | null;
+  clubs: ClubRef | ClubRef[] | null;
   birth_year: number | null;
   ghin_number: string | null;
   shirt_size: string | null;
@@ -103,18 +103,24 @@ function categoryForPlayer(
   );
 }
 
-function clubLabelFromClub(clubs: ClubRef[] | null | undefined) {
-  const club = Array.isArray(clubs) ? (clubs[0] ?? null) : null;
+function firstClub(clubs: ClubRef | ClubRef[] | null | undefined) {
+  if (!clubs) return null;
+  if (Array.isArray(clubs)) return clubs[0] ?? null;
+  return clubs;
+}
+
+function clubLabelFromClub(clubs: ClubRef | ClubRef[] | null | undefined) {
+  const club = firstClub(clubs);
   const v = (club?.short_name ?? club?.name ?? "").trim();
   return v || "—";
 }
 
 function findPreferredTournament(tournaments: Tournament[]) {
-  const preferred = tournaments.find((t) =>
-    normalizeText(t.name).includes("torneo prueba 2")
+  const withoutPrueba2 = tournaments.filter(
+    (t) => !normalizeText(t.name).includes("torneo prueba 2")
   );
 
-  return preferred ?? tournaments[0] ?? null;
+  return withoutPrueba2[0] ?? tournaments[0] ?? null;
 }
 
 function displayCell(value: string | number | null | undefined) {
@@ -166,7 +172,9 @@ export default async function PlayersPage(props: {
   const { data: catData, error: catErr } = effectiveTournamentId
     ? await supabase
         .from("categories")
-        .select("id, tournament_id, gender, code, name, handicap_min, handicap_max")
+        .select(
+          "id, tournament_id, gender, code, name, handicap_min, handicap_max"
+        )
         .eq("tournament_id", effectiveTournamentId)
         .order("gender", { ascending: true })
         .order("handicap_min", { ascending: true })
@@ -216,7 +224,7 @@ export default async function PlayersPage(props: {
       shirt_size,
       shoe_size,
       club_id,
-      clubs:clubs (
+      clubs (
         name,
         short_name
       )
@@ -260,7 +268,8 @@ export default async function PlayersPage(props: {
 
   const playersWithCategory: PlayerWithCategory[] = players.map((p) => {
     const g = normalizeGender(p.gender);
-    const catObj = categoryForPlayer(categories, g, p.handicap_index);
+    const effectiveHcp = p.handicap_torneo ?? p.handicap_index;
+    const catObj = categoryForPlayer(categories, g, effectiveHcp);
 
     const categorySortKey = catObj ? catObj.handicap_min : 999999;
     const categoryLabel = catObj ? `${catObj.code} - ${catObj.name}` : "—";
@@ -282,16 +291,16 @@ export default async function PlayersPage(props: {
       const d1 = a.categorySortKey - b.categorySortKey;
       if (d1 !== 0) return d1;
 
-      const ha = a.handicap_index ?? 999999;
-      const hb = b.handicap_index ?? 999999;
+      const ha = (a.handicap_torneo ?? a.handicap_index) ?? 999999;
+      const hb = (b.handicap_torneo ?? b.handicap_index) ?? 999999;
       const d2 = ha - hb;
       if (d2 !== 0) return d2;
 
       return normalizeName(a).localeCompare(normalizeName(b));
     }
 
-    const ha = a.handicap_index ?? 999999;
-    const hb = b.handicap_index ?? 999999;
+    const ha = (a.handicap_torneo ?? a.handicap_index) ?? 999999;
+    const hb = (b.handicap_torneo ?? b.handicap_index) ?? 999999;
     const d = ha - hb;
     if (d !== 0) return d;
 
@@ -433,7 +442,7 @@ export default async function PlayersPage(props: {
 
           <tbody>
             {sorted.map((p) => {
-              const club = Array.isArray(p.clubs) ? (p.clubs[0] ?? null) : null;
+              const club = firstClub(p.clubs);
 
               return (
                 <tr key={String(p.id)} className="bg-white">
@@ -450,7 +459,7 @@ export default async function PlayersPage(props: {
                   </td>
 
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {displayCell(p.handicap_index)}
+                    {displayCell(p.handicap_torneo ?? p.handicap_index)}
                   </td>
 
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
