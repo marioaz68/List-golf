@@ -17,6 +17,7 @@ type Entry = {
   handicap_index: number | null;
   status: string | null;
   players: {
+    id: string;
     first_name: string | null;
     last_name: string | null;
     club_label: string | null;
@@ -194,7 +195,7 @@ export default function EntriesListPanel({
       </div>
 
       <div className="max-h-[560px] overflow-auto border">
-        <table className="w-full text-[11px] whitespace-nowrap">
+        <table className="w-full whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -203,7 +204,7 @@ export default function EntriesListPanel({
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="px-1 py-1 text-left w-[370px]">Acciones</th>
+              <th className="w-[370px] px-1 py-1 text-left">Acciones</th>
             </tr>
           </thead>
 
@@ -219,7 +220,9 @@ export default function EntriesListPanel({
 
               return (
                 <tr key={e.id} className="border-t align-middle">
-                  <td className="px-1 py-1 font-semibold">{e.player_number ?? "-"}</td>
+                  <td className="px-1 py-1 font-semibold">
+                    {e.player_number ?? "-"}
+                  </td>
                   <td className="px-1 py-1">{fullName}</td>
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
@@ -307,27 +310,33 @@ export default function EntriesListPanel({
 
                       <div className={SLOT_EDIT}>
                         <PlayerRowActions
-  tournamentId={tournamentId}
-  player={
-    e.players
-      ? {
-          id: e.players.id,
-          first_name: e.players.first_name,
-          last_name: e.players.last_name,
-          initials: e.players.initials,
-          gender: e.players.gender,
-          handicap_index: e.players.handicap_index,
-          handicap_torneo: e.handicap ?? e.players.handicap_torneo,
-          phone: e.players.phone,
-          email: e.players.email,
-          club: e.players.club,
-          club_id: e.players.club_id,
-          shirt_size: e.players.shirt_size,
-          shoe_size: e.players.shoe_size,
-        }
-      : null
-  }
-/>
+                          tournamentId={tournamentId}
+                          player={
+                            e.players
+                              ? {
+                                  id: e.players.id,
+                                  first_name: e.players.first_name,
+                                  last_name: e.players.last_name,
+                                  initials: e.players.initials ?? null,
+                                  gender: e.players.gender ?? null,
+                                  handicap_index:
+                                    e.players.handicap_index ?? null,
+                                  handicap_torneo:
+                                    e.handicap_index ??
+                                    e.players.handicap_torneo ??
+                                    null,
+                                  phone: e.players.phone ?? null,
+                                  email: e.players.email ?? null,
+                                  club: e.players.club ?? null,
+                                  club_id: e.players.club_id ?? null,
+                                  ghin_number: e.players.ghin_number ?? null,
+                                  shirt_size: e.players.shirt_size ?? null,
+                                  shoe_size: e.players.shoe_size ?? null,
+                                }
+                              : null
+                          }
+                        />
+                      </div>
 
                       <div className={SLOT_MD}>
                         <button
@@ -351,13 +360,13 @@ export default function EntriesListPanel({
               );
             })}
 
-            {filtered.length === 0 && (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-2 text-gray-600">
                   Sin resultados
                 </td>
               </tr>
-            )}
+            ) : null}
           </tbody>
         </table>
       </div>
