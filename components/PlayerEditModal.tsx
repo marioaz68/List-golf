@@ -556,24 +556,41 @@ export default function PlayerEditModal({
             </label>
 
             <label style={labelStyle}>
-              Shirt Size
-              <input
-                value={shirtSize}
-                onChange={(e) => setShirtSize(e.target.value)}
-                placeholder="Ej. S, M, L, XL"
-                style={fieldStyle}
-              />
-            </label>
+  Shirt Size
+  <select
+    value={shirtSize}
+    onChange={(e) => setShirtSize(e.target.value)}
+    style={fieldStyle}
+  >
+    <option value="">Seleccionar</option>
+    <option>XS</option>
+    <option>S</option>
+    <option>M</option>
+    <option>L</option>
+    <option>XL</option>
+    <option>XXL</option>
+  </select>
+</label>
 
-            <label style={labelStyle}>
-              Shoe Size
-              <input
-                value={shoeSize}
-                onChange={(e) => setShoeSize(e.target.value)}
-                placeholder="Ej. 8, 9, 10"
-                style={fieldStyle}
-              />
-            </label>
+<label style={labelStyle}>
+  Shoe Size
+  <select
+    value={shoeSize}
+    onChange={(e) => setShoeSize(e.target.value)}
+    style={fieldStyle}
+  >
+    <option value="">Seleccionar</option>
+    {[
+      6, 6.5, 7, 7.5, 8, 8.5,
+      9, 9.5, 10, 10.5, 11, 11.5,
+      12, 12.5, 13, 13.5, 14
+    ].map((n) => (
+      <option key={n} value={String(n)}>
+        {n}
+      </option>
+    ))}
+  </select>
+</label>
 
             <div ref={clubBoxRef} style={{ position: "relative" }}>
               <label style={labelStyle}>

@@ -2,7 +2,6 @@ import { createClient } from "@/utils/supabase/server";
 import PlayerRowActions from "@/components/PlayerRowActions";
 import NewPlayerSection from "./NewPlayerSection";
 import { unstable_noStore as noStore } from "next/cache";
-import { assignTeeSet } from "@/lib/tee-assignment";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,22 +21,15 @@ type Category = {
   name: string;
   handicap_min: number;
   handicap_max: number;
-  handicap_percent_override: number | null;
-  allow_multiple_prizes_per_player: boolean;
-  default_prize_count: number | null;
+  sort_order: number | null;
 };
 
-type TeeSet = {
+type CategoryRule = {
   id: string;
-  code: string;
-  name: string;
-};
-
-type TeeRule = {
-  id: string;
+  tournament_id: string;
   category_id: string;
-  tee_set_id: string;
-  priority: number;
+  tee_set_id: string | null;
+  priority: number | null;
   age_min: number | null;
   age_max: number | null;
   gender: "M" | "F" | "X" | null;
@@ -61,14 +53,17 @@ type Player = {
   phone: string | null;
   email: string | null;
   club_id: string | null;
-  clubs: ClubRef[] | null;
+  clubs: ClubRef | ClubRef[] | null;
   birth_year: number | null;
+  ghin_number: string | null;
+  shirt_size: string | null;
+  shoe_size: string | null;
 };
 
 type PlayerWithCategory = Player & {
   categoryLabel: string;
+  categoryCode: string | null;
   categorySortKey: number;
-  teeLabel: string;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -95,11 +90,85 @@ function normalizeName(p: Player) {
   return `${ln} ${fn}`.trim().toLowerCase();
 }
 
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizeGender(g: unknown): "M" | "F" {
   return g === "F" ? "F" : "M";
 }
 
-function categoryForPlayer(
+function firstClub(clubs: ClubRef | ClubRef[] | null | undefined) {
+  if (!clubs) return null;
+  if (Array.isArray(clubs)) return clubs[0] ?? null;
+  return clubs;
+}
+
+function clubLabelFromClub(clubs: ClubRef | ClubRef[] | null | undefined) {
+  const club = firstClub(clubs);
+  const v = (club?.short_name ?? club?.name ?? "").trim();
+  return v || "—";
+}
+
+function findPreferredTournament(tournaments: Tournament[]) {
+  const withoutPrueba2 = tournaments.filter(
+    (t) => !normalizeText(t.name).includes("torneo prueba 2")
+  );
+
+  return withoutPrueba2[0] ?? tournaments[0] ?? null;
+}
+
+function displayCell(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  const text = String(value).trim();
+  return text.length ? text : "—";
+}
+
+function getPlayerAge(birthYear: number | null) {
+  if (birthYear === null || !Number.isFinite(birthYear)) return null;
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - birthYear;
+  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  return age;
+}
+
+function matchesRule(params: {
+  rule: CategoryRule;
+  playerGender: "M" | "F";
+  hcp: number | null;
+  age: number | null;
+}) {
+  const { rule, playerGender, hcp, age } = params;
+
+  const genderOk =
+    !rule.gender || rule.gender === "X" || rule.gender === playerGender;
+
+  if (!genderOk) return false;
+
+  if (rule.handicap_min !== null) {
+    if (hcp === null || hcp < rule.handicap_min) return false;
+  }
+
+  if (rule.handicap_max !== null) {
+    if (hcp === null || hcp > rule.handicap_max) return false;
+  }
+
+  if (rule.age_min !== null) {
+    if (age === null || age < rule.age_min) return false;
+  }
+
+  if (rule.age_max !== null) {
+    if (age === null || age > rule.age_max) return false;
+  }
+
+  return true;
+}
+
+function fallbackCategoryForPlayer(
   categories: Category[],
   playerGender: "M" | "F",
   hcp: number | null
@@ -110,13 +179,42 @@ function categoryForPlayer(
     (c) => c.gender === playerGender || c.gender === "X"
   );
 
-  return relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null;
+  return (
+    relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null
+  );
 }
 
-function clubLabelFromClub(clubs: ClubRef[] | null | undefined) {
-  const club = Array.isArray(clubs) ? (clubs[0] ?? null) : null;
-  const v = (club?.name ?? club?.short_name ?? "").trim();
-  return v || "—";
+function resolveCategoryForPlayer(params: {
+  categories: Category[];
+  rules: CategoryRule[];
+  playerGender: "M" | "F";
+  hcp: number | null;
+  age: number | null;
+}) {
+  const { categories, rules, playerGender, hcp, age } = params;
+
+  const sortedRules = [...rules].sort((a, b) => {
+    const pa = a.priority ?? 999999;
+    const pb = b.priority ?? 999999;
+    if (pa !== pb) return pa - pb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  for (const rule of sortedRules) {
+    if (
+      matchesRule({
+        rule,
+        playerGender,
+        hcp,
+        age,
+      })
+    ) {
+      const matchedCategory = categories.find((c) => c.id === rule.category_id);
+      if (matchedCategory) return matchedCategory;
+    }
+  }
+
+  return fallbackCategoryForPlayer(categories, playerGender, hcp);
 }
 
 export default async function PlayersPage(props: {
@@ -151,8 +249,10 @@ export default async function PlayersPage(props: {
   }
 
   const tournaments: Tournament[] = (tData ?? []) as Tournament[];
+  const preferredTournament = findPreferredTournament(tournaments);
+
   const effectiveTournamentId =
-    tournamentIdParam || (tournaments.length > 0 ? tournaments[0].id : "");
+    tournamentIdParam || preferredTournament?.id || "";
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -161,9 +261,10 @@ export default async function PlayersPage(props: {
     ? await supabase
         .from("categories")
         .select(
-          "id, tournament_id, gender, code, name, handicap_min, handicap_max, handicap_percent_override, allow_multiple_prizes_per_player, default_prize_count"
+          "id, tournament_id, gender, code, name, handicap_min, handicap_max, sort_order"
         )
         .eq("tournament_id", effectiveTournamentId)
+        .order("sort_order", { ascending: true })
         .order("gender", { ascending: true })
         .order("handicap_min", { ascending: true })
         .order("code", { ascending: true })
@@ -179,76 +280,68 @@ export default async function PlayersPage(props: {
   }
 
   const categories: Category[] = (catData ?? []).map((c: any) => ({
-    ...c,
+    id: String(c.id),
     tournament_id: String(c.tournament_id),
     gender: String(c.gender ?? "X").toUpperCase() as "M" | "F" | "X",
     code: String(c.code ?? "").toUpperCase(),
     name: String(c.name ?? ""),
     handicap_min: Number(c.handicap_min),
     handicap_max: Number(c.handicap_max),
-    handicap_percent_override:
-      c.handicap_percent_override === null ? null : Number(c.handicap_percent_override),
-    default_prize_count:
-      c.default_prize_count === null ? null : Number(c.default_prize_count),
+    sort_order:
+      c.sort_order === null || c.sort_order === undefined
+        ? null
+        : Number(c.sort_order),
   }));
 
-  const { data: teeSetsData, error: teeSetsErr } = effectiveTournamentId
+  const { data: rulesData, error: rulesErr } = effectiveTournamentId
     ? await supabase
-        .from("tee_sets")
-        .select("id, code, name")
+        .from("category_tee_rules")
+        .select(
+          "id, tournament_id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+        )
         .eq("tournament_id", effectiveTournamentId)
-        .order("sort_order", { ascending: true })
-        .order("code", { ascending: true })
+        .order("priority", { ascending: true })
     : { data: [], error: null };
-
-  if (teeSetsErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
-        <p className="text-sm text-red-600">Error salidas: {teeSetsErr.message}</p>
-      </div>
-    );
-  }
-
-  const teeSets: TeeSet[] = (teeSetsData ?? []).map((t: any) => ({
-    id: String(t.id),
-    code: String(t.code ?? "").toUpperCase(),
-    name: String(t.name ?? ""),
-  }));
-
-  const categoryIds = categories.map((c) => c.id);
-
-  const { data: rulesData, error: rulesErr } =
-    categoryIds.length > 0
-      ? await supabase
-          .from("category_tee_rules")
-          .select(
-            "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
-          )
-          .in("category_id", categoryIds)
-          .order("priority", { ascending: true })
-      : { data: [], error: null };
 
   if (rulesErr) {
     return (
       <div className="p-3">
         <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
-        <p className="text-sm text-red-600">Error reglas de salidas: {rulesErr.message}</p>
+        <p className="text-sm text-red-600">
+          Error reglas de categoría: {rulesErr.message}
+        </p>
       </div>
     );
   }
 
-  const teeRules: TeeRule[] = (rulesData ?? []).map((r: any) => ({
+  const categoryRules: CategoryRule[] = (rulesData ?? []).map((r: any) => ({
     id: String(r.id),
+    tournament_id: String(r.tournament_id),
     category_id: String(r.category_id),
-    tee_set_id: String(r.tee_set_id),
-    priority: Number(r.priority ?? 999),
-    age_min: r.age_min === null ? null : Number(r.age_min),
-    age_max: r.age_max === null ? null : Number(r.age_max),
+    tee_set_id:
+      r.tee_set_id === null || r.tee_set_id === undefined
+        ? null
+        : String(r.tee_set_id),
+    priority:
+      r.priority === null || r.priority === undefined
+        ? null
+        : Number(r.priority),
+    age_min:
+      r.age_min === null || r.age_min === undefined ? null : Number(r.age_min),
+    age_max:
+      r.age_max === null || r.age_max === undefined ? null : Number(r.age_max),
     gender:
-      r.gender === null ? null : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
-    handicap_min: r.handicap_min === null ? null : Number(r.handicap_min),
-    handicap_max: r.handicap_max === null ? null : Number(r.handicap_max),
+      r.gender === null || r.gender === undefined || String(r.gender).trim() === ""
+        ? null
+        : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
+    handicap_min:
+      r.handicap_min === null || r.handicap_min === undefined
+        ? null
+        : Number(r.handicap_min),
+    handicap_max:
+      r.handicap_max === null || r.handicap_max === undefined
+        ? null
+        : Number(r.handicap_max),
   }));
 
   const categoriesForFilter =
@@ -260,9 +353,7 @@ export default async function PlayersPage(props: {
     ? categoriesForFilter.find((c) => c.code === cat) ?? null
     : null;
 
-  let playersQuery = supabase
-    .from("players")
-    .select(`
+  let playersQuery = supabase.from("players").select(`
       id,
       first_name,
       last_name,
@@ -273,8 +364,11 @@ export default async function PlayersPage(props: {
       phone,
       email,
       birth_year,
+      ghin_number,
+      shirt_size,
+      shoe_size,
       club_id,
-      clubs:clubs (
+      clubs (
         name,
         short_name
       )
@@ -282,18 +376,19 @@ export default async function PlayersPage(props: {
 
   if (q) {
     playersQuery = playersQuery.or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,initials.ilike.%${q}%`
+      [
+        `first_name.ilike.%${q}%`,
+        `last_name.ilike.%${q}%`,
+        `email.ilike.%${q}%`,
+        `initials.ilike.%${q}%`,
+        `phone.ilike.%${q}%`,
+        `ghin_number.ilike.%${q}%`,
+      ].join(",")
     );
   }
 
   if (genderFilter === "M" || genderFilter === "F") {
     playersQuery = playersQuery.eq("gender", genderFilter);
-  }
-
-  if (selectedCat) {
-    playersQuery = playersQuery
-      .gte("handicap_index", selectedCat.handicap_min)
-      .lte("handicap_index", selectedCat.handicap_max);
   }
 
   const { data: playersData, error: playersErr } = await playersQuery;
@@ -311,37 +406,39 @@ export default async function PlayersPage(props: {
 
   const playersWithCategory: PlayerWithCategory[] = players.map((p) => {
     const g = normalizeGender(p.gender);
-    const catObj = categoryForPlayer(categories, g, p.handicap_index);
+    const effectiveHcp = p.handicap_torneo ?? p.handicap_index;
+    const age = getPlayerAge(p.birth_year);
 
-    const categorySortKey = catObj ? catObj.handicap_min : 999999;
+    const catObj = resolveCategoryForPlayer({
+      categories,
+      rules: categoryRules,
+      playerGender: g,
+      hcp: effectiveHcp,
+      age,
+    });
+
+    const categorySortKey =
+      catObj?.sort_order ??
+      catObj?.handicap_min ??
+      999999;
+
     const categoryLabel = catObj ? `${catObj.code} - ${catObj.name}` : "—";
-
-    const tee = catObj
-      ? assignTeeSet(
-          {
-            id: String(p.id),
-            gender: g,
-            handicap_index: Number(p.handicap_index ?? 0),
-            birth_year: p.birth_year,
-            category_id: catObj.id,
-          },
-          teeRules,
-          teeSets
-        )
-      : null;
-
-    const teeLabel = tee ? `${tee.code} - ${tee.name}` : "—";
+    const categoryCode = catObj?.code ?? null;
 
     return {
       ...p,
       categoryLabel,
+      categoryCode,
       categorySortKey,
-      teeLabel,
       gender: g,
     };
   });
 
-  const sorted = [...playersWithCategory].sort((a, b) => {
+  const filteredByCategory = selectedCat
+    ? playersWithCategory.filter((p) => p.categoryCode === selectedCat.code)
+    : playersWithCategory;
+
+  const sorted = [...filteredByCategory].sort((a, b) => {
     if (sort === "name") {
       return normalizeName(a).localeCompare(normalizeName(b));
     }
@@ -350,16 +447,16 @@ export default async function PlayersPage(props: {
       const d1 = a.categorySortKey - b.categorySortKey;
       if (d1 !== 0) return d1;
 
-      const ha = a.handicap_index ?? 999999;
-      const hb = b.handicap_index ?? 999999;
+      const ha = (a.handicap_torneo ?? a.handicap_index) ?? 999999;
+      const hb = (b.handicap_torneo ?? b.handicap_index) ?? 999999;
       const d2 = ha - hb;
       if (d2 !== 0) return d2;
 
       return normalizeName(a).localeCompare(normalizeName(b));
     }
 
-    const ha = a.handicap_index ?? 999999;
-    const hb = b.handicap_index ?? 999999;
+    const ha = (a.handicap_torneo ?? a.handicap_index) ?? 999999;
+    const hb = (b.handicap_torneo ?? b.handicap_index) ?? 999999;
     const d = ha - hb;
     if (d !== 0) return d;
 
@@ -377,7 +474,9 @@ export default async function PlayersPage(props: {
           <h1 className="text-lg font-bold leading-none text-white">Players</h1>
           <p className="mt-1 text-[11px] leading-snug text-white/90">
             Mostrando {sorted.length} jugadores {q ? `(búsqueda: "${q}")` : ""}
-            {effectiveTournamentId ? ` (torneo: ${effectiveTournamentId.slice(0, 8)})` : ""}
+            {effectiveTournamentId
+              ? ` (torneo: ${effectiveTournamentId.slice(0, 8)})`
+              : ""}
             {genderFilter !== "ALL"
               ? ` (${genderFilter === "M" ? "Caballeros" : "Damas"})`
               : ""}
@@ -387,8 +486,6 @@ export default async function PlayersPage(props: {
 
         <div className="flex flex-wrap items-start gap-2">
           <form action="/players" method="GET" className="flex flex-wrap gap-1.5">
-            <input type="hidden" name="sort" value={sort} />
-
             <select
               name="tournament_id"
               defaultValue={effectiveTournamentId}
@@ -447,20 +544,6 @@ export default async function PlayersPage(props: {
             >
               Categorías
             </a>
-
-            <a
-              href={`/tee-sets?tournament_id=${effectiveTournamentId}`}
-              style={buttonStyle}
-            >
-              Salidas
-            </a>
-
-            <a
-              href={`/category-tee-rules?tournament_id=${effectiveTournamentId}`}
-              style={buttonStyle}
-            >
-              Reglas de Salidas
-            </a>
           </div>
         </div>
       </header>
@@ -468,54 +551,105 @@ export default async function PlayersPage(props: {
       <NewPlayerSection />
 
       <section className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
-        <table className="min-w-[1260px] w-full border-collapse text-[11px] leading-none">
+        <table className="min-w-[1800px] w-full border-collapse text-[11px] leading-none">
           <thead>
             <tr className="bg-gray-200 text-left text-gray-900">
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Nombre</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Iniciales</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Género</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Handicap</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Año Nac.</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Categoría</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Salida</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Club</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Email</th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">Acciones</th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Nombre
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Iniciales
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Género
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Handicap
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Año Nac.
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Categoría
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Teléfono
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                GHIN
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Talla Playera
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Talla Zapatos
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Club
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Email
+              </th>
+              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
+                Acciones
+              </th>
             </tr>
           </thead>
+
           <tbody>
             {sorted.map((p) => {
-              const club = Array.isArray(p.clubs) ? (p.clubs[0] ?? null) : null;
+              const club = firstClub(p.clubs);
 
               return (
                 <tr key={String(p.id)} className="bg-white">
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "—"}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.initials ?? "—"}
+                    {displayCell(p.initials)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {genderLabel(normalizeGender(p.gender))}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.handicap_index ?? "—"}
+                    {displayCell(p.handicap_torneo ?? p.handicap_index)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.birth_year ?? "—"}
+                    {displayCell(p.birth_year)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.categoryLabel}
+                    {displayCell(p.categoryLabel)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.teeLabel}
+                    {displayCell(p.phone)}
                   </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.ghin_number)}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.shirt_size)}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
+                    {displayCell(p.shoe_size)}
+                  </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {clubLabelFromClub(p.clubs)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {p.email ?? "—"}
+                    {displayCell(p.email)}
                   </td>
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     <PlayerRowActions
                       player={{
@@ -528,8 +662,14 @@ export default async function PlayersPage(props: {
                         handicap_torneo: p.handicap_torneo,
                         phone: p.phone,
                         email: p.email,
-                        club: club?.name ?? null,
+                        club:
+                          club?.short_name?.trim() ||
+                          club?.name?.trim() ||
+                          null,
                         club_id: p.club_id ?? null,
+                        ghin_number: p.ghin_number,
+                        shirt_size: p.shirt_size,
+                        shoe_size: p.shoe_size,
                       }}
                     />
                   </td>
@@ -539,7 +679,10 @@ export default async function PlayersPage(props: {
 
             {sorted.length === 0 ? (
               <tr>
-                <td className="border border-gray-300 px-2 py-2 text-[11px] text-black" colSpan={10}>
+                <td
+                  className="border border-gray-300 px-2 py-2 text-[11px] text-black"
+                  colSpan={13}
+                >
                   Sin resultados
                 </td>
               </tr>

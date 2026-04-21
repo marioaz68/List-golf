@@ -15,6 +15,9 @@ type PlayerModalData = {
   email: string | null;
   club: string | null;
   club_id: string | null;
+  ghin_number: string | null;
+  shirt_size: string | null;
+  shoe_size: string | null;
 };
 
 type PlayerRowActionsProps = {

@@ -27,6 +27,10 @@ type Entry = {
     phone?: string | null;
     club?: string | null;
     club_id?: string | null;
+    initials?: string | null;
+    ghin_number?: string | null;
+    shirt_size?: string | null;
+    shoe_size?: string | null;
   } | null;
   categories: {
     code: string | null;
@@ -309,14 +313,20 @@ export default function EntriesListPanel({
                                   id: e.player_id,
                                   first_name: e.players.first_name ?? null,
                                   last_name: e.players.last_name ?? null,
-                                  initials: null,
+                                  initials: e.players.initials ?? null,
                                   gender: e.players.gender ?? null,
                                   handicap_index: e.players.handicap_index ?? null,
                                   handicap_torneo: e.players.handicap_torneo ?? null,
                                   phone: e.players.phone ?? null,
                                   email: e.players.email ?? null,
-                                  club: e.players.club ?? null,
+                                  club:
+                                    e.players.club_label ??
+                                    e.players.club ??
+                                    null,
                                   club_id: e.players.club_id ?? null,
+                                  ghin_number: e.players.ghin_number ?? null,
+                                  shirt_size: e.players.shirt_size ?? null,
+                                  shoe_size: e.players.shoe_size ?? null,
                                 }
                               : null
                           }
