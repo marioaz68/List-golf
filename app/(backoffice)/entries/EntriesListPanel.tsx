@@ -68,10 +68,10 @@ function badgeLabel(status: string | null) {
 const BTN_BASE =
   "inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50";
 
-const SLOT_SM = "w-[66px] shrink-0";
-const SLOT_MD = "w-[76px] shrink-0";
-const SLOT_EDIT = "w-[76px] shrink-0";
-const ACTIONS_COL = "min-w-[360px] w-[360px]";
+const SLOT_SM = "w-[72px] shrink-0";
+const SLOT_MD = "w-[84px] shrink-0";
+const SLOT_EDIT = "w-[110px] shrink-0";
+const ACTIONS_COL = "min-w-[460px] w-[460px]";
 
 export default function EntriesListPanel({
   entries,
@@ -196,7 +196,7 @@ export default function EntriesListPanel({
       </div>
 
       <div className="max-h-[560px] overflow-auto border">
-        <table className="min-w-[980px] w-max whitespace-nowrap text-[11px]">
+        <table className="min-w-[1080px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -242,8 +242,10 @@ export default function EntriesListPanel({
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[360px] items-center gap-2 whitespace-nowrap overflow-x-auto">
-                      <div className={`${SLOT_SM} sticky left-0 z-10 bg-white`}>
+                    <div className="flex min-w-[460px] items-center gap-2 whitespace-nowrap overflow-x-auto">
+                      <div
+                        className={`${SLOT_MD} sticky left-0 z-20 bg-white pr-1 shadow-[2px_0_0_0_rgba(255,255,255,1)]`}
+                      >
                         <button
                           type="button"
                           onClick={() =>
@@ -254,7 +256,7 @@ export default function EntriesListPanel({
                             )
                           }
                           disabled={isPending}
-                          className="w-full h-6 bg-red-700 text-white text-[10px] rounded"
+                          className="w-full h-7 rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
                         >
                           ELIMINAR
                         </button>
