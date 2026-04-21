@@ -671,6 +671,7 @@ export default async function PlayersPage(props: {
                         shirt_size: p.shirt_size,
                         shoe_size: p.shoe_size,
                       }}
+                        canDelete={true}
                     />
                   </td>
                 </tr>
