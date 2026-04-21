@@ -21,6 +21,20 @@ type Category = {
   name: string;
   handicap_min: number;
   handicap_max: number;
+  sort_order: number | null;
+};
+
+type CategoryRule = {
+  id: string;
+  tournament_id: string;
+  category_id: string;
+  tee_set_id: string | null;
+  priority: number | null;
+  age_min: number | null;
+  age_max: number | null;
+  gender: "M" | "F" | "X" | null;
+  handicap_min: number | null;
+  handicap_max: number | null;
 };
 
 type ClubRef = {
@@ -48,6 +62,7 @@ type Player = {
 
 type PlayerWithCategory = Player & {
   categoryLabel: string;
+  categoryCode: string | null;
   categorySortKey: number;
 };
 
@@ -87,22 +102,6 @@ function normalizeGender(g: unknown): "M" | "F" {
   return g === "F" ? "F" : "M";
 }
 
-function categoryForPlayer(
-  categories: Category[],
-  playerGender: "M" | "F",
-  hcp: number | null
-) {
-  if (hcp === null || !Number.isFinite(hcp)) return null;
-
-  const relevant = categories.filter(
-    (c) => c.gender === playerGender || c.gender === "X"
-  );
-
-  return (
-    relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null
-  );
-}
-
 function firstClub(clubs: ClubRef | ClubRef[] | null | undefined) {
   if (!clubs) return null;
   if (Array.isArray(clubs)) return clubs[0] ?? null;
@@ -127,6 +126,95 @@ function displayCell(value: string | number | null | undefined) {
   if (value === null || value === undefined) return "—";
   const text = String(value).trim();
   return text.length ? text : "—";
+}
+
+function getPlayerAge(birthYear: number | null) {
+  if (birthYear === null || !Number.isFinite(birthYear)) return null;
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - birthYear;
+  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  return age;
+}
+
+function matchesRule(params: {
+  rule: CategoryRule;
+  playerGender: "M" | "F";
+  hcp: number | null;
+  age: number | null;
+}) {
+  const { rule, playerGender, hcp, age } = params;
+
+  const genderOk =
+    !rule.gender || rule.gender === "X" || rule.gender === playerGender;
+
+  if (!genderOk) return false;
+
+  if (rule.handicap_min !== null) {
+    if (hcp === null || hcp < rule.handicap_min) return false;
+  }
+
+  if (rule.handicap_max !== null) {
+    if (hcp === null || hcp > rule.handicap_max) return false;
+  }
+
+  if (rule.age_min !== null) {
+    if (age === null || age < rule.age_min) return false;
+  }
+
+  if (rule.age_max !== null) {
+    if (age === null || age > rule.age_max) return false;
+  }
+
+  return true;
+}
+
+function fallbackCategoryForPlayer(
+  categories: Category[],
+  playerGender: "M" | "F",
+  hcp: number | null
+) {
+  if (hcp === null || !Number.isFinite(hcp)) return null;
+
+  const relevant = categories.filter(
+    (c) => c.gender === playerGender || c.gender === "X"
+  );
+
+  return (
+    relevant.find((c) => hcp >= c.handicap_min && hcp <= c.handicap_max) ?? null
+  );
+}
+
+function resolveCategoryForPlayer(params: {
+  categories: Category[];
+  rules: CategoryRule[];
+  playerGender: "M" | "F";
+  hcp: number | null;
+  age: number | null;
+}) {
+  const { categories, rules, playerGender, hcp, age } = params;
+
+  const sortedRules = [...rules].sort((a, b) => {
+    const pa = a.priority ?? 999999;
+    const pb = b.priority ?? 999999;
+    if (pa !== pb) return pa - pb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  for (const rule of sortedRules) {
+    if (
+      matchesRule({
+        rule,
+        playerGender,
+        hcp,
+        age,
+      })
+    ) {
+      const matchedCategory = categories.find((c) => c.id === rule.category_id);
+      if (matchedCategory) return matchedCategory;
+    }
+  }
+
+  return fallbackCategoryForPlayer(categories, playerGender, hcp);
 }
 
 export default async function PlayersPage(props: {
@@ -173,9 +261,10 @@ export default async function PlayersPage(props: {
     ? await supabase
         .from("categories")
         .select(
-          "id, tournament_id, gender, code, name, handicap_min, handicap_max"
+          "id, tournament_id, gender, code, name, handicap_min, handicap_max, sort_order"
         )
         .eq("tournament_id", effectiveTournamentId)
+        .order("sort_order", { ascending: true })
         .order("gender", { ascending: true })
         .order("handicap_min", { ascending: true })
         .order("code", { ascending: true })
@@ -198,6 +287,61 @@ export default async function PlayersPage(props: {
     name: String(c.name ?? ""),
     handicap_min: Number(c.handicap_min),
     handicap_max: Number(c.handicap_max),
+    sort_order:
+      c.sort_order === null || c.sort_order === undefined
+        ? null
+        : Number(c.sort_order),
+  }));
+
+  const { data: rulesData, error: rulesErr } = effectiveTournamentId
+    ? await supabase
+        .from("category_tee_rules")
+        .select(
+          "id, tournament_id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+        )
+        .eq("tournament_id", effectiveTournamentId)
+        .order("priority", { ascending: true })
+    : { data: [], error: null };
+
+  if (rulesErr) {
+    return (
+      <div className="p-3">
+        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
+        <p className="text-sm text-red-600">
+          Error reglas de categoría: {rulesErr.message}
+        </p>
+      </div>
+    );
+  }
+
+  const categoryRules: CategoryRule[] = (rulesData ?? []).map((r: any) => ({
+    id: String(r.id),
+    tournament_id: String(r.tournament_id),
+    category_id: String(r.category_id),
+    tee_set_id:
+      r.tee_set_id === null || r.tee_set_id === undefined
+        ? null
+        : String(r.tee_set_id),
+    priority:
+      r.priority === null || r.priority === undefined
+        ? null
+        : Number(r.priority),
+    age_min:
+      r.age_min === null || r.age_min === undefined ? null : Number(r.age_min),
+    age_max:
+      r.age_max === null || r.age_max === undefined ? null : Number(r.age_max),
+    gender:
+      r.gender === null || r.gender === undefined || String(r.gender).trim() === ""
+        ? null
+        : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
+    handicap_min:
+      r.handicap_min === null || r.handicap_min === undefined
+        ? null
+        : Number(r.handicap_min),
+    handicap_max:
+      r.handicap_max === null || r.handicap_max === undefined
+        ? null
+        : Number(r.handicap_max),
   }));
 
   const categoriesForFilter =
@@ -247,15 +391,6 @@ export default async function PlayersPage(props: {
     playersQuery = playersQuery.eq("gender", genderFilter);
   }
 
- if (selectedCat) {
-  playersQuery = playersQuery.or(
-    [
-      `and(handicap_torneo.gte.${selectedCat.handicap_min},handicap_torneo.lte.${selectedCat.handicap_max})`,
-      `and(handicap_torneo.is.null,handicap_index.gte.${selectedCat.handicap_min},handicap_index.lte.${selectedCat.handicap_max})`,
-    ].join(",")
-  );
-}
-
   const { data: playersData, error: playersErr } = await playersQuery;
 
   if (playersErr) {
@@ -272,20 +407,38 @@ export default async function PlayersPage(props: {
   const playersWithCategory: PlayerWithCategory[] = players.map((p) => {
     const g = normalizeGender(p.gender);
     const effectiveHcp = p.handicap_torneo ?? p.handicap_index;
-    const catObj = categoryForPlayer(categories, g, effectiveHcp);
+    const age = getPlayerAge(p.birth_year);
 
-    const categorySortKey = catObj ? catObj.handicap_min : 999999;
+    const catObj = resolveCategoryForPlayer({
+      categories,
+      rules: categoryRules,
+      playerGender: g,
+      hcp: effectiveHcp,
+      age,
+    });
+
+    const categorySortKey =
+      catObj?.sort_order ??
+      catObj?.handicap_min ??
+      999999;
+
     const categoryLabel = catObj ? `${catObj.code} - ${catObj.name}` : "—";
+    const categoryCode = catObj?.code ?? null;
 
     return {
       ...p,
       categoryLabel,
+      categoryCode,
       categorySortKey,
       gender: g,
     };
   });
 
-  const sorted = [...playersWithCategory].sort((a, b) => {
+  const filteredByCategory = selectedCat
+    ? playersWithCategory.filter((p) => p.categoryCode === selectedCat.code)
+    : playersWithCategory;
+
+  const sorted = [...filteredByCategory].sort((a, b) => {
     if (sort === "name") {
       return normalizeName(a).localeCompare(normalizeName(b));
     }
