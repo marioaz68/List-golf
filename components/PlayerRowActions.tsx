@@ -46,6 +46,8 @@ export default function PlayerRowActions({
     );
   }
 
+  const safePlayer = player;
+
   function handleDelete() {
     const confirmed = window.confirm(
       "¿Seguro que quieres eliminar este jugador? Esta acción no se puede deshacer."
@@ -53,7 +55,7 @@ export default function PlayerRowActions({
 
     if (!confirmed) return;
 
-    const playerId = player.id;
+    const playerId = safePlayer.id;
 
     startTransition(async () => {
       const result = await deletePlayerAction(playerId);
@@ -95,7 +97,7 @@ export default function PlayerRowActions({
       <PlayerEditModal
         open={open}
         onClose={() => setOpen(false)}
-        player={player}
+        player={safePlayer}
       />
     </>
   );
