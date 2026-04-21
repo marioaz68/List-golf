@@ -307,31 +307,27 @@ export default function EntriesListPanel({
 
                       <div className={SLOT_EDIT}>
                         <PlayerRowActions
-                          player={
-                            e.players
-                              ? {
-                                  id: e.player_id,
-                                  first_name: e.players.first_name ?? null,
-                                  last_name: e.players.last_name ?? null,
-                                  initials: e.players.initials ?? null,
-                                  gender: e.players.gender ?? null,
-                                  handicap_index: e.players.handicap_index ?? null,
-                                  handicap_torneo: e.players.handicap_torneo ?? null,
-                                  phone: e.players.phone ?? null,
-                                  email: e.players.email ?? null,
-                                  club:
-                                    e.players.club_label ??
-                                    e.players.club ??
-                                    null,
-                                  club_id: e.players.club_id ?? null,
-                                  ghin_number: e.players.ghin_number ?? null,
-                                  shirt_size: e.players.shirt_size ?? null,
-                                  shoe_size: e.players.shoe_size ?? null,
-                                }
-                              : null
-                          }
-                        />
-                      </div>
+  tournamentId={tournamentId}
+  player={
+    e.players
+      ? {
+          id: e.players.id,
+          first_name: e.players.first_name,
+          last_name: e.players.last_name,
+          initials: e.players.initials,
+          gender: e.players.gender,
+          handicap_index: e.players.handicap_index,
+          handicap_torneo: e.handicap ?? e.players.handicap_torneo,
+          phone: e.players.phone,
+          email: e.players.email,
+          club: e.players.club,
+          club_id: e.players.club_id,
+          shirt_size: e.players.shirt_size,
+          shoe_size: e.players.shoe_size,
+        }
+      : null
+  }
+/>
 
                       <div className={SLOT_MD}>
                         <button
