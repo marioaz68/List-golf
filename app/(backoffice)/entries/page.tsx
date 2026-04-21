@@ -46,6 +46,7 @@ type Player = {
 };
 
 type EntryPlayerRaw = {
+  id: string;
   first_name: string | null;
   last_name: string | null;
   gender: "M" | "F" | "X" | null;
@@ -55,6 +56,10 @@ type EntryPlayerRaw = {
   email: string | null;
   club: string | null;
   club_id: string | null;
+  initials: string | null;
+  ghin_number: string | null;
+  shirt_size: string | null;
+  shoe_size: string | null;
   clubs: ClubRef | ClubRef[] | null;
 };
 
@@ -80,6 +85,7 @@ type EntryRow = {
   handicap_index: number | null;
   status: string | null;
   players: {
+    id: string;
     first_name: string | null;
     last_name: string | null;
     gender: "M" | "F" | "X" | null;
@@ -90,6 +96,10 @@ type EntryRow = {
     club: string | null;
     club_id: string | null;
     club_label: string | null;
+    initials: string | null;
+    ghin_number: string | null;
+    shirt_size: string | null;
+    shoe_size: string | null;
   } | null;
   categories: {
     code: string | null;
@@ -268,6 +278,7 @@ export default async function EntriesPage({
         handicap_index,
         status,
         players:players (
+          id,
           first_name,
           last_name,
           gender,
@@ -277,6 +288,10 @@ export default async function EntriesPage({
           email,
           club,
           club_id,
+          initials,
+          ghin_number,
+          shirt_size,
+          shoe_size,
           clubs:clubs (
             name,
             short_name
@@ -306,6 +321,7 @@ export default async function EntriesPage({
         status: e.status,
         players: player
           ? {
+              id: player.id,
               first_name: player.first_name,
               last_name: player.last_name,
               gender: player.gender,
@@ -316,6 +332,10 @@ export default async function EntriesPage({
               club: player.club,
               club_id: player.club_id,
               club_label: clubLabelFromClub(player.clubs),
+              initials: player.initials,
+              ghin_number: player.ghin_number,
+              shirt_size: player.shirt_size,
+              shoe_size: player.shoe_size,
             }
           : null,
         categories: category
