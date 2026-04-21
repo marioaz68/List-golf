@@ -33,9 +33,7 @@ export default function PlayerRowActions({
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const playerId = player?.id;
-
-  if (!player || !playerId) {
+  if (!player || !player.id) {
     return (
       <button
         type="button"
@@ -55,10 +53,10 @@ export default function PlayerRowActions({
 
     if (!confirmed) return;
 
-    const safePlayerId = playerId;
+    const playerId = player.id;
 
     startTransition(async () => {
-      const result = await deletePlayerAction(safePlayerId);
+      const result = await deletePlayerAction(playerId);
 
       if (!result.ok) {
         window.alert(result.message ?? "No se pudo eliminar el jugador.");
