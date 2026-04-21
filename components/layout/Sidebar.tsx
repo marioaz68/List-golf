@@ -106,7 +106,7 @@ export default function Sidebar() {
     { name: "Plantillas cat.", href: "/category-templates", icon: Layers3 },
 
     { name: "Players", href: "/players", icon: Users, requiresTournament: true },
-    { name: "Entries", href: "/entries", icon: ClipboardList, requiresTournament: true },
+    { name: "Entries", href: "/entries", icon: ClipboardList },
 
     { name: "Editar torneo", href: "/tournaments/edit", icon: FilePenLine, requiresTournament: true },
     { name: "Setup torneo", href: "/tournaments/setup", icon: Settings, requiresTournament: true },
