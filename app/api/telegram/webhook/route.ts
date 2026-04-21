@@ -20,25 +20,14 @@ export async function POST(req: Request) {
 
     if (message) {
       const chatId = String(message.chat?.id ?? "");
-      const text = String(message.text ?? "");
       const fromId = String(message.from?.id ?? "");
-      const username = message.from?.username ?? "";
-      const firstName = message.from?.first_name ?? "";
-      const lastName = message.from?.last_name ?? "";
-      const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
 
-      let replyText =
-        `Mensaje recibido.\n\n` +
-        `Texto: ${text || "(sin texto)"}\n` +
-        `chat_id: ${chatId || "(vacío)"}\n` +
-        `from_id: ${fromId || "(vacío)"}\n` +
-        `username: ${username || "(sin username)"}\n` +
-        `nombre: ${fullName || "(sin nombre)"}`;
+      let replyText = "No pude procesar tu mensaje.";
 
       if (!supabase) {
-        replyText += `\n\nError: faltan variables de Supabase en el servidor.`;
+        replyText = "Error de configuración del servidor.";
       } else if (!fromId) {
-        replyText += `\n\nNo llegó from_id desde Telegram.`;
+        replyText = "No llegó el identificador de Telegram.";
       } else {
         const { data: player, error } = await supabase
           .from("players")
@@ -48,21 +37,17 @@ export async function POST(req: Request) {
 
         if (error) {
           console.error("TELEGRAM PLAYER LOOKUP ERROR:", error);
-          replyText += `\n\nError buscando jugador en players.`;
+          replyText = "Ocurrió un error buscando tu jugador.";
         } else if (!player) {
-          replyText += `\n\nNo encontré jugador vinculado con telegram_user_id ${fromId}.`;
+          replyText =
+            "Tu cuenta de Telegram no está vinculada a ningún jugador.";
         } else {
           const playerName = [player.first_name, player.last_name]
             .filter(Boolean)
             .join(" ")
             .trim();
 
-          replyText +=
-            `\n\nJugador encontrado:` +
-            `\nID: ${player.id}` +
-            `\nNombre: ${playerName || "(sin nombre)"}` +
-            `\ntelegram_user_id: ${player.telegram_user_id || "(vacío)"}` +
-            `\ntelegram_chat_id: ${player.telegram_chat_id || "(vacío)"}`;
+          replyText = `Hola ${playerName || "jugador"}, ya te identifiqué correctamente.`;
         }
       }
 
