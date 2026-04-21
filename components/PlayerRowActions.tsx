@@ -23,11 +23,13 @@ type PlayerModalData = {
 
 type PlayerRowActionsProps = {
   player: PlayerModalData | null;
+  tournamentId: string;
   canDelete?: boolean;
 };
 
 export default function PlayerRowActions({
   player,
+  tournamentId,
   canDelete = false,
 }: PlayerRowActionsProps) {
   const [open, setOpen] = useState(false);
@@ -47,6 +49,7 @@ export default function PlayerRowActions({
   }
 
   const safePlayer = player;
+  const safeTournamentId = tournamentId;
 
   function handleDelete() {
     const confirmed = window.confirm(
@@ -58,7 +61,7 @@ export default function PlayerRowActions({
     const playerId = safePlayer.id;
 
     startTransition(async () => {
-      const result = await deletePlayerAction(playerId);
+      const result = await deletePlayerAction(playerId, safeTournamentId);
 
       if (!result.ok) {
         window.alert(result.message ?? "No se pudo eliminar el jugador.");

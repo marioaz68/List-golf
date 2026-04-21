@@ -417,10 +417,7 @@ export default async function PlayersPage(props: {
       age,
     });
 
-    const categorySortKey =
-      catObj?.sort_order ??
-      catObj?.handicap_min ??
-      999999;
+    const categorySortKey = catObj?.sort_order ?? catObj?.handicap_min ?? 999999;
 
     const categoryLabel = catObj ? `${catObj.code} - ${catObj.name}` : "—";
     const categoryCode = catObj?.code ?? null;
@@ -671,7 +668,8 @@ export default async function PlayersPage(props: {
                         shirt_size: p.shirt_size,
                         shoe_size: p.shoe_size,
                       }}
-                        canDelete={true}
+                      tournamentId={effectiveTournamentId}
+                      canDelete={true}
                     />
                   </td>
                 </tr>
