@@ -71,6 +71,7 @@ const BTN_BASE =
 const SLOT_SM = "w-[66px] shrink-0";
 const SLOT_MD = "w-[76px] shrink-0";
 const SLOT_EDIT = "w-[76px] shrink-0";
+const ACTIONS_COL = "min-w-[360px] w-[360px]";
 
 export default function EntriesListPanel({
   entries,
@@ -194,8 +195,8 @@ export default function EntriesListPanel({
         </div>
       </div>
 
-      <div className="max-h-[560px] overflow-auto border overflow-x-auto">
-        <table className="w-full whitespace-nowrap text-[11px]">
+      <div className="max-h-[560px] overflow-auto border">
+        <table className="min-w-[980px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -204,7 +205,9 @@ export default function EntriesListPanel({
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="w-[480px] px-1 py-1 text-left">Acciones</th>
+              <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
+                Acciones
+              </th>
             </tr>
           </thead>
 
@@ -238,8 +241,8 @@ export default function EntriesListPanel({
                     </span>
                   </td>
 
-                  <td className="px-1 py-1">
-                    <div className="flex items-center gap-2 whitespace-nowrap">
+                  <td className={`${ACTIONS_COL} px-1 py-1`}>
+                    <div className="flex min-w-[360px] items-center gap-2 whitespace-nowrap">
                       <div className={SLOT_SM}>
                         {isWithdrawn ? (
                           <button
