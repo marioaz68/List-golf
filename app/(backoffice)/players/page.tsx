@@ -2,7 +2,6 @@ import { createClient } from "@/utils/supabase/server";
 import PlayerRowActions from "@/components/PlayerRowActions";
 import NewPlayerSection from "./NewPlayerSection";
 import { unstable_noStore as noStore } from "next/cache";
-import { assignTeeSet } from "@/lib/tee-assignment";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,27 +21,6 @@ type Category = {
   name: string;
   handicap_min: number;
   handicap_max: number;
-  handicap_percent_override: number | null;
-  allow_multiple_prizes_per_player: boolean;
-  default_prize_count: number | null;
-};
-
-type TeeSet = {
-  id: string;
-  code: string;
-  name: string;
-};
-
-type TeeRule = {
-  id: string;
-  category_id: string;
-  tee_set_id: string;
-  priority: number;
-  age_min: number | null;
-  age_max: number | null;
-  gender: "M" | "F" | "X" | null;
-  handicap_min: number | null;
-  handicap_max: number | null;
 };
 
 type ClubRef = {
@@ -65,13 +43,12 @@ type Player = {
   birth_year: number | null;
   ghin_number: string | null;
   shirt_size: string | null;
-  shoe_size: string | number | null;
+  shoe_size: string | null;
 };
 
 type PlayerWithCategory = Player & {
   categoryLabel: string;
   categorySortKey: number;
-  teeLabel: string;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -189,9 +166,7 @@ export default async function PlayersPage(props: {
   const { data: catData, error: catErr } = effectiveTournamentId
     ? await supabase
         .from("categories")
-        .select(
-          "id, tournament_id, gender, code, name, handicap_min, handicap_max, handicap_percent_override, allow_multiple_prizes_per_player, default_prize_count"
-        )
+        .select("id, tournament_id, gender, code, name, handicap_min, handicap_max")
         .eq("tournament_id", effectiveTournamentId)
         .order("gender", { ascending: true })
         .order("handicap_min", { ascending: true })
@@ -208,82 +183,13 @@ export default async function PlayersPage(props: {
   }
 
   const categories: Category[] = (catData ?? []).map((c: any) => ({
-    ...c,
+    id: String(c.id),
     tournament_id: String(c.tournament_id),
     gender: String(c.gender ?? "X").toUpperCase() as "M" | "F" | "X",
     code: String(c.code ?? "").toUpperCase(),
     name: String(c.name ?? ""),
     handicap_min: Number(c.handicap_min),
     handicap_max: Number(c.handicap_max),
-    handicap_percent_override:
-      c.handicap_percent_override === null
-        ? null
-        : Number(c.handicap_percent_override),
-    default_prize_count:
-      c.default_prize_count === null ? null : Number(c.default_prize_count),
-  }));
-
-  const { data: teeSetsData, error: teeSetsErr } = effectiveTournamentId
-    ? await supabase
-        .from("tee_sets")
-        .select("id, code, name")
-        .eq("tournament_id", effectiveTournamentId)
-        .order("sort_order", { ascending: true })
-        .order("code", { ascending: true })
-    : { data: [], error: null };
-
-  if (teeSetsErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
-        <p className="text-sm text-red-600">Error salidas: {teeSetsErr.message}</p>
-      </div>
-    );
-  }
-
-  const teeSets: TeeSet[] = (teeSetsData ?? []).map((t: any) => ({
-    id: String(t.id),
-    code: String(t.code ?? "").toUpperCase(),
-    name: String(t.name ?? ""),
-  }));
-
-  const categoryIds = categories.map((c) => c.id);
-
-  const { data: rulesData, error: rulesErr } =
-    categoryIds.length > 0
-      ? await supabase
-          .from("category_tee_rules")
-          .select(
-            "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
-          )
-          .in("category_id", categoryIds)
-          .order("priority", { ascending: true })
-      : { data: [], error: null };
-
-  if (rulesErr) {
-    return (
-      <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
-        <p className="text-sm text-red-600">
-          Error reglas de salidas: {rulesErr.message}
-        </p>
-      </div>
-    );
-  }
-
-  const teeRules: TeeRule[] = (rulesData ?? []).map((r: any) => ({
-    id: String(r.id),
-    category_id: String(r.category_id),
-    tee_set_id: String(r.tee_set_id),
-    priority: Number(r.priority ?? 999),
-    age_min: r.age_min === null ? null : Number(r.age_min),
-    age_max: r.age_max === null ? null : Number(r.age_max),
-    gender:
-      r.gender === null
-        ? null
-        : (String(r.gender).toUpperCase() as "M" | "F" | "X"),
-    handicap_min: r.handicap_min === null ? null : Number(r.handicap_min),
-    handicap_max: r.handicap_max === null ? null : Number(r.handicap_max),
   }));
 
   const categoriesForFilter =
@@ -359,27 +265,10 @@ export default async function PlayersPage(props: {
     const categorySortKey = catObj ? catObj.handicap_min : 999999;
     const categoryLabel = catObj ? `${catObj.code} - ${catObj.name}` : "—";
 
-    const tee = catObj
-      ? assignTeeSet(
-          {
-            id: String(p.id),
-            gender: g,
-            handicap_index: Number(p.handicap_index ?? 0),
-            birth_year: p.birth_year,
-            category_id: catObj.id,
-          },
-          teeRules,
-          teeSets
-        )
-      : null;
-
-    const teeLabel = tee ? `${tee.code} - ${tee.name}` : "—";
-
     return {
       ...p,
       categoryLabel,
       categorySortKey,
-      teeLabel,
       gender: g,
     };
   });
@@ -490,20 +379,6 @@ export default async function PlayersPage(props: {
             >
               Categorías
             </a>
-
-            <a
-              href={`/tee-sets?tournament_id=${effectiveTournamentId}`}
-              style={buttonStyle}
-            >
-              Salidas
-            </a>
-
-            <a
-              href={`/category-tee-rules?tournament_id=${effectiveTournamentId}`}
-              style={buttonStyle}
-            >
-              Reglas de Salidas
-            </a>
           </div>
         </div>
       </header>
@@ -511,7 +386,7 @@ export default async function PlayersPage(props: {
       <NewPlayerSection />
 
       <section className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
-        <table className="min-w-[1900px] w-full border-collapse text-[11px] leading-none">
+        <table className="min-w-[1800px] w-full border-collapse text-[11px] leading-none">
           <thead>
             <tr className="bg-gray-200 text-left text-gray-900">
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">
@@ -531,9 +406,6 @@ export default async function PlayersPage(props: {
               </th>
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">
                 Categoría
-              </th>
-              <th className="border border-gray-300 px-1.5 py-1 font-semibold">
-                Salida
               </th>
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">
                 Teléfono
@@ -590,10 +462,6 @@ export default async function PlayersPage(props: {
                   </td>
 
                   <td className="border border-gray-300 px-1.5 py-[3px] text-black">
-                    {displayCell(p.teeLabel)}
-                  </td>
-
-                  <td className="border border-gray-300 px-1.5 py-[3px] text-black">
                     {displayCell(p.phone)}
                   </td>
 
@@ -629,12 +497,14 @@ export default async function PlayersPage(props: {
                         handicap_torneo: p.handicap_torneo,
                         phone: p.phone,
                         email: p.email,
-                        club: club?.name ?? null,
+                        club:
+                          club?.short_name?.trim() ||
+                          club?.name?.trim() ||
+                          null,
                         club_id: p.club_id ?? null,
-                        shirt_size:
-                          p.shirt_size == null ? null : String(p.shirt_size),
-                        shoe_size:
-                          p.shoe_size == null ? null : String(p.shoe_size),
+                        ghin_number: p.ghin_number,
+                        shirt_size: p.shirt_size,
+                        shoe_size: p.shoe_size,
                       }}
                     />
                   </td>
@@ -646,7 +516,7 @@ export default async function PlayersPage(props: {
               <tr>
                 <td
                   className="border border-gray-300 px-2 py-2 text-[11px] text-black"
-                  colSpan={14}
+                  colSpan={13}
                 >
                   Sin resultados
                 </td>
