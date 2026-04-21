@@ -8,7 +8,7 @@ type PlayerModalData = {
   first_name: string | null;
   last_name: string | null;
   initials: string | null;
-  gender: string | null;
+  gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
   handicap_torneo: number | null;
   phone: string | null;
