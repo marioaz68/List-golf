@@ -247,11 +247,14 @@ export default async function PlayersPage(props: {
     playersQuery = playersQuery.eq("gender", genderFilter);
   }
 
-  if (selectedCat) {
-    playersQuery = playersQuery
-      .gte("handicap_index", selectedCat.handicap_min)
-      .lte("handicap_index", selectedCat.handicap_max);
-  }
+ if (selectedCat) {
+  playersQuery = playersQuery.or(
+    [
+      `and(handicap_torneo.gte.${selectedCat.handicap_min},handicap_torneo.lte.${selectedCat.handicap_max})`,
+      `and(handicap_torneo.is.null,handicap_index.gte.${selectedCat.handicap_min},handicap_index.lte.${selectedCat.handicap_max})`,
+    ].join(",")
+  );
+}
 
   const { data: playersData, error: playersErr } = await playersQuery;
 
