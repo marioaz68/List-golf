@@ -194,7 +194,7 @@ export default function EntriesListPanel({
         </div>
       </div>
 
-      <div className="max-h-[560px] overflow-auto border">
+      <div className="max-h-[560px] overflow-auto border overflow-x-auto">
         <table className="w-full whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
@@ -204,7 +204,7 @@ export default function EntriesListPanel({
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="w-[370px] px-1 py-1 text-left">Acciones</th>
+              <th className="w-[480px] px-1 py-1 text-left">Acciones</th>
             </tr>
           </thead>
 
