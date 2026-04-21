@@ -242,8 +242,8 @@ export default function EntriesListPanel({
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[360px] items-center gap-2 whitespace-nowrap">
-                      <div className={SLOT_SM}>
+                    <div className="flex min-w-[360px] items-center gap-2 whitespace-nowrap overflow-x-auto">
+                      <div className={`${SLOT_SM} sticky left-0 z-10 bg-white`}>
                         <button
                           type="button"
                           onClick={() =>
