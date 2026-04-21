@@ -2,19 +2,20 @@
 
 import { useState } from "react";
 import PlayerEditModal from "./PlayerEditModal";
-
 type PlayerModalData = {
   id: string;
   first_name: string | null;
   last_name: string | null;
   initials: string | null;
-  gender: "M" | "F" | "X" | null;
+  gender: string | null;
   handicap_index: number | null;
   handicap_torneo: number | null;
   phone: string | null;
   email: string | null;
   club: string | null;
   club_id: string | null;
+  shirt_size: string | null;
+  shoe_size: string | null;
 };
 
 type PlayerRowActionsProps = {
