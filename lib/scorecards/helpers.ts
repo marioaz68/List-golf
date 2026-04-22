@@ -82,10 +82,15 @@ export function shouldMoveToReview(holes: ScorecardHole[]): boolean {
 export function canLockScorecard(
   status: ScorecardStatus,
   hasPlayer: boolean,
-  hasMarker: boolean
+  hasMarker: boolean,
+  hasWitness: boolean,
+  hasStaff: boolean
 ): boolean {
   if (status === "locked") return false;
-  return hasPlayer && hasMarker;
+
+  if (hasStaff) return true;
+
+  return hasPlayer && hasMarker && hasWitness;
 }
 
 /**
@@ -93,18 +98,30 @@ export function canLockScorecard(
  */
 export function getNextStatusAfterSignature(
   current: ScorecardStatus,
-  role: "player" | "marker"
+  role: "player" | "marker" | "witness" | "staff",
+  hasPlayer: boolean,
+  hasMarker: boolean,
+  hasWitness: boolean
 ): ScorecardStatus {
   if (current === "locked") return current;
 
-  if (role === "player") {
-    if (current === "signed_marker") return "signed_complete";
-    return "signed_player";
+  if (role === "staff") {
+    return "signed_complete";
   }
 
   if (role === "marker") {
-    if (current === "signed_player") return "signed_complete";
+    if (hasPlayer && hasWitness) return "signed_complete";
     return "signed_marker";
+  }
+
+  if (role === "player") {
+    if (hasMarker && hasWitness) return "signed_complete";
+    return "signed_player";
+  }
+
+  if (role === "witness") {
+    if (hasPlayer && hasMarker) return "signed_complete";
+    return "in_review";
   }
 
   return current;
