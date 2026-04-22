@@ -69,26 +69,28 @@ export function signScorecard(
   let marker_signed_at = current.marker_signed_at ?? null;
   let witness_signed_at = current.witness_signed_at ?? null;
 
-  let nextStatus: ScorecardStatus = current.status;
-
+  // 👇 aplicar firma según rol
   if (input.role === "player") {
     player_signed_at = signedAt;
-    nextStatus = getNextStatusAfterSignature(current.status, "player");
   } else if (input.role === "marker") {
     marker_signed_at = signedAt;
-    nextStatus = getNextStatusAfterSignature(current.status, "marker");
   } else if (input.role === "witness") {
     witness_signed_at = signedAt;
   } else if (input.role === "staff") {
-    nextStatus = current.status;
+    // staff no cambia timestamps directamente
   }
 
   const hasPlayer = !!player_signed_at;
   const hasMarker = !!marker_signed_at;
+  const hasWitness = !!witness_signed_at;
 
-  if (hasPlayer && hasMarker) {
-    nextStatus = "signed_complete";
-  }
+  const nextStatus = getNextStatusAfterSignature(
+    current.status,
+    input.role,
+    hasPlayer,
+    hasMarker,
+    hasWitness
+  );
 
   return {
     signature,
