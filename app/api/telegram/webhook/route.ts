@@ -92,6 +92,31 @@ export async function POST(req: Request) {
 
               const tournamentName = tournamentRow?.name ?? "(sin torneo)";
               const entryId = entry?.id ?? null;
+              const tournamentId = entry?.tournament_id ?? null;
+
+              let roundLine = `Ronda: sin ronda activa`;
+              let roundDateLine = `Fecha ronda: -`;
+              let roundStatusLine = `Status ronda: -`;
+
+              if (tournamentId) {
+                const { data: round, error: roundError } = await supabase
+                  .from("rounds")
+                  .select("id, round_no, round_date, status")
+                  .eq("tournament_id", tournamentId)
+                  .eq("status", "capture")
+                  .order("round_no", { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+
+                if (roundError) {
+                  console.error("TELEGRAM ROUND LOOKUP ERROR:", roundError);
+                  roundLine = "Ronda: error buscando ronda activa";
+                } else if (round) {
+                  roundLine = `Ronda: ${round.round_no ?? "-"}`;
+                  roundDateLine = `Fecha ronda: ${round.round_date ?? "-"}`;
+                  roundStatusLine = `Status ronda: ${round.status ?? "-"}`;
+                }
+              }
 
               replyText =
                 `Jugador: ${playerName || "(sin nombre)"}\n` +
@@ -99,7 +124,10 @@ export async function POST(req: Request) {
                 `Club: ${player.club || "(sin club)"}\n` +
                 `Estado: cuenta de Telegram vinculada correctamente\n` +
                 `Torneo: ${entryId ? tournamentName : "sin inscripción"}\n` +
-                `Entry ID: ${entryId || "(sin entry)"}`;
+                `Entry ID: ${entryId || "(sin entry)"}\n` +
+                `${roundLine}\n` +
+                `${roundDateLine}\n` +
+                `${roundStatusLine}`;
             }
           } else {
             replyText =
