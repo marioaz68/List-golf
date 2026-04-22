@@ -112,6 +112,7 @@ export async function signScorecardAction(input: {
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
     locked_at: input.locked_at ?? null,
+    actor_role: input.role,
   });
 
   const updatedScorecard = await updateScorecardState({
@@ -208,6 +209,7 @@ export async function signScorecardByTokenAction(input: {
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
     locked_at: input.locked_at ?? null,
+    actor_role: request.role,
   });
 
   const updatedScorecard = await updateScorecardState({
