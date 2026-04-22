@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 const REAL_TOURNAMENT_ID = "eb492f19-b690-41f2-9adb-e31eb1a37a05";
 const REAL_ROUND_ID = "49b1548d-6085-4fea-8fee-ebbeccc50ed3";
-const REAL_ENTRY_ID = "177c684c-80e3-4f58-801a-20052707cd62";
+const REAL_ENTRY_ID = "456d6e4f-0f83-429c-8533-b376f93001f1";
 
 type HoleScoreRow = {
   id: string;
