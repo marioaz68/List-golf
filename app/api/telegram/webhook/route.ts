@@ -16,6 +16,10 @@ function normalizeText(value: unknown) {
     .toUpperCase();
 }
 
+function formatPlayerName(firstName: string | null, lastName: string | null) {
+  return [firstName, lastName].filter(Boolean).join(" ").trim() || "(sin nombre)";
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -52,13 +56,10 @@ export async function POST(req: Request) {
           replyText =
             "Tu cuenta de Telegram no está vinculada a ningún jugador.";
         } else {
-          const playerName = [player.first_name, player.last_name]
-            .filter(Boolean)
-            .join(" ")
-            .trim();
+          const playerName = formatPlayerName(player.first_name, player.last_name);
 
           if (command === "HOLA") {
-            replyText = `Hola ${playerName || "jugador"}, ya te identifiqué correctamente.`;
+            replyText = `Hola ${playerName}, ya te identifiqué correctamente.`;
           } else if (command === "INICIO") {
             const { data: entry, error: entryError } = await supabase
               .from("tournament_entries")
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
             if (entryError) {
               console.error("TELEGRAM ENTRY LOOKUP ERROR:", entryError);
               replyText =
-                `Jugador: ${playerName || "(sin nombre)"}\n` +
+                `Jugador: ${playerName}\n` +
                 `ID jugador: ${player.id}\n` +
                 `Club: ${player.club || "(sin club)"}\n` +
                 `Estado: cuenta de Telegram vinculada correctamente\n` +
@@ -128,6 +129,9 @@ export async function POST(req: Request) {
               let groupPositionLine = `Posición grupo: -`;
               let groupHoleLine = `Hoyo salida grupo: -`;
               let groupTeeTimeLine = `Tee time grupo: -`;
+              let teammatesLine = `Compañeros:\n-`;
+
+              let groupId: string | null = null;
 
               if (roundId && entryId) {
                 const { data: groupMember, error: groupMemberError } =
@@ -155,16 +159,59 @@ export async function POST(req: Request) {
                     console.error("TELEGRAM GROUP LOOKUP ERROR:", groupRowError);
                     groupLine = "Group ID: error buscando grupo";
                   } else if (groupRow) {
+                    groupId = groupRow.id;
                     groupLine = `Group ID: ${groupRow.id}`;
                     groupPositionLine = `Posición grupo: ${groupMember.position ?? "-"}`;
                     groupHoleLine = `Hoyo salida grupo: ${groupRow.starting_hole ?? "-"}`;
                     groupTeeTimeLine = `Tee time grupo: ${groupRow.tee_time ?? "-"}`;
+
+                    const { data: members, error: membersError } = await supabase
+                      .from("pairing_group_members")
+                      .select(
+                        `
+                        position,
+                        entry_id,
+                        tournament_entries (
+                          id,
+                          players (
+                            first_name,
+                            last_name
+                          )
+                        )
+                      `
+                      )
+                      .eq("group_id", groupId)
+                      .order("position", { ascending: true });
+
+                    if (membersError) {
+                      console.error("TELEGRAM GROUP MEMBERS LOOKUP ERROR:", membersError);
+                      teammatesLine = "Compañeros:\n(error buscando compañeros)";
+                    } else if (members && members.length > 0) {
+                      const lines = members.map((member) => {
+                        const entryRow = Array.isArray(member.tournament_entries)
+                          ? member.tournament_entries[0]
+                          : member.tournament_entries;
+
+                        const playerRow = Array.isArray(entryRow?.players)
+                          ? entryRow.players[0]
+                          : entryRow?.players;
+
+                        const memberName = formatPlayerName(
+                          playerRow?.first_name ?? null,
+                          playerRow?.last_name ?? null
+                        );
+
+                        return `${member.position ?? "-"} . ${memberName}`;
+                      });
+
+                      teammatesLine = `Compañeros:\n${lines.join("\n")}`;
+                    }
                   }
                 }
               }
 
               replyText =
-                `Jugador: ${playerName || "(sin nombre)"}\n` +
+                `Jugador: ${playerName}\n` +
                 `ID jugador: ${player.id}\n` +
                 `Club: ${player.club || "(sin club)"}\n` +
                 `Estado: cuenta de Telegram vinculada correctamente\n` +
@@ -177,11 +224,12 @@ export async function POST(req: Request) {
                 `${groupLine}\n` +
                 `${groupPositionLine}\n` +
                 `${groupHoleLine}\n` +
-                `${groupTeeTimeLine}`;
+                `${groupTeeTimeLine}\n` +
+                `${teammatesLine}`;
             }
           } else {
             replyText =
-              `Hola ${playerName || "jugador"}.\n` +
+              `Hola ${playerName}.\n` +
               `Comandos disponibles:\n` +
               `HOLA\n` +
               `INICIO`;
