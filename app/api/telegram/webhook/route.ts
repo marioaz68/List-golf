@@ -94,27 +94,30 @@ export async function POST(req: Request) {
               const entryId = entry?.id ?? null;
               const tournamentId = entry?.tournament_id ?? null;
 
-              let roundLine = `Ronda: sin ronda activa`;
+              let roundLine = `Ronda: sin ronda`;
               let roundDateLine = `Fecha ronda: -`;
-              let roundStatusLine = `Status ronda: -`;
+              let roundStartTypeLine = `Tipo salida: -`;
+              let roundStartTimeLine = `Hora salida: -`;
 
               if (tournamentId) {
                 const { data: round, error: roundError } = await supabase
                   .from("rounds")
-                  .select("id, round_no, round_date, status")
+                  .select(
+                    "id, round_no, round_date, start_type, start_time, interval_minutes"
+                  )
                   .eq("tournament_id", tournamentId)
-                  .eq("status", "capture")
                   .order("round_no", { ascending: false })
                   .limit(1)
                   .maybeSingle();
 
                 if (roundError) {
                   console.error("TELEGRAM ROUND LOOKUP ERROR:", roundError);
-                  roundLine = "Ronda: error buscando ronda activa";
+                  roundLine = "Ronda: error buscando ronda";
                 } else if (round) {
                   roundLine = `Ronda: ${round.round_no ?? "-"}`;
                   roundDateLine = `Fecha ronda: ${round.round_date ?? "-"}`;
-                  roundStatusLine = `Status ronda: ${round.status ?? "-"}`;
+                  roundStartTypeLine = `Tipo salida: ${round.start_type ?? "-"}`;
+                  roundStartTimeLine = `Hora salida: ${round.start_time ?? "-"}`;
                 }
               }
 
@@ -127,7 +130,8 @@ export async function POST(req: Request) {
                 `Entry ID: ${entryId || "(sin entry)"}\n` +
                 `${roundLine}\n` +
                 `${roundDateLine}\n` +
-                `${roundStatusLine}`;
+                `${roundStartTypeLine}\n` +
+                `${roundStartTimeLine}`;
             }
           } else {
             replyText =
