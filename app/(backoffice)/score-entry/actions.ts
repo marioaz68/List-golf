@@ -56,7 +56,10 @@ function getAdminClient() {
   });
 }
 
-async function getTournamentIdFromRoundId(admin: ReturnType<typeof getAdminClient>, roundId: string) {
+async function getTournamentIdFromRoundId(
+  admin: ReturnType<typeof getAdminClient>,
+  roundId: string
+) {
   const { data, error } = await admin
     .from("rounds")
     .select("id, tournament_id")
@@ -70,12 +73,49 @@ async function getTournamentIdFromRoundId(admin: ReturnType<typeof getAdminClien
   return String(data.tournament_id);
 }
 
+async function getEntryIdForRoundAndPlayer(
+  admin: ReturnType<typeof getAdminClient>,
+  roundId: string,
+  playerId: string
+) {
+  const { data: roundData, error: roundErr } = await admin
+    .from("rounds")
+    .select("tournament_id")
+    .eq("id", roundId)
+    .single();
+
+  if (roundErr || !roundData?.tournament_id) {
+    throw new Error("No se pudo determinar el torneo de la ronda.");
+  }
+
+  const { data: entryData, error: entryErr } = await admin
+    .from("tournament_entries")
+    .select("id")
+    .eq("tournament_id", String(roundData.tournament_id))
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (entryErr) {
+    throw new Error(
+      `Error buscando tournament_entries: ${supabaseErrText(entryErr)}`
+    );
+  }
+
+  if (!entryData?.id) {
+    throw new Error(
+      "No se encontró tournament_entries para este jugador en el torneo de la ronda."
+    );
+  }
+
+  return String(entryData.id);
+}
+
 export async function savePlayerScores(
   _prevState: SaveScoresState,
   formData: FormData
 ): Promise<SaveScoresState> {
   try {
-    const supabase = await createClient();
+    await createClient();
     const admin = getAdminClient();
 
     const roundId = String(formData.get("round_id") ?? "").trim();
@@ -101,6 +141,8 @@ export async function savePlayerScores(
         "score_capture",
       ],
     });
+
+    const entryId = await getEntryIdForRoundAndPlayer(admin, roundId, playerId);
 
     const grossScores: { hole_number: number; strokes: number }[] = [];
 
@@ -218,37 +260,34 @@ export async function savePlayerScores(
 
     const rows = grossScores.map((x) => ({
       round_score_id: roundScoreId,
+      entry_id: entryId,
+      round_id: roundId,
+      hole_no: x.hole_number,
       hole_number: x.hole_number,
       strokes: x.strokes,
       ...(tournamentDayId ? { tournament_day_id: tournamentDayId } : {}),
     }));
 
-    const { error: upsertErr } = await admin
+    const { error: deleteExistingErr } = await admin
       .from("hole_scores")
-      .upsert(rows, {
-        onConflict: "round_score_id,hole_number",
-      });
+      .delete()
+      .eq("round_score_id", roundScoreId);
 
-    if (upsertErr) {
+    if (deleteExistingErr) {
       return {
         ok: false,
-        message: `Error guardando hole_scores: ${supabaseErrText(upsertErr)}`,
+        message: `Error borrando hole_scores existentes: ${supabaseErrText(deleteExistingErr)}`,
       };
     }
 
-    const keepHoleNumbers = grossScores.map((x) => x.hole_number);
-    const keepList = `(${keepHoleNumbers.join(",")})`;
-
-    const { error: deleteRemovedErr } = await admin
+    const { error: insertErr2 } = await admin
       .from("hole_scores")
-      .delete()
-      .eq("round_score_id", roundScoreId)
-      .not("hole_number", "in", keepList);
+      .insert(rows);
 
-    if (deleteRemovedErr) {
+    if (insertErr2) {
       return {
         ok: false,
-        message: `Error borrando hoyos vacíos: ${supabaseErrText(deleteRemovedErr)}`,
+        message: `Error insertando hole_scores: ${supabaseErrText(insertErr2)}`,
       };
     }
 
