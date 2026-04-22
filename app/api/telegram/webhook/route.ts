@@ -134,7 +134,6 @@ export async function POST(req: Request) {
                   await supabase
                     .from("pairing_group_members")
                     .select("group_id, position, entry_id")
-                    .eq("round_id", roundId)
                     .eq("entry_id", entryId)
                     .maybeSingle();
 
@@ -145,19 +144,19 @@ export async function POST(req: Request) {
                   );
                   groupLine = "Group ID: error buscando grupo";
                 } else if (groupMember?.group_id) {
-                  groupLine = `Group ID: ${groupMember.group_id}`;
-                  groupPositionLine = `Posición grupo: ${groupMember.position ?? "-"}`;
-
                   const { data: groupRow, error: groupRowError } = await supabase
                     .from("pairing_groups")
-                    .select("id, starting_hole, tee_time")
+                    .select("id, round_id, starting_hole, tee_time")
                     .eq("id", groupMember.group_id)
+                    .eq("round_id", roundId)
                     .maybeSingle();
 
                   if (groupRowError) {
                     console.error("TELEGRAM GROUP LOOKUP ERROR:", groupRowError);
-                    groupHoleLine = "Hoyo salida grupo: error";
+                    groupLine = "Group ID: error buscando grupo";
                   } else if (groupRow) {
+                    groupLine = `Group ID: ${groupRow.id}`;
+                    groupPositionLine = `Posición grupo: ${groupMember.position ?? "-"}`;
                     groupHoleLine = `Hoyo salida grupo: ${groupRow.starting_hole ?? "-"}`;
                     groupTeeTimeLine = `Tee time grupo: ${groupRow.tee_time ?? "-"}`;
                   }
