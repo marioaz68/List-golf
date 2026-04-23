@@ -17,15 +17,36 @@ export type AppModule =
 export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
   users: ["super_admin", "club_admin", "tournament_director"],
 
-  tournaments: ["super_admin", "club_admin", "tournament_director"],
+  tournaments: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+  ],
 
   "tournaments-setup": ["super_admin", "club_admin", "tournament_director"],
 
-  entries: ["super_admin", "club_admin", "tournament_director", "checkin"],
+  entries: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "checkin",
+  ],
 
-  rounds: ["super_admin", "club_admin", "tournament_director"],
+  rounds: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+  ],
 
-  "score-entry": ["super_admin", "club_admin", "tournament_director", "score_capture"],
+  "score-entry": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+  ],
 };
 
 export function normalizeRole(role: string | null | undefined): AppRole | null {
