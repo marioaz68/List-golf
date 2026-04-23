@@ -790,7 +790,16 @@ export default async function PublicTournamentPage({
     current.push(row);
     holeScoresByRoundScoreId.set(row.round_score_id, current);
   }
+  const { data: scorecardsData } = await supabase
+  .from("scorecards")
+  .select("entry_id, round_id, locked_at")
+  .not("locked_at", "is", null);
 
+const lockedScorecardMap = new Set(
+  (scorecardsData ?? []).map(
+    (sc) => `${sc.entry_id}_${sc.round_id}`
+  )
+);
   const leaderboardBase: LeaderboardRow[] = filteredEntries.map((entry, index) => {
     const playerName = [
       entry.player.first_name ?? "",
@@ -822,8 +831,11 @@ export default async function PublicTournamentPage({
     });
 
     const details: RoundDetail[] = rounds.map((round) => {
-      const score =
-        playerRoundScores.find((row) => row.round_id === round.id) ?? null;
+  const isLockedRound = lockedScorecardMap.has(`${entry.id}_${round.id}`);
+
+  const score = isLockedRound
+    ? playerRoundScores.find((row) => row.round_id === round.id) ?? null
+    : null;
 
       const roundHoleRows = score
         ? [...(holeScoresByRoundScoreId.get(score.id) ?? [])].sort(
