@@ -17,6 +17,8 @@ type Entry = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  player_signed?: boolean | null;
+  marker_signed?: boolean | null;
   players: {
     id: string;
     first_name: string | null;
@@ -64,6 +66,36 @@ function badgeLabel(status: string | null) {
     default:
       return status ?? "-";
   }
+}
+
+function signatureBadgeClass(
+  playerSigned: boolean | null | undefined,
+  markerSigned: boolean | null | undefined
+) {
+  if (playerSigned && markerSigned) {
+    return "border-green-300 bg-green-50 text-green-700";
+  }
+
+  if (playerSigned || markerSigned) {
+    return "border-amber-300 bg-amber-50 text-amber-700";
+  }
+
+  return "border-gray-300 bg-gray-50 text-gray-700";
+}
+
+function signatureBadgeLabel(
+  playerSigned: boolean | null | undefined,
+  markerSigned: boolean | null | undefined
+) {
+  if (playerSigned && markerSigned) {
+    return "Firmado";
+  }
+
+  if (playerSigned || markerSigned) {
+    return "Parcial";
+  }
+
+  return "Pendiente";
 }
 
 const BTN_BASE =
@@ -118,13 +150,17 @@ export default function EntriesListPanel({
       const clubText = (e.players?.club_label ?? "").toLowerCase();
       const numberText = String(e.player_number ?? "");
       const statusText = String(e.status ?? "").toLowerCase();
+      const signatureText = `${e.player_signed ? "jugador firmado" : "jugador pendiente"} ${
+        e.marker_signed ? "marcador firmado" : "marcador pendiente"
+      }`.toLowerCase();
 
       return (
         (!q ||
           name.includes(q) ||
           clubText.includes(q) ||
           numberText.includes(q) ||
-          statusText.includes(q)) &&
+          statusText.includes(q) ||
+          signatureText.includes(q)) &&
         (!club || e.players?.club_label === club) &&
         (!category || e.categories?.code === category)
       );
@@ -194,7 +230,7 @@ ${res.witness_url}`;
 
         <div className="flex flex-wrap items-center gap-1">
           <input
-            placeholder="#, nombre, club o estatus..."
+            placeholder="#, nombre, club, estatus o firma..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-7 min-w-[180px] rounded border px-2"
@@ -229,7 +265,7 @@ ${res.witness_url}`;
       </div>
 
       <div className="max-h-[560px] overflow-auto border">
-        <table className="min-w-[1180px] w-max whitespace-nowrap text-[11px]">
+        <table className="min-w-[1320px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -238,6 +274,7 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
+              <th className="px-1 py-1 text-left">Estado firma</th>
               <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
                 Acciones
               </th>
@@ -259,9 +296,13 @@ ${res.witness_url}`;
                   <td className="px-1 py-1 font-semibold">
                     {e.player_number ?? "-"}
                   </td>
+
                   <td className="px-1 py-1">{fullName}</td>
+
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
+
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
+
                   <td className="px-1 py-1">{e.categories?.code ?? "-"}</td>
 
                   <td className="px-1 py-1">
@@ -274,14 +315,38 @@ ${res.witness_url}`;
                     </span>
                   </td>
 
+                  <td className="px-1 py-1">
+                    <div className="flex min-w-[126px] flex-col gap-1">
+                      <span
+                        className={`inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-semibold ${signatureBadgeClass(
+                          e.player_signed,
+                          e.marker_signed
+                        )}`}
+                      >
+                        {signatureBadgeLabel(e.player_signed, e.marker_signed)}
+                      </span>
+
+                      <div className="text-[10px] leading-4 text-gray-700">
+                        J:{" "}
+                        <span className="font-semibold">
+                          {e.player_signed ? "✔" : "—"}
+                        </span>{" "}
+                        | M:{" "}
+                        <span className="font-semibold">
+                          {e.marker_signed ? "✔" : "—"}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[560px] items-center gap-2 whitespace-nowrap overflow-x-auto">
+                    <div className="flex min-w-[560px] items-center gap-2 overflow-x-auto whitespace-nowrap">
                       <div className={SLOT_MD}>
                         <button
                           type="button"
                           onClick={() => handleGenerateLinks(e.id)}
                           disabled={isPending}
-                          className="w-full h-7 rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
+                          className="h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
                         >
                           FIRMAS
                         </button>
@@ -300,7 +365,7 @@ ${res.witness_url}`;
                             )
                           }
                           disabled={isPending}
-                          className="w-full h-7 rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
+                          className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
                         >
                           ELIMINAR
                         </button>
@@ -411,7 +476,7 @@ ${res.witness_url}`;
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-2 text-gray-600">
+                <td colSpan={8} className="p-2 text-gray-600">
                   Sin resultados
                 </td>
               </tr>
