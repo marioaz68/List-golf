@@ -315,3 +315,46 @@ export async function disputeScorecardAction(input: {
     auditLog: savedAuditLog,
   };
 }
+
+/**
+ * Crear scorecard + tokens de firma remota
+ */
+export async function createScorecardWithTokensAction(input: {
+  tournament_id: string;
+  round_id: string;
+  entry_id: string;
+}) {
+  const scorecard = await getOrCreateScorecard({
+    tournament_id: input.tournament_id,
+    round_id: input.round_id,
+    entry_id: input.entry_id,
+  });
+
+  const playerReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "player",
+  });
+
+  const markerReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "marker",
+  });
+
+  const witnessReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "witness",
+  });
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL || "https://staging.listgolf.club";
+
+  return {
+    scorecard_id: scorecard.id,
+    player_token: playerReq.token,
+    marker_token: markerReq.token,
+    witness_token: witnessReq.token,
+    player_url: `${baseUrl}/sign/scorecard/${playerReq.token}`,
+    marker_url: `${baseUrl}/sign/scorecard/${markerReq.token}`,
+    witness_url: `${baseUrl}/sign/scorecard/${witnessReq.token}`,
+  };
+}
