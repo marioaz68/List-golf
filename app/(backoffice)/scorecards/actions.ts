@@ -131,7 +131,6 @@ export async function signScorecardAction(input: {
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked: isFullySigned,
     locked_at: lockedAt,
   });
 
@@ -154,7 +153,7 @@ export async function signScorecardAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
-      locked: isFullySigned,
+      fully_signed: isFullySigned,
     },
   });
 
@@ -241,7 +240,6 @@ export async function signScorecardByTokenAction(input: {
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked: isFullySigned,
     locked_at: lockedAt,
   });
 
@@ -266,7 +264,7 @@ export async function signScorecardByTokenAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
-      locked: isFullySigned,
+      fully_signed: isFullySigned,
       token_used: true,
       remote_role: request.role,
     },
