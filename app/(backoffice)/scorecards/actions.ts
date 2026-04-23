@@ -115,13 +115,24 @@ export async function signScorecardAction(input: {
     actor_role: input.role,
   });
 
+  const isFullySigned = Boolean(
+    signResult.player_signed_at &&
+      signResult.marker_signed_at &&
+      signResult.witness_signed_at
+  );
+
+  const lockedAt = isFullySigned
+    ? lockResult.locked_at ?? new Date().toISOString()
+    : lockResult.locked_at;
+
   const updatedScorecard = await updateScorecardState({
     scorecard_id: input.scorecard_id,
     status: lockResult.nextStatus,
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked_at: lockResult.locked_at,
+    locked: isFullySigned,
+    locked_at: lockedAt,
   });
 
   const auditLog = createScorecardAuditLog({
@@ -143,6 +154,7 @@ export async function signScorecardAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
+      locked: isFullySigned,
     },
   });
 
@@ -156,6 +168,7 @@ export async function signScorecardAction(input: {
     marker_signed_at: updatedScorecard.marker_signed_at,
     witness_signed_at: updatedScorecard.witness_signed_at,
     locked_at: updatedScorecard.locked_at,
+    locked: isFullySigned,
     updatedScorecard,
     auditLog: savedAuditLog,
   };
@@ -212,13 +225,24 @@ export async function signScorecardByTokenAction(input: {
     actor_role: request.role,
   });
 
+  const isFullySigned = Boolean(
+    signResult.player_signed_at &&
+      signResult.marker_signed_at &&
+      signResult.witness_signed_at
+  );
+
+  const lockedAt = isFullySigned
+    ? lockResult.locked_at ?? new Date().toISOString()
+    : lockResult.locked_at;
+
   const updatedScorecard = await updateScorecardState({
     scorecard_id: request.scorecard_id,
     status: lockResult.nextStatus,
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked_at: lockResult.locked_at,
+    locked: isFullySigned,
+    locked_at: lockedAt,
   });
 
   await markSignatureRequestUsed({ token: input.token });
@@ -242,6 +266,7 @@ export async function signScorecardByTokenAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
+      locked: isFullySigned,
       token_used: true,
       remote_role: request.role,
     },
@@ -258,6 +283,7 @@ export async function signScorecardByTokenAction(input: {
     marker_signed_at: updatedScorecard.marker_signed_at,
     witness_signed_at: updatedScorecard.witness_signed_at,
     locked_at: updatedScorecard.locked_at,
+    locked: isFullySigned,
     updatedScorecard,
     auditLog: savedAuditLog,
   };
