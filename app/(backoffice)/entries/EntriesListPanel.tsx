@@ -11,14 +11,20 @@ import {
 import PlayerRowActions from "@/components/PlayerRowActions";
 import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
 
+type RoundSignature = {
+  round_no: number;
+  player_signed?: boolean | null;
+  marker_signed?: boolean | null;
+  witness_signed?: boolean | null;
+};
+
 type Entry = {
   id: string;
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
-  player_signed?: boolean | null;
-  marker_signed?: boolean | null;
+  round_signatures?: RoundSignature[] | null;
   players: {
     id: string;
     first_name: string | null;
@@ -68,34 +74,26 @@ function badgeLabel(status: string | null) {
   }
 }
 
-function signatureBadgeClass(
-  playerSigned: boolean | null | undefined,
-  markerSigned: boolean | null | undefined
-) {
-  if (playerSigned && markerSigned) {
-    return "border-green-300 bg-green-50 text-green-700";
-  }
-
-  if (playerSigned || markerSigned) {
-    return "border-amber-300 bg-amber-50 text-amber-700";
-  }
-
-  return "border-gray-300 bg-gray-50 text-gray-700";
+function getSignatureCount(sig?: RoundSignature | null) {
+  return (
+    (sig?.player_signed ? 1 : 0) +
+    (sig?.marker_signed ? 1 : 0) +
+    (sig?.witness_signed ? 1 : 0)
+  );
 }
 
-function signatureBadgeLabel(
-  playerSigned: boolean | null | undefined,
-  markerSigned: boolean | null | undefined
-) {
-  if (playerSigned && markerSigned) {
-    return "Firmado";
+function getBallClass(sig?: RoundSignature | null) {
+  const count = getSignatureCount(sig);
+
+  if (count >= 3) {
+    return "bg-green-600";
   }
 
-  if (playerSigned || markerSigned) {
-    return "Parcial";
+  if (count === 2) {
+    return "bg-blue-600";
   }
 
-  return "Pendiente";
+  return "bg-red-600";
 }
 
 const BTN_BASE =
@@ -150,9 +148,16 @@ export default function EntriesListPanel({
       const clubText = (e.players?.club_label ?? "").toLowerCase();
       const numberText = String(e.player_number ?? "");
       const statusText = String(e.status ?? "").toLowerCase();
-      const signatureText = `${e.player_signed ? "jugador firmado" : "jugador pendiente"} ${
-        e.marker_signed ? "marcador firmado" : "marcador pendiente"
-      }`.toLowerCase();
+
+      const roundsText = [1, 2, 3]
+        .map((roundNo) => {
+          const sig =
+            e.round_signatures?.find((r) => r.round_no === roundNo) ?? null;
+          const count = getSignatureCount(sig);
+          return `r${roundNo} ${count} firmas`;
+        })
+        .join(" ")
+        .toLowerCase();
 
       return (
         (!q ||
@@ -160,7 +165,7 @@ export default function EntriesListPanel({
           clubText.includes(q) ||
           numberText.includes(q) ||
           statusText.includes(q) ||
-          signatureText.includes(q)) &&
+          roundsText.includes(q)) &&
         (!club || e.players?.club_label === club) &&
         (!category || e.categories?.code === category)
       );
@@ -230,7 +235,7 @@ ${res.witness_url}`;
 
         <div className="flex flex-wrap items-center gap-1">
           <input
-            placeholder="#, nombre, club, estatus o firma..."
+            placeholder="#, nombre, club, estatus o ronda..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-7 min-w-[180px] rounded border px-2"
@@ -274,7 +279,7 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="px-1 py-1 text-left">Estado firma</th>
+              <th className="px-1 py-1 text-left">Firmas</th>
               <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
                 Acciones
               </th>
@@ -316,26 +321,30 @@ ${res.witness_url}`;
                   </td>
 
                   <td className="px-1 py-1">
-                    <div className="flex min-w-[126px] flex-col gap-1">
-                      <span
-                        className={`inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-semibold ${signatureBadgeClass(
-                          e.player_signed,
-                          e.marker_signed
-                        )}`}
-                      >
-                        {signatureBadgeLabel(e.player_signed, e.marker_signed)}
-                      </span>
+                    <div className="flex min-w-[114px] items-center justify-center gap-3">
+                      {[1, 2, 3].map((roundNo) => {
+                        const sig =
+                          e.round_signatures?.find(
+                            (r) => r.round_no === roundNo
+                          ) ?? null;
 
-                      <div className="text-[10px] leading-4 text-gray-700">
-                        J:{" "}
-                        <span className="font-semibold">
-                          {e.player_signed ? "✔" : "—"}
-                        </span>{" "}
-                        | M:{" "}
-                        <span className="font-semibold">
-                          {e.marker_signed ? "✔" : "—"}
-                        </span>
-                      </div>
+                        return (
+                          <div
+                            key={roundNo}
+                            className="flex flex-col items-center gap-1"
+                            title={`R${roundNo}: ${getSignatureCount(sig)} firma(s)`}
+                          >
+                            <span className="text-[9px] font-semibold text-gray-700">
+                              R{roundNo}
+                            </span>
+                            <span
+                              className={`block h-3 w-3 rounded-full ${getBallClass(
+                                sig
+                              )}`}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </td>
 
