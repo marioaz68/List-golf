@@ -68,6 +68,27 @@ type EntryCategoryRaw = {
   name: string | null;
 };
 
+type RoundRow = {
+  id: string;
+  round_no: number | null;
+};
+
+type ScorecardRow = {
+  id: string;
+  entry_id: string;
+  round_id: string;
+  player_signed: boolean | null;
+  marker_signed: boolean | null;
+  witness_signed: boolean | null;
+};
+
+type RoundSignature = {
+  round_no: number;
+  player_signed: boolean;
+  marker_signed: boolean;
+  witness_signed: boolean;
+};
+
 type EntryRowBase = {
   id: string;
   player_id: string;
@@ -84,6 +105,7 @@ type EntryRow = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  round_signatures: RoundSignature[];
   players: {
     id: string;
     first_name: string | null;
@@ -309,9 +331,58 @@ export default async function EntriesPage({
       throw new Error(`Error leyendo tournament_entries: ${entriesRes.error.message}`);
     }
 
-    entries = ((entriesRes.data ?? []) as unknown as EntryRowBase[]).map((e) => {
+    const entryRows = (entriesRes.data ?? []) as unknown as EntryRowBase[];
+    const entryIds = entryRows.map((e) => e.id);
+
+    const [roundsRes, scorecardsRes] = await Promise.all([
+      supabase
+        .from("rounds")
+        .select("id, round_no")
+        .eq("tournament_id", selectedTournamentId)
+        .order("round_no", { ascending: true }),
+      entryIds.length > 0
+        ? supabase
+            .from("scorecards")
+            .select(
+              "id, entry_id, round_id, player_signed, marker_signed, witness_signed"
+            )
+            .in("entry_id", entryIds)
+        : Promise.resolve({
+            data: [] as ScorecardRow[],
+            error: null,
+          }),
+    ]);
+
+    if (roundsRes.error) {
+      throw new Error(`Error leyendo rounds: ${roundsRes.error.message}`);
+    }
+
+    if (scorecardsRes.error) {
+      throw new Error(`Error leyendo scorecards: ${scorecardsRes.error.message}`);
+    }
+
+    const rounds = ((roundsRes.data ?? []) as RoundRow[])
+      .filter((r) => typeof r.round_no === "number")
+      .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0));
+
+    const scorecards = (scorecardsRes.data ?? []) as ScorecardRow[];
+
+    entries = entryRows.map((e) => {
       const player = oneOrNull(e.players);
       const category = oneOrNull(e.categories);
+
+      const round_signatures: RoundSignature[] = rounds.map((round) => {
+        const scorecard = scorecards.find(
+          (sc) => sc.entry_id === e.id && sc.round_id === round.id
+        );
+
+        return {
+          round_no: round.round_no ?? 0,
+          player_signed: Boolean(scorecard?.player_signed),
+          marker_signed: Boolean(scorecard?.marker_signed),
+          witness_signed: Boolean(scorecard?.witness_signed),
+        };
+      });
 
       return {
         id: e.id,
@@ -319,6 +390,7 @@ export default async function EntriesPage({
         player_number: e.player_number,
         handicap_index: e.handicap_index,
         status: e.status,
+        round_signatures,
         players: player
           ? {
               id: player.id,
