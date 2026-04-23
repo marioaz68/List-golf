@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import { assignCaddieAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,6 +29,11 @@ type PairingGroupRow = {
   tee_time: string | null;
 };
 
+type PairingGroupMemberRow = {
+  group_id: string;
+  entry_id: string;
+};
+
 type ClubRow = {
   id: string;
   name: string | null;
@@ -46,6 +52,7 @@ type CaddieRow = {
   notes: string | null;
   is_active: boolean | null;
   created_at: string | null;
+  level: string | null;
 };
 
 type EntryPlayerRow = {
@@ -153,6 +160,22 @@ const ghostButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const miniButtonStyle: React.CSSProperties = {
+  height: 28,
+  padding: "0 10px",
+  border: "1px solid #1f2937",
+  borderRadius: 8,
+  background: "#111827",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+};
+
 const tableWrapStyle: React.CSSProperties = {
   overflowX: "auto",
 };
@@ -221,6 +244,18 @@ const fieldStyle: React.CSSProperties = {
   minWidth: 0,
 };
 
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  minWidth: 170,
+  height: 32,
+  padding: "0 8px",
+  border: "1px solid #cbd5e1",
+  borderRadius: 8,
+  fontSize: 12,
+  background: "#fff",
+  color: "#0f172a",
+};
+
 const statsGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
@@ -279,6 +314,51 @@ const warnBadge: React.CSSProperties = {
   border: "1px solid #fecaca",
   background: "#fef2f2",
   color: "#991b1b",
+};
+
+const levelAdvancedBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  minWidth: 52,
+  padding: "0 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 800,
+  border: "1px solid #93c5fd",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+};
+
+const levelIntermediateBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  minWidth: 52,
+  padding: "0 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 800,
+  border: "1px solid #fca5a5",
+  background: "#fef2f2",
+  color: "#b91c1c",
+};
+
+const levelBeginnerBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  minWidth: 52,
+  padding: "0 10px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 800,
+  border: "1px solid #86efac",
+  background: "#f0fdf4",
+  color: "#15803d",
 };
 
 function getParam(sp: SP, key: string) {
@@ -352,6 +432,22 @@ function pairingGroupLabel(
   return `${hole} · ${time}`;
 }
 
+function renderLevelBadge(level: string | null) {
+  if (level === "advanced") {
+    return <span style={levelAdvancedBadge}>ADV</span>;
+  }
+
+  if (level === "intermediate") {
+    return <span style={levelIntermediateBadge}>INT</span>;
+  }
+
+  if (level === "beginner") {
+    return <span style={levelBeginnerBadge}>BEG</span>;
+  }
+
+  return <span style={{ fontSize: 12, color: "#64748b" }}>—</span>;
+}
+
 export default async function CaddiesPage({
   searchParams,
 }: {
@@ -367,6 +463,7 @@ export default async function CaddiesPage({
     tournamentsRes,
     roundsRes,
     pairingGroupsRes,
+    pairingGroupMembersRes,
     clubsRes,
     caddiesRes,
     entriesRes,
@@ -385,13 +482,16 @@ export default async function CaddiesPage({
       .select("id, round_id, starting_hole, tee_time")
       .order("tee_time", { ascending: true }),
     supabase
+      .from("pairing_group_members")
+      .select("group_id, entry_id"),
+    supabase
       .from("clubs")
       .select("id, name, short_name")
       .order("name", { ascending: true }),
     supabase
       .from("caddies")
       .select(
-        "id, first_name, last_name, phone, whatsapp_phone, whatsapp_phone_e164, email, club_id, notes, is_active, created_at"
+        "id, first_name, last_name, phone, whatsapp_phone, whatsapp_phone_e164, email, club_id, notes, is_active, created_at, level"
       )
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true }),
@@ -433,6 +533,12 @@ export default async function CaddiesPage({
     throw new Error(`Error leyendo pairing_groups: ${pairingGroupsRes.error.message}`);
   }
 
+  if (pairingGroupMembersRes.error) {
+    throw new Error(
+      `Error leyendo pairing_group_members: ${pairingGroupMembersRes.error.message}`
+    );
+  }
+
   if (clubsRes.error) {
     throw new Error(`Error leyendo clubs: ${clubsRes.error.message}`);
   }
@@ -452,6 +558,8 @@ export default async function CaddiesPage({
   const tournaments = (tournamentsRes.data ?? []) as TournamentRow[];
   const roundsAll = (roundsRes.data ?? []) as RoundRow[];
   const pairingGroupsAll = (pairingGroupsRes.data ?? []) as PairingGroupRow[];
+  const pairingGroupMembersAll = (pairingGroupMembersRes.data ??
+    []) as PairingGroupMemberRow[];
   const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
   const entriesAll = (entriesRes.data ?? []) as EntryRow[];
@@ -470,9 +578,7 @@ export default async function CaddiesPage({
   const pairingGroups = selectedRoundId
     ? pairingGroupsAll.filter((g) => g.round_id === selectedRoundId)
     : selectedTournamentId
-      ? pairingGroupsAll.filter((g) =>
-          rounds.some((r) => r.id === g.round_id)
-        )
+      ? pairingGroupsAll.filter((g) => rounds.some((r) => r.id === g.round_id))
       : pairingGroupsAll;
 
   const entries = selectedTournamentId
@@ -505,6 +611,56 @@ export default async function CaddiesPage({
   }
 
   const conflictCount = Array.from(groupedConflicts.values()).filter((n) => n > 1).length;
+
+  const currentAssignmentsByEntryRound = new Map<string, CaddieAssignmentRow>();
+  for (const a of assignmentsAll.filter((x) => x.is_active !== false)) {
+    const key = `${a.entry_id}_${a.round_id ?? ""}`;
+    if (!currentAssignmentsByEntryRound.has(key)) {
+      currentAssignmentsByEntryRound.set(key, a);
+    }
+  }
+
+  const assignmentCandidates =
+    selectedTournamentId && selectedRoundId
+      ? pairingGroupMembersAll
+          .map((member) => {
+            const group = pairingGroupsAll.find((g) => g.id === member.group_id);
+            if (!group || group.round_id !== selectedRoundId) return null;
+
+            const entry = entriesAll.find(
+              (e) => e.id === member.entry_id && e.tournament_id === selectedTournamentId
+            );
+            if (!entry) return null;
+
+            const currentAssignment =
+              currentAssignmentsByEntryRound.get(`${entry.id}_${selectedRoundId}`) ?? null;
+
+            return {
+              entry,
+              group,
+              currentAssignment,
+              currentCaddie:
+                currentAssignment?.caddie_id
+                  ? caddieMap.get(currentAssignment.caddie_id) ?? null
+                  : null,
+            };
+          })
+          .filter(
+            (
+              row
+            ): row is {
+              entry: EntryRow;
+              group: PairingGroupRow;
+              currentAssignment: CaddieAssignmentRow | null;
+              currentCaddie: CaddieRow | null;
+            } => !!row
+          )
+          .sort((a, b) => {
+            const aNum = a.entry.player_number ?? 999999;
+            const bNum = b.entry.player_number ?? 999999;
+            return aNum - bNum;
+          })
+      : [];
 
   return (
     <div style={pageWrap}>
@@ -632,6 +788,93 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
+            <h2 style={titleStyle}>ASIGNAR CADDIE POR RONDA</h2>
+            <p style={subStyle}>
+              Selecciona torneo y ronda para asignar marcador real por grupo y hora
+            </p>
+          </div>
+        </div>
+
+        {!selectedTournamentId || !selectedRoundId ? (
+          <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
+            Primero selecciona <strong>torneo</strong> y <strong>ronda</strong>.
+          </div>
+        ) : assignmentCandidates.length === 0 ? (
+          <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
+            No hay jugadores con grupo asignado en esa ronda.
+          </div>
+        ) : (
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Jugador</th>
+                  <th style={thStyle}>#</th>
+                  <th style={thStyle}>Cat</th>
+                  <th style={thStyle}>Grupo</th>
+                  <th style={thStyle}>Caddie actual</th>
+                  <th style={thStyle}>Asignar</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {assignmentCandidates.map((row) => (
+                  <tr key={`${row.entry.id}_${row.group.id}`}>
+                    <td style={tdStyle}>{displayEntryPlayerName(row.entry)}</td>
+                    <td style={tdStyle}>{row.entry.player_number ?? "—"}</td>
+                    <td style={tdStyle}>{displayEntryCategory(row.entry)}</td>
+                    <td style={tdStyle}>{pairingGroupLabel(row.group.id, pairingGroupsAll)}</td>
+                    <td style={tdStyle}>
+                      {row.currentCaddie ? displayCaddieName(row.currentCaddie) : "Sin asignar"}
+                    </td>
+                    <td style={tdStyle}>
+                      <form
+                        action={assignCaddieAction}
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <input type="hidden" name="tournament_id" value={selectedTournamentId} />
+                        <input type="hidden" name="entry_id" value={row.entry.id} />
+                        <input type="hidden" name="round_id" value={selectedRoundId} />
+                        <input type="hidden" name="pairing_group_id" value={row.group.id} />
+
+                        <select
+                          name="caddie_id"
+                          defaultValue={row.currentCaddie?.id ?? ""}
+                          style={selectStyle}
+                        >
+                          <option value="">Selecciona caddie</option>
+                          {caddies
+                            .filter((c) => c.is_active !== false)
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {displayCaddieName(c)}
+                                {c.level ? ` · ${c.level}` : ""}
+                                {c.phone ? ` · ${c.phone}` : ""}
+                              </option>
+                            ))}
+                        </select>
+
+                        <button type="submit" style={miniButtonStyle}>
+                          Guardar
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={cardStyle}>
+        <div style={cardHeader}>
+          <div>
             <h2 style={titleStyle}>CATÁLOGO DE CADDIES</h2>
             <p style={subStyle}>Vista base del padrón de caddies registrados</p>
           </div>
@@ -643,6 +886,7 @@ export default async function CaddiesPage({
               <tr>
                 <th style={thStyle}>Nombre</th>
                 <th style={thStyle}>Activo</th>
+                <th style={thStyle}>Nivel</th>
                 <th style={thStyle}>Teléfono</th>
                 <th style={thStyle}>WhatsApp</th>
                 <th style={thStyle}>Email</th>
@@ -654,7 +898,7 @@ export default async function CaddiesPage({
             <tbody>
               {caddies.length === 0 ? (
                 <tr>
-                  <td style={tdStyle} colSpan={7}>
+                  <td style={tdStyle} colSpan={8}>
                     No hay caddies registrados.
                   </td>
                 </tr>
@@ -673,6 +917,8 @@ export default async function CaddiesPage({
                         {c.is_active !== false ? "Sí" : "No"}
                       </span>
                     </td>
+
+                    <td style={tdStyle}>{renderLevelBadge(c.level)}</td>
 
                     <td style={tdStyle}>{c.phone ?? "—"}</td>
                     <td style={tdStyle}>
@@ -754,7 +1000,12 @@ export default async function CaddiesPage({
                       </td>
 
                       <td style={tdStyle}>
-                        {caddie ? displayCaddieName(caddie) : "—"}
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div>{caddie ? displayCaddieName(caddie) : "—"}</div>
+                          {caddie ? (
+                            <div>{renderLevelBadge(caddie.level)}</div>
+                          ) : null}
+                        </div>
                       </td>
 
                       <td style={tdStyle}>{a.role ?? "marker"}</td>
