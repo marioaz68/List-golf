@@ -9,6 +9,7 @@ import {
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
+import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
 
 type Entry = {
   id: string;
@@ -71,7 +72,7 @@ const BTN_BASE =
 const SLOT_SM = "w-[72px] shrink-0";
 const SLOT_MD = "w-[84px] shrink-0";
 const SLOT_EDIT = "w-[110px] shrink-0";
-const ACTIONS_COL = "min-w-[460px] w-[460px]";
+const ACTIONS_COL = "min-w-[560px] w-[560px]";
 
 export default function EntriesListPanel({
   entries,
@@ -152,6 +153,38 @@ export default function EntriesListPanel({
     });
   }
 
+  async function handleGenerateLinks(entryId: string) {
+    try {
+      const roundId =
+        new URLSearchParams(window.location.search).get("round_id") ?? "";
+
+      if (!roundId) {
+        alert("No se encontró round_id en la URL.");
+        return;
+      }
+
+      const res = await createScorecardWithTokensAction({
+        tournament_id: tournamentId,
+        round_id: roundId,
+        entry_id: entryId,
+      });
+
+      const msg = `Jugador:
+${res.player_url}
+
+Marcador:
+${res.marker_url}
+
+Testigo:
+${res.witness_url}`;
+
+      await navigator.clipboard.writeText(msg);
+      alert("Ligas copiadas al portapapeles");
+    } catch (err: any) {
+      alert(err?.message ?? "Error generando ligas");
+    }
+  }
+
   return (
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
@@ -196,7 +229,7 @@ export default function EntriesListPanel({
       </div>
 
       <div className="max-h-[560px] overflow-auto border">
-        <table className="min-w-[1080px] w-max whitespace-nowrap text-[11px]">
+        <table className="min-w-[1180px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -242,7 +275,18 @@ export default function EntriesListPanel({
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[460px] items-center gap-2 whitespace-nowrap overflow-x-auto">
+                    <div className="flex min-w-[560px] items-center gap-2 whitespace-nowrap overflow-x-auto">
+                      <div className={SLOT_MD}>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateLinks(e.id)}
+                          disabled={isPending}
+                          className="w-full h-7 rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
+                        >
+                          FIRMAS
+                        </button>
+                      </div>
+
                       <div
                         className={`${SLOT_MD} sticky left-0 z-20 bg-white pr-1 shadow-[2px_0_0_0_rgba(255,255,255,1)]`}
                       >
