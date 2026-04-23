@@ -73,13 +73,13 @@ type RoundRow = {
   round_no: number | null;
 };
 
+type ScorecardSignatureRaw = Record<string, unknown>;
+
 type ScorecardRow = {
   id: string;
-  entry_id: string;
-  round_id: string;
-  player_signed: boolean | null;
-  marker_signed: boolean | null;
-  witness_signed: boolean | null;
+  entry_id: string | null;
+  round_id: string | null;
+  scorecard_signatures?: ScorecardSignatureRaw[] | null;
 };
 
 type RoundSignature = {
@@ -191,6 +191,100 @@ function feedbackClasses(status: BulkStatus) {
     return "rounded border border-red-300 bg-red-50 px-3 py-2 text-[12px] text-red-800 shadow-sm";
   }
   return "hidden";
+}
+
+function normalizeRole(value: unknown): "player" | "marker" | "witness" | null {
+  if (typeof value !== "string") return null;
+
+  const v = value.trim().toLowerCase();
+
+  if (["player", "jugador", "player_signer"].includes(v)) return "player";
+  if (["marker", "marcador", "marker_signer"].includes(v)) return "marker";
+  if (["witness", "testigo", "witness_signer"].includes(v)) return "witness";
+
+  return null;
+}
+
+function signatureRole(sig: ScorecardSignatureRaw): "player" | "marker" | "witness" | null {
+  return (
+    normalizeRole(sig.role) ??
+    normalizeRole(sig.signer_role) ??
+    normalizeRole(sig.signature_role) ??
+    normalizeRole(sig.requested_role) ??
+    null
+  );
+}
+
+function signatureIsSigned(sig: ScorecardSignatureRaw): boolean {
+  const directBooleanKeys = [
+    "signed",
+    "is_signed",
+    "completed",
+    "is_completed",
+    "accepted",
+    "approved",
+    "is_approved",
+  ] as const;
+
+  for (const key of directBooleanKeys) {
+    const value = sig[key];
+    if (typeof value === "boolean") return value;
+  }
+
+  const dateLikeKeys = [
+    "signed_at",
+    "completed_at",
+    "accepted_at",
+    "approved_at",
+    "created_at",
+  ] as const;
+
+  for (const key of dateLikeKeys) {
+    const value = sig[key];
+    if (typeof value === "string" && value.trim()) return true;
+  }
+
+  const statusKeys = ["status", "state"] as const;
+
+  for (const key of statusKeys) {
+    const value = sig[key];
+    if (typeof value === "string") {
+      const v = value.trim().toLowerCase();
+      if (["signed", "completed", "complete", "done", "approved", "accepted"].includes(v)) {
+        return true;
+      }
+      if (["pending", "requested", "sent", "open"].includes(v)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function buildRoundSignatures(
+  entryId: string,
+  rounds: RoundRow[],
+  scorecards: ScorecardRow[]
+): RoundSignature[] {
+  return rounds.map((round) => {
+    const scorecard = scorecards.find(
+      (sc) => sc.entry_id === entryId && sc.round_id === round.id
+    );
+
+    const signatures = Array.isArray(scorecard?.scorecard_signatures)
+      ? scorecard!.scorecard_signatures!
+      : [];
+
+    const signedRows = signatures.filter(signatureIsSigned);
+
+    return {
+      round_no: round.round_no ?? 0,
+      player_signed: signedRows.some((sig) => signatureRole(sig) === "player"),
+      marker_signed: signedRows.some((sig) => signatureRole(sig) === "marker"),
+      witness_signed: signedRows.some((sig) => signatureRole(sig) === "witness"),
+    };
+  });
 }
 
 function HeaderBlock({
@@ -334,55 +428,43 @@ export default async function EntriesPage({
     const entryRows = (entriesRes.data ?? []) as unknown as EntryRowBase[];
     const entryIds = entryRows.map((e) => e.id);
 
-    const [roundsRes, scorecardsRes] = await Promise.all([
-      supabase
-        .from("rounds")
-        .select("id, round_no")
-        .eq("tournament_id", selectedTournamentId)
-        .order("round_no", { ascending: true }),
-      entryIds.length > 0
-        ? supabase
-            .from("scorecards")
-            .select(
-              "id, entry_id, round_id, player_signed, marker_signed, witness_signed"
-            )
-            .in("entry_id", entryIds)
-        : Promise.resolve({
-            data: [] as ScorecardRow[],
-            error: null,
-          }),
-    ]);
+    const roundsRes = await supabase
+      .from("rounds")
+      .select("id, round_no")
+      .eq("tournament_id", selectedTournamentId)
+      .order("round_no", { ascending: true });
 
     if (roundsRes.error) {
       throw new Error(`Error leyendo rounds: ${roundsRes.error.message}`);
-    }
-
-    if (scorecardsRes.error) {
-      throw new Error(`Error leyendo scorecards: ${scorecardsRes.error.message}`);
     }
 
     const rounds = ((roundsRes.data ?? []) as RoundRow[])
       .filter((r) => typeof r.round_no === "number")
       .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0));
 
-    const scorecards = (scorecardsRes.data ?? []) as ScorecardRow[];
+    let scorecards: ScorecardRow[] = [];
+
+    if (entryIds.length > 0) {
+      const scorecardsRes = await supabase
+        .from("scorecards")
+        .select(`
+          id,
+          entry_id,
+          round_id,
+          scorecard_signatures (*)
+        `)
+        .in("entry_id", entryIds);
+
+      if (scorecardsRes.error) {
+        throw new Error(`Error leyendo scorecards con firmas: ${scorecardsRes.error.message}`);
+      }
+
+      scorecards = (scorecardsRes.data ?? []) as unknown as ScorecardRow[];
+    }
 
     entries = entryRows.map((e) => {
       const player = oneOrNull(e.players);
       const category = oneOrNull(e.categories);
-
-      const round_signatures: RoundSignature[] = rounds.map((round) => {
-        const scorecard = scorecards.find(
-          (sc) => sc.entry_id === e.id && sc.round_id === round.id
-        );
-
-        return {
-          round_no: round.round_no ?? 0,
-          player_signed: Boolean(scorecard?.player_signed),
-          marker_signed: Boolean(scorecard?.marker_signed),
-          witness_signed: Boolean(scorecard?.witness_signed),
-        };
-      });
 
       return {
         id: e.id,
@@ -390,7 +472,7 @@ export default async function EntriesPage({
         player_number: e.player_number,
         handicap_index: e.handicap_index,
         status: e.status,
-        round_signatures,
+        round_signatures: buildRoundSignatures(e.id, rounds, scorecards),
         players: player
           ? {
               id: player.id,
