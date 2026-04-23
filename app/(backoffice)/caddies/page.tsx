@@ -21,6 +21,13 @@ type RoundRow = {
   round_date: string | null;
 };
 
+type PairingGroupRow = {
+  id: string;
+  round_id: string;
+  starting_hole: number | null;
+  tee_time: string | null;
+};
+
 type ClubRow = {
   id: string;
   name: string | null;
@@ -67,6 +74,7 @@ type CaddieAssignmentRow = {
   entry_id: string;
   caddie_id: string;
   round_id: string | null;
+  pairing_group_id: string | null;
   role: string | null;
   is_active: boolean | null;
   notes: string | null;
@@ -283,21 +291,17 @@ function oneOrNull<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-function normalizeText(value: string | null | undefined) {
-  return (value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
 function formatDate(value: string | null) {
   if (!value) return "—";
   const onlyDate = value.slice(0, 10);
   const [y, m, d] = onlyDate.split("-");
   if (!y || !m || !d) return onlyDate;
   return `${d}/${m}/${y}`;
+}
+
+function formatTime(value: string | null) {
+  if (!value) return "—";
+  return value.slice(0, 5);
 }
 
 function displayTournamentName(t: TournamentRow) {
@@ -327,14 +331,25 @@ function displayEntryCategory(entry: EntryRow) {
   return category?.code ?? category?.name ?? "—";
 }
 
-function assignmentRoundLabel(
-  roundId: string | null,
-  rounds: RoundRow[]
-) {
+function assignmentRoundLabel(roundId: string | null, rounds: RoundRow[]) {
   if (!roundId) return "Todas";
   const found = rounds.find((r) => r.id === roundId);
   if (!found) return "—";
   return `R${found.round_no ?? "?"}`;
+}
+
+function pairingGroupLabel(
+  pairingGroupId: string | null,
+  pairingGroups: PairingGroupRow[]
+) {
+  if (!pairingGroupId) return "—";
+  const found = pairingGroups.find((g) => g.id === pairingGroupId);
+  if (!found) return "—";
+
+  const hole = found.starting_hole != null ? `H${found.starting_hole}` : "H?";
+  const time = found.tee_time ? formatTime(found.tee_time) : "—";
+
+  return `${hole} · ${time}`;
 }
 
 export default async function CaddiesPage({
@@ -351,6 +366,7 @@ export default async function CaddiesPage({
   const [
     tournamentsRes,
     roundsRes,
+    pairingGroupsRes,
     clubsRes,
     caddiesRes,
     entriesRes,
@@ -364,6 +380,10 @@ export default async function CaddiesPage({
       .from("rounds")
       .select("id, tournament_id, round_no, round_date")
       .order("round_no", { ascending: true }),
+    supabase
+      .from("pairing_groups")
+      .select("id, round_id, starting_hole, tee_time")
+      .order("tee_time", { ascending: true }),
     supabase
       .from("clubs")
       .select("id, name, short_name")
@@ -396,7 +416,7 @@ export default async function CaddiesPage({
     supabase
       .from("caddie_assignments")
       .select(
-        "id, tournament_id, entry_id, caddie_id, round_id, role, is_active, notes, created_at"
+        "id, tournament_id, entry_id, caddie_id, round_id, pairing_group_id, role, is_active, notes, created_at"
       )
       .order("created_at", { ascending: false }),
   ]);
@@ -407,6 +427,10 @@ export default async function CaddiesPage({
 
   if (roundsRes.error) {
     throw new Error(`Error leyendo rounds: ${roundsRes.error.message}`);
+  }
+
+  if (pairingGroupsRes.error) {
+    throw new Error(`Error leyendo pairing_groups: ${pairingGroupsRes.error.message}`);
   }
 
   if (clubsRes.error) {
@@ -427,24 +451,29 @@ export default async function CaddiesPage({
 
   const tournaments = (tournamentsRes.data ?? []) as TournamentRow[];
   const roundsAll = (roundsRes.data ?? []) as RoundRow[];
+  const pairingGroupsAll = (pairingGroupsRes.data ?? []) as PairingGroupRow[];
   const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
   const entriesAll = (entriesRes.data ?? []) as EntryRow[];
   const assignmentsAll = (assignmentsRes.data ?? []) as CaddieAssignmentRow[];
 
-  const selectedTournamentId =
-    tournaments.some((t) => t.id === tournamentId)
-      ? tournamentId
-      : "";
+  const selectedTournamentId = tournaments.some((t) => t.id === tournamentId)
+    ? tournamentId
+    : "";
 
   const rounds = selectedTournamentId
     ? roundsAll.filter((r) => r.tournament_id === selectedTournamentId)
     : roundsAll;
 
-  const selectedRoundId =
-    rounds.some((r) => r.id === roundId)
-      ? roundId
-      : "";
+  const selectedRoundId = rounds.some((r) => r.id === roundId) ? roundId : "";
+
+  const pairingGroups = selectedRoundId
+    ? pairingGroupsAll.filter((g) => g.round_id === selectedRoundId)
+    : selectedTournamentId
+      ? pairingGroupsAll.filter((g) =>
+          rounds.some((r) => r.id === g.round_id)
+        )
+      : pairingGroupsAll;
 
   const entries = selectedTournamentId
     ? entriesAll.filter((e) => e.tournament_id === selectedTournamentId)
@@ -465,9 +494,17 @@ export default async function CaddiesPage({
   const tournamentMap = new Map(tournaments.map((t) => [t.id, t]));
 
   const activeCaddies = caddies.filter((c) => c.is_active !== false).length;
-  const inactiveCaddies = Math.max(caddies.length - activeCaddies, 0);
   const activeAssignments = assignmentsAll.filter((a) => a.is_active !== false).length;
-  const inactiveAssignments = Math.max(assignmentsAll.length - activeAssignments, 0);
+  const groupedConflicts = new Map<string, number>();
+
+  for (const a of assignmentsAll.filter(
+    (x) => x.is_active !== false && x.pairing_group_id
+  )) {
+    const key = `${a.caddie_id}_${a.round_id ?? ""}_${a.pairing_group_id ?? ""}`;
+    groupedConflicts.set(key, (groupedConflicts.get(key) ?? 0) + 1);
+  }
+
+  const conflictCount = Array.from(groupedConflicts.values()).filter((n) => n > 1).length;
 
   return (
     <div style={pageWrap}>
@@ -586,8 +623,8 @@ export default async function CaddiesPage({
           </div>
 
           <div style={statCardStyle}>
-            <p style={statLabelStyle}>Asignaciones inactivas</p>
-            <p style={statValueStyle}>{inactiveAssignments}</p>
+            <p style={statLabelStyle}>Conflictos grupo</p>
+            <p style={statValueStyle}>{conflictCount}</p>
           </div>
         </div>
       </div>
@@ -596,9 +633,7 @@ export default async function CaddiesPage({
         <div style={cardHeader}>
           <div>
             <h2 style={titleStyle}>CATÁLOGO DE CADDIES</h2>
-            <p style={subStyle}>
-              Vista base del padrón de caddies registrados
-            </p>
+            <p style={subStyle}>Vista base del padrón de caddies registrados</p>
           </div>
         </div>
 
@@ -659,7 +694,7 @@ export default async function CaddiesPage({
           <div>
             <h2 style={titleStyle}>ASIGNACIONES</h2>
             <p style={subStyle}>
-              Caddie asignado a jugador inscrito por torneo y ronda
+              Caddie asignado a jugador inscrito por torneo, ronda y grupo
             </p>
           </div>
         </div>
@@ -670,6 +705,7 @@ export default async function CaddiesPage({
               <tr>
                 <th style={thStyle}>Torneo</th>
                 <th style={thStyle}>Ronda</th>
+                <th style={thStyle}>Grupo</th>
                 <th style={thStyle}>Jugador</th>
                 <th style={thStyle}>#</th>
                 <th style={thStyle}>Cat</th>
@@ -683,7 +719,7 @@ export default async function CaddiesPage({
             <tbody>
               {assignments.length === 0 ? (
                 <tr>
-                  <td style={tdStyle} colSpan={9}>
+                  <td style={tdStyle} colSpan={10}>
                     No hay asignaciones para este filtro.
                   </td>
                 </tr>
@@ -701,6 +737,10 @@ export default async function CaddiesPage({
 
                       <td style={tdStyle}>
                         {assignmentRoundLabel(a.round_id, roundsAll)}
+                      </td>
+
+                      <td style={tdStyle}>
+                        {pairingGroupLabel(a.pairing_group_id, pairingGroupsAll)}
                       </td>
 
                       <td style={tdStyle}>
