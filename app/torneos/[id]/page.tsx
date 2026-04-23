@@ -800,6 +800,28 @@ const lockedScorecardMap = new Set(
     (sc) => `${sc.entry_id}_${sc.round_id}`
   )
 );
+const categoryStatusMap: Record<
+  string,
+  { total: number; closed: number }
+> = {};
+
+filteredEntries.forEach((entry) => {
+  const cat = entry.category?.code ?? "SIN CAT";
+
+  if (!categoryStatusMap[cat]) {
+    categoryStatusMap[cat] = { total: 0, closed: 0 };
+  }
+
+  categoryStatusMap[cat].total += 1;
+
+  const hasClosedRound = rounds.some((round) =>
+    lockedScorecardMap.has(`${entry.id}_${round.id}`)
+  );
+
+  if (hasClosedRound) {
+    categoryStatusMap[cat].closed += 1;
+  }
+});
   const leaderboardBase: LeaderboardRow[] = filteredEntries.map((entry, index) => {
     const playerName = [
       entry.player.first_name ?? "",
@@ -1496,6 +1518,25 @@ const lockedScorecardMap = new Set(
 
       <section className="bg-[#08111f]">
         <div className="mx-auto w-full max-w-[1600px] px-3 py-8 sm:px-4 lg:px-6 xl:px-8">
+          {view === "official" ? (
+  <div className="mb-4 flex flex-wrap gap-2">
+    {Object.entries(categoryStatusMap)
+      .sort((a, b) => a[0].localeCompare(b[0], "es", { sensitivity: "base" }))
+      .map(([cat, stats]) => {
+        const pending = Math.max(stats.total - stats.closed, 0);
+
+        return (
+          <div
+            key={cat}
+            className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-200"
+          >
+            {cat}: {stats.closed}/{stats.total} cerradas
+            {pending > 0 ? ` • faltan ${pending}` : " • completo"}
+          </div>
+        );
+      })}
+  </div>
+) : null}     
           {view === "favorites" ? (
             <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <FavoritesView
