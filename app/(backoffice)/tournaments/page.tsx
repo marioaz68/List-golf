@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { togglePublic, toggleArchive } from "./actions";
 import PosterUploadInline from "./PosterUploadInline";
 
@@ -495,6 +496,13 @@ export default async function TournamentsPage({
 
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const roles = user ? await getUserRoles(supabase, user.id) : [];
+  const isScoreCapture = roles.includes("score_capture");
+
   let tournamentsQuery = supabase
     .from("tournaments")
     .select(
@@ -588,9 +596,11 @@ export default async function TournamentsPage({
               Torneos públicos
             </Link>
 
-            <Link href="/tournaments/new" style={buttonStyle}>
-              Nuevo torneo
-            </Link>
+            {!isScoreCapture ? (
+              <Link href="/tournaments/new" style={buttonStyle}>
+                Nuevo torneo
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>
@@ -800,7 +810,11 @@ export default async function TournamentsPage({
 
                         <div style={{ minWidth: 0 }}>
                           <Link
-                            href={`/tournaments/edit?tournament_id=${t.id}`}
+                            href={
+                              isScoreCapture
+                                ? `/entries?tournament_id=${t.id}`
+                                : `/tournaments/edit?tournament_id=${t.id}`
+                            }
                             style={nameLinkStyle}
                           >
                             {displayTournamentName(t)}
@@ -818,14 +832,20 @@ export default async function TournamentsPage({
                     </td>
 
                     <td style={tdStyle}>
-                      <Link
-                        href={`/tournaments/edit?tournament_id=${t.id}`}
-                        style={{ textDecoration: "none" }}
-                      >
+                      {isScoreCapture ? (
                         <span style={statusBadge(t.status)}>
                           {t.status ?? "—"}
                         </span>
-                      </Link>
+                      ) : (
+                        <Link
+                          href={`/tournaments/edit?tournament_id=${t.id}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <span style={statusBadge(t.status)}>
+                            {t.status ?? "—"}
+                          </span>
+                        </Link>
+                      )}
                     </td>
 
                     <td style={tdStyle}>
@@ -902,12 +922,14 @@ export default async function TournamentsPage({
                           </Link>
                         ) : null}
 
-                        <Link
-                          href={`/tournaments/edit?tournament_id=${t.id}`}
-                          style={ghostButtonStyle}
-                        >
-                          Editar
-                        </Link>
+                        {!isScoreCapture ? (
+                          <Link
+                            href={`/tournaments/edit?tournament_id=${t.id}`}
+                            style={ghostButtonStyle}
+                          >
+                            Editar
+                          </Link>
+                        ) : null}
 
                         <Link
                           href={`/entries?tournament_id=${t.id}`}
@@ -923,28 +945,32 @@ export default async function TournamentsPage({
                           Scores
                         </Link>
 
-                        <PosterUploadInline
-                          tournamentId={t.id}
-                          hasPoster={Boolean(t.poster_path)}
-                        />
+                        {!isScoreCapture ? (
+                          <>
+                            <PosterUploadInline
+                              tournamentId={t.id}
+                              hasPoster={Boolean(t.poster_path)}
+                            />
 
-                        <form
-                          action={togglePublic.bind(null, t.id)}
-                          style={inlineFormStyle}
-                        >
-                          <button type="submit" style={miniActionButtonStyle}>
-                            {isPublic ? "Ocultar" : "Mostrar"}
-                          </button>
-                        </form>
+                            <form
+                              action={togglePublic.bind(null, t.id)}
+                              style={inlineFormStyle}
+                            >
+                              <button type="submit" style={miniActionButtonStyle}>
+                                {isPublic ? "Ocultar" : "Mostrar"}
+                              </button>
+                            </form>
 
-                        <form
-                          action={toggleArchive.bind(null, t.id)}
-                          style={inlineFormStyle}
-                        >
-                          <button type="submit" style={miniActionButtonStyle}>
-                            {isArchived ? "Reactivar" : "Archivar"}
-                          </button>
-                        </form>
+                            <form
+                              action={toggleArchive.bind(null, t.id)}
+                              style={inlineFormStyle}
+                            >
+                              <button type="submit" style={miniActionButtonStyle}>
+                                {isArchived ? "Reactivar" : "Archivar"}
+                              </button>
+                            </form>
+                          </>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
