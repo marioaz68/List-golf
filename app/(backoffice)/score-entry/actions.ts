@@ -129,6 +129,18 @@ async function getScorecardForEntryAndRound(
   return data;
 }
 
+async function canOverrideLockedScore(tournamentId: string) {
+  try {
+    await requireTournamentAccess({
+      tournamentId,
+      allowedRoles: ["super_admin", "club_admin", "tournament_director"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function savePlayerScores(
   _prevState: SaveScoresState,
   formData: FormData
@@ -170,8 +182,11 @@ export async function savePlayerScores(
     );
 
     const isLocked = Boolean(scorecard?.locked_at);
+    const canOverride = isLocked
+      ? await canOverrideLockedScore(tournamentId)
+      : false;
 
-    if (isLocked) {
+    if (isLocked && !canOverride) {
       return {
         ok: false,
         message: "Tarjeta cerrada. No se puede modificar.",
@@ -288,7 +303,9 @@ export async function savePlayerScores(
 
       return {
         ok: true,
-        message: "Se limpiaron los scores de esta ronda para el jugador.",
+        message: canOverride
+          ? "Administrador: se limpiaron los scores de una tarjeta cerrada."
+          : "Se limpiaron los scores de esta ronda para el jugador.",
       };
     }
 
@@ -343,7 +360,9 @@ export async function savePlayerScores(
 
     return {
       ok: true,
-      message: `Scores guardados correctamente (${grossScores.length} hoyos). Total: ${grossTotal}.`,
+      message: canOverride
+        ? `Administrador: se actualizó una tarjeta cerrada (${grossScores.length} hoyos). Total: ${grossTotal}.`
+        : `Scores guardados correctamente (${grossScores.length} hoyos). Total: ${grossTotal}.`,
     };
   } catch (err) {
     console.error("savePlayerScores ERROR:", err);
