@@ -110,6 +110,25 @@ async function getEntryIdForRoundAndPlayer(
   return String(entryData.id);
 }
 
+async function getScorecardForEntryAndRound(
+  admin: ReturnType<typeof getAdminClient>,
+  entryId: string,
+  roundId: string
+) {
+  const { data, error } = await admin
+    .from("scorecards")
+    .select("id, locked_at")
+    .eq("entry_id", entryId)
+    .eq("round_id", roundId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Error leyendo scorecard: ${supabaseErrText(error)}`);
+  }
+
+  return data;
+}
+
 export async function savePlayerScores(
   _prevState: SaveScoresState,
   formData: FormData
@@ -143,6 +162,21 @@ export async function savePlayerScores(
     });
 
     const entryId = await getEntryIdForRoundAndPlayer(admin, roundId, playerId);
+
+    const scorecard = await getScorecardForEntryAndRound(
+      admin,
+      entryId,
+      roundId
+    );
+
+    const isLocked = Boolean(scorecard?.locked_at);
+
+    if (isLocked) {
+      return {
+        ok: false,
+        message: "Tarjeta cerrada. No se puede modificar.",
+      };
+    }
 
     const grossScores: { hole_number: number; strokes: number }[] = [];
 
