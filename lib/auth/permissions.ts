@@ -3,6 +3,8 @@ export type AppRole =
   | "club_admin"
   | "tournament_director"
   | "score_capture"
+  | "entries_operator"
+  | "caddie_manager"
   | "checkin"
   | "viewer";
 
@@ -12,7 +14,8 @@ export type AppModule =
   | "tournaments-setup"
   | "entries"
   | "rounds"
-  | "score-entry";
+  | "score-entry"
+  | "caddies";
 
 export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
   users: ["super_admin", "club_admin", "tournament_director"],
@@ -22,6 +25,8 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "club_admin",
     "tournament_director",
     "score_capture",
+    "entries_operator",
+    "caddie_manager",
   ],
 
   "tournaments-setup": ["super_admin", "club_admin", "tournament_director"],
@@ -30,7 +35,9 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "super_admin",
     "club_admin",
     "tournament_director",
+    "entries_operator",
     "score_capture",
+    "caddie_manager",
     "checkin",
   ],
 
@@ -38,7 +45,9 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "super_admin",
     "club_admin",
     "tournament_director",
+    "entries_operator",
     "score_capture",
+    "caddie_manager",
   ],
 
   "score-entry": [
@@ -46,6 +55,13 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "club_admin",
     "tournament_director",
     "score_capture",
+  ],
+
+  caddies: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "caddie_manager",
   ],
 };
 
@@ -57,6 +73,8 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "club_admin",
     "tournament_director",
     "score_capture",
+    "entries_operator",
+    "caddie_manager",
     "checkin",
     "viewer",
   ];
@@ -71,6 +89,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/entries")) return "entries";
   if (pathname.startsWith("/rounds")) return "rounds";
   if (pathname.startsWith("/score-entry")) return "score-entry";
+  if (pathname.startsWith("/caddies")) return "caddies";
 
   return null;
 }
