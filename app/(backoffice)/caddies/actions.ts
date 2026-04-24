@@ -4,12 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 
-type PairingGroupRow = {
-  id: string;
-  tee_time: string | null;
-  round_id: string;
-};
-
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
@@ -41,87 +35,47 @@ export async function assignCaddieAction(formData: FormData) {
     throw new Error("Falta round_id");
   }
 
-  // 🔵 helper para guardar
-  async function saveAssignment() {
-    await supabase
-      .from("caddie_assignments")
-      .update({ is_active: false })
-      .eq("tournament_id", tournament_id)
-      .eq("entry_id", entry_id)
-      .eq("round_id", round_id)
-      .eq("is_active", true);
-
-    const { error } = await supabase.from("caddie_assignments").insert({
-      tournament_id,
-      entry_id,
-      caddie_id,
-      round_id,
-      pairing_group_id: pairing_group_id || null,
-      role: "marker",
-      is_active: true,
-    });
-
-    if (error) throw new Error(error.message);
-
-    revalidatePath("/caddies");
-    redirectBack(tournament_id, round_id);
-  }
-
-  // 🔵 SIN GRUPO
-  if (!pairing_group_id) {
-    await saveAssignment();
-  }
-
-  // 🔵 leer grupo
-  const { data: group } = await supabase
-    .from("pairing_groups")
-    .select("id, tee_time, round_id")
-    .eq("id", pairing_group_id)
-    .maybeSingle();
-
-  const currentGroup = group as PairingGroupRow | null;
-
-  // 🔵 SIN GRUPO REAL → permitir
-  if (!currentGroup) {
-    await saveAssignment();
-  }
-
-  // 🔵 SIN TEE TIME → permitir
-  if (!currentGroup?.tee_time) {
-    await saveAssignment();
-  }
-
-  // 🔴 validar conflicto SOLO si hay hora
-
-  const { data: sameTimeGroups } = await supabase
-    .from("pairing_groups")
-    .select("id")
-    .eq("round_id", round_id)
-    .eq("tee_time", currentGroup!.tee_time);
-
-  const groupIds = (sameTimeGroups ?? []).map((g) => g.id);
-
-  const { data: conflicts } = await supabase
+  const { data: conflicts, error: conflictError } = await supabase
     .from("caddie_assignments")
-    .select("entry_id")
+    .select("id, entry_id")
     .eq("tournament_id", tournament_id)
     .eq("caddie_id", caddie_id)
     .eq("round_id", round_id)
-    .eq("is_active", true)
-    .in("pairing_group_id", groupIds);
+    .eq("is_active", true);
+
+  if (conflictError) throw new Error(conflictError.message);
 
   const conflict = (conflicts ?? []).find((a) => a.entry_id !== entry_id);
 
   if (conflict) {
-    throw new Error("Conflicto: caddie ocupado en misma hora");
+    throw new Error("Este caddie ya está asignado en esta ronda");
   }
 
-  await saveAssignment();
-}
+  const { error: deactivateError } = await supabase
+    .from("caddie_assignments")
+    .update({ is_active: false })
+    .eq("tournament_id", tournament_id)
+    .eq("entry_id", entry_id)
+    .eq("round_id", round_id)
+    .eq("is_active", true);
 
-// =======================
-// BAJA
-// =======================
+  if (deactivateError) throw new Error(deactivateError.message);
+
+  const { error } = await supabase.from("caddie_assignments").insert({
+    tournament_id,
+    entry_id,
+    caddie_id,
+    round_id,
+    pairing_group_id: pairing_group_id || null,
+    role: "marker",
+    is_active: true,
+  });
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/caddies");
+  redirectBack(tournament_id, round_id);
+}
 
 export async function deactivateCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
@@ -137,10 +91,6 @@ export async function deactivateCaddieAction(formData: FormData) {
   revalidatePath("/caddies");
 }
 
-// =======================
-// REACTIVAR
-// =======================
-
 export async function activateCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
   const id = clean(formData.get("caddie_id"));
@@ -154,10 +104,6 @@ export async function activateCaddieAction(formData: FormData) {
 
   revalidatePath("/caddies");
 }
-
-// =======================
-// ELIMINAR
-// =======================
 
 export async function deleteCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
