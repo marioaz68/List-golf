@@ -16,21 +16,13 @@ function normalizeMxPhoneToE164(value: string) {
 
   if (!digits) return "";
 
-  if (digits.length === 10) {
-    return `+52${digits}`;
-  }
-
-  if (digits.length === 12 && digits.startsWith("52")) {
-    return `+${digits}`;
-  }
-
+  if (digits.length === 10) return `+52${digits}`;
+  if (digits.length === 12 && digits.startsWith("52")) return `+${digits}`;
   if (digits.length === 13 && digits.startsWith("521")) {
     return `+52${digits.slice(3)}`;
   }
 
-  if (value.trim().startsWith("+")) {
-    return value.trim();
-  }
+  if (value.trim().startsWith("+")) return value.trim();
 
   return `+${digits}`;
 }
@@ -50,13 +42,13 @@ export async function createCaddieAction(formData: FormData) {
   const level = clean(formData.get("level"));
   const notes = clean(formData.get("notes"));
 
-  if (!first_name) {
-    throw new Error("El nombre es obligatorio");
-  }
+  const favorite_player_ids = formData
+    .getAll("favorite_player_ids")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
 
-  if (!last_name) {
-    throw new Error("El apellido es obligatorio");
-  }
+  if (!first_name) throw new Error("El nombre es obligatorio");
+  if (!last_name) throw new Error("El apellido es obligatorio");
 
   const allowedLevels = ["advanced", "intermediate", "beginner", ""];
   if (!allowedLevels.includes(level)) {
@@ -64,8 +56,7 @@ export async function createCaddieAction(formData: FormData) {
   }
 
   const whatsapp_phone_e164 =
-    whatsapp_phone_e164_raw ||
-    normalizeMxPhoneToE164(whatsapp_phone || phone);
+    whatsapp_phone_e164_raw || normalizeMxPhoneToE164(whatsapp_phone || phone);
 
   if (whatsapp_phone_e164) {
     const { data: existingByWhatsapp, error: existingByWhatsappError } =
@@ -84,40 +75,59 @@ export async function createCaddieAction(formData: FormData) {
     }
   }
 
-  const { data: existingByNamePhone, error: existingByNamePhoneError } =
-    await supabase
-      .from("caddies")
-      .select("id")
-      .ilike("first_name", first_name)
-      .ilike("last_name", last_name)
-      .eq("phone", phone)
-      .maybeSingle();
+  if (phone) {
+    const { data: existingByNamePhone, error: existingByNamePhoneError } =
+      await supabase
+        .from("caddies")
+        .select("id")
+        .ilike("first_name", first_name)
+        .ilike("last_name", last_name)
+        .eq("phone", phone)
+        .maybeSingle();
 
-  if (existingByNamePhoneError) {
-    throw new Error(existingByNamePhoneError.message);
+    if (existingByNamePhoneError) {
+      throw new Error(existingByNamePhoneError.message);
+    }
+
+    if (existingByNamePhone) {
+      throw new Error("Ya existe un caddie con ese nombre y teléfono");
+    }
   }
 
-  if (existingByNamePhone) {
-    throw new Error("Ya existe un caddie con ese nombre y teléfono");
-  }
+  const { data: insertedCaddie, error } = await supabase
+    .from("caddies")
+    .insert({
+      first_name,
+      last_name,
+      nickname: nullable(nickname),
+      phone: nullable(phone),
+      telegram: nullable(telegram),
+      whatsapp_phone: nullable(whatsapp_phone || phone),
+      whatsapp_phone_e164: nullable(whatsapp_phone_e164),
+      email: nullable(email),
+      club_id: nullable(club_id),
+      level: nullable(level),
+      notes: nullable(notes),
+      is_active: true,
+    })
+    .select("id")
+    .single();
 
-  const { error } = await supabase.from("caddies").insert({
-    first_name,
-    last_name,
-    nickname: nullable(nickname),
-    phone: nullable(phone),
-    telegram: nullable(telegram),
-    whatsapp_phone: nullable(whatsapp_phone || phone),
-    whatsapp_phone_e164: nullable(whatsapp_phone_e164),
-    email: nullable(email),
-    club_id: nullable(club_id),
-    level: nullable(level),
-    notes: nullable(notes),
-    is_active: true,
-  });
+  if (error) throw new Error(error.message);
 
-  if (error) {
-    throw new Error(error.message);
+  if (favorite_player_ids.length > 0) {
+    const uniqueFavoritePlayerIds = Array.from(new Set(favorite_player_ids));
+
+    const rows = uniqueFavoritePlayerIds.map((player_id) => ({
+      caddie_id: insertedCaddie.id,
+      player_id,
+    }));
+
+    const { error: favoritesError } = await supabase
+      .from("caddie_favorite_players")
+      .insert(rows);
+
+    if (favoritesError) throw new Error(favoritesError.message);
   }
 
   revalidatePath("/caddies");

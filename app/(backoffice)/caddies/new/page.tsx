@@ -18,6 +18,12 @@ type ClubRow = {
   is_active?: boolean | null;
 };
 
+type PlayerRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+};
+
 type CaddieRow = {
   id: string;
   first_name: string | null;
@@ -328,6 +334,11 @@ function displayCaddiePrimary(c: CaddieRow) {
   return c.nickname?.trim() || displayCaddieName(c);
 }
 
+function displayPlayerName(p: PlayerRow) {
+  const full = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim();
+  return full || "Sin nombre";
+}
+
 function renderLevelDot(level: string | null) {
   if (level === "advanced") {
     return <span style={dotBlue} title="Avanzado" />;
@@ -347,7 +358,7 @@ function renderLevelDot(level: string | null) {
 export default async function NewCaddiePage() {
   const supabase = await createClient();
 
-  const [clubsRes, caddiesRes, assignmentCountsRes] = await Promise.all([
+  const [clubsRes, caddiesRes, assignmentCountsRes, playersRes] = await Promise.all([
     supabase
       .from("clubs")
       .select("id, name, short_name, is_active")
@@ -361,6 +372,11 @@ export default async function NewCaddiePage() {
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true }),
     supabase.from("caddie_assignments").select("id, caddie_id"),
+    supabase
+      .from("players")
+      .select("id, first_name, last_name")
+      .order("first_name", { ascending: true })
+      .order("last_name", { ascending: true }),
   ]);
 
   if (clubsRes.error) {
@@ -377,8 +393,13 @@ export default async function NewCaddiePage() {
     );
   }
 
+  if (playersRes.error) {
+    throw new Error(`Error leyendo players: ${playersRes.error.message}`);
+  }
+
   const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
+  const players = (playersRes.data ?? []) as PlayerRow[];
   const assignmentCountRows = (assignmentCountsRes.data ?? []) as {
     id: string;
     caddie_id: string;
@@ -399,7 +420,7 @@ export default async function NewCaddiePage() {
           <div>
             <h1 style={titleStyle}>NUEVO CADDIE</h1>
             <p style={subStyle}>
-              Alta de caddie con teléfono, Telegram, club y nivel operativo
+              Alta de caddie con teléfono, Telegram, club, nivel y jugadores favoritos
             </p>
           </div>
 
@@ -530,6 +551,63 @@ export default async function NewCaddiePage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div style={{ ...fieldWrapStyle, gridColumn: "span 12" }}>
+              <label style={labelStyle}>Jugadores favoritos</label>
+
+              <div
+                style={{
+                  maxHeight: 170,
+                  overflowY: "auto",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 8,
+                  padding: 8,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 6,
+                  background: "#fff",
+                }}
+              >
+                {players.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#64748b" }}>
+                    No hay jugadores registrados.
+                  </div>
+                ) : (
+                  players.map((p) => (
+                    <label
+                      key={p.id}
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        fontSize: 12,
+                        color: "#0f172a",
+                        minWidth: 0,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        name="favorite_player_ids"
+                        value={p.id}
+                      />
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {displayPlayerName(p)}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+
+              <div style={{ fontSize: 11, color: "#64748b" }}>
+                Estos jugadores aparecerán primero al asignar caddie.
+              </div>
             </div>
 
             <div style={{ ...fieldWrapStyle, gridColumn: "span 12" }}>
