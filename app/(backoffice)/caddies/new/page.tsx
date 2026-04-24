@@ -5,7 +5,11 @@ import CaddieClient from "@/components/CaddieClient";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/* ================= TYPES ================= */
+type ClubRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+};
 
 type CaddieRow = {
   id: string;
@@ -35,30 +39,21 @@ type FavoriteRow = {
   player_id: string;
 };
 
-/* ================= PAGE ================= */
-
 export default async function NewCaddiePage() {
   const supabase = await createClient();
 
-  const [caddiesRes, playersRes, favoritesRes] = await Promise.all([
+  const [clubsRes, caddiesRes, playersRes, favoritesRes] = await Promise.all([
+    supabase
+      .from("clubs")
+      .select("id, name, short_name")
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+
     supabase
       .from("caddies")
-      .select(`
-        id,
-        first_name,
-        last_name,
-        nickname,
-        phone,
-        telegram,
-        whatsapp_phone,
-        whatsapp_phone_e164,
-        email,
-        club_id,
-        notes,
-        is_active,
-        created_at,
-        level
-      `)
+      .select(
+        "id, first_name, last_name, nickname, phone, telegram, whatsapp_phone, whatsapp_phone_e164, email, club_id, notes, is_active, created_at, level"
+      )
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true }),
 
@@ -68,32 +63,20 @@ export default async function NewCaddiePage() {
       .order("first_name", { ascending: true })
       .order("last_name", { ascending: true }),
 
-    supabase
-      .from("caddie_favorites")
-      .select("caddie_id, player_id"),
+    supabase.from("caddie_favorites").select("caddie_id, player_id"),
   ]);
 
-  /* ================= ERROR HANDLING ================= */
-
-  if (caddiesRes.error) {
-    throw new Error(`Error leyendo caddies: ${caddiesRes.error.message}`);
-  }
-
-  if (playersRes.error) {
-    throw new Error(`Error leyendo players: ${playersRes.error.message}`);
-  }
-
+  if (clubsRes.error) throw new Error(`Error leyendo clubs: ${clubsRes.error.message}`);
+  if (caddiesRes.error) throw new Error(`Error leyendo caddies: ${caddiesRes.error.message}`);
+  if (playersRes.error) throw new Error(`Error leyendo players: ${playersRes.error.message}`);
   if (favoritesRes.error) {
     throw new Error(`Error leyendo favoritos: ${favoritesRes.error.message}`);
   }
 
-  /* ================= DATA ================= */
-
+  const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
   const players = (playersRes.data ?? []) as PlayerRow[];
   const favorites = (favoritesRes.data ?? []) as FavoriteRow[];
-
-  /* ================= MAP FAVORITES ================= */
 
   const favoriteIdsByCaddie: Record<string, string[]> = {};
 
@@ -104,14 +87,14 @@ export default async function NewCaddiePage() {
     favoriteIdsByCaddie[f.caddie_id].push(f.player_id);
   }
 
-  /* ================= UI ================= */
-
   return (
-    <div style={{ padding: 20, display: "grid", gap: 16 }}>
-      
-      {/* HEADER */}
+    <div style={{ padding: "16px 20px", display: "grid", gap: 14 }}>
       <div
         style={{
+          border: "1px solid #dbe2ea",
+          borderRadius: 12,
+          background: "#ffffff",
+          padding: "10px 12px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -119,21 +102,21 @@ export default async function NewCaddiePage() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0 }}>CADDIES</h1>
-          <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+          <h1 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#0f172a" }}>
+            CADDIES
+          </h1>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "2px 0 0 0" }}>
             Alta, edición y favoritos de caddies
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/caddies" style={{ fontSize: 12 }}>
-            Asignaciones
-          </Link>
-        </div>
+        <Link href="/caddies" style={{ fontSize: 12, color: "#0f172a" }}>
+          Asignaciones
+        </Link>
       </div>
 
-      {/* CLIENT APP */}
       <CaddieClient
+        clubs={clubs}
         caddies={caddies}
         players={players}
         initialSelectedCaddie={null}
