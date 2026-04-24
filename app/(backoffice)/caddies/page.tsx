@@ -7,6 +7,7 @@ import {
   deleteCaddieAction,
 } from "./actions";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { deleteCaddieAssignmentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -1122,65 +1123,7 @@ export default async function CaddiesPage({
               </tr>
             </thead>
 
-            <tbody>
-              {assignments.length === 0 ? (
-                <tr>
-                  <td style={tdStyle} colSpan={10}>
-                    No hay asignaciones para este filtro.
-                  </td>
-                </tr>
-              ) : (
-                assignments.map((a) => {
-                  const tournament = tournamentMap.get(a.tournament_id) ?? null;
-                  const entry = entryMap.get(a.entry_id) ?? null;
-                  const caddie = caddieMap.get(a.caddie_id) ?? null;
-
-                  return (
-                    <tr key={a.id}>
-                      <td style={tdStyle}>
-                        {tournament ? displayTournamentName(tournament) : "—"}
-                      </td>
-                      <td style={tdStyle}>{assignmentRoundLabel(a.round_id, roundsAll)}</td>
-                      <td style={tdStyle}>
-                        {pairingGroupLabel(a.pairing_group_id, pairingGroupsAll)}
-                      </td>
-                      <td style={tdStyle}>{entry ? displayEntryPlayerName(entry) : "—"}</td>
-                      <td style={tdStyle}>{entry?.player_number ?? "—"}</td>
-                      <td style={tdStyle}>{entry ? displayEntryCategory(entry) : "—"}</td>
-                      <td style={tdStyle}>
-                        {caddie ? (
-                          <div style={{ display: "grid", gap: 4 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                fontWeight: 700,
-                              }}
-                            >
-                              {renderLevelDot(caddie.level)}
-                              <span>{displayCaddiePrimary(caddie)}</span>
-                            </div>
-                            <div style={{ fontSize: 11, color: "#64748b" }}>
-                              {displayCaddieName(caddie)}
-                            </div>
-                          </div>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={tdStyle}>{a.role ?? "marker"}</td>
-                      <td style={tdStyle}>
-                        <span style={a.is_active !== false ? okBadge : warnBadge}>
-                          {a.is_active !== false ? "Sí" : "No"}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>{a.notes?.trim() || "—"}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
+            
           </table>
         </div>
       </div>

@@ -77,6 +77,28 @@ export async function assignCaddieAction(formData: FormData) {
   redirectBack(tournament_id, round_id);
 }
 
+export async function deleteCaddieAssignmentAction(formData: FormData) {
+  const supabase = createAdminClient();
+
+  const assignment_id = clean(formData.get("assignment_id"));
+  const tournament_id = clean(formData.get("tournament_id"));
+  const round_id = clean(formData.get("round_id"));
+
+  if (!assignment_id) {
+    throw new Error("Falta assignment_id");
+  }
+
+  const { error } = await supabase
+    .from("caddie_assignments")
+    .update({ is_active: false })
+    .eq("id", assignment_id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/caddies");
+  redirectBack(tournament_id, round_id);
+}
+
 export async function deactivateCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
   const id = clean(formData.get("caddie_id"));
