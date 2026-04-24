@@ -1,13 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import {
-  activateCaddieAction,
   assignCaddieAction,
-  deactivateCaddieAction,
-  deleteCaddieAction,
+  deleteCaddieAssignmentAction,
 } from "./actions";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { deleteCaddieAssignmentAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,12 +36,6 @@ type PairingGroupRow = {
 type PairingGroupMemberRow = {
   group_id: string;
   entry_id: string;
-};
-
-type ClubRow = {
-  id: string;
-  name: string | null;
-  short_name: string | null;
 };
 
 type CaddieRow = {
@@ -201,37 +192,6 @@ const dangerButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const warnButtonStyle: React.CSSProperties = {
-  height: 28,
-  padding: "0 10px",
-  border: "1px solid #cbd5e1",
-  borderRadius: 8,
-  background: "#fff",
-  color: "#0f172a",
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  whiteSpace: "nowrap",
-};
-
-const lockedButtonStyle: React.CSSProperties = {
-  height: 28,
-  padding: "0 10px",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
-  background: "#f8fafc",
-  color: "#94a3b8",
-  fontSize: 11,
-  fontWeight: 700,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  whiteSpace: "nowrap",
-};
-
 const currentCaddieBoxStyle: React.CSSProperties = {
   border: "1px solid #dbeafe",
   background: "#eff6ff",
@@ -353,36 +313,6 @@ const statValueStyle: React.CSSProperties = {
   margin: "6px 0 0 0",
 };
 
-const okBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 24,
-  minWidth: 44,
-  padding: "0 9px",
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 800,
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
-  color: "#166534",
-};
-
-const warnBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 24,
-  minWidth: 44,
-  padding: "0 9px",
-  borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 800,
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-};
-
 const dotBlue: React.CSSProperties = {
   width: 12,
   height: 12,
@@ -435,13 +365,6 @@ function formatTime(value: string | null) {
 
 function displayTournamentName(t: TournamentRow) {
   return t.short_name?.trim() || t.name || "—";
-}
-
-function displayClubName(clubId: string | null, clubs: ClubRow[]) {
-  if (!clubId) return "—";
-  const found = clubs.find((c) => c.id === clubId);
-  if (!found) return "—";
-  return found.short_name?.trim() || found.name || "—";
 }
 
 function displayCaddieName(c: CaddieRow) {
@@ -524,11 +447,9 @@ export default async function CaddiesPage({
     roundsRes,
     pairingGroupsRes,
     pairingGroupMembersRes,
-    clubsRes,
     caddiesRes,
     entriesRes,
     assignmentsRes,
-    assignmentCountsRes,
   ] = await Promise.all([
     supabase
       .from("tournaments")
@@ -543,7 +464,6 @@ export default async function CaddiesPage({
       .select("id, round_id, starting_hole, tee_time")
       .order("tee_time", { ascending: true }),
     supabase.from("pairing_group_members").select("group_id, entry_id"),
-    supabase.from("clubs").select("id, name, short_name").order("name", { ascending: true }),
     supabase
       .from("caddies")
       .select(
@@ -575,7 +495,6 @@ export default async function CaddiesPage({
         "id, tournament_id, entry_id, caddie_id, round_id, pairing_group_id, role, is_active, notes, created_at"
       )
       .order("created_at", { ascending: false }),
-    supabase.from("caddie_assignments").select("id, caddie_id"),
   ]);
 
   if (tournamentsRes.error) {
@@ -592,9 +511,6 @@ export default async function CaddiesPage({
       `Error leyendo pairing_group_members: ${pairingGroupMembersRes.error.message}`
     );
   }
-  if (clubsRes.error) {
-    throw new Error(`Error leyendo clubs: ${clubsRes.error.message}`);
-  }
   if (caddiesRes.error) {
     throw new Error(`Error leyendo caddies: ${caddiesRes.error.message}`);
   }
@@ -604,33 +520,15 @@ export default async function CaddiesPage({
   if (assignmentsRes.error) {
     throw new Error(`Error leyendo caddie_assignments: ${assignmentsRes.error.message}`);
   }
-  if (assignmentCountsRes.error) {
-    throw new Error(
-      `Error leyendo conteo de asignaciones: ${assignmentCountsRes.error.message}`
-    );
-  }
 
   const tournaments = (tournamentsRes.data ?? []) as TournamentRow[];
   const roundsAll = (roundsRes.data ?? []) as RoundRow[];
   const pairingGroupsAll = (pairingGroupsRes.data ?? []) as PairingGroupRow[];
   const pairingGroupMembersAll = (pairingGroupMembersRes.data ??
     []) as PairingGroupMemberRow[];
-  const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
   const entriesAll = (entriesRes.data ?? []) as EntryRow[];
   const assignmentsAll = (assignmentsRes.data ?? []) as CaddieAssignmentRow[];
-  const assignmentCountRows = (assignmentCountsRes.data ?? []) as {
-    id: string;
-    caddie_id: string;
-  }[];
-
-  const assignmentCountByCaddie = new Map<string, number>();
-  for (const row of assignmentCountRows) {
-    assignmentCountByCaddie.set(
-      row.caddie_id,
-      (assignmentCountByCaddie.get(row.caddie_id) ?? 0) + 1
-    );
-  }
 
   const selectedTournamentId = tournaments.some((t) => t.id === tournamentId)
     ? tournamentId
@@ -642,15 +540,13 @@ export default async function CaddiesPage({
 
   const selectedRoundId = rounds.some((r) => r.id === roundId) ? roundId : "";
 
-  const entries = selectedTournamentId
-    ? entriesAll.filter((e) => e.tournament_id === selectedTournamentId)
-    : entriesAll;
-
   const assignments = assignmentsAll.filter((a) => {
     if (selectedTournamentId && a.tournament_id !== selectedTournamentId) return false;
     if (selectedRoundId && a.round_id !== selectedRoundId) return false;
     return true;
   });
+
+  const activeAssignmentsForView = assignments.filter((a) => a.is_active !== false);
 
   const caddieMap = new Map(caddies.map((c) => [c.id, c]));
   const entryMap = new Map(entriesAll.map((e) => [e.id, e]));
@@ -658,6 +554,7 @@ export default async function CaddiesPage({
 
   const activeCaddies = caddies.filter((c) => c.is_active !== false).length;
   const activeAssignments = assignmentsAll.filter((a) => a.is_active !== false).length;
+
   const groupedConflicts = new Map<string, number>();
 
   for (const a of assignmentsAll.filter(
@@ -739,12 +636,12 @@ export default async function CaddiesPage({
         <div style={cardHeader}>
           <div>
             <h1 style={titleStyle}>CADDIES</h1>
-            <p style={subStyle}>Catálogo y asignación operativa de caddies por torneo</p>
+            <p style={subStyle}>Asignación operativa de caddies por torneo y ronda</p>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/caddies/new" style={buttonStyle}>
-              Nuevo caddie
+              Alta / Catálogo
             </Link>
             <Link href="/tournaments" style={ghostButtonStyle}>
               Torneos
@@ -970,139 +867,10 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h2 style={titleStyle}>CATÁLOGO DE CADDIES</h2>
-            <p style={subStyle}>
-              Si no tiene asignaciones se puede eliminar. Si ya tiene historial, usa baja.
-            </p>
-          </div>
-
-          <Link href="/caddies/new" style={buttonStyle}>
-            Nuevo caddie
-          </Link>
-        </div>
-
-        <div style={tableWrapStyle}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thStyle}>Caddie</th>
-                <th style={thStyle}>Activo</th>
-                <th style={thStyle}>Teléfono</th>
-                <th style={thStyle}>Telegram</th>
-                <th style={thStyle}>WhatsApp</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Club</th>
-                <th style={thStyle}>Asigs</th>
-                <th style={thStyle}>Notas</th>
-                <th style={thStyle}>Acciones</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {caddies.length === 0 ? (
-                <tr>
-                  <td style={tdStyle} colSpan={10}>
-                    No hay caddies registrados.
-                  </td>
-                </tr>
-              ) : (
-                caddies.map((c) => {
-                  const assignmentCount = assignmentCountByCaddie.get(c.id) ?? 0;
-                  const canDelete = assignmentCount === 0;
-
-                  return (
-                    <tr key={c.id}>
-                      <td style={tdStyle}>
-                        <div style={{ display: "grid", gap: 4 }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 8,
-                              fontWeight: 800,
-                            }}
-                          >
-                            {renderLevelDot(c.level)}
-                            <span>{displayCaddiePrimary(c)}</span>
-                          </div>
-
-                          <div style={{ fontSize: 11, color: "#64748b" }}>
-                            {displayCaddieName(c)}
-                          </div>
-
-                          <div style={{ fontSize: 11, color: "#94a3b8" }}>{c.id}</div>
-                        </div>
-                      </td>
-
-                      <td style={tdStyle}>
-                        <span style={c.is_active !== false ? okBadge : warnBadge}>
-                          {c.is_active !== false ? "Sí" : "No"}
-                        </span>
-                      </td>
-
-                      <td style={tdStyle}>{c.phone ?? "—"}</td>
-                      <td style={tdStyle}>{c.telegram ?? "—"}</td>
-                      <td style={tdStyle}>
-                        {c.whatsapp_phone_e164 ?? c.whatsapp_phone ?? "—"}
-                      </td>
-                      <td style={tdStyle}>{c.email ?? "—"}</td>
-                      <td style={tdStyle}>{displayClubName(c.club_id, clubs)}</td>
-                      <td style={tdStyle}>{assignmentCount}</td>
-                      <td style={tdStyle}>{c.notes?.trim() || "—"}</td>
-
-                      <td style={tdStyle}>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <Link href={`/caddies/${c.id}/edit`} style={ghostButtonStyle}>
-                            Editar
-                          </Link>
-
-                          {c.is_active !== false ? (
-                            <form action={deactivateCaddieAction}>
-                              <input type="hidden" name="caddie_id" value={c.id} />
-                              <button type="submit" style={warnButtonStyle}>
-                                Baja
-                              </button>
-                            </form>
-                          ) : (
-                            <form action={activateCaddieAction}>
-                              <input type="hidden" name="caddie_id" value={c.id} />
-                              <button type="submit" style={miniButtonStyle}>
-                                Reactivar
-                              </button>
-                            </form>
-                          )}
-
-                          {canDelete ? (
-                            <form action={deleteCaddieAction}>
-                              <input type="hidden" name="caddie_id" value={c.id} />
-                              <button type="submit" style={dangerButtonStyle}>
-                                Eliminar
-                              </button>
-                            </form>
-                          ) : (
-                            <span
-                              style={lockedButtonStyle}
-                              title="Tiene asignaciones. Usa Baja para conservar historial."
-                            >
-                              Con historial
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style={cardStyle}>
-        <div style={cardHeader}>
-          <div>
             <h2 style={titleStyle}>ASIGNACIONES</h2>
-            <p style={subStyle}>Caddie asignado a jugador inscrito por torneo, ronda y grupo</p>
+            <p style={subStyle}>
+              Solo se muestran asignaciones activas. Quitar conserva historial.
+            </p>
           </div>
         </div>
 
@@ -1117,13 +885,77 @@ export default async function CaddiesPage({
                 <th style={thStyle}>#</th>
                 <th style={thStyle}>Cat</th>
                 <th style={thStyle}>Caddie</th>
-                <th style={thStyle}>Rol</th>
-                <th style={thStyle}>Activo</th>
-                <th style={thStyle}>Notas</th>
+                <th style={thStyle}>Acciones</th>
               </tr>
             </thead>
 
-            
+            <tbody>
+              {activeAssignmentsForView.length === 0 ? (
+                <tr>
+                  <td style={tdStyle} colSpan={8}>
+                    No hay asignaciones activas para este filtro.
+                  </td>
+                </tr>
+              ) : (
+                activeAssignmentsForView.map((a) => {
+                  const tournament = tournamentMap.get(a.tournament_id) ?? null;
+                  const entry = entryMap.get(a.entry_id) ?? null;
+                  const caddie = caddieMap.get(a.caddie_id) ?? null;
+
+                  return (
+                    <tr key={a.id}>
+                      <td style={tdStyle}>
+                        {tournament ? displayTournamentName(tournament) : "—"}
+                      </td>
+                      <td style={tdStyle}>{assignmentRoundLabel(a.round_id, roundsAll)}</td>
+                      <td style={tdStyle}>
+                        {pairingGroupLabel(a.pairing_group_id, pairingGroupsAll)}
+                      </td>
+                      <td style={tdStyle}>{entry ? displayEntryPlayerName(entry) : "—"}</td>
+                      <td style={tdStyle}>{entry?.player_number ?? "—"}</td>
+                      <td style={tdStyle}>{entry ? displayEntryCategory(entry) : "—"}</td>
+                      <td style={tdStyle}>
+                        {caddie ? (
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {renderLevelDot(caddie.level)}
+                              <span>{displayCaddiePrimary(caddie)}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: "#64748b" }}>
+                              {displayCaddieName(caddie)}
+                            </div>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <form action={deleteCaddieAssignmentAction}>
+                          <input type="hidden" name="assignment_id" value={a.id} />
+                          <input
+                            type="hidden"
+                            name="tournament_id"
+                            value={selectedTournamentId}
+                          />
+                          <input type="hidden" name="round_id" value={selectedRoundId} />
+
+                          <button type="submit" style={dangerButtonStyle}>
+                            Quitar
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
           </table>
         </div>
       </div>
