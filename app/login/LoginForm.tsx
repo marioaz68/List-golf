@@ -74,7 +74,7 @@ export default function LoginForm() {
 
       <div className="mt-4 text-center">
         <Link
-          href="/forgot-password"
+          href="/login/forgot-password"
           className="text-sm font-medium text-gray-700 underline hover:text-black"
         >
           ¿Olvidaste tu contraseña?
