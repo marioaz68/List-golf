@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "./actions";
 
@@ -20,6 +21,7 @@ export default function LoginForm() {
       className="mx-auto max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
     >
       <h1 className="text-2xl font-bold text-gray-900">Iniciar sesión</h1>
+
       <p className="mt-1 text-sm text-gray-600">
         Entra con tu usuario de Supabase Auth.
       </p>
@@ -69,6 +71,15 @@ export default function LoginForm() {
       >
         {isPending ? "Entrando..." : "Entrar"}
       </button>
+
+      <div className="mt-4 text-center">
+        <Link
+          href="/forgot-password"
+          className="text-sm font-medium text-gray-700 underline hover:text-black"
+        >
+          ¿Olvidaste tu contraseña?
+        </Link>
+      </div>
     </form>
   );
 }

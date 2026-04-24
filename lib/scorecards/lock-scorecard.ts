@@ -7,6 +7,7 @@ type LockScorecardInput = {
   marker_signed_at?: string | null;
   witness_signed_at?: string | null;
   locked_at?: string | null;
+  actor_role?: "player" | "marker" | "witness" | "staff";
 };
 
 type LockScorecardResult = {
@@ -20,6 +21,8 @@ export function lockScorecard(
 ): LockScorecardResult {
   const hasPlayer = !!input.player_signed_at;
   const hasMarker = !!input.marker_signed_at;
+  const hasWitness = !!input.witness_signed_at;
+  const hasStaff = input.actor_role === "staff";
 
   if (input.locked_at) {
     return {
@@ -29,7 +32,13 @@ export function lockScorecard(
     };
   }
 
-  const allowed = canLockScorecard(input.status, hasPlayer, hasMarker);
+  const allowed = canLockScorecard(
+    input.status,
+    hasPlayer,
+    hasMarker,
+    hasWitness,
+    hasStaff
+  );
 
   if (!allowed) {
     return {

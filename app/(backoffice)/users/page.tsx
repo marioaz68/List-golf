@@ -226,6 +226,27 @@ function extractRoleCode(roleValue: any): string | null {
   return roleValue.code ?? null;
 }
 
+function formatRoleLabel(code: string) {
+  switch (code) {
+    case "super_admin":
+      return "Super Admin";
+    case "club_admin":
+      return "Club Admin";
+    case "tournament_director":
+      return "Tournament Director";
+    case "score_capture":
+      return "Score Capture";
+    case "entries_operator":
+      return "Entries Operator";
+    case "checkin":
+      return "Check-in";
+    case "viewer":
+      return "Viewer";
+    default:
+      return code;
+  }
+}
+
 export default async function UsersPage({
   searchParams,
 }: {
@@ -533,10 +554,10 @@ export default async function UsersPage({
 
   const clubRoleCodes = isSuperAdmin ? ["club_admin"] : [];
   const tournamentRoleCodes = isSuperAdmin
-    ? ["tournament_director", "score_capture", "checkin", "viewer"]
+    ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer"]
     : isClubAdmin
-      ? ["tournament_director", "score_capture", "checkin", "viewer"]
-      : ["score_capture", "checkin", "viewer"];
+      ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer"]
+      : ["score_capture", "entries_operator", "checkin", "viewer"];
 
   const { data: clubRoleOptions } = clubRoleCodes.length
     ? await supabase
@@ -590,6 +611,7 @@ export default async function UsersPage({
                   <th style={thStyle}>Usuario</th>
                   <th style={thStyle}>Datos</th>
                   <th style={thStyle}>Activo</th>
+                  <th style={thStyle}>Permisos global</th>
                   <th style={thStyle}>Permisos club</th>
                   <th style={thStyle}>Permisos torneo</th>
                 </tr>
@@ -598,7 +620,7 @@ export default async function UsersPage({
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} style={tdStyle}>
+                    <td colSpan={6} style={tdStyle}>
                       No hay usuarios visibles para este contexto.
                     </td>
                   </tr>
@@ -606,6 +628,9 @@ export default async function UsersPage({
                   filteredUsers.map((u: UserRow) => {
                     const clubRoles = clubRolesByUser.get(u.id) ?? [];
                     const tournamentRoles = tournamentRolesByUser.get(u.id) ?? [];
+                    const globalRoleCodes = Array.from(
+                      roleMap.get(u.id)?.global ?? new Set<string>()
+                    );
 
                     const filteredTournamentRoles = tournamentId
                       ? tournamentRoles.filter((r) => r.tournament_id === tournamentId)
@@ -670,6 +695,22 @@ export default async function UsersPage({
                           <span style={u.is_active ? okBadge : warnBadge}>
                             {u.is_active ? "Sí" : "No"}
                           </span>
+                        </td>
+
+                        <td style={tdStyle}>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minWidth: 150 }}>
+                            {globalRoleCodes.length === 0 ? (
+                              <span style={{ fontSize: 11, color: "#64748b" }}>
+                                Sin global
+                              </span>
+                            ) : (
+                              globalRoleCodes.map((code) => (
+                                <span key={code} style={okBadge}>
+                                  {formatRoleLabel(code)}
+                                </span>
+                              ))
+                            )}
+                          </div>
                         </td>
 
                         <td style={tdStyle}>

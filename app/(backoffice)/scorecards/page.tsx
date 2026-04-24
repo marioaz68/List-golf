@@ -8,12 +8,13 @@ import {
 import ScorecardPreview from "@/components/scorecards/ScorecardPreview";
 import MarkerSignForm from "@/components/scorecards/MarkerSignForm";
 import PlayerSignForm from "@/components/scorecards/PlayerSignForm";
+import WitnessSignForm from "@/components/scorecards/WitnessSignForm"; // 👈 NUEVO
 
 export const dynamic = "force-dynamic";
 
 const REAL_TOURNAMENT_ID = "eb492f19-b690-41f2-9adb-e31eb1a37a05";
 const REAL_ROUND_ID = "49b1548d-6085-4fea-8fee-ebbeccc50ed3";
-const REAL_ENTRY_ID = "177c684c-80e3-4f58-801a-20052707cd62";
+const REAL_ENTRY_ID = "456d6e4f-0f83-429c-8533-b376f93001f1";
 
 type HoleScoreRow = {
   id: string;
@@ -152,41 +153,8 @@ export default async function ScorecardsTestPage() {
           Scorecard real conectado a Supabase
         </h1>
         <p className="text-slate-600">
-          Firma digital completa: marcador + jugador. Solo permite firmar con 18 hoyos.
+          Firma digital completa: marcador + jugador + testigo.
         </p>
-      </section>
-
-      {/* INFO */}
-      <section className="rounded-lg border p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg bg-slate-100 p-3">
-            <div className="text-xs text-slate-500">Jugador</div>
-            <div className="font-semibold text-slate-900">
-              {fullName(player)}
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-slate-100 p-3">
-            <div className="text-xs text-slate-500">Tournament ID</div>
-            <div className="break-all font-mono text-[12px] text-slate-900">
-              {REAL_TOURNAMENT_ID}
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-slate-100 p-3">
-            <div className="text-xs text-slate-500">Round ID</div>
-            <div className="break-all font-mono text-[12px] text-slate-900">
-              {REAL_ROUND_ID}
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-slate-100 p-3">
-            <div className="text-xs text-slate-500">Entry ID</div>
-            <div className="break-all font-mono text-[12px] text-slate-900">
-              {REAL_ENTRY_ID}
-            </div>
-          </div>
-        </div>
       </section>
 
       {/* TARJETA */}
@@ -225,67 +193,33 @@ export default async function ScorecardsTestPage() {
         holes_played={summary.totals.holesPlayed}
       />
 
+      {/* 🔥 FIRMA TESTIGO (NUEVO) */}
+      <WitnessSignForm
+        scorecard_id={scorecard.id}
+        current_status={scorecard.status}
+        player_signed_at={scorecard.player_signed_at}
+        marker_signed_at={scorecard.marker_signed_at}
+        witness_signed_at={scorecard.witness_signed_at}
+        locked_at={scorecard.locked_at}
+        signer_name="Testigo Demo"
+        holes_played={summary.totals.holesPlayed}
+      />
+
       {/* LINK REMOTO */}
       <section className="rounded-lg border p-4">
         <h2 className="mb-2 font-semibold">Firma remota</h2>
 
         {remoteFullUrl ? (
           <div className="space-y-3">
-            <p className="text-slate-600">
-              Este link es el que puedes abrir o mandar por WhatsApp al jugador.
-            </p>
-
             <div className="rounded bg-slate-100 p-3 font-mono text-[12px] break-all text-slate-900">
               {remoteFullUrl}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={remoteFullUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded bg-black px-3 py-2 text-sm text-white"
-              >
-                Abrir firma remota
-              </a>
             </div>
           </div>
         ) : (
           <p className="text-slate-600">
-            No se generó link remoto porque el jugador ya firmó o la tarjeta ya está cerrada.
+            No se generó link remoto porque ya firmaron o está cerrada.
           </p>
         )}
-      </section>
-
-      {/* DEBUG */}
-      <section className="rounded-lg border p-4">
-        <h2 className="mb-2 font-semibold">Scorecard DB</h2>
-        <pre className="overflow-x-auto rounded bg-slate-100 p-3">
-          {JSON.stringify(scorecard, null, 2)}
-        </pre>
-      </section>
-
-      <section className="rounded-lg border p-4">
-        <h2 className="mb-2 font-semibold">Summary calculado</h2>
-        <pre className="overflow-x-auto rounded bg-slate-100 p-3">
-          {JSON.stringify(summary, null, 2)}
-        </pre>
-      </section>
-
-      <section className="rounded-lg border p-4">
-        <h2 className="mb-2 font-semibold">
-          Hole scores ({holeScores.length})
-        </h2>
-        <pre className="overflow-x-auto rounded bg-slate-100 p-3">
-          {JSON.stringify(holeScores, null, 2)}
-        </pre>
-      </section>
-
-      <section className="rounded-lg border p-4">
-        <h2 className="mb-2 font-semibold">Firmas ({signatures.length})</h2>
-        <pre className="overflow-x-auto rounded bg-slate-100 p-3">
-          {JSON.stringify(signatures, null, 2)}
-        </pre>
       </section>
     </main>
   );

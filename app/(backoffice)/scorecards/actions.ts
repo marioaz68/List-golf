@@ -112,7 +112,18 @@ export async function signScorecardAction(input: {
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
     locked_at: input.locked_at ?? null,
+    actor_role: input.role,
   });
+
+  const isFullySigned = Boolean(
+    signResult.player_signed_at &&
+      signResult.marker_signed_at &&
+      signResult.witness_signed_at
+  );
+
+  const lockedAt = isFullySigned
+    ? lockResult.locked_at ?? new Date().toISOString()
+    : lockResult.locked_at;
 
   const updatedScorecard = await updateScorecardState({
     scorecard_id: input.scorecard_id,
@@ -120,7 +131,7 @@ export async function signScorecardAction(input: {
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked_at: lockResult.locked_at,
+    locked_at: lockedAt,
   });
 
   const auditLog = createScorecardAuditLog({
@@ -142,6 +153,7 @@ export async function signScorecardAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
+      fully_signed: isFullySigned,
     },
   });
 
@@ -155,6 +167,7 @@ export async function signScorecardAction(input: {
     marker_signed_at: updatedScorecard.marker_signed_at,
     witness_signed_at: updatedScorecard.witness_signed_at,
     locked_at: updatedScorecard.locked_at,
+    locked: isFullySigned,
     updatedScorecard,
     auditLog: savedAuditLog,
   };
@@ -208,7 +221,18 @@ export async function signScorecardByTokenAction(input: {
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
     locked_at: input.locked_at ?? null,
+    actor_role: request.role,
   });
+
+  const isFullySigned = Boolean(
+    signResult.player_signed_at &&
+      signResult.marker_signed_at &&
+      signResult.witness_signed_at
+  );
+
+  const lockedAt = isFullySigned
+    ? lockResult.locked_at ?? new Date().toISOString()
+    : lockResult.locked_at;
 
   const updatedScorecard = await updateScorecardState({
     scorecard_id: request.scorecard_id,
@@ -216,7 +240,7 @@ export async function signScorecardByTokenAction(input: {
     player_signed_at: signResult.player_signed_at,
     marker_signed_at: signResult.marker_signed_at,
     witness_signed_at: signResult.witness_signed_at,
-    locked_at: lockResult.locked_at,
+    locked_at: lockedAt,
   });
 
   await markSignatureRequestUsed({ token: input.token });
@@ -240,6 +264,7 @@ export async function signScorecardByTokenAction(input: {
       marker_signed_at: updatedScorecard.marker_signed_at,
       witness_signed_at: updatedScorecard.witness_signed_at,
       locked_at: updatedScorecard.locked_at,
+      fully_signed: isFullySigned,
       token_used: true,
       remote_role: request.role,
     },
@@ -256,6 +281,7 @@ export async function signScorecardByTokenAction(input: {
     marker_signed_at: updatedScorecard.marker_signed_at,
     witness_signed_at: updatedScorecard.witness_signed_at,
     locked_at: updatedScorecard.locked_at,
+    locked: isFullySigned,
     updatedScorecard,
     auditLog: savedAuditLog,
   };
@@ -311,5 +337,48 @@ export async function disputeScorecardAction(input: {
     disputed_at: updatedScorecard.disputed_at,
     updatedScorecard,
     auditLog: savedAuditLog,
+  };
+}
+
+/**
+ * Crear scorecard + tokens de firma remota
+ */
+export async function createScorecardWithTokensAction(input: {
+  tournament_id: string;
+  round_id: string;
+  entry_id: string;
+}) {
+  const scorecard = await getOrCreateScorecard({
+    tournament_id: input.tournament_id,
+    round_id: input.round_id,
+    entry_id: input.entry_id,
+  });
+
+  const playerReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "player",
+  });
+
+  const markerReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "marker",
+  });
+
+  const witnessReq = await createSignatureRequest({
+    scorecard_id: scorecard.id,
+    role: "witness",
+  });
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL || "https://staging.listgolf.club";
+
+  return {
+    scorecard_id: scorecard.id,
+    player_token: playerReq.token,
+    marker_token: markerReq.token,
+    witness_token: witnessReq.token,
+    player_url: `${baseUrl}/sign/scorecard/${playerReq.token}`,
+    marker_url: `${baseUrl}/sign/scorecard/${markerReq.token}`,
+    witness_url: `${baseUrl}/sign/scorecard/${witnessReq.token}`,
   };
 }

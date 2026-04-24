@@ -134,7 +134,6 @@ export default function RemoteSignForm({
                   });
 
                   setDone(true);
-                  router.refresh();
                 } catch (error) {
                   console.error(error);
                   alert(

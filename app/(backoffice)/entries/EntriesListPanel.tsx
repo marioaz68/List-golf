@@ -9,6 +9,14 @@ import {
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
+import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
+
+type RoundSignature = {
+  round_no: number;
+  player_signed?: boolean | null;
+  marker_signed?: boolean | null;
+  witness_signed?: boolean | null;
+};
 
 type Entry = {
   id: string;
@@ -16,7 +24,9 @@ type Entry = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  round_signatures?: RoundSignature[] | null;
   players: {
+    id: string;
     first_name: string | null;
     last_name: string | null;
     club_label: string | null;
@@ -64,12 +74,35 @@ function badgeLabel(status: string | null) {
   }
 }
 
+function getSignatureCount(sig?: RoundSignature | null) {
+  return (
+    (sig?.player_signed ? 1 : 0) +
+    (sig?.marker_signed ? 1 : 0) +
+    (sig?.witness_signed ? 1 : 0)
+  );
+}
+
+function getBallClass(sig?: RoundSignature | null) {
+  const count = getSignatureCount(sig);
+
+  if (count >= 3) {
+    return "bg-green-600";
+  }
+
+  if (count === 2) {
+    return "bg-blue-600";
+  }
+
+  return "bg-red-600";
+}
+
 const BTN_BASE =
   "inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50";
 
-const SLOT_SM = "w-[66px] shrink-0";
-const SLOT_MD = "w-[76px] shrink-0";
-const SLOT_EDIT = "w-[76px] shrink-0";
+const SLOT_SM = "w-[72px] shrink-0";
+const SLOT_MD = "w-[84px] shrink-0";
+const SLOT_EDIT = "w-[110px] shrink-0";
+const ACTIONS_COL = "min-w-[560px] w-[560px]";
 
 export default function EntriesListPanel({
   entries,
@@ -116,12 +149,23 @@ export default function EntriesListPanel({
       const numberText = String(e.player_number ?? "");
       const statusText = String(e.status ?? "").toLowerCase();
 
+      const roundsText = [1, 2, 3]
+        .map((roundNo) => {
+          const sig =
+            e.round_signatures?.find((r) => r.round_no === roundNo) ?? null;
+          const count = getSignatureCount(sig);
+          return `r${roundNo} ${count} firmas`;
+        })
+        .join(" ")
+        .toLowerCase();
+
       return (
         (!q ||
           name.includes(q) ||
           clubText.includes(q) ||
           numberText.includes(q) ||
-          statusText.includes(q)) &&
+          statusText.includes(q) ||
+          roundsText.includes(q)) &&
         (!club || e.players?.club_label === club) &&
         (!category || e.categories?.code === category)
       );
@@ -150,6 +194,38 @@ export default function EntriesListPanel({
     });
   }
 
+  async function handleGenerateLinks(entryId: string) {
+    try {
+      const roundId =
+        new URLSearchParams(window.location.search).get("round_id") ?? "";
+
+      if (!roundId) {
+        alert("No se encontró round_id en la URL.");
+        return;
+      }
+
+      const res = await createScorecardWithTokensAction({
+        tournament_id: tournamentId,
+        round_id: roundId,
+        entry_id: entryId,
+      });
+
+      const msg = `Jugador:
+${res.player_url}
+
+Marcador:
+${res.marker_url}
+
+Testigo:
+${res.witness_url}`;
+
+      await navigator.clipboard.writeText(msg);
+      alert("Ligas copiadas al portapapeles");
+    } catch (err: any) {
+      alert(err?.message ?? "Error generando ligas");
+    }
+  }
+
   return (
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
@@ -159,7 +235,7 @@ export default function EntriesListPanel({
 
         <div className="flex flex-wrap items-center gap-1">
           <input
-            placeholder="#, nombre, club o estatus..."
+            placeholder="#, nombre, club, estatus o ronda..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-7 min-w-[180px] rounded border px-2"
@@ -194,7 +270,7 @@ export default function EntriesListPanel({
       </div>
 
       <div className="max-h-[560px] overflow-auto border">
-        <table className="w-full text-[11px] whitespace-nowrap">
+        <table className="min-w-[1320px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
               <th className="px-1 py-1 text-left">#</th>
@@ -203,7 +279,10 @@ export default function EntriesListPanel({
               <th className="px-1 py-1 text-left">Hcp</th>
               <th className="px-1 py-1 text-left">Cat</th>
               <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="px-1 py-1 text-left w-[370px]">Acciones</th>
+              <th className="px-1 py-1 text-left">Firmas</th>
+              <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
+                Acciones
+              </th>
             </tr>
           </thead>
 
@@ -219,10 +298,16 @@ export default function EntriesListPanel({
 
               return (
                 <tr key={e.id} className="border-t align-middle">
-                  <td className="px-1 py-1 font-semibold">{e.player_number ?? "-"}</td>
+                  <td className="px-1 py-1 font-semibold">
+                    {e.player_number ?? "-"}
+                  </td>
+
                   <td className="px-1 py-1">{fullName}</td>
+
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
+
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
+
                   <td className="px-1 py-1">{e.categories?.code ?? "-"}</td>
 
                   <td className="px-1 py-1">
@@ -236,7 +321,65 @@ export default function EntriesListPanel({
                   </td>
 
                   <td className="px-1 py-1">
-                    <div className="flex items-center gap-2 whitespace-nowrap">
+                    <div className="flex min-w-[114px] items-center justify-center gap-3">
+                      {[1, 2, 3].map((roundNo) => {
+                        const sig =
+                          e.round_signatures?.find(
+                            (r) => r.round_no === roundNo
+                          ) ?? null;
+
+                        return (
+                          <div
+                            key={roundNo}
+                            className="flex flex-col items-center gap-1"
+                            title={`R${roundNo}: ${getSignatureCount(sig)} firma(s)`}
+                          >
+                            <span className="text-[9px] font-semibold text-gray-700">
+                              R{roundNo}
+                            </span>
+                            <span
+                              className={`block h-3 w-3 rounded-full ${getBallClass(
+                                sig
+                              )}`}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </td>
+
+                  <td className={`${ACTIONS_COL} px-1 py-1`}>
+                    <div className="flex min-w-[560px] items-center gap-2 overflow-x-auto whitespace-nowrap">
+                      <div className={SLOT_MD}>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateLinks(e.id)}
+                          disabled={isPending}
+                          className="h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
+                        >
+                          FIRMAS
+                        </button>
+                      </div>
+
+                      <div
+                        className={`${SLOT_MD} sticky left-0 z-20 bg-white pr-1 shadow-[2px_0_0_0_rgba(255,255,255,1)]`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            runAction(
+                              deleteEntry,
+                              e.id,
+                              "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados."
+                            )
+                          }
+                          disabled={isPending}
+                          className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
+                        >
+                          ELIMINAR
+                        </button>
+                      </div>
+
                       <div className={SLOT_SM}>
                         {isWithdrawn ? (
                           <button
@@ -307,22 +450,24 @@ export default function EntriesListPanel({
 
                       <div className={SLOT_EDIT}>
                         <PlayerRowActions
+                          tournamentId={tournamentId}
                           player={
                             e.players
                               ? {
-                                  id: e.player_id,
-                                  first_name: e.players.first_name ?? null,
-                                  last_name: e.players.last_name ?? null,
+                                  id: e.players.id,
+                                  first_name: e.players.first_name,
+                                  last_name: e.players.last_name,
                                   initials: e.players.initials ?? null,
                                   gender: e.players.gender ?? null,
-                                  handicap_index: e.players.handicap_index ?? null,
-                                  handicap_torneo: e.players.handicap_torneo ?? null,
+                                  handicap_index:
+                                    e.players.handicap_index ?? null,
+                                  handicap_torneo:
+                                    e.handicap_index ??
+                                    e.players.handicap_torneo ??
+                                    null,
                                   phone: e.players.phone ?? null,
                                   email: e.players.email ?? null,
-                                  club:
-                                    e.players.club_label ??
-                                    e.players.club ??
-                                    null,
+                                  club: e.players.club ?? null,
                                   club_id: e.players.club_id ?? null,
                                   ghin_number: e.players.ghin_number ?? null,
                                   shirt_size: e.players.shirt_size ?? null,
@@ -332,36 +477,19 @@ export default function EntriesListPanel({
                           }
                         />
                       </div>
-
-                      <div className={SLOT_MD}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            runAction(
-                              deleteEntry,
-                              e.id,
-                              "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados. Si ya tiene scores reales, deberás usar DQ."
-                            )
-                          }
-                          disabled={isPending}
-                          className={`${BTN_BASE} w-full border-black bg-black`}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
                     </div>
                   </td>
                 </tr>
               );
             })}
 
-            {filtered.length === 0 && (
+            {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-2 text-gray-600">
+                <td colSpan={8} className="p-2 text-gray-600">
                   Sin resultados
                 </td>
               </tr>
-            )}
+            ) : null}
           </tbody>
         </table>
       </div>
