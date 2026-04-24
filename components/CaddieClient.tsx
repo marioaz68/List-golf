@@ -2,8 +2,6 @@
 
 import { useState, useMemo } from "react";
 
-/* ================= TYPES ================= */
-
 type Caddie = {
   id: string;
   first_name: string | null;
@@ -24,8 +22,6 @@ type Props = {
   initialSelectedCaddie: Caddie | null;
   favoriteIdsByCaddie: Record<string, string[]>;
 };
-
-/* ================= COMPONENT ================= */
 
 export default function CaddieClient({
   caddies,
@@ -59,18 +55,31 @@ export default function CaddieClient({
   }, [selected, favoriteIdsByCaddie]);
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
+    <div style={{ display: "grid", gap: 16 }}>
       
-      {/* 🔍 BUSCAR CADDIE */}
+      {/* 🔍 BUSCADOR CADDIE */}
       <input
         placeholder="Buscar caddie..."
         value={searchCaddie}
         onChange={(e) => setSearchCaddie(e.target.value)}
-        style={{ width: "100%", height: 40 }}
+        style={{
+          height: 36,
+          padding: "0 10px",
+          borderRadius: 8,
+          border: "1px solid #cbd5e1",
+        }}
       />
 
-      {/* LISTA CADDIES */}
-      <div style={{ maxHeight: 200, overflow: "auto" }}>
+      {/* LISTA */}
+      <div
+        style={{
+          maxHeight: 200,
+          overflow: "auto",
+          border: "1px solid #334155",
+          borderRadius: 8,
+          background: "#0f172a",
+        }}
+      >
         {filteredCaddies.map((c) => (
           <div
             key={c.id}
@@ -78,7 +87,10 @@ export default function CaddieClient({
             style={{
               padding: 8,
               cursor: "pointer",
-              background: selected?.id === c.id ? "#e0f2fe" : "white",
+              borderBottom: "1px solid #1e293b",
+              background:
+                selected?.id === c.id ? "#1e40af" : "transparent",
+              color: "#fff",
             }}
           >
             {c.nickname || `${c.first_name} ${c.last_name}`}
@@ -86,21 +98,45 @@ export default function CaddieClient({
         ))}
       </div>
 
-      {/* 🔵 FAVORITOS */}
+      {/* FAVORITOS */}
       {selected && (
-        <div>
-          <h3>Favoritos de {selected.nickname}</h3>
+        <div
+          style={{
+            border: "1px solid #334155",
+            borderRadius: 8,
+            padding: 12,
+            background: "#020617",
+          }}
+        >
+          <h3 style={{ margin: 0, marginBottom: 10 }}>
+            Favoritos de {selected.nickname || selected.first_name}
+          </h3>
 
           <input
             placeholder="Buscar jugador..."
             value={searchPlayer}
             onChange={(e) => setSearchPlayer(e.target.value)}
-            style={{ width: "100%", height: 40 }}
+            style={{
+              height: 36,
+              padding: "0 10px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              marginBottom: 10,
+              width: "100%",
+            }}
           />
 
-          <div style={{ maxHeight: 300, overflow: "auto" }}>
+          <div style={{ maxHeight: 250, overflow: "auto" }}>
             {filteredPlayers.map((p) => (
-              <label key={p.id} style={{ display: "block" }}>
+              <label
+                key={p.id}
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  padding: 6,
+                  color: "#fff",
+                }}
+              >
                 <input
                   type="checkbox"
                   defaultChecked={selectedFavorites.has(p.id)}
