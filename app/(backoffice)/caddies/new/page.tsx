@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { createCaddieAction } from "./actions";
+import SubmitButton from "./SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -312,9 +313,7 @@ export default async function NewCaddiePage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="submit" style={buttonStyle}>
-              Guardar caddie
-            </button>
+          <SubmitButton />
 
             <Link href="/caddies" style={ghostButtonStyle}>
               Cancelar
