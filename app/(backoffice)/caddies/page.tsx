@@ -6,6 +6,7 @@ import {
   deactivateCaddieAction,
   deleteCaddieAction,
 } from "./actions";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -498,6 +499,7 @@ export default async function CaddiesPage({
   const roundId = String(getParam(sp, "round_id") ?? "").trim();
 
   const supabase = await createClient();
+  const supabaseAdmin = createAdminClient();
 
   const [
     tournamentsRes,
@@ -549,8 +551,8 @@ export default async function CaddiesPage({
         )
       `)
       .order("player_number", { ascending: true, nullsFirst: false }),
-    supabase
-      .from("caddie_assignments")
+    supabaseAdmin
+  .from("caddie_assignments")
       .select(
         "id, tournament_id, entry_id, caddie_id, round_id, pairing_group_id, role, is_active, notes, created_at"
       )
