@@ -17,14 +17,18 @@ type ExistingAssignmentRow = {
   is_active: boolean | null;
 };
 
+function clean(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
+}
+
 export async function assignCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
 
-  const tournament_id = String(formData.get("tournament_id") ?? "").trim();
-  const entry_id = String(formData.get("entry_id") ?? "").trim();
-  const caddie_id = String(formData.get("caddie_id") ?? "").trim();
-  const round_id = String(formData.get("round_id") ?? "").trim();
-  const pairing_group_id = String(formData.get("pairing_group_id") ?? "").trim();
+  const tournament_id = clean(formData.get("tournament_id"));
+  const entry_id = clean(formData.get("entry_id"));
+  const caddie_id = clean(formData.get("caddie_id"));
+  const round_id = clean(formData.get("round_id"));
+  const pairing_group_id = clean(formData.get("pairing_group_id"));
 
   if (!tournament_id || !entry_id || !caddie_id) {
     throw new Error("Datos incompletos para asignación");
@@ -38,12 +42,11 @@ export async function assignCaddieAction(formData: FormData) {
     throw new Error("Falta pairing_group_id para validar horario del caddie");
   }
 
-  // 1) Leer el grupo actual para obtener su tee_time
   const { data: currentGroup, error: currentGroupError } = await supabase
     .from("pairing_groups")
     .select("id, tee_time, round_id")
     .eq("id", pairing_group_id)
-    .single();
+    .maybeSingle();
 
   if (currentGroupError) {
     throw new Error(`No se pudo leer el grupo actual: ${currentGroupError.message}`);
@@ -52,14 +55,13 @@ export async function assignCaddieAction(formData: FormData) {
   const currentPairingGroup = currentGroup as PairingGroupRow | null;
 
   if (!currentPairingGroup) {
-    throw new Error("No se encontró el grupo actual");
+    throw new Error("El grupo actual no existe");
   }
 
   if (!currentPairingGroup.tee_time) {
     throw new Error("El grupo actual no tiene tee_time; no se puede validar conflicto");
   }
 
-  // 2) Buscar todos los grupos de la misma ronda y misma hora
   const { data: sameTimeGroupsData, error: sameTimeGroupsError } = await supabase
     .from("pairing_groups")
     .select("id, tee_time, round_id")
@@ -77,7 +79,6 @@ export async function assignCaddieAction(formData: FormData) {
     throw new Error("No se encontraron grupos para validar conflicto de horario");
   }
 
-  // 3) Revisar si ese caddie ya está activo en otro grupo de la misma ronda y misma hora
   const { data: conflictingAssignmentsData, error: conflictingAssignmentsError } =
     await supabase
       .from("caddie_assignments")
@@ -109,7 +110,6 @@ export async function assignCaddieAction(formData: FormData) {
     );
   }
 
-  // 4) Desactivar asignaciones previas de ese entry en ese torneo/ronda
   await supabase
     .from("caddie_assignments")
     .update({ is_active: false })
@@ -118,7 +118,6 @@ export async function assignCaddieAction(formData: FormData) {
     .eq("round_id", round_id)
     .eq("is_active", true);
 
-  // 5) Crear nueva asignación
   const { error } = await supabase.from("caddie_assignments").insert({
     tournament_id,
     entry_id,
@@ -128,6 +127,78 @@ export async function assignCaddieAction(formData: FormData) {
     role: "marker",
     is_active: true,
   });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/caddies");
+}
+
+export async function deactivateCaddieAction(formData: FormData) {
+  const supabase = createAdminClient();
+  const caddieId = clean(formData.get("caddie_id"));
+
+  if (!caddieId) {
+    throw new Error("Falta caddie_id");
+  }
+
+  const { error } = await supabase
+    .from("caddies")
+    .update({ is_active: false })
+    .eq("id", caddieId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/caddies");
+}
+
+export async function activateCaddieAction(formData: FormData) {
+  const supabase = createAdminClient();
+  const caddieId = clean(formData.get("caddie_id"));
+
+  if (!caddieId) {
+    throw new Error("Falta caddie_id");
+  }
+
+  const { error } = await supabase
+    .from("caddies")
+    .update({ is_active: true })
+    .eq("id", caddieId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/caddies");
+}
+
+export async function deleteCaddieAction(formData: FormData) {
+  const supabase = createAdminClient();
+  const caddieId = clean(formData.get("caddie_id"));
+
+  if (!caddieId) {
+    throw new Error("Falta caddie_id");
+  }
+
+  const { count, error: countError } = await supabase
+    .from("caddie_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("caddie_id", caddieId);
+
+  if (countError) {
+    throw new Error(countError.message);
+  }
+
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      "No se puede eliminar este caddie porque ya tiene asignaciones. Usa BAJA en su lugar."
+    );
+  }
+
+  const { error } = await supabase.from("caddies").delete().eq("id", caddieId);
 
   if (error) {
     throw new Error(error.message);
