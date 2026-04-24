@@ -2,15 +2,42 @@
 
 import { useState, useMemo } from "react";
 
+/* ================= TYPES ================= */
+
+type Caddie = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  nickname: string | null;
+  phone: string | null;
+};
+
+type Player = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+type Props = {
+  caddies: Caddie[];
+  players: Player[];
+  initialSelectedCaddie: Caddie | null;
+  favoriteIdsByCaddie: Record<string, string[]>;
+};
+
+/* ================= COMPONENT ================= */
+
 export default function CaddieClient({
   caddies,
   players,
   initialSelectedCaddie,
   favoriteIdsByCaddie,
-}) {
+}: Props) {
   const [searchCaddie, setSearchCaddie] = useState("");
   const [searchPlayer, setSearchPlayer] = useState("");
-  const [selected, setSelected] = useState(initialSelectedCaddie);
+  const [selected, setSelected] = useState<Caddie | null>(
+    initialSelectedCaddie
+  );
 
   const filteredCaddies = useMemo(() => {
     return caddies.filter((c) => {
@@ -27,22 +54,20 @@ export default function CaddieClient({
   }, [players, searchPlayer]);
 
   const selectedFavorites = useMemo(() => {
-    if (!selected) return new Set();
-    return favoriteIdsByCaddie[selected.id] || new Set();
+    if (!selected) return new Set<string>();
+    return new Set(favoriteIdsByCaddie[selected.id] ?? []);
   }, [selected, favoriteIdsByCaddie]);
 
   return (
     <div style={{ display: "grid", gap: 20 }}>
       
       {/* 🔍 BUSCAR CADDIE */}
-      <div>
-        <input
-          placeholder="Buscar caddie..."
-          value={searchCaddie}
-          onChange={(e) => setSearchCaddie(e.target.value)}
-          style={{ width: "100%", height: 40 }}
-        />
-      </div>
+      <input
+        placeholder="Buscar caddie..."
+        value={searchCaddie}
+        onChange={(e) => setSearchCaddie(e.target.value)}
+        style={{ width: "100%", height: 40 }}
+      />
 
       {/* LISTA CADDIES */}
       <div style={{ maxHeight: 200, overflow: "auto" }}>
