@@ -82,6 +82,26 @@ function validateHandicapRange(min: number, max: number, prefix = "") {
   }
 }
 
+function normalizeMaxPlayers(value: unknown, prefix = "") {
+  const label = prefix ? `${prefix}: ` : "";
+
+  if (value === undefined || value === null || value === "") return null;
+
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    throw new Error(`${label}max_players inválido`);
+  }
+
+  const intValue = Math.trunc(n);
+
+  if (intValue < 0) {
+    throw new Error(`${label}max_players no puede ser negativo`);
+  }
+
+  return intValue;
+}
+
 async function normalizeCategorySortOrder(tournamentId: string) {
   const supabase = await createClient();
 
@@ -130,6 +150,7 @@ export async function createCategory(formData: FormData) {
   const name = reqStr(formData, "name");
   const handicap_min = reqNum(formData, "handicap_min");
   const handicap_max = reqNum(formData, "handicap_max");
+  const max_players = normalizeMaxPlayers(formData.get("max_players"));
   const is_active = optBool(formData, "is_active");
 
   const handicap_percent_override = optInt(
@@ -165,6 +186,7 @@ export async function createCategory(formData: FormData) {
     name,
     handicap_min,
     handicap_max,
+    max_players,
     is_active,
     allow_multiple_prizes_per_player,
     handicap_percent_override,
@@ -195,6 +217,7 @@ export async function updateCategory(formData: FormData) {
   const name = reqStr(formData, "name");
   const handicap_min = reqNum(formData, "handicap_min");
   const handicap_max = reqNum(formData, "handicap_max");
+  const max_players = normalizeMaxPlayers(formData.get("max_players"));
   const is_active = optBool(formData, "is_active");
 
   const handicap_percent_override = optInt(
@@ -220,6 +243,7 @@ export async function updateCategory(formData: FormData) {
       name,
       handicap_min,
       handicap_max,
+      max_players,
       is_active,
       allow_multiple_prizes_per_player,
       handicap_percent_override,
@@ -241,6 +265,7 @@ type SnapshotRow = {
   category_group: string;
   handicap_min: number;
   handicap_max: number;
+  max_players?: number | null;
   is_active?: boolean;
   sort_order?: number;
 };
@@ -283,6 +308,7 @@ export async function saveCategoriesSnapshot(formData: FormData) {
     r.category_group = parseCategoryGroup(String(r.category_group ?? "main"));
     r.handicap_min = Number(r.handicap_min);
     r.handicap_max = Number(r.handicap_max);
+    r.max_players = normalizeMaxPlayers(r.max_players, `En fila ${i + 1}`);
     r.is_active = Boolean(r.is_active);
     r.sort_order = i + 1;
 
@@ -330,6 +356,7 @@ export async function saveCategoriesSnapshot(formData: FormData) {
         category_group: r.category_group,
         handicap_min: r.handicap_min,
         handicap_max: r.handicap_max,
+        max_players: r.max_players ?? null,
         is_active: r.is_active ?? true,
         sort_order: r.sort_order,
       })
@@ -348,6 +375,7 @@ export async function saveCategoriesSnapshot(formData: FormData) {
       category_group: r.category_group,
       handicap_min: r.handicap_min,
       handicap_max: r.handicap_max,
+      max_players: r.max_players ?? null,
       is_active: r.is_active ?? true,
       sort_order: r.sort_order,
     }));
@@ -431,6 +459,7 @@ export async function applyCategoryTemplate(formData: FormData) {
     category_group: parseCategoryGroup(String(item.category_group ?? "main")),
     handicap_min: Number(item.handicap_min ?? 0),
     handicap_max: Number(item.handicap_max ?? 0),
+    max_players: null,
     is_active: item.is_active ?? true,
     sort_order: idx + 1,
     handicap_percent_override: null,
