@@ -31,6 +31,7 @@ type Cat = {
   handicap_min: number;
   handicap_max: number;
   code: string;
+  max_players: number | null;
 };
 
 function pickCategoryId(params: {
@@ -62,6 +63,10 @@ function mapCats(catsData: any[]): Cat[] {
     handicap_min: Number(c.handicap_min),
     handicap_max: Number(c.handicap_max),
     code: String(c.code ?? ""),
+    max_players:
+      c.max_players === null || c.max_players === undefined
+        ? null
+        : Number(c.max_players),
   }));
 }
 
@@ -119,7 +124,7 @@ async function getTournamentData(supabase: any, tournament_id: string) {
 async function getTournamentCats(supabase: any, tournament_id: string) {
   const { data: catsData, error: cErr } = await supabase
     .from("categories")
-    .select("id, gender, handicap_min, handicap_max, code")
+    .select("id, gender, handicap_min, handicap_max, code, max_players")
     .eq("tournament_id", tournament_id);
 
   if (cErr) throw new Error("Error leyendo categorías: " + cErr.message);
@@ -137,6 +142,85 @@ async function ensureEntriesAccess(tournament_id: string) {
       "checkin",
     ],
   });
+}
+
+async function getActiveEntryCountByCategory(
+  supabase: any,
+  params: {
+    categoryId: string;
+    excludeEntryId?: string;
+  }
+) {
+  let query = supabase
+    .from("tournament_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("category_id", params.categoryId)
+    .neq("status", "dq")
+    .neq("status", "withdrawn");
+
+  if (params.excludeEntryId) {
+    query = query.neq("id", params.excludeEntryId);
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    throw new Error("Error contando jugadores por categoría: " + error.message);
+  }
+
+  return count ?? 0;
+}
+
+async function validateCategoryCapacity(params: {
+  supabase: any;
+  cats: Cat[];
+  categoryId: string | null;
+  addCount?: number;
+  excludeEntryId?: string;
+}) {
+  const { supabase, cats, categoryId, addCount = 1, excludeEntryId } = params;
+
+  if (!categoryId) return;
+
+  const cat = cats.find((c) => c.id === categoryId);
+  const maxPlayers = cat?.max_players ?? null;
+
+  if (maxPlayers === null || maxPlayers === undefined) return;
+
+  const currentCount = await getActiveEntryCountByCategory(supabase, {
+    categoryId,
+    excludeEntryId,
+  });
+
+  if (currentCount + addCount > maxPlayers) {
+    throw new Error(
+      `Cupo lleno en categoría ${cat?.code || ""}. Límite: ${maxPlayers}, inscritos actuales: ${currentCount}.`
+    );
+  }
+}
+
+async function validateBulkCategoryCapacity(params: {
+  supabase: any;
+  cats: Cat[];
+  rows: Array<{ category_id: string | null }>;
+}) {
+  const { supabase, cats, rows } = params;
+
+  const addByCategory = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!row.category_id) continue;
+    addByCategory.set(row.category_id, (addByCategory.get(row.category_id) ?? 0) + 1);
+  }
+
+  for (const [categoryId, addCount] of addByCategory.entries()) {
+    await validateCategoryCapacity({
+      supabase,
+      cats,
+      categoryId,
+      addCount,
+    });
+  }
 }
 
 async function getEntryOrThrow(admin: any, entryId: string) {
@@ -270,6 +354,12 @@ export async function addEntry(formData: FormData) {
   const cats = await getTournamentCats(supabase, tournament_id);
   const category_id = pickCategoryId({ cats, playerGender, handicap });
 
+  await validateCategoryCapacity({
+    supabase,
+    cats,
+    categoryId: category_id,
+  });
+
   const { error } = await admin.from("tournament_entries").insert({
     tournament_id,
     player_id,
@@ -325,12 +415,21 @@ export async function createPlayerAndAddEntry(formData: FormData) {
 
   if (pErr) throw new Error("Error creando jugador: " + pErr.message);
 
-  const playerGender = String(newPlayer.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+  const playerGender = String(newPlayer.gender ?? "X").toUpperCase() as
+    | "M"
+    | "F"
+    | "X";
   const handicap = Number(newPlayer.handicap_index ?? handicap_index ?? 0);
   const category_id =
     handicap != null && Number.isFinite(handicap)
       ? pickCategoryId({ cats, playerGender, handicap })
       : null;
+
+  await validateCategoryCapacity({
+    supabase,
+    cats,
+    categoryId: category_id,
+  });
 
   const { error: eErr } = await admin.from("tournament_entries").insert({
     tournament_id,
@@ -411,7 +510,10 @@ export async function addSelectedEntries(formData: FormData) {
     playersAll
       .filter((p: any) => !existingSet.has(p.id))
       .map((p: any) => {
-        const playerGender = String(p.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+        const playerGender = String(p.gender ?? "X").toUpperCase() as
+          | "M"
+          | "F"
+          | "X";
 
         const handicap =
           p.handicap_torneo != null
@@ -433,6 +535,12 @@ export async function addSelectedEntries(formData: FormData) {
           status: "confirmed",
         };
       }) || [];
+
+  await validateBulkCategoryCapacity({
+    supabase,
+    cats,
+    rows,
+  });
 
   const addedCount = rows.length;
   const selectedCount = playerIds.length;
@@ -687,6 +795,13 @@ export async function updateEntryHandicap(formData: FormData) {
   const cats = await getTournamentCats(supabase, tournament_id);
   const category_id = pickCategoryId({ cats, playerGender, handicap });
 
+  await validateCategoryCapacity({
+    supabase,
+    cats,
+    categoryId: category_id,
+    excludeEntryId: id,
+  });
+
   const { error } = await admin
     .from("tournament_entries")
     .update({ handicap_index: handicap, category_id })
@@ -727,7 +842,10 @@ export async function autoCategorizeEntries(formData: FormData) {
   const entries = (eData ?? []) as any[];
 
   for (const e of entries) {
-    const playerGender = String(e.players?.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+    const playerGender = String(e.players?.gender ?? "X").toUpperCase() as
+      | "M"
+      | "F"
+      | "X";
     const hEntry = e.handicap_index == null ? null : Number(e.handicap_index);
     const hPlayer =
       e.players?.handicap_index == null ? null : Number(e.players.handicap_index);
@@ -786,7 +904,10 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
       .filter((p: any) => !existingSet.has(p.id))
       .slice(0, limit)
       .map((p: any) => {
-        const playerGender = String(p.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+        const playerGender = String(p.gender ?? "X").toUpperCase() as
+          | "M"
+          | "F"
+          | "X";
 
         const handicap =
           p.handicap_torneo != null
@@ -808,6 +929,12 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
           status: "confirmed",
         };
       }) || [];
+
+  await validateBulkCategoryCapacity({
+    supabase,
+    cats,
+    rows,
+  });
 
   if (rows.length > 0) {
     for (const batch of chunkArray(rows, 100)) {
@@ -851,7 +978,10 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
     (players ?? [])
       .filter((p: any) => !existingSet.has(p.id))
       .map((p: any) => {
-        const playerGender = String(p.gender ?? "X").toUpperCase() as "M" | "F" | "X";
+        const playerGender = String(p.gender ?? "X").toUpperCase() as
+          | "M"
+          | "F"
+          | "X";
 
         const handicap =
           p.handicap_torneo != null
@@ -873,6 +1003,12 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
           status: "confirmed",
         };
       }) || [];
+
+  await validateBulkCategoryCapacity({
+    supabase,
+    cats,
+    rows,
+  });
 
   if (rows.length > 0) {
     for (const batch of chunkArray(rows, 100)) {
