@@ -15,6 +15,7 @@ type Row = {
   name: string;
   handicap_min: number;
   handicap_max: number;
+  max_players?: number | null;
   sort_order: number;
   is_active: boolean;
 };
@@ -97,7 +98,7 @@ export default function CategoryTemplateEditor({
   function updateRow(
     id: string,
     field: keyof Row,
-    value: string | number | boolean
+    value: string | number | boolean | null
   ) {
     setRows((prev) =>
       prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
@@ -160,6 +161,7 @@ export default function CategoryTemplateEditor({
         name: "",
         handicap_min: 0,
         handicap_max: 0,
+        max_players: null,
         sort_order: prev.length + 1,
         is_active: true,
       },
@@ -172,6 +174,7 @@ export default function CategoryTemplateEditor({
     code: String(r.code ?? "").trim().toUpperCase(),
     name: String(r.name ?? "").trim(),
     category_group: (r.category_group ?? "main") as Row["category_group"],
+    max_players: r.max_players ?? null,
     sort_order: i + 1,
     is_active: Boolean(r.is_active),
   }));
@@ -205,6 +208,15 @@ export default function CategoryTemplateEditor({
 
       if (Number(r.handicap_min) > Number(r.handicap_max)) {
         setMsg(`Min mayor que Max en fila ${i + 1}.`);
+        return false;
+      }
+
+      if (
+        r.max_players !== null &&
+        r.max_players !== undefined &&
+        (!Number.isFinite(Number(r.max_players)) || Number(r.max_players) < 0)
+      ) {
+        setMsg(`Cupo inválido en fila ${i + 1}.`);
         return false;
       }
     }
@@ -316,7 +328,7 @@ export default function CategoryTemplateEditor({
                 paddingBottom: "12px",
               }}
             >
-              <table className="w-full min-w-[980px] border-collapse text-[11px] leading-none">
+              <table className="w-full min-w-[1060px] border-collapse text-[11px] leading-none">
                 <thead>
                   <tr className="bg-gray-200 text-gray-900">
                     <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
@@ -344,6 +356,9 @@ export default function CategoryTemplateEditor({
                       Max
                     </th>
                     <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                      Cupo
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
                       Acciones
                     </th>
                   </tr>
@@ -353,7 +368,7 @@ export default function CategoryTemplateEditor({
                   {rows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                       >
                         No hay categorías todavía. Aplica una plantilla o agrega una nueva.
@@ -464,6 +479,24 @@ export default function CategoryTemplateEditor({
                             value={r.handicap_max}
                             onChange={(e) =>
                               updateRow(r.id, "handicap_max", Number(e.target.value))
+                            }
+                            className={numberClass}
+                          />
+                        </td>
+
+                        <td className="min-w-[78px] border border-gray-300 px-1.5 py-[3px]">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={r.max_players ?? ""}
+                            placeholder="∞"
+                            onChange={(e) =>
+                              updateRow(
+                                r.id,
+                                "max_players",
+                                e.target.value ? Number(e.target.value) : null
+                              )
                             }
                             className={numberClass}
                           />

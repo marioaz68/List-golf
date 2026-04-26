@@ -66,6 +66,7 @@ type EntryPlayerRaw = {
 type EntryCategoryRaw = {
   code: string | null;
   name: string | null;
+  max_players?: number | null;
 };
 
 type RoundRow = {
@@ -126,6 +127,7 @@ type EntryRow = {
   categories: {
     code: string | null;
     name: string | null;
+    max_players?: number | null;
   } | null;
 };
 
@@ -415,7 +417,8 @@ export default async function EntriesPage({
         ),
         categories:categories (
           code,
-          name
+          name,
+          max_players
         )
       `)
       .eq("tournament_id", selectedTournamentId)
@@ -496,6 +499,7 @@ export default async function EntriesPage({
           ? {
               code: category.code,
               name: category.name,
+              max_players: category.max_players ?? null,
             }
           : null,
       };
