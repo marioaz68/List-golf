@@ -764,6 +764,7 @@ export default function NewPlayerForm({
   return (
     <form
       onSubmit={savePlayer}
+       autoComplete="off"
       style={{
         border: "1px solid #d1d5db",
         padding: 10,
@@ -914,7 +915,8 @@ export default function NewPlayerForm({
       >
         <label style={labelStyle}>
           Nombre
-         <input
+        <input
+           name={`lf_fn_${Math.random()}`}
            value={firstName}
            onChange={(e) => setFirstName(e.target.value)}
            style={fieldStyle}
@@ -922,13 +924,13 @@ export default function NewPlayerForm({
            autoCorrect="off"
            autoCapitalize="off"
            spellCheck={false}
-            name="lf_first_name"
           />
         </label>
 
         <label style={labelStyle}>
           Apellido
          <input
+            name={`lf_ln_${Math.random()}`}
             value={lastName}
              onChange={(e) => setLastName(e.target.value)}
              style={fieldStyle}
@@ -936,7 +938,6 @@ export default function NewPlayerForm({
              autoCorrect="off"
              autoCapitalize="off"
              spellCheck={false}
-             name="lf_last_name"
             />
         </label>
 
