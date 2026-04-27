@@ -914,20 +914,30 @@ export default function NewPlayerForm({
       >
         <label style={labelStyle}>
           Nombre
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            style={fieldStyle}
+         <input
+           value={firstName}
+           onChange={(e) => setFirstName(e.target.value)}
+           style={fieldStyle}
+           autoComplete="new-password"
+           autoCorrect="off"
+           autoCapitalize="off"
+           spellCheck={false}
+            name="lf_first_name"
           />
         </label>
 
         <label style={labelStyle}>
           Apellido
-          <input
+         <input
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            style={fieldStyle}
-          />
+             onChange={(e) => setLastName(e.target.value)}
+             style={fieldStyle}
+             autoComplete="new-password"
+             autoCorrect="off"
+             autoCapitalize="off"
+             spellCheck={false}
+             name="lf_last_name"
+            />
         </label>
 
         <label style={labelStyle}>
