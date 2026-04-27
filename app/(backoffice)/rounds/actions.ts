@@ -35,10 +35,6 @@ function optInt(fd: FormData, key: string) {
   return Math.trunc(n);
 }
 
-/**
- * 🔥 FIX IMPORTANTE:
- * Soporta "tee_times" viejo y lo convierte a "tee_time"
- */
 function reqStartType(fd: FormData) {
   let v = String(fd.get("start_type") ?? "").trim();
 
@@ -71,7 +67,7 @@ function reqGroupSize(fd: FormData) {
 function normalizeTime(raw: string | null) {
   if (!raw) return null;
 
-  let s = raw.toLowerCase().trim();
+  const s = raw.toLowerCase().trim();
   if (!s) return null;
 
   const m = s.match(/^(\d{1,2}):(\d{2})$/);
@@ -85,6 +81,22 @@ function normalizeTime(raw: string | null) {
   }
 
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
+function getCategoryIds(fd: FormData) {
+  const many = fd
+    .getAll("category_ids")
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+
+  if (many.length > 0) {
+    return Array.from(new Set(many));
+  }
+
+  const single = String(fd.get("category_id") ?? "").trim();
+  if (single) return [single];
+
+  throw new Error("Selecciona al menos una categoría");
 }
 
 async function ensureAccess(tournament_id: string) {
@@ -105,7 +117,7 @@ export async function createRound(formData: FormData) {
   await ensureAccess(tournament_id);
 
   const round_no = reqInt(formData, "round_no");
-  const category_id = reqStr(formData, "category_id");
+  const category_ids = getCategoryIds(formData);
   const round_date = optStr(formData, "round_date");
   const wave = optWave(formData);
   const start_type = reqStartType(formData);
@@ -113,7 +125,32 @@ export async function createRound(formData: FormData) {
   const interval_minutes = optInt(formData, "interval_minutes");
   const group_size = reqGroupSize(formData);
 
-  const { error } = await supabase.from("rounds").insert({
+  const query = supabase
+    .from("rounds")
+    .select("category_id")
+    .eq("tournament_id", tournament_id)
+    .eq("round_no", round_no);
+
+  if (round_date) {
+    query.eq("round_date", round_date);
+  } else {
+    query.is("round_date", null);
+  }
+
+  const { data: existing, error: existingError } = await query;
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const existingSet = new Set((existing ?? []).map((r: any) => r.category_id));
+  const duplicates = category_ids.filter((id) => existingSet.has(id));
+
+  if (duplicates.length > 0) {
+    throw new Error("Ya existe una ronda para esa categoría en ese día/ronda");
+  }
+
+  const rows = category_ids.map((category_id) => ({
     tournament_id,
     round_no,
     category_id,
@@ -123,7 +160,9 @@ export async function createRound(formData: FormData) {
     start_time,
     interval_minutes,
     group_size,
-  });
+  }));
+
+  const { error } = await supabase.from("rounds").insert(rows);
 
   if (error) throw new Error(error.message);
 

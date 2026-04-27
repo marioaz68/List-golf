@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
@@ -125,44 +125,17 @@ function buildRoundDayGroups(rounds: Round[]) {
       );
       if (timeDiff !== 0) return timeDiff;
 
-      return String(a.category_id ?? "").localeCompare(String(b.category_id ?? ""));
+      return String(a.category_id ?? "").localeCompare(
+        String(b.category_id ?? "")
+      );
     }),
   }));
 }
 
-const buttonStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: "30px",
-  padding: "0 10px",
-  borderRadius: "7px",
-  border: "1px solid #374151",
-  background: "linear-gradient(#6b7280, #4b5563)",
-  color: "#ffffff",
-  fontWeight: 600,
-  fontSize: "11px",
-  lineHeight: 1,
-  textDecoration: "none",
-  boxShadow: "0 3px 0 #1f2937, 0 4px 8px rgba(0,0,0,0.22)",
-  whiteSpace: "nowrap",
-};
-
-const lightButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: "linear-gradient(#f9fafb, #e5e7eb)",
-  color: "#111827",
-  border: "1px solid #9ca3af",
-  boxShadow: "0 3px 0 #9ca3af, 0 4px 8px rgba(0,0,0,0.14)",
-};
-
-const redButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: "linear-gradient(#ef4444, #b91c1c)",
-  border: "1px solid #7f1d1d",
-  boxShadow: "0 3px 0 #7f1d1d, 0 4px 8px rgba(0,0,0,0.22)",
-};
-
+const primaryButtonClass =
+  "inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800";
+const secondaryButtonClass =
+  "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 shadow-sm hover:bg-gray-50";
 const fieldClass =
   "h-8 w-full rounded-md border border-gray-300 bg-gray-100 px-2 text-[11px] leading-normal text-black";
 const compactTableFieldClass =
@@ -173,7 +146,7 @@ const cardClass =
   "space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2.5 shadow-sm";
 const fieldWrapClass = "grid gap-1 min-w-[150px]";
 const newRoundGridClass =
-  "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[90px_220px_145px_110px_130px_115px_115px_auto] xl:items-end";
+  "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[90px_145px_110px_130px_115px_115px_auto] xl:items-end";
 
 function HeaderBlock({
   title,
@@ -316,13 +289,13 @@ export default async function RoundsPage(props: {
           title="TORNEO"
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
-              <button style={buttonStyle}>Cambiar</button>
-              <a href="/tournaments/new" style={lightButtonStyle}>
+              <button className={primaryButtonClass}>Cambiar</button>
+              <a href="/tournaments/new" className={secondaryButtonClass}>
                 + Nuevo torneo
               </a>
               <a
                 href={`/cut-rules?tournament_id=${effectiveTournamentId}`}
-                style={lightButtonStyle}
+                className={secondaryButtonClass}
               >
                 Reglas corte
               </a>
@@ -355,11 +328,11 @@ export default async function RoundsPage(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-              Nueva ronda / categoría por día
+              Nuevo día de juego
             </div>
             <div className="mt-1 text-[11px] leading-snug text-gray-500">
-              Cada registro representa una categoría jugando una ronda en una
-              fecha y horario específico.
+              Selecciona la fecha, ronda, horario y todas las categorías que
+              juegan ese día. Se creará un registro por categoría.
             </div>
           </div>
         </div>
@@ -379,6 +352,18 @@ export default async function RoundsPage(props: {
           />
 
           <div className={fieldWrapClass}>
+            <label className={labelClass} htmlFor="round_date">
+              Fecha / día
+            </label>
+            <input
+              id="round_date"
+              name="round_date"
+              type="date"
+              className={fieldClass}
+            />
+          </div>
+
+          <div className={fieldWrapClass}>
             <label className={labelClass} htmlFor="round_no">
               Ronda
             </label>
@@ -390,38 +375,6 @@ export default async function RoundsPage(props: {
               placeholder="Ronda #"
               className={fieldClass}
               required
-            />
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="category_id">
-              Categoría
-            </label>
-            <select
-              id="category_id"
-              name="category_id"
-              className={fieldClass}
-              required
-              disabled={categories.length === 0}
-            >
-              <option value="">Selecciona categoría</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {categoryLabel(c)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="round_date">
-              Fecha / día
-            </label>
-            <input
-              id="round_date"
-              name="round_date"
-              type="date"
-              className={fieldClass}
             />
           </div>
 
@@ -504,13 +457,33 @@ export default async function RoundsPage(props: {
             </select>
           </div>
 
+          <div className="col-span-full">
+            <label className={labelClass}>Categorías que juegan ese día</label>
+
+            <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+              {categories.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2 rounded border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] text-black"
+                >
+                  <input
+                    type="checkbox"
+                    name="category_ids"
+                    value={c.id}
+                    className="h-3 w-3"
+                  />
+                  <span>{categoryLabel(c)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-end">
             <RoundSubmitButton
               pendingText="Creando..."
-              style={buttonStyle}
               disabled={categories.length === 0}
             >
-              Crear
+              Crear día
             </RoundSubmitButton>
           </div>
         </form>
@@ -725,7 +698,6 @@ export default async function RoundsPage(props: {
                                 <RoundSubmitButton
                                   form={formId}
                                   pendingText="Guardando..."
-                                  style={buttonStyle}
                                 >
                                   Guardar
                                 </RoundSubmitButton>
@@ -737,7 +709,7 @@ export default async function RoundsPage(props: {
                                     name="tournament_id"
                                     value={effectiveTournamentId}
                                   />
-                                  <RoundDeleteButton style={redButtonStyle} />
+                                  <RoundDeleteButton />
                                 </form>
                               </div>
                             </td>
