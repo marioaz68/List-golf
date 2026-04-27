@@ -36,6 +36,12 @@ type Round = {
   group_size: number | null;
 };
 
+type RoundDayGroup = {
+  key: string;
+  label: string;
+  rounds: Round[];
+};
+
 function buildTimeOptions(startHour = 6, endHour = 18, stepMinutes = 5) {
   const options: string[] = [];
 
@@ -72,6 +78,56 @@ function categoryLabel(c: Category) {
   if (name) return name;
   if (code) return code;
   return c.id.slice(0, 8);
+}
+
+function roundDateLabel(value: string | null) {
+  if (!value) return "Sin fecha";
+
+  const parts = value.split("-");
+  if (parts.length !== 3) return value;
+
+  const [yyyy, mm, dd] = parts;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function getRoundDayKey(value: string | null) {
+  return value || "sin-fecha";
+}
+
+function buildRoundDayGroups(rounds: Round[]) {
+  const map = new Map<string, RoundDayGroup>();
+
+  for (const round of rounds) {
+    const key = getRoundDayKey(round.round_date);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: roundDateLabel(round.round_date),
+        rounds: [],
+      });
+    }
+
+    map.get(key)!.rounds.push(round);
+  }
+
+  return Array.from(map.values()).map((group) => ({
+    ...group,
+    rounds: group.rounds.sort((a, b) => {
+      const roundDiff = a.round_no - b.round_no;
+      if (roundDiff !== 0) return roundDiff;
+
+      const waveDiff = String(a.wave ?? "").localeCompare(String(b.wave ?? ""));
+      if (waveDiff !== 0) return waveDiff;
+
+      const timeDiff = String(a.start_time ?? "").localeCompare(
+        String(b.start_time ?? "")
+      );
+      if (timeDiff !== 0) return timeDiff;
+
+      return String(a.category_id ?? "").localeCompare(String(b.category_id ?? ""));
+    }),
+  }));
 }
 
 const buttonStyle: CSSProperties = {
@@ -173,11 +229,7 @@ export default async function RoundsPage(props: {
 
   await requireTournamentAccess({
     tournamentId: effectiveTournamentId,
-    allowedRoles: [
-      "super_admin",
-      "club_admin",
-      "tournament_director",
-    ],
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
   });
 
   const { data: cData, error: cErr } = effectiveTournamentId
@@ -207,6 +259,8 @@ export default async function RoundsPage(props: {
     sort_order: c.sort_order === null ? null : Number(c.sort_order),
   }));
 
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+
   const { data: rData, error: rErr } = effectiveTournamentId
     ? await supabase
         .from("rounds")
@@ -214,9 +268,10 @@ export default async function RoundsPage(props: {
           "id, tournament_id, round_no, round_date, start_type, start_time, interval_minutes, category_id, wave, group_size"
         )
         .eq("tournament_id", effectiveTournamentId)
-        .order("round_no", { ascending: true })
         .order("round_date", { ascending: true })
+        .order("round_no", { ascending: true })
         .order("wave", { ascending: true })
+        .order("start_time", { ascending: true })
     : { data: [], error: null };
 
   if (rErr) {
@@ -241,6 +296,8 @@ export default async function RoundsPage(props: {
     group_size: r.group_size === null ? null : Number(r.group_size),
   }));
 
+  const roundDayGroups = buildRoundDayGroups(rounds);
+
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
 
@@ -249,7 +306,8 @@ export default async function RoundsPage(props: {
       <header className="space-y-1">
         <h1 className="text-lg font-bold text-white">Rounds</h1>
         <p className="text-[11px] leading-snug text-white/85">
-          Crea y configura rondas por torneo, categoría, día, turno y tipo de salida.
+          Configura el calendario del torneo por día, ronda, categoría, turno y
+          horario.
         </p>
       </header>
 
@@ -262,7 +320,10 @@ export default async function RoundsPage(props: {
               <a href="/tournaments/new" style={lightButtonStyle}>
                 + Nuevo torneo
               </a>
-              <a href={`/cut-rules?tournament_id=${effectiveTournamentId}`} style={lightButtonStyle}>
+              <a
+                href={`/cut-rules?tournament_id=${effectiveTournamentId}`}
+                style={lightButtonStyle}
+              >
                 Reglas corte
               </a>
             </div>
@@ -291,19 +352,31 @@ export default async function RoundsPage(props: {
       </form>
 
       <section className={cardClass}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-          Nueva ronda
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Nueva ronda / categoría por día
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Cada registro representa una categoría jugando una ronda en una
+              fecha y horario específico.
+            </div>
+          </div>
         </div>
 
         {categories.length === 0 ? (
           <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
-            Este torneo todavía no tiene categorías activas. Primero crea categorías para poder
-            crear rondas por categoría.
+            Este torneo todavía no tiene categorías activas. Primero crea
+            categorías para poder crear rondas por categoría.
           </div>
         ) : null}
 
         <form action={createRound} className={newRoundGridClass}>
-          <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+          <input
+            type="hidden"
+            name="tournament_id"
+            value={effectiveTournamentId}
+          />
 
           <div className={fieldWrapClass}>
             <label className={labelClass} htmlFor="round_no">
@@ -342,7 +415,7 @@ export default async function RoundsPage(props: {
 
           <div className={fieldWrapClass}>
             <label className={labelClass} htmlFor="round_date">
-              Fecha
+              Fecha / día
             </label>
             <input
               id="round_date"
@@ -444,199 +517,240 @@ export default async function RoundsPage(props: {
       </section>
 
       <section className={cardClass}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-          Listado
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Calendario de rondas por día
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Primero se agrupa por fecha. Dentro de cada día se ordena por
+              ronda, turno, hora y categoría.
+            </div>
+          </div>
+
+          <div className="rounded-full border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+            {rounds.length} registros
+          </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
-          <table className="w-full min-w-[1280px] border-collapse text-[11px] text-black">
-            <thead>
-              <tr className="bg-gray-200 text-left text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Ronda
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Categoría
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Fecha
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Turno
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Tipo
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Hora
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Intervalo
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Grupo
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
+        {rounds.length === 0 ? (
+          <div className="rounded-lg border border-gray-300 bg-white px-2 py-3 text-center text-[11px] text-gray-500">
+            No hay rondas todavía.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {roundDayGroups.map((group, index) => (
+              <div
+                key={group.key}
+                className="overflow-hidden rounded-lg border border-gray-300 bg-white"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-300 bg-gray-800 px-2 py-1.5 text-white">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-white/15 px-2 py-0.5 text-[11px] font-bold">
+                      Día {index + 1}
+                    </span>
+                    <span className="text-[12px] font-bold">{group.label}</span>
+                  </div>
 
-            <tbody>
-              {rounds.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={9}
-                    className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
-                  >
-                    No hay rondas todavía.
-                  </td>
-                </tr>
-              ) : (
-                rounds.map((r) => {
-                  const formId = `row-${r.id}`;
-                  const startTimeValue = normalizeTimeForSelect(r.start_time);
+                  <span className="text-[11px] text-white/85">
+                    {group.rounds.length} categoría
+                    {group.rounds.length === 1 ? "" : "s"} / horario
+                    {group.rounds.length === 1 ? "" : "s"}
+                  </span>
+                </div>
 
-                  return (
-                    <tr key={r.id} className="bg-white align-middle">
-                      <td className="border border-gray-300 px-1.5 py-1.5 w-[90px]">
-                        <form id={formId} action={updateRound}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <input type="hidden" name="tournament_id" value={r.tournament_id} />
-                        </form>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1280px] border-collapse text-[11px] text-black">
+                    <thead>
+                      <tr className="bg-gray-200 text-left text-gray-900">
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Ronda
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Categoría
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Fecha
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Turno
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Tipo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Hora
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Intervalo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Grupo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
 
-                        <input
-                          form={formId}
-                          name="round_no"
-                          type="number"
-                          defaultValue={r.round_no}
-                          className={compactTableFieldClass}
-                        />
-                      </td>
+                    <tbody>
+                      {group.rounds.map((r) => {
+                        const formId = `row-${r.id}`;
+                        const startTimeValue = normalizeTimeForSelect(
+                          r.start_time
+                        );
+                        const category = r.category_id
+                          ? categoryById.get(r.category_id)
+                          : null;
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[210px]">
-                        <select
-                          form={formId}
-                          name="category_id"
-                          defaultValue={r.category_id ?? ""}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin categoría</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {categoryLabel(c)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                        return (
+                          <tr key={r.id} className="bg-white align-middle">
+                            <td className="w-[90px] border border-gray-300 px-1.5 py-1.5">
+                              <form id={formId} action={updateRound}>
+                                <input type="hidden" name="id" value={r.id} />
+                                <input
+                                  type="hidden"
+                                  name="tournament_id"
+                                  value={r.tournament_id}
+                                />
+                              </form>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 w-[145px]">
-                        <input
-                          form={formId}
-                          name="round_date"
-                          type="date"
-                          defaultValue={r.round_date ?? ""}
-                          className={compactTableFieldClass}
-                        />
-                      </td>
+                              <input
+                                form={formId}
+                                name="round_no"
+                                type="number"
+                                defaultValue={r.round_no}
+                                className={compactTableFieldClass}
+                              />
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[95px]">
-                        <select
-                          form={formId}
-                          name="wave"
-                          defaultValue={r.wave ?? ""}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin turno</option>
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
-                        </select>
-                      </td>
+                            <td className="min-w-[210px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="category_id"
+                                defaultValue={r.category_id ?? ""}
+                                className={compactTableFieldClass}
+                                title={category ? categoryLabel(category) : ""}
+                              >
+                                <option value="">Sin categoría</option>
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {categoryLabel(c)}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[120px]">
-                        <select
-                          form={formId}
-                          name="start_type"
-                          defaultValue={r.start_type}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="tee_time">tee_time</option>
-                          <option value="shotgun">shotgun</option>
-                        </select>
-                      </td>
+                            <td className="w-[145px] border border-gray-300 px-1.5 py-1.5">
+                              <input
+                                form={formId}
+                                name="round_date"
+                                type="date"
+                                defaultValue={r.round_date ?? ""}
+                                className={compactTableFieldClass}
+                              />
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[115px]">
-                        <select
-                          form={formId}
-                          name="start_time"
-                          defaultValue={startTimeValue}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin hora</option>
-                          {timeOptions.map((time) => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                            <td className="min-w-[95px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="wave"
+                                defaultValue={r.wave ?? ""}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin turno</option>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[115px]">
-                        <select
-                          form={formId}
-                          name="interval_minutes"
-                          defaultValue={r.interval_minutes ?? ""}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin intervalo</option>
-                          <option value="7">7</option>
-                          <option value="8">8</option>
-                          <option value="9">9</option>
-                          <option value="10">10</option>
-                          <option value="12">12</option>
-                        </select>
-                      </td>
+                            <td className="min-w-[120px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="start_type"
+                                defaultValue={r.start_type}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="tee_time">tee_time</option>
+                                <option value="shotgun">shotgun</option>
+                              </select>
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[95px]">
-                        <select
-                          form={formId}
-                          name="group_size"
-                          defaultValue={r.group_size ?? 4}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="3">3</option>
-                          <option value="4">4</option>
-                        </select>
-                      </td>
+                            <td className="min-w-[115px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="start_time"
+                                defaultValue={startTimeValue}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin hora</option>
+                                {timeOptions.map((time) => (
+                                  <option key={time} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <RoundSubmitButton
-                            form={formId}
-                            pendingText="Guardando..."
-                            style={buttonStyle}
-                          >
-                            Guardar
-                          </RoundSubmitButton>
+                            <td className="min-w-[115px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="interval_minutes"
+                                defaultValue={r.interval_minutes ?? ""}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin intervalo</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="12">12</option>
+                              </select>
+                            </td>
 
-                          <form action={deleteRound}>
-                            <input type="hidden" name="id" value={r.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={effectiveTournamentId}
-                            />
-                            <RoundDeleteButton style={redButtonStyle} />
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <td className="min-w-[95px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="group_size"
+                                defaultValue={r.group_size ?? 4}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                              </select>
+                            </td>
+
+                            <td className="border border-gray-300 px-1.5 py-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <RoundSubmitButton
+                                  form={formId}
+                                  pendingText="Guardando..."
+                                  style={buttonStyle}
+                                >
+                                  Guardar
+                                </RoundSubmitButton>
+
+                                <form action={deleteRound}>
+                                  <input type="hidden" name="id" value={r.id} />
+                                  <input
+                                    type="hidden"
+                                    name="tournament_id"
+                                    value={effectiveTournamentId}
+                                  />
+                                  <RoundDeleteButton style={redButtonStyle} />
+                                </form>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
