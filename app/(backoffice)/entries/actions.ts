@@ -385,7 +385,22 @@ export async function addEntry(formData: FormData) {
     status: "confirmed",
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    const msg = String(error.message ?? "").toLowerCase();
+
+    if (msg.includes("duplicate") || msg.includes("unique")) {
+      redirect(
+        buildEntriesRedirect({
+          tournamentId: tournament_id,
+          tab: "manual",
+          bulkStatus: "warning",
+          bulkMessage: "El jugador ya está inscrito en este torneo.",
+        })
+      );
+    }
+
+    throw new Error(error.message);
+  }
 
   revalidatePath("/entries");
   revalidatePath("/players");
