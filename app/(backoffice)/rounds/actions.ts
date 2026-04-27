@@ -19,34 +19,53 @@ function optStr(fd: FormData, key: string) {
 function reqInt(fd: FormData, key: string) {
   const raw = String(fd.get(key) ?? "").trim();
   const n = Number(raw);
-
   if (!Number.isFinite(n)) {
     throw new Error(`Número inválido en ${key}`);
   }
-
   return Math.trunc(n);
 }
 
 function optInt(fd: FormData, key: string) {
   const raw = String(fd.get(key) ?? "").trim();
   if (!raw) return null;
-
   const n = Number(raw);
   if (!Number.isFinite(n)) {
     throw new Error(`Número inválido en ${key}`);
   }
-
   return Math.trunc(n);
 }
 
+/**
+ * 🔥 FIX IMPORTANTE:
+ * Soporta "tee_times" viejo y lo convierte a "tee_time"
+ */
 function reqStartType(fd: FormData) {
-  const v = String(fd.get("start_type") ?? "").trim();
+  let v = String(fd.get("start_type") ?? "").trim();
 
-  if (v !== "tee_times" && v !== "shotgun") {
+  if (v === "tee_times") v = "tee_time";
+
+  if (v !== "tee_time" && v !== "shotgun") {
     throw new Error("start_type inválido");
   }
 
-  return v as "tee_times" | "shotgun";
+  return v as "tee_time" | "shotgun";
+}
+
+function optWave(fd: FormData) {
+  const v = String(fd.get("wave") ?? "").trim().toUpperCase();
+  if (!v) return null;
+  if (v !== "AM" && v !== "PM") {
+    throw new Error("Turno inválido");
+  }
+  return v;
+}
+
+function reqGroupSize(fd: FormData) {
+  const n = reqInt(fd, "group_size");
+  if (n < 2 || n > 5) {
+    throw new Error("Tamaño de grupo inválido");
+  }
+  return n;
 }
 
 function normalizeTime(raw: string | null) {
@@ -55,41 +74,20 @@ function normalizeTime(raw: string | null) {
   let s = raw.toLowerCase().trim();
   if (!s) return null;
 
-  s = s.replace(/\./g, "");
-  s = s.replace(/\s+/g, " ");
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) throw new Error("Hora inválida");
 
-  const m24 = s.match(/^(\d{1,2}):(\d{2})$/);
-  if (m24) {
-    const h = Number(m24[1]);
-    const m = Number(m24[2]);
+  const h = Number(m[1]);
+  const min = Number(m[2]);
 
-    if (h < 0 || h > 23 || m < 0 || m > 59) {
-      throw new Error("Hora inválida. Usa 07:30 / 14:30 / 7:30 am.");
-    }
-
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  if (h < 0 || h > 23 || min < 0 || min > 59) {
+    throw new Error("Hora inválida");
   }
 
-  const m12 = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
-  if (m12) {
-    let h = Number(m12[1]);
-    const m = Number(m12[2]);
-    const ap = m12[3];
-
-    if (h < 1 || h > 12 || m < 0 || m > 59) {
-      throw new Error("Hora inválida. Usa 07:30 / 14:30 / 7:30 am.");
-    }
-
-    if (ap === "pm" && h !== 12) h += 12;
-    if (ap === "am" && h === 12) h = 0;
-
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-  }
-
-  throw new Error("Hora inválida. Usa 07:30 / 14:30 / 7:30 am.");
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
-async function ensureRoundsAccess(tournament_id: string) {
+async function ensureAccess(tournament_id: string) {
   await requireTournamentAccess({
     tournamentId: tournament_id,
     allowedRoles: [
@@ -104,21 +102,27 @@ export async function createRound(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
-  await ensureRoundsAccess(tournament_id);
+  await ensureAccess(tournament_id);
 
   const round_no = reqInt(formData, "round_no");
+  const category_id = reqStr(formData, "category_id");
   const round_date = optStr(formData, "round_date");
+  const wave = optWave(formData);
   const start_type = reqStartType(formData);
   const start_time = normalizeTime(optStr(formData, "start_time"));
   const interval_minutes = optInt(formData, "interval_minutes");
+  const group_size = reqGroupSize(formData);
 
   const { error } = await supabase.from("rounds").insert({
     tournament_id,
     round_no,
+    category_id,
     round_date,
+    wave,
     start_type,
     start_time,
     interval_minutes,
+    group_size,
   });
 
   if (error) throw new Error(error.message);
@@ -132,23 +136,28 @@ export async function updateRound(formData: FormData) {
 
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
-  await ensureRoundsAccess(tournament_id);
+  await ensureAccess(tournament_id);
 
   const round_no = reqInt(formData, "round_no");
+  const category_id = optStr(formData, "category_id");
   const round_date = optStr(formData, "round_date");
+  const wave = optWave(formData);
   const start_type = reqStartType(formData);
   const start_time = normalizeTime(optStr(formData, "start_time"));
   const interval_minutes = optInt(formData, "interval_minutes");
+  const group_size = reqGroupSize(formData);
 
   const { error } = await supabase
     .from("rounds")
     .update({
-      tournament_id,
       round_no,
+      category_id,
       round_date,
+      wave,
       start_type,
       start_time,
       interval_minutes,
+      group_size,
     })
     .eq("id", id);
 
@@ -165,10 +174,13 @@ export async function deleteRound(formData: FormData) {
   const tournament_id = optStr(formData, "tournament_id");
 
   if (tournament_id) {
-    await ensureRoundsAccess(tournament_id);
+    await ensureAccess(tournament_id);
   }
 
-  const { error } = await supabase.from("rounds").delete().eq("id", id);
+  const { error } = await supabase
+    .from("rounds")
+    .delete()
+    .eq("id", id);
 
   if (error) throw new Error(error.message);
 
