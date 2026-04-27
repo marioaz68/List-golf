@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { addEntry } from "./actions";
 
 type Player = {
@@ -10,6 +11,44 @@ type Player = {
   handicap_index: number | null;
   club_label: string | null;
 };
+
+function SubmitEntryButton({
+  playerId,
+  disabled,
+}: {
+  playerId: string;
+  disabled: boolean;
+}) {
+  const { pending } = useFormStatus();
+
+  if (disabled) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
+      >
+        Sin HI
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="submit"
+      name="player_id"
+      value={playerId}
+      disabled={pending}
+      className={
+        pending
+          ? "inline-flex min-h-6 cursor-wait items-center justify-center rounded border border-gray-400 bg-gray-400 px-2 text-[10px] font-medium leading-none text-white"
+          : "inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-gray-800"
+      }
+    >
+      {pending ? "Inscribiendo..." : "Inscribir"}
+    </button>
+  );
+}
 
 export default function SinglePlayerEntryPanel({
   players,
@@ -101,19 +140,10 @@ export default function SinglePlayerEntryPanel({
                     </td>
 
                     <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
-                      <button
-                        type="submit"
-                        name="player_id"
-                        value={p.id}
+                      <SubmitEntryButton
+                        playerId={p.id}
                         disabled={!hasHandicap}
-                        className={
-                          hasHandicap
-                            ? "inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-gray-800"
-                            : "inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
-                        }
-                      >
-                        {hasHandicap ? "Inscribir" : "Sin HI"}
-                      </button>
+                      />
                     </td>
                   </tr>
                 );
