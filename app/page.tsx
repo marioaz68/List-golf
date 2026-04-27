@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 
 type SearchParams = Promise<{
   club?: string | string[];
+  status?: string | string[];
 }>;
 
 type TournamentRow = {
@@ -47,11 +48,20 @@ function buildPosterUrl(posterPath: string | null) {
   return `${baseUrl}/storage/v1/object/public/tournament-posters/${posterPath}`;
 }
 
+function getTournamentStatusValue(startDate: string | null) {
+  if (!startDate) return "undefined";
+
+  const today = new Date();
+  const target = new Date(startDate);
+
+  return target > today ? "upcoming" : "finished";
+}
+
 function getTournamentStatus(startDate: string | null) {
   if (!startDate) {
     return {
       label: "Por definir",
-      className: "bg-white/10 text-slate-300",
+      className: "bg-slate-600 text-white",
     };
   }
 
@@ -61,13 +71,13 @@ function getTournamentStatus(startDate: string | null) {
   if (target > today) {
     return {
       label: "Próximo",
-      className: "bg-cyan-400/10 text-cyan-300",
+      className: "bg-cyan-400 text-[#08111f]",
     };
   }
 
   return {
     label: "Finalizado",
-    className: "bg-white/10 text-slate-300",
+    className: "bg-slate-600 text-white",
   };
 }
 
@@ -78,6 +88,7 @@ export default async function HomePage({
 }) {
   const params = await searchParams;
   const selectedClub = firstValue(params.club).trim();
+  const selectedStatus = firstValue(params.status).trim();
 
   const supabase = await createClient();
 
@@ -136,6 +147,9 @@ export default async function HomePage({
   const tournaments = allTournaments
     .filter((item) => {
       if (selectedClub && item.club_id !== selectedClub) return false;
+      if (selectedStatus && getTournamentStatusValue(item.start_date) !== selectedStatus) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -184,7 +198,9 @@ export default async function HomePage({
             className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
           >
             <div className="mr-2">
-              <h1 className="text-xl font-bold">Torneos</h1>
+              <h1 className="text-lg font-semibold tracking-tight">
+                Torneos públicos
+              </h1>
               <p className="text-xs text-slate-400">Posters públicos</p>
             </div>
 
@@ -201,16 +217,26 @@ export default async function HomePage({
               ))}
             </select>
 
+            <select
+              name="status"
+              defaultValue={selectedStatus}
+              className="h-10 rounded-lg border border-white/10 bg-[#0c1728] px-3 text-sm"
+            >
+              <option value="">Todos los estados</option>
+              <option value="upcoming">Próximos</option>
+              <option value="finished">Finalizados</option>
+            </select>
+
             <button
               type="submit"
-              className="h-10 rounded-lg bg-cyan-400 px-4 text-sm font-semibold text-[#08111f]"
+              className="h-10 rounded-lg bg-cyan-400 px-4 text-sm font-semibold text-[#08111f] transition hover:bg-cyan-300"
             >
               Buscar
             </button>
 
             <Link
               href="/"
-              className="flex h-10 items-center rounded-lg border border-white/10 px-4 text-sm"
+              className="flex h-10 items-center rounded-lg border border-white/10 px-4 text-sm transition hover:border-cyan-400/40 hover:bg-white/5"
             >
               Todos
             </Link>
@@ -229,7 +255,7 @@ export default async function HomePage({
               No hay torneos.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {tournaments.map((t) => {
                 const posterUrl = buildPosterUrl(t.poster_path);
                 const status = getTournamentStatus(t.start_date);
@@ -240,12 +266,12 @@ export default async function HomePage({
                     href={`/torneos/${t.id}`}
                     className="group block overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-cyan-400/40"
                   >
-                    <div className="relative h-[260px] bg-black">
+                    <div className="relative h-[220px] bg-black">
                       {posterUrl ? (
                         <img
                           src={posterUrl}
                           alt={`Poster de ${t.name ?? "torneo"}`}
-                          className="absolute inset-0 h-full w-full object-cover bg-black transition duration-300 group-hover:scale-[1.02]"
+                          className="absolute inset-0 h-full w-full bg-black object-cover transition duration-300 group-hover:scale-[1.02]"
                         />
                       ) : (
                         <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-400">
@@ -253,11 +279,14 @@ export default async function HomePage({
                         </div>
                       )}
 
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent p-2.5">
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent p-2.5">
                         <div className="flex items-end justify-between gap-2">
                           <div className="min-w-0">
                             <div className="truncate text-[10px] uppercase tracking-[0.14em] text-slate-300">
                               {t.club_label ?? "Sin club"}
+                            </div>
+                            <div className="mt-1 truncate text-xs font-semibold text-white">
+                              {t.name ?? "Torneo"}
                             </div>
                             <div className="mt-1 text-[11px] text-slate-300">
                               {formatDate(t.start_date)}

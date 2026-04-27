@@ -5,6 +5,7 @@ import {
   saveCategoriesSnapshot,
   saveTournamentCategoriesAsTemplate,
 } from "./actions";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 type Row = {
   id: string;
@@ -291,7 +292,9 @@ export default function CategoryTemplateEditor({
             />
           </div>
 
-          <button style={buttonStyle}>Guardar plantilla</button>
+          <SubmitButton pendingText="Guardando plantilla...">
+            Guardar plantilla
+          </SubmitButton>
         </form>
       </div>
 
@@ -541,7 +544,9 @@ export default function CategoryTemplateEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <button style={buttonStyle}>Guardar cambios</button>
+          <SubmitButton pendingText="Guardando cambios...">
+            Guardar cambios
+          </SubmitButton>
 
           {msg && <div className="text-[11px] leading-snug text-red-600">{msg}</div>}
         </div>

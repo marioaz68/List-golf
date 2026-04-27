@@ -263,18 +263,18 @@ function buildScorecardsHref(params: {
 
 function pillClasses(active: boolean) {
   return active
-    ? "inline-flex min-h-8 items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-500/15 px-3 text-[11px] font-semibold leading-none text-cyan-300 shadow-sm"
-    : "inline-flex min-h-8 items-center justify-center rounded-full border border-white/10 bg-white/5 px-3 text-[11px] font-medium leading-none text-slate-300 hover:bg-white/10";
+    ? "inline-flex min-h-8 items-center justify-center rounded-md border border-cyan-300 bg-gradient-to-b from-cyan-300 to-cyan-500 px-3 text-[11px] font-bold leading-none text-[#08111f] shadow-[0_3px_0_#0e7490,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-cyan-200 hover:to-cyan-400"
+    : "inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700";
 }
 
 function adminPillClasses() {
-  return "inline-flex min-h-8 items-center justify-center rounded-full border border-emerald-400/50 bg-emerald-500/12 px-3 text-[11px] font-semibold leading-none text-emerald-300 shadow-sm hover:bg-emerald-500/18";
+  return "inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600";
 }
 
 function sectionPillClasses(active: boolean) {
   return active
-    ? "inline-flex min-h-7 items-center justify-center rounded border border-cyan-500/50 bg-cyan-500/10 px-2.5 text-[11px] font-medium leading-none text-cyan-300"
-    : "inline-flex min-h-7 items-center justify-center rounded border border-white/10 bg-white/5 px-2.5 text-[11px] font-medium leading-none text-slate-300 hover:bg-white/10";
+    ? "inline-flex min-h-7 items-center justify-center rounded-md border border-cyan-300 bg-gradient-to-b from-cyan-300 to-cyan-500 px-2.5 text-[11px] font-bold leading-none text-[#08111f] shadow-[0_2px_0_#0e7490,0_3px_7px_rgba(0,0,0,0.22)] transition hover:from-cyan-200 hover:to-cyan-400"
+    : "inline-flex min-h-7 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-2.5 text-[11px] font-bold leading-none text-white shadow-[0_2px_0_#0f172a,0_3px_7px_rgba(0,0,0,0.22)] transition hover:from-slate-600 hover:to-slate-700";
 }
 
 function getPlayerCode(index: number) {
@@ -1307,14 +1307,14 @@ filteredEntries.forEach((entry) => {
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href="/"
-                className="inline-flex min-h-8 items-center justify-center rounded-full border border-white/15 bg-white/5 px-3 text-[11px] font-semibold leading-none text-white transition hover:border-cyan-400/40 hover:bg-white/10"
+                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
               >
                 ← Inicio
               </Link>
 
               <Link
                 href="/#torneos"
-                className="inline-flex min-h-8 items-center justify-center rounded-full border border-white/15 bg-white/5 px-3 text-[11px] font-semibold leading-none text-slate-200 transition hover:border-cyan-400/40 hover:bg-white/10"
+                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
               >
                 Ver torneos
               </Link>
@@ -1368,7 +1368,7 @@ filteredEntries.forEach((entry) => {
                   tournamentId: typedTournament.id,
                   roundId: selectedRound?.id ?? null,
                 })}
-                className="inline-flex min-h-8 items-center justify-center rounded-full border border-emerald-400/50 bg-emerald-500/12 px-3 text-[11px] font-semibold leading-none text-emerald-300 shadow-sm hover:bg-emerald-500/18"
+                className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
               >
                 ✍️ Firma electrónica
               </Link>
@@ -1776,7 +1776,7 @@ filteredEntries.forEach((entry) => {
                     tournamentId: typedTournament.id,
                     roundId: selectedRound?.id ?? null,
                   })}
-                  className="inline-flex min-h-9 items-center justify-center rounded-full border border-emerald-400/50 bg-emerald-500/12 px-4 text-sm font-semibold text-emerald-200 shadow-sm hover:bg-emerald-500/18"
+                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-4 text-sm font-bold text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
                 >
                   Ir a firma electrónica
                 </Link>
