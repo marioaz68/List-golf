@@ -194,7 +194,7 @@ async function validateCategoryCapacity(params: {
 
   if (currentCount + addCount > maxPlayers) {
     throw new Error(
-      `Cupo lleno en categoría ${cat?.code || ""}. Límite: ${maxPlayers}, inscritos actuales: ${currentCount}.`
+      `CAPACITY_FULL|Categoría ${cat?.code || ""} llena. Límite ${maxPlayers}, inscritos actuales ${currentCount}.`
     );
   }
 }
@@ -354,11 +354,28 @@ export async function addEntry(formData: FormData) {
   const cats = await getTournamentCats(supabase, tournament_id);
   const category_id = pickCategoryId({ cats, playerGender, handicap });
 
-  await validateCategoryCapacity({
-    supabase,
-    cats,
-    categoryId: category_id,
-  });
+  try {
+    await validateCategoryCapacity({
+      supabase,
+      cats,
+      categoryId: category_id,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudo inscribir.";
+
+    if (message.startsWith("CAPACITY_FULL|")) {
+      redirect(
+        buildEntriesRedirect({
+          tournamentId: tournament_id,
+          tab: "manual",
+          bulkStatus: "error",
+          bulkMessage: message.replace("CAPACITY_FULL|", ""),
+        })
+      );
+    }
+
+    throw err;
+  }
 
   const { error } = await admin.from("tournament_entries").insert({
     tournament_id,
@@ -425,11 +442,28 @@ export async function createPlayerAndAddEntry(formData: FormData) {
       ? pickCategoryId({ cats, playerGender, handicap })
       : null;
 
-  await validateCategoryCapacity({
-    supabase,
-    cats,
-    categoryId: category_id,
-  });
+  try {
+    await validateCategoryCapacity({
+      supabase,
+      cats,
+      categoryId: category_id,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudo inscribir.";
+
+    if (message.startsWith("CAPACITY_FULL|")) {
+      redirect(
+        buildEntriesRedirect({
+          tournamentId: tournament_id,
+          tab: "manual",
+          bulkStatus: "error",
+          bulkMessage: message.replace("CAPACITY_FULL|", ""),
+        })
+      );
+    }
+
+    throw err;
+  }
 
   const { error: eErr } = await admin.from("tournament_entries").insert({
     tournament_id,
@@ -536,11 +570,31 @@ export async function addSelectedEntries(formData: FormData) {
         };
       }) || [];
 
-  await validateBulkCategoryCapacity({
-    supabase,
-    cats,
-    rows,
-  });
+  try {
+    await validateBulkCategoryCapacity({
+      supabase,
+      cats,
+      rows,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "No se pudo inscribir.";
+
+    if (message.startsWith("CAPACITY_FULL|")) {
+      redirect(
+        buildEntriesRedirect({
+          tournamentId: tournament_id,
+          tab: "bulk",
+          bulkStatus: "error",
+          bulkMessage: message.replace("CAPACITY_FULL|", ""),
+          selectedCount: playerIds.length,
+          addedCount: 0,
+          skippedCount: playerIds.length,
+        })
+      );
+    }
+
+    throw err;
+  }
 
   const addedCount = rows.length;
   const selectedCount = playerIds.length;
