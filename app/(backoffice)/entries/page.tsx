@@ -549,7 +549,7 @@ export default async function EntriesPage({
 
       {selectedTournamentId ? (
         <>
-          {activeTab === "bulk" && bulkStatus && bulkMessage ? (
+         {bulkStatus && bulkMessage ? (
             <section className={feedbackClasses(bulkStatus)}>
               <div className="font-semibold">{bulkMessage}</div>
 
