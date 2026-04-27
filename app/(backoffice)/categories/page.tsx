@@ -25,6 +25,7 @@ type CategoryRow = {
     | null;
   handicap_min: number | null;
   handicap_max: number | null;
+  max_players: number | null;
   sort_order: number | null;
   is_active: boolean | null;
 };
@@ -222,7 +223,7 @@ export default async function CategoriesPage(props: {
   const { data: rawCategories, error: categoriesError } = await supabase
     .from("categories")
     .select(
-      "id, tournament_id, code, name, gender, category_group, handicap_min, handicap_max, sort_order, is_active"
+      "id, tournament_id, code, name, gender, category_group, handicap_min, handicap_max, max_players, sort_order, is_active"
     )
     .eq("tournament_id", effectiveTournamentId)
     .order("sort_order", { ascending: true })
@@ -241,6 +242,7 @@ export default async function CategoriesPage(props: {
     name: c.name ?? "",
     handicap_min: Number(c.handicap_min ?? 0),
     handicap_max: Number(c.handicap_max ?? 0),
+    max_players: c.max_players ?? null,
     sort_order: c.sort_order ?? idx + 1,
     is_active: c.is_active ?? true,
   }));

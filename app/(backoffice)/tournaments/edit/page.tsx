@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { updateTournamentAction } from "../actions";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -315,9 +316,12 @@ export default async function EditTournamentPage({
           </div>
 
           <div style={buttonRow}>
-            <button type="submit" style={buttonStyle}>
+            <SubmitButton
+              pendingText="Guardando..."
+              className="h-8 px-3 rounded border border-gray-800 bg-gray-900 text-[12px] font-bold text-white"
+            >
               Guardar cambios
-            </button>
+            </SubmitButton>
 
             <Link href="/tournaments" style={ghostButtonStyle}>
               Cancelar

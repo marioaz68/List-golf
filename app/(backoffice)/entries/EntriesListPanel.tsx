@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import {
   deleteEntry,
   disqualifyEntry,
@@ -9,6 +8,7 @@ import {
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
+import SubmitButton from "@/components/ui/SubmitButton";
 import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
 
 type RoundSignature = {
@@ -111,9 +111,6 @@ export default function EntriesListPanel({
   entries: Entry[];
   tournamentId: string;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
   const [search, setSearch] = useState("");
   const [club, setClub] = useState("");
   const [category, setCategory] = useState("");
@@ -171,28 +168,6 @@ export default function EntriesListPanel({
       );
     });
   }, [entries, search, club, category]);
-
-  function runAction(
-    action: (formData: FormData) => Promise<void>,
-    entryId: string,
-    message: string
-  ) {
-    const ok = window.confirm(message);
-    if (!ok) return;
-
-    const fd = new FormData();
-    fd.append("id", entryId);
-    fd.append("tournament_id", tournamentId);
-
-    startTransition(async () => {
-      try {
-        await action(fd);
-        router.refresh();
-      } catch (err: any) {
-        alert(err?.message ?? "Error ejecutando acción");
-      }
-    });
-  }
 
   async function handleGenerateLinks(entryId: string) {
     try {
@@ -354,7 +329,6 @@ ${res.witness_url}`;
                         <button
                           type="button"
                           onClick={() => handleGenerateLinks(e.id)}
-                          disabled={isPending}
                           className="h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
                         >
                           FIRMAS
@@ -364,87 +338,145 @@ ${res.witness_url}`;
                       <div
                         className={`${SLOT_MD} sticky left-0 z-20 bg-white pr-1 shadow-[2px_0_0_0_rgba(255,255,255,1)]`}
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            runAction(
-                              deleteEntry,
-                              e.id,
-                              "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados."
-                            )
-                          }
-                          disabled={isPending}
-                          className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
+                        <form
+                          action={deleteEntry}
+                          className="w-full"
+                          onSubmit={(event) => {
+                            if (
+                              !window.confirm(
+                                "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados."
+                              )
+                            ) {
+                              event.preventDefault();
+                            }
+                          }}
                         >
-                          ELIMINAR
-                        </button>
+                          <input type="hidden" name="id" value={e.id} />
+                          <input
+                            type="hidden"
+                            name="tournament_id"
+                            value={tournamentId}
+                          />
+
+                          <SubmitButton
+                            pendingText="Eliminando..."
+                            className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
+                            pendingClassName="h-7 w-full cursor-wait rounded border border-red-400 bg-red-400 text-[11px] font-bold text-white"
+                          >
+                            ELIMINAR
+                          </SubmitButton>
+                        </form>
                       </div>
 
                       <div className={SLOT_SM}>
                         {isWithdrawn ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              runAction(
-                                restoreEntry,
-                                e.id,
-                                "¿Reactivar este jugador en el torneo?"
-                              )
-                            }
-                            disabled={isPending}
-                            className={`${BTN_BASE} w-full border-green-700 bg-green-700`}
+                          <form
+                            action={restoreEntry}
+                            className="w-full"
+                            onSubmit={(event) => {
+                              if (!window.confirm("¿Reactivar este jugador en el torneo?")) {
+                                event.preventDefault();
+                              }
+                            }}
                           >
-                            REA
-                          </button>
+                            <input type="hidden" name="id" value={e.id} />
+                            <input
+                              type="hidden"
+                              name="tournament_id"
+                              value={tournamentId}
+                            />
+
+                            <SubmitButton
+                              pendingText="Restaurando..."
+                              className={`${BTN_BASE} w-full border-green-700 bg-green-700`}
+                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-green-400 bg-green-400`}
+                            >
+                              REA
+                            </SubmitButton>
+                          </form>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              runAction(
-                                withdrawEntry,
-                                e.id,
-                                "¿Dar de baja a este jugador del torneo?"
-                              )
-                            }
-                            disabled={isPending}
-                            className={`${BTN_BASE} w-full border-amber-600 bg-amber-600`}
+                          <form
+                            action={withdrawEntry}
+                            className="w-full"
+                            onSubmit={(event) => {
+                              if (!window.confirm("¿Dar de baja a este jugador del torneo?")) {
+                                event.preventDefault();
+                              }
+                            }}
                           >
-                            Baja
-                          </button>
+                            <input type="hidden" name="id" value={e.id} />
+                            <input
+                              type="hidden"
+                              name="tournament_id"
+                              value={tournamentId}
+                            />
+
+                            <SubmitButton
+                              pendingText="Dando de baja..."
+                              className={`${BTN_BASE} w-full border-amber-600 bg-amber-600`}
+                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-amber-400 bg-amber-400`}
+                            >
+                              Baja
+                            </SubmitButton>
+                          </form>
                         )}
                       </div>
 
                       <div className={SLOT_SM}>
                         {isDQ ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              runAction(
-                                restoreEntry,
-                                e.id,
-                                "¿Quitar DQ y regresar el jugador a activo?"
-                              )
-                            }
-                            disabled={isPending}
-                            className={`${BTN_BASE} w-full border-sky-700 bg-sky-700`}
+                          <form
+                            action={restoreEntry}
+                            className="w-full"
+                            onSubmit={(event) => {
+                              if (!window.confirm("¿Quitar DQ y regresar el jugador a activo?")) {
+                                event.preventDefault();
+                              }
+                            }}
                           >
-                            REA
-                          </button>
+                            <input type="hidden" name="id" value={e.id} />
+                            <input
+                              type="hidden"
+                              name="tournament_id"
+                              value={tournamentId}
+                            />
+
+                            <SubmitButton
+                              pendingText="Restaurando..."
+                              className={`${BTN_BASE} w-full border-sky-700 bg-sky-700`}
+                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-sky-400 bg-sky-400`}
+                            >
+                              REA
+                            </SubmitButton>
+                          </form>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              runAction(
-                                disqualifyEntry,
-                                e.id,
-                                "¿Marcar DQ? Esto pondrá 400 a la ronda actual/última del torneo y dejará al jugador como DQ."
-                              )
-                            }
-                            disabled={isPending}
-                            className={`${BTN_BASE} w-full border-red-700 bg-red-700`}
+                          <form
+                            action={disqualifyEntry}
+                            className="w-full"
+                            onSubmit={(event) => {
+                              if (
+                                !window.confirm(
+                                  "¿Marcar DQ? Esto pondrá 400 a la ronda actual/última del torneo y dejará al jugador como DQ."
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
                           >
-                            DQ
-                          </button>
+                            <input type="hidden" name="id" value={e.id} />
+                            <input
+                              type="hidden"
+                              name="tournament_id"
+                              value={tournamentId}
+                            />
+
+                            <SubmitButton
+                              pendingText="Marcando DQ..."
+                              className={`${BTN_BASE} w-full border-red-700 bg-red-700`}
+                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-red-400 bg-red-400`}
+                            >
+                              DQ
+                            </SubmitButton>
+                          </form>
                         )}
                       </div>
 

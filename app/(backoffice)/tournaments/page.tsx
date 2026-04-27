@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { togglePublic, toggleArchive } from "./actions";
 import PosterUploadInline from "./PosterUploadInline";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -956,18 +957,24 @@ export default async function TournamentsPage({
                               action={togglePublic.bind(null, t.id)}
                               style={inlineFormStyle}
                             >
-                              <button type="submit" style={miniActionButtonStyle}>
+                              <SubmitButton
+                                pendingText="Actualizando..."
+                                className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-900"
+                              >
                                 {isPublic ? "Ocultar" : "Mostrar"}
-                              </button>
+                              </SubmitButton>
                             </form>
 
                             <form
                               action={toggleArchive.bind(null, t.id)}
                               style={inlineFormStyle}
                             >
-                              <button type="submit" style={miniActionButtonStyle}>
+                              <SubmitButton
+                                pendingText="Actualizando..."
+                                className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-900"
+                              >
                                 {isArchived ? "Reactivar" : "Archivar"}
-                              </button>
+                              </SubmitButton>
                             </form>
                           </>
                         ) : null}

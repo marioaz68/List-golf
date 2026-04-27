@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
+import SubmitButton from "@/components/ui/SubmitButton";
+import SearchInput from "@/components/ui/SearchInput";
 
 type Player = {
   id: string;
@@ -39,10 +41,10 @@ export default function SinglePlayerEntryPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
-          <input
-            placeholder="Buscar nombre o club..."
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            placeholder="Buscar nombre o club..."
             className="h-7 min-w-[220px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black placeholder:text-gray-400"
           />
 
@@ -82,32 +84,46 @@ export default function SinglePlayerEntryPanel({
             </thead>
 
             <tbody className="bg-white text-black">
-              {filtered.map((p) => (
-                <tr key={p.id} className="bg-white align-top">
-                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                    {`${p.last_name ?? ""} ${p.first_name ?? ""}`.trim()}
-                  </td>
+              {filtered.map((p) => {
+                const hasHandicap =
+                  p.handicap_index !== null && p.handicap_index !== undefined;
 
-                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                    {p.club_label ?? "-"}
-                  </td>
+                return (
+                  <tr key={p.id} className="bg-white align-top">
+                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                      {`${p.last_name ?? ""} ${p.first_name ?? ""}`.trim()}
+                    </td>
 
-                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                    {p.handicap_index ?? "-"}
-                  </td>
+                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                      {p.club_label ?? "-"}
+                    </td>
 
-                  <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
-                    <button
-                      type="submit"
-                      name="player_id"
-                      value={p.id}
-                      className="inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-gray-800"
-                    >
-                      Inscribir
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                      {p.handicap_index ?? "-"}
+                    </td>
+
+                    <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
+                      {!hasHandicap ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
+                        >
+                          Sin HI
+                        </button>
+                      ) : (
+                        <SubmitButton
+                          name="player_id"
+                          value={p.id}
+                          pendingText="..."
+                        >
+                          Inscribir
+                        </SubmitButton>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {filtered.length === 0 ? (
                 <tr>

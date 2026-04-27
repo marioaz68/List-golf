@@ -5,6 +5,7 @@ import {
   deleteCaddieAssignmentAction,
 } from "./actions";
 import { createAdminClient } from "@/utils/supabase/admin";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -850,9 +851,12 @@ export default async function CaddiesPage({
                             ))}
                           </select>
 
-                          <button type="submit" style={miniButtonStyle}>
+                          <SubmitButton
+                            pendingText="Guardando..."
+                            className="h-7 px-2 border border-gray-800 rounded bg-gray-900 text-white text-[11px] font-bold"
+                          >
                             Guardar
-                          </button>
+                          </SubmitButton>
                         </form>
                       </td>
                     </tr>
@@ -946,9 +950,12 @@ export default async function CaddiesPage({
                           />
                           <input type="hidden" name="round_id" value={selectedRoundId} />
 
-                          <button type="submit" style={dangerButtonStyle}>
+                          <SubmitButton
+                            pendingText="Quitando..."
+                            className="h-7 px-2 border border-red-800 rounded bg-red-700 text-white text-[11px] font-bold"
+                          >
                             Quitar
-                          </button>
+                          </SubmitButton>
                         </form>
                       </td>
                     </tr>

@@ -173,6 +173,37 @@ function buildMatchScore(params: {
   return score;
 }
 
+
+function InlineSpinner() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      style={{
+        marginRight: 6,
+        animation: "lf-spin 0.8s linear infinite",
+        flexShrink: 0,
+      }}
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        opacity="0.25"
+      />
+      <path
+        fill="currentColor"
+        d="M22 12a10 10 0 0 1-10 10v-4a6 6 0 0 0 6-6h4z"
+      />
+    </svg>
+  );
+}
+
 export default function NewPlayerForm({
   onCreated,
   returnTournament,
@@ -764,6 +795,7 @@ export default function NewPlayerForm({
   return (
     <form
       onSubmit={savePlayer}
+       autoComplete="off"
       style={{
         border: "1px solid #d1d5db",
         padding: 10,
@@ -772,6 +804,13 @@ export default function NewPlayerForm({
         boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
       }}
     >
+      <style>{`
+        @keyframes lf-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
       <h2
         style={{
           fontSize: 14,
@@ -914,20 +953,30 @@ export default function NewPlayerForm({
       >
         <label style={labelStyle}>
           Nombre
-          <input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            style={fieldStyle}
+        <input
+           name={`lf_fn_${Math.random()}`}
+           value={firstName}
+           onChange={(e) => setFirstName(e.target.value)}
+           style={fieldStyle}
+           autoComplete="new-password"
+           autoCorrect="off"
+           autoCapitalize="off"
+           spellCheck={false}
           />
         </label>
 
         <label style={labelStyle}>
           Apellido
-          <input
+         <input
+            name={`lf_ln_${Math.random()}`}
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            style={fieldStyle}
-          />
+             onChange={(e) => setLastName(e.target.value)}
+             style={fieldStyle}
+             autoComplete="new-password"
+             autoCorrect="off"
+             autoCapitalize="off"
+             spellCheck={false}
+            />
         </label>
 
         <label style={labelStyle}>
@@ -1227,12 +1276,15 @@ export default function NewPlayerForm({
         <button
           type="submit"
           disabled={loading}
+          aria-busy={loading}
           style={{
             ...buttonStyle,
-            opacity: loading ? 0.7 : 1,
+            opacity: loading ? 0.78 : 1,
             pointerEvents: loading ? "none" : "auto",
+            gap: 4,
           }}
         >
+          {loading && <InlineSpinner />}
           {loading
             ? "Guardando..."
             : selectedExistingPlayerId

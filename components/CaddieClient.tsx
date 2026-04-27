@@ -6,6 +6,7 @@ import {
   saveCaddieFavoritesAction,
   updateCaddieAction,
 } from "@/app/(backoffice)/caddies/new/actions";
+import SubmitButton from "@/components/ui/SubmitButton";
 
 type Club = {
   id: string;
@@ -294,9 +295,12 @@ export default function CaddieClient({
           </div>
 
           <div>
-            <button type="submit" style={buttonStyle}>
+            <SubmitButton
+              pendingText="Guardando..."
+              className="h-8 rounded border border-gray-900 bg-gray-900 px-3 text-[12px] font-bold text-white"
+            >
               Guardar caddie
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </div>
@@ -477,9 +481,12 @@ export default function CaddieClient({
             </div>
 
             <div>
-              <button type="submit" style={buttonStyle}>
+              <SubmitButton
+                pendingText="Guardando..."
+                className="h-8 rounded border border-gray-900 bg-gray-900 px-3 text-[12px] font-bold text-white"
+              >
                 Guardar datos generales
-              </button>
+              </SubmitButton>
             </div>
           </form>
 
@@ -581,9 +588,12 @@ export default function CaddieClient({
             </div>
 
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="submit" style={buttonStyle}>
+              <SubmitButton
+                pendingText="Asignando..."
+                className="h-8 rounded border border-gray-900 bg-gray-900 px-3 text-[12px] font-bold text-white"
+              >
                 Asignar favoritos
-              </button>
+              </SubmitButton>
 
               <button
                 type="button"

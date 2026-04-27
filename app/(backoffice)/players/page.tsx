@@ -510,9 +510,15 @@ export default async function PlayersPage(props: {
             </select>
 
             <input
+              type="search"
               name="q"
               defaultValue={q}
               placeholder="Buscar..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              inputMode="search"
               className={`${inputClass} min-w-[120px]`}
             />
 
