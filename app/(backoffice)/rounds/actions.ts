@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
@@ -99,7 +99,7 @@ async function ensureAccess(tournament_id: string) {
 }
 
 export async function createRound(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureAccess(tournament_id);
@@ -132,7 +132,7 @@ export async function createRound(formData: FormData) {
 }
 
 export async function updateRound(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
@@ -168,7 +168,7 @@ export async function updateRound(formData: FormData) {
 }
 
 export async function deleteRound(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const id = reqStr(formData, "id");
   const tournament_id = optStr(formData, "tournament_id");
