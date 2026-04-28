@@ -42,6 +42,13 @@ type RoundDayGroup = {
   rounds: Round[];
 };
 
+type CategoryRoundCheck = {
+  category: Category;
+  configuredRounds: number[];
+  missingRounds: number[];
+  isComplete: boolean;
+};
+
 function buildTimeOptions(startHour = 6, endHour = 18, stepMinutes = 5) {
   const options: string[] = [];
 
@@ -135,6 +142,41 @@ function buildRoundDayGroups(rounds: Round[]) {
     ...group,
     rounds: group.rounds.sort(sortRounds),
   }));
+}
+
+function buildRoundChecks(categories: Category[], rounds: Round[]) {
+  const requiredRounds = [1, 2, 3];
+
+  const roundsByCategory = new Map<string, Set<number>>();
+
+  for (const round of rounds) {
+    if (!round.category_id) continue;
+
+    if (!roundsByCategory.has(round.category_id)) {
+      roundsByCategory.set(round.category_id, new Set<number>());
+    }
+
+    roundsByCategory.get(round.category_id)!.add(round.round_no);
+  }
+
+  return categories.map<CategoryRoundCheck>((category) => {
+    const configuredRounds = Array.from(
+      roundsByCategory.get(category.id) ?? new Set<number>()
+    )
+      .filter((roundNo) => requiredRounds.includes(roundNo))
+      .sort((a, b) => a - b);
+
+    const missingRounds = requiredRounds.filter(
+      (roundNo) => !configuredRounds.includes(roundNo)
+    );
+
+    return {
+      category,
+      configuredRounds,
+      missingRounds,
+      isComplete: missingRounds.length === 0,
+    };
+  });
 }
 
 const primaryButtonClass =
@@ -307,6 +349,11 @@ export default async function RoundsPage(props: {
   }));
 
   const roundDayGroups = buildRoundDayGroups(rounds);
+  const roundChecks = buildRoundChecks(categories, rounds);
+  const completeChecks = roundChecks.filter((check) => check.isComplete);
+  const incompleteChecks = roundChecks.filter((check) => !check.isComplete);
+  const isCalendarComplete =
+    categories.length > 0 && incompleteChecks.length === 0;
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -356,6 +403,80 @@ export default async function RoundsPage(props: {
           </div>
         </HeaderBlock>
       </form>
+
+      <section className={cardClass}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Verificador de rondas
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Valida que cada categoría activa tenga configuradas las rondas 1,
+              2 y 3. El día y turno pueden ser distintos.
+            </div>
+          </div>
+
+          <button type="button" className={primaryButtonClass}>
+            Verificar rondas
+          </button>
+        </div>
+
+        <div
+          className={
+            isCalendarComplete
+              ? "rounded border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] leading-snug text-emerald-800"
+              : "rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800"
+          }
+        >
+          {isCalendarComplete ? (
+            <span>
+              ✅ Calendario completo: {completeChecks.length}/
+              {categories.length} categorías tienen rondas 1, 2 y 3.
+            </span>
+          ) : (
+            <span>
+              ⚠️ Faltan rondas: {completeChecks.length}/{categories.length}{" "}
+              categorías completas. Revisa las categorías marcadas abajo.
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-1.5 md:grid-cols-2 lg:grid-cols-3">
+          {roundChecks.map((check) => (
+            <div
+              key={check.category.id}
+              className={
+                check.isComplete
+                  ? "rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-900"
+                  : "rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900"
+              }
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">
+                  {check.isComplete ? "✅" : "⚠️"} {categoryLabel(check.category)}
+                </span>
+                <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold">
+                  {check.configuredRounds.length}/3
+                </span>
+              </div>
+
+              <div className="mt-1 leading-snug">
+                {check.isComplete ? (
+                  <span>Completa: rondas {check.configuredRounds.join(", ")}</span>
+                ) : (
+                  <span>
+                    Tiene{" "}
+                    {check.configuredRounds.length > 0
+                      ? check.configuredRounds.join(", ")
+                      : "ninguna"}
+                    . Faltan {check.missingRounds.join(", ")}.
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className={cardClass}>
         <div className="flex flex-wrap items-center justify-between gap-2">
