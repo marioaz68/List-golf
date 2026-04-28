@@ -61,10 +61,10 @@ function normalizeTimeForSelect(value: string | null | undefined) {
   if (!value) return "";
 
   const s = String(value).trim();
-  const m = s.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
 
   if (m) {
-    return `${m[1]}:${m[2]}`;
+    return `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`;
   }
 
   return s;
@@ -80,6 +80,11 @@ function categoryLabel(c: Category) {
   return c.id.slice(0, 8);
 }
 
+function fallbackCategoryLabel(categoryId: string | null) {
+  if (!categoryId) return "Sin categoría";
+  return `Categoría no activa (${categoryId.slice(0, 8)})`;
+}
+
 function roundDateLabel(value: string | null) {
   if (!value) return "Sin fecha";
 
@@ -92,6 +97,21 @@ function roundDateLabel(value: string | null) {
 
 function getRoundDayKey(value: string | null) {
   return value || "sin-fecha";
+}
+
+function sortRounds(a: Round, b: Round) {
+  const roundDiff = a.round_no - b.round_no;
+  if (roundDiff !== 0) return roundDiff;
+
+  const waveDiff = String(a.wave ?? "").localeCompare(String(b.wave ?? ""));
+  if (waveDiff !== 0) return waveDiff;
+
+  const timeDiff = String(a.start_time ?? "").localeCompare(
+    String(b.start_time ?? "")
+  );
+  if (timeDiff !== 0) return timeDiff;
+
+  return String(a.category_id ?? "").localeCompare(String(b.category_id ?? ""));
 }
 
 function buildRoundDayGroups(rounds: Round[]) {
@@ -113,22 +133,7 @@ function buildRoundDayGroups(rounds: Round[]) {
 
   return Array.from(map.values()).map((group) => ({
     ...group,
-    rounds: group.rounds.sort((a, b) => {
-      const roundDiff = a.round_no - b.round_no;
-      if (roundDiff !== 0) return roundDiff;
-
-      const waveDiff = String(a.wave ?? "").localeCompare(String(b.wave ?? ""));
-      if (waveDiff !== 0) return waveDiff;
-
-      const timeDiff = String(a.start_time ?? "").localeCompare(
-        String(b.start_time ?? "")
-      );
-      if (timeDiff !== 0) return timeDiff;
-
-      return String(a.category_id ?? "").localeCompare(
-        String(b.category_id ?? "")
-      );
-    }),
+    rounds: group.rounds.sort(sortRounds),
   }));
 }
 
@@ -138,6 +143,8 @@ const secondaryButtonClass =
   "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 shadow-sm hover:bg-gray-50";
 const deleteButtonClass =
   "inline-flex min-h-6 items-center justify-center rounded border border-red-700 bg-red-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-red-800";
+const saveButtonClass =
+  "inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-gray-800";
 const fieldClass =
   "h-8 w-full rounded-md border border-gray-300 bg-gray-100 px-2 text-[11px] leading-normal text-black";
 const compactTableFieldClass =
@@ -194,7 +201,10 @@ export default async function RoundsPage(props: {
     );
   }
 
-  const tournaments: Tournament[] = (tData ?? []) as any[];
+  const tournaments: Tournament[] = ((tData ?? []) as any[]).map((t) => ({
+    id: t.id,
+    name: t.name ?? null,
+  }));
 
   const effectiveTournamentId = tournamentId || (tournaments[0]?.id ?? "");
 
@@ -202,73 +212,98 @@ export default async function RoundsPage(props: {
     redirect(`/rounds?tournament_id=${effectiveTournamentId}`);
   }
 
+  if (!effectiveTournamentId) {
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <header className="space-y-1">
+          <h1 className="text-lg font-bold text-white">Rounds</h1>
+          <p className="text-[11px] leading-snug text-white/85">
+            No hay torneos disponibles.
+          </p>
+        </header>
+
+        <a href="/tournaments/new" className={primaryButtonClass}>
+          + Nuevo torneo
+        </a>
+      </div>
+    );
+  }
+
   await requireTournamentAccess({
     tournamentId: effectiveTournamentId,
     allowedRoles: ["super_admin", "club_admin", "tournament_director"],
   });
 
-  const { data: cData, error: cErr } = effectiveTournamentId
-    ? await supabase
-        .from("categories")
-        .select("id, code, name, sort_order")
-        .eq("tournament_id", effectiveTournamentId)
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true })
-    : { data: [], error: null };
+  const [categoriesRes, roundsRes] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, code, name, sort_order")
+      .eq("tournament_id", effectiveTournamentId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("rounds")
+      .select(
+        "id, tournament_id, round_no, round_date, start_type, start_time, interval_minutes, category_id, wave, group_size"
+      )
+      .eq("tournament_id", effectiveTournamentId)
+      .order("round_date", { ascending: true, nullsFirst: false })
+      .order("round_no", { ascending: true })
+      .order("wave", { ascending: true, nullsFirst: false })
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .limit(500),
+  ]);
 
-  if (cErr) {
+  if (categoriesRes.error) {
     return (
       <div className="space-y-2 p-2 md:p-3">
         <h1 className="text-lg font-bold text-white">Rounds</h1>
         <p className="text-[11px] leading-snug text-red-200">
-          Error cargando categorías: {cErr.message}
+          Error cargando categorías: {categoriesRes.error.message}
         </p>
       </div>
     );
   }
 
-  const categories: Category[] = ((cData ?? []) as any[]).map((c) => ({
-    id: c.id,
-    code: c.code ?? null,
-    name: c.name ?? null,
-    sort_order: c.sort_order === null ? null : Number(c.sort_order),
-  }));
+  if (roundsRes.error) {
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <p className="text-[11px] leading-snug text-red-200">
+          Error cargando rounds: {roundsRes.error.message}
+        </p>
+      </div>
+    );
+  }
+
+  const categories: Category[] = ((categoriesRes.data ?? []) as any[]).map(
+    (c) => ({
+      id: c.id,
+      code: c.code ?? null,
+      name: c.name ?? null,
+      sort_order: c.sort_order === null ? null : Number(c.sort_order),
+    })
+  );
 
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
-  const { data: rData, error: rErr } = effectiveTournamentId
-    ? await supabase
-        .from("rounds")
-        .select(
-          "id, tournament_id, round_no, round_date, start_type, start_time, interval_minutes, category_id, wave, group_size"
-        )
-        .eq("tournament_id", effectiveTournamentId)
-        .order("round_date", { ascending: true })
-        .order("round_no", { ascending: true })
-        .order("wave", { ascending: true })
-        .order("start_time", { ascending: true })
-    : { data: [], error: null };
-
-  if (rErr) {
-    return (
-      <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
-        <p className="text-[11px] leading-snug text-red-200">
-          Error cargando rounds: {rErr.message}
-        </p>
-      </div>
-    );
-  }
-
-  const rounds: Round[] = (rData ?? []).map((r: any) => ({
-    ...r,
-    round_no: Number(r.round_no),
+  const rounds: Round[] = ((roundsRes.data ?? []) as any[]).map((r) => ({
+    id: r.id,
+    tournament_id: r.tournament_id,
+    round_no: Number(r.round_no ?? 0),
+    round_date: r.round_date ?? null,
     start_type: r.start_type === "shotgun" ? "shotgun" : "tee_time",
+    start_time: r.start_time ?? null,
     interval_minutes:
-      r.interval_minutes === null ? null : Number(r.interval_minutes),
+      r.interval_minutes === null || r.interval_minutes === undefined
+        ? null
+        : Number(r.interval_minutes),
     category_id: r.category_id ?? null,
     wave: r.wave ?? null,
-    group_size: r.group_size === null ? null : Number(r.group_size),
+    group_size:
+      r.group_size === null || r.group_size === undefined
+        ? null
+        : Number(r.group_size),
   }));
 
   const roundDayGroups = buildRoundDayGroups(rounds);
@@ -291,7 +326,9 @@ export default async function RoundsPage(props: {
           title="TORNEO"
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
-              <button className={primaryButtonClass}>Cambiar</button>
+              <button type="submit" className={primaryButtonClass}>
+                Cambiar
+              </button>
               <a href="/tournaments/new" className={secondaryButtonClass}>
                 + Nuevo torneo
               </a>
@@ -304,25 +341,19 @@ export default async function RoundsPage(props: {
             </div>
           }
         >
-          {tournaments.length === 0 ? (
-            <div className="text-[11px] leading-snug text-red-200">
-              No hay torneos. Crea uno primero.
-            </div>
-          ) : (
-            <div className="min-w-0">
-              <select
-                name="tournament_id"
-                defaultValue={effectiveTournamentId}
-                className={fieldClass}
-              >
-                {tournaments.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {tournamentLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="min-w-0">
+            <select
+              name="tournament_id"
+              defaultValue={effectiveTournamentId}
+              className={fieldClass}
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {tournamentLabel(t)}
+                </option>
+              ))}
+            </select>
+          </div>
         </HeaderBlock>
       </form>
 
@@ -362,6 +393,7 @@ export default async function RoundsPage(props: {
               name="round_date"
               type="date"
               className={fieldClass}
+              required
             />
           </div>
 
@@ -384,8 +416,13 @@ export default async function RoundsPage(props: {
             <label className={labelClass} htmlFor="wave">
               Turno
             </label>
-            <select id="wave" name="wave" defaultValue="AM" className={fieldClass}>
-              <option value="">Sin turno</option>
+            <select
+              id="wave"
+              name="wave"
+              defaultValue="AM"
+              className={fieldClass}
+              required
+            >
               <option value="AM">AM</option>
               <option value="PM">PM</option>
             </select>
@@ -505,6 +542,13 @@ export default async function RoundsPage(props: {
           </div>
         </div>
 
+        {rounds.length > 499 ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
+            Se muestran los primeros 500 registros. Más adelante agregamos
+            filtro por día/ronda si el torneo crece mucho.
+          </div>
+        ) : null}
+
         {rounds.length === 0 ? (
           <div className="rounded-lg border border-gray-300 bg-white px-2 py-3 text-center text-[11px] text-gray-500">
             No hay rondas todavía.
@@ -567,13 +611,16 @@ export default async function RoundsPage(props: {
 
                     <tbody>
                       {group.rounds.map((r) => {
-                        const formId = `row-${r.id}`;
+                        const formId = `round-edit-${r.id}`;
                         const startTimeValue = normalizeTimeForSelect(
                           r.start_time
                         );
                         const category = r.category_id
                           ? categoryById.get(r.category_id)
                           : null;
+                        const currentCategoryLabel = category
+                          ? categoryLabel(category)
+                          : fallbackCategoryLabel(r.category_id);
 
                         return (
                           <tr key={r.id} className="bg-white align-middle">
@@ -591,6 +638,7 @@ export default async function RoundsPage(props: {
                                 form={formId}
                                 name="round_no"
                                 type="number"
+                                min="1"
                                 defaultValue={r.round_no}
                                 className={compactTableFieldClass}
                               />
@@ -602,8 +650,13 @@ export default async function RoundsPage(props: {
                                 name="category_id"
                                 defaultValue={r.category_id ?? ""}
                                 className={compactTableFieldClass}
-                                title={category ? categoryLabel(category) : ""}
+                                title={currentCategoryLabel}
                               >
+                                {!category && r.category_id ? (
+                                  <option value={r.category_id}>
+                                    {currentCategoryLabel}
+                                  </option>
+                                ) : null}
                                 <option value="">Sin categoría</option>
                                 {categories.map((c) => (
                                   <option key={c.id} value={c.id}>
@@ -695,12 +748,12 @@ export default async function RoundsPage(props: {
                             <td className="border border-gray-300 px-1.5 py-1.5">
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <button
-                                 type="submit"
-                                form={formId}
-                                 className="inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
+                                  type="submit"
+                                  form={formId}
+                                  className={saveButtonClass}
                                 >
-                               Guardar
-                              </button>
+                                  Guardar
+                                </button>
 
                                 <form action={deleteRound}>
                                   <input type="hidden" name="id" value={r.id} />
