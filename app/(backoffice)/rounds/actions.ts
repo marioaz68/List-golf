@@ -102,11 +102,7 @@ function getCategoryIds(fd: FormData) {
 async function ensureAccess(tournament_id: string) {
   await requireTournamentAccess({
     tournamentId: tournament_id,
-    allowedRoles: [
-      "super_admin",
-      "club_admin",
-      "tournament_director",
-    ],
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
   });
 }
 
@@ -125,31 +121,6 @@ export async function createRound(formData: FormData) {
   const interval_minutes = optInt(formData, "interval_minutes");
   const group_size = reqGroupSize(formData);
 
-  const query = supabase
-    .from("rounds")
-    .select("category_id")
-    .eq("tournament_id", tournament_id)
-    .eq("round_no", round_no);
-
-  if (round_date) {
-    query.eq("round_date", round_date);
-  } else {
-    query.is("round_date", null);
-  }
-
-  const { data: existing, error: existingError } = await query;
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  const existingSet = new Set((existing ?? []).map((r: any) => r.category_id));
-  const duplicates = category_ids.filter((id) => existingSet.has(id));
-
-  if (duplicates.length > 0) {
-    throw new Error("Ya existe una ronda para esa categoría en ese día/ronda");
-  }
-
   const rows = category_ids.map((category_id) => ({
     tournament_id,
     round_no,
@@ -164,7 +135,18 @@ export async function createRound(formData: FormData) {
 
   const { error } = await supabase.from("rounds").insert(rows);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (
+      error.message.includes("duplicate key value") ||
+      error.message.includes("uq_rounds_tournament_round_category_wave")
+    ) {
+      throw new Error(
+        "Ya existe una ronda para esa categoría, número de ronda y turno."
+      );
+    }
+
+    throw new Error(error.message);
+  }
 
   revalidatePath("/rounds");
   redirect(`/rounds?tournament_id=${tournament_id}`);
@@ -200,7 +182,18 @@ export async function updateRound(formData: FormData) {
     })
     .eq("id", id);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (
+      error.message.includes("duplicate key value") ||
+      error.message.includes("uq_rounds_tournament_round_category_wave")
+    ) {
+      throw new Error(
+        "Ya existe una ronda para esa categoría, número de ronda y turno."
+      );
+    }
+
+    throw new Error(error.message);
+  }
 
   revalidatePath("/rounds");
   redirect(`/rounds?tournament_id=${tournament_id}`);
@@ -216,10 +209,7 @@ export async function deleteRound(formData: FormData) {
     await ensureAccess(tournament_id);
   }
 
-  const { error } = await supabase
-    .from("rounds")
-    .delete()
-    .eq("id", id);
+  const { error } = await supabase.from("rounds").delete().eq("id", id);
 
   if (error) throw new Error(error.message);
 
