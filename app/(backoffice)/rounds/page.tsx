@@ -3,7 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { createRound, updateRound, deleteRound } from "./actions";
-import { RoundDeleteButton, RoundSubmitButton } from "./RoundFormButtons";
+import SubmitButton from "@/components/ui/SubmitButton";
 import HeaderBar from "@/components/ui/HeaderBar";
 
 export const dynamic = "force-dynamic";
@@ -136,6 +136,8 @@ const primaryButtonClass =
   "inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800";
 const secondaryButtonClass =
   "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 shadow-sm hover:bg-gray-50";
+const deleteButtonClass =
+  "inline-flex min-h-6 items-center justify-center rounded border border-red-700 bg-red-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-red-800";
 const fieldClass =
   "h-8 w-full rounded-md border border-gray-300 bg-gray-100 px-2 text-[11px] leading-normal text-black";
 const compactTableFieldClass =
@@ -479,12 +481,9 @@ export default async function RoundsPage(props: {
           </div>
 
           <div className="flex items-end">
-            <RoundSubmitButton
-              pendingText="Creando..."
-              disabled={categories.length === 0}
-            >
+            <SubmitButton pendingText="Creando..." disabled={categories.length === 0}>
               Crear día
-            </RoundSubmitButton>
+            </SubmitButton>
           </div>
         </form>
       </section>
@@ -695,12 +694,9 @@ export default async function RoundsPage(props: {
 
                             <td className="border border-gray-300 px-1.5 py-1.5">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <RoundSubmitButton
-                                  form={formId}
-                                  pendingText="Guardando..."
-                                >
+                                <SubmitButton form={formId} pendingText="...">
                                   Guardar
-                                </RoundSubmitButton>
+                                </SubmitButton>
 
                                 <form action={deleteRound}>
                                   <input type="hidden" name="id" value={r.id} />
@@ -709,7 +705,12 @@ export default async function RoundsPage(props: {
                                     name="tournament_id"
                                     value={effectiveTournamentId}
                                   />
-                                  <RoundDeleteButton />
+                                  <button
+                                    type="submit"
+                                    className={deleteButtonClass}
+                                  >
+                                    Eliminar
+                                  </button>
                                 </form>
                               </div>
                             </td>
