@@ -694,9 +694,13 @@ export default async function RoundsPage(props: {
 
                             <td className="border border-gray-300 px-1.5 py-1.5">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <SubmitButton form={formId} pendingText="...">
-                                  Guardar
-                                </SubmitButton>
+                                <button
+                                 type="submit"
+                                form={formId}
+                                 className="inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
+                                >
+                               Guardar
+                              </button>
 
                                 <form action={deleteRound}>
                                   <input type="hidden" name="id" value={r.id} />
