@@ -78,7 +78,13 @@ type RuleRow = {
   to_round_no: number;
   scope_type: "category" | "category_group" | "category_code_list" | "overall";
   scope_value: string;
-  ranking_basis: "gross_total" | "net_total" | "points_total" | "gross_round" | "net_round" | "points_round";
+  ranking_basis:
+    | "gross_total"
+    | "net_total"
+    | "points_total"
+    | "gross_round"
+    | "net_round"
+    | "points_round";
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
   advancement_type: "top_n" | "top_percent";
   advancement_value: number;
@@ -131,25 +137,39 @@ export async function saveCutRulesSnapshot(formData: FormData) {
     r.is_active = parseBool(r.is_active);
     r.notes = String(r.notes ?? "").trim() || null;
 
-    if (r.from_round_no < 1) throw new Error(`from_round_no inválido en fila ${i + 1}`);
-    if (r.to_round_no < 1) throw new Error(`to_round_no inválido en fila ${i + 1}`);
-    if (r.to_round_no <= r.from_round_no) {
-      throw new Error(`to_round_no debe ser mayor que from_round_no en fila ${i + 1}`);
+    if (r.from_round_no < 1) {
+      throw new Error(`from_round_no inválido en fila ${i + 1}`);
+    }
+
+    if (r.to_round_no < 1) {
+      throw new Error(`to_round_no inválido en fila ${i + 1}`);
+    }
+
+    // 🔥 CAMBIO AQUÍ → ahora permite R1 → R1
+    if (r.to_round_no < r.from_round_no) {
+      throw new Error(
+        `to_round_no debe ser mayor o igual que from_round_no en fila ${i + 1}`
+      );
     }
 
     if (r.scope_type !== "overall" && !r.scope_value) {
       throw new Error(`Falta scope_value en fila ${i + 1}`);
     }
 
-    if (r.advancement_type === "top_n" && (!Number.isFinite(r.advancement_value) || r.advancement_value < 1)) {
-      throw new Error(`Top N inválido en fila ${i + 1}`);
+    if (r.advancement_type === "top_n") {
+      if (!Number.isFinite(r.advancement_value) || r.advancement_value < 1) {
+        throw new Error(`Top N inválido en fila ${i + 1}`);
+      }
     }
 
-    if (
-      r.advancement_type === "top_percent" &&
-      (!Number.isFinite(r.advancement_value) || r.advancement_value <= 0 || r.advancement_value > 100)
-    ) {
-      throw new Error(`Top % inválido en fila ${i + 1}`);
+    if (r.advancement_type === "top_percent") {
+      if (
+        !Number.isFinite(r.advancement_value) ||
+        r.advancement_value <= 0 ||
+        r.advancement_value > 100
+      ) {
+        throw new Error(`Top % inválido en fila ${i + 1}`);
+      }
     }
   }
 
@@ -208,7 +228,10 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       notes: r.notes,
     }));
 
-    const { error } = await supabase.from("round_advancement_rules").insert(payload);
+    const { error } = await supabase
+      .from("round_advancement_rules")
+      .insert(payload);
+
     if (error) throw new Error(error.message);
   }
 

@@ -20,6 +20,13 @@ type RoundRow = {
   round_date: string | null;
 };
 
+type CategoryRow = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  sort_order: number | null;
+};
+
 type TieBreakProfileRow = {
   id: string;
   name: string | null;
@@ -132,6 +139,16 @@ export default async function CutRulesPage(props: {
 
   if (roundsError) throw new Error(roundsError.message);
 
+  const { data: categories, error: categoriesError } = effectiveTournamentId
+    ? await supabase
+        .from("categories")
+        .select("id, code, name, sort_order")
+        .eq("tournament_id", effectiveTournamentId)
+        .order("sort_order", { ascending: true })
+    : { data: [], error: null };
+
+  if (categoriesError) throw new Error(categoriesError.message);
+
   const { data: tieBreakProfiles, error: tieBreakProfilesError } =
     effectiveTournamentId
       ? await supabase
@@ -200,6 +217,13 @@ export default async function CutRulesPage(props: {
         >
           Reglas de Salidas
         </a>
+
+        <a
+          href={`/prize-rules?tournament_id=${effectiveTournamentId}`}
+          style={buttonStyle}
+        >
+          Premios
+        </a>
       </div>
 
       <form method="GET" action="/cut-rules" className="space-y-2">
@@ -231,6 +255,7 @@ export default async function CutRulesPage(props: {
       <CutRulesEditor
         tournamentId={effectiveTournamentId}
         rounds={(rounds ?? []) as RoundRow[]}
+        categories={(categories ?? []) as CategoryRow[]}
         tieBreakProfiles={(tieBreakProfiles ?? []) as TieBreakProfileRow[]}
         rules={(rules ?? []) as CutRuleRow[]}
       />
