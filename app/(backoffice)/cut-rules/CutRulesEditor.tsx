@@ -75,13 +75,6 @@ const redButtonStyle: React.CSSProperties = {
   boxShadow: "0 3px 0 #7f1d1d, 0 4px 8px rgba(0,0,0,0.22)",
 };
 
-const SCOPE_OPTIONS = [
-  { value: "overall", label: "Todas" },
-  { value: "category_code_list", label: "Categorías seleccionadas" },
-  { value: "category_group", label: "Grupo manual" },
-  { value: "category", label: "Categoría ID" },
-] as const;
-
 const RANKING_BASIS_OPTIONS = [
   { value: "gross_total", label: "Gross total" },
   { value: "net_total", label: "Neto total" },
@@ -134,8 +127,15 @@ export default function CutRulesEditor({
   rules: RuleRow[];
 }) {
   const [rows, setRows] = useState<RuleRow[]>(
-    [...rules].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
+    [...rules]
+      .map((r) => ({
+        ...r,
+        scope_type: "category_code_list" as const,
+        scope_value: r.scope_type === "overall" ? "" : String(r.scope_value ?? ""),
+      }))
+      .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
   );
+
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -152,7 +152,7 @@ export default function CutRulesEditor({
     [categories]
   );
 
-  const canAddRule = uniqueRounds.length >= 1;
+  const canAddRule = uniqueRounds.length >= 1 && sortedCategories.length >= 1;
 
   function updateRow(
     id: string,
@@ -160,18 +160,6 @@ export default function CutRulesEditor({
     value: string | number | boolean | null
   ) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-    setMsg(null);
-  }
-
-  function updateScopeType(id: string, value: RuleRow["scope_type"]) {
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== id) return r;
-        if (value === "overall") return { ...r, scope_type: value, scope_value: "ALL" };
-        if (value === "category_code_list") return { ...r, scope_type: value, scope_value: "" };
-        return { ...r, scope_type: value, scope_value: "" };
-      })
-    );
     setMsg(null);
   }
 
@@ -189,7 +177,7 @@ export default function CutRulesEditor({
 
   function addRow() {
     if (!canAddRule) {
-      setMsg("Primero debes crear al menos 1 ronda para definir reglas.");
+      setMsg("Primero debes crear rondas y categorías para definir reglas.");
       return;
     }
 
@@ -254,7 +242,8 @@ export default function CutRulesEditor({
     ...r,
     from_round_no: Number(r.from_round_no),
     to_round_no: Number(r.to_round_no),
-    scope_value: r.scope_type === "overall" ? "ALL" : String(r.scope_value ?? "").trim(),
+    scope_type: "category_code_list" as const,
+    scope_value: String(r.scope_value ?? "").trim(),
     advancement_value: Number(r.advancement_value),
     tie_break_profile_id: r.tie_break_profile_id ? String(r.tie_break_profile_id) : null,
     sort_order: i + 1,
@@ -266,6 +255,11 @@ export default function CutRulesEditor({
   function validate() {
     if (uniqueRounds.length < 1) {
       setMsg("Primero debes crear al menos 1 ronda.");
+      return false;
+    }
+
+    if (sortedCategories.length < 1) {
+      setMsg("Primero debes crear categorías.");
       return false;
     }
 
@@ -287,8 +281,8 @@ export default function CutRulesEditor({
         return false;
       }
 
-      if (r.scope_type !== "overall" && !r.scope_value) {
-        setMsg(`Selecciona alcance/categorías en fila ${i + 1}.`);
+      if (!r.scope_value) {
+        setMsg(`Selecciona al menos una categoría en fila ${i + 1}.`);
         return false;
       }
 
@@ -325,7 +319,7 @@ export default function CutRulesEditor({
     <div className="space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2 shadow-sm">
       {!canAddRule && (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
-          Debes tener al menos 1 ronda creada en este torneo para configurar reglas.
+          Debes tener rondas y categorías creadas en este torneo para configurar cortes.
         </div>
       )}
 
@@ -344,7 +338,7 @@ export default function CutRulesEditor({
         </button>
 
         <div className="text-[11px] leading-snug text-gray-700">
-          Primero selecciona categorías; después define de qué ronda a qué ronda aplica.
+          Los cortes se configuran por categoría. Selecciona una o varias categorías por regla.
         </div>
       </div>
 
@@ -360,12 +354,11 @@ export default function CutRulesEditor({
         <input type="hidden" name="delete_ids_json" value={JSON.stringify(deleteIds)} />
 
         <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
-          <table className="min-w-[1720px] w-full border-collapse text-[11px] leading-none">
+          <table className="min-w-[1580px] w-full border-collapse text-[11px] leading-none">
             <thead>
               <tr className="bg-gray-200 text-gray-900">
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Orden</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Alcance</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Categorías / Valor</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Categorías</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">De</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">A</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Base</th>
@@ -384,7 +377,7 @@ export default function CutRulesEditor({
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={14}
+                    colSpan={13}
                     className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                   >
                     No hay reglas todavía.
@@ -400,59 +393,36 @@ export default function CutRulesEditor({
                         {i + 1}
                       </td>
 
-                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[155px]">
-                        <select
-                          value={r.scope_type}
-                          onChange={(e) => updateScopeType(r.id, e.target.value as RuleRow["scope_type"])}
-                          className={fieldClass}
-                        >
-                          {SCOPE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[360px]">
+                        <div className="max-h-20 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-1">
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                            {sortedCategories.map((c) => {
+                              const code = String(c.code ?? "").trim();
+                              if (!code) return null;
+                              return (
+                                <label key={c.id} className="flex items-center gap-1 text-[11px] text-gray-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCodes.includes(code)}
+                                    onChange={(e) => toggleCategoryCode(r.id, code, e.target.checked)}
+                                    className={checkboxClass}
+                                  />
+                                  <span className="truncate">{categoryLabel(c)}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
 
-                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[340px]">
-                        {r.scope_type === "overall" ? (
-                          <div className="rounded border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] text-gray-700">
-                            Aplica a todas las categorías
-                          </div>
-                        ) : r.scope_type === "category_code_list" ? (
-                          <div className="max-h-20 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-1">
-                            <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                              {sortedCategories.map((c) => {
-                                const code = String(c.code ?? "").trim();
-                                if (!code) return null;
-                                return (
-                                  <label key={c.id} className="flex items-center gap-1 text-[11px] text-gray-800">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedCodes.includes(code)}
-                                      onChange={(e) => toggleCategoryCode(r.id, code, e.target.checked)}
-                                      className={checkboxClass}
-                                    />
-                                    <span className="truncate">{categoryLabel(c)}</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            value={r.scope_value}
-                            onChange={(e) => updateRow(r.id, "scope_value", e.target.value)}
-                            className={fieldClass}
-                            placeholder={r.scope_type === "category_group" ? "main / senior / damas" : "category_id"}
-                          />
-                        )}
-                        {r.scope_type === "category_code_list" && selectedCodes.length > 0 ? (
+                        {selectedCodes.length > 0 ? (
                           <div className="mt-1 text-[10px] leading-snug text-gray-600">
                             Seleccionadas: {selectedCodes.join(", ")}
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="mt-1 text-[10px] leading-snug text-red-600">
+                            Selecciona al menos una categoría
+                          </div>
+                        )}
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px]">
