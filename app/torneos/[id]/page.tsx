@@ -823,7 +823,7 @@ filteredEntries.forEach((entry) => {
     categoryStatusMap[cat].closed += 1;
   }
 });
-  const leaderboardBase = buildLiveLeaderboard({
+  const leaderboardBase: LeaderboardRow[] = buildLiveLeaderboard({
   filteredEntries,
   rounds,
   roundScores,
