@@ -145,31 +145,23 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       throw new Error(`to_round_no inválido en fila ${i + 1}`);
     }
 
-    // 🔥 CAMBIO AQUÍ → ahora permite R1 → R1
     if (r.to_round_no < r.from_round_no) {
-      throw new Error(
-        `to_round_no debe ser mayor o igual que from_round_no en fila ${i + 1}`
-      );
+      throw new Error(`to_round_no debe ser mayor o igual que from_round_no en fila ${i + 1}`);
     }
 
     if (r.scope_type !== "overall" && !r.scope_value) {
       throw new Error(`Falta scope_value en fila ${i + 1}`);
     }
 
-    if (r.advancement_type === "top_n") {
-      if (!Number.isFinite(r.advancement_value) || r.advancement_value < 1) {
-        throw new Error(`Top N inválido en fila ${i + 1}`);
-      }
+    if (r.advancement_type === "top_n" && r.advancement_value < 1) {
+      throw new Error(`Top N inválido en fila ${i + 1}`);
     }
 
-    if (r.advancement_type === "top_percent") {
-      if (
-        !Number.isFinite(r.advancement_value) ||
-        r.advancement_value <= 0 ||
-        r.advancement_value > 100
-      ) {
-        throw new Error(`Top % inválido en fila ${i + 1}`);
-      }
+    if (
+      r.advancement_type === "top_percent" &&
+      (r.advancement_value <= 0 || r.advancement_value > 100)
+    ) {
+      throw new Error(`Top % inválido en fila ${i + 1}`);
     }
   }
 
@@ -236,5 +228,7 @@ export async function saveCutRulesSnapshot(formData: FormData) {
   }
 
   revalidatePath("/cut-rules");
-  redirect(`/cut-rules?tournament_id=${tournament_id}`);
+
+  // 🔥 CLAVE: mensaje de guardado
+  redirect(`/cut-rules?tournament_id=${tournament_id}&saved=1`);
 }

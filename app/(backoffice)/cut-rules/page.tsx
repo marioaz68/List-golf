@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import CutRulesEditor from "./CutRulesEditor";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -106,10 +107,12 @@ export default async function CutRulesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const supabase = await createClient();
+  const supabaseAdmin = createAdminClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
   const tournamentId =
     typeof sp.tournament_id === "string" ? sp.tournament_id : "";
+  const saved = typeof sp.saved === "string" ? sp.saved : "";
 
   const { data: tournaments, error: tournamentsError } = await supabase
     .from("tournaments")
@@ -151,10 +154,11 @@ export default async function CutRulesPage(props: {
 
   const { data: tieBreakProfiles, error: tieBreakProfilesError } =
     effectiveTournamentId
-      ? await supabase
+      ? await supabaseAdmin
           .from("tie_break_profiles")
           .select("id, name, applies_to")
           .eq("tournament_id", effectiveTournamentId)
+          .eq("is_active", true)
           .in("applies_to", ["cut", "general"])
           .order("name", { ascending: true })
       : { data: [], error: null };
@@ -219,6 +223,13 @@ export default async function CutRulesPage(props: {
         </a>
 
         <a
+          href={`/competition-rules?tournament_id=${effectiveTournamentId}`}
+          style={buttonStyle}
+        >
+          Competencia
+        </a>
+
+        <a
           href={`/prize-rules?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
@@ -251,6 +262,12 @@ export default async function CutRulesPage(props: {
           </div>
         </HeaderBlock>
       </form>
+
+      {saved === "1" ? (
+        <div className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-[11px] font-semibold leading-snug text-green-800">
+          Reglas guardadas correctamente.
+        </div>
+      ) : null}
 
       <CutRulesEditor
         tournamentId={effectiveTournamentId}
