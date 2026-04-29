@@ -22,6 +22,8 @@ type TieBreakProfileRow = {
   applies_to: "cut" | "trophy" | "general";
 };
 
+type AdvancementType = "top_n" | "top_percent" | "all";
+
 type RuleRow = {
   id: string;
   from_round_no: number;
@@ -36,7 +38,7 @@ type RuleRow = {
     | "net_round"
     | "points_round";
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
-  advancement_type: "top_n" | "top_percent";
+  advancement_type: AdvancementType;
   advancement_value: number;
   include_ties: boolean;
   tie_break_profile_id: string | null;
@@ -93,6 +95,7 @@ const RANKING_MODE_OPTIONS = [
 const ADVANCEMENT_TYPE_OPTIONS = [
   { value: "top_n", label: "Top N" },
   { value: "top_percent", label: "Top %" },
+  { value: "all", label: "Sin corte / pasan todos" },
 ] as const;
 
 function splitCodes(value: string) {
@@ -132,6 +135,8 @@ export default function CutRulesEditor({
         ...r,
         scope_type: "category_code_list" as const,
         scope_value: r.scope_type === "overall" ? "" : String(r.scope_value ?? ""),
+        advancement_type: r.advancement_type as AdvancementType,
+        advancement_value: r.advancement_type === "all" ? 0 : Number(r.advancement_value ?? 0),
       }))
       .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
   );
@@ -159,7 +164,23 @@ export default function CutRulesEditor({
     field: keyof RuleRow,
     value: string | number | boolean | null
   ) {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+
+        if (field === "advancement_type") {
+          const nextType = value as AdvancementType;
+
+          return {
+            ...r,
+            advancement_type: nextType,
+            advancement_value: nextType === "all" ? 0 : Number(r.advancement_value || 0),
+          };
+        }
+
+        return { ...r, [field]: value };
+      })
+    );
     setMsg(null);
   }
 
@@ -244,7 +265,8 @@ export default function CutRulesEditor({
     to_round_no: Number(r.to_round_no),
     scope_type: "category_code_list" as const,
     scope_value: String(r.scope_value ?? "").trim(),
-    advancement_value: Number(r.advancement_value),
+    advancement_type: r.advancement_type,
+    advancement_value: r.advancement_type === "all" ? 0 : Number(r.advancement_value),
     tie_break_profile_id: r.tie_break_profile_id ? String(r.tie_break_profile_id) : null,
     sort_order: i + 1,
     is_active: !!r.is_active,
@@ -286,7 +308,7 @@ export default function CutRulesEditor({
         return false;
       }
 
-      if (!Number.isFinite(r.advancement_value)) {
+      if (r.advancement_type !== "all" && !Number.isFinite(r.advancement_value)) {
         setMsg(`Valor de corte inválido en fila ${i + 1}.`);
         return false;
       }
@@ -481,7 +503,7 @@ export default function CutRulesEditor({
                         </select>
                       </td>
 
-                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[105px]">
+                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[160px]">
                         <select
                           value={r.advancement_type}
                           onChange={(e) => updateRow(r.id, "advancement_type", e.target.value)}
@@ -496,13 +518,19 @@ export default function CutRulesEditor({
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px]">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={r.advancement_value}
-                          onChange={(e) => updateRow(r.id, "advancement_value", Number(e.target.value))}
-                          className={shortFieldClass}
-                        />
+                        {r.advancement_type === "all" ? (
+                          <div className="h-7 w-28 rounded border border-emerald-300 bg-emerald-50 px-2 text-[11px] leading-7 text-emerald-800">
+                            Pasan todos
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={r.advancement_value}
+                            onChange={(e) => updateRow(r.id, "advancement_value", Number(e.target.value))}
+                            className={shortFieldClass}
+                          />
+                        )}
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px] text-center">

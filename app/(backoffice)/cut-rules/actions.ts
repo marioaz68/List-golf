@@ -39,10 +39,18 @@ function parseScopeType(value: unknown) {
 function parseRankingBasis(value: unknown) {
   const v = String(value ?? "").trim();
   if (
-    !["gross_total", "net_total", "points_total", "gross_round", "net_round", "points_round"].includes(v)
+    ![
+      "gross_total",
+      "net_total",
+      "points_total",
+      "gross_round",
+      "net_round",
+      "points_round",
+    ].includes(v)
   ) {
     throw new Error(`ranking_basis inválido: ${v}`);
   }
+
   return v as
     | "gross_total"
     | "net_total"
@@ -62,10 +70,10 @@ function parseRankingMode(value: unknown) {
 
 function parseAdvancementType(value: unknown) {
   const v = String(value ?? "").trim();
-  if (!["top_n", "top_percent"].includes(v)) {
+  if (!["top_n", "top_percent", "all"].includes(v)) {
     throw new Error(`advancement_type inválido: ${v}`);
   }
-  return v as "top_n" | "top_percent";
+  return v as "top_n" | "top_percent" | "all";
 }
 
 function parseBool(value: unknown) {
@@ -86,7 +94,7 @@ type RuleRow = {
     | "net_round"
     | "points_round";
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
-  advancement_type: "top_n" | "top_percent";
+  advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
   include_ties: boolean;
   tie_break_profile_id?: string | null;
@@ -131,6 +139,11 @@ export async function saveCutRulesSnapshot(formData: FormData) {
     r.ranking_mode = parseRankingMode(r.ranking_mode);
     r.advancement_type = parseAdvancementType(r.advancement_type);
     r.advancement_value = optNum(r.advancement_value) ?? 0;
+
+    if (r.advancement_type === "all") {
+      r.advancement_value = 0;
+    }
+
     r.include_ties = parseBool(r.include_ties);
     r.tie_break_profile_id = String(r.tie_break_profile_id ?? "").trim() || null;
     r.sort_order = i + 1;
@@ -220,15 +233,12 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       notes: r.notes,
     }));
 
-    const { error } = await supabase
-      .from("round_advancement_rules")
-      .insert(payload);
+    const { error } = await supabase.from("round_advancement_rules").insert(payload);
 
     if (error) throw new Error(error.message);
   }
 
   revalidatePath("/cut-rules");
 
-  // 🔥 CLAVE: mensaje de guardado
   redirect(`/cut-rules?tournament_id=${tournament_id}&saved=1`);
 }
