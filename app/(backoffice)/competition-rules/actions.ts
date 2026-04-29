@@ -73,7 +73,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
   }
 
   const now = new Date().toISOString();
-
+console.log("🔥 ACTIONS NUEVO EJECUTANDO");
   const normalizedRows = rows.map((row, index) => {
     const category_id = String(row.category_id ?? "").trim();
 
@@ -92,6 +92,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
     const is_active = parseBool(row.is_active);
     const notes = String(row.notes ?? "").trim() || null;
 
+    // VALIDACIONES
     if (handicap_percentage < 0 || handicap_percentage > 150) {
       throw new Error(
         `El % handicap debe estar entre 0 y 150 en fila ${index + 1}`
@@ -106,6 +107,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
       throw new Error(`Neto premios no puede ser negativo en fila ${index + 1}`);
     }
 
+    // STABLEFORD
     if (scoring_format === "stableford") {
       leaderboard_basis = "stableford";
       prize_basis = "stableford";
@@ -113,6 +115,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
       net_prize_places = null;
     }
 
+    // VALIDACIONES CRUZADAS
     if (scoring_format === "stroke_play" && leaderboard_basis === "stableford") {
       throw new Error(
         `Si la modalidad es Stroke Play, el leaderboard no puede ser Stableford en fila ${index + 1}`
@@ -125,6 +128,8 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
       );
     }
 
+    // 🔥 LÓGICA CORRECTA DE PREMIOS
+
     if (prize_basis === "gross") {
       net_prize_places = 0;
       if (gross_prize_places <= 0) gross_prize_places = 1;
@@ -132,12 +137,19 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
 
     if (prize_basis === "net") {
       gross_prize_places = 0;
-      if (net_prize_places === null) net_prize_places = 1;
+      if (net_prize_places === null || net_prize_places <= 0) {
+        net_prize_places = 1;
+      }
     }
 
     if (prize_basis === "both") {
-      if (gross_prize_places <= 0) gross_prize_places = 1;
-      // net_prize_places null = todos los demás
+      if (gross_prize_places <= 0) {
+        gross_prize_places = 1;
+      }
+
+      if (net_prize_places === null || net_prize_places <= 0) {
+        net_prize_places = 1;
+      }
     }
 
     return {
@@ -155,6 +167,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
     };
   });
 
+  // 🔥 BORRAR ANTES (SNAPSHOT)
   const { error: deleteError } = await supabase
     .from("category_competition_rules")
     .delete()
@@ -176,5 +189,7 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
 
   revalidatePath("/competition-rules");
 
-  redirect(`/competition-rules?tournament_id=${tournament_id}&saved=${Date.now()}`);
+  redirect(
+    `/competition-rules?tournament_id=${tournament_id}&saved=${Date.now()}`
+  );
 }

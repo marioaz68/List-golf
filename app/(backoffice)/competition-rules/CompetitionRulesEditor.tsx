@@ -161,11 +161,15 @@ export default function CompetitionRulesEditor({
   const [rows, setRows] = useState<EditorRow[]>(() => makeInitialRows(categories, rules));
   const [msg, setMsg] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    setRows(makeInitialRows(categories, rules));
-    setMsg(null);
-  }, [categories, rules]);
+    if (!initialized) {
+      setRows(makeInitialRows(categories, rules));
+      setMsg(null);
+      setInitialized(true);
+    }
+  }, [categories, rules, initialized]);
 
   const normalizedRows = useMemo(
     () =>
@@ -236,18 +240,31 @@ export default function CompetitionRulesEditor({
           if (value === "net") {
             next.prize_basis = next.prize_basis === "stableford" ? "net" : next.prize_basis;
             next.gross_prize_places = 0;
+            if (next.net_prize_places === null || next.net_prize_places <= 0) next.net_prize_places = 1;
           }
 
           if (value === "both") {
             next.prize_basis = "both";
             if (next.gross_prize_places <= 0) next.gross_prize_places = 1;
+            if (next.net_prize_places === null || next.net_prize_places <= 0) next.net_prize_places = 1;
           }
         }
 
         if (field === "prize_basis") {
-          if (value === "gross" && next.gross_prize_places <= 0) next.gross_prize_places = 1;
-          if (value === "net") next.gross_prize_places = 0;
-          if (value === "both" && next.gross_prize_places <= 0) next.gross_prize_places = 1;
+          if (value === "gross") {
+            if (next.gross_prize_places <= 0) next.gross_prize_places = 1;
+            next.net_prize_places = 0;
+          }
+
+          if (value === "net") {
+            next.gross_prize_places = 0;
+            if (next.net_prize_places === null || next.net_prize_places <= 0) next.net_prize_places = 1;
+          }
+
+          if (value === "both") {
+            if (next.gross_prize_places <= 0) next.gross_prize_places = 1;
+            if (next.net_prize_places === null || next.net_prize_places <= 0) next.net_prize_places = 1;
+          }
         }
 
         return next;

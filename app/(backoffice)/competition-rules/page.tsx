@@ -29,6 +29,8 @@ type CompetitionRuleRow = {
   leaderboard_basis: "gross" | "net" | "both" | "stableford";
   prize_basis: "gross" | "net" | "both" | "stableford";
   handicap_percentage: number;
+  gross_prize_places: number | null;
+  net_prize_places: number | null;
   is_active: boolean;
   notes: string | null;
   updated_at: string | null;
@@ -120,7 +122,7 @@ export default async function CompetitionRulesPage(props: {
     ? await supabase
         .from("category_competition_rules")
         .select(
-          "id, tournament_id, category_id, scoring_format, leaderboard_basis, prize_basis, handicap_percentage, is_active, notes, updated_at"
+         "id, tournament_id, category_id, scoring_format, leaderboard_basis, prize_basis, handicap_percentage, gross_prize_places, net_prize_places, is_active, notes, updated_at"
         )
         .eq("tournament_id", effectiveTournamentId)
         .order("updated_at", { ascending: false })
@@ -132,7 +134,12 @@ export default async function CompetitionRulesPage(props: {
   const rulesList = (rules ?? []) as CompetitionRuleRow[];
 
   const editorKey = `${effectiveTournamentId}-${rulesList
-    .map((rule) => `${rule.category_id}:${rule.updated_at ?? ""}`)
+    .map(
+      (rule) =>
+        `${rule.category_id}:${rule.updated_at ?? ""}:${rule.gross_prize_places ?? ""}:${
+          rule.net_prize_places ?? ""
+        }`
+    )
     .join("|")}`;
 
   if (!effectiveTournamentId) {
