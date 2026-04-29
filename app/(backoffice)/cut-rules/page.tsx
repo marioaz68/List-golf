@@ -48,9 +48,11 @@ type CutRuleRow = {
     | "net_round"
     | "points_round";
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
-  advancement_type: "top_n" | "top_percent";
+  advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
   include_ties: boolean;
+  gross_exemption_enabled: boolean;
+  gross_exemption_top_n: number;
   tie_break_profile_id: string | null;
   sort_order: number | null;
   is_active: boolean;
@@ -169,7 +171,7 @@ export default async function CutRulesPage(props: {
     ? await supabase
         .from("round_advancement_rules")
         .select(
-          "id, from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, tie_break_profile_id, sort_order, is_active, notes"
+          "id, from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, sort_order, is_active, notes"
         )
         .eq("tournament_id", effectiveTournamentId)
         .order("sort_order", { ascending: true })
@@ -178,6 +180,16 @@ export default async function CutRulesPage(props: {
     : { data: [], error: null };
 
   if (rulesError) throw new Error(rulesError.message);
+
+  const normalizedRules = (rules ?? []).map((r) => ({
+    ...r,
+    advancement_type: (r.advancement_type ?? "top_n") as
+      | "top_n"
+      | "top_percent"
+      | "all",
+    gross_exemption_enabled: !!r.gross_exemption_enabled,
+    gross_exemption_top_n: Number(r.gross_exemption_top_n ?? 0),
+  })) as CutRuleRow[];
 
   if (!effectiveTournamentId) {
     return (
@@ -274,7 +286,7 @@ export default async function CutRulesPage(props: {
         rounds={(rounds ?? []) as RoundRow[]}
         categories={(categories ?? []) as CategoryRow[]}
         tieBreakProfiles={(tieBreakProfiles ?? []) as TieBreakProfileRow[]}
-        rules={(rules ?? []) as CutRuleRow[]}
+        rules={normalizedRules}
       />
     </div>
   );
