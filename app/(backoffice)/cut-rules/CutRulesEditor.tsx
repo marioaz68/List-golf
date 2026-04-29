@@ -41,6 +41,8 @@ type RuleRow = {
   advancement_type: AdvancementType;
   advancement_value: number;
   include_ties: boolean;
+  gross_exemption_enabled: boolean;
+  gross_exemption_top_n: number;
   tie_break_profile_id: string | null;
   sort_order: number | null;
   is_active: boolean;
@@ -137,6 +139,8 @@ export default function CutRulesEditor({
         scope_value: r.scope_type === "overall" ? "" : String(r.scope_value ?? ""),
         advancement_type: r.advancement_type as AdvancementType,
         advancement_value: r.advancement_type === "all" ? 0 : Number(r.advancement_value ?? 0),
+        gross_exemption_enabled: !!r.gross_exemption_enabled,
+        gross_exemption_top_n: Number(r.gross_exemption_top_n ?? 0),
       }))
       .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
   );
@@ -175,6 +179,16 @@ export default function CutRulesEditor({
             ...r,
             advancement_type: nextType,
             advancement_value: nextType === "all" ? 0 : Number(r.advancement_value || 0),
+          };
+        }
+
+        if (field === "gross_exemption_enabled") {
+          const enabled = !!value;
+
+          return {
+            ...r,
+            gross_exemption_enabled: enabled,
+            gross_exemption_top_n: enabled ? Number(r.gross_exemption_top_n || 1) : 0,
           };
         }
 
@@ -217,6 +231,8 @@ export default function CutRulesEditor({
         advancement_type: "top_n",
         advancement_value: 24,
         include_ties: true,
+        gross_exemption_enabled: false,
+        gross_exemption_top_n: 0,
         tie_break_profile_id: null,
         sort_order: prev.length + 1,
         is_active: true,
@@ -267,10 +283,12 @@ export default function CutRulesEditor({
     scope_value: String(r.scope_value ?? "").trim(),
     advancement_type: r.advancement_type,
     advancement_value: r.advancement_type === "all" ? 0 : Number(r.advancement_value),
+    include_ties: !!r.include_ties,
+    gross_exemption_enabled: !!r.gross_exemption_enabled,
+    gross_exemption_top_n: r.gross_exemption_enabled ? Number(r.gross_exemption_top_n || 0) : 0,
     tie_break_profile_id: r.tie_break_profile_id ? String(r.tie_break_profile_id) : null,
     sort_order: i + 1,
     is_active: !!r.is_active,
-    include_ties: !!r.include_ties,
     notes: String(r.notes ?? "").trim(),
   }));
 
@@ -325,6 +343,14 @@ export default function CutRulesEditor({
         setMsg(`Top % debe estar entre 0 y 100 en fila ${i + 1}.`);
         return false;
       }
+
+      if (
+        r.gross_exemption_enabled &&
+        (!Number.isFinite(r.gross_exemption_top_n) || r.gross_exemption_top_n < 1)
+      ) {
+        setMsg(`Top Gross protegido debe ser mayor o igual a 1 en fila ${i + 1}.`);
+        return false;
+      }
     }
 
     setMsg(null);
@@ -376,7 +402,7 @@ export default function CutRulesEditor({
         <input type="hidden" name="delete_ids_json" value={JSON.stringify(deleteIds)} />
 
         <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
-          <table className="min-w-[1580px] w-full border-collapse text-[11px] leading-none">
+          <table className="min-w-[1720px] w-full border-collapse text-[11px] leading-none">
             <thead>
               <tr className="bg-gray-200 text-gray-900">
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Orden</th>
@@ -388,6 +414,7 @@ export default function CutRulesEditor({
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Tipo</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Corte</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Empates</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Protección Gross</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Desempate</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Activo</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Notas</th>
@@ -399,7 +426,7 @@ export default function CutRulesEditor({
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={13}
+                    colSpan={14}
                     className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                   >
                     No hay reglas todavía.
@@ -540,6 +567,32 @@ export default function CutRulesEditor({
                           onChange={(e) => updateRow(r.id, "include_ties", e.target.checked)}
                           className={checkboxClass}
                         />
+                      </td>
+
+                      <td className="border border-gray-300 px-1.5 py-[3px] min-w-[145px]">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="checkbox"
+                            checked={!!r.gross_exemption_enabled}
+                            onChange={(e) => updateRow(r.id, "gross_exemption_enabled", e.target.checked)}
+                            className={checkboxClass}
+                          />
+
+                          <span className="text-[10px] leading-none text-gray-700">Top Gross</span>
+
+                          {r.gross_exemption_enabled ? (
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={r.gross_exemption_top_n || ""}
+                              onChange={(e) => updateRow(r.id, "gross_exemption_top_n", Number(e.target.value))}
+                              className="h-7 w-14 rounded border border-gray-300 bg-gray-100 px-1 text-[11px] leading-none text-black"
+                            />
+                          ) : (
+                            <span className="text-[10px] leading-none text-gray-400">No</span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px] min-w-[190px]">

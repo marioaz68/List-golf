@@ -97,6 +97,8 @@ type RuleRow = {
   advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
   include_ties: boolean;
+  gross_exemption_enabled?: boolean;
+  gross_exemption_top_n?: number;
   tie_break_profile_id?: string | null;
   sort_order?: number;
   is_active: boolean;
@@ -145,6 +147,17 @@ export async function saveCutRulesSnapshot(formData: FormData) {
     }
 
     r.include_ties = parseBool(r.include_ties);
+    r.gross_exemption_enabled = parseBool(r.gross_exemption_enabled);
+    r.gross_exemption_top_n = optInt(r.gross_exemption_top_n) ?? 0;
+
+    if (!r.gross_exemption_enabled) {
+      r.gross_exemption_top_n = 0;
+    }
+
+    if (r.gross_exemption_enabled && r.gross_exemption_top_n < 1) {
+      throw new Error(`Top Gross protegido inválido en fila ${i + 1}`);
+    }
+
     r.tie_break_profile_id = String(r.tie_break_profile_id ?? "").trim() || null;
     r.sort_order = i + 1;
     r.is_active = parseBool(r.is_active);
@@ -205,6 +218,8 @@ export async function saveCutRulesSnapshot(formData: FormData) {
         advancement_type: r.advancement_type,
         advancement_value: r.advancement_value,
         include_ties: r.include_ties,
+        gross_exemption_enabled: r.gross_exemption_enabled,
+        gross_exemption_top_n: r.gross_exemption_top_n,
         tie_break_profile_id: r.tie_break_profile_id,
         sort_order: r.sort_order,
         is_active: r.is_active,
@@ -227,6 +242,8 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       advancement_type: r.advancement_type,
       advancement_value: r.advancement_value,
       include_ties: r.include_ties,
+      gross_exemption_enabled: r.gross_exemption_enabled,
+      gross_exemption_top_n: r.gross_exemption_top_n,
       tie_break_profile_id: r.tie_break_profile_id,
       sort_order: r.sort_order,
       is_active: r.is_active,
