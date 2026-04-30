@@ -617,6 +617,7 @@ export default async function EntriesPage({
             <SinglePlayerEntryPanel
               players={players}
               tournamentId={selectedTournamentId}
+              categories={categories}
             />
           ) : null}
 
