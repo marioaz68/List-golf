@@ -16,6 +16,7 @@ type Row = {
   name: string;
   handicap_min: number;
   handicap_max: number;
+  min_age?: number | null;
   max_players?: number | null;
   sort_order: number;
   is_active: boolean;
@@ -162,6 +163,7 @@ export default function CategoryTemplateEditor({
         name: "",
         handicap_min: 0,
         handicap_max: 0,
+        min_age: null,
         max_players: null,
         sort_order: prev.length + 1,
         is_active: true,
@@ -175,6 +177,7 @@ export default function CategoryTemplateEditor({
     code: String(r.code ?? "").trim().toUpperCase(),
     name: String(r.name ?? "").trim(),
     category_group: (r.category_group ?? "main") as Row["category_group"],
+    min_age: r.min_age ?? null,
     max_players: r.max_players ?? null,
     sort_order: i + 1,
     is_active: Boolean(r.is_active),
@@ -209,6 +212,15 @@ export default function CategoryTemplateEditor({
 
       if (Number(r.handicap_min) > Number(r.handicap_max)) {
         setMsg(`Min mayor que Max en fila ${i + 1}.`);
+        return false;
+      }
+
+      if (
+        r.min_age !== null &&
+        r.min_age !== undefined &&
+        (!Number.isFinite(Number(r.min_age)) || Number(r.min_age) < 0)
+      ) {
+        setMsg(`Edad Min inválida en fila ${i + 1}.`);
         return false;
       }
 
@@ -331,7 +343,7 @@ export default function CategoryTemplateEditor({
                 paddingBottom: "12px",
               }}
             >
-              <table className="w-full min-w-[1060px] border-collapse text-[11px] leading-none">
+              <table className="w-full min-w-[1140px] border-collapse text-[11px] leading-none">
                 <thead>
                   <tr className="bg-gray-200 text-gray-900">
                     <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
@@ -345,6 +357,9 @@ export default function CategoryTemplateEditor({
                     </th>
                     <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
                       Grupo
+                    </th>
+                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                      Edad Min
                     </th>
                     <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
                       Code
@@ -371,7 +386,7 @@ export default function CategoryTemplateEditor({
                   {rows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={11}
                         className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                       >
                         No hay categorías todavía. Aplica una plantilla o agrega una nueva.
@@ -437,6 +452,24 @@ export default function CategoryTemplateEditor({
                               </option>
                             ))}
                           </select>
+                        </td>
+
+                        <td className="min-w-[78px] border border-gray-300 px-1.5 py-[3px]">
+                          <input
+                            type="number"
+                            min="0"
+                            step="1"
+                            value={r.min_age ?? ""}
+                            placeholder="-"
+                            onChange={(e) =>
+                              updateRow(
+                                r.id,
+                                "min_age",
+                                e.target.value ? Number(e.target.value) : null
+                              )
+                            }
+                            className={numberClass}
+                          />
                         </td>
 
                         <td className="min-w-[80px] border border-gray-300 px-1.5 py-[3px]">

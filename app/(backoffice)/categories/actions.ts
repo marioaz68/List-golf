@@ -102,6 +102,26 @@ function normalizeMaxPlayers(value: unknown, prefix = "") {
   return intValue;
 }
 
+function normalizeMinAge(value: unknown, prefix = "") {
+  const label = prefix ? `${prefix}: ` : "";
+
+  if (value === undefined || value === null || value === "") return null;
+
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    throw new Error(`${label}min_age inválido`);
+  }
+
+  const intValue = Math.trunc(n);
+
+  if (intValue < 0 || intValue > 120) {
+    throw new Error(`${label}min_age fuera de rango razonable`);
+  }
+
+  return intValue;
+}
+
 async function normalizeCategorySortOrder(tournamentId: string) {
   const supabase = await createClient();
 
@@ -150,6 +170,7 @@ export async function createCategory(formData: FormData) {
   const name = reqStr(formData, "name");
   const handicap_min = reqNum(formData, "handicap_min");
   const handicap_max = reqNum(formData, "handicap_max");
+  const min_age = optInt(formData, "min_age");
   const max_players = normalizeMaxPlayers(formData.get("max_players"));
   const is_active = optBool(formData, "is_active");
 
@@ -186,6 +207,8 @@ export async function createCategory(formData: FormData) {
     name,
     handicap_min,
     handicap_max,
+    min_age,
+    max_age: null,
     max_players,
     is_active,
     allow_multiple_prizes_per_player,
@@ -217,6 +240,7 @@ export async function updateCategory(formData: FormData) {
   const name = reqStr(formData, "name");
   const handicap_min = reqNum(formData, "handicap_min");
   const handicap_max = reqNum(formData, "handicap_max");
+  const min_age = optInt(formData, "min_age");
   const max_players = normalizeMaxPlayers(formData.get("max_players"));
   const is_active = optBool(formData, "is_active");
 
@@ -243,6 +267,8 @@ export async function updateCategory(formData: FormData) {
       name,
       handicap_min,
       handicap_max,
+      min_age,
+      max_age: null,
       max_players,
       is_active,
       allow_multiple_prizes_per_player,
@@ -265,6 +291,8 @@ type SnapshotRow = {
   category_group: string;
   handicap_min: number;
   handicap_max: number;
+  min_age?: number | null;
+  max_age?: number | null;
   max_players?: number | null;
   is_active?: boolean;
   sort_order?: number;
@@ -308,6 +336,8 @@ export async function saveCategoriesSnapshot(formData: FormData) {
     r.category_group = parseCategoryGroup(String(r.category_group ?? "main"));
     r.handicap_min = Number(r.handicap_min);
     r.handicap_max = Number(r.handicap_max);
+    r.min_age = normalizeMinAge(r.min_age, `En fila ${i + 1}`);
+    r.max_age = null;
     r.max_players = normalizeMaxPlayers(r.max_players, `En fila ${i + 1}`);
     r.is_active = Boolean(r.is_active);
     r.sort_order = i + 1;
@@ -356,6 +386,8 @@ export async function saveCategoriesSnapshot(formData: FormData) {
         category_group: r.category_group,
         handicap_min: r.handicap_min,
         handicap_max: r.handicap_max,
+        min_age: r.min_age ?? null,
+        max_age: null,
         max_players: r.max_players ?? null,
         is_active: r.is_active ?? true,
         sort_order: r.sort_order,
@@ -375,6 +407,8 @@ export async function saveCategoriesSnapshot(formData: FormData) {
       category_group: r.category_group,
       handicap_min: r.handicap_min,
       handicap_max: r.handicap_max,
+      min_age: r.min_age ?? null,
+      max_age: null,
       max_players: r.max_players ?? null,
       is_active: r.is_active ?? true,
       sort_order: r.sort_order,
@@ -435,7 +469,7 @@ export async function applyCategoryTemplate(formData: FormData) {
   const { data: items, error: itemsError } = await supabase
     .from("category_template_items")
     .select(
-      "code, name, gender, category_group, handicap_min, handicap_max, is_active, sort_order"
+      "code, name, gender, category_group, handicap_min, handicap_max, min_age, is_active, sort_order"
     )
     .eq("template_id", template_id)
     .order("sort_order", { ascending: true })
@@ -459,6 +493,8 @@ export async function applyCategoryTemplate(formData: FormData) {
     category_group: parseCategoryGroup(String(item.category_group ?? "main")),
     handicap_min: Number(item.handicap_min ?? 0),
     handicap_max: Number(item.handicap_max ?? 0),
+    min_age: normalizeMinAge((item as any).min_age),
+    max_age: null,
     max_players: null,
     is_active: item.is_active ?? true,
     sort_order: idx + 1,
@@ -491,7 +527,7 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
   const { data: currentCategories, error: categoriesError } = await supabase
     .from("categories")
     .select(
-      "code, name, gender, category_group, handicap_min, handicap_max, is_active, sort_order"
+      "code, name, gender, category_group, handicap_min, handicap_max, min_age, is_active, sort_order"
     )
     .eq("tournament_id", tournament_id)
     .order("sort_order", { ascending: true })
@@ -556,6 +592,8 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
     category_group: parseCategoryGroup(String(item.category_group ?? "main")),
     handicap_min: Number(item.handicap_min ?? 0),
     handicap_max: Number(item.handicap_max ?? 0),
+    min_age: normalizeMinAge((item as any).min_age),
+    max_age: null,
     is_active: item.is_active ?? true,
     sort_order: idx + 1,
   }));
