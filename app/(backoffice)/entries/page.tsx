@@ -33,6 +33,7 @@ type PlayerBaseRaw = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
+  birth_year: number | null;
   clubs: ClubRef | ClubRef[] | null;
 };
 
@@ -42,6 +43,7 @@ type Player = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
+  birth_year: number | null;
   club_label: string | null;
 };
 
@@ -335,6 +337,7 @@ export default async function EntriesPage({
         last_name,
         gender,
         handicap_index,
+        birth_year,
         clubs:clubs (
           name,
           short_name
@@ -380,6 +383,7 @@ export default async function EntriesPage({
       last_name: p.last_name,
       gender: p.gender,
       handicap_index: p.handicap_index,
+      birth_year: p.birth_year,
       club_label: clubLabelFromClub(p.clubs),
     })
   );
