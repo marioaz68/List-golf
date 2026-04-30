@@ -12,7 +12,7 @@ export function buildLiveLeaderboard({
   subtotal,
   getPlayerCode,
 }: any) {
-  const leaderboardBase = filteredEntries.map((entry: any, index: number) => {
+  return filteredEntries.map((entry: any, index: number) => {
     const playerName = [
       entry.player.first_name ?? "",
       entry.player.last_name ?? "",
@@ -179,6 +179,4 @@ export function buildLiveLeaderboard({
         ) || rowIsDQ,
     };
   });
-
-  return leaderboardBase;
 }
