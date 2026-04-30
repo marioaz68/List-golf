@@ -352,7 +352,12 @@ export async function addEntry(formData: FormData) {
   }
 
   const cats = await getTournamentCats(supabase, tournament_id);
-  const category_id = pickCategoryId({ cats, playerGender, handicap });
+  const category_id_input = optStr(formData, "category_id");
+
+  const category_id =
+    category_id_input && category_id_input !== ""
+      ? category_id_input
+      : pickCategoryId({ cats, playerGender, handicap });
 
   try {
     await validateCategoryCapacity({
