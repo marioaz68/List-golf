@@ -31,15 +31,15 @@ type Category = {
 type PlayerRowActionsProps = {
   player: PlayerModalData | null;
   tournamentId: string;
-  categories: Category[];
-  entryId: string;
+  categories?: Category[];
+  entryId?: string;
   canDelete?: boolean;
 };
 
 export default function PlayerRowActions({
   player,
   tournamentId,
-  categories,
+  categories = [],
   entryId,
   canDelete = false,
 }: PlayerRowActionsProps) {
