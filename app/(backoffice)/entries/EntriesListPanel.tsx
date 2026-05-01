@@ -5,6 +5,7 @@ import {
   deleteEntry,
   disqualifyEntry,
   restoreEntry,
+  updateEntryCategory,
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
@@ -16,6 +17,16 @@ type RoundSignature = {
   player_signed?: boolean | null;
   marker_signed?: boolean | null;
   witness_signed?: boolean | null;
+};
+
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  gender: "M" | "F" | "X" | null;
+  handicap_min: number | null;
+  handicap_max: number | null;
+  min_age: number | null;
 };
 
 type Entry = {
@@ -41,8 +52,10 @@ type Entry = {
     ghin_number?: string | null;
     shirt_size?: string | null;
     shoe_size?: string | null;
+    birth_year?: number | null;
   } | null;
   categories: {
+    id: string;
     code: string | null;
     name: string | null;
   } | null;
@@ -96,6 +109,85 @@ function getBallClass(sig?: RoundSignature | null) {
   return "bg-red-600";
 }
 
+function getPlayerAge(entry: Entry) {
+  const birthYear = entry.players?.birth_year ?? null;
+  if (!birthYear) return null;
+  return new Date().getFullYear() - birthYear;
+}
+
+function categoryGenderOk(
+  category: Category,
+  playerGender: "M" | "F" | "X" | null | undefined
+) {
+  const catGender = String(category.gender ?? "X").toUpperCase();
+  const gender = String(playerGender ?? "X").toUpperCase();
+  return catGender === "X" || catGender === gender;
+}
+
+function getHandicapCategory(entry: Entry, categories: Category[]) {
+  const handicap =
+    entry.handicap_index ??
+    entry.players?.handicap_torneo ??
+    entry.players?.handicap_index ??
+    null;
+
+  if (handicap === null || handicap === undefined || !Number.isFinite(Number(handicap))) {
+    return null;
+  }
+
+  const candidates = categories.filter((c) => {
+    if (c.min_age !== null && c.min_age !== undefined) return false;
+    if (c.handicap_min === null || c.handicap_min === undefined) return false;
+    if (c.handicap_max === null || c.handicap_max === undefined) return false;
+    if (!categoryGenderOk(c, entry.players?.gender)) return false;
+
+    return Number(handicap) >= Number(c.handicap_min) && Number(handicap) <= Number(c.handicap_max);
+  });
+
+  const exact = candidates.filter(
+    (c) => String(c.gender ?? "X").toUpperCase() === String(entry.players?.gender ?? "X").toUpperCase()
+  );
+  const pool = exact.length > 0 ? exact : candidates;
+
+  return [...pool].sort(
+    (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
+  )[0] ?? null;
+}
+
+function getAgeCategories(entry: Entry, categories: Category[]) {
+  const age = getPlayerAge(entry);
+  if (age === null) return [];
+
+  return categories.filter((c) => {
+    if (c.min_age === null || c.min_age === undefined) return false;
+    if (!categoryGenderOk(c, entry.players?.gender)) return false;
+    return age >= Number(c.min_age);
+  });
+}
+
+function getSelectableCategories(entry: Entry, categories: Category[]) {
+  const byId = new Map<string, Category>();
+  const handicapCategory = getHandicapCategory(entry, categories);
+
+  if (handicapCategory) byId.set(handicapCategory.id, handicapCategory);
+
+  getAgeCategories(entry, categories).forEach((c) => byId.set(c.id, c));
+
+  if (entry.categories?.id && !byId.has(entry.categories.id)) {
+    byId.set(entry.categories.id, {
+      id: entry.categories.id,
+      code: entry.categories.code,
+      name: entry.categories.name,
+      gender: "X",
+      handicap_min: null,
+      handicap_max: null,
+      min_age: null,
+    });
+  }
+
+  return Array.from(byId.values());
+}
+
 const BTN_BASE =
   "inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50";
 
@@ -107,9 +199,11 @@ const ACTIONS_COL = "min-w-[560px] w-[560px]";
 export default function EntriesListPanel({
   entries,
   tournamentId,
+  categories: allCategories,
 }: {
   entries: Entry[];
   tournamentId: string;
+  categories: Category[];
 }) {
   const [search, setSearch] = useState("");
   const [club, setClub] = useState("");
@@ -283,7 +377,31 @@ ${res.witness_url}`;
 
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
 
-                  <td className="px-1 py-1">{e.categories?.code ?? "-"}</td>
+                  <td className="px-1 py-1">
+                    <form action={updateEntryCategory} className="flex items-center gap-1">
+                      <input type="hidden" name="entry_id" value={e.id} />
+                      <input
+                        type="hidden"
+                        name="tournament_id"
+                        value={tournamentId}
+                      />
+
+                      <select
+                        name="category_id"
+                        defaultValue={e.categories?.id ?? ""}
+                        className="h-7 max-w-[170px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
+                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                      >
+                        <option value="">-</option>
+                        {getSelectableCategories(e, allCategories).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.code ? `${c.code} - ` : ""}
+                            {c.name ?? "Sin nombre"}
+                          </option>
+                        ))}
+                      </select>
+                    </form>
+                  </td>
 
                   <td className="px-1 py-1">
                     <span

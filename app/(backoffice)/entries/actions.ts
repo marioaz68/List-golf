@@ -1094,3 +1094,25 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
   revalidatePath("/entries");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
+export async function updateEntryCategory(formData: FormData) {
+  const admin = await createAdminClient();
+
+  const entry_id = reqStr(formData, "entry_id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  const category_id = reqStr(formData, "category_id");
+
+  await ensureEntriesAccess(tournament_id);
+
+  const { error } = await admin
+    .from("tournament_entries")
+    .update({ category_id })
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id);
+
+  if (error) {
+    throw new Error("Error actualizando categoría: " + error.message);
+  }
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+}
