@@ -111,7 +111,11 @@ function getBallClass(sig?: RoundSignature | null) {
 function getPlayerAge(entry: Entry) {
   const birthYear = entry.players?.birth_year ?? null;
   if (!birthYear) return null;
-  return new Date().getFullYear() - birthYear;
+
+  const age = new Date().getFullYear() - birthYear;
+  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+
+  return age;
 }
 
 function categoryGenderOk(
@@ -130,7 +134,11 @@ function getHandicapCategory(entry: Entry, categories: Category[]) {
     entry.players?.handicap_index ??
     null;
 
-  if (handicap === null || handicap === undefined || !Number.isFinite(Number(handicap))) {
+  if (
+    handicap === null ||
+    handicap === undefined ||
+    !Number.isFinite(Number(handicap))
+  ) {
     return null;
   }
 
@@ -140,17 +148,24 @@ function getHandicapCategory(entry: Entry, categories: Category[]) {
     if (c.handicap_max === null || c.handicap_max === undefined) return false;
     if (!categoryGenderOk(c, entry.players?.gender)) return false;
 
-    return Number(handicap) >= Number(c.handicap_min) && Number(handicap) <= Number(c.handicap_max);
+    return (
+      Number(handicap) >= Number(c.handicap_min) &&
+      Number(handicap) <= Number(c.handicap_max)
+    );
   });
 
   const exact = candidates.filter(
-    (c) => String(c.gender ?? "X").toUpperCase() === String(entry.players?.gender ?? "X").toUpperCase()
+    (c) =>
+      String(c.gender ?? "X").toUpperCase() ===
+      String(entry.players?.gender ?? "X").toUpperCase()
   );
   const pool = exact.length > 0 ? exact : candidates;
 
-  return [...pool].sort(
-    (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
-  )[0] ?? null;
+  return (
+    [...pool].sort(
+      (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
+    )[0] ?? null
+  );
 }
 
 function getAgeCategories(entry: Entry, categories: Category[]) {
@@ -363,6 +378,7 @@ ${res.witness_url}`;
               const status = (e.status ?? "").toLowerCase();
               const isDQ = status === "dq";
               const isWithdrawn = status === "withdrawn";
+              const selectableCategories = getSelectableCategories(e, allCategories);
 
               return (
                 <tr key={e.id} className="border-t align-middle">
@@ -379,7 +395,13 @@ ${res.witness_url}`;
                   <td className="px-1 py-1">
                     <span
                       className="inline-flex h-6 min-w-8 items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-semibold text-gray-800"
-                      title={e.categories?.name ?? "Sin categoría"}
+                      title={
+                        selectableCategories.length > 0
+                          ? `Opciones válidas: ${selectableCategories
+                              .map((c) => c.code ?? c.name ?? "-")
+                              .join(", ")}`
+                          : e.categories?.name ?? "Sin categoría"
+                      }
                     >
                       {e.categories?.code ?? "-"}
                     </span>
@@ -585,7 +607,6 @@ ${res.witness_url}`;
                           tournamentId={tournamentId}
                           entryId={e.id}
                           categories={allCategories}
-                          currentCategoryId={e.categories?.id ?? null}
                           player={
                             e.players
                               ? {
@@ -607,7 +628,6 @@ ${res.witness_url}`;
                                   ghin_number: e.players.ghin_number ?? null,
                                   shirt_size: e.players.shirt_size ?? null,
                                   shoe_size: e.players.shoe_size ?? null,
-                                  birth_year: e.players.birth_year ?? null,
                                 }
                               : null
                           }
