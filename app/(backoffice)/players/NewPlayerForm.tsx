@@ -115,6 +115,23 @@ function normalizeClubName(value: string) {
     .replace(/\s+/g, " ");
 }
 
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function splitSearchTokens(value: string) {
+  return normalizeSearchText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+    .slice(0, 4);
+}
+
 function normalizeInitials(value: string) {
   return value
     .normalize("NFD")
@@ -147,8 +164,11 @@ function buildMatchScore(params: {
   const candidateWhatsappPhone = (candidate.whatsapp_phone_e164 || "").trim();
   const candidateEmail = (candidate.email || "").trim().toLowerCase();
   const candidateGhin = (candidate.ghin_number || "").trim();
-  const candidateFirst = (candidate.first_name || "").trim().toLowerCase();
-  const candidateLast = (candidate.last_name || "").trim().toLowerCase();
+  const candidateFirst = normalizeSearchText(candidate.first_name);
+  const candidateLast = normalizeSearchText(candidate.last_name);
+  const normalizedFullName = normalizeSearchText(
+    `${candidate.first_name ?? ""} ${candidate.last_name ?? ""}`
+  );
 
   if (normalizedPhone && candidateWhatsappPhone === normalizedPhone) score += 100;
   if (cleanEmail && candidateEmail === cleanEmail) score += 90;
@@ -160,13 +180,20 @@ function buildMatchScore(params: {
     candidateFirst === normalizedFirstName &&
     candidateLast === normalizedLastName
   ) {
-    score += 40;
+    score += 60;
   } else {
     if (normalizedFirstName && candidateFirst.includes(normalizedFirstName)) {
-      score += 10;
+      score += 14;
     }
     if (normalizedLastName && candidateLast.includes(normalizedLastName)) {
-      score += 10;
+      score += 22;
+    }
+    if (
+      normalizedFirstName &&
+      normalizedLastName &&
+      normalizedFullName.includes(`${normalizedFirstName} ${normalizedLastName}`)
+    ) {
+      score += 35;
     }
   }
 
@@ -239,6 +266,8 @@ export default function NewPlayerForm({
   const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
+  const firstNameInputNameRef = useRef(`lf_first_name_${Date.now()}`);
+  const lastNameInputNameRef = useRef(`lf_last_name_${Date.now()}`);
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
@@ -332,8 +361,8 @@ export default function NewPlayerForm({
   useEffect(() => {
     const trimmedFirst = firstName.trim();
     const trimmedLast = lastName.trim();
-    const normalizedFirstName = trimmedFirst.toLowerCase();
-    const normalizedLastName = trimmedLast.toLowerCase();
+    const normalizedFirstName = normalizeSearchText(trimmedFirst);
+    const normalizedLastName = normalizeSearchText(trimmedLast);
     const normalizedPhone = phone.trim()
       ? normalizePhoneToE164(phone, "MX")
       : null;
@@ -362,12 +391,13 @@ export default function NewPlayerForm({
       }
       if (cleanEmail) conditions.push(`email.eq.${cleanEmail}`);
       if (cleanGhin) conditions.push(`ghin_number.eq.${cleanGhin}`);
-      if (trimmedFirst.length >= 2) {
-        conditions.push(`first_name.ilike.%${trimmedFirst}%`);
-      }
-      if (trimmedLast.length >= 2) {
-        conditions.push(`last_name.ilike.%${trimmedLast}%`);
-      }
+      splitSearchTokens(trimmedFirst).forEach((token) => {
+        conditions.push(`first_name.ilike.%${token}%`);
+      });
+
+      splitSearchTokens(trimmedLast).forEach((token) => {
+        conditions.push(`last_name.ilike.%${token}%`);
+      });
 
       if (conditions.length === 0) {
         setPlayerMatches([]);
@@ -381,7 +411,7 @@ export default function NewPlayerForm({
           "id, first_name, last_name, phone, whatsapp_phone_e164, email, ghin_number, club"
         )
         .or(conditions.join(","))
-        .limit(8);
+        .limit(25);
 
       if (error || !data) {
         setPlayerMatches([]);
@@ -830,9 +860,9 @@ export default function NewPlayerForm({
           padding: 8,
           marginBottom: 8,
           background: "#f9fafb",
-          minHeight: 110,
-          maxHeight: 148,
+          height: 132,
           overflowY: "auto",
+          overscrollBehavior: "contain",
         }}
       >
         <div
@@ -841,100 +871,78 @@ export default function NewPlayerForm({
             fontWeight: 700,
             marginBottom: 6,
             color: "#111827",
+            lineHeight: 1.1,
           }}
         >
           {searchingPlayers
             ? "Buscando jugadores similares..."
             : playerMatches.length > 0
               ? "Posibles jugadores existentes"
-              : "Búsqueda de duplicados"}
+              : "Sin coincidencias todavía"}
         </div>
 
-        {searchingPlayers && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              minHeight: 56,
-              fontSize: 11,
-              color: "#6b7280",
-            }}
-          >
-            <InlineSpinner />
-            Revisando jugadores existentes...
+        {searchingPlayers && playerMatches.length === 0 && (
+          <div style={{ fontSize: 11, color: "#6b7280" }}>
+            Escribe nombre y apellido para buscar sin mover la pantalla.
           </div>
         )}
 
         {!searchingPlayers && playerMatches.length === 0 && (
-          <div
-            style={{
-              minHeight: 56,
-              display: "flex",
-              alignItems: "center",
-              fontSize: 11,
-              color: "#6b7280",
-              lineHeight: 1.25,
-            }}
-          >
-            Escribe nombre y apellido, teléfono, email o GHIN para revisar si ya existe.
-          </div>
+          <div style={{ fontSize: 11, color: "#6b7280" }}>—</div>
         )}
 
-        {!searchingPlayers &&
-          playerMatches.map((p, index) => (
-            <div
-              key={p.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 8,
-                padding: "6px 8px",
-                borderBottom:
-                  index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
-                fontSize: 11,
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div
-                  style={{
-                    fontWeight: 700,
-                    color: "#111827",
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {p.first_name || ""} {p.last_name || ""}
-                </div>
-                <div
-                  style={{
-                    color: "#4b5563",
-                    lineHeight: 1.2,
-                    marginTop: 2,
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
-                  {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => useExistingPlayer(p)}
-                disabled={usingExistingPlayerId === p.id}
+        {playerMatches.map((p, index) => (
+          <div
+            key={p.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              padding: "6px 8px",
+              borderBottom:
+                index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
+              fontSize: 11,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
                 style={{
-                  ...secondaryButtonStyle,
-                  opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
-                  pointerEvents:
-                    usingExistingPlayerId === p.id ? "none" : "auto",
-                  flexShrink: 0,
+                  fontWeight: 700,
+                  color: "#111827",
+                  lineHeight: 1.2,
                 }}
               >
-                {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
-              </button>
+                {p.first_name || ""} {p.last_name || ""}
+              </div>
+              <div
+                style={{
+                  color: "#4b5563",
+                  lineHeight: 1.2,
+                  marginTop: 2,
+                  wordBreak: "break-word",
+                }}
+              >
+                {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
+                {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
+              </div>
             </div>
-          ))}
+
+            <button
+              type="button"
+              onClick={() => useExistingPlayer(p)}
+              disabled={usingExistingPlayerId === p.id}
+              style={{
+                ...secondaryButtonStyle,
+                opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
+                pointerEvents: usingExistingPlayerId === p.id ? "none" : "auto",
+                flexShrink: 0,
+              }}
+            >
+              {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
+            </button>
+          </div>
+        ))}
       </div>
 
       {selectedExistingPlayerId && (
@@ -988,11 +996,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Nombre
         <input
-           name={`lf_fn_${Math.random()}`}
+           name={firstNameInputNameRef.current}
            value={firstName}
            onChange={(e) => setFirstName(e.target.value)}
            style={fieldStyle}
-           autoComplete="new-password"
+           autoComplete="one-time-code"
            autoCorrect="off"
            autoCapitalize="off"
            spellCheck={false}
@@ -1002,11 +1010,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Apellido
          <input
-            name={`lf_ln_${Math.random()}`}
+            name={lastNameInputNameRef.current}
             value={lastName}
              onChange={(e) => setLastName(e.target.value)}
              style={fieldStyle}
-             autoComplete="new-password"
+             autoComplete="one-time-code"
              autoCorrect="off"
              autoCapitalize="off"
              spellCheck={false}
