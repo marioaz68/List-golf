@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { addSelectedEntries } from "./actions";
 
 type Player = {
@@ -24,6 +25,55 @@ function categoryFromHandicap(h: number | null) {
   return "E";
 }
 
+
+function InlineSpinner() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      className="mr-1.5 animate-spin"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        opacity="0.25"
+      />
+      <path
+        fill="currentColor"
+        d="M22 12a10 10 0 0 1-10 10v-4a6 6 0 0 0 6-6h4z"
+      />
+    </svg>
+  );
+}
+
+function SubmitEntriesButton({ selectedCount }: { selectedCount: number }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      className="inline-flex min-h-7 items-center justify-center rounded border border-green-700 bg-green-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={selectedCount === 0 || pending}
+      aria-busy={pending}
+    >
+      {pending ? (
+        <>
+          <InlineSpinner />
+          Inscribiendo...
+        </>
+      ) : (
+        `Inscribir seleccionados (${selectedCount})`
+      )}
+    </button>
+  );
+}
+
 export default function BulkEntryPanel({
   tournamentId,
   players,
@@ -35,6 +85,8 @@ export default function BulkEntryPanel({
   const [search, setSearch] = useState("");
   const [club, setClub] = useState("");
   const [category, setCategory] = useState("");
+  const [isSelectingVisible, startSelectingVisible] = useTransition();
+  const [isClearingVisible, startClearingVisible] = useTransition();
 
   const clubs = useMemo(() => {
     const set = new Set<string>();
@@ -71,23 +123,27 @@ export default function BulkEntryPanel({
   }
 
   function selectVisible() {
-    const next = { ...selected };
+    startSelectingVisible(() => {
+      const next = { ...selected };
 
-    filtered.forEach((p) => {
-      next[p.id] = true;
+      filtered.forEach((p) => {
+        next[p.id] = true;
+      });
+
+      setSelected(next);
     });
-
-    setSelected(next);
   }
 
   function clearVisible() {
-    const next = { ...selected };
+    startClearingVisible(() => {
+      const next = { ...selected };
 
-    filtered.forEach((p) => {
-      next[p.id] = false;
+      filtered.forEach((p) => {
+        next[p.id] = false;
+      });
+
+      setSelected(next);
     });
-
-    setSelected(next);
   }
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
@@ -140,17 +196,35 @@ export default function BulkEntryPanel({
             <button
               type="button"
               onClick={selectVisible}
-              className="inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
+              disabled={isSelectingVisible || filtered.length === 0}
+              aria-busy={isSelectingVisible}
+              className="inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Seleccionar visibles
+              {isSelectingVisible ? (
+                <>
+                  <InlineSpinner />
+                  Seleccionando...
+                </>
+              ) : (
+                "Seleccionar visibles"
+              )}
             </button>
 
             <button
               type="button"
               onClick={clearVisible}
-              className="inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 hover:bg-gray-50"
+              disabled={isClearingVisible || selectedVisibleCount === 0}
+              aria-busy={isClearingVisible}
+              className="inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Limpiar visibles
+              {isClearingVisible ? (
+                <>
+                  <InlineSpinner />
+                  Limpiando...
+                </>
+              ) : (
+                "Limpiar visibles"
+              )}
             </button>
           </div>
         </div>
@@ -246,13 +320,7 @@ export default function BulkEntryPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
-          <button
-            type="submit"
-            className="inline-flex min-h-7 items-center justify-center rounded border border-green-700 bg-green-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={selectedCount === 0}
-          >
-            Inscribir seleccionados ({selectedCount})
-          </button>
+          <SubmitEntriesButton selectedCount={selectedCount} />
         </div>
       </form>
     </section>
