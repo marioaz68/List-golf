@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { normalizePhoneToE164 } from "@/utils/phone";
 import { savePlayerAction } from "@/app/(backoffice)/players/actions";
+import { updateEntryCategory } from "@/app/(backoffice)/entries/actions";
 
 type ClubOption = {
   id: string;
@@ -26,8 +27,20 @@ type Player = {
   email: string | null;
   club: string | null;
   club_id?: string | null;
+  ghin_number?: string | null;
+  birth_year?: number | null;
   shirt_size?: string | null;
   shoe_size?: string | number | null;
+};
+
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  gender?: "M" | "F" | "X" | null;
+  handicap_min?: number | null;
+  handicap_max?: number | null;
+  min_age?: number | null;
 };
 
 function normalizeClubName(value: string) {
@@ -114,10 +127,18 @@ export default function PlayerEditModal({
   open,
   onClose,
   player,
+  tournamentId,
+  entryId = null,
+  categories = [],
+  currentCategoryId = null,
 }: {
   open: boolean;
   onClose: () => void;
   player: Player;
+  tournamentId?: string | null;
+  entryId?: string | null;
+  categories?: Category[];
+  currentCategoryId?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -135,6 +156,7 @@ export default function PlayerEditModal({
   const [shirtSize, setShirtSize] = useState("");
   const [shoeSize, setShoeSize] = useState("");
   const [saving, setSaving] = useState(false);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(currentCategoryId ?? "");
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
   const [clubDropdownOpen, setClubDropdownOpen] = useState(false);
@@ -165,6 +187,7 @@ export default function PlayerEditModal({
       setClubId(player?.club_id ?? null);
       setShirtSize(player?.shirt_size ?? "");
       setShoeSize(player?.shoe_size == null ? "" : String(player.shoe_size));
+      setSelectedCategoryId(currentCategoryId ?? "");
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -186,7 +209,7 @@ export default function PlayerEditModal({
     }
 
     loadInitialData();
-  }, [player, open]);
+  }, [player, open, currentCategoryId]);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -235,6 +258,70 @@ export default function PlayerEditModal({
 
     return () => clearTimeout(timer);
   }, [club, open]);
+
+  const playerAge = useMemo(() => {
+    if (!player?.birth_year) return null;
+    return new Date().getFullYear() - Number(player.birth_year);
+  }, [player?.birth_year]);
+
+  const categoryHandicap = useMemo(() => {
+    const value = handicapTorneo.trim() || handicapIndex.trim();
+    if (!value) return null;
+    const n = Number(value.replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }, [handicapIndex, handicapTorneo]);
+
+  const baseCategory = useMemo(() => {
+    if (categoryHandicap === null) return null;
+
+    const playerGender = String(gender ?? "X").toUpperCase();
+
+    const candidates = categories.filter((c) => {
+      if (c.min_age !== null && c.min_age !== undefined) return false;
+      if (c.handicap_min === null || c.handicap_min === undefined) return false;
+      if (c.handicap_max === null || c.handicap_max === undefined) return false;
+
+      const catGender = String(c.gender ?? "X").toUpperCase();
+      if (catGender !== "X" && catGender !== playerGender) return false;
+
+      return (
+        categoryHandicap >= Number(c.handicap_min) &&
+        categoryHandicap <= Number(c.handicap_max)
+      );
+    });
+
+    const exact = candidates.filter(
+      (c) => String(c.gender ?? "X").toUpperCase() === playerGender
+    );
+    const pool = exact.length > 0 ? exact : candidates;
+
+    return [...pool].sort(
+      (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
+    )[0] ?? null;
+  }, [categories, categoryHandicap, gender]);
+
+  const ageCategories = useMemo(() => {
+    if (playerAge === null) return [];
+
+    return categories.filter((c) => {
+      if (c.min_age === null || c.min_age === undefined) return false;
+      return playerAge >= Number(c.min_age);
+    });
+  }, [categories, playerAge]);
+
+  const categoryOptions = useMemo(() => {
+    const byId = new Map<string, Category>();
+
+    if (baseCategory) byId.set(baseCategory.id, baseCategory);
+    ageCategories.forEach((c) => byId.set(c.id, c));
+
+    if (currentCategoryId && !byId.has(currentCategoryId)) {
+      const current = categories.find((c) => c.id === currentCategoryId);
+      if (current) byId.set(current.id, current);
+    }
+
+    return Array.from(byId.values());
+  }, [ageCategories, baseCategory, categories, currentCategoryId]);
 
   if (!open) return null;
 
@@ -436,6 +523,19 @@ export default function PlayerEditModal({
         return;
       }
 
+      if (
+        entryId &&
+        tournamentId &&
+        selectedCategoryId &&
+        selectedCategoryId !== (currentCategoryId ?? "")
+      ) {
+        const categoryFormData = new FormData();
+        categoryFormData.set("entry_id", entryId);
+        categoryFormData.set("tournament_id", tournamentId);
+        categoryFormData.set("category_id", selectedCategoryId);
+        await updateEntryCategory(categoryFormData);
+      }
+
       onClose();
       startTransition(() => router.refresh());
     } catch (err: any) {
@@ -533,6 +633,29 @@ export default function PlayerEditModal({
                 inputMode="decimal"
                 style={fieldStyle}
               />
+            </label>
+
+            <label style={labelStyle}>
+              Categoría de inscripción
+              {entryId && tournamentId && categoryOptions.length > 0 ? (
+                <select
+                  value={selectedCategoryId}
+                  onChange={(e) => setSelectedCategoryId(e.target.value)}
+                  style={fieldStyle}
+                >
+                  <option value="">Sin cambio</option>
+                  {categoryOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.code ? `${c.code} - ` : ""}
+                      {c.name ?? "Sin nombre"}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>
+                  No aplica en esta pantalla
+                </span>
+              )}
             </label>
 
             <label style={labelStyle}>

@@ -155,7 +155,7 @@ export async function savePlayerAction(input: SavePlayerInput) {
 
 export async function deletePlayerAction(
   playerId: string,
-  tournamentId: string
+  tournamentId?: string | null
 ) {
   try {
     const validPlayerId = toNullableString(playerId);
@@ -163,10 +163,6 @@ export async function deletePlayerAction(
 
     if (!validPlayerId) {
       return { ok: false, message: "Jugador no válido." };
-    }
-
-    if (!validTournamentId) {
-      return { ok: false, message: "Torneo no válido." };
     }
 
     const authSupabase = await createClient();
@@ -180,14 +176,20 @@ export async function deletePlayerAction(
       return { ok: false, message: "No autenticado." };
     }
 
-    const { data: tournament, error: tournamentError } = await authSupabase
-      .from("tournaments")
-      .select("id, club_id")
-      .eq("id", validTournamentId)
-      .single();
+    let tournament: { id: string; club_id: string | null } | null = null;
 
-    if (tournamentError || !tournament) {
-      return { ok: false, message: "Torneo no encontrado." };
+    if (validTournamentId) {
+      const { data: tournamentData, error: tournamentError } = await authSupabase
+        .from("tournaments")
+        .select("id, club_id")
+        .eq("id", validTournamentId)
+        .single();
+
+      if (tournamentError || !tournamentData) {
+        return { ok: false, message: "Torneo no encontrado." };
+      }
+
+      tournament = tournamentData as { id: string; club_id: string | null };
     }
 
     const { data: globalRows, error: globalError } = await authSupabase
@@ -209,7 +211,7 @@ export async function deletePlayerAction(
     const isSuperAdmin = globalCodes.includes("super_admin");
 
     let isClubAdmin = false;
-    if (tournament.club_id) {
+    if (tournament?.club_id) {
       const { data: clubRows, error: clubError } = await authSupabase
         .from("user_club_roles")
         .select("roles(code)")
@@ -230,26 +232,29 @@ export async function deletePlayerAction(
       isClubAdmin = clubCodes.includes("club_admin");
     }
 
-    const { data: tournamentRows, error: tournamentRolesError } =
-      await authSupabase
-        .from("user_tournament_roles")
-        .select("roles(code)")
-        .eq("user_id", user.id)
-        .eq("tournament_id", validTournamentId)
-        .eq("is_active", true);
+    let isTournamentDirector = false;
 
-    if (tournamentRolesError) {
-      return {
-        ok: false,
-        message: `No se pudieron validar roles del torneo: ${tournamentRolesError.message}`,
-      };
+    if (validTournamentId) {
+      const { data: tournamentRows, error: tournamentRolesError } =
+        await authSupabase
+          .from("user_tournament_roles")
+          .select("roles(code)")
+          .eq("user_id", user.id)
+          .eq("tournament_id", validTournamentId)
+          .eq("is_active", true);
+
+      if (tournamentRolesError) {
+        return {
+          ok: false,
+          message: `No se pudieron validar roles del torneo: ${tournamentRolesError.message}`,
+        };
+      }
+
+      const tournamentCodes =
+        tournamentRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
+
+      isTournamentDirector = tournamentCodes.includes("tournament_director");
     }
-
-    const tournamentCodes =
-      tournamentRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
-
-    const isTournamentDirector =
-      tournamentCodes.includes("tournament_director");
 
     const canDelete = isSuperAdmin || isClubAdmin || isTournamentDirector;
 

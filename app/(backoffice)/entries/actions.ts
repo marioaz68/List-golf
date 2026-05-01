@@ -352,7 +352,12 @@ export async function addEntry(formData: FormData) {
   }
 
   const cats = await getTournamentCats(supabase, tournament_id);
-  const category_id = pickCategoryId({ cats, playerGender, handicap });
+  const category_id_input = optStr(formData, "category_id");
+
+  const category_id =
+    category_id_input && category_id_input !== ""
+      ? category_id_input
+      : pickCategoryId({ cats, playerGender, handicap });
 
   try {
     await validateCategoryCapacity({
@@ -1088,4 +1093,42 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
 
   revalidatePath("/entries");
   redirect(`/entries?tournament_id=${tournament_id}`);
+}
+export async function updateEntryCategory(formData: FormData) {
+  const admin = await createAdminClient();
+
+  const entry_id = reqStr(formData, "entry_id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  const category_id = reqStr(formData, "category_id");
+
+  await ensureEntriesAccess(tournament_id);
+
+  const supabase = await createClient();
+  const cats = await getTournamentCats(supabase, tournament_id);
+
+  await validateCategoryCapacity({
+    supabase,
+    cats,
+    categoryId: category_id,
+    excludeEntryId: entry_id,
+  });
+
+  const { error } = await admin
+    .from("tournament_entries")
+    .update({ category_id })
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id);
+
+  if (error) {
+    throw new Error("Error actualizando categoría: " + error.message);
+  }
+
+  revalidatePath("/entries");
+  revalidatePath("/players");
+
+  return { ok: true };
+}
+
+export async function updateEntryCategoryInline(formData: FormData) {
+  return updateEntryCategory(formData);
 }

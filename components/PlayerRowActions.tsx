@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import PlayerEditModal from "./PlayerEditModal";
 import { deletePlayerAction } from "@/app/(backoffice)/players/actions";
 
@@ -21,17 +22,29 @@ type PlayerModalData = {
   shoe_size: string | null;
 };
 
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  min_age?: number | null;
+};
+
 type PlayerRowActionsProps = {
   player: PlayerModalData | null;
-  tournamentId: string;
+  tournamentId?: string;
+  categories?: Category[];
+  entryId?: string;
   canDelete?: boolean;
 };
 
 export default function PlayerRowActions({
   player,
-  tournamentId,
+  tournamentId = "",
+  categories = [],
+  entryId,
   canDelete = false,
 }: PlayerRowActionsProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -52,8 +65,9 @@ export default function PlayerRowActions({
   const safeTournamentId = tournamentId;
 
   function handleDelete() {
+    const fullName = `${safePlayer.first_name ?? ""} ${safePlayer.last_name ?? ""}`.trim();
     const confirmed = window.confirm(
-      "¿Seguro que quieres eliminar este jugador? Esta acción no se puede deshacer."
+      `¿Seguro que quieres eliminar ${fullName || "este jugador"}?\n\nSolo se eliminará si NO forma parte de ningún torneo.`
     );
 
     if (!confirmed) return;
@@ -61,7 +75,7 @@ export default function PlayerRowActions({
     const playerId = safePlayer.id;
 
     startTransition(async () => {
-      const result = await deletePlayerAction(playerId, safeTournamentId);
+      const result = await deletePlayerAction(playerId, safeTournamentId || null);
 
       if (!result.ok) {
         window.alert(result.message ?? "No se pudo eliminar el jugador.");
@@ -69,7 +83,7 @@ export default function PlayerRowActions({
       }
 
       window.alert("Jugador eliminado correctamente.");
-      window.location.reload();
+      router.refresh();
     });
   }
 
@@ -89,7 +103,7 @@ export default function PlayerRowActions({
             type="button"
             onClick={handleDelete}
             disabled={isPending}
-            title="Eliminar jugador"
+            title="Eliminar jugador solo si no tiene torneos"
             className="inline-flex h-6 items-center justify-center rounded border border-red-700 bg-red-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPending ? "Borrando..." : "Eliminar"}
@@ -101,6 +115,9 @@ export default function PlayerRowActions({
         open={open}
         onClose={() => setOpen(false)}
         player={safePlayer}
+        categories={categories}
+        entryId={entryId}
+        tournamentId={safeTournamentId}
       />
     </>
   );

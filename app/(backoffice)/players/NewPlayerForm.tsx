@@ -5,7 +5,7 @@ import type { CSSProperties, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
-import { savePlayerAction } from "@/app/(backoffice)/players/actions";
+import { deletePlayerAction, savePlayerAction } from "@/app/(backoffice)/players/actions";
 
 type Props = {
   onCreated?: () => void;
@@ -86,6 +86,24 @@ const secondaryButtonStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const dangerButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "24px",
+  padding: "0 8px",
+  borderRadius: "6px",
+  border: "1px solid #991b1b",
+  background: "linear-gradient(#ef4444, #dc2626)",
+  color: "#ffffff",
+  fontWeight: 700,
+  fontSize: "11px",
+  lineHeight: 1,
+  textDecoration: "none",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
 const fieldStyle: CSSProperties = {
   width: "100%",
   height: 28,
@@ -113,6 +131,23 @@ function normalizeClubName(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ");
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function splitSearchTokens(value: string) {
+  return normalizeSearchText(value)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+    .slice(0, 4);
 }
 
 function normalizeInitials(value: string) {
@@ -147,8 +182,11 @@ function buildMatchScore(params: {
   const candidateWhatsappPhone = (candidate.whatsapp_phone_e164 || "").trim();
   const candidateEmail = (candidate.email || "").trim().toLowerCase();
   const candidateGhin = (candidate.ghin_number || "").trim();
-  const candidateFirst = (candidate.first_name || "").trim().toLowerCase();
-  const candidateLast = (candidate.last_name || "").trim().toLowerCase();
+  const candidateFirst = normalizeSearchText(candidate.first_name);
+  const candidateLast = normalizeSearchText(candidate.last_name);
+  const normalizedFullName = normalizeSearchText(
+    `${candidate.first_name ?? ""} ${candidate.last_name ?? ""}`
+  );
 
   if (normalizedPhone && candidateWhatsappPhone === normalizedPhone) score += 100;
   if (cleanEmail && candidateEmail === cleanEmail) score += 90;
@@ -160,13 +198,20 @@ function buildMatchScore(params: {
     candidateFirst === normalizedFirstName &&
     candidateLast === normalizedLastName
   ) {
-    score += 40;
+    score += 60;
   } else {
     if (normalizedFirstName && candidateFirst.includes(normalizedFirstName)) {
-      score += 10;
+      score += 14;
     }
     if (normalizedLastName && candidateLast.includes(normalizedLastName)) {
-      score += 10;
+      score += 22;
+    }
+    if (
+      normalizedFirstName &&
+      normalizedLastName &&
+      normalizedFullName.includes(`${normalizedFirstName} ${normalizedLastName}`)
+    ) {
+      score += 35;
     }
   }
 
@@ -226,6 +271,7 @@ export default function NewPlayerForm({
   const [shoeSize, setShoeSize] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [deletingPlayer, setDeletingPlayer] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
@@ -239,6 +285,8 @@ export default function NewPlayerForm({
   const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
+  const firstNameInputNameRef = useRef(`lf_first_name_${Date.now()}`);
+  const lastNameInputNameRef = useRef(`lf_last_name_${Date.now()}`);
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
@@ -332,8 +380,8 @@ export default function NewPlayerForm({
   useEffect(() => {
     const trimmedFirst = firstName.trim();
     const trimmedLast = lastName.trim();
-    const normalizedFirstName = trimmedFirst.toLowerCase();
-    const normalizedLastName = trimmedLast.toLowerCase();
+    const normalizedFirstName = normalizeSearchText(trimmedFirst);
+    const normalizedLastName = normalizeSearchText(trimmedLast);
     const normalizedPhone = phone.trim()
       ? normalizePhoneToE164(phone, "MX")
       : null;
@@ -362,12 +410,13 @@ export default function NewPlayerForm({
       }
       if (cleanEmail) conditions.push(`email.eq.${cleanEmail}`);
       if (cleanGhin) conditions.push(`ghin_number.eq.${cleanGhin}`);
-      if (trimmedFirst.length >= 2) {
-        conditions.push(`first_name.ilike.%${trimmedFirst}%`);
-      }
-      if (trimmedLast.length >= 2) {
-        conditions.push(`last_name.ilike.%${trimmedLast}%`);
-      }
+      splitSearchTokens(trimmedFirst).forEach((token) => {
+        conditions.push(`first_name.ilike.%${token}%`);
+      });
+
+      splitSearchTokens(trimmedLast).forEach((token) => {
+        conditions.push(`last_name.ilike.%${token}%`);
+      });
 
       if (conditions.length === 0) {
         setPlayerMatches([]);
@@ -381,7 +430,7 @@ export default function NewPlayerForm({
           "id, first_name, last_name, phone, whatsapp_phone_e164, email, ghin_number, club"
         )
         .or(conditions.join(","))
-        .limit(8);
+        .limit(25);
 
       if (error || !data) {
         setPlayerMatches([]);
@@ -590,6 +639,42 @@ export default function NewPlayerForm({
       setMsg(`❌ ${err?.message ?? "Error cargando jugador existente"}`);
     } finally {
       setUsingExistingPlayerId(null);
+    }
+  };
+
+  const deleteSelectedPlayer = async () => {
+    if (!selectedExistingPlayerId || deletingPlayer) return;
+
+    const playerName = `${firstName.trim()} ${lastName.trim()}`.trim() || "este jugador";
+
+    const confirmed = window.confirm(
+      `¿Eliminar definitivamente a ${playerName}?\n\nSolo se eliminará si NO tiene inscripciones en torneos.`
+    );
+
+    if (!confirmed) return;
+
+    setMsg(null);
+    setDeletingPlayer(true);
+
+    try {
+      const res = await deletePlayerAction(
+        selectedExistingPlayerId,
+        returnTournament ?? null
+      );
+
+      if (!res.ok) {
+        setMsg(`❌ ${res.message}`);
+        return;
+      }
+
+      resetForm();
+      setMsg("✅ Jugador eliminado");
+      onCreated?.();
+      router.refresh();
+    } catch (err: any) {
+      setMsg(`❌ ${err?.message ?? "Error eliminando jugador"}`);
+    } finally {
+      setDeletingPlayer(false);
     }
   };
 
@@ -823,85 +908,97 @@ export default function NewPlayerForm({
         {selectedExistingPlayerId ? "Editar jugador existente" : "Nuevo jugador"}
       </h2>
 
-      {(searchingPlayers || playerMatches.length > 0) && (
+      <div
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          padding: 8,
+          marginBottom: 8,
+          background: "#f9fafb",
+          height: 132,
+          overflowY: "auto",
+          overscrollBehavior: "contain",
+        }}
+      >
         <div
           style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: 8,
-            marginBottom: 8,
-            background: "#f9fafb",
+            fontSize: 11,
+            fontWeight: 700,
+            marginBottom: 6,
+            color: "#111827",
+            lineHeight: 1.1,
           }}
         >
+          {searchingPlayers
+            ? "Buscando jugadores similares..."
+            : playerMatches.length > 0
+              ? "Posibles jugadores existentes"
+              : "Sin coincidencias todavía"}
+        </div>
+
+        {searchingPlayers && playerMatches.length === 0 && (
+          <div style={{ fontSize: 11, color: "#6b7280" }}>
+            Escribe nombre y apellido para buscar sin mover la pantalla.
+          </div>
+        )}
+
+        {!searchingPlayers && playerMatches.length === 0 && (
+          <div style={{ fontSize: 11, color: "#6b7280" }}>—</div>
+        )}
+
+        {playerMatches.map((p, index) => (
           <div
+            key={p.id}
             style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              padding: "6px 8px",
+              borderBottom:
+                index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
               fontSize: 11,
-              fontWeight: 700,
-              marginBottom: 6,
-              color: "#111827",
             }}
           >
-            {searchingPlayers
-              ? "Buscando jugadores similares..."
-              : "Posibles jugadores existentes"}
-          </div>
-
-          {!searchingPlayers &&
-            playerMatches.map((p, index) => (
+            <div style={{ minWidth: 0 }}>
               <div
-                key={p.id}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  padding: "6px 8px",
-                  borderBottom:
-                    index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
-                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#111827",
+                  lineHeight: 1.2,
                 }}
               >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "#111827",
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {p.first_name || ""} {p.last_name || ""}
-                  </div>
-                  <div
-                    style={{
-                      color: "#4b5563",
-                      lineHeight: 1.2,
-                      marginTop: 2,
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
-                    {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => useExistingPlayer(p)}
-                  disabled={usingExistingPlayerId === p.id}
-                  style={{
-                    ...secondaryButtonStyle,
-                    opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
-                    pointerEvents:
-                      usingExistingPlayerId === p.id ? "none" : "auto",
-                    flexShrink: 0,
-                  }}
-                >
-                  {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
-                </button>
+                {p.first_name || ""} {p.last_name || ""}
               </div>
-            ))}
-        </div>
-      )}
+              <div
+                style={{
+                  color: "#4b5563",
+                  lineHeight: 1.2,
+                  marginTop: 2,
+                  wordBreak: "break-word",
+                }}
+              >
+                {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
+                {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => useExistingPlayer(p)}
+              disabled={usingExistingPlayerId === p.id}
+              style={{
+                ...secondaryButtonStyle,
+                opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
+                pointerEvents: usingExistingPlayerId === p.id ? "none" : "auto",
+                flexShrink: 0,
+              }}
+            >
+              {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
+            </button>
+          </div>
+        ))}
+      </div>
 
       {selectedExistingPlayerId && (
         <div
@@ -926,9 +1023,27 @@ export default function NewPlayerForm({
           <button
             type="button"
             onClick={resetForm}
-            style={secondaryButtonStyle}
+            disabled={deletingPlayer}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: deletingPlayer ? 0.7 : 1,
+              pointerEvents: deletingPlayer ? "none" : "auto",
+            }}
           >
             Nuevo jugador
+          </button>
+
+          <button
+            type="button"
+            onClick={deleteSelectedPlayer}
+            disabled={deletingPlayer || loading}
+            style={{
+              ...dangerButtonStyle,
+              opacity: deletingPlayer || loading ? 0.7 : 1,
+              pointerEvents: deletingPlayer || loading ? "none" : "auto",
+            }}
+          >
+            {deletingPlayer ? "Eliminando..." : "Eliminar jugador"}
           </button>
         </div>
       )}
@@ -954,11 +1069,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Nombre
         <input
-           name={`lf_fn_${Math.random()}`}
+           name={firstNameInputNameRef.current}
            value={firstName}
            onChange={(e) => setFirstName(e.target.value)}
            style={fieldStyle}
-           autoComplete="new-password"
+           autoComplete="one-time-code"
            autoCorrect="off"
            autoCapitalize="off"
            spellCheck={false}
@@ -968,11 +1083,11 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Apellido
          <input
-            name={`lf_ln_${Math.random()}`}
+            name={lastNameInputNameRef.current}
             value={lastName}
              onChange={(e) => setLastName(e.target.value)}
              style={fieldStyle}
-             autoComplete="new-password"
+             autoComplete="one-time-code"
              autoCorrect="off"
              autoCapitalize="off"
              spellCheck={false}

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
-import SubmitButton from "@/components/ui/SubmitButton";
 import SearchInput from "@/components/ui/SearchInput";
 
 type Player = {
@@ -11,16 +10,30 @@ type Player = {
   last_name: string;
   handicap_index: number | null;
   club_label: string | null;
+  birth_year: number | null;
+};
+
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  min_age?: number | null;
 };
 
 export default function SinglePlayerEntryPanel({
   players,
   tournamentId,
+  categories,
 }: {
   players: Player[];
   tournamentId: string;
+  categories: Category[];
 }) {
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<Record<string, string>>({});
+  const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
+
+  const currentYear = new Date().getFullYear();
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -32,6 +45,25 @@ export default function SinglePlayerEntryPanel({
       return name.includes(q) || club.includes(q);
     });
   }, [players, search]);
+
+  function getAge(p: Player) {
+    if (!p.birth_year) return null;
+    return currentYear - p.birth_year;
+  }
+
+  function getEligibleAgeCategories(p: Player) {
+    const age = getAge(p);
+    if (age === null) return [];
+
+    return categories.filter((c) => {
+      if (c.min_age === null || c.min_age === undefined) return false;
+      return age >= Number(c.min_age);
+    });
+  }
+
+  function needsCategorySelection(p: Player) {
+    return getEligibleAgeCategories(p).length > 0;
+  }
 
   return (
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
@@ -61,84 +93,138 @@ export default function SinglePlayerEntryPanel({
         </div>
       </div>
 
-      <form action={addEntry} className="space-y-1">
-        <input type="hidden" name="tournament_id" value={tournamentId} />
+      <div className="max-h-[560px] overflow-auto rounded border border-gray-300">
+        <table className="w-full border-collapse text-[11px] text-black">
+          <thead className="sticky top-0 z-10 bg-gray-200 text-black">
+            <tr>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                Jugador
+              </th>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                Club
+              </th>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                HI
+              </th>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                Edad
+              </th>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                Categoría
+              </th>
+              <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
+                Acción
+              </th>
+            </tr>
+          </thead>
 
-        <div className="max-h-[560px] overflow-auto rounded border border-gray-300">
-          <table className="w-full border-collapse text-[11px] text-black">
-            <thead className="sticky top-0 z-10 bg-gray-200 text-black">
-              <tr>
-                <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  Jugador
-                </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  Club
-                </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  HI
-                </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                  Acción
-                </th>
-              </tr>
-            </thead>
+          <tbody className="bg-white text-black">
+            {filtered.map((p) => {
+              const hasHandicap =
+                p.handicap_index !== null && p.handicap_index !== undefined;
+              const age = getAge(p);
+              const ageCategories = getEligibleAgeCategories(p);
+              const needsSelection = needsCategorySelection(p);
+              const selected = selectedCategory[p.id] ?? "";
+              const isSubmittingThisPlayer = submittingPlayerId === p.id;
 
-            <tbody className="bg-white text-black">
-              {filtered.map((p) => {
-                const hasHandicap =
-                  p.handicap_index !== null && p.handicap_index !== undefined;
+              return (
+                <tr key={p.id} className="bg-white align-top">
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {`${p.last_name ?? ""} ${p.first_name ?? ""}`.trim()}
+                  </td>
 
-                return (
-                  <tr key={p.id} className="bg-white align-top">
-                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      {`${p.last_name ?? ""} ${p.first_name ?? ""}`.trim()}
-                    </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {p.club_label ?? "-"}
+                  </td>
 
-                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      {p.club_label ?? "-"}
-                    </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {p.handicap_index ?? "-"}
+                  </td>
 
-                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      {p.handicap_index ?? "-"}
-                    </td>
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {age ?? "-"}
+                  </td>
 
-                    <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
-                      {!hasHandicap ? (
+                  <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                    {needsSelection ? (
+                      <select
+                        value={selected}
+                        onChange={(e) =>
+                          setSelectedCategory((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        disabled={isSubmittingThisPlayer}
+                        className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black disabled:cursor-wait disabled:bg-gray-100"
+                      >
+                        <option value="">Categoría normal</option>
+                        {ageCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.code ? `${c.code} - ` : ""}
+                            {c.name ?? "Sin nombre"}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-gray-500">Auto</span>
+                    )}
+                  </td>
+
+                  <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
+                    {!hasHandicap ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
+                      >
+                        Sin HI
+                      </button>
+                    ) : (
+                      <form
+                        action={addEntry}
+                        className="inline"
+                        onSubmit={() => setSubmittingPlayerId(p.id)}
+                      >
+                        <input type="hidden" name="tournament_id" value={tournamentId} />
+                        {needsSelection && selected ? (
+                          <input type="hidden" name="category_id" value={selected} />
+                        ) : null}
+
                         <button
-                          type="button"
-                          disabled
-                          className="inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
-                        >
-                          Sin HI
-                        </button>
-                      ) : (
-                        <SubmitButton
+                          type="submit"
                           name="player_id"
                           value={p.id}
-                          pendingText="..."
+                          disabled={isSubmittingThisPlayer}
+                          className={
+                            isSubmittingThisPlayer
+                              ? "inline-flex min-h-6 cursor-wait items-center justify-center rounded border border-gray-400 bg-gray-400 px-2 text-[10px] font-medium leading-none text-white"
+                              : "inline-flex min-h-6 items-center justify-center rounded border border-green-700 bg-green-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-green-800"
+                          }
                         >
-                          Inscribir
-                        </SubmitButton>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="border border-gray-300 px-2 py-2 text-center text-[11px] text-gray-700"
-                  >
-                    No se encontró jugador en la lista general.
+                          {isSubmittingThisPlayer ? "Inscribiendo..." : "Inscribir"}
+                        </button>
+                      </form>
+                    )}
                   </td>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </form>
+              );
+            })}
+
+            {filtered.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="border border-gray-300 px-2 py-2 text-center text-[11px] text-gray-700"
+                >
+                  No se encontró jugador en la lista general.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

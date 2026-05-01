@@ -1,8 +1,9 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { createRound, updateRound, deleteRound } from "./actions";
+import SubmitButton from "@/components/ui/SubmitButton";
 import HeaderBar from "@/components/ui/HeaderBar";
 
 export const dynamic = "force-dynamic";
@@ -15,14 +16,37 @@ type Tournament = {
   name: string | null;
 };
 
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  sort_order: number | null;
+};
+
 type Round = {
   id: string;
   tournament_id: string;
   round_no: number;
   round_date: string | null;
-  start_type: "tee_times" | "shotgun";
+  start_type: "tee_time" | "shotgun";
   start_time: string | null;
   interval_minutes: number | null;
+  category_id: string | null;
+  wave: string | null;
+  group_size: number | null;
+};
+
+type RoundDayGroup = {
+  key: string;
+  label: string;
+  rounds: Round[];
+};
+
+type CategoryRoundCheck = {
+  category: Category;
+  configuredRounds: number[];
+  missingRounds: number[];
+  isComplete: boolean;
 };
 
 function buildTimeOptions(startHour = 6, endHour = 18, stepMinutes = 5) {
@@ -44,48 +68,125 @@ function normalizeTimeForSelect(value: string | null | undefined) {
   if (!value) return "";
 
   const s = String(value).trim();
-  const m = s.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
 
   if (m) {
-    return `${m[1]}:${m[2]}`;
+    return `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`;
   }
 
   return s;
 }
 
-const buttonStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: "30px",
-  padding: "0 10px",
-  borderRadius: "7px",
-  border: "1px solid #374151",
-  background: "linear-gradient(#6b7280, #4b5563)",
-  color: "#ffffff",
-  fontWeight: 600,
-  fontSize: "11px",
-  lineHeight: 1,
-  textDecoration: "none",
-  boxShadow: "0 3px 0 #1f2937, 0 4px 8px rgba(0,0,0,0.22)",
-  whiteSpace: "nowrap",
-};
+function categoryLabel(c: Category) {
+  const code = (c.code ?? "").trim();
+  const name = (c.name ?? "").trim();
 
-const lightButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: "linear-gradient(#f9fafb, #e5e7eb)",
-  color: "#111827",
-  border: "1px solid #9ca3af",
-  boxShadow: "0 3px 0 #9ca3af, 0 4px 8px rgba(0,0,0,0.14)",
-};
+  if (code && name) return `${code} - ${name}`;
+  if (name) return name;
+  if (code) return code;
+  return c.id.slice(0, 8);
+}
 
-const redButtonStyle: CSSProperties = {
-  ...buttonStyle,
-  background: "linear-gradient(#ef4444, #b91c1c)",
-  border: "1px solid #7f1d1d",
-  boxShadow: "0 3px 0 #7f1d1d, 0 4px 8px rgba(0,0,0,0.22)",
-};
+function fallbackCategoryLabel(categoryId: string | null) {
+  if (!categoryId) return "Sin categoría";
+  return `Categoría no activa (${categoryId.slice(0, 8)})`;
+}
 
+function roundDateLabel(value: string | null) {
+  if (!value) return "Sin fecha";
+
+  const parts = value.split("-");
+  if (parts.length !== 3) return value;
+
+  const [yyyy, mm, dd] = parts;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+function getRoundDayKey(value: string | null) {
+  return value || "sin-fecha";
+}
+
+function sortRounds(a: Round, b: Round) {
+  const roundDiff = a.round_no - b.round_no;
+  if (roundDiff !== 0) return roundDiff;
+
+  const waveDiff = String(a.wave ?? "").localeCompare(String(b.wave ?? ""));
+  if (waveDiff !== 0) return waveDiff;
+
+  const timeDiff = String(a.start_time ?? "").localeCompare(
+    String(b.start_time ?? "")
+  );
+  if (timeDiff !== 0) return timeDiff;
+
+  return String(a.category_id ?? "").localeCompare(String(b.category_id ?? ""));
+}
+
+function buildRoundDayGroups(rounds: Round[]) {
+  const map = new Map<string, RoundDayGroup>();
+
+  for (const round of rounds) {
+    const key = getRoundDayKey(round.round_date);
+
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: roundDateLabel(round.round_date),
+        rounds: [],
+      });
+    }
+
+    map.get(key)!.rounds.push(round);
+  }
+
+  return Array.from(map.values()).map((group) => ({
+    ...group,
+    rounds: group.rounds.sort(sortRounds),
+  }));
+}
+
+function buildRoundChecks(categories: Category[], rounds: Round[]) {
+  const requiredRounds = [1, 2, 3];
+
+  const roundsByCategory = new Map<string, Set<number>>();
+
+  for (const round of rounds) {
+    if (!round.category_id) continue;
+
+    if (!roundsByCategory.has(round.category_id)) {
+      roundsByCategory.set(round.category_id, new Set<number>());
+    }
+
+    roundsByCategory.get(round.category_id)!.add(round.round_no);
+  }
+
+  return categories.map<CategoryRoundCheck>((category) => {
+    const configuredRounds = Array.from(
+      roundsByCategory.get(category.id) ?? new Set<number>()
+    )
+      .filter((roundNo) => requiredRounds.includes(roundNo))
+      .sort((a, b) => a - b);
+
+    const missingRounds = requiredRounds.filter(
+      (roundNo) => !configuredRounds.includes(roundNo)
+    );
+
+    return {
+      category,
+      configuredRounds,
+      missingRounds,
+      isComplete: missingRounds.length === 0,
+    };
+  });
+}
+
+const primaryButtonClass =
+  "inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800";
+const secondaryButtonClass =
+  "inline-flex min-h-7 items-center justify-center rounded border border-gray-300 bg-white px-2.5 text-[11px] font-medium leading-none text-gray-700 shadow-sm hover:bg-gray-50";
+const deleteButtonClass =
+  "inline-flex min-h-6 items-center justify-center rounded border border-red-700 bg-red-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-red-800";
+const saveButtonClass =
+  "inline-flex min-h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white shadow-sm hover:bg-gray-800";
 const fieldClass =
   "h-8 w-full rounded-md border border-gray-300 bg-gray-100 px-2 text-[11px] leading-normal text-black";
 const compactTableFieldClass =
@@ -96,7 +197,7 @@ const cardClass =
   "space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2.5 shadow-sm";
 const fieldWrapClass = "grid gap-1 min-w-[150px]";
 const newRoundGridClass =
-  "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[100px_150px_150px_130px_130px_auto] xl:items-end";
+  "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[90px_145px_110px_130px_115px_115px_auto] xl:items-end";
 
 function HeaderBlock({
   title,
@@ -142,7 +243,10 @@ export default async function RoundsPage(props: {
     );
   }
 
-  const tournaments: Tournament[] = (tData ?? []) as any[];
+  const tournaments: Tournament[] = ((tData ?? []) as any[]).map((t) => ({
+    id: t.id,
+    name: t.name ?? null,
+  }));
 
   const effectiveTournamentId = tournamentId || (tournaments[0]?.id ?? "");
 
@@ -150,42 +254,106 @@ export default async function RoundsPage(props: {
     redirect(`/rounds?tournament_id=${effectiveTournamentId}`);
   }
 
+  if (!effectiveTournamentId) {
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <header className="space-y-1">
+          <h1 className="text-lg font-bold text-white">Rounds</h1>
+          <p className="text-[11px] leading-snug text-white/85">
+            No hay torneos disponibles.
+          </p>
+        </header>
+
+        <a href="/tournaments/new" className={primaryButtonClass}>
+          + Nuevo torneo
+        </a>
+      </div>
+    );
+  }
+
   await requireTournamentAccess({
     tournamentId: effectiveTournamentId,
-    allowedRoles: [
-      "super_admin",
-      "club_admin",
-      "tournament_director",
-    ],
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
   });
 
-  const { data: rData, error: rErr } = effectiveTournamentId
-    ? await supabase
-        .from("rounds")
-        .select(
-          "id, tournament_id, round_no, round_date, start_type, start_time, interval_minutes"
-        )
-        .eq("tournament_id", effectiveTournamentId)
-        .order("round_no", { ascending: true })
-    : { data: [], error: null };
+  const [categoriesRes, roundsRes] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, code, name, sort_order")
+      .eq("tournament_id", effectiveTournamentId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("rounds")
+      .select(
+        "id, tournament_id, round_no, round_date, start_type, start_time, interval_minutes, category_id, wave, group_size"
+      )
+      .eq("tournament_id", effectiveTournamentId)
+      .order("round_date", { ascending: true, nullsFirst: false })
+      .order("round_no", { ascending: true })
+      .order("wave", { ascending: true, nullsFirst: false })
+      .order("start_time", { ascending: true, nullsFirst: false })
+      .limit(500),
+  ]);
 
-  if (rErr) {
+  if (categoriesRes.error) {
     return (
       <div className="space-y-2 p-2 md:p-3">
         <h1 className="text-lg font-bold text-white">Rounds</h1>
         <p className="text-[11px] leading-snug text-red-200">
-          Error cargando rounds: {rErr.message}
+          Error cargando categorías: {categoriesRes.error.message}
         </p>
       </div>
     );
   }
 
-  const rounds: Round[] = (rData ?? []).map((r: any) => ({
-    ...r,
-    round_no: Number(r.round_no),
+  if (roundsRes.error) {
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <p className="text-[11px] leading-snug text-red-200">
+          Error cargando rounds: {roundsRes.error.message}
+        </p>
+      </div>
+    );
+  }
+
+  const categories: Category[] = ((categoriesRes.data ?? []) as any[]).map(
+    (c) => ({
+      id: c.id,
+      code: c.code ?? null,
+      name: c.name ?? null,
+      sort_order: c.sort_order === null ? null : Number(c.sort_order),
+    })
+  );
+
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+
+  const rounds: Round[] = ((roundsRes.data ?? []) as any[]).map((r) => ({
+    id: r.id,
+    tournament_id: r.tournament_id,
+    round_no: Number(r.round_no ?? 0),
+    round_date: r.round_date ?? null,
+    start_type: r.start_type === "shotgun" ? "shotgun" : "tee_time",
+    start_time: r.start_time ?? null,
     interval_minutes:
-      r.interval_minutes === null ? null : Number(r.interval_minutes),
+      r.interval_minutes === null || r.interval_minutes === undefined
+        ? null
+        : Number(r.interval_minutes),
+    category_id: r.category_id ?? null,
+    wave: r.wave ?? null,
+    group_size:
+      r.group_size === null || r.group_size === undefined
+        ? null
+        : Number(r.group_size),
   }));
+
+  const roundDayGroups = buildRoundDayGroups(rounds);
+  const roundChecks = buildRoundChecks(categories, rounds);
+  const completeChecks = roundChecks.filter((check) => check.isComplete);
+  const incompleteChecks = roundChecks.filter((check) => !check.isComplete);
+  const isCalendarComplete =
+    categories.length > 0 && incompleteChecks.length === 0;
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -195,7 +363,8 @@ export default async function RoundsPage(props: {
       <header className="space-y-1">
         <h1 className="text-lg font-bold text-white">Rounds</h1>
         <p className="text-[11px] leading-snug text-white/85">
-          Crea y configura rondas por torneo (R1, R2...)
+          Configura el calendario del torneo por día, ronda, categoría, turno y
+          horario.
         </p>
       </header>
 
@@ -204,42 +373,150 @@ export default async function RoundsPage(props: {
           title="TORNEO"
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
-              <button style={buttonStyle}>Cambiar</button>
-              <a href="/tournaments/new" style={lightButtonStyle}>
+              <button type="submit" className={primaryButtonClass}>
+                Cambiar
+              </button>
+              <a href="/tournaments/new" className={secondaryButtonClass}>
                 + Nuevo torneo
+              </a>
+              <a
+                href={`/cut-rules?tournament_id=${effectiveTournamentId}`}
+                className={secondaryButtonClass}
+              >
+                Reglas corte
               </a>
             </div>
           }
         >
-          {tournaments.length === 0 ? (
-            <div className="text-[11px] leading-snug text-red-200">
-              No hay torneos. Crea uno primero.
-            </div>
-          ) : (
-            <div className="min-w-0">
-              <select
-                name="tournament_id"
-                defaultValue={effectiveTournamentId}
-                className={fieldClass}
-              >
-                {tournaments.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {tournamentLabel(t)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="min-w-0">
+            <select
+              name="tournament_id"
+              defaultValue={effectiveTournamentId}
+              className={fieldClass}
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {tournamentLabel(t)}
+                </option>
+              ))}
+            </select>
+          </div>
         </HeaderBlock>
       </form>
 
       <section className={cardClass}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-          Nueva ronda
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Verificador de rondas
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Valida que cada categoría activa tenga configuradas las rondas 1,
+              2 y 3. El día y turno pueden ser distintos.
+            </div>
+          </div>
+
+          <button type="button" className={primaryButtonClass}>
+            Verificar rondas
+          </button>
         </div>
 
+        <div
+          className={
+            isCalendarComplete
+              ? "rounded border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-[11px] leading-snug text-emerald-800"
+              : "rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800"
+          }
+        >
+          {isCalendarComplete ? (
+            <span>
+              ✅ Calendario completo: {completeChecks.length}/
+              {categories.length} categorías tienen rondas 1, 2 y 3.
+            </span>
+          ) : (
+            <span>
+              ⚠️ Faltan rondas: {completeChecks.length}/{categories.length}{" "}
+              categorías completas. Revisa las categorías marcadas abajo.
+            </span>
+          )}
+        </div>
+
+        <div className="grid gap-1.5 md:grid-cols-2 lg:grid-cols-3">
+          {roundChecks.map((check) => (
+            <div
+              key={check.category.id}
+              className={
+                check.isComplete
+                  ? "rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-900"
+                  : "rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900"
+              }
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">
+                  {check.isComplete ? "✅" : "⚠️"} {categoryLabel(check.category)}
+                </span>
+                <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold">
+                  {check.configuredRounds.length}/3
+                </span>
+              </div>
+
+              <div className="mt-1 leading-snug">
+                {check.isComplete ? (
+                  <span>Completa: rondas {check.configuredRounds.join(", ")}</span>
+                ) : (
+                  <span>
+                    Tiene{" "}
+                    {check.configuredRounds.length > 0
+                      ? check.configuredRounds.join(", ")
+                      : "ninguna"}
+                    . Faltan {check.missingRounds.join(", ")}.
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={cardClass}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Nuevo día de juego
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Selecciona la fecha, ronda, horario y todas las categorías que
+              juegan ese día. Se creará un registro por categoría.
+            </div>
+          </div>
+        </div>
+
+        {categories.length === 0 ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
+            Este torneo todavía no tiene categorías activas. Primero crea
+            categorías para poder crear rondas por categoría.
+          </div>
+        ) : null}
+
         <form action={createRound} className={newRoundGridClass}>
-          <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+          <input
+            type="hidden"
+            name="tournament_id"
+            value={effectiveTournamentId}
+          />
+
+          <div className={fieldWrapClass}>
+            <label className={labelClass} htmlFor="round_date">
+              Fecha / día
+            </label>
+            <input
+              id="round_date"
+              name="round_date"
+              type="date"
+              className={fieldClass}
+              required
+            />
+          </div>
 
           <div className={fieldWrapClass}>
             <label className={labelClass} htmlFor="round_no">
@@ -257,15 +534,19 @@ export default async function RoundsPage(props: {
           </div>
 
           <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="round_date">
-              Fecha
+            <label className={labelClass} htmlFor="wave">
+              Turno
             </label>
-            <input
-              id="round_date"
-              name="round_date"
-              type="date"
+            <select
+              id="wave"
+              name="wave"
+              defaultValue="AM"
               className={fieldClass}
-            />
+              required
+            >
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
           </div>
 
           <div className={fieldWrapClass}>
@@ -275,10 +556,10 @@ export default async function RoundsPage(props: {
             <select
               id="start_type"
               name="start_type"
-              defaultValue="tee_times"
+              defaultValue="tee_time"
               className={fieldClass}
             >
-              <option value="tee_times">Tee times</option>
+              <option value="tee_time">Tee time</option>
               <option value="shotgun">Shotgun</option>
             </select>
           </div>
@@ -321,152 +602,306 @@ export default async function RoundsPage(props: {
             </select>
           </div>
 
+          <div className={fieldWrapClass}>
+            <label className={labelClass} htmlFor="group_size">
+              Grupo
+            </label>
+            <select
+              id="group_size"
+              name="group_size"
+              defaultValue="4"
+              className={fieldClass}
+            >
+              <option value="3">3 jug.</option>
+              <option value="4">4 jug.</option>
+            </select>
+          </div>
+
+          <div className="col-span-full">
+            <label className={labelClass}>Categorías que juegan ese día</label>
+
+            <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+              {categories.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2 rounded border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] text-black"
+                >
+                  <input
+                    type="checkbox"
+                    name="category_ids"
+                    value={c.id}
+                    className="h-3 w-3"
+                  />
+                  <span>{categoryLabel(c)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-end">
-            <button style={buttonStyle}>Crear</button>
+            <SubmitButton pendingText="Creando..." disabled={categories.length === 0}>
+              Crear día
+            </SubmitButton>
           </div>
         </form>
       </section>
 
       <section className={cardClass}>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-          Listado
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
+              Calendario de rondas por día
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-gray-500">
+              Primero se agrupa por fecha. Dentro de cada día se ordena por
+              ronda, turno, hora y categoría.
+            </div>
+          </div>
+
+          <div className="rounded-full border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+            {rounds.length} registros
+          </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
-          <table className="w-full min-w-[920px] border-collapse text-[11px] text-black">
-            <thead>
-              <tr className="bg-gray-200 text-left text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Ronda
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Fecha
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Tipo
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Hora
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Intervalo
-                </th>
-                <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
+        {rounds.length > 499 ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
+            Se muestran los primeros 500 registros. Más adelante agregamos
+            filtro por día/ronda si el torneo crece mucho.
+          </div>
+        ) : null}
 
-            <tbody>
-              {rounds.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
-                  >
-                    No hay rondas todavía.
-                  </td>
-                </tr>
-              ) : (
-                rounds.map((r) => {
-                  const formId = `row-${r.id}`;
-                  const startTimeValue = normalizeTimeForSelect(r.start_time);
+        {rounds.length === 0 ? (
+          <div className="rounded-lg border border-gray-300 bg-white px-2 py-3 text-center text-[11px] text-gray-500">
+            No hay rondas todavía.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {roundDayGroups.map((group, index) => (
+              <div
+                key={group.key}
+                className="overflow-hidden rounded-lg border border-gray-300 bg-white"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-300 bg-gray-800 px-2 py-1.5 text-white">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-white/15 px-2 py-0.5 text-[11px] font-bold">
+                      Día {index + 1}
+                    </span>
+                    <span className="text-[12px] font-bold">{group.label}</span>
+                  </div>
 
-                  return (
-                    <tr key={r.id} className="bg-white align-middle">
-                      <td className="border border-gray-300 px-1.5 py-1.5 w-[100px]">
-                        <form id={formId} action={updateRound}>
-                          <input type="hidden" name="id" value={r.id} />
-                          <input type="hidden" name="tournament_id" value={r.tournament_id} />
-                        </form>
+                  <span className="text-[11px] text-white/85">
+                    {group.rounds.length} categoría
+                    {group.rounds.length === 1 ? "" : "s"} / horario
+                    {group.rounds.length === 1 ? "" : "s"}
+                  </span>
+                </div>
 
-                        <input
-                          form={formId}
-                          name="round_no"
-                          type="number"
-                          defaultValue={r.round_no}
-                          className={compactTableFieldClass}
-                        />
-                      </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1280px] border-collapse text-[11px] text-black">
+                    <thead>
+                      <tr className="bg-gray-200 text-left text-gray-900">
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Ronda
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Categoría
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Fecha
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Turno
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Tipo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Hora
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Intervalo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Grupo
+                        </th>
+                        <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 w-[150px]">
-                        <input
-                          form={formId}
-                          name="round_date"
-                          type="date"
-                          defaultValue={r.round_date ?? ""}
-                          className={compactTableFieldClass}
-                        />
-                      </td>
+                    <tbody>
+                      {group.rounds.map((r) => {
+                        const formId = `round-edit-${r.id}`;
+                        const startTimeValue = normalizeTimeForSelect(
+                          r.start_time
+                        );
+                        const category = r.category_id
+                          ? categoryById.get(r.category_id)
+                          : null;
+                        const currentCategoryLabel = category
+                          ? categoryLabel(category)
+                          : fallbackCategoryLabel(r.category_id);
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[130px]">
-                        <select
-                          form={formId}
-                          name="start_type"
-                          defaultValue={r.start_type}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="tee_times">tee_times</option>
-                          <option value="shotgun">shotgun</option>
-                        </select>
-                      </td>
+                        return (
+                          <tr key={r.id} className="bg-white align-middle">
+                            <td className="w-[90px] border border-gray-300 px-1.5 py-1.5">
+                              <form id={formId} action={updateRound}>
+                                <input type="hidden" name="id" value={r.id} />
+                                <input
+                                  type="hidden"
+                                  name="tournament_id"
+                                  value={r.tournament_id}
+                                />
+                              </form>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[115px]">
-                        <select
-                          form={formId}
-                          name="start_time"
-                          defaultValue={startTimeValue}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin hora</option>
-                          {timeOptions.map((time) => (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                              <input
+                                form={formId}
+                                name="round_no"
+                                type="number"
+                                min="1"
+                                defaultValue={r.round_no}
+                                className={compactTableFieldClass}
+                              />
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5 min-w-[115px]">
-                        <select
-                          form={formId}
-                          name="interval_minutes"
-                          defaultValue={r.interval_minutes ?? ""}
-                          className={compactTableFieldClass}
-                        >
-                          <option value="">Sin intervalo</option>
-                          <option value="7">7</option>
-                          <option value="8">8</option>
-                          <option value="9">9</option>
-                          <option value="10">10</option>
-                          <option value="12">12</option>
-                        </select>
-                      </td>
+                            <td className="min-w-[210px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="category_id"
+                                defaultValue={r.category_id ?? ""}
+                                className={compactTableFieldClass}
+                                title={currentCategoryLabel}
+                              >
+                                {!category && r.category_id ? (
+                                  <option value={r.category_id}>
+                                    {currentCategoryLabel}
+                                  </option>
+                                ) : null}
+                                <option value="">Sin categoría</option>
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {categoryLabel(c)}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
 
-                      <td className="border border-gray-300 px-1.5 py-1.5">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button form={formId} style={buttonStyle}>
-                            Guardar
-                          </button>
+                            <td className="w-[145px] border border-gray-300 px-1.5 py-1.5">
+                              <input
+                                form={formId}
+                                name="round_date"
+                                type="date"
+                                defaultValue={r.round_date ?? ""}
+                                className={compactTableFieldClass}
+                              />
+                            </td>
 
-                          <form action={deleteRound}>
-                            <input type="hidden" name="id" value={r.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={effectiveTournamentId}
-                            />
-                            <button style={redButtonStyle}>Borrar</button>
-                          </form>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <td className="min-w-[95px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="wave"
+                                defaultValue={r.wave ?? ""}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin turno</option>
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </td>
+
+                            <td className="min-w-[120px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="start_type"
+                                defaultValue={r.start_type}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="tee_time">tee_time</option>
+                                <option value="shotgun">shotgun</option>
+                              </select>
+                            </td>
+
+                            <td className="min-w-[115px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="start_time"
+                                defaultValue={startTimeValue}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin hora</option>
+                                {timeOptions.map((time) => (
+                                  <option key={time} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+
+                            <td className="min-w-[115px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="interval_minutes"
+                                defaultValue={r.interval_minutes ?? ""}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="">Sin intervalo</option>
+                                <option value="7">7</option>
+                                <option value="8">8</option>
+                                <option value="9">9</option>
+                                <option value="10">10</option>
+                                <option value="12">12</option>
+                              </select>
+                            </td>
+
+                            <td className="min-w-[95px] border border-gray-300 px-1.5 py-1.5">
+                              <select
+                                form={formId}
+                                name="group_size"
+                                defaultValue={r.group_size ?? 4}
+                                className={compactTableFieldClass}
+                              >
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                              </select>
+                            </td>
+
+                            <td className="border border-gray-300 px-1.5 py-1.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="submit"
+                                  form={formId}
+                                  className={saveButtonClass}
+                                >
+                                  Guardar
+                                </button>
+
+                                <form action={deleteRound}>
+                                  <input type="hidden" name="id" value={r.id} />
+                                  <input
+                                    type="hidden"
+                                    name="tournament_id"
+                                    value={effectiveTournamentId}
+                                  />
+                                  <button
+                                    type="submit"
+                                    className={deleteButtonClass}
+                                  >
+                                    Eliminar
+                                  </button>
+                                </form>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

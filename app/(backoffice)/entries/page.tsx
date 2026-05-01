@@ -20,6 +20,10 @@ type Category = {
   id: string;
   code: string | null;
   name: string | null;
+  gender: "M" | "F" | "X" | null;
+  handicap_min: number | null;
+  handicap_max: number | null;
+  min_age: number | null;
 };
 
 type ClubRef = {
@@ -33,6 +37,7 @@ type PlayerBaseRaw = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
+  birth_year: number | null;
   clubs: ClubRef | ClubRef[] | null;
 };
 
@@ -42,6 +47,7 @@ type Player = {
   last_name: string;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
+  birth_year: number | null;
   club_label: string | null;
 };
 
@@ -60,10 +66,12 @@ type EntryPlayerRaw = {
   ghin_number: string | null;
   shirt_size: string | null;
   shoe_size: string | null;
+  birth_year: number | null;
   clubs: ClubRef | ClubRef[] | null;
 };
 
 type EntryCategoryRaw = {
+  id: string;
   code: string | null;
   name: string | null;
   max_players?: number | null;
@@ -123,8 +131,10 @@ type EntryRow = {
     ghin_number: string | null;
     shirt_size: string | null;
     shoe_size: string | null;
+    birth_year: number | null;
   } | null;
   categories: {
+    id: string;
     code: string | null;
     name: string | null;
     max_players?: number | null;
@@ -335,6 +345,7 @@ export default async function EntriesPage({
         last_name,
         gender,
         handicap_index,
+        birth_year,
         clubs:clubs (
           name,
           short_name
@@ -344,7 +355,7 @@ export default async function EntriesPage({
       .order("first_name"),
     supabase
       .from("categories")
-      .select("id, code, name, tournament_id")
+      .select("id, code, name, tournament_id, gender, handicap_min, handicap_max, min_age")
       .order("sort_order", { ascending: true }),
   ]);
 
@@ -371,6 +382,10 @@ export default async function EntriesPage({
       id: c.id,
       code: c.code,
       name: c.name,
+      gender: c.gender,
+      handicap_min: c.handicap_min,
+      handicap_max: c.handicap_max,
+      min_age: c.min_age,
     }));
 
   const players: Player[] = ((playersRes.data ?? []) as unknown as PlayerBaseRaw[]).map(
@@ -380,6 +395,7 @@ export default async function EntriesPage({
       last_name: p.last_name,
       gender: p.gender,
       handicap_index: p.handicap_index,
+      birth_year: p.birth_year,
       club_label: clubLabelFromClub(p.clubs),
     })
   );
@@ -410,12 +426,14 @@ export default async function EntriesPage({
           ghin_number,
           shirt_size,
           shoe_size,
+          birth_year,
           clubs:clubs (
             name,
             short_name
           )
         ),
         categories:categories (
+          id,
           code,
           name,
           max_players
@@ -493,10 +511,12 @@ export default async function EntriesPage({
               ghin_number: player.ghin_number,
               shirt_size: player.shirt_size,
               shoe_size: player.shoe_size,
+              birth_year: player.birth_year,
             }
           : null,
         categories: category
           ? {
+              id: category.id,
               code: category.code,
               name: category.name,
               max_players: category.max_players ?? null,
@@ -611,8 +631,11 @@ export default async function EntriesPage({
 
           {activeTab === "manual" ? (
             <SinglePlayerEntryPanel
-              players={players}
+              players={players.filter(
+                (p) => !entries.some((e) => e.player_id === p.id)
+              )}
               tournamentId={selectedTournamentId}
+              categories={categories}
             />
           ) : null}
 
@@ -627,6 +650,7 @@ export default async function EntriesPage({
             <EntriesListPanel
               entries={entries}
               tournamentId={selectedTournamentId}
+              categories={categories}
             />
           ) : null}
 

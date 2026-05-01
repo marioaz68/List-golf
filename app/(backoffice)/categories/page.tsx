@@ -25,6 +25,7 @@ type CategoryRow = {
     | null;
   handicap_min: number | null;
   handicap_max: number | null;
+  min_age: number | null;
   max_players: number | null;
   sort_order: number | null;
   is_active: boolean | null;
@@ -50,6 +51,7 @@ type TemplateItemRow = {
     | null;
   handicap_min: number | null;
   handicap_max: number | null;
+  min_age: number | null;
   is_active: boolean | null;
   sort_order: number | null;
 };
@@ -61,6 +63,7 @@ type PreviewItem = {
   category_group: "main" | "senior" | "ladies" | "super_senior" | "mixed";
   handicap_min: number;
   handicap_max: number;
+  min_age: number | null;
   is_active: boolean;
 };
 
@@ -130,6 +133,7 @@ function normalizeItem(row: TemplateItemRow): PreviewItem {
       | "mixed",
     handicap_min: Number(row.handicap_min ?? 0),
     handicap_max: Number(row.handicap_max ?? 0),
+    min_age: row.min_age ?? null,
     is_active: row.is_active ?? true,
   };
 }
@@ -223,7 +227,7 @@ export default async function CategoriesPage(props: {
   const { data: rawCategories, error: categoriesError } = await supabase
     .from("categories")
     .select(
-      "id, tournament_id, code, name, gender, category_group, handicap_min, handicap_max, max_players, sort_order, is_active"
+      "id, tournament_id, code, name, gender, category_group, handicap_min, handicap_max, min_age, max_players, sort_order, is_active"
     )
     .eq("tournament_id", effectiveTournamentId)
     .order("sort_order", { ascending: true })
@@ -242,6 +246,7 @@ export default async function CategoriesPage(props: {
     name: c.name ?? "",
     handicap_min: Number(c.handicap_min ?? 0),
     handicap_max: Number(c.handicap_max ?? 0),
+    min_age: c.min_age ?? null,
     max_players: c.max_players ?? null,
     sort_order: c.sort_order ?? idx + 1,
     is_active: c.is_active ?? true,
@@ -255,7 +260,7 @@ export default async function CategoriesPage(props: {
     const { data: previewRaw, error: previewError } = await supabase
       .from("category_template_items")
       .select(
-        "code, name, gender, category_group, handicap_min, handicap_max, is_active, sort_order"
+        "code, name, gender, category_group, handicap_min, handicap_max, min_age, is_active, sort_order"
       )
       .eq("template_id", selectedTemplate.id)
       .order("sort_order", { ascending: true })
@@ -404,6 +409,7 @@ export default async function CategoriesPage(props: {
                   <th className="px-2 py-1 text-left font-semibold">Grupo</th>
                   <th className="px-2 py-1 text-left font-semibold">Hcp min</th>
                   <th className="px-2 py-1 text-left font-semibold">Hcp max</th>
+                  <th className="px-2 py-1 text-left font-semibold">Edad min</th>
                 </tr>
               </thead>
 
@@ -417,11 +423,12 @@ export default async function CategoriesPage(props: {
                       <td className="px-2 py-1.5">{item.category_group}</td>
                       <td className="px-2 py-1.5">{item.handicap_min}</td>
                       <td className="px-2 py-1.5">{item.handicap_max}</td>
+                      <td className="px-2 py-1.5">{item.min_age ?? "-"}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td className="px-2 py-2 text-white/70" colSpan={6}>
+                    <td className="px-2 py-2 text-white/70" colSpan={7}>
                       {templates.length === 0
                         ? "No hay plantillas guardadas todavía."
                         : "Esta plantilla no tiene categorías capturadas todavía."}

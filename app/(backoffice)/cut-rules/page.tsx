@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import CutRulesEditor from "./CutRulesEditor";
 import HeaderBar from "@/components/ui/HeaderBar";
@@ -18,6 +19,13 @@ type RoundRow = {
   id: string;
   round_no: number;
   round_date: string | null;
+};
+
+type CategoryRow = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  sort_order: number | null;
 };
 
 type TieBreakProfileRow = {
@@ -40,9 +48,11 @@ type CutRuleRow = {
     | "net_round"
     | "points_round";
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
-  advancement_type: "top_n" | "top_percent";
+  advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
   include_ties: boolean;
+  gross_exemption_enabled: boolean;
+  gross_exemption_top_n: number;
   tie_break_profile_id: string | null;
   sort_order: number | null;
   is_active: boolean;
@@ -99,10 +109,12 @@ export default async function CutRulesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const supabase = await createClient();
+  const supabaseAdmin = createAdminClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
   const tournamentId =
     typeof sp.tournament_id === "string" ? sp.tournament_id : "";
+  const saved = typeof sp.saved === "string" ? sp.saved : "";
 
   const { data: tournaments, error: tournamentsError } = await supabase
     .from("tournaments")
@@ -132,12 +144,23 @@ export default async function CutRulesPage(props: {
 
   if (roundsError) throw new Error(roundsError.message);
 
+  const { data: categories, error: categoriesError } = effectiveTournamentId
+    ? await supabase
+        .from("categories")
+        .select("id, code, name, sort_order")
+        .eq("tournament_id", effectiveTournamentId)
+        .order("sort_order", { ascending: true })
+    : { data: [], error: null };
+
+  if (categoriesError) throw new Error(categoriesError.message);
+
   const { data: tieBreakProfiles, error: tieBreakProfilesError } =
     effectiveTournamentId
-      ? await supabase
+      ? await supabaseAdmin
           .from("tie_break_profiles")
           .select("id, name, applies_to")
           .eq("tournament_id", effectiveTournamentId)
+          .eq("is_active", true)
           .in("applies_to", ["cut", "general"])
           .order("name", { ascending: true })
       : { data: [], error: null };
@@ -148,7 +171,7 @@ export default async function CutRulesPage(props: {
     ? await supabase
         .from("round_advancement_rules")
         .select(
-          "id, from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, tie_break_profile_id, sort_order, is_active, notes"
+          "id, from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, sort_order, is_active, notes"
         )
         .eq("tournament_id", effectiveTournamentId)
         .order("sort_order", { ascending: true })
@@ -157,6 +180,16 @@ export default async function CutRulesPage(props: {
     : { data: [], error: null };
 
   if (rulesError) throw new Error(rulesError.message);
+
+  const normalizedRules = (rules ?? []).map((r) => ({
+    ...r,
+    advancement_type: (r.advancement_type ?? "top_n") as
+      | "top_n"
+      | "top_percent"
+      | "all",
+    gross_exemption_enabled: !!r.gross_exemption_enabled,
+    gross_exemption_top_n: Number(r.gross_exemption_top_n ?? 0),
+  })) as CutRuleRow[];
 
   if (!effectiveTournamentId) {
     return (
@@ -200,6 +233,20 @@ export default async function CutRulesPage(props: {
         >
           Reglas de Salidas
         </a>
+
+        <a
+          href={`/competition-rules?tournament_id=${effectiveTournamentId}`}
+          style={buttonStyle}
+        >
+          Competencia
+        </a>
+
+        <a
+          href={`/prize-rules?tournament_id=${effectiveTournamentId}`}
+          style={buttonStyle}
+        >
+          Premios
+        </a>
       </div>
 
       <form method="GET" action="/cut-rules" className="space-y-2">
@@ -228,11 +275,18 @@ export default async function CutRulesPage(props: {
         </HeaderBlock>
       </form>
 
+      {saved === "1" ? (
+        <div className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-[11px] font-semibold leading-snug text-green-800">
+          Reglas guardadas correctamente.
+        </div>
+      ) : null}
+
       <CutRulesEditor
         tournamentId={effectiveTournamentId}
         rounds={(rounds ?? []) as RoundRow[]}
+        categories={(categories ?? []) as CategoryRow[]}
         tieBreakProfiles={(tieBreakProfiles ?? []) as TieBreakProfileRow[]}
-        rules={(rules ?? []) as CutRuleRow[]}
+        rules={normalizedRules}
       />
     </div>
   );
