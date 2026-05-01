@@ -1103,6 +1103,16 @@ export async function updateEntryCategory(formData: FormData) {
 
   await ensureEntriesAccess(tournament_id);
 
+  const supabase = await createClient();
+  const cats = await getTournamentCats(supabase, tournament_id);
+
+  await validateCategoryCapacity({
+    supabase,
+    cats,
+    categoryId: category_id,
+    excludeEntryId: entry_id,
+  });
+
   const { error } = await admin
     .from("tournament_entries")
     .update({ category_id })
@@ -1114,5 +1124,11 @@ export async function updateEntryCategory(formData: FormData) {
   }
 
   revalidatePath("/entries");
-  redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
+  revalidatePath("/players");
+
+  return { ok: true };
+}
+
+export async function updateEntryCategoryInline(formData: FormData) {
+  return updateEntryCategory(formData);
 }
