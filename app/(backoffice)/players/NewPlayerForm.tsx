@@ -823,85 +823,119 @@ export default function NewPlayerForm({
         {selectedExistingPlayerId ? "Editar jugador existente" : "Nuevo jugador"}
       </h2>
 
-      {(searchingPlayers || playerMatches.length > 0) && (
+      <div
+        style={{
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          padding: 8,
+          marginBottom: 8,
+          background: "#f9fafb",
+          minHeight: 110,
+          maxHeight: 148,
+          overflowY: "auto",
+        }}
+      >
         <div
           style={{
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-            padding: 8,
-            marginBottom: 8,
-            background: "#f9fafb",
+            fontSize: 11,
+            fontWeight: 700,
+            marginBottom: 6,
+            color: "#111827",
           }}
         >
+          {searchingPlayers
+            ? "Buscando jugadores similares..."
+            : playerMatches.length > 0
+              ? "Posibles jugadores existentes"
+              : "Búsqueda de duplicados"}
+        </div>
+
+        {searchingPlayers && (
           <div
             style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              minHeight: 56,
               fontSize: 11,
-              fontWeight: 700,
-              marginBottom: 6,
-              color: "#111827",
+              color: "#6b7280",
             }}
           >
-            {searchingPlayers
-              ? "Buscando jugadores similares..."
-              : "Posibles jugadores existentes"}
+            <InlineSpinner />
+            Revisando jugadores existentes...
           </div>
+        )}
 
-          {!searchingPlayers &&
-            playerMatches.map((p, index) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  padding: "6px 8px",
-                  borderBottom:
-                    index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
-                  fontSize: 11,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      color: "#111827",
-                      lineHeight: 1.2,
-                    }}
-                  >
-                    {p.first_name || ""} {p.last_name || ""}
-                  </div>
-                  <div
-                    style={{
-                      color: "#4b5563",
-                      lineHeight: 1.2,
-                      marginTop: 2,
-                      wordBreak: "break-word",
-                    }}
-                  >
-                    {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
-                    {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
-                  </div>
-                </div>
+        {!searchingPlayers && playerMatches.length === 0 && (
+          <div
+            style={{
+              minHeight: 56,
+              display: "flex",
+              alignItems: "center",
+              fontSize: 11,
+              color: "#6b7280",
+              lineHeight: 1.25,
+            }}
+          >
+            Escribe nombre y apellido, teléfono, email o GHIN para revisar si ya existe.
+          </div>
+        )}
 
-                <button
-                  type="button"
-                  onClick={() => useExistingPlayer(p)}
-                  disabled={usingExistingPlayerId === p.id}
+        {!searchingPlayers &&
+          playerMatches.map((p, index) => (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                padding: "6px 8px",
+                borderBottom:
+                  index < playerMatches.length - 1 ? "1px solid #e5e7eb" : "none",
+                fontSize: 11,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
                   style={{
-                    ...secondaryButtonStyle,
-                    opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
-                    pointerEvents:
-                      usingExistingPlayerId === p.id ? "none" : "auto",
-                    flexShrink: 0,
+                    fontWeight: 700,
+                    color: "#111827",
+                    lineHeight: 1.2,
                   }}
                 >
-                  {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
-                </button>
+                  {p.first_name || ""} {p.last_name || ""}
+                </div>
+                <div
+                  style={{
+                    color: "#4b5563",
+                    lineHeight: 1.2,
+                    marginTop: 2,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {p.club || "Sin club"} · {p.phone || "-"} · {p.email || "-"}
+                  {p.ghin_number ? ` · GHIN: ${p.ghin_number}` : ""}
+                </div>
               </div>
-            ))}
-        </div>
-      )}
+
+              <button
+                type="button"
+                onClick={() => useExistingPlayer(p)}
+                disabled={usingExistingPlayerId === p.id}
+                style={{
+                  ...secondaryButtonStyle,
+                  opacity: usingExistingPlayerId === p.id ? 0.7 : 1,
+                  pointerEvents:
+                    usingExistingPlayerId === p.id ? "none" : "auto",
+                  flexShrink: 0,
+                }}
+              >
+                {usingExistingPlayerId === p.id ? "Cargando..." : "Usar existente"}
+              </button>
+            </div>
+          ))}
+      </div>
 
       {selectedExistingPlayerId && (
         <div
