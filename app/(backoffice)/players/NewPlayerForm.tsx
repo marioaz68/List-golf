@@ -5,7 +5,7 @@ import type { CSSProperties, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
-import { savePlayerAction } from "@/app/(backoffice)/players/actions";
+import { deletePlayerAction, savePlayerAction } from "@/app/(backoffice)/players/actions";
 
 type Props = {
   onCreated?: () => void;
@@ -79,6 +79,24 @@ const secondaryButtonStyle: CSSProperties = {
   background: "#ffffff",
   color: "#111827",
   fontWeight: 600,
+  fontSize: "11px",
+  lineHeight: 1,
+  textDecoration: "none",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+};
+
+const dangerButtonStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: "24px",
+  padding: "0 8px",
+  borderRadius: "6px",
+  border: "1px solid #991b1b",
+  background: "linear-gradient(#ef4444, #dc2626)",
+  color: "#ffffff",
+  fontWeight: 700,
   fontSize: "11px",
   lineHeight: 1,
   textDecoration: "none",
@@ -253,6 +271,7 @@ export default function NewPlayerForm({
   const [shoeSize, setShoeSize] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [deletingPlayer, setDeletingPlayer] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
@@ -623,6 +642,42 @@ export default function NewPlayerForm({
     }
   };
 
+  const deleteSelectedPlayer = async () => {
+    if (!selectedExistingPlayerId || deletingPlayer) return;
+
+    const playerName = `${firstName.trim()} ${lastName.trim()}`.trim() || "este jugador";
+
+    const confirmed = window.confirm(
+      `¿Eliminar definitivamente a ${playerName}?\n\nSolo se eliminará si NO tiene inscripciones en torneos.`
+    );
+
+    if (!confirmed) return;
+
+    setMsg(null);
+    setDeletingPlayer(true);
+
+    try {
+      const res = await deletePlayerAction(
+        selectedExistingPlayerId,
+        returnTournament ?? null
+      );
+
+      if (!res.ok) {
+        setMsg(`❌ ${res.message}`);
+        return;
+      }
+
+      resetForm();
+      setMsg("✅ Jugador eliminado");
+      onCreated?.();
+      router.refresh();
+    } catch (err: any) {
+      setMsg(`❌ ${err?.message ?? "Error eliminando jugador"}`);
+    } finally {
+      setDeletingPlayer(false);
+    }
+  };
+
   const savePlayer = async (e: FormEvent) => {
     e.preventDefault();
     setMsg(null);
@@ -968,9 +1023,27 @@ export default function NewPlayerForm({
           <button
             type="button"
             onClick={resetForm}
-            style={secondaryButtonStyle}
+            disabled={deletingPlayer}
+            style={{
+              ...secondaryButtonStyle,
+              opacity: deletingPlayer ? 0.7 : 1,
+              pointerEvents: deletingPlayer ? "none" : "auto",
+            }}
           >
             Nuevo jugador
+          </button>
+
+          <button
+            type="button"
+            onClick={deleteSelectedPlayer}
+            disabled={deletingPlayer || loading}
+            style={{
+              ...dangerButtonStyle,
+              opacity: deletingPlayer || loading ? 0.7 : 1,
+              pointerEvents: deletingPlayer || loading ? "none" : "auto",
+            }}
+          >
+            {deletingPlayer ? "Eliminando..." : "Eliminar jugador"}
           </button>
         </div>
       )}
