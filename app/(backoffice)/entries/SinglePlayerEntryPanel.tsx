@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
-import SubmitButton from "@/components/ui/SubmitButton";
 import SearchInput from "@/components/ui/SearchInput";
 
 type Player = {
@@ -32,6 +31,7 @@ export default function SinglePlayerEntryPanel({
 }) {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Record<string, string>>({});
+  const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
 
   const currentYear = new Date().getFullYear();
 
@@ -57,7 +57,7 @@ export default function SinglePlayerEntryPanel({
 
     return categories.filter((c) => {
       if (c.min_age === null || c.min_age === undefined) return false;
-      return age >= c.min_age;
+      return age >= Number(c.min_age);
     });
   }
 
@@ -126,6 +126,7 @@ export default function SinglePlayerEntryPanel({
               const ageCategories = getEligibleAgeCategories(p);
               const needsSelection = needsCategorySelection(p);
               const selected = selectedCategory[p.id] ?? "";
+              const isSubmittingThisPlayer = submittingPlayerId === p.id;
 
               return (
                 <tr key={p.id} className="bg-white align-top">
@@ -155,12 +156,14 @@ export default function SinglePlayerEntryPanel({
                             [p.id]: e.target.value,
                           }))
                         }
-                        className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black"
+                        disabled={isSubmittingThisPlayer}
+                        className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black disabled:cursor-wait disabled:bg-gray-100"
                       >
                         <option value="">Categoría normal</option>
                         {ageCategories.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.code ?? "-"}
+                            {c.code ? `${c.code} - ` : ""}
+                            {c.name ?? "Sin nombre"}
                           </option>
                         ))}
                       </select>
@@ -179,19 +182,29 @@ export default function SinglePlayerEntryPanel({
                         Sin HI
                       </button>
                     ) : (
-                      <form action={addEntry} className="inline">
+                      <form
+                        action={addEntry}
+                        className="inline"
+                        onSubmit={() => setSubmittingPlayerId(p.id)}
+                      >
                         <input type="hidden" name="tournament_id" value={tournamentId} />
                         {needsSelection && selected ? (
                           <input type="hidden" name="category_id" value={selected} />
                         ) : null}
 
-                        <SubmitButton
+                        <button
+                          type="submit"
                           name="player_id"
                           value={p.id}
-                          pendingText="..."
+                          disabled={isSubmittingThisPlayer}
+                          className={
+                            isSubmittingThisPlayer
+                              ? "inline-flex min-h-6 cursor-wait items-center justify-center rounded border border-gray-400 bg-gray-400 px-2 text-[10px] font-medium leading-none text-white"
+                              : "inline-flex min-h-6 items-center justify-center rounded border border-green-700 bg-green-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-green-800"
+                          }
                         >
-                          Inscribir
-                        </SubmitButton>
+                          {isSubmittingThisPlayer ? "Inscribiendo..." : "Inscribir"}
+                        </button>
                       </form>
                     )}
                   </td>
