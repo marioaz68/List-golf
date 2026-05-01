@@ -19,12 +19,16 @@ type PlayerModalData = {
   ghin_number: string | null;
   shirt_size: string | null;
   shoe_size: string | null;
+  birth_year?: number | null;
 };
 
 type Category = {
   id: string;
   code: string | null;
   name: string | null;
+  gender?: "M" | "F" | "X" | null;
+  handicap_min?: number | null;
+  handicap_max?: number | null;
   min_age?: number | null;
 };
 
@@ -32,7 +36,8 @@ type PlayerRowActionsProps = {
   player: PlayerModalData | null;
   tournamentId: string;
   categories?: Category[];
-  entryId?: string;
+  entryId?: string | null;
+  currentCategoryId?: string | null;
   canDelete?: boolean;
 };
 
@@ -40,7 +45,8 @@ export default function PlayerRowActions({
   player,
   tournamentId,
   categories = [],
-  entryId,
+  entryId = null,
+  currentCategoryId = null,
   canDelete = false,
 }: PlayerRowActionsProps) {
   const [open, setOpen] = useState(false);
@@ -112,9 +118,10 @@ export default function PlayerRowActions({
         open={open}
         onClose={() => setOpen(false)}
         player={safePlayer}
-        categories={categories}
+        tournamentId={safeTournamentId}
         entryId={entryId}
-        tournamentId={tournamentId}
+        categories={categories}
+        currentCategoryId={currentCategoryId}
       />
     </>
   );

@@ -363,7 +363,6 @@ ${res.witness_url}`;
               const status = (e.status ?? "").toLowerCase();
               const isDQ = status === "dq";
               const isWithdrawn = status === "withdrawn";
-              const selectableCategories = getSelectableCategories(e, allCategories);
 
               return (
                 <tr key={e.id} className="border-t align-middle">
@@ -380,13 +379,7 @@ ${res.witness_url}`;
                   <td className="px-1 py-1">
                     <span
                       className="inline-flex h-6 min-w-8 items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-semibold text-gray-800"
-                      title={
-                        selectableCategories.length > 0
-                          ? `Opciones válidas: ${selectableCategories
-                              .map((c) => c.code ?? c.name ?? "-")
-                              .join(", ")}`
-                          : e.categories?.name ?? "Sin categoría"
-                      }
+                      title={e.categories?.name ?? "Sin categoría"}
                     >
                       {e.categories?.code ?? "-"}
                     </span>
@@ -592,6 +585,7 @@ ${res.witness_url}`;
                           tournamentId={tournamentId}
                           entryId={e.id}
                           categories={allCategories}
+                          currentCategoryId={e.categories?.id ?? null}
                           player={
                             e.players
                               ? {
@@ -613,6 +607,7 @@ ${res.witness_url}`;
                                   ghin_number: e.players.ghin_number ?? null,
                                   shirt_size: e.players.shirt_size ?? null,
                                   shoe_size: e.players.shoe_size ?? null,
+                                  birth_year: e.players.birth_year ?? null,
                                 }
                               : null
                           }
