@@ -615,7 +615,9 @@ export default async function EntriesPage({
 
           {activeTab === "manual" ? (
             <SinglePlayerEntryPanel
-              players={players}
+              players={players.filter(
+                (p) => !entries.some((e) => e.player_id === p.id)
+              )}
               tournamentId={selectedTournamentId}
               categories={categories}
             />
