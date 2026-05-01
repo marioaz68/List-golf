@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { normalizePhoneToE164 } from "@/utils/phone";
 import { savePlayerAction } from "@/app/(backoffice)/players/actions";
+import { updateEntryCategory } from "@/app/(backoffice)/entries/actions";
 
 type ClubOption = {
   id: string;
@@ -28,6 +29,14 @@ type Player = {
   club_id?: string | null;
   shirt_size?: string | null;
   shoe_size?: string | number | null;
+  birth_year?: number | null;
+};
+
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  min_age?: number | null;
 };
 
 function normalizeClubName(value: string) {
@@ -114,10 +123,18 @@ export default function PlayerEditModal({
   open,
   onClose,
   player,
+  categories = [],
+  tournamentId,
+  entryId,
+  currentCategoryId,
 }: {
   open: boolean;
   onClose: () => void;
   player: Player;
+  categories?: Category[];
+  tournamentId?: string;
+  entryId?: string;
+  currentCategoryId?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -134,6 +151,7 @@ export default function PlayerEditModal({
   const [clubId, setClubId] = useState<string | null>(null);
   const [shirtSize, setShirtSize] = useState("");
   const [shoeSize, setShoeSize] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
@@ -144,6 +162,25 @@ export default function PlayerEditModal({
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
+
+  const playerAge = useMemo(() => {
+    if (!player?.birth_year) return null;
+    return new Date().getFullYear() - player.birth_year;
+  }, [player?.birth_year]);
+
+  const ageCategories = useMemo(() => {
+    if (playerAge === null) return [];
+
+    return categories.filter((category) => {
+      if (category.min_age === null || category.min_age === undefined) {
+        return false;
+      }
+
+      return playerAge >= Number(category.min_age);
+    });
+  }, [categories, playerAge]);
+
+  const canUpdateEntryCategory = Boolean(entryId && tournamentId);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -165,6 +202,7 @@ export default function PlayerEditModal({
       setClubId(player?.club_id ?? null);
       setShirtSize(player?.shirt_size ?? "");
       setShoeSize(player?.shoe_size == null ? "" : String(player.shoe_size));
+      setSelectedCategoryId(currentCategoryId ?? "");
       setClubSuggestions([]);
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
@@ -186,7 +224,7 @@ export default function PlayerEditModal({
     }
 
     loadInitialData();
-  }, [player, open]);
+  }, [player, open, currentCategoryId]);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -436,6 +474,15 @@ export default function PlayerEditModal({
         return;
       }
 
+      if (selectedCategoryId && entryId && tournamentId) {
+        const categoryForm = new FormData();
+        categoryForm.set("entry_id", entryId);
+        categoryForm.set("tournament_id", tournamentId);
+        categoryForm.set("category_id", selectedCategoryId);
+
+        await updateEntryCategory(categoryForm);
+      }
+
       onClose();
       startTransition(() => router.refresh());
     } catch (err: any) {
@@ -534,6 +581,30 @@ export default function PlayerEditModal({
                 style={fieldStyle}
               />
             </label>
+
+            {ageCategories.length > 0 ? (
+              <label style={labelStyle}>
+                Categoría por edad
+                <select
+                  value={selectedCategoryId}
+                  onChange={(e) => setSelectedCategoryId(e.target.value)}
+                  disabled={!canUpdateEntryCategory}
+                  style={fieldStyle}
+                  title={
+                    canUpdateEntryCategory
+                      ? "Cambiar categoría de inscripción"
+                      : "Falta entryId/tournamentId para guardar categoría"
+                  }
+                >
+                  <option value="">Sin cambio</option>
+                  {ageCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.code ?? category.name ?? "Categoría"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label style={labelStyle}>
               Teléfono

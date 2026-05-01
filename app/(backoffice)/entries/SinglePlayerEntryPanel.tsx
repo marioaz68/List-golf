@@ -57,11 +57,6 @@ export default function SinglePlayerEntryPanel({
 
     return categories.filter((c) => {
       if (c.min_age === null || c.min_age === undefined) return false;
-
-      const code = String(c.code ?? "").toUpperCase();
-
-      if (code !== "S" && code !== "SS") return false;
-
       return age >= c.min_age;
     });
   }
@@ -162,11 +157,10 @@ export default function SinglePlayerEntryPanel({
                         }
                         className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black"
                       >
-                        <option value="">Libre por handicap</option>
+                        <option value="">Categoría normal</option>
                         {ageCategories.map((c) => (
                           <option key={c.id} value={c.id}>
-                            {c.code ? `${c.code} - ` : ""}
-                            {c.name ?? "Sin nombre"}
+                            {c.code ?? "-"}
                           </option>
                         ))}
                       </select>

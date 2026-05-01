@@ -363,6 +363,7 @@ ${res.witness_url}`;
               const status = (e.status ?? "").toLowerCase();
               const isDQ = status === "dq";
               const isWithdrawn = status === "withdrawn";
+              const selectableCategories = getSelectableCategories(e, allCategories);
 
               return (
                 <tr key={e.id} className="border-t align-middle">
@@ -378,17 +379,16 @@ ${res.witness_url}`;
 
                   <td className="px-1 py-1">
                     <span
-                      className="inline-flex h-6 max-w-[190px] items-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium text-gray-800"
+                      className="inline-flex h-6 min-w-8 items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-semibold text-gray-800"
                       title={
-                        getSelectableCategories(e, allCategories).length > 1
-                          ? "Este jugador califica por edad a otra categoría. Para cambiarlo usa Editar."
-                          : e.categories?.name ?? "-"
+                        selectableCategories.length > 0
+                          ? `Opciones válidas: ${selectableCategories
+                              .map((c) => c.code ?? c.name ?? "-")
+                              .join(", ")}`
+                          : e.categories?.name ?? "Sin categoría"
                       }
                     >
-                      <span className="truncate">
-                        {e.categories?.code ? `${e.categories.code} - ` : ""}
-                        {e.categories?.name ?? "-"}
-                      </span>
+                      {e.categories?.code ?? "-"}
                     </span>
                   </td>
 
@@ -590,6 +590,8 @@ ${res.witness_url}`;
                       <div className={SLOT_EDIT}>
                         <PlayerRowActions
                           tournamentId={tournamentId}
+                          entryId={e.id}
+                          categories={allCategories}
                           player={
                             e.players
                               ? {

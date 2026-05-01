@@ -21,15 +21,26 @@ type PlayerModalData = {
   shoe_size: string | null;
 };
 
+type Category = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  min_age?: number | null;
+};
+
 type PlayerRowActionsProps = {
   player: PlayerModalData | null;
   tournamentId: string;
+  categories: Category[];
+  entryId: string;
   canDelete?: boolean;
 };
 
 export default function PlayerRowActions({
   player,
   tournamentId,
+  categories,
+  entryId,
   canDelete = false,
 }: PlayerRowActionsProps) {
   const [open, setOpen] = useState(false);
@@ -101,6 +112,9 @@ export default function PlayerRowActions({
         open={open}
         onClose={() => setOpen(false)}
         player={safePlayer}
+        categories={categories}
+        entryId={entryId}
+        tournamentId={tournamentId}
       />
     </>
   );
