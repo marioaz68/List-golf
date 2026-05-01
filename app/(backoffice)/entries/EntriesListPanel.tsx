@@ -5,7 +5,6 @@ import {
   deleteEntry,
   disqualifyEntry,
   restoreEntry,
-  updateEntryCategory,
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
@@ -378,29 +377,19 @@ ${res.witness_url}`;
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
 
                   <td className="px-1 py-1">
-                    <form action={updateEntryCategory} className="flex items-center gap-1">
-                      <input type="hidden" name="entry_id" value={e.id} />
-                      <input
-                        type="hidden"
-                        name="tournament_id"
-                        value={tournamentId}
-                      />
-
-                      <select
-                        name="category_id"
-                        defaultValue={e.categories?.id ?? ""}
-                        className="h-7 max-w-[170px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
-                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
-                      >
-                        <option value="">-</option>
-                        {getSelectableCategories(e, allCategories).map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.code ? `${c.code} - ` : ""}
-                            {c.name ?? "Sin nombre"}
-                          </option>
-                        ))}
-                      </select>
-                    </form>
+                    <span
+                      className="inline-flex h-6 max-w-[190px] items-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium text-gray-800"
+                      title={
+                        getSelectableCategories(e, allCategories).length > 1
+                          ? "Este jugador califica por edad a otra categoría. Para cambiarlo usa Editar."
+                          : e.categories?.name ?? "-"
+                      }
+                    >
+                      <span className="truncate">
+                        {e.categories?.code ? `${e.categories.code} - ` : ""}
+                        {e.categories?.name ?? "-"}
+                      </span>
+                    </span>
                   </td>
 
                   <td className="px-1 py-1">

@@ -57,6 +57,11 @@ export default function SinglePlayerEntryPanel({
 
     return categories.filter((c) => {
       if (c.min_age === null || c.min_age === undefined) return false;
+
+      const code = String(c.code ?? "").toUpperCase();
+
+      if (code !== "S" && code !== "SS") return false;
+
       return age >= c.min_age;
     });
   }
