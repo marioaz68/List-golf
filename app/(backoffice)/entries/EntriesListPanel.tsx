@@ -108,99 +108,6 @@ function getBallClass(sig?: RoundSignature | null) {
   return "bg-red-600";
 }
 
-function getPlayerAge(entry: Entry) {
-  const birthYear = entry.players?.birth_year ?? null;
-  if (!birthYear) return null;
-
-  const age = new Date().getFullYear() - birthYear;
-  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
-
-  return age;
-}
-
-function categoryGenderOk(
-  category: Category,
-  playerGender: "M" | "F" | "X" | null | undefined
-) {
-  const catGender = String(category.gender ?? "X").toUpperCase();
-  const gender = String(playerGender ?? "X").toUpperCase();
-  return catGender === "X" || catGender === gender;
-}
-
-function getHandicapCategory(entry: Entry, categories: Category[]) {
-  const handicap =
-    entry.handicap_index ??
-    entry.players?.handicap_torneo ??
-    entry.players?.handicap_index ??
-    null;
-
-  if (
-    handicap === null ||
-    handicap === undefined ||
-    !Number.isFinite(Number(handicap))
-  ) {
-    return null;
-  }
-
-  const candidates = categories.filter((c) => {
-    if (c.min_age !== null && c.min_age !== undefined) return false;
-    if (c.handicap_min === null || c.handicap_min === undefined) return false;
-    if (c.handicap_max === null || c.handicap_max === undefined) return false;
-    if (!categoryGenderOk(c, entry.players?.gender)) return false;
-
-    return (
-      Number(handicap) >= Number(c.handicap_min) &&
-      Number(handicap) <= Number(c.handicap_max)
-    );
-  });
-
-  const exact = candidates.filter(
-    (c) =>
-      String(c.gender ?? "X").toUpperCase() ===
-      String(entry.players?.gender ?? "X").toUpperCase()
-  );
-  const pool = exact.length > 0 ? exact : candidates;
-
-  return (
-    [...pool].sort(
-      (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
-    )[0] ?? null
-  );
-}
-
-function getAgeCategories(entry: Entry, categories: Category[]) {
-  const age = getPlayerAge(entry);
-  if (age === null) return [];
-
-  return categories.filter((c) => {
-    if (c.min_age === null || c.min_age === undefined) return false;
-    if (!categoryGenderOk(c, entry.players?.gender)) return false;
-    return age >= Number(c.min_age);
-  });
-}
-
-function getSelectableCategories(entry: Entry, categories: Category[]) {
-  const byId = new Map<string, Category>();
-  const handicapCategory = getHandicapCategory(entry, categories);
-
-  if (handicapCategory) byId.set(handicapCategory.id, handicapCategory);
-
-  getAgeCategories(entry, categories).forEach((c) => byId.set(c.id, c));
-
-  if (entry.categories?.id && !byId.has(entry.categories.id)) {
-    byId.set(entry.categories.id, {
-      id: entry.categories.id,
-      code: entry.categories.code,
-      name: entry.categories.name,
-      gender: "X",
-      handicap_min: null,
-      handicap_max: null,
-      min_age: null,
-    });
-  }
-
-  return Array.from(byId.values());
-}
 
 const BTN_BASE =
   "inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50";
@@ -213,7 +120,7 @@ const ACTIONS_COL = "min-w-[560px] w-[560px]";
 export default function EntriesListPanel({
   entries,
   tournamentId,
-  categories: allCategories,
+  categories,
 }: {
   entries: Entry[];
   tournamentId: string;
@@ -233,7 +140,7 @@ export default function EntriesListPanel({
     );
   }, [entries]);
 
-  const categories = useMemo(() => {
+  const categoryCodes = useMemo(() => {
     const set = new Set<string>();
     entries.forEach((e) => {
       if (e.categories?.code) set.add(e.categories.code);
@@ -341,7 +248,7 @@ ${res.witness_url}`;
             className="h-7 px-2"
           >
             <option value="">Cat</option>
-            {categories.map((c) => (
+            {categoryCodes.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
@@ -378,7 +285,6 @@ ${res.witness_url}`;
               const status = (e.status ?? "").toLowerCase();
               const isDQ = status === "dq";
               const isWithdrawn = status === "withdrawn";
-              const selectableCategories = getSelectableCategories(e, allCategories);
 
               return (
                 <tr key={e.id} className="border-t align-middle">
@@ -393,17 +299,11 @@ ${res.witness_url}`;
                   <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
 
                   <td className="px-1 py-1">
-                    <span
-                      className="inline-flex h-6 min-w-8 items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-semibold text-gray-800"
-                      title={
-                        selectableCategories.length > 0
-                          ? `Opciones válidas: ${selectableCategories
-                              .map((c) => c.code ?? c.name ?? "-")
-                              .join(", ")}`
-                          : e.categories?.name ?? "Sin categoría"
-                      }
-                    >
-                      {e.categories?.code ?? "-"}
+                    <span className="inline-flex h-6 max-w-[190px] items-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium text-gray-800">
+                      <span className="truncate">
+                        {e.categories?.code ? `${e.categories.code} - ` : ""}
+                        {e.categories?.name ?? "-"}
+                      </span>
                     </span>
                   </td>
 
@@ -606,7 +506,8 @@ ${res.witness_url}`;
                         <PlayerRowActions
                           tournamentId={tournamentId}
                           entryId={e.id}
-                          categories={allCategories}
+                          currentCategoryId={e.categories?.id ?? null}
+                          categories={categories}
                           player={
                             e.players
                               ? {
@@ -628,6 +529,7 @@ ${res.witness_url}`;
                                   ghin_number: e.players.ghin_number ?? null,
                                   shirt_size: e.players.shirt_size ?? null,
                                   shoe_size: e.players.shoe_size ?? null,
+                                  birth_year: e.players.birth_year ?? null,
                                 }
                               : null
                           }

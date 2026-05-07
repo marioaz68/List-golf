@@ -801,9 +801,10 @@ export default async function PublicTournamentPage({
     .maybeSingle();
 
   const { data: scorecardsData } = await supabase
-  .from("scorecards")
-  .select("entry_id, round_id, locked_at")
-  .not("locked_at", "is", null);
+    .from("scorecards")
+    .select("entry_id, round_id, locked_at")
+    .eq("tournament_id", typedTournament.id)
+    .not("locked_at", "is", null);
 
 const lockedScorecardMap = new Set(
   (scorecardsData ?? []).map(

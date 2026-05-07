@@ -20,6 +20,7 @@ type PlayerModalData = {
   ghin_number: string | null;
   shirt_size: string | null;
   shoe_size: string | null;
+  birth_year?: number | null;
 };
 
 type Category = {
@@ -33,6 +34,7 @@ type PlayerRowActionsProps = {
   player: PlayerModalData | null;
   tournamentId?: string;
   categories?: Category[];
+  currentCategoryId?: string | null;
   entryId?: string;
   canDelete?: boolean;
 };
@@ -41,6 +43,7 @@ export default function PlayerRowActions({
   player,
   tournamentId = "",
   categories = [],
+  currentCategoryId,
   entryId,
   canDelete = false,
 }: PlayerRowActionsProps) {
@@ -66,6 +69,7 @@ export default function PlayerRowActions({
 
   function handleDelete() {
     const fullName = `${safePlayer.first_name ?? ""} ${safePlayer.last_name ?? ""}`.trim();
+
     const confirmed = window.confirm(
       `¿Seguro que quieres eliminar ${fullName || "este jugador"}?\n\nSolo se eliminará si NO forma parte de ningún torneo.`
     );
@@ -116,6 +120,7 @@ export default function PlayerRowActions({
         onClose={() => setOpen(false)}
         player={safePlayer}
         categories={categories}
+        currentCategoryId={currentCategoryId}
         entryId={entryId}
         tournamentId={safeTournamentId}
       />
