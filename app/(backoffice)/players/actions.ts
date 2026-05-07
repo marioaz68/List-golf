@@ -96,7 +96,7 @@ function validatePlayerPayload(payload: Record<string, unknown>) {
 
 export async function savePlayerAction(input: SavePlayerInput) {
   try {
-    const supabase = createAdminClient();
+    const supabase = await createAdminClient();
     const playerId = toNullableString(input.id);
     const payload = buildPlayerPayload(input);
 
