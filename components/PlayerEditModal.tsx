@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { normalizePhoneToE164 } from "@/utils/phone";
 import { savePlayerAction } from "@/app/(backoffice)/players/actions";
-import { updateEntryCategory } from "@/app/(backoffice)/entries/actions";
+import {
+  updateEntryCategory,
+  updateEntryHandicap,
+} from "@/app/(backoffice)/entries/actions";
 
 type ClubOption = {
   id: string;
@@ -583,6 +586,20 @@ export default function PlayerEditModal({
       if (!result.ok) {
         alert("Error al guardar: " + result.message);
         return;
+      }
+
+      if (entryId && tournamentId) {
+        const tournamentHandicap = ht ?? hi;
+
+        if (tournamentHandicap !== null) {
+          const handicapForm = new FormData();
+          handicapForm.set("id", entryId);
+          handicapForm.set("tournament_id", tournamentId);
+          handicapForm.set("player_id", player.id);
+          handicapForm.set("handicap_index", String(tournamentHandicap));
+
+          await updateEntryHandicap(handicapForm);
+        }
       }
 
       if (selectedCategoryId && entryId && tournamentId) {

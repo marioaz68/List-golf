@@ -883,25 +883,16 @@ export async function updateEntryHandicap(formData: FormData) {
   const { error } = await admin
     .from("tournament_entries")
     .update({ handicap_index: handicap, category_id })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("tournament_id", tournament_id)
+    .eq("player_id", player_id);
 
   if (error) throw new Error(error.message);
 
-  const { error: playerUpdateError } = await admin
-    .from("players")
-    .update({ handicap_torneo: handicap })
-    .eq("id", player_id);
-
-  if (playerUpdateError) {
-    throw new Error(
-      "Error actualizando handicap_torneo del jugador: " +
-        playerUpdateError.message
-    );
-  }
-
   revalidatePath("/entries");
   revalidatePath("/players");
-  redirect(`/entries?tournament_id=${tournament_id}`);
+
+  return { ok: true };
 }
 
 export async function autoCategorizeEntries(formData: FormData) {
