@@ -335,14 +335,15 @@ export async function addEntry(formData: FormData) {
 
   const { data: p, error: pErr } = await supabase
     .from("players")
-    .select("gender, handicap_index")
+    .select("gender, handicap_torneo, handicap_index")
     .eq("id", player_id)
     .single();
 
   if (pErr) throw new Error("Error leyendo jugador: " + pErr.message);
 
   const playerGender = String(p?.gender ?? "X").toUpperCase() as "M" | "F" | "X";
-  const playerHI = p?.handicap_index ?? null;
+  const playerHI =
+    p?.handicap_torneo != null ? p.handicap_torneo : p?.handicap_index ?? null;
   const handicap = handicap_index_input ?? playerHI;
 
   if (handicap === null) {
@@ -440,6 +441,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
       last_name,
       gender,
       handicap_index,
+      handicap_torneo: handicap_index,
       club,
       city,
       email,
@@ -447,7 +449,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
       member_type,
       is_active: true,
     })
-    .select("id, gender, handicap_index")
+    .select("id, gender, handicap_torneo, handicap_index")
     .single();
 
   if (pErr) throw new Error("Error creando jugador: " + pErr.message);
@@ -456,7 +458,9 @@ export async function createPlayerAndAddEntry(formData: FormData) {
     | "M"
     | "F"
     | "X";
-  const handicap = Number(newPlayer.handicap_index ?? handicap_index ?? 0);
+  const handicap = Number(
+    newPlayer.handicap_torneo ?? newPlayer.handicap_index ?? handicap_index ?? 0
+  );
   const category_id =
     handicap != null && Number.isFinite(handicap)
       ? pickCategoryId({ cats, playerGender, handicap })
@@ -883,7 +887,20 @@ export async function updateEntryHandicap(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  const { error: playerUpdateError } = await admin
+    .from("players")
+    .update({ handicap_torneo: handicap })
+    .eq("id", player_id);
+
+  if (playerUpdateError) {
+    throw new Error(
+      "Error actualizando handicap_torneo del jugador: " +
+        playerUpdateError.message
+    );
+  }
+
   revalidatePath("/entries");
+  revalidatePath("/players");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
 
@@ -905,6 +922,7 @@ export async function autoCategorizeEntries(formData: FormData) {
       handicap_index,
       players:players (
         gender,
+        handicap_torneo,
         handicap_index
       )
     `
@@ -921,9 +939,11 @@ export async function autoCategorizeEntries(formData: FormData) {
       | "F"
       | "X";
     const hEntry = e.handicap_index == null ? null : Number(e.handicap_index);
-    const hPlayer =
+    const hPlayerTorneo =
+      e.players?.handicap_torneo == null ? null : Number(e.players.handicap_torneo);
+    const hPlayerIndex =
       e.players?.handicap_index == null ? null : Number(e.players.handicap_index);
-    const handicap = hEntry ?? hPlayer;
+    const handicap = hEntry ?? hPlayerTorneo ?? hPlayerIndex;
 
     if (handicap == null || !Number.isFinite(handicap)) continue;
 
@@ -1094,6 +1114,7 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
   revalidatePath("/entries");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
+
 export async function updateEntryCategory(formData: FormData) {
   const admin = await createAdminClient();
 
