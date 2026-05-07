@@ -148,6 +148,7 @@ export default function PlayerEditModal({
   const [gender, setGender] = useState<"M" | "F" | "X">("M");
   const [handicapIndex, setHandicapIndex] = useState<string>("");
   const [handicapTorneo, setHandicapTorneo] = useState<string>("");
+  const [birthYear, setBirthYear] = useState<string>("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [club, setClub] = useState("");
@@ -167,9 +168,17 @@ export default function PlayerEditModal({
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
   const playerAge = useMemo(() => {
-    if (!player?.birth_year) return null;
-    return new Date().getFullYear() - player.birth_year;
-  }, [player?.birth_year]);
+    const year = Number(birthYear);
+
+    if (!Number.isFinite(year) || year < 1900 || year > new Date().getFullYear()) {
+      return null;
+    }
+
+    const age = new Date().getFullYear() - year;
+    if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+
+    return age;
+  }, [birthYear]);
 
   const availableCategories = useMemo(() => {
     const playerGender = String(gender ?? "X").toUpperCase() as "M" | "F" | "X";
@@ -296,6 +305,7 @@ export default function PlayerEditModal({
       setHandicapTorneo(
         player?.handicap_torneo == null ? "" : String(player.handicap_torneo)
       );
+      setBirthYear(player?.birth_year == null ? "" : String(player.birth_year));
       setPhone(player?.phone ?? "");
       setEmail(player?.email ?? "");
       setClub(player?.club ?? "");
@@ -567,6 +577,7 @@ export default function PlayerEditModal({
         club_id: finalClubId,
         shirt_size: shirtSize.trim() || null,
         shoe_size: shoeSize.trim() || null,
+        birth_year: birthYear.trim() ? Number(birthYear) : null,
       });
 
       if (!result.ok) {
@@ -678,6 +689,18 @@ export default function PlayerEditModal({
                 onChange={(e) => setHandicapTorneo(e.target.value)}
                 placeholder="Ej. 10"
                 inputMode="decimal"
+                style={fieldStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Año nacimiento
+              <input
+                value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                placeholder="Ej. 1964"
+                inputMode="numeric"
+                maxLength={4}
                 style={fieldStyle}
               />
             </label>
