@@ -153,6 +153,20 @@ const ghostButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+
+const antiSafariInputProps = {
+  autoComplete: "section-listgolf-caddies one-time-code",
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  spellCheck: false,
+  "data-lpignore": "true",
+  "data-1p-ignore": "true",
+  "data-form-type": "other",
+  "data-gramm": "false",
+  "data-gramm_editor": "false",
+  "data-enable-grammarly": "false",
+} as const;
+
 function displayClubName(c: ClubRow) {
   return c.short_name?.trim() || c.name || "Club";
 }
@@ -215,7 +229,7 @@ export default async function EditCaddiePage({
           </div>
         </div>
 
-        <form action={updateCaddieAction} style={formStyle}>
+        <form action={updateCaddieAction} style={formStyle} autoComplete="off" spellCheck={false}>
           <input type="hidden" name="id" value={caddie.id} />
 
           <div style={gridStyle}>
@@ -229,6 +243,7 @@ export default async function EditCaddiePage({
                 required
                 defaultValue={caddie.first_name ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="Nombre"
               />
             </div>
@@ -243,6 +258,7 @@ export default async function EditCaddiePage({
                 required
                 defaultValue={caddie.last_name ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="Apellido"
               />
             </div>
@@ -256,6 +272,7 @@ export default async function EditCaddiePage({
                 name="nickname"
                 defaultValue={caddie.nickname ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="Ej. Chino / Flaco / Junior"
               />
             </div>
@@ -284,8 +301,10 @@ export default async function EditCaddiePage({
               <input
                 id="phone"
                 name="phone"
+                inputMode="tel"
                 defaultValue={caddie.phone ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="442..."
               />
             </div>
@@ -297,8 +316,10 @@ export default async function EditCaddiePage({
               <input
                 id="telegram"
                 name="telegram"
+                inputMode="tel"
                 defaultValue={caddie.telegram ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="@usuario o teléfono"
               />
             </div>
@@ -310,8 +331,10 @@ export default async function EditCaddiePage({
               <input
                 id="whatsapp_phone"
                 name="whatsapp_phone"
+                inputMode="tel"
                 defaultValue={caddie.whatsapp_phone ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="442..."
               />
             </div>
@@ -323,8 +346,10 @@ export default async function EditCaddiePage({
               <input
                 id="whatsapp_phone_e164"
                 name="whatsapp_phone_e164"
+                inputMode="tel"
                 defaultValue={caddie.whatsapp_phone_e164 ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="+52442..."
               />
             </div>
@@ -336,9 +361,11 @@ export default async function EditCaddiePage({
               <input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
+                inputMode="email"
                 defaultValue={caddie.email ?? ""}
                 style={fieldStyle}
+                {...antiSafariInputProps}
                 placeholder="correo@ejemplo.com"
               />
             </div>
@@ -386,6 +413,7 @@ export default async function EditCaddiePage({
                 name="notes"
                 defaultValue={caddie.notes ?? ""}
                 style={textareaStyle}
+                {...antiSafariInputProps}
                 placeholder="Notas operativas del caddie"
               />
             </div>

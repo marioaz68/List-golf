@@ -167,6 +167,28 @@ export default function PlayerEditModal({
   const [selectedClubIndex, setSelectedClubIndex] = useState(-1);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
+  const firstNameInputNameRef = useRef(`lg_k_${Date.now()}`);
+  const lastNameInputNameRef = useRef(`lg_l_${Date.now()}`);
+  const initialsInputNameRef = useRef(`lg_m_${Date.now()}`);
+  const handicapIndexInputNameRef = useRef(`lg_n_${Date.now()}`);
+  const handicapTorneoInputNameRef = useRef(`lg_o_${Date.now()}`);
+  const birthYearInputNameRef = useRef(`lg_p_${Date.now()}`);
+  const phoneInputNameRef = useRef(`lg_q_${Date.now()}`);
+  const emailInputNameRef = useRef(`lg_r_${Date.now()}`);
+  const clubInputNameRef = useRef(`lg_s_${Date.now()}`);
+
+  const antiSafariInputProps = {
+    autoComplete: "one-time-code",
+    autoCorrect: "off",
+    autoCapitalize: "off",
+    spellCheck: false,
+    "data-lpignore": "true",
+    "data-1p-ignore": "true",
+    "data-form-type": "other",
+    "data-gramm": "false",
+    "data-gramm_editor": "false",
+    "data-enable-grammarly": "false",
+  } as const;
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
@@ -634,7 +656,7 @@ export default function PlayerEditModal({
           Editar jugador
         </h3>
 
-        <form onSubmit={onSave} style={{ display: "grid", gap: 12 }}>
+        <form onSubmit={onSave} autoComplete="off" style={{ display: "grid", gap: 12 }}>
           <div
             style={{
               display: "grid",
@@ -645,6 +667,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Nombre
               <input
+                name={firstNameInputNameRef.current}
+                {...antiSafariInputProps}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 placeholder="Nombre"
@@ -656,6 +680,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Apellido
               <input
+                name={lastNameInputNameRef.current}
+                {...antiSafariInputProps}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 placeholder="Apellido"
@@ -667,6 +693,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Iniciales
               <input
+                name={initialsInputNameRef.current}
+                {...antiSafariInputProps}
                 value={initials}
                 onChange={(e) => setInitials(normalizeInitials(e.target.value))}
                 placeholder="Ej. MAZ"
@@ -691,6 +719,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Handicap Index
               <input
+                name={handicapIndexInputNameRef.current}
+                {...antiSafariInputProps}
                 value={handicapIndex}
                 onChange={(e) => setHandicapIndex(e.target.value)}
                 placeholder="Ej. 12.4 o -1.2"
@@ -702,6 +732,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Handicap Torneo
               <input
+                name={handicapTorneoInputNameRef.current}
+                {...antiSafariInputProps}
                 value={handicapTorneo}
                 onChange={(e) => setHandicapTorneo(e.target.value)}
                 placeholder="Ej. 10"
@@ -713,6 +745,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Año nacimiento
               <input
+                name={birthYearInputNameRef.current}
+                {...antiSafariInputProps}
                 value={birthYear}
                 onChange={(e) => setBirthYear(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
                 placeholder="Ej. 1964"
@@ -748,6 +782,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Teléfono
               <input
+                name={phoneInputNameRef.current}
+                {...antiSafariInputProps}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="Teléfono"
@@ -758,6 +794,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Email
               <input
+                name={emailInputNameRef.current}
+                {...antiSafariInputProps}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
@@ -806,6 +844,8 @@ export default function PlayerEditModal({
               <label style={labelStyle}>
                 Club
                 <input
+                  name={clubInputNameRef.current}
+                  {...antiSafariInputProps}
                   value={club}
                   onChange={(e) => {
                     setClub(e.target.value);

@@ -285,8 +285,29 @@ export default function NewPlayerForm({
   const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
-  const firstNameInputNameRef = useRef(`lf_first_name_${Date.now()}`);
-  const lastNameInputNameRef = useRef(`lf_last_name_${Date.now()}`);
+  const firstNameInputNameRef = useRef(`lg_a_${Date.now()}`);
+  const lastNameInputNameRef = useRef(`lg_b_${Date.now()}`);
+  const initialsInputNameRef = useRef(`lg_c_${Date.now()}`);
+  const handicapIndexInputNameRef = useRef(`lg_d_${Date.now()}`);
+  const handicapTorneoInputNameRef = useRef(`lg_e_${Date.now()}`);
+  const birthYearInputNameRef = useRef(`lg_f_${Date.now()}`);
+  const phoneInputNameRef = useRef(`lg_g_${Date.now()}`);
+  const emailInputNameRef = useRef(`lg_h_${Date.now()}`);
+  const ghinInputNameRef = useRef(`lg_i_${Date.now()}`);
+  const clubInputNameRef = useRef(`lg_j_${Date.now()}`);
+
+  const antiSafariInputProps = {
+    autoComplete: "one-time-code",
+    autoCorrect: "off",
+    autoCapitalize: "off",
+    spellCheck: false,
+    "data-lpignore": "true",
+    "data-1p-ignore": "true",
+    "data-form-type": "other",
+    "data-gramm": "false",
+    "data-gramm_editor": "false",
+    "data-enable-grammarly": "false",
+  } as const;
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
 
@@ -880,7 +901,7 @@ export default function NewPlayerForm({
   return (
     <form
       onSubmit={savePlayer}
-       autoComplete="off"
+      autoComplete="off"
       style={{
         border: "1px solid #d1d5db",
         padding: 10,
@@ -1073,10 +1094,7 @@ export default function NewPlayerForm({
            value={firstName}
            onChange={(e) => setFirstName(e.target.value)}
            style={fieldStyle}
-           autoComplete="one-time-code"
-           autoCorrect="off"
-           autoCapitalize="off"
-           spellCheck={false}
+           {...antiSafariInputProps}
           />
         </label>
 
@@ -1087,16 +1105,15 @@ export default function NewPlayerForm({
             value={lastName}
              onChange={(e) => setLastName(e.target.value)}
              style={fieldStyle}
-             autoComplete="one-time-code"
-             autoCorrect="off"
-             autoCapitalize="off"
-             spellCheck={false}
+             {...antiSafariInputProps}
             />
         </label>
 
         <label style={labelStyle}>
           Iniciales
           <input
+            name={initialsInputNameRef.current}
+            {...antiSafariInputProps}
             value={initials}
             onChange={(e) => setInitials(normalizeInitials(e.target.value))}
             placeholder="Ej. MAZ"
@@ -1120,6 +1137,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Handicap Index
           <input
+            name={handicapIndexInputNameRef.current}
+            {...antiSafariInputProps}
             value={handicapIndex}
             onChange={(e) => setHandicapIndex(e.target.value)}
             placeholder="Ej. -1.2, 0, 12.5"
@@ -1130,6 +1149,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Handicap Torneo
           <input
+            name={handicapTorneoInputNameRef.current}
+            {...antiSafariInputProps}
             value={handicapTorneo}
             onChange={(e) => setHandicapTorneo(e.target.value)}
             placeholder="Ej. -1, 0, 10"
@@ -1140,6 +1161,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Año nacimiento
           <input
+            name={birthYearInputNameRef.current}
+            {...antiSafariInputProps}
             value={birthYear}
             onChange={(e) => setBirthYear(e.target.value)}
             placeholder="Ej. 1978"
@@ -1151,6 +1174,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Teléfono
           <input
+            name={phoneInputNameRef.current}
+            {...antiSafariInputProps}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="4421490361"
@@ -1161,6 +1186,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Email
           <input
+            name={emailInputNameRef.current}
+            {...antiSafariInputProps}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="correo@ejemplo.com"
@@ -1171,6 +1198,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           GHIN
           <input
+            name={ghinInputNameRef.current}
+            {...antiSafariInputProps}
             value={ghinNumber}
             onChange={(e) => setGhinNumber(e.target.value)}
             style={fieldStyle}
@@ -1217,6 +1246,8 @@ export default function NewPlayerForm({
           <label style={labelStyle}>
             Club
             <input
+              name={clubInputNameRef.current}
+              {...antiSafariInputProps}
               value={club}
               onChange={(e) => {
                 setClub(e.target.value);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createCaddieAction,
   saveCaddieFavoritesAction,
@@ -42,6 +42,23 @@ type Props = {
   players: Player[];
   initialSelectedCaddie: Caddie | null;
   favoriteIdsByCaddie: Record<string, string[]>;
+};
+
+type AntiAutofillInputProps = {
+  name: string;
+  defaultValue?: string | null;
+  required?: boolean;
+  placeholder?: string;
+  style?: React.CSSProperties;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
+};
+
+type AntiAutofillTextareaProps = {
+  name: string;
+  defaultValue?: string | null;
+  placeholder?: string;
+  style?: React.CSSProperties;
 };
 
 const cardStyle: React.CSSProperties = {
@@ -111,18 +128,6 @@ const textareaStyle: React.CSSProperties = {
   color: "#0f172a",
 };
 
-const buttonStyle: React.CSSProperties = {
-  height: 32,
-  padding: "0 12px",
-  border: "1px solid #111827",
-  borderRadius: 8,
-  background: "#111827",
-  color: "#fff",
-  fontSize: 12,
-  fontWeight: 700,
-  cursor: "pointer",
-};
-
 const ghostButtonStyle: React.CSSProperties = {
   height: 32,
   padding: "0 12px",
@@ -134,6 +139,87 @@ const ghostButtonStyle: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
+
+const antiSafariProps = {
+  autoComplete: "section-listgolf-caddies one-time-code",
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  spellCheck: false,
+  "data-lpignore": "true",
+  "data-1p-ignore": "true",
+  "data-form-type": "other",
+  "data-gramm": "false",
+  "data-gramm_editor": "false",
+  "data-enable-grammarly": "false",
+} as const;
+
+function AntiAutofillInput({
+  name,
+  defaultValue,
+  required,
+  placeholder,
+  style,
+  inputMode,
+  maxLength,
+}: AntiAutofillInputProps) {
+  const generatedName = useRef(
+    `lf_caddie_${name}_${Math.random().toString(36).slice(2)}`
+  );
+  const [value, setValue] = useState(defaultValue ?? "");
+
+  useEffect(() => {
+    setValue(defaultValue ?? "");
+  }, [defaultValue]);
+
+  return (
+    <>
+      <input type="hidden" name={name} value={value} />
+
+      <input
+        name={generatedName.current}
+        value={value}
+        required={required}
+        placeholder={placeholder}
+        style={style}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        onChange={(e) => setValue(e.target.value)}
+        {...antiSafariProps}
+      />
+    </>
+  );
+}
+
+function AntiAutofillTextarea({
+  name,
+  defaultValue,
+  placeholder,
+  style,
+}: AntiAutofillTextareaProps) {
+  const generatedName = useRef(
+    `lf_caddie_${name}_${Math.random().toString(36).slice(2)}`
+  );
+  const [value, setValue] = useState(defaultValue ?? "");
+
+  useEffect(() => {
+    setValue(defaultValue ?? "");
+  }, [defaultValue]);
+
+  return (
+    <>
+      <input type="hidden" name={name} value={value} />
+
+      <textarea
+        name={generatedName.current}
+        value={value}
+        placeholder={placeholder}
+        style={style}
+        onChange={(e) => setValue(e.target.value)}
+        {...antiSafariProps}
+      />
+    </>
+  );
+}
 
 function displayCaddieName(c: Caddie) {
   const full = `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim();
@@ -224,26 +310,32 @@ export default function CaddieClient({
           <p style={subStyle}>Alta rápida de caddie</p>
         </div>
 
-        <form action={createCaddieAction} style={bodyStyle}>
+        <form
+          action={createCaddieAction}
+          style={bodyStyle}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+        >
           <div style={gridStyle}>
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Nombre</label>
-              <input name="first_name" required style={fieldStyle} />
+              <AntiAutofillInput name="first_name" required style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Apellido</label>
-              <input name="last_name" required style={fieldStyle} />
+              <AntiAutofillInput name="last_name" required style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Apodo</label>
-              <input name="nickname" style={fieldStyle} />
+              <AntiAutofillInput name="nickname" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Nivel</label>
-              <select name="level" defaultValue="" style={fieldStyle}>
+              <select name="level" defaultValue="" style={fieldStyle} autoComplete="off">
                 <option value="">Sin nivel</option>
                 <option value="advanced">Azul · Avanzado</option>
                 <option value="intermediate">Rojo · Intermedio</option>
@@ -253,32 +345,42 @@ export default function CaddieClient({
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Teléfono</label>
-              <input name="phone" style={fieldStyle} />
+              <AntiAutofillInput name="phone" inputMode="tel" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Telegram</label>
-              <input name="telegram" style={fieldStyle} />
+              <AntiAutofillInput name="telegram" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>WhatsApp</label>
-              <input name="whatsapp_phone" style={fieldStyle} />
+              <AntiAutofillInput name="whatsapp_phone" inputMode="tel" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>WhatsApp E164</label>
-              <input name="whatsapp_phone_e164" style={fieldStyle} />
+              <AntiAutofillInput
+                name="whatsapp_phone_e164"
+                inputMode="tel"
+                placeholder="+52442..."
+                style={fieldStyle}
+              />
             </div>
 
             <div style={{ gridColumn: "span 4" }}>
               <label style={labelStyle}>Email</label>
-              <input name="email" type="email" style={fieldStyle} />
+              <AntiAutofillInput
+                name="email"
+                inputMode="email"
+                placeholder="correo@ejemplo.com"
+                style={fieldStyle}
+              />
             </div>
 
             <div style={{ gridColumn: "span 4" }}>
               <label style={labelStyle}>Club</label>
-              <select name="club_id" defaultValue="" style={fieldStyle}>
+              <select name="club_id" defaultValue="" style={fieldStyle} autoComplete="off">
                 <option value="">Sin club</option>
                 {clubs.map((club) => (
                   <option key={club.id} value={club.id}>
@@ -290,7 +392,7 @@ export default function CaddieClient({
 
             <div style={{ gridColumn: "span 12" }}>
               <label style={labelStyle}>Notas</label>
-              <textarea name="notes" style={textareaStyle} />
+              <AntiAutofillTextarea name="notes" style={textareaStyle} />
             </div>
           </div>
 
@@ -313,10 +415,12 @@ export default function CaddieClient({
 
         <div style={bodyStyle}>
           <input
+            name="lf_search_caddie"
             placeholder="Buscar caddie..."
             value={searchCaddie}
             onChange={(e) => setSearchCaddie(e.target.value)}
             style={fieldStyle}
+            {...antiSafariProps}
           />
 
           <div
@@ -361,13 +465,20 @@ export default function CaddieClient({
             <p style={subStyle}>{displayCaddieName(selected)}</p>
           </div>
 
-          <form action={updateCaddieAction} style={bodyStyle}>
+          <form
+            key={selected.id}
+            action={updateCaddieAction}
+            style={bodyStyle}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          >
             <input type="hidden" name="caddie_id" value={selected.id} />
 
             <div style={gridStyle}>
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>Nombre</label>
-                <input
+                <AntiAutofillInput
                   name="first_name"
                   required
                   defaultValue={selected.first_name ?? ""}
@@ -377,7 +488,7 @@ export default function CaddieClient({
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>Apellido</label>
-                <input
+                <AntiAutofillInput
                   name="last_name"
                   required
                   defaultValue={selected.last_name ?? ""}
@@ -387,7 +498,7 @@ export default function CaddieClient({
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>Apodo</label>
-                <input
+                <AntiAutofillInput
                   name="nickname"
                   defaultValue={selected.nickname ?? ""}
                   style={fieldStyle}
@@ -400,6 +511,7 @@ export default function CaddieClient({
                   name="level"
                   defaultValue={selected.level ?? ""}
                   style={fieldStyle}
+                  autoComplete="off"
                 >
                   <option value="">Sin nivel</option>
                   <option value="advanced">Azul · Avanzado</option>
@@ -410,16 +522,17 @@ export default function CaddieClient({
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>Teléfono</label>
-                <input
+                <AntiAutofillInput
                   name="phone"
                   defaultValue={selected.phone ?? ""}
+                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>Telegram</label>
-                <input
+                <AntiAutofillInput
                   name="telegram"
                   defaultValue={selected.telegram ?? ""}
                   style={fieldStyle}
@@ -428,28 +541,30 @@ export default function CaddieClient({
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>WhatsApp</label>
-                <input
+                <AntiAutofillInput
                   name="whatsapp_phone"
                   defaultValue={selected.whatsapp_phone ?? ""}
+                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
 
               <div style={{ gridColumn: "span 3" }}>
                 <label style={labelStyle}>WhatsApp E164</label>
-                <input
+                <AntiAutofillInput
                   name="whatsapp_phone_e164"
                   defaultValue={selected.whatsapp_phone_e164 ?? ""}
+                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
 
               <div style={{ gridColumn: "span 4" }}>
                 <label style={labelStyle}>Email</label>
-                <input
+                <AntiAutofillInput
                   name="email"
-                  type="email"
                   defaultValue={selected.email ?? ""}
+                  inputMode="email"
                   style={fieldStyle}
                 />
               </div>
@@ -460,6 +575,7 @@ export default function CaddieClient({
                   name="club_id"
                   defaultValue={selected.club_id ?? ""}
                   style={fieldStyle}
+                  autoComplete="off"
                 >
                   <option value="">Sin club</option>
                   {clubs.map((club) => (
@@ -472,7 +588,7 @@ export default function CaddieClient({
 
               <div style={{ gridColumn: "span 12" }}>
                 <label style={labelStyle}>Notas</label>
-                <textarea
+                <AntiAutofillTextarea
                   name="notes"
                   defaultValue={selected.notes ?? ""}
                   style={textareaStyle}
@@ -490,7 +606,13 @@ export default function CaddieClient({
             </div>
           </form>
 
-          <form action={saveCaddieFavoritesAction} style={bodyStyle}>
+          <form
+            action={saveCaddieFavoritesAction}
+            style={bodyStyle}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          >
             <input type="hidden" name="caddie_id" value={selected.id} />
 
             {Array.from(selectedFavoriteIds).map((playerId) => (
@@ -506,10 +628,12 @@ export default function CaddieClient({
               <div style={{ gridColumn: "span 6" }}>
                 <label style={labelStyle}>Buscar jugador favorito</label>
                 <input
+                  name="lf_search_player"
                   value={searchPlayer}
                   onChange={(e) => setSearchPlayer(e.target.value)}
                   placeholder="Buscar jugador..."
                   style={fieldStyle}
+                  {...antiSafariProps}
                 />
               </div>
 
