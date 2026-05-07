@@ -240,7 +240,7 @@ export default function PlayerEditModal({
 
     const handicapCode = handicapCategory ? codeOf(handicapCategory) : "";
     const handicapIndexRank = ranking.findIndex((code) => code === handicapCode);
-    const baseIndex = currentIndex >= 0 ? currentIndex : handicapIndexRank;
+    const baseIndex = handicapIndexRank >= 0 ? handicapIndexRank : currentIndex;
 
     const allowedByRank =
       baseIndex >= 0
