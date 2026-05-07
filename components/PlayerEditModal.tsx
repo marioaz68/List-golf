@@ -205,7 +205,19 @@ export default function PlayerEditModal({
     return ageEligible.filter((category) => {
       const code = (category.code ?? "").toUpperCase();
 
-      if (code === "S" || code === "SS") return true;
+      if (
+        code === "S" ||
+        code === "SS" ||
+        code === "SENIOR" ||
+        code === "SUPER SENIOR" ||
+        code === "SUPER_SENIOR"
+      ) {
+        return true;
+      }
+
+      if (category.min_age != null) {
+        return true;
+      }
 
       const idx = ranking.findIndex((r) => r === code);
 
