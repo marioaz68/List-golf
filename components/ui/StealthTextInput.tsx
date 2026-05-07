@@ -20,8 +20,22 @@ type Props = {
   ariaLabel?: string;
 };
 
-function normalizeText(value: string) {
-  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ");
+function cleanText(value: string) {
+  return value
+    .replace(/\u00a0/g, " ")
+    .replace(/[\r\n\t]+/g, " ");
+}
+
+function moveCaretToEnd(element: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(false);
+
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 /**
@@ -31,7 +45,10 @@ function normalizeText(value: string) {
  * Esto evita que Safari/macOS lo detecte como campo de contactos
  * y abra ayudas/popup gris de nombres, apellidos, teléfonos, etc.
  *
- * Si pasas "name", también genera un input hidden para formularios nativos.
+ * Importante:
+ * - Mientras el usuario está escribiendo NO reescribe textContent.
+ * - Eso evita que el cursor se brinque al inicio.
+ * - Si pasas "name", también genera un input hidden para formularios nativos.
  */
 export default function StealthTextInput({
   name,
@@ -45,13 +62,18 @@ export default function StealthTextInput({
   ariaLabel,
 }: Props) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const isFocusedRef = useRef(false);
   const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;
 
-    if (editor.textContent !== value) {
+    // No sincronizar mientras el usuario escribe.
+    // Esto evita que el cursor salte al inicio o a otra posición.
+    if (isFocusedRef.current) return;
+
+    if ((editor.textContent ?? "") !== value) {
       editor.textContent = value;
     }
   }, [value]);
@@ -60,22 +82,12 @@ export default function StealthTextInput({
     const editor = editorRef.current;
     if (!editor) return;
 
-    let next = normalizeText(editor.textContent ?? "");
+    let next = cleanText(editor.textContent ?? "");
 
-    if (typeof maxLength === "number" && maxLength > 0) {
+    if (typeof maxLength === "number" && maxLength > 0 && next.length > maxLength) {
       next = next.slice(0, maxLength);
-
-      if ((editor.textContent ?? "") !== next) {
-        editor.textContent = next;
-
-        const selection = window.getSelection();
-        const range = document.createRange();
-
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
+      editor.textContent = next;
+      moveCaretToEnd(editor);
     }
 
     onChange(next);
@@ -122,14 +134,24 @@ export default function StealthTextInput({
         spellCheck={false}
         onInput={emitChange}
         onBlur={() => {
+          isFocusedRef.current = false;
           setFocused(false);
           emitChange();
         }}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          isFocusedRef.current = true;
+          setFocused(true);
+
+          const editor = editorRef.current;
+          if (editor && (editor.textContent ?? "") !== value) {
+            editor.textContent = value;
+            moveCaretToEnd(editor);
+          }
+        }}
         onPaste={(event) => {
           event.preventDefault();
 
-          const text = event.clipboardData.getData("text/plain");
+          const text = cleanText(event.clipboardData.getData("text/plain"));
           document.execCommand("insertText", false, text);
           emitChange();
         }}
@@ -144,6 +166,7 @@ export default function StealthTextInput({
           userSelect: "text",
           WebkitUserSelect: "text",
           WebkitUserModify: "read-write-plaintext-only" as any,
+          cursor: "text",
         }}
       />
 
