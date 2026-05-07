@@ -20,6 +20,7 @@ type PlayerModalData = {
   ghin_number: string | null;
   shirt_size: string | null;
   shoe_size: string | null;
+  birth_year?: number | null;
 };
 
 type Category = {
@@ -68,6 +69,7 @@ export default function PlayerRowActions({
 
   function handleDelete() {
     const fullName = `${safePlayer.first_name ?? ""} ${safePlayer.last_name ?? ""}`.trim();
+
     const confirmed = window.confirm(
       `¿Seguro que quieres eliminar ${fullName || "este jugador"}?\n\nSolo se eliminará si NO forma parte de ningún torneo.`
     );
