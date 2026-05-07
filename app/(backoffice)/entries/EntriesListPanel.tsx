@@ -9,6 +9,7 @@ import {
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
 import SubmitButton from "@/components/ui/SubmitButton";
+import StealthTextInput from "@/components/ui/StealthTextInput";
 import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
 
 type RoundSignature = {
@@ -224,11 +225,20 @@ ${res.witness_url}`;
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
-          <input
-            placeholder="#, nombre, club, estatus o ronda..."
+          <StealthTextInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-7 min-w-[180px] rounded border px-2"
+            onChange={setSearch}
+            placeholder="#, nombre, club, estatus o ronda..."
+            style={{
+              minWidth: 180,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #d1d5db",
+              background: "#ffffff",
+              color: "#000000",
+              fontSize: 11,
+              padding: "0 8px",
+            }}
           />
 
           <select

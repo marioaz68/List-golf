@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
 import SearchInput from "@/components/ui/SearchInput";
+import StealthTextInput from "@/components/ui/StealthTextInput";
 
 type Player = {
   id: string;
@@ -73,11 +74,20 @@ export default function SinglePlayerEntryPanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
-          <SearchInput
+          <StealthTextInput
             value={search}
             onChange={setSearch}
             placeholder="Buscar nombre o club..."
-            className="h-7 min-w-[220px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black placeholder:text-gray-400"
+            style={{
+              minWidth: 220,
+              height: 28,
+              borderRadius: 6,
+              border: "1px solid #d1d5db",
+              background: "#ffffff",
+              color: "#000000",
+              fontSize: 11,
+              padding: "0 8px",
+            }}
           />
 
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">

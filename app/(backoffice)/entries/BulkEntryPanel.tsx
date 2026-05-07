@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { addSelectedEntries } from "./actions";
+import StealthTextInput from "@/components/ui/StealthTextInput";
 
 type Player = {
   id: string;
@@ -158,11 +159,20 @@ export default function BulkEntryPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-1">
-            <input
-              placeholder="Buscar nombre o club..."
+            <StealthTextInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-7 min-w-[160px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black placeholder:text-gray-400"
+              onChange={setSearch}
+              placeholder="Buscar nombre o club..."
+              style={{
+                minWidth: 160,
+                height: 28,
+                borderRadius: 6,
+                border: "1px solid #d1d5db",
+                background: "#ffffff",
+                color: "#000000",
+                fontSize: 11,
+                padding: "0 8px",
+              }}
             />
 
             <select
