@@ -27,19 +27,15 @@ type Player = {
   email: string | null;
   club: string | null;
   club_id?: string | null;
-  ghin_number?: string | null;
-  birth_year?: number | null;
   shirt_size?: string | null;
   shoe_size?: string | number | null;
+  birth_year?: number | null;
 };
 
 type Category = {
   id: string;
   code: string | null;
   name: string | null;
-  gender?: "M" | "F" | "X" | null;
-  handicap_min?: number | null;
-  handicap_max?: number | null;
   min_age?: number | null;
 };
 
@@ -127,17 +123,17 @@ export default function PlayerEditModal({
   open,
   onClose,
   player,
-  tournamentId,
-  entryId = null,
   categories = [],
-  currentCategoryId = null,
+  tournamentId,
+  entryId,
+  currentCategoryId,
 }: {
   open: boolean;
   onClose: () => void;
   player: Player;
-  tournamentId?: string | null;
-  entryId?: string | null;
   categories?: Category[];
+  tournamentId?: string;
+  entryId?: string;
   currentCategoryId?: string | null;
 }) {
   const router = useRouter();
@@ -155,8 +151,8 @@ export default function PlayerEditModal({
   const [clubId, setClubId] = useState<string | null>(null);
   const [shirtSize, setShirtSize] = useState("");
   const [shoeSize, setShoeSize] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(currentCategoryId ?? "");
 
   const [clubSuggestions, setClubSuggestions] = useState<ClubOption[]>([]);
   const [clubDropdownOpen, setClubDropdownOpen] = useState(false);
@@ -166,6 +162,25 @@ export default function PlayerEditModal({
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
 
   const normalizedTypedClub = useMemo(() => normalizeClubName(club), [club]);
+
+  const playerAge = useMemo(() => {
+    if (!player?.birth_year) return null;
+    return new Date().getFullYear() - player.birth_year;
+  }, [player?.birth_year]);
+
+  const ageCategories = useMemo(() => {
+    if (playerAge === null) return [];
+
+    return categories.filter((category) => {
+      if (category.min_age === null || category.min_age === undefined) {
+        return false;
+      }
+
+      return playerAge >= Number(category.min_age);
+    });
+  }, [categories, playerAge]);
+
+  const canUpdateEntryCategory = Boolean(entryId && tournamentId);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -258,70 +273,6 @@ export default function PlayerEditModal({
 
     return () => clearTimeout(timer);
   }, [club, open]);
-
-  const playerAge = useMemo(() => {
-    if (!player?.birth_year) return null;
-    return new Date().getFullYear() - Number(player.birth_year);
-  }, [player?.birth_year]);
-
-  const categoryHandicap = useMemo(() => {
-    const value = handicapTorneo.trim() || handicapIndex.trim();
-    if (!value) return null;
-    const n = Number(value.replace(",", "."));
-    return Number.isFinite(n) ? n : null;
-  }, [handicapIndex, handicapTorneo]);
-
-  const baseCategory = useMemo(() => {
-    if (categoryHandicap === null) return null;
-
-    const playerGender = String(gender ?? "X").toUpperCase();
-
-    const candidates = categories.filter((c) => {
-      if (c.min_age !== null && c.min_age !== undefined) return false;
-      if (c.handicap_min === null || c.handicap_min === undefined) return false;
-      if (c.handicap_max === null || c.handicap_max === undefined) return false;
-
-      const catGender = String(c.gender ?? "X").toUpperCase();
-      if (catGender !== "X" && catGender !== playerGender) return false;
-
-      return (
-        categoryHandicap >= Number(c.handicap_min) &&
-        categoryHandicap <= Number(c.handicap_max)
-      );
-    });
-
-    const exact = candidates.filter(
-      (c) => String(c.gender ?? "X").toUpperCase() === playerGender
-    );
-    const pool = exact.length > 0 ? exact : candidates;
-
-    return [...pool].sort(
-      (a, b) => Number(a.handicap_min ?? 0) - Number(b.handicap_min ?? 0)
-    )[0] ?? null;
-  }, [categories, categoryHandicap, gender]);
-
-  const ageCategories = useMemo(() => {
-    if (playerAge === null) return [];
-
-    return categories.filter((c) => {
-      if (c.min_age === null || c.min_age === undefined) return false;
-      return playerAge >= Number(c.min_age);
-    });
-  }, [categories, playerAge]);
-
-  const categoryOptions = useMemo(() => {
-    const byId = new Map<string, Category>();
-
-    if (baseCategory) byId.set(baseCategory.id, baseCategory);
-    ageCategories.forEach((c) => byId.set(c.id, c));
-
-    if (currentCategoryId && !byId.has(currentCategoryId)) {
-      const current = categories.find((c) => c.id === currentCategoryId);
-      if (current) byId.set(current.id, current);
-    }
-
-    return Array.from(byId.values());
-  }, [ageCategories, baseCategory, categories, currentCategoryId]);
 
   if (!open) return null;
 
@@ -523,17 +474,13 @@ export default function PlayerEditModal({
         return;
       }
 
-      if (
-        entryId &&
-        tournamentId &&
-        selectedCategoryId &&
-        selectedCategoryId !== (currentCategoryId ?? "")
-      ) {
-        const categoryFormData = new FormData();
-        categoryFormData.set("entry_id", entryId);
-        categoryFormData.set("tournament_id", tournamentId);
-        categoryFormData.set("category_id", selectedCategoryId);
-        await updateEntryCategory(categoryFormData);
+      if (selectedCategoryId && entryId && tournamentId) {
+        const categoryForm = new FormData();
+        categoryForm.set("entry_id", entryId);
+        categoryForm.set("tournament_id", tournamentId);
+        categoryForm.set("category_id", selectedCategoryId);
+
+        await updateEntryCategory(categoryForm);
       }
 
       onClose();
@@ -635,28 +582,29 @@ export default function PlayerEditModal({
               />
             </label>
 
-            <label style={labelStyle}>
-              Categoría de inscripción
-              {entryId && tournamentId && categoryOptions.length > 0 ? (
+            {ageCategories.length > 0 ? (
+              <label style={labelStyle}>
+                Categoría por edad
                 <select
                   value={selectedCategoryId}
                   onChange={(e) => setSelectedCategoryId(e.target.value)}
+                  disabled={!canUpdateEntryCategory}
                   style={fieldStyle}
+                  title={
+                    canUpdateEntryCategory
+                      ? "Cambiar categoría de inscripción"
+                      : "Falta entryId/tournamentId para guardar categoría"
+                  }
                 >
                   <option value="">Sin cambio</option>
-                  {categoryOptions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code ? `${c.code} - ` : ""}
-                      {c.name ?? "Sin nombre"}
+                  {ageCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.code ?? category.name ?? "Categoría"}
                     </option>
                   ))}
                 </select>
-              ) : (
-                <span style={{ color: "#6b7280", fontSize: 11, fontWeight: 500 }}>
-                  No aplica en esta pantalla
-                </span>
-              )}
-            </label>
+              </label>
+            ) : null}
 
             <label style={labelStyle}>
               Teléfono
