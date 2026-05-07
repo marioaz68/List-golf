@@ -1178,7 +1178,7 @@ export default function NewPlayerForm({
             value={birthYear}
             onChange={(e) => setBirthYear(e.target.value)}
             placeholder="Ej. 1978"
-            type="number"
+            inputMode="numeric"
             style={fieldStyle}
           />
         </label>

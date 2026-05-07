@@ -145,7 +145,6 @@ const antiSafariProps = {
   autoCorrect: "off",
   autoCapitalize: "off",
   spellCheck: false,
-  enterKeyHint: "done",
   "data-lpignore": "true",
   "data-1p-ignore": "true",
   "data-form-type": "other",
