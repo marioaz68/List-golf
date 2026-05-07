@@ -7,6 +7,7 @@ import {
   updateCaddieAction,
 } from "@/app/(backoffice)/caddies/new/actions";
 import SubmitButton from "@/components/ui/SubmitButton";
+import StealthTextInput from "@/components/ui/StealthTextInput";
 
 type Club = {
   id: string;
@@ -50,7 +51,6 @@ type AntiAutofillInputProps = {
   required?: boolean;
   placeholder?: string;
   style?: React.CSSProperties;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   maxLength?: number;
 };
 
@@ -159,7 +159,6 @@ function AntiAutofillInput({
   required,
   placeholder,
   style,
-  inputMode,
   maxLength,
 }: AntiAutofillInputProps) {
   const generatedName = useRef(
@@ -175,18 +174,14 @@ function AntiAutofillInput({
     <>
       <input type="hidden" name={name} value={value} />
 
-      <input
-            type="search"
-            enterKeyHint="done"
-        name={generatedName.current}
+      <StealthTextInput
         value={value}
+        onChange={setValue}
         required={required}
         placeholder={placeholder}
         style={style}
-        inputMode={inputMode}
         maxLength={maxLength}
-        onChange={(e) => setValue(e.target.value)}
-        {...antiSafariProps}
+        ariaLabel={placeholder ?? name}
       />
     </>
   );
@@ -347,7 +342,7 @@ export default function CaddieClient({
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>Teléfono</label>
-              <AntiAutofillInput name="phone" inputMode="tel" style={fieldStyle} />
+              <AntiAutofillInput name="phone" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
@@ -357,14 +352,13 @@ export default function CaddieClient({
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>WhatsApp</label>
-              <AntiAutofillInput name="whatsapp_phone" inputMode="tel" style={fieldStyle} />
+              <AntiAutofillInput name="whatsapp_phone" style={fieldStyle} />
             </div>
 
             <div style={{ gridColumn: "span 3" }}>
               <label style={labelStyle}>WhatsApp E164</label>
               <AntiAutofillInput
                 name="whatsapp_phone_e164"
-                inputMode="tel"
                 placeholder="+52442..."
                 style={fieldStyle}
               />
@@ -374,7 +368,6 @@ export default function CaddieClient({
               <label style={labelStyle}>Email</label>
               <AntiAutofillInput
                 name="email"
-                inputMode="email"
                 placeholder="correo@ejemplo.com"
                 style={fieldStyle}
               />
@@ -529,7 +522,6 @@ export default function CaddieClient({
                 <AntiAutofillInput
                   name="phone"
                   defaultValue={selected.phone ?? ""}
-                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
@@ -548,7 +540,6 @@ export default function CaddieClient({
                 <AntiAutofillInput
                   name="whatsapp_phone"
                   defaultValue={selected.whatsapp_phone ?? ""}
-                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
@@ -558,7 +549,6 @@ export default function CaddieClient({
                 <AntiAutofillInput
                   name="whatsapp_phone_e164"
                   defaultValue={selected.whatsapp_phone_e164 ?? ""}
-                  inputMode="tel"
                   style={fieldStyle}
                 />
               </div>
@@ -568,7 +558,6 @@ export default function CaddieClient({
                 <AntiAutofillInput
                   name="email"
                   defaultValue={selected.email ?? ""}
-                  inputMode="email"
                   style={fieldStyle}
                 />
               </div>
