@@ -140,7 +140,7 @@ export default function EntriesListPanel({
     );
   }, [entries]);
 
-  const categories = useMemo(() => {
+  const categoryCodes = useMemo(() => {
     const set = new Set<string>();
     entries.forEach((e) => {
       if (e.categories?.code) set.add(e.categories.code);
@@ -248,7 +248,7 @@ ${res.witness_url}`;
             className="h-7 px-2"
           >
             <option value="">Cat</option>
-            {categories.map((c) => (
+            {categoryCodes.map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
