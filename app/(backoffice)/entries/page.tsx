@@ -6,6 +6,7 @@ import BulkEntryPanel from "./BulkEntryPanel";
 import EntriesListPanel from "./EntriesListPanel";
 import EntriesSummaryPanel from "./EntriesSummaryPanel";
 import EnrollExcelButton from "./EnrollExcelButton";
+import { closeTournamentRegistration, reopenTournamentRegistration } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -14,6 +15,8 @@ type Tournament = {
   id: string;
   name: string | null;
   status: string | null;
+  registration_status: "open" | "closed" | string | null;
+  registration_closed_at: string | null;
 };
 
 type Category = {
@@ -336,7 +339,7 @@ export default async function EntriesPage({
   const supabase = await createClient();
 
   const [tournamentsRes, playersRes, categoriesRes] = await Promise.all([
-    supabase.from("tournaments").select("id, name, status").order("name"),
+    supabase.from("tournaments").select("id, name, status, registration_status, registration_closed_at").order("name"),
     supabase
       .from("players")
       .select(`
@@ -373,6 +376,9 @@ export default async function EntriesPage({
 
   const tournaments = (tournamentsRes.data ?? []) as Tournament[];
   const selectedTournamentId = requestedTournamentId || tournaments[0]?.id || "";
+  const selectedTournament = tournaments.find((t) => t.id === selectedTournamentId) ?? null;
+  const registrationStatus = selectedTournament?.registration_status ?? "open";
+  const registrationsClosed = registrationStatus === "closed";
 
   const categories = ((categoriesRes.data ?? []) as Array<
     Category & { tournament_id?: string | null }
@@ -530,7 +536,7 @@ export default async function EntriesPage({
     <main className="space-y-2 p-2">
       <HeaderBlock title="Entries">
         <div className="flex flex-wrap items-center gap-1">
-          {selectedTournamentId ? (
+          {selectedTournamentId && !registrationsClosed ? (
             <EnrollExcelButton tournament_id={selectedTournamentId} />
           ) : null}
         </div>
@@ -569,6 +575,65 @@ export default async function EntriesPage({
 
       {selectedTournamentId ? (
         <>
+          <section
+            className={`rounded border p-2 shadow-sm ${
+              registrationsClosed
+                ? "border-red-300 bg-red-50 text-red-900"
+                : "border-green-300 bg-green-50 text-green-900"
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <div className="text-[12px] font-semibold">
+                  {registrationsClosed ? "Inscripciones cerradas" : "Inscripciones abiertas"}
+                </div>
+                <div className="text-[11px]">
+                  {registrationsClosed
+                    ? "La inscripción, edición de categoría/handicap y eliminación de jugadores está bloqueada."
+                    : "Puedes inscribir jugadores, editar categoría/handicap y eliminar inscritos."}
+                </div>
+                {selectedTournament?.registration_closed_at ? (
+                  <div className="text-[10px] opacity-80">
+                    Cerrado: {new Date(selectedTournament.registration_closed_at).toLocaleString("es-MX")}
+                  </div>
+                ) : null}
+              </div>
+
+              {registrationsClosed ? (
+                <form action={reopenTournamentRegistration} className="flex flex-wrap items-center gap-1">
+                  <input type="hidden" name="tournament_id" value={selectedTournamentId} />
+                  <input type="hidden" name="tab" value={activeTab} />
+                  <input
+                    name="registration_status_note"
+                    placeholder="Motivo para reabrir"
+                    className="h-7 w-[180px] rounded border border-red-300 bg-white px-2 text-[11px] text-black"
+                  />
+                  <button
+                    type="submit"
+                    className="inline-flex min-h-7 items-center justify-center rounded border border-red-700 bg-red-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-red-800"
+                  >
+                    Reabrir inscripciones
+                  </button>
+                </form>
+              ) : (
+                <form action={closeTournamentRegistration} className="flex flex-wrap items-center gap-1">
+                  <input type="hidden" name="tournament_id" value={selectedTournamentId} />
+                  <input type="hidden" name="tab" value={activeTab} />
+                  <input
+                    name="registration_status_note"
+                    placeholder="Motivo del cierre"
+                    className="h-7 w-[180px] rounded border border-green-300 bg-white px-2 text-[11px] text-black"
+                  />
+                  <button
+                    type="submit"
+                    className="inline-flex min-h-7 items-center justify-center rounded border border-green-700 bg-green-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-green-800"
+                  >
+                    Cerrar inscripciones
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
          {bulkStatus && bulkMessage ? (
             <section className={feedbackClasses(bulkStatus)}>
               <div className="font-semibold">{bulkMessage}</div>
@@ -630,20 +695,32 @@ export default async function EntriesPage({
           </section>
 
           {activeTab === "manual" ? (
-            <SinglePlayerEntryPanel
-              players={players.filter(
-                (p) => !entries.some((e) => e.player_id === p.id)
-              )}
-              tournamentId={selectedTournamentId}
-              categories={categories}
-            />
+            registrationsClosed ? (
+              <section className="rounded border border-red-300 bg-red-50 p-3 text-[12px] text-red-900 shadow-sm">
+                Inscripciones cerradas. Reabre el torneo para inscribir jugadores manualmente.
+              </section>
+            ) : (
+              <SinglePlayerEntryPanel
+                players={players.filter(
+                  (p) => !entries.some((e) => e.player_id === p.id)
+                )}
+                tournamentId={selectedTournamentId}
+                categories={categories}
+              />
+            )
           ) : null}
 
           {activeTab === "bulk" ? (
-            <BulkEntryPanel
-              players={players}
-              tournamentId={selectedTournamentId}
-            />
+            registrationsClosed ? (
+              <section className="rounded border border-red-300 bg-red-50 p-3 text-[12px] text-red-900 shadow-sm">
+                Inscripciones cerradas. Reabre el torneo para usar inscripción masiva.
+              </section>
+            ) : (
+              <BulkEntryPanel
+                players={players}
+                tournamentId={selectedTournamentId}
+              />
+            )
           ) : null}
 
           {activeTab === "entries" ? (

@@ -107,6 +107,66 @@ function buildEntriesRedirect(params: {
   return `/entries?${search.toString()}`;
 }
 
+type TournamentRegistrationState = {
+  id: string;
+  registration_status: string | null;
+};
+
+function entriesLockedRedirect(tournamentId: string, tab: string = "entries") {
+  redirect(
+    buildEntriesRedirect({
+      tournamentId,
+      tab,
+      bulkStatus: "error",
+      bulkMessage:
+        "Inscripciones cerradas. Reabre el torneo para hacer cambios en inscritos.",
+    })
+  );
+}
+
+async function getTournamentRegistrationState(
+  supabase: any,
+  tournament_id: string
+): Promise<TournamentRegistrationState> {
+  const { data, error } = await supabase
+    .from("tournaments")
+    .select("id, registration_status")
+    .eq("id", tournament_id)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Torneo no encontrado: " + (error?.message ?? ""));
+  }
+
+  return data as TournamentRegistrationState;
+}
+
+async function ensureRegistrationOpen(
+  supabase: any,
+  tournament_id: string,
+  tab: string = "entries"
+) {
+  const tournament = await getTournamentRegistrationState(supabase, tournament_id);
+
+  if (tournament.registration_status === "closed") {
+    entriesLockedRedirect(tournament_id, tab);
+  }
+}
+
+async function ensureRegistrationControlAccess(tournament_id: string) {
+  await requireTournamentAccess({
+    tournamentId: tournament_id,
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
+  });
+}
+
+async function getCurrentUserId(supabase: any) {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) return null;
+  return data?.user?.id ?? null;
+}
+
+
 async function getTournamentData(supabase: any, tournament_id: string) {
   const { data, error } = await supabase
     .from("tournaments")
@@ -327,6 +387,7 @@ export async function addEntry(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "manual");
 
   const player_id = reqStr(formData, "player_id");
   const handicap_index_input = optNum(formData, "handicap_index");
@@ -419,6 +480,7 @@ export async function createPlayerAndAddEntry(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "manual");
 
   const first_name = reqStr(formData, "first_name");
   const last_name = reqStr(formData, "last_name");
@@ -510,6 +572,7 @@ export async function addSelectedEntries(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "bulk");
 
   const playerIdsRaw = formData.getAll("player_ids");
   const playerIds = [...new Set(playerIdsRaw.map((x) => String(x)).filter(Boolean))];
@@ -672,6 +735,7 @@ export async function deleteEntry(formData: FormData) {
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(admin, tournament_id, "entries");
 
   const entry = await getEntryOrThrow(admin, id);
 
@@ -746,6 +810,7 @@ export async function withdrawEntry(formData: FormData) {
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(admin, tournament_id, "entries");
 
   await getEntryOrThrow(admin, id);
 
@@ -766,6 +831,7 @@ export async function disqualifyEntry(formData: FormData) {
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(admin, tournament_id, "entries");
 
   const entry = await getEntryOrThrow(admin, id);
   const round = await getLatestTournamentRound(admin, tournament_id);
@@ -835,6 +901,7 @@ export async function restoreEntry(formData: FormData) {
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(admin, tournament_id, "entries");
 
   const { error } = await admin
     .from("tournament_entries")
@@ -857,6 +924,7 @@ export async function updateEntryHandicap(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const player_id = reqStr(formData, "player_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "entries");
 
   const handicap = optNum(formData, "handicap_index");
   if (handicap === null) throw new Error("handicap_index requerido");
@@ -901,6 +969,7 @@ export async function autoCategorizeEntries(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "entries");
 
   const cats = await getTournamentCats(supabase, tournament_id);
 
@@ -960,6 +1029,7 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "bulk");
 
   const rawLimit = Number(formData.get("limit") ?? 30);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 30;
@@ -1038,6 +1108,7 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
+  await ensureRegistrationOpen(supabase, tournament_id, "bulk");
 
   await getTournamentData(supabase, tournament_id);
   const cats = await getTournamentCats(supabase, tournament_id);
@@ -1116,6 +1187,7 @@ export async function updateEntryCategory(formData: FormData) {
   await ensureEntriesAccess(tournament_id);
 
   const supabase = await createClient();
+  await ensureRegistrationOpen(supabase, tournament_id, "entries");
   const cats = await getTournamentCats(supabase, tournament_id);
 
   await validateCategoryCapacity({
@@ -1139,6 +1211,67 @@ export async function updateEntryCategory(formData: FormData) {
   revalidatePath("/players");
 
   return { ok: true };
+}
+
+
+export async function closeTournamentRegistration(formData: FormData) {
+  const supabase = await createClient();
+  const admin = await createAdminClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const tab = optStr(formData, "tab") ?? "entries";
+  const note = optStr(formData, "registration_status_note");
+
+  await ensureRegistrationControlAccess(tournament_id);
+
+  const userId = await getCurrentUserId(supabase);
+
+  const { error } = await admin
+    .from("tournaments")
+    .update({
+      registration_status: "closed",
+      registration_closed_at: new Date().toISOString(),
+      registration_closed_by: userId,
+      registration_status_note: note,
+    })
+    .eq("id", tournament_id);
+
+  if (error) {
+    throw new Error("Error cerrando inscripciones: " + error.message);
+  }
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=${tab}`);
+}
+
+export async function reopenTournamentRegistration(formData: FormData) {
+  const supabase = await createClient();
+  const admin = await createAdminClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const tab = optStr(formData, "tab") ?? "entries";
+  const note = optStr(formData, "registration_status_note");
+
+  await ensureRegistrationControlAccess(tournament_id);
+
+  const userId = await getCurrentUserId(supabase);
+
+  const { error } = await admin
+    .from("tournaments")
+    .update({
+      registration_status: "open",
+      registration_reopened_at: new Date().toISOString(),
+      registration_reopened_by: userId,
+      registration_status_note: note,
+    })
+    .eq("id", tournament_id);
+
+  if (error) {
+    throw new Error("Error reabriendo inscripciones: " + error.message);
+  }
+
+  revalidatePath("/entries");
+  redirect(`/entries?tournament_id=${tournament_id}&tab=${tab}`);
 }
 
 export async function updateEntryCategoryInline(formData: FormData) {
