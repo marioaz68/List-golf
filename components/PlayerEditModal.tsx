@@ -36,6 +36,9 @@ type Category = {
   id: string;
   code: string | null;
   name: string | null;
+  gender?: "M" | "F" | "X" | null;
+  handicap_min?: number | null;
+  handicap_max?: number | null;
   min_age?: number | null;
 };
 
@@ -169,61 +172,104 @@ export default function PlayerEditModal({
   }, [player?.birth_year]);
 
   const availableCategories = useMemo(() => {
-    const hcp = Number(handicapTorneo || handicapIndex || 0);
+    const playerGender = String(gender ?? "X").toUpperCase() as "M" | "F" | "X";
+    const handicapValue = Number((handicapTorneo || handicapIndex || "").replace(",", "."));
+    const ranking =
+      playerGender === "F"
+        ? ["DA", "DB", "DC"]
+        : ["CA", "AA", "A", "B", "C", "DE"];
 
-    const genderFiltered = categories.filter((category) => {
-      const code = (category.code ?? "").toUpperCase();
+    const codeOf = (category: Category) => String(category.code ?? "").toUpperCase();
 
-      if (gender === "F") {
-        return code.startsWith("D");
-      }
+    const genderOk = (category: Category) => {
+      const catGender = String(category.gender ?? "X").toUpperCase();
 
-      return !code.startsWith("D");
+      if (catGender === "X") return true;
+      return catGender === playerGender;
+    };
+
+    const isSeniorCategory = (category: Category) => {
+      const code = codeOf(category);
+
+      return (
+        category.min_age !== null &&
+        category.min_age !== undefined &&
+        (code === "S" ||
+          code === "SS" ||
+          code.includes("SENIOR"))
+      );
+    };
+
+    const regularCategories = categories.filter((category) => {
+      const code = codeOf(category);
+      return ranking.includes(code) && !isSeniorCategory(category) && genderOk(category);
     });
 
-    const ageEligible = genderFiltered.filter((category) => {
-      if (category.min_age == null) return true;
-      if (playerAge == null) return false;
+    const currentCategory = categories.find((category) => category.id === currentCategoryId);
+    const currentCode = currentCategory ? codeOf(currentCategory) : "";
+    const currentIndex = ranking.findIndex((code) => code === currentCode);
+
+    const handicapCategory = Number.isFinite(handicapValue)
+      ? regularCategories.find((category) => {
+          if (category.handicap_min === null || category.handicap_min === undefined) {
+            return false;
+          }
+
+          if (category.handicap_max === null || category.handicap_max === undefined) {
+            return false;
+          }
+
+          return (
+            handicapValue >= Number(category.handicap_min) &&
+            handicapValue <= Number(category.handicap_max)
+          );
+        }) ?? null
+      : null;
+
+    const handicapCode = handicapCategory ? codeOf(handicapCategory) : "";
+    const handicapIndexRank = ranking.findIndex((code) => code === handicapCode);
+    const baseIndex = currentIndex >= 0 ? currentIndex : handicapIndexRank;
+
+    const allowedByRank =
+      baseIndex >= 0
+        ? regularCategories.filter((category) => {
+            const idx = ranking.findIndex((code) => code === codeOf(category));
+            return idx >= 0 && idx <= baseIndex;
+          })
+        : regularCategories;
+
+    const seniorOptions = categories.filter((category) => {
+      if (!isSeniorCategory(category)) return false;
+      if (!genderOk(category)) return false;
+      if (playerAge === null) return false;
 
       return playerAge >= Number(category.min_age);
     });
 
-    const currentCategory = categories.find(
-      (c) => c.id === currentCategoryId
-    );
+    const byId = new Map<string, Category>();
 
-    const currentCode = (currentCategory?.code ?? "").toUpperCase();
+    [...allowedByRank, ...seniorOptions].forEach((category) => {
+      byId.set(category.id, category);
+    });
 
-    const ranking = ["CA", "AA", "A", "B", "C", "D", "DE"];
-
-    const currentIndex = ranking.findIndex((r) => r === currentCode);
-
-    if (currentIndex === -1) {
-      return ageEligible;
+    if (currentCategory && !byId.has(currentCategory.id) && genderOk(currentCategory)) {
+      byId.set(currentCategory.id, currentCategory);
     }
 
-    return ageEligible.filter((category) => {
-      const code = (category.code ?? "").toUpperCase();
+    return Array.from(byId.values()).sort((a, b) => {
+      const aSenior = isSeniorCategory(a);
+      const bSenior = isSeniorCategory(b);
 
-      if (
-        code === "S" ||
-        code === "SS" ||
-        code === "SENIOR" ||
-        code === "SUPER SENIOR" ||
-        code === "SUPER_SENIOR"
-      ) {
-        return true;
+      if (aSenior !== bSenior) return aSenior ? -1 : 1;
+
+      if (aSenior && bSenior) {
+        return Number(b.min_age ?? 0) - Number(a.min_age ?? 0);
       }
 
-      if (category.min_age != null) {
-        return true;
-      }
+      const aRank = ranking.findIndex((code) => code === codeOf(a));
+      const bRank = ranking.findIndex((code) => code === codeOf(b));
 
-      const idx = ranking.findIndex((r) => r === code);
-
-      if (idx === -1) return true;
-
-      return idx <= currentIndex;
+      return (aRank === -1 ? 999 : aRank) - (bRank === -1 ? 999 : bRank);
     });
   }, [
     categories,
