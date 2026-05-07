@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
 import { deletePlayerAction, savePlayerAction } from "@/app/(backoffice)/players/actions";
+import StealthTextInput from "@/components/ui/StealthTextInput";
 
 type Props = {
   onCreated?: () => void;
@@ -285,8 +286,6 @@ export default function NewPlayerForm({
   const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
-  const firstNameInputNameRef = useRef(`lg_a_${Date.now()}`);
-  const lastNameInputNameRef = useRef(`lg_b_${Date.now()}`);
   const initialsInputNameRef = useRef(`lg_c_${Date.now()}`);
   const handicapIndexInputNameRef = useRef(`lg_d_${Date.now()}`);
   const handicapTorneoInputNameRef = useRef(`lg_e_${Date.now()}`);
@@ -1089,28 +1088,26 @@ export default function NewPlayerForm({
       >
         <label style={labelStyle}>
           Nombre
-        <input
-            type="search"
-            enterKeyHint="done"
-           name={firstNameInputNameRef.current}
-           value={firstName}
-           onChange={(e) => setFirstName(e.target.value)}
-           style={fieldStyle}
-           {...antiSafariInputProps}
+          <StealthTextInput
+            value={firstName}
+            onChange={setFirstName}
+            placeholder="Nombre"
+            required
+            style={fieldStyle}
+            ariaLabel="Nombre"
           />
         </label>
 
         <label style={labelStyle}>
           Apellido
-         <input
-            type="search"
-            enterKeyHint="done"
-            name={lastNameInputNameRef.current}
+          <StealthTextInput
             value={lastName}
-             onChange={(e) => setLastName(e.target.value)}
-             style={fieldStyle}
-             {...antiSafariInputProps}
-            />
+            onChange={setLastName}
+            placeholder="Apellido"
+            required
+            style={fieldStyle}
+            ariaLabel="Apellido"
+          />
         </label>
 
         <label style={labelStyle}>
