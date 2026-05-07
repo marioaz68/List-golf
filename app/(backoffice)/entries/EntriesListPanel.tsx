@@ -120,6 +120,7 @@ const ACTIONS_COL = "min-w-[560px] w-[560px]";
 export default function EntriesListPanel({
   entries,
   tournamentId,
+  categories,
 }: {
   entries: Entry[];
   tournamentId: string;
@@ -504,6 +505,9 @@ ${res.witness_url}`;
                       <div className={SLOT_EDIT}>
                         <PlayerRowActions
                           tournamentId={tournamentId}
+                          entryId={e.id}
+                          currentCategoryId={e.categories?.id ?? null}
+                          categories={categories}
                           player={
                             e.players
                               ? {
