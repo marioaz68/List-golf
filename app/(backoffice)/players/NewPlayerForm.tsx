@@ -1090,6 +1090,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Nombre
         <input
+            type="search"
+            enterKeyHint="done"
            name={firstNameInputNameRef.current}
            value={firstName}
            onChange={(e) => setFirstName(e.target.value)}
@@ -1101,6 +1103,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Apellido
          <input
+            type="search"
+            enterKeyHint="done"
             name={lastNameInputNameRef.current}
             value={lastName}
              onChange={(e) => setLastName(e.target.value)}
@@ -1112,6 +1116,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Iniciales
           <input
+            type="search"
+            enterKeyHint="done"
             name={initialsInputNameRef.current}
             {...antiSafariInputProps}
             value={initials}
@@ -1137,6 +1143,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Handicap Index
           <input
+            type="search"
+            enterKeyHint="done"
             name={handicapIndexInputNameRef.current}
             {...antiSafariInputProps}
             value={handicapIndex}
@@ -1149,6 +1157,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Handicap Torneo
           <input
+            type="search"
+            enterKeyHint="done"
             name={handicapTorneoInputNameRef.current}
             {...antiSafariInputProps}
             value={handicapTorneo}
@@ -1161,6 +1171,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Año nacimiento
           <input
+            type="search"
+            enterKeyHint="done"
             name={birthYearInputNameRef.current}
             {...antiSafariInputProps}
             value={birthYear}
@@ -1174,6 +1186,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Teléfono
           <input
+            type="search"
+            enterKeyHint="done"
             name={phoneInputNameRef.current}
             {...antiSafariInputProps}
             value={phone}
@@ -1186,6 +1200,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           Email
           <input
+            type="search"
+            enterKeyHint="done"
             name={emailInputNameRef.current}
             {...antiSafariInputProps}
             value={email}
@@ -1198,6 +1214,8 @@ export default function NewPlayerForm({
         <label style={labelStyle}>
           GHIN
           <input
+            type="search"
+            enterKeyHint="done"
             name={ghinInputNameRef.current}
             {...antiSafariInputProps}
             value={ghinNumber}
@@ -1246,6 +1264,8 @@ export default function NewPlayerForm({
           <label style={labelStyle}>
             Club
             <input
+            type="search"
+            enterKeyHint="done"
               name={clubInputNameRef.current}
               {...antiSafariInputProps}
               value={club}

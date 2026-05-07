@@ -145,6 +145,7 @@ const antiSafariProps = {
   autoCorrect: "off",
   autoCapitalize: "off",
   spellCheck: false,
+  enterKeyHint: "done",
   "data-lpignore": "true",
   "data-1p-ignore": "true",
   "data-form-type": "other",
@@ -176,6 +177,8 @@ function AntiAutofillInput({
       <input type="hidden" name={name} value={value} />
 
       <input
+            type="search"
+            enterKeyHint="done"
         name={generatedName.current}
         value={value}
         required={required}
@@ -415,6 +418,8 @@ export default function CaddieClient({
 
         <div style={bodyStyle}>
           <input
+            type="search"
+            enterKeyHint="done"
             name="lf_search_caddie"
             placeholder="Buscar caddie..."
             value={searchCaddie}
@@ -628,6 +633,8 @@ export default function CaddieClient({
               <div style={{ gridColumn: "span 6" }}>
                 <label style={labelStyle}>Buscar jugador favorito</label>
                 <input
+            type="search"
+            enterKeyHint="done"
                   name="lf_search_player"
                   value={searchPlayer}
                   onChange={(e) => setSearchPlayer(e.target.value)}

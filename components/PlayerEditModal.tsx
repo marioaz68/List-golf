@@ -667,6 +667,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Nombre
               <input
+            type="search"
+            enterKeyHint="done"
                 name={firstNameInputNameRef.current}
                 {...antiSafariInputProps}
                 value={firstName}
@@ -680,6 +682,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Apellido
               <input
+            type="search"
+            enterKeyHint="done"
                 name={lastNameInputNameRef.current}
                 {...antiSafariInputProps}
                 value={lastName}
@@ -693,6 +697,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Iniciales
               <input
+            type="search"
+            enterKeyHint="done"
                 name={initialsInputNameRef.current}
                 {...antiSafariInputProps}
                 value={initials}
@@ -719,6 +725,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Handicap Index
               <input
+            type="search"
+            enterKeyHint="done"
                 name={handicapIndexInputNameRef.current}
                 {...antiSafariInputProps}
                 value={handicapIndex}
@@ -732,6 +740,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Handicap Torneo
               <input
+            type="search"
+            enterKeyHint="done"
                 name={handicapTorneoInputNameRef.current}
                 {...antiSafariInputProps}
                 value={handicapTorneo}
@@ -745,6 +755,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Año nacimiento
               <input
+            type="search"
+            enterKeyHint="done"
                 name={birthYearInputNameRef.current}
                 {...antiSafariInputProps}
                 value={birthYear}
@@ -782,6 +794,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Teléfono
               <input
+            type="search"
+            enterKeyHint="done"
                 name={phoneInputNameRef.current}
                 {...antiSafariInputProps}
                 value={phone}
@@ -794,6 +808,8 @@ export default function PlayerEditModal({
             <label style={labelStyle}>
               Email
               <input
+            type="search"
+            enterKeyHint="done"
                 name={emailInputNameRef.current}
                 {...antiSafariInputProps}
                 value={email}
@@ -844,6 +860,8 @@ export default function PlayerEditModal({
               <label style={labelStyle}>
                 Club
                 <input
+            type="search"
+            enterKeyHint="done"
                   name={clubInputNameRef.current}
                   {...antiSafariInputProps}
                   value={club}
