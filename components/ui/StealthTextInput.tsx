@@ -42,13 +42,14 @@ function moveCaretToEnd(element: HTMLElement) {
  * StealthTextInput
  *
  * Campo visible basado en contentEditable, no en <input>.
- * Esto evita que Safari/macOS lo detecte como campo de contactos
- * y abra ayudas/popup gris de nombres, apellidos, teléfonos, etc.
  *
- * Importante:
- * - Mientras el usuario está escribiendo NO reescribe textContent.
- * - Eso evita que el cursor se brinque al inicio.
- * - Si pasas "name", también genera un input hidden para formularios nativos.
+ * Objetivo:
+ * - Evitar Safari/macOS Contacts Suggestions.
+ * - Evitar autofill/autocomplete del navegador.
+ * - Reducir predictive text, Grammarly y ayudas invasivas.
+ * - Mantener el cursor estable mientras el usuario escribe.
+ *
+ * Si pasas "name", también genera un input hidden para formularios nativos.
  */
 export default function StealthTextInput({
   name,
@@ -129,10 +130,24 @@ export default function StealthTextInput({
         aria-required={required}
         data-placeholder={placeholder ?? ""}
         data-empty={value.trim() ? "false" : "true"}
+        data-lpignore="true"
+        data-1p-ignore="true"
+        data-form-type="other"
+        data-gramm="false"
+        data-gramm_editor="false"
+        data-enable-grammarly="false"
+        autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
+        {...({ inputMode: "none" } as any)}
         onInput={emitChange}
+        onBeforeInput={(event) => {
+          // Evita saltos raros cuando Safari intenta insertar predicción inline.
+          if ((event.nativeEvent as InputEvent).inputType === "insertReplacementText") {
+            event.preventDefault();
+          }
+        }}
         onBlur={() => {
           isFocusedRef.current = false;
           setFocused(false);
@@ -166,6 +181,8 @@ export default function StealthTextInput({
           userSelect: "text",
           WebkitUserSelect: "text",
           WebkitUserModify: "read-write-plaintext-only" as any,
+          WebkitTextSecurity: "none" as any,
+          caretColor: "#111827",
           cursor: "text",
         }}
       />
