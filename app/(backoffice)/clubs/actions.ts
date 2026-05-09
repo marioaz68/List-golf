@@ -2,311 +2,312 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
 
-function reqStr(fd: FormData, key: string) {
-  const v = String(fd.get(key) ?? "").trim();
-  if (!v) throw new Error(`Falta ${key}`);
-  return v;
-}
-
-function optStr(fd: FormData, key: string) {
-  const v = String(fd.get(key) ?? "").trim();
-  return v || null;
-}
-
-function boolFromForm(fd: FormData, key: string) {
-  const raw = String(fd.get(key) ?? "").trim().toLowerCase();
-  return raw === "true" || raw === "1" || raw === "on";
-}
-
-function normalizeText(value: string) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-type ClubCheckRow = {
-  id: string;
-  name: string | null;
-  short_name: string | null;
-  normalized_name: string | null;
-  is_active: boolean | null;
+type SavePlayerInput = {
+  id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  initials?: string | null;
+  gender?: "M" | "F" | "X" | null;
+  handicap_index?: number | string | null;
+  handicap_torneo?: number | string | null;
+  birth_year?: number | string | null;
+  phone?: string | null;
+  whatsapp_phone_e164?: string | null;
+  email?: string | null;
+  club?: string | null;
+  club_id?: string | null;
+  ghin_number?: string | null;
+  shirt_size?: string | null;
+  shoe_size?: string | number | null;
 };
 
-function revalidateAll() {
-  revalidatePath("/clubs");
-  revalidatePath("/courses");
-  revalidatePath("/tournaments");
-  revalidatePath("/", "layout");
+function toNullableString(value: unknown) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  return s.length ? s : null;
 }
 
-async function getClubById(club_id: string) {
-  const supabase = createAdminClient();
-
-  const { data, error } = await supabase
-    .from("clubs")
-    .select("id, name, short_name, normalized_name, is_active")
-    .eq("id", club_id)
-    .maybeSingle();
-
-  if (error) throw new Error(`Error leyendo club: ${error.message}`);
-  return (data as ClubCheckRow | null) ?? null;
+function toNullableUpperString(value: unknown) {
+  const s = toNullableString(value);
+  return s ? s.toUpperCase() : null;
 }
 
-async function getDuplicatesByNormalizedName(
-  normalized_name: string,
-  excludeId?: string
-) {
-  const supabase = createAdminClient();
-
-  let query = supabase
-    .from("clubs")
-    .select("id, name, short_name, normalized_name, is_active")
-    .eq("normalized_name", normalized_name);
-
-  if (excludeId) query = query.neq("id", excludeId);
-
-  const { data, error } = await query;
-  if (error) throw new Error(`Error buscando duplicados: ${error.message}`);
-
-  return (data ?? []) as ClubCheckRow[];
+function toNullableNumber(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
-async function getActiveDuplicatesByNormalizedName(
-  normalized_name: string,
-  excludeId?: string
-) {
-  const supabase = createAdminClient();
-
-  let query = supabase
-    .from("clubs")
-    .select("id, name, short_name, normalized_name, is_active")
-    .eq("normalized_name", normalized_name)
-    .eq("is_active", true);
-
-  if (excludeId) query = query.neq("id", excludeId);
-
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`Error buscando duplicados activos: ${error.message}`);
-  }
-
-  return (data ?? []) as ClubCheckRow[];
+function normalizeGender(value: unknown): "M" | "F" | "X" | null {
+  if (value === "F") return "F";
+  if (value === "M") return "M";
+  if (value === "X") return "X";
+  return null;
 }
 
-async function ensureUniqueNormalizedName(
-  clubId: string | null,
-  normalized_name: string
-) {
-  const duplicates = await getDuplicatesByNormalizedName(
-    normalized_name,
-    clubId ?? undefined
-  );
+function buildPlayerPayload(input: SavePlayerInput) {
+  const payload: Record<string, unknown> = {
+    first_name: toNullableString(input.first_name),
+    last_name: toNullableString(input.last_name),
+    initials: toNullableUpperString(input.initials),
+    gender: normalizeGender(input.gender),
+    handicap_index: toNullableNumber(input.handicap_index),
+    handicap_torneo: toNullableNumber(input.handicap_torneo),
+    birth_year: toNullableNumber(input.birth_year),
+    phone: toNullableString(input.phone),
+    whatsapp_phone_e164: toNullableString(input.whatsapp_phone_e164),
+    email: toNullableString(input.email),
+    club: toNullableString(input.club),
+    club_id: toNullableString(input.club_id),
+    ghin_number: toNullableString(input.ghin_number),
+  };
 
-  if (duplicates.length > 0) {
-    const existing = duplicates[0];
-    throw new Error(
-      `Ya existe un club con nombre equivalente: "${existing?.name ?? "Club existente"}".`
-    );
+  const shirtSize = toNullableUpperString(input.shirt_size);
+  const shoeSize = toNullableString(input.shoe_size);
+
+  if (shirtSize !== null) {
+    payload.shirt_size = shirtSize;
   }
+
+  if (shoeSize !== null) {
+    payload.shoe_size = shoeSize;
+  }
+
+  return payload;
 }
 
-async function ensureUniqueActiveNormalizedName(
-  clubId: string | null,
-  normalized_name: string
-) {
-  const duplicates = await getActiveDuplicatesByNormalizedName(
-    normalized_name,
-    clubId ?? undefined
-  );
-
-  if (duplicates.length > 0) {
-    const existing = duplicates[0];
-    throw new Error(
-      `Ya existe otro club activo con nombre equivalente: "${existing?.name ?? "Club existente"}".`
-    );
+function validatePlayerPayload(payload: Record<string, unknown>) {
+  if (!payload.first_name) {
+    return "Falta nombre.";
   }
+
+  if (!payload.last_name) {
+    return "Falta apellido.";
+  }
+
+  if (!payload.gender) {
+    return "Falta género.";
+  }
+
+  return null;
 }
 
-export async function createClub(formData: FormData) {
-  const supabase = createAdminClient();
+export async function savePlayerAction(input: SavePlayerInput) {
+  try {
+    const supabase = await createAdminClient();
+    const playerId = toNullableString(input.id);
+    const payload = buildPlayerPayload(input);
 
-  const name = reqStr(formData, "name");
-  const short_name = optStr(formData, "short_name");
-  const is_active = boolFromForm(formData, "is_active");
-  const normalized_name = normalizeText(name);
-
-  if (!normalized_name) {
-    throw new Error("Falta nombre válido del club.");
-  }
-
-  await ensureUniqueNormalizedName(null, normalized_name);
-
-  const { data, error } = await supabase
-    .from("clubs")
-    .insert({
-      name,
-      short_name,
-      normalized_name,
-      is_active,
-    })
-    .select("id, name, short_name, normalized_name, is_active")
-    .single();
-
-  if (error) throw new Error(`Error creando club: ${error.message}`);
-
-  revalidateAll();
-  return data;
-}
-
-export async function updateClub(formData: FormData) {
-  const supabase = createAdminClient();
-
-  const club_id = reqStr(formData, "club_id");
-  const name = reqStr(formData, "name");
-  const short_name = optStr(formData, "short_name");
-  const is_active = boolFromForm(formData, "is_active");
-  const normalized_name = normalizeText(name);
-
-  const existingClub = await getClubById(club_id);
-
-  if (!existingClub) {
-    throw new Error(
-      "No se encontró el club a editar. Recarga la pantalla y vuelve a intentar."
-    );
-  }
-
-  if (!normalized_name) {
-    throw new Error("Falta nombre válido del club.");
-  }
-
-  const previousNormalized = normalizeText(existingClub.name || "");
-  const normalizedChanged = normalized_name !== previousNormalized;
-
-  if (normalizedChanged) {
-    await ensureUniqueNormalizedName(club_id, normalized_name);
-  }
-
-  if (is_active) {
-    await ensureUniqueActiveNormalizedName(club_id, normalized_name);
-  }
-
-  const { data, error } = await supabase
-    .from("clubs")
-    .update({
-      name,
-      short_name,
-      normalized_name,
-      is_active,
-    })
-    .eq("id", club_id)
-    .select("id, name, short_name, normalized_name, is_active")
-    .single();
-
-  if (error) throw new Error(`Error actualizando club: ${error.message}`);
-
-  revalidateAll();
-  return data;
-}
-
-export async function toggleClubActive(formData: FormData) {
-  const supabase = createAdminClient();
-
-  const club_id = reqStr(formData, "club_id");
-  const next_active = boolFromForm(formData, "next_active");
-
-  const current = await getClubById(club_id);
-
-  if (!current) {
-    throw new Error("No se encontró el club a actualizar.");
-  }
-
-  if (next_active) {
-    const normalized_name = normalizeText(current.name || "");
-
-    if (!normalized_name) {
-      throw new Error(
-        "No se puede activar este club porque no tiene nombre válido."
-      );
+    const validationError = validatePlayerPayload(payload);
+    if (validationError) {
+      return { ok: false, message: validationError };
     }
 
-    await ensureUniqueActiveNormalizedName(club_id, normalized_name);
+    if (playerId) {
+      const { data, error } = await supabase
+        .from("players")
+        .update(payload)
+        .eq("id", playerId)
+        .select("id")
+        .single();
+
+      if (error) {
+        return { ok: false, message: error.message };
+      }
+
+      revalidatePath("/players");
+      revalidatePath("/entries");
+
+      return {
+        ok: true,
+        mode: "update" as const,
+        id: data.id,
+      };
+    }
+
+    const { data, error } = await supabase
+      .from("players")
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/players");
+    revalidatePath("/entries");
+
+    return {
+      ok: true,
+      mode: "insert" as const,
+      id: data.id,
+    };
+  } catch (error: any) {
+    return {
+      ok: false,
+      message: error?.message ?? "Error guardando jugador.",
+    };
   }
-
-  const { data, error } = await supabase
-    .from("clubs")
-    .update({
-      is_active: next_active,
-    })
-    .eq("id", club_id)
-    .select("id, name, short_name, normalized_name, is_active")
-    .single();
-
-  if (error) throw new Error(`Error cambiando estatus del club: ${error.message}`);
-
-  revalidateAll();
-  return data;
 }
 
-export async function mergeClubIntoWinner(formData: FormData) {
-  const supabase = createAdminClient();
+export async function deletePlayerAction(
+  playerId: string,
+  tournamentId?: string | null
+) {
+  try {
+    const validPlayerId = toNullableString(playerId);
+    const validTournamentId = toNullableString(tournamentId);
 
-  const source_club_id = reqStr(formData, "source_club_id");
-  const target_club_id = reqStr(formData, "target_club_id");
+    if (!validPlayerId) {
+      return { ok: false, message: "Jugador no válido." };
+    }
 
-  if (source_club_id === target_club_id) {
-    throw new Error("El club origen y el club destino no pueden ser el mismo.");
+    const authSupabase = await createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await authSupabase.auth.getUser();
+
+    if (userError || !user) {
+      return { ok: false, message: "No autenticado." };
+    }
+
+    let tournament: { id: string; club_id: string | null } | null = null;
+
+    if (validTournamentId) {
+      const { data: tournamentData, error: tournamentError } = await authSupabase
+        .from("tournaments")
+        .select("id, club_id")
+        .eq("id", validTournamentId)
+        .single();
+
+      if (tournamentError || !tournamentData) {
+        return { ok: false, message: "Torneo no encontrado." };
+      }
+
+      tournament = tournamentData as { id: string; club_id: string | null };
+    }
+
+    const { data: globalRows, error: globalError } = await authSupabase
+      .from("user_global_roles")
+      .select("roles(code)")
+      .eq("user_id", user.id)
+      .eq("is_active", true);
+
+    if (globalError) {
+      return {
+        ok: false,
+        message: `No se pudieron validar roles globales: ${globalError.message}`,
+      };
+    }
+
+    const globalCodes =
+      globalRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
+
+    const isSuperAdmin = globalCodes.includes("super_admin");
+
+    let isClubAdmin = false;
+    if (tournament?.club_id) {
+      const { data: clubRows, error: clubError } = await authSupabase
+        .from("user_club_roles")
+        .select("roles(code)")
+        .eq("user_id", user.id)
+        .eq("club_id", tournament.club_id)
+        .eq("is_active", true);
+
+      if (clubError) {
+        return {
+          ok: false,
+          message: `No se pudieron validar roles del club: ${clubError.message}`,
+        };
+      }
+
+      const clubCodes =
+        clubRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
+
+      isClubAdmin = clubCodes.includes("club_admin");
+    }
+
+    let isTournamentDirector = false;
+
+    if (validTournamentId) {
+      const { data: tournamentRows, error: tournamentRolesError } =
+        await authSupabase
+          .from("user_tournament_roles")
+          .select("roles(code)")
+          .eq("user_id", user.id)
+          .eq("tournament_id", validTournamentId)
+          .eq("is_active", true);
+
+      if (tournamentRolesError) {
+        return {
+          ok: false,
+          message: `No se pudieron validar roles del torneo: ${tournamentRolesError.message}`,
+        };
+      }
+
+      const tournamentCodes =
+        tournamentRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
+
+      isTournamentDirector = tournamentCodes.includes("tournament_director");
+    }
+
+    const canDelete = isSuperAdmin || isClubAdmin || isTournamentDirector;
+
+    if (!canDelete) {
+      return {
+        ok: false,
+        message:
+          "No tienes permiso para eliminar jugadores. Solo gerente del torneo, club admin o super admin.",
+      };
+    }
+
+    const supabase = createAdminClient();
+
+    const { count: entriesCount, error: entriesCountError } = await supabase
+      .from("tournament_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("player_id", validPlayerId);
+
+    if (entriesCountError) {
+      return {
+        ok: false,
+        message: `No se pudo validar inscripciones: ${entriesCountError.message}`,
+      };
+    }
+
+    if ((entriesCount ?? 0) > 0) {
+      return {
+        ok: false,
+        message:
+          "No se puede eliminar el jugador porque tiene inscripciones en torneos. Elimínalo primero de entries.",
+      };
+    }
+
+    const { error } = await supabase
+      .from("players")
+      .delete()
+      .eq("id", validPlayerId);
+
+    if (error) {
+      return {
+        ok: false,
+        message: error.message,
+      };
+    }
+
+    revalidatePath("/players");
+    revalidatePath("/entries");
+
+    return { ok: true };
+  } catch (error: any) {
+    return {
+      ok: false,
+      message: error?.message ?? "Error eliminando jugador.",
+    };
   }
-
-  const [sourceClub, targetClub] = await Promise.all([
-    getClubById(source_club_id),
-    getClubById(target_club_id),
-  ]);
-
-  if (!sourceClub) throw new Error("No se encontró el club duplicado/origen.");
-  if (!targetClub) throw new Error("No se encontró el club destino.");
-
-  const targetNormalized = normalizeText(targetClub.name || "");
-  if (!targetNormalized) throw new Error("El club destino no tiene nombre válido.");
-
-  await ensureUniqueActiveNormalizedName(target_club_id, targetNormalized);
-
-  const { error: moveCoursesError } = await supabase
-    .from("courses")
-    .update({ club_id: target_club_id })
-    .eq("club_id", source_club_id);
-
-  if (moveCoursesError) {
-    throw new Error(
-      `Error moviendo courses al club destino: ${moveCoursesError.message}`
-    );
-  }
-
-  const { error: deactivateSourceError } = await supabase
-    .from("clubs")
-    .update({ is_active: false })
-    .eq("id", source_club_id);
-
-  if (deactivateSourceError) {
-    throw new Error(
-      `Error desactivando club origen: ${deactivateSourceError.message}`
-    );
-  }
-
-  const { error: activateTargetError } = await supabase
-    .from("clubs")
-    .update({ is_active: true })
-    .eq("id", target_club_id);
-
-  if (activateTargetError) {
-    throw new Error(
-      `Error activando club destino: ${activateTargetError.message}`
-    );
-  }
-
-  revalidateAll();
-  return { ok: true };
 }
