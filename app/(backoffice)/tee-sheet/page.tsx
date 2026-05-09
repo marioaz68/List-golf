@@ -23,11 +23,16 @@ type Tournament = {
 type Round = {
   id: string;
   tournament_id: string;
+  category_id: string | null;
   round_no: number;
   round_date: string | null;
   start_type: "tee_times" | "shotgun";
   start_time: string | null;
   interval_minutes: number | null;
+  categories?: {
+    code: string | null;
+    name: string | null;
+  } | null;
 };
 
 type GroupRow = {
@@ -95,7 +100,20 @@ export default async function TeeSheetPage(props: {
   const { data: rData, error: rErr } = effectiveTournamentId
     ? await supabase
         .from("rounds")
-        .select("id,tournament_id,round_no,round_date,start_type,start_time,interval_minutes")
+        .select(`
+          id,
+          tournament_id,
+          category_id,
+          round_no,
+          round_date,
+          start_type,
+          start_time,
+          interval_minutes,
+          categories:categories (
+            code,
+            name
+          )
+        `)
         .eq("tournament_id", effectiveTournamentId)
         .order("round_no", { ascending: true })
     : { data: [], error: null };
@@ -219,9 +237,24 @@ for (const row of membersRaw) {
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
 
+  const roundCategoryLabel = (r: Round) => {
+    const rawCategory = Array.isArray(r.categories)
+      ? r.categories[0] ?? null
+      : r.categories ?? null;
+
+    const code = rawCategory?.code?.trim() || "";
+    const name = rawCategory?.name?.trim() || "";
+
+    if (code && name) return `${code} — ${name}`;
+    if (code) return code;
+    if (name) return name;
+    return "Todas las categorías";
+  };
+
   const roundLabel = (r: Round) =>
     `R${r.round_no}` +
     (r.round_date ? ` (${r.round_date})` : "") +
+    ` — ${roundCategoryLabel(r)}` +
     ` — ${r.start_type}` +
     (r.start_time ? ` ${r.start_time}` : "") +
     (r.interval_minutes ? ` / ${r.interval_minutes}min` : "");

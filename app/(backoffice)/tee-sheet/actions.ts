@@ -394,7 +394,7 @@ export async function recalculateTeeTimes(formData: FormData) {
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
-    .select("id, tournament_id, start_type, start_time, interval_minutes")
+    .select("id, tournament_id, category_id, start_type, start_time, interval_minutes")
     .eq("id", round_id)
     .single();
 
@@ -664,7 +664,7 @@ export async function generateGroupsByCategory(formData: FormData) {
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
-    .select("id, tournament_id, start_type, start_time, interval_minutes")
+    .select("id, tournament_id, category_id, start_type, start_time, interval_minutes")
     .eq("id", round_id)
     .single();
 
@@ -781,7 +781,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     });
   }
 
-  const { data: eData, error: eErr } = await supabase
+  let entriesQuery = supabase
     .from("tournament_entries")
     .select(`
       id,
@@ -792,11 +792,26 @@ export async function generateGroupsByCategory(formData: FormData) {
     .eq("tournament_id", tournament_id)
     .in("status", ["active", "confirmed"]);
 
+  const roundCategoryId =
+    typeof r.category_id === "string" && r.category_id.trim()
+      ? r.category_id.trim()
+      : null;
+
+  if (roundCategoryId) {
+    entriesQuery = entriesQuery.eq("category_id", roundCategoryId);
+  }
+
+  const { data: eData, error: eErr } = await entriesQuery;
+
   if (eErr) throw new Error("Error leyendo inscritos: " + eErr.message);
 
   const entries: EntryRow[] = (eData ?? []) as any[];
   if (entries.length === 0) {
-    throw new Error("No hay inscritos (status active/confirmed) para generar grupos.");
+    throw new Error(
+      roundCategoryId
+        ? "No hay inscritos activos/confirmados para la categoría de este round."
+        : "No hay inscritos (status active/confirmed) para generar grupos."
+    );
   }
 
   const { data: oldGroups, error: gErr } = await supabase
