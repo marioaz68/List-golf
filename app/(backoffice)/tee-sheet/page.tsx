@@ -223,7 +223,7 @@ for (const row of membersRaw) {
       seenByHole.set(g.starting_hole, seen);
 
       const total = totalByHole.get(g.starting_hole) ?? 1;
-      const suffix = total > 1 ? (seen === 1 ? "B" : "A") : "A";
+      const suffix = total > 1 ? (seen === 1 ? "A" : "B") : "A";
       starting_label = `H${g.starting_hole}${suffix}`;
     }
 

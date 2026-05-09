@@ -31,6 +31,7 @@ type GroupUI = {
   group_no: number;
   tee_time: string | null;
   starting_hole: number | null;
+  starting_label?: string | null;
   notes: string | null;
   members: MemberUI[];
 };
@@ -498,7 +499,7 @@ function DroppableGroupCard({
             </div>
 
             <div className="text-[11px] font-semibold text-slate-700">
-              H{group.starting_hole ?? "-"}
+              {group.starting_label ?? (group.starting_hole ? `H${group.starting_hole}` : "H-")}
             </div>
 
             <div className="min-w-0 truncate text-[10px] text-slate-700">

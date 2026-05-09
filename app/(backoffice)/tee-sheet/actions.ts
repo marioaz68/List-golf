@@ -142,14 +142,22 @@ function getShotgunExtraHoleOrder() {
   return [1, 10, 5, 14, 2, 4, 6, 8, 11, 13, 15, 17, 3, 7, 9, 12, 16, 18];
 }
 
-function buildShotgunSlots() {
+function buildShotgunSlots(totalGroups?: number) {
+  // Regla de shotgun:
+  // 1) primero se llenan los 18 hoyos con salida A.
+  // 2) si hacen falta más grupos, se agregan dobles salidas B en orden:
+  //    H1, H10, después pares 5, después pares 4, al final pares 3.
+  // 3) el orden visual/grupo NO se reordena por hoyo; se mantiene por categoría.
   const singles: ShotgunSlot[] = Array.from({ length: 18 }, (_, i) => ({
     hole: i + 1,
     side: "A" as const,
     order: i + 1,
   }));
 
-  const doubles = getShotgunExtraHoleOrder().map((hole, i) => ({
+  const extraNeeded = Math.max(0, (totalGroups ?? 36) - 18);
+  const extraHoles = getShotgunExtraHoleOrder().slice(0, extraNeeded);
+
+  const doubles = extraHoles.map((hole, i) => ({
     hole,
     side: "B" as const,
     order: 100 + i + 1,
@@ -159,8 +167,9 @@ function buildShotgunSlots() {
 }
 
 function slotSortKey(slot: ShotgunSlot) {
-  // Vista final: hoyo 1 al 18. Si hay doble salida, primero B y luego A.
-  return slot.hole * 10 + (slot.side === "B" ? 0 : 1);
+  // Se conserva el orden de asignación, no el orden por hoyo,
+  // para que cada categoría salga junta.
+  return slot.order;
 }
 
 async function renumberPositions(supabase: any, group_id: string) {
@@ -743,13 +752,16 @@ function assignShotgunSlotsByCategoryOrder(
   categories: Array<{ categoryId: string; order: number; chunks: any[][] }>
 ) {
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
-  const slots = buildShotgunSlots();
+  const totalGroups = sortedCategories.reduce((acc, category) => acc + category.chunks.length, 0);
 
-  const lane1Slots = slots.filter((slot) => slot.hole >= 1 && slot.hole <= 9);
-  const lane10Slots = slots.filter((slot) => slot.hole >= 10 && slot.hole <= 18);
+  if (totalGroups > 36) {
+    throw new Error(
+      `Demasiados grupos para shotgun con doble salida por hoyo: ${totalGroups}. Máximo 36. Divide el bloque o mueve categorías a otra sesión.`
+    );
+  }
 
-  let lane1Cursor = 0;
-  let lane10Cursor = 0;
+  const slots = buildShotgunSlots(totalGroups);
+  let slotCursor = 0;
 
   const out: Array<{
     categoryId: string;
@@ -762,21 +774,16 @@ function assignShotgunSlotsByCategoryOrder(
   }> = [];
 
   for (const category of sortedCategories) {
-    // Orden 1 inicia por el carril 1, orden 2 por el carril 10,
-    // orden 3 continúa detrás del carril 1, orden 4 detrás del 10, etc.
-    const useLane10 = category.order % 2 === 0;
-    const laneSlots = useLane10 ? lane10Slots : lane1Slots;
-    let cursor = useLane10 ? lane10Cursor : lane1Cursor;
-
-    if (cursor + category.chunks.length > laneSlots.length) {
-      const laneLabel = useLane10 ? "H10-H18" : "H1-H9";
-      throw new Error(
-        `No caben ${category.chunks.length} grupos de la categoría en el carril ${laneLabel}. Divide el bloque o ajusta categorías.`
-      );
-    }
-
+    // Cada categoría se mantiene junta. Cuando termina una categoría,
+    // la siguiente toma la siguiente salida disponible.
     for (let i = 0; i < category.chunks.length; i++) {
-      const slot = laneSlots[cursor + i];
+      const slot = slots[slotCursor];
+      if (!slot) {
+        throw new Error(
+          "No hay suficientes salidas disponibles para esta planeación. Divide el bloque o cambia grupos de 4/5."
+        );
+      }
+
       out.push({
         categoryId: category.categoryId,
         chunk: category.chunks[i],
@@ -786,15 +793,13 @@ function assignShotgunSlotsByCategoryOrder(
         categoryOrder: category.order,
         indexWithinCategory: i,
       });
-    }
 
-    cursor += category.chunks.length;
-    if (useLane10) lane10Cursor = cursor;
-    else lane1Cursor = cursor;
+      slotCursor += 1;
+    }
   }
 
-  // La pantalla final queda ordenada por hoyo: 1B, 1A, 2B, 2A... hasta 18.
-  return out.sort((a, b) => a.displayOrder - b.displayOrder);
+  // Importante: NO ordenar por hoyo. El grupo 1,2,3... queda por categoría.
+  return out;
 }
 
 export async function generateGroupsByCategory(formData: FormData) {
