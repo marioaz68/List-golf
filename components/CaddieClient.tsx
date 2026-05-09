@@ -445,10 +445,38 @@ export default function CaddieClient({
                   fontSize: 12,
                 }}
               >
-                <strong>{displayCaddieName(c)}</strong>
-                <span style={{ color: "#64748b", marginLeft: 8 }}>
-                  {c.phone ?? ""} {c.telegram ?? ""}
-                </span>
+                <div style={{ display: "grid", gap: 2 }}>
+                  <strong>
+                    {c.first_name ?? ""} {c.last_name ?? ""}
+                  </strong>
+
+                  {c.nickname ? (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: "#2563eb",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Apodo: {c.nickname}
+                    </span>
+                  ) : null}
+
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    {c.phone ?? ""}
+                  </span>
+
+                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                    Nivel:{" "}
+                    {c.level === "advanced"
+                      ? "Avanzado"
+                      : c.level === "intermediate"
+                      ? "Intermedio"
+                      : c.level === "beginner"
+                      ? "Principiante"
+                      : "Sin nivel"}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
