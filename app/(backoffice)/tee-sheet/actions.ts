@@ -297,21 +297,9 @@ async function recalcStartsForRound(supabase: any, round_id: string) {
   }
 
   if (r.start_type === "shotgun") {
-    const total = list.length;
-
-    for (let i = 0; i < list.length; i++) {
-      const hole = computeShotgunHole(i, total);
-
-      const { error } = await supabase
-        .from("pairing_groups")
-        .update({
-          starting_hole: hole,
-          tee_time: null,
-        })
-        .eq("id", list[i].id);
-
-      if (error) throw new Error("Error recalculando starting_hole: " + error.message);
-    }
+    // En shotgun, los hoyos ya se asignan desde la planeación por carriles H1/H10.
+    // Al mover jugadores con DnD no debemos recalcularlos, porque rompería el orden aprobado.
+    return;
   }
 }
 
@@ -657,19 +645,16 @@ export async function balanceGroupsByCategory(formData: FormData) {
 function normalizePlanRows(formData: FormData) {
   const ids = formData.getAll("plan_category_id").map((x) => String(x).trim());
   const orders = formData.getAll("plan_order").map((x) => Number(String(x).trim()));
-  const holes = formData.getAll("plan_start_hole").map((x) => Number(String(x).trim()));
   const sizes = formData.getAll("plan_group_size").map((x) => Number(String(x).trim()));
 
   return ids
     .map((id, idx) => {
       const order = Number.isFinite(orders[idx]) ? Math.trunc(orders[idx]) : idx + 1;
-      const startHole = Number.isFinite(holes[idx]) ? Math.trunc(holes[idx]) : 1;
       const groupSize = Number.isFinite(sizes[idx]) ? Math.trunc(sizes[idx]) : 4;
 
       return {
         id,
         order,
-        startHole: startHole >= 1 && startHole <= 18 ? startHole : 1,
         groupSize: groupSize === 5 ? 5 : 4,
       };
     })
@@ -715,17 +700,61 @@ function buildBalancedChunks<T>(list: T[], preferredSize: number) {
   );
 }
 
-function buildHoleSequence(startHole: number) {
-  const holes: number[] = [];
-  for (let i = 0; i < 18; i++) {
-    holes.push(((startHole - 1 + i) % 18) + 1);
+function buildDoubleShotgunLaneSlots(startHole: 1 | 10) {
+  const laneHoles = startHole === 1
+    ? [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    : [10, 11, 12, 13, 14, 15, 16, 17, 18];
+
+  const slots: number[] = [];
+  for (const hole of laneHoles) {
+    slots.push(hole, hole);
   }
-  return holes;
+
+  return slots;
 }
 
-function plannedShotgunHole(startHole: number, groupIndexWithinCategory: number) {
-  const seq = buildHoleSequence(startHole);
-  return seq[Math.floor(groupIndexWithinCategory / 2) % seq.length];
+function assignShotgunSlotsByCategoryOrder(
+  categories: Array<{ categoryId: string; order: number; chunks: any[][] }>
+) {
+  const lane1Slots = buildDoubleShotgunLaneSlots(1);
+  const lane10Slots = buildDoubleShotgunLaneSlots(10);
+  let lane1Cursor = 0;
+  let lane10Cursor = 0;
+
+  const out: Array<{
+    categoryId: string;
+    chunk: any[];
+    startingHole: number;
+    indexWithinCategory: number;
+  }> = [];
+
+  for (const category of categories) {
+    const useLane10 = category.order % 2 === 0;
+    const laneSlots = useLane10 ? lane10Slots : lane1Slots;
+    let cursor = useLane10 ? lane10Cursor : lane1Cursor;
+
+    if (cursor + category.chunks.length > laneSlots.length) {
+      const laneLabel = useLane10 ? "H10" : "H1";
+      throw new Error(
+        `No caben ${category.chunks.length} grupos de la categoría en el carril ${laneLabel}. Divide el bloque o ajusta categorías.`
+      );
+    }
+
+    for (let i = 0; i < category.chunks.length; i++) {
+      out.push({
+        categoryId: category.categoryId,
+        chunk: category.chunks[i],
+        startingHole: laneSlots[cursor + i],
+        indexWithinCategory: i,
+      });
+    }
+
+    cursor += category.chunks.length;
+    if (useLane10) lane10Cursor = cursor;
+    else lane1Cursor = cursor;
+  }
+
+  return out;
 }
 
 export async function generateGroupsByCategory(formData: FormData) {
@@ -983,21 +1012,20 @@ export async function generateGroupsByCategory(formData: FormData) {
   });
 
   const planByCategory = new Map(planRows.map((row) => [row.id, row]));
-  const startHoleSequence = [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18];
 
   const catKeys = planRows.length > 0
     ? planRows.map((row) => row.id).filter((id) => byCat.has(id))
     : defaultCatKeys;
 
   type EntryGroupItem = (typeof resolved)[number];
-  const plannedGroups: Array<{
+  const plannedCategoryBlocks: Array<{
     categoryId: string;
-    categoryStartHole: number;
-    chunk: EntryGroupItem[];
-    indexWithinCategory: number;
+    order: number;
+    chunks: EntryGroupItem[][];
   }> = [];
 
-  for (const k of catKeys) {
+  for (let catIndex = 0; catIndex < catKeys.length; catIndex++) {
+    const k = catKeys[catIndex];
     const list = byCat.get(k);
     if (!list || list.length === 0) continue;
 
@@ -1018,18 +1046,26 @@ export async function generateGroupsByCategory(formData: FormData) {
 
     const plan = planByCategory.get(k);
     const preferredSize = plan?.groupSize ?? group_size;
-    const categoryStartHole = plan?.startHole ?? startHoleSequence[plannedGroups.length % startHoleSequence.length];
+    const order = plan?.order ?? catIndex + 1;
     const chunks = buildBalancedChunks(list, preferredSize);
 
-    for (let i = 0; i < chunks.length; i++) {
-      plannedGroups.push({
-        categoryId: k,
-        categoryStartHole,
-        chunk: chunks[i],
-        indexWithinCategory: i,
-      });
-    }
+    plannedCategoryBlocks.push({
+      categoryId: k,
+      order,
+      chunks,
+    });
   }
+
+  const plannedGroups = startType === "shotgun"
+    ? assignShotgunSlotsByCategoryOrder(plannedCategoryBlocks)
+    : plannedCategoryBlocks.flatMap((category) =>
+        category.chunks.map((chunk, indexWithinCategory) => ({
+          categoryId: category.categoryId,
+          chunk,
+          startingHole: null as number | null,
+          indexWithinCategory,
+        }))
+      );
 
   if (plannedGroups.length === 0) {
     throw new Error("No hay grupos válidos para generar con la planeación actual.");
@@ -1044,10 +1080,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     const tee_time =
       canAutoTeeTimes ? formatHHMM((baseMinutes as number) + i * (interval as number)) : null;
 
-    const starting_hole =
-      startType === "shotgun"
-        ? plannedShotgunHole(planned.categoryStartHole, planned.indexWithinCategory)
-        : null;
+    const starting_hole = startType === "shotgun" ? planned.startingHole : null;
 
     const catId = planned.categoryId;
     const meta = catId !== "NO_CAT" ? catMetaById.get(catId) : null;

@@ -4,7 +4,6 @@ import {
   clearGroups,
   generateGroupsByCategory,
   recalculateTeeTimes,
-  recalculateStartingHoles,
 } from "./actions";
 import TeeSheetDnD from "./TeeSheetDnD";
 
@@ -536,7 +535,7 @@ for (const row of membersRaw) {
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Planeación editable del bloque</h2>
             <div className="mt-1 text-sm text-slate-700">
-              Revisa la sugerencia, cambia el orden de categorías, el hoyo inicial y el tamaño de grupo antes de generar. La generación mantiene cada categoría junta y evita grupos de 1 o 2.
+              Revisa la sugerencia, cambia solo el orden de categorías y el tamaño de grupo antes de generar. El hoyo se calcula automático: orden 1 inicia por H1, orden 2 por H10, orden 3 continúa atrás del H1, orden 4 continúa atrás del H10, y así sucesivamente.
             </div>
           </div>
 
@@ -557,7 +556,7 @@ for (const row of membersRaw) {
                   <th className="px-3 py-2 text-right">Jugadores</th>
                   <th className="px-3 py-2 text-right">G4</th>
                   <th className="px-3 py-2 text-right">G5</th>
-                  <th className="px-3 py-2">Hoyo inicial</th>
+                  <th className="px-3 py-2">Salida automática</th>
                   <th className="px-3 py-2">Grupo</th>
                 </tr>
               </thead>
@@ -585,18 +584,10 @@ for (const row of membersRaw) {
                       <td className="px-3 py-2 text-right">{row.players}</td>
                       <td className="px-3 py-2 text-right">{row.groups4}</td>
                       <td className="px-3 py-2 text-right">{row.groups5}</td>
-                      <td className="px-3 py-2">
-                        <select
-                          name="plan_start_hole"
-                          defaultValue={String(row.suggestedStartHole)}
-                          className="h-8 rounded border border-slate-300 bg-white px-2 text-slate-950"
-                        >
-                          {[1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18].map((h) => (
-                            <option key={`${row.id}-${h}`} value={h}>
-                              H{h}
-                            </option>
-                          ))}
-                        </select>
+                      <td className="px-3 py-2 text-xs text-slate-700">
+                        <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+                          Orden impar: carril H1 · orden par: carril H10
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <select
@@ -642,10 +633,10 @@ for (const row of membersRaw) {
               {planRecommendation}
             </div>
             <div className="text-xs text-slate-600">
-              Sugerencia inicial: la categoría más importante por H1, segunda por H10, luego H2/H11. Puedes cambiarlo antes de generar.
+              Regla de salidas: el orden define el carril. Orden 1 inicia H1, orden 2 inicia H10, orden 3 continúa en el siguiente espacio libre del carril H1, orden 4 continúa en el siguiente espacio libre del carril H10.
             </div>
             <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
-              Regla aplicada: categorías juntas; distribución automática 4/5; nunca grupos de 1 o 2. Si una categoría tiene solo 1 o 2 jugadores, el sistema pedirá ajuste manual antes de generar.
+              Regla aplicada: categorías juntas, sin reiniciar hoyos por categoría, distribución automática 4/5, nunca grupos de 1 o 2. Después puedes ajustar manualmente con Drag & Drop.
             </div>
           </div>
         </div>
@@ -656,7 +647,7 @@ for (const row of membersRaw) {
             className="rounded bg-black px-4 py-2 font-medium text-white hover:bg-slate-900"
             disabled={planRows.length === 0}
           >
-            Generar grupos desde esta planeación
+            Generar grupos con este orden
           </button>
         </div>
       </form>
@@ -679,16 +670,6 @@ for (const row of membersRaw) {
           <input type="hidden" name="cat" value={effectiveCat} />
           <button className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black">
             Recalcular Tee Times
-          </button>
-        </form>
-
-        <form action={recalculateStartingHoles}>
-          <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
-          <input type="hidden" name="round_id" value={effectiveRoundId} />
-          <input type="hidden" name="group_size" value={effectiveGroupSize} />
-          <input type="hidden" name="cat" value={effectiveCat} />
-          <button className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black">
-            Recalcular Starting Holes
           </button>
         </form>
       </section>
