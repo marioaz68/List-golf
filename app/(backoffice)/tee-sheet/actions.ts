@@ -118,15 +118,15 @@ function formatHHMM(totalMinutes: number) {
   return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
 }
 
+const STARTING_ORDER_CONFIRMED_MARKER = "[LIST_GOLF_STARTING_ORDER_CONFIRMED]";
+
 function computeShotgunHole(groupIndexZeroBased: number, totalGroups: number) {
-  if (totalGroups <= 18) return groupIndexZeroBased + 1;
-
-  const extraOrder = getShotgunExtraHoleOrder();
-  const index = groupIndexZeroBased - 18;
-
-  if (index >= 0 && index < extraOrder.length) return extraOrder[index];
-
-  throw new Error("Demasiados grupos para shotgun (máximo 36 con doble salida por hoyo).");
+  const slots = buildShotgunSlots(totalGroups);
+  const slot = slots[groupIndexZeroBased];
+  if (!slot) {
+    throw new Error("Demasiados grupos para shotgun (máximo 36 con doble salida por hoyo).");
+  }
+  return slot.hole;
 }
 
 type ShotgunSlot = {
@@ -136,31 +136,30 @@ type ShotgunSlot = {
 };
 
 function getShotgunExtraHoleOrder() {
-  // Orden profesional para definir DOBLES salidas antes de meter categorías.
-  // Regla solicitada:
-  // 1) H1 y H10 siempre son los primeros dobles.
-  // 2) Después van pares 5.
-  // 3) Después pares 4.
-  // 4) Al último pares 3.
+  // Prioridad para DOBLES salidas:
+  // 1) H1 y H10.
+  // 2) Pares 5.
+  // 3) Pares 4.
+  // 4) Pares 3 solo cuando ya no hay otra opción; por ejemplo, si hay 36 grupos.
   //
   // TODO futuro: leer par real desde tournament_holes/course_holes.
-  // Por ahora dejamos un orden seguro configurable en código.
+  // Por ahora usamos el orden base del campo cargado en código.
   const primary = [1, 10];
   const par5 = [5, 9, 14, 18];
-  const par4 = [2, 4, 6, 8, 11, 13, 15, 17];
-  const par3 = [3, 7, 12, 16];
+  const par4 = [2, 4, 6, 11, 13, 15, 17];
+  const par3 = [8, 3, 7, 12, 16];
 
   return [...primary, ...par5, ...par4, ...par3];
 }
 
 function buildShotgunSlots(totalGroups?: number) {
-  // Regla correcta del bloque completo:
+  // Regla del bloque completo:
   // 1) Primero se define cuántos grupos hay en TODO el bloque.
   // 2) Los primeros 18 grupos ocupan una salida A en cada hoyo.
-  // 3) Si hay más de 18, se eligen hoyos dobles B según prioridad:
-  //    H1/H10, pares 5, pares 4, pares 3.
-  // 4) Para la secuencia/ranking, en un hoyo doble va primero B y luego A.
-  // 5) Las categorías se meten completas, sin mezclarse, consumiendo esta secuencia.
+  // 3) Si hay más de 18, se agregan salidas B en esta prioridad:
+  //    H1/H10, pares 5, pares 4 y pares 3 solamente si el bloque se acerca a 36.
+  // 4) En un hoyo doble, B sale antes que A.
+  // 5) Las categorías se consumen completas en esta secuencia, sin mezclarse.
   const groupCount = totalGroups ?? 36;
   if (groupCount > 36) {
     throw new Error("Demasiados grupos para shotgun (máximo 36 con doble salida por hoyo).");
@@ -173,7 +172,6 @@ function buildShotgunSlots(totalGroups?: number) {
 
   for (let hole = 1; hole <= 18; hole++) {
     if (doubleHoles.has(hole)) {
-      // B es el mejor grupo y debe ir antes que A del mismo hoyo.
       slots.push({ hole, side: "B", order: slots.length + 1 });
       slots.push({ hole, side: "A", order: slots.length + 1 });
     } else {
@@ -182,6 +180,33 @@ function buildShotgunSlots(totalGroups?: number) {
   }
 
   return slots.slice(0, groupCount);
+}
+
+function isStartingOrderConfirmed(notes: string | null | undefined) {
+  return String(notes ?? "").includes(STARTING_ORDER_CONFIRMED_MARKER);
+}
+
+function stripStartingOrderConfirmedMarker(notes: string | null | undefined) {
+  return String(notes ?? "")
+    .replace(STARTING_ORDER_CONFIRMED_MARKER, "")
+    .replace(/\n\s*\n\s*\n/g, "\n\n")
+    .trim() || null;
+}
+
+async function ensureStartingOrderIsEditable(supabase: any, round_id: string) {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select("id, notes")
+    .eq("id", round_id)
+    .single();
+
+  if (error || !data) {
+    throw new Error("No se pudo validar si el orden de salidas está confirmado: " + (error?.message ?? ""));
+  }
+
+  if (isStartingOrderConfirmed(data.notes)) {
+    throw new Error("El orden de salidas de este día ya está confirmado. Primero reabre el orden si necesitas cambiar grupos o salidas.");
+  }
 }
 
 function slotSortKey(slot: ShotgunSlot) {
@@ -372,6 +397,7 @@ export async function clearGroups(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
+  await ensureStartingOrderIsEditable(supabase, round_id);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
@@ -410,6 +436,7 @@ export async function updateGroup(formData: FormData) {
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
+  await ensureStartingOrderIsEditable(supabase, round_id);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
@@ -441,6 +468,7 @@ export async function recalculateTeeTimes(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
+  await ensureStartingOrderIsEditable(supabase, round_id);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
@@ -496,6 +524,7 @@ export async function recalculateStartingHoles(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
+  await ensureStartingOrderIsEditable(supabase, round_id);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
@@ -544,6 +573,7 @@ export async function moveEntryToGroupPosition(formData: FormData) {
 
     reqStr(formData, "tournament_id");
     const round_id = reqStr(formData, "round_id");
+    await ensureStartingOrderIsEditable(supabase, round_id);
 
     const entry_id = reqStr(formData, "entry_id");
     const to_group_id = reqStr(formData, "to_group_id");
@@ -624,6 +654,7 @@ export async function moveEntryToGroup(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
+  await ensureStartingOrderIsEditable(supabase, round_id);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
@@ -688,6 +719,7 @@ export async function balanceGroupsByCategory(formData: FormData) {
 
     reqStr(formData, "tournament_id");
     const round_id = reqStr(formData, "round_id");
+    await ensureStartingOrderIsEditable(supabase, round_id);
     const maxSize = reqGroupSize(formData);
 
     const { data, error } = await supabase.rpc("balance_groups_by_category", {
@@ -818,6 +850,106 @@ function assignShotgunSlotsByCategoryOrder(
   return out;
 }
 
+export async function saveCategoryPlanOrder(formData: FormData) {
+  const supabase = await createClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const round_id = reqStr(formData, "round_id");
+  const group_size = reqGroupSize(formData);
+  const cat = optStr(formData, "cat");
+  const planRows = normalizePlanRows(formData);
+
+  await ensureStartingOrderIsEditable(supabase, round_id);
+
+  for (let i = 0; i < planRows.length; i++) {
+    const row = planRows[i];
+    if (row.id === "NO_CAT") continue;
+
+    const { error } = await supabase
+      .from("categories")
+      .update({ sort_order: i + 1 })
+      .eq("id", row.id)
+      .eq("tournament_id", tournament_id);
+
+    if (error) throw new Error("Error guardando orden de categorías: " + error.message);
+  }
+
+  revalidatePath("/tee-sheet");
+  redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
+}
+
+export async function confirmStartingOrder(formData: FormData) {
+  const supabase = await createClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const round_id = reqStr(formData, "round_id");
+  const group_size = reqGroupSize(formData);
+  const cat = optStr(formData, "cat");
+
+  const { data: groups, error: groupsErr } = await supabase
+    .from("pairing_groups")
+    .select("id")
+    .eq("round_id", round_id)
+    .limit(1);
+
+  if (groupsErr) throw new Error("Error validando grupos: " + groupsErr.message);
+  if ((groups ?? []).length === 0) {
+    throw new Error("No puedes confirmar el orden definitivo sin grupos generados.");
+  }
+
+  const { data: round, error: roundErr } = await supabase
+    .from("rounds")
+    .select("id, tournament_id, notes")
+    .eq("id", round_id)
+    .single();
+
+  if (roundErr || !round) throw new Error("No se pudo leer round: " + (roundErr?.message ?? ""));
+  if (round.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
+
+  const currentNotes = String(round.notes ?? "").trim();
+  const nextNotes = isStartingOrderConfirmed(currentNotes)
+    ? currentNotes
+    : [currentNotes, STARTING_ORDER_CONFIRMED_MARKER].filter(Boolean).join("\n");
+
+  const { error } = await supabase
+    .from("rounds")
+    .update({ notes: nextNotes })
+    .eq("id", round_id);
+
+  if (error) throw new Error("Error confirmando orden definitivo: " + error.message);
+
+  revalidatePath("/tee-sheet");
+  redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
+}
+
+export async function reopenStartingOrder(formData: FormData) {
+  const supabase = await createClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const round_id = reqStr(formData, "round_id");
+  const group_size = reqGroupSize(formData);
+  const cat = optStr(formData, "cat");
+
+  const { data: round, error: roundErr } = await supabase
+    .from("rounds")
+    .select("id, tournament_id, notes")
+    .eq("id", round_id)
+    .single();
+
+  if (roundErr || !round) throw new Error("No se pudo leer round: " + (roundErr?.message ?? ""));
+  if (round.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
+
+  const { error } = await supabase
+    .from("rounds")
+    .update({ notes: stripStartingOrderConfirmedMarker(round.notes) })
+    .eq("id", round_id);
+
+  if (error) throw new Error("Error reabriendo orden definitivo: " + error.message);
+
+  revalidatePath("/tee-sheet");
+  redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
+}
+
 export async function generateGroupsByCategory(formData: FormData) {
   const supabase = await createClient();
 
@@ -826,6 +958,21 @@ export async function generateGroupsByCategory(formData: FormData) {
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
   const planRows = normalizePlanRows(formData);
+
+  await ensureStartingOrderIsEditable(supabase, round_id);
+
+  for (let i = 0; i < planRows.length; i++) {
+    const row = planRows[i];
+    if (row.id === "NO_CAT") continue;
+
+    const { error: orderErr } = await supabase
+      .from("categories")
+      .update({ sort_order: i + 1 })
+      .eq("id", row.id)
+      .eq("tournament_id", tournament_id);
+
+    if (orderErr) throw new Error("Error guardando orden de categorías: " + orderErr.message);
+  }
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")

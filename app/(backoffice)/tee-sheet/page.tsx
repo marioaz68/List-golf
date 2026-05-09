@@ -2,8 +2,11 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import {
   clearGroups,
+  confirmStartingOrder,
   generateGroupsByCategory,
   recalculateTeeTimes,
+  reopenStartingOrder,
+  saveCategoryPlanOrder,
 } from "./actions";
 import TeeSheetDnD from "./TeeSheetDnD";
 
@@ -28,6 +31,7 @@ type Round = {
   start_type: "tee_times" | "shotgun";
   start_time: string | null;
   interval_minutes: number | null;
+  notes: string | null;
   categories?: {
     code: string | null;
     name: string | null;
@@ -70,11 +74,13 @@ type ShotgunSlot = {
   side: "A" | "B";
 };
 
+const STARTING_ORDER_CONFIRMED_MARKER = "[LIST_GOLF_STARTING_ORDER_CONFIRMED]";
+
 function getShotgunExtraHoleOrder() {
   const primary = [1, 10];
   const par5 = [5, 9, 14, 18];
-  const par4 = [2, 4, 6, 8, 11, 13, 15, 17];
-  const par3 = [3, 7, 12, 16];
+  const par4 = [2, 4, 6, 11, 13, 15, 17];
+  const par3 = [8, 3, 7, 12, 16];
 
   return [...primary, ...par5, ...par4, ...par3];
 }
@@ -94,6 +100,10 @@ function buildShotgunSlots(totalGroups: number): ShotgunSlot[] {
   }
 
   return slots.slice(0, totalGroups);
+}
+
+function isStartingOrderConfirmed(notes: string | null | undefined) {
+  return String(notes ?? "").includes(STARTING_ORDER_CONFIRMED_MARKER);
 }
 
 export default async function TeeSheetPage(props: {
@@ -140,6 +150,7 @@ export default async function TeeSheetPage(props: {
           start_type,
           start_time,
           interval_minutes,
+          notes,
           categories:categories (
             code,
             name
@@ -305,6 +316,7 @@ for (const row of membersRaw) {
 
 
   const selectedRound = rounds.find((r) => r.id === effectiveRoundId) ?? null;
+  const startingOrderConfirmed = isStartingOrderConfirmed(selectedRound?.notes);
 
   const blockRounds = selectedRound
     ? rounds.filter((r) => {
@@ -405,6 +417,7 @@ for (const row of membersRaw) {
       return {
         id: c.id,
         label,
+        sortOrder: c.sort_order,
         players,
         groups4,
         groups5,
@@ -417,6 +430,7 @@ for (const row of membersRaw) {
     planRows.push({
       id: "NO_CAT",
       label: "SIN CATEGORÍA",
+      sortOrder: null,
       players: noCategoryCount,
       groups4: Math.ceil(noCategoryCount / 4),
       groups5: Math.ceil(noCategoryCount / 5),
@@ -576,11 +590,17 @@ for (const row of membersRaw) {
         <input type="hidden" name="group_size" value={effectiveGroupSize} />
         <input type="hidden" name="cat" value={effectiveCat} />
 
+        {startingOrderConfirmed ? (
+          <div className="mb-3 rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900">
+            Orden definitivo confirmado. Para cambiar categorías, grupos o salidas, primero reabre el orden.
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Planeación editable del bloque</h2>
             <div className="mt-1 text-sm text-slate-700">
-              Revisa la sugerencia, cambia solo el orden de categorías y el tamaño de grupo antes de generar. El hoyo se calcula automático: orden 1 inicia por H1, orden 2 por H10, orden 3 continúa atrás del H1, orden 4 continúa atrás del H10, y así sucesivamente.
+              Revisa la sugerencia, cambia el orden de categorías y el tamaño de grupo antes de generar. El orden se puede guardar. En shotgun, las dobles priorizan H1/H10, después pares 5, después pares 4, y los pares 3 solo se usan cuando el bloque llega cerca del máximo de 36 grupos.
             </div>
           </div>
 
@@ -621,8 +641,9 @@ for (const row of membersRaw) {
                           name="plan_order"
                           type="number"
                           min={1}
-                          defaultValue={idx + 1}
+                          defaultValue={row.sortOrder ?? idx + 1}
                           className="h-8 w-16 rounded border border-slate-300 bg-white px-2 text-right text-slate-950"
+                          disabled={startingOrderConfirmed}
                         />
                       </td>
                       <td className="px-3 py-2 font-medium text-slate-950">{row.label}</td>
@@ -639,6 +660,7 @@ for (const row of membersRaw) {
                           name="plan_group_size"
                           defaultValue={row.groups5 <= shotgunDoubleCapacity ? "5" : String(effectiveGroupSize)}
                           className="h-8 rounded border border-slate-300 bg-white px-2 text-slate-950"
+                          disabled={startingOrderConfirmed}
                         >
                           <option value="4">4</option>
                           <option value="5">5</option>
@@ -678,7 +700,7 @@ for (const row of membersRaw) {
               {planRecommendation}
             </div>
             <div className="text-xs text-slate-600">
-              Regla de salidas: el orden define el carril. Orden 1 inicia H1, orden 2 inicia H10, orden 3 continúa en el siguiente espacio libre del carril H1, orden 4 continúa en el siguiente espacio libre del carril H10.
+              Regla de salidas: se define primero el total de grupos del bloque. Las dobles empiezan por H1/H10, luego pares 5, luego pares 4. Los pares 3 quedan al final y solo entran si se necesitan para llegar hasta 36 grupos.
             </div>
             <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
               Regla aplicada: categorías juntas, sin reiniciar hoyos por categoría, distribución automática 4/5, nunca grupos de 1 o 2. Después puedes ajustar manualmente con Drag & Drop.
@@ -689,10 +711,19 @@ for (const row of membersRaw) {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="submit"
-            className="rounded bg-black px-4 py-2 font-medium text-white hover:bg-slate-900"
-            disabled={planRows.length === 0}
+            className="rounded bg-black px-4 py-2 font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={planRows.length === 0 || startingOrderConfirmed}
           >
             Generar grupos con este orden
+          </button>
+
+          <button
+            type="submit"
+            formAction={saveCategoryPlanOrder}
+            className="rounded border border-slate-400 bg-white px-4 py-2 font-medium text-slate-950 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={planRows.length === 0 || startingOrderConfirmed}
+          >
+            Guardar orden de categorías
           </button>
         </div>
       </form>
@@ -703,7 +734,10 @@ for (const row of membersRaw) {
           <input type="hidden" name="round_id" value={effectiveRoundId} />
           <input type="hidden" name="group_size" value={effectiveGroupSize} />
           <input type="hidden" name="cat" value={effectiveCat} />
-          <button className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black">
+          <button
+            className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={startingOrderConfirmed}
+          >
             Borrar grupos
           </button>
         </form>
@@ -713,10 +747,49 @@ for (const row of membersRaw) {
           <input type="hidden" name="round_id" value={effectiveRoundId} />
           <input type="hidden" name="group_size" value={effectiveGroupSize} />
           <input type="hidden" name="cat" value={effectiveCat} />
-          <button className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black">
+          <button
+            className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={startingOrderConfirmed}
+          >
             Recalcular Tee Times
           </button>
         </form>
+      </section>
+
+      <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="font-semibold text-slate-950">Orden definitivo del día</div>
+            <div className="mt-1 text-sm text-slate-700">
+              Confirma cuando ya revisaste grupos, categorías y hoyos de salida. Al confirmar se bloquean cambios accidentales.
+            </div>
+          </div>
+
+          {startingOrderConfirmed ? (
+            <form action={reopenStartingOrder}>
+              <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+              <input type="hidden" name="round_id" value={effectiveRoundId} />
+              <input type="hidden" name="group_size" value={effectiveGroupSize} />
+              <input type="hidden" name="cat" value={effectiveCat} />
+              <button className="rounded border border-amber-500 bg-amber-50 px-4 py-2 font-medium text-amber-900 hover:bg-amber-100">
+                Reabrir orden para editar
+              </button>
+            </form>
+          ) : (
+            <form action={confirmStartingOrder}>
+              <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+              <input type="hidden" name="round_id" value={effectiveRoundId} />
+              <input type="hidden" name="group_size" value={effectiveGroupSize} />
+              <input type="hidden" name="cat" value={effectiveCat} />
+              <button
+                className="rounded bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={groupsForUI.length === 0}
+              >
+                Confirmar orden definitivo de salidas
+              </button>
+            </form>
+          )}
+        </div>
       </section>
 
       <TeeSheetDnD
@@ -726,6 +799,7 @@ for (const row of membersRaw) {
         maxGroupSize={MAX_GROUP_SIZE}
         groups={groupsForUI}
         initialCategory={effectiveCat}
+        startingOrderConfirmed={startingOrderConfirmed}
       />
     </div>
   );
