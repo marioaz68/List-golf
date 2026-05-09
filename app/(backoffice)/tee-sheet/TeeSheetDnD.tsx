@@ -31,7 +31,6 @@ type GroupUI = {
   group_no: number;
   tee_time: string | null;
   starting_hole: number | null;
-  starting_label?: string | null;
   notes: string | null;
   members: MemberUI[];
 };
@@ -43,7 +42,6 @@ type Props = {
   maxGroupSize: number;
   groups: GroupUI[];
   initialCategory?: string;
-  startingOrderConfirmed?: boolean;
 };
 
 function norm(s: string) {
@@ -101,7 +99,6 @@ export default function TeeSheetDnD({
   maxGroupSize,
   groups,
   initialCategory = "ALL",
-  startingOrderConfirmed = false,
 }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -224,11 +221,6 @@ export default function TeeSheetDnD({
   async function doMove(entryId: string, toGroupId: string, targetPos: number) {
     setLastError("");
 
-    if (startingOrderConfirmed) {
-      setLastError("El orden de salidas ya está confirmado. Reabre el orden antes de mover jugadores.");
-      return;
-    }
-
     const movingMember = entryToMember.get(entryId);
     const fromGroupId = movingMember?.group_id ?? "";
     const isSameGroup = fromGroupId === toGroupId;
@@ -256,12 +248,6 @@ export default function TeeSheetDnD({
 
   async function runAutoBalanceRPC() {
     setLastError("");
-
-    if (startingOrderConfirmed) {
-      setLastError("El orden de salidas ya está confirmado. Reabre el orden antes de balancear grupos.");
-      return;
-    }
-
     const fd = new FormData();
     fd.set("tournament_id", tournamentId);
     fd.set("round_id", roundId);
@@ -405,7 +391,6 @@ export default function TeeSheetDnD({
                 );
               })
             }
-            disabled={startingOrderConfirmed}
           >
             Auto-balance
           </button>
@@ -513,7 +498,7 @@ function DroppableGroupCard({
             </div>
 
             <div className="text-[11px] font-semibold text-slate-700">
-              {group.starting_label ?? (group.starting_hole ? `H${group.starting_hole}` : "H-")}
+              H{group.starting_hole ?? "-"}
             </div>
 
             <div className="min-w-0 truncate text-[10px] text-slate-700">
