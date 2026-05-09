@@ -223,3 +223,39 @@ export async function saveCaddieFavoritesAction(formData: FormData) {
   revalidatePath("/caddies");
   revalidatePath("/caddies/new");
 }
+
+export async function deleteCaddieAction(formData: FormData) {
+  const supabase = createAdminClient();
+
+  const caddie_id = clean(formData.get("caddie_id"));
+
+  if (!caddie_id) throw new Error("Falta caddie_id");
+
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from("caddie_assignments")
+    .select("id")
+    .eq("caddie_id", caddie_id)
+    .limit(1);
+
+  if (assignmentsError) throw new Error(assignmentsError.message);
+
+  if ((assignments ?? []).length > 0) {
+    throw new Error(
+      "No se puede eliminar este caddie porque ya tiene asignaciones. Primero quita sus asignaciones o déjalo inactivo."
+    );
+  }
+
+  const { error: favoritesError } = await supabase
+    .from("caddie_favorites")
+    .delete()
+    .eq("caddie_id", caddie_id);
+
+  if (favoritesError) throw new Error(favoritesError.message);
+
+  const { error } = await supabase.from("caddies").delete().eq("id", caddie_id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/caddies");
+  revalidatePath("/caddies/new");
+}

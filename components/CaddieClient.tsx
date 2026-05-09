@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   createCaddieAction,
+  deleteCaddieAction,
   saveCaddieFavoritesAction,
   updateCaddieAction,
 } from "@/app/(backoffice)/caddies/new/actions";
@@ -140,6 +142,85 @@ const ghostButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const dangerButtonStyle: React.CSSProperties = {
+  height: 28,
+  padding: "0 10px",
+  border: "1px solid #b91c1c",
+  borderRadius: 8,
+  background: "#b91c1c",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+};
+
+const tableWrapStyle: React.CSSProperties = {
+  overflowX: "auto",
+  border: "1px solid #e5e7eb",
+  borderRadius: 8,
+};
+
+const tableStyle: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: 12,
+};
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "8px 10px",
+  borderBottom: "1px solid #e5e7eb",
+  background: "#f8fafc",
+  fontSize: 11,
+  letterSpacing: 0.3,
+  textTransform: "uppercase",
+  color: "#334155",
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  borderBottom: "1px solid #eef2f7",
+  verticalAlign: "middle",
+  color: "#0f172a",
+  whiteSpace: "nowrap",
+};
+
+const dotBlue: React.CSSProperties = {
+  width: 11,
+  height: 11,
+  borderRadius: 999,
+  background: "#2563eb",
+  border: "1px solid #1d4ed8",
+  display: "inline-block",
+  flex: "0 0 auto",
+};
+
+const dotRed: React.CSSProperties = {
+  width: 11,
+  height: 11,
+  borderRadius: 999,
+  background: "#dc2626",
+  border: "1px solid #b91c1c",
+  display: "inline-block",
+  flex: "0 0 auto",
+};
+
+const dotGreen: React.CSSProperties = {
+  width: 11,
+  height: 11,
+  borderRadius: 999,
+  background: "#16a34a",
+  border: "1px solid #15803d",
+  display: "inline-block",
+  flex: "0 0 auto",
+};
+
+
 const antiSafariProps = {
   autoComplete: "section-listgolf-caddies one-time-code",
   autoCorrect: "off",
@@ -231,6 +312,21 @@ function displayClubName(c: Club) {
   return c.short_name?.trim() || c.name || "Club";
 }
 
+function displayLevelName(level: string | null) {
+  if (level === "advanced") return "Avanzado";
+  if (level === "intermediate") return "Intermedio";
+  if (level === "beginner") return "Principiante";
+  return "Sin nivel";
+}
+
+function renderLevelDot(level: string | null) {
+  if (level === "advanced") return <span style={dotBlue} title="Avanzado" />;
+  if (level === "intermediate") return <span style={dotRed} title="Intermedio" />;
+  if (level === "beginner") return <span style={dotGreen} title="Principiante" />;
+  return <span style={{ color: "#94a3b8" }}>—</span>;
+}
+
+
 export default function CaddieClient({
   clubs,
   caddies,
@@ -238,6 +334,8 @@ export default function CaddieClient({
   initialSelectedCaddie,
   favoriteIdsByCaddie,
 }: Props) {
+  const router = useRouter();
+  const [createFormKey, setCreateFormKey] = useState(0);
   const [searchCaddie, setSearchCaddie] = useState("");
   const [searchPlayer, setSearchPlayer] = useState("");
   const [selected, setSelected] = useState<Caddie | null>(initialSelectedCaddie);
@@ -299,6 +397,37 @@ export default function CaddieClient({
     });
   }
 
+  async function handleCreateCaddie(formData: FormData) {
+    await createCaddieAction(formData);
+    setCreateFormKey((prev) => prev + 1);
+    setSelected(null);
+    setSearchCaddie("");
+    router.refresh();
+  }
+
+  async function handleUpdateCaddie(formData: FormData) {
+    await updateCaddieAction(formData);
+    router.refresh();
+  }
+
+  async function handleDeleteCaddie(formData: FormData) {
+    const caddieId = String(formData.get("caddie_id") ?? "");
+    await deleteCaddieAction(formData);
+
+    if (selected?.id === caddieId) {
+      setSelected(null);
+      setSelectedFavoriteIds(new Set());
+    }
+
+    router.refresh();
+  }
+
+  async function handleSaveFavorites(formData: FormData) {
+    await saveCaddieFavoritesAction(formData);
+    router.refresh();
+  }
+
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={cardStyle}>
@@ -308,7 +437,8 @@ export default function CaddieClient({
         </div>
 
         <form
-          action={createCaddieAction}
+          key={createFormKey}
+          action={handleCreateCaddie}
           style={bodyStyle}
           autoComplete="off"
           autoCorrect="off"
@@ -420,65 +550,86 @@ export default function CaddieClient({
             {...antiSafariProps}
           />
 
-          <div
-            style={{
-              maxHeight: 220,
-              overflowY: "auto",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-            }}
-          >
-            {filteredCaddies.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelected(c)}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "9px 10px",
-                  border: 0,
-                  borderBottom: "1px solid #eef2f7",
-                  background: selected?.id === c.id ? "#eff6ff" : "#fff",
-                  color: "#0f172a",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                <div style={{ display: "grid", gap: 2 }}>
-                  <strong>
-                    {c.first_name ?? ""} {c.last_name ?? ""}
-                  </strong>
+          <div style={tableWrapStyle}>
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  <th style={thStyle}>Nombre</th>
+                  <th style={thStyle}>Apellido</th>
+                  <th style={thStyle}>Apodo</th>
+                  <th style={thStyle}>Teléfono</th>
+                  <th style={thStyle}>Nivel</th>
+                  <th style={thStyle}>Acciones</th>
+                </tr>
+              </thead>
 
-                  {c.nickname ? (
-                    <span
+              <tbody>
+                {filteredCaddies.length === 0 ? (
+                  <tr>
+                    <td style={tdStyle} colSpan={6}>
+                      No hay caddies con ese filtro.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCaddies.map((c) => (
+                    <tr
+                      key={c.id}
                       style={{
-                        fontSize: 11,
-                        color: "#2563eb",
-                        fontWeight: 700,
+                        background: selected?.id === c.id ? "#eff6ff" : "#fff",
                       }}
                     >
-                      Apodo: {c.nickname}
-                    </span>
-                  ) : null}
+                      <td style={tdStyle}>
+                        <strong>{c.first_name || "—"}</strong>
+                      </td>
+                      <td style={tdStyle}>{c.last_name || "—"}</td>
+                      <td style={tdStyle}>{c.nickname || "—"}</td>
+                      <td style={tdStyle}>{c.phone || c.whatsapp_phone || "—"}</td>
+                      <td style={tdStyle}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 7,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {renderLevelDot(c.level)}
+                          {displayLevelName(c.level)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setSelected(c)}
+                            style={ghostButtonStyle}
+                          >
+                            Editar
+                          </button>
 
-                  <span style={{ fontSize: 11, color: "#64748b" }}>
-                    {c.phone ?? ""}
-                  </span>
-
-                  <span style={{ fontSize: 11, color: "#64748b" }}>
-                    Nivel:{" "}
-                    {c.level === "advanced"
-                      ? "Avanzado"
-                      : c.level === "intermediate"
-                      ? "Intermedio"
-                      : c.level === "beginner"
-                      ? "Principiante"
-                      : "Sin nivel"}
-                  </span>
-                </div>
-              </button>
-            ))}
+                          <form action={handleDeleteCaddie}>
+                            <input type="hidden" name="caddie_id" value={c.id} />
+                            <SubmitButton
+                              pendingText="Eliminando..."
+                              className="h-7 px-2 border border-red-800 rounded bg-red-700 text-white text-[11px] font-bold"
+                            >
+                              Eliminar
+                            </SubmitButton>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -492,7 +643,7 @@ export default function CaddieClient({
 
           <form
             key={selected.id}
-            action={updateCaddieAction}
+            action={handleUpdateCaddie}
             style={bodyStyle}
             autoComplete="off"
             autoCorrect="off"
@@ -628,7 +779,7 @@ export default function CaddieClient({
           </form>
 
           <form
-            action={saveCaddieFavoritesAction}
+            action={handleSaveFavorites}
             style={bodyStyle}
             autoComplete="off"
             autoCorrect="off"
