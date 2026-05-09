@@ -136,39 +136,55 @@ type ShotgunSlot = {
 };
 
 function getShotgunExtraHoleOrder() {
-  // Orden profesional para dobles salidas:
-  // primero H1/H10, después pares 5, después pares 4, al final pares 3.
-  // Si después parametrizamos pares por campo, esta lista se puede sacar de tournament_holes.
-  return [1, 10, 5, 14, 2, 4, 6, 8, 11, 13, 15, 17, 3, 7, 9, 12, 16, 18];
+  // Orden profesional para definir DOBLES salidas antes de meter categorías.
+  // Regla solicitada:
+  // 1) H1 y H10 siempre son los primeros dobles.
+  // 2) Después van pares 5.
+  // 3) Después pares 4.
+  // 4) Al último pares 3.
+  //
+  // TODO futuro: leer par real desde tournament_holes/course_holes.
+  // Por ahora dejamos un orden seguro configurable en código.
+  const primary = [1, 10];
+  const par5 = [5, 9, 14, 18];
+  const par4 = [2, 4, 6, 8, 11, 13, 15, 17];
+  const par3 = [3, 7, 12, 16];
+
+  return [...primary, ...par5, ...par4, ...par3];
 }
 
 function buildShotgunSlots(totalGroups?: number) {
-  // Regla de shotgun:
-  // 1) primero se llenan los 18 hoyos con salida A.
-  // 2) si hacen falta más grupos, se agregan dobles salidas B en orden:
-  //    H1, H10, después pares 5, después pares 4, al final pares 3.
-  // 3) el orden visual/grupo NO se reordena por hoyo; se mantiene por categoría.
-  const singles: ShotgunSlot[] = Array.from({ length: 18 }, (_, i) => ({
-    hole: i + 1,
-    side: "A" as const,
-    order: i + 1,
-  }));
+  // Regla correcta del bloque completo:
+  // 1) Primero se define cuántos grupos hay en TODO el bloque.
+  // 2) Los primeros 18 grupos ocupan una salida A en cada hoyo.
+  // 3) Si hay más de 18, se eligen hoyos dobles B según prioridad:
+  //    H1/H10, pares 5, pares 4, pares 3.
+  // 4) Para la secuencia/ranking, en un hoyo doble va primero B y luego A.
+  // 5) Las categorías se meten completas, sin mezclarse, consumiendo esta secuencia.
+  const groupCount = totalGroups ?? 36;
+  if (groupCount > 36) {
+    throw new Error("Demasiados grupos para shotgun (máximo 36 con doble salida por hoyo).");
+  }
 
-  const extraNeeded = Math.max(0, (totalGroups ?? 36) - 18);
-  const extraHoles = getShotgunExtraHoleOrder().slice(0, extraNeeded);
+  const extraNeeded = Math.max(0, groupCount - 18);
+  const doubleHoles = new Set(getShotgunExtraHoleOrder().slice(0, extraNeeded));
 
-  const doubles = extraHoles.map((hole, i) => ({
-    hole,
-    side: "B" as const,
-    order: 100 + i + 1,
-  }));
+  const slots: ShotgunSlot[] = [];
 
-  return [...singles, ...doubles];
+  for (let hole = 1; hole <= 18; hole++) {
+    if (doubleHoles.has(hole)) {
+      // B es el mejor grupo y debe ir antes que A del mismo hoyo.
+      slots.push({ hole, side: "B", order: slots.length + 1 });
+      slots.push({ hole, side: "A", order: slots.length + 1 });
+    } else {
+      slots.push({ hole, side: "A", order: slots.length + 1 });
+    }
+  }
+
+  return slots.slice(0, groupCount);
 }
 
 function slotSortKey(slot: ShotgunSlot) {
-  // Se conserva el orden de asignación, no el orden por hoyo,
-  // para que cada categoría salga junta.
   return slot.order;
 }
 

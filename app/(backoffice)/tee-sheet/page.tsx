@@ -64,6 +64,38 @@ function catSort(a: string, b: string) {
   return a.localeCompare(b);
 }
 
+
+type ShotgunSlot = {
+  hole: number;
+  side: "A" | "B";
+};
+
+function getShotgunExtraHoleOrder() {
+  const primary = [1, 10];
+  const par5 = [5, 9, 14, 18];
+  const par4 = [2, 4, 6, 8, 11, 13, 15, 17];
+  const par3 = [3, 7, 12, 16];
+
+  return [...primary, ...par5, ...par4, ...par3];
+}
+
+function buildShotgunSlots(totalGroups: number): ShotgunSlot[] {
+  const extraNeeded = Math.max(0, totalGroups - 18);
+  const doubleHoles = new Set(getShotgunExtraHoleOrder().slice(0, extraNeeded));
+  const slots: ShotgunSlot[] = [];
+
+  for (let hole = 1; hole <= 18; hole++) {
+    if (doubleHoles.has(hole)) {
+      slots.push({ hole, side: "B" });
+      slots.push({ hole, side: "A" });
+    } else {
+      slots.push({ hole, side: "A" });
+    }
+  }
+
+  return slots.slice(0, totalGroups);
+}
+
 export default async function TeeSheetPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
@@ -208,24 +240,15 @@ for (const row of membersRaw) {
 }
 
   const sortedGroups = [...groups].sort((a, b) => a.group_no - b.group_no);
-  const totalByHole = new Map<number, number>();
-  for (const g of sortedGroups) {
-    if (typeof g.starting_hole !== "number") continue;
-    totalByHole.set(g.starting_hole, (totalByHole.get(g.starting_hole) ?? 0) + 1);
-  }
+  const shotgunSlots = buildShotgunSlots(sortedGroups.length);
 
-  const seenByHole = new Map<number, number>();
-  const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
-    let starting_label: string | null = null;
-
-    if (typeof g.starting_hole === "number") {
-      const seen = (seenByHole.get(g.starting_hole) ?? 0) + 1;
-      seenByHole.set(g.starting_hole, seen);
-
-      const total = totalByHole.get(g.starting_hole) ?? 1;
-      const suffix = total > 1 ? (seen === 1 ? "A" : "B") : "A";
-      starting_label = `H${g.starting_hole}${suffix}`;
-    }
+  const groupsForUI: GroupUI[] = sortedGroups.map((g, index) => {
+    const slot = shotgunSlots[index];
+    const starting_label = slot
+      ? `H${slot.hole}${slot.side}`
+      : typeof g.starting_hole === "number"
+        ? `H${g.starting_hole}`
+        : null;
 
     return {
       ...g,
