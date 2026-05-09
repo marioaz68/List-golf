@@ -259,6 +259,150 @@ for (const row of membersRaw) {
     (r.start_time ? ` ${r.start_time}` : "") +
     (r.interval_minutes ? ` / ${r.interval_minutes}min` : "");
 
+
+  const selectedRound = rounds.find((r) => r.id === effectiveRoundId) ?? null;
+
+  const blockRounds = selectedRound
+    ? rounds.filter((r) => {
+        return (
+          r.tournament_id === selectedRound.tournament_id &&
+          r.round_no === selectedRound.round_no &&
+          String(r.round_date ?? "") === String(selectedRound.round_date ?? "") &&
+          String(r.start_type ?? "") === String(selectedRound.start_type ?? "") &&
+          String(r.start_time ?? "") === String(selectedRound.start_time ?? "")
+        );
+      })
+    : [];
+
+  const blockCategoryIds = Array.from(
+    new Set(
+      blockRounds
+        .map((r) => (typeof r.category_id === "string" ? r.category_id.trim() : ""))
+        .filter(Boolean)
+    )
+  );
+
+  const { data: planCategoriesData, error: planCategoriesErr } =
+    effectiveTournamentId
+      ? await supabase
+          .from("categories")
+          .select("id, code, name, sort_order, handicap_min, category_group")
+          .eq("tournament_id", effectiveTournamentId)
+          .order("sort_order", { ascending: true })
+          .order("handicap_min", { ascending: true })
+      : { data: [], error: null };
+
+  if (planCategoriesErr) {
+    throw new Error("Error leyendo categorías para planeación: " + planCategoriesErr.message);
+  }
+
+  const allPlanCategories = (planCategoriesData ?? []) as Array<{
+    id: string;
+    code: string | null;
+    name: string | null;
+    sort_order: number | null;
+    handicap_min: number | null;
+    category_group: string | null;
+  }>;
+
+  const planCategories =
+    blockCategoryIds.length > 0
+      ? allPlanCategories.filter((c) => blockCategoryIds.includes(c.id))
+      : allPlanCategories;
+
+  let planEntriesQuery = effectiveTournamentId
+    ? supabase
+        .from("tournament_entries")
+        .select("id, category_id, status")
+        .eq("tournament_id", effectiveTournamentId)
+        .in("status", ["active", "confirmed"])
+    : null;
+
+  if (planEntriesQuery && blockCategoryIds.length > 0) {
+    planEntriesQuery = planEntriesQuery.in("category_id", blockCategoryIds);
+  }
+
+  const { data: planEntriesData, error: planEntriesErr } = planEntriesQuery
+    ? await planEntriesQuery
+    : { data: [], error: null };
+
+  if (planEntriesErr) {
+    throw new Error("Error leyendo inscritos para planeación: " + planEntriesErr.message);
+  }
+
+  const planEntryRows = (planEntriesData ?? []) as Array<{
+    id: string;
+    category_id: string | null;
+    status: string | null;
+  }>;
+
+  const entryCountByCategory = new Map<string, number>();
+  let noCategoryCount = 0;
+
+  for (const row of planEntryRows) {
+    const catId = typeof row.category_id === "string" ? row.category_id : "";
+    if (!catId) {
+      noCategoryCount += 1;
+      continue;
+    }
+
+    entryCountByCategory.set(catId, (entryCountByCategory.get(catId) ?? 0) + 1);
+  }
+
+  const startHoleSequence = [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18];
+
+  const planRows = planCategories
+    .map((c, idx) => {
+      const players = entryCountByCategory.get(c.id) ?? 0;
+      const groups4 = Math.ceil(players / 4);
+      const groups5 = Math.ceil(players / 5);
+      const label = [c.code, c.name].filter(Boolean).join(" — ") || "SIN CATEGORÍA";
+
+      return {
+        id: c.id,
+        label,
+        players,
+        groups4,
+        groups5,
+        suggestedStartHole: startHoleSequence[idx % startHoleSequence.length],
+      };
+    })
+    .filter((row) => row.players > 0 || blockCategoryIds.includes(row.id));
+
+  if (noCategoryCount > 0) {
+    planRows.push({
+      id: "NO_CAT",
+      label: "SIN CATEGORÍA",
+      players: noCategoryCount,
+      groups4: Math.ceil(noCategoryCount / 4),
+      groups5: Math.ceil(noCategoryCount / 5),
+      suggestedStartHole: startHoleSequence[planRows.length % startHoleSequence.length],
+    });
+  }
+
+  const planTotalPlayers = planRows.reduce((acc, row) => acc + row.players, 0);
+  const planTotalGroups4 = planRows.reduce((acc, row) => acc + row.groups4, 0);
+  const planTotalGroups5 = planRows.reduce((acc, row) => acc + row.groups5, 0);
+  const shotgunSimpleCapacity = 18;
+  const shotgunDoubleCapacity = 36;
+  const shotgunExtendedCapacity = 44;
+
+  const planRecommendation = (() => {
+    if (!selectedRound) return "Selecciona una ronda/bloque para analizar.";
+    if (planTotalPlayers === 0) return "No hay jugadores activos/confirmados para este bloque.";
+    if (selectedRound.start_type !== "shotgun") {
+      return planTotalGroups4 <= shotgunSimpleCapacity
+        ? "Tee times: grupos de 4 funcionan bien para esta cantidad."
+        : "Tee times: revisa el intervalo y la ventana disponible de salidas.";
+    }
+    if (planTotalGroups4 <= shotgunSimpleCapacity) return "Cabe con grupos de 4 y salida sencilla.";
+    if (planTotalGroups5 <= shotgunSimpleCapacity) return "Conviene usar grupos de 5; cabe con salida sencilla.";
+    if (planTotalGroups4 <= shotgunDoubleCapacity) return "Cabe con grupos de 4 usando doble salida por hoyo.";
+    if (planTotalGroups5 <= shotgunDoubleCapacity) return "Recomendado: grupos de 5 usando doble salida por hoyo.";
+    if (planTotalGroups5 <= shotgunExtendedCapacity) return "Recomendado: grupos de 5 + doble salida principal 1/10 + pares 5 secundarios.";
+    return "No cabe en este bloque. Divide categorías en otra sesión o reduce jugadores del bloque.";
+  })();
+
   if (!effectiveTournamentId) {
     return (
       <div className="min-h-screen p-6 space-y-6">
@@ -379,6 +523,89 @@ for (const row of membersRaw) {
           </span>{" "}
           · Grupos: <span className="font-semibold">{visibleGroups.length}</span> ·
           Jugadores: <span className="font-semibold">{visiblePlayers}</span>
+        </div>
+      </section>
+
+      <section className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Planeación del bloque</h2>
+            <div className="mt-1 text-sm text-slate-700">
+              Analiza jugadores y capacidad antes de generar grupos. No crea ni mueve grupos.
+            </div>
+          </div>
+
+          <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4:{" "}
+            <span className="font-semibold">{planTotalGroups4}</span> · G5:{" "}
+            <span className="font-semibold">{planTotalGroups5}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_280px]">
+          <div className="overflow-x-auto rounded border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+                <tr>
+                  <th className="px-3 py-2">Categoría</th>
+                  <th className="px-3 py-2 text-right">Jugadores</th>
+                  <th className="px-3 py-2 text-right">Gpos 4</th>
+                  <th className="px-3 py-2 text-right">Gpos 5</th>
+                  <th className="px-3 py-2 text-right">Inicio sugerido</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800">
+                {planRows.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-3 text-slate-500" colSpan={5}>
+                      No hay jugadores activos/confirmados para analizar en este bloque.
+                    </td>
+                  </tr>
+                ) : (
+                  planRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2 font-medium text-slate-950">{row.label}</td>
+                      <td className="px-3 py-2 text-right">{row.players}</td>
+                      <td className="px-3 py-2 text-right">{row.groups4}</td>
+                      <td className="px-3 py-2 text-right">{row.groups5}</td>
+                      <td className="px-3 py-2 text-right">H{row.suggestedStartHole}</td>
+                    </tr>
+                  ))
+                )}
+                {planRows.length > 0 ? (
+                  <tr className="bg-slate-50 font-semibold text-slate-950">
+                    <td className="px-3 py-2">Total bloque</td>
+                    <td className="px-3 py-2 text-right">{planTotalPlayers}</td>
+                    <td className="px-3 py-2 text-right">{planTotalGroups4}</td>
+                    <td className="px-3 py-2 text-right">{planTotalGroups5}</td>
+                    <td className="px-3 py-2 text-right">—</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+            <div className="font-semibold text-slate-950">Capacidad</div>
+            <div className="flex justify-between gap-2">
+              <span>Shotgun simple</span>
+              <span className="font-semibold">{shotgunSimpleCapacity} grupos</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span>Shotgun doble</span>
+              <span className="font-semibold">{shotgunDoubleCapacity} grupos</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span>Extendido pares 5</span>
+              <span className="font-semibold">{shotgunExtendedCapacity} grupos</span>
+            </div>
+            <div className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-amber-900">
+              {planRecommendation}
+            </div>
+            <div className="text-xs text-slate-600">
+              Orden sugerido: categoría prioritaria por H1, segunda por H10, después H2/H11 y así sucesivamente.
+            </div>
+          </div>
         </div>
       </section>
 
