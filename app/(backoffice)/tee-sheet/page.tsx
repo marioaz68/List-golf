@@ -526,59 +526,98 @@ for (const row of membersRaw) {
         </div>
       </section>
 
-      <section className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
+      <form action={generateGroupsByCategory} className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
+        <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+        <input type="hidden" name="round_id" value={effectiveRoundId} />
+        <input type="hidden" name="group_size" value={effectiveGroupSize} />
+        <input type="hidden" name="cat" value={effectiveCat} />
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">Planeación del bloque</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Planeación editable del bloque</h2>
             <div className="mt-1 text-sm text-slate-700">
-              Analiza jugadores y capacidad antes de generar grupos. No crea ni mueve grupos.
+              Revisa la sugerencia, cambia el orden de categorías, el hoyo inicial y el tamaño de grupo antes de generar. La generación mantiene cada categoría junta y evita grupos de 1 o 2.
             </div>
           </div>
 
           <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-            Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4:{" "}
-            <span className="font-semibold">{planTotalGroups4}</span> · G5:{" "}
+            Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4: {" "}
+            <span className="font-semibold">{planTotalGroups4}</span> · G5: {" "}
             <span className="font-semibold">{planTotalGroups5}</span>
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_280px]">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_300px]">
           <div className="overflow-x-auto rounded border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
                 <tr>
+                  <th className="px-3 py-2">Orden</th>
                   <th className="px-3 py-2">Categoría</th>
                   <th className="px-3 py-2 text-right">Jugadores</th>
-                  <th className="px-3 py-2 text-right">Gpos 4</th>
-                  <th className="px-3 py-2 text-right">Gpos 5</th>
-                  <th className="px-3 py-2 text-right">Inicio sugerido</th>
+                  <th className="px-3 py-2 text-right">G4</th>
+                  <th className="px-3 py-2 text-right">G5</th>
+                  <th className="px-3 py-2">Hoyo inicial</th>
+                  <th className="px-3 py-2">Grupo</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
                 {planRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-3 text-slate-500" colSpan={5}>
+                    <td className="px-3 py-3 text-slate-500" colSpan={7}>
                       No hay jugadores activos/confirmados para analizar en este bloque.
                     </td>
                   </tr>
                 ) : (
-                  planRows.map((row) => (
+                  planRows.map((row, idx) => (
                     <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <input type="hidden" name="plan_category_id" value={row.id} />
+                        <input
+                          name="plan_order"
+                          type="number"
+                          min={1}
+                          defaultValue={idx + 1}
+                          className="h-8 w-16 rounded border border-slate-300 bg-white px-2 text-right text-slate-950"
+                        />
+                      </td>
                       <td className="px-3 py-2 font-medium text-slate-950">{row.label}</td>
                       <td className="px-3 py-2 text-right">{row.players}</td>
                       <td className="px-3 py-2 text-right">{row.groups4}</td>
                       <td className="px-3 py-2 text-right">{row.groups5}</td>
-                      <td className="px-3 py-2 text-right">H{row.suggestedStartHole}</td>
+                      <td className="px-3 py-2">
+                        <select
+                          name="plan_start_hole"
+                          defaultValue={String(row.suggestedStartHole)}
+                          className="h-8 rounded border border-slate-300 bg-white px-2 text-slate-950"
+                        >
+                          {[1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18].map((h) => (
+                            <option key={`${row.id}-${h}`} value={h}>
+                              H{h}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <select
+                          name="plan_group_size"
+                          defaultValue={row.groups5 <= shotgunDoubleCapacity ? "5" : String(effectiveGroupSize)}
+                          className="h-8 rounded border border-slate-300 bg-white px-2 text-slate-950"
+                        >
+                          <option value="4">4</option>
+                          <option value="5">5</option>
+                        </select>
+                      </td>
                     </tr>
                   ))
                 )}
                 {planRows.length > 0 ? (
                   <tr className="bg-slate-50 font-semibold text-slate-950">
-                    <td className="px-3 py-2">Total bloque</td>
+                    <td className="px-3 py-2" colSpan={2}>Total bloque</td>
                     <td className="px-3 py-2 text-right">{planTotalPlayers}</td>
                     <td className="px-3 py-2 text-right">{planTotalGroups4}</td>
                     <td className="px-3 py-2 text-right">{planTotalGroups5}</td>
-                    <td className="px-3 py-2 text-right">—</td>
+                    <td className="px-3 py-2" colSpan={2}>—</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -603,23 +642,26 @@ for (const row of membersRaw) {
               {planRecommendation}
             </div>
             <div className="text-xs text-slate-600">
-              Orden sugerido: categoría prioritaria por H1, segunda por H10, después H2/H11 y así sucesivamente.
+              Sugerencia inicial: la categoría más importante por H1, segunda por H10, luego H2/H11. Puedes cambiarlo antes de generar.
+            </div>
+            <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
+              Regla aplicada: categorías juntas; distribución automática 4/5; nunca grupos de 1 o 2. Si una categoría tiene solo 1 o 2 jugadores, el sistema pedirá ajuste manual antes de generar.
             </div>
           </div>
         </div>
-      </section>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="submit"
+            className="rounded bg-black px-4 py-2 font-medium text-white hover:bg-slate-900"
+            disabled={planRows.length === 0}
+          >
+            Generar grupos desde esta planeación
+          </button>
+        </div>
+      </form>
 
       <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm flex flex-wrap gap-3">
-        <form action={generateGroupsByCategory}>
-          <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
-          <input type="hidden" name="round_id" value={effectiveRoundId} />
-          <input type="hidden" name="group_size" value={effectiveGroupSize} />
-          <input type="hidden" name="cat" value={effectiveCat} />
-          <button className="rounded bg-black text-white px-4 py-2 font-medium hover:bg-slate-900">
-            Generar grupos
-          </button>
-        </form>
-
         <form action={clearGroups}>
           <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
           <input type="hidden" name="round_id" value={effectiveRoundId} />

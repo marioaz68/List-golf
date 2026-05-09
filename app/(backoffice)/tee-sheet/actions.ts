@@ -654,6 +654,80 @@ export async function balanceGroupsByCategory(formData: FormData) {
   }
 }
 
+function normalizePlanRows(formData: FormData) {
+  const ids = formData.getAll("plan_category_id").map((x) => String(x).trim());
+  const orders = formData.getAll("plan_order").map((x) => Number(String(x).trim()));
+  const holes = formData.getAll("plan_start_hole").map((x) => Number(String(x).trim()));
+  const sizes = formData.getAll("plan_group_size").map((x) => Number(String(x).trim()));
+
+  return ids
+    .map((id, idx) => {
+      const order = Number.isFinite(orders[idx]) ? Math.trunc(orders[idx]) : idx + 1;
+      const startHole = Number.isFinite(holes[idx]) ? Math.trunc(holes[idx]) : 1;
+      const groupSize = Number.isFinite(sizes[idx]) ? Math.trunc(sizes[idx]) : 4;
+
+      return {
+        id,
+        order,
+        startHole: startHole >= 1 && startHole <= 18 ? startHole : 1,
+        groupSize: groupSize === 5 ? 5 : 4,
+      };
+    })
+    .filter((row) => row.id)
+    .sort((a, b) => {
+      if (a.order !== b.order) return a.order - b.order;
+      return a.id.localeCompare(b.id);
+    });
+}
+
+function buildBalancedChunks<T>(list: T[], preferredSize: number) {
+  const total = list.length;
+  const size = preferredSize === 5 ? 5 : 4;
+
+  if (total === 0) return [];
+  if (total < 3) {
+    throw new Error(
+      `No se puede generar una categoría con ${total} jugador(es). Para evitar grupos de 1 o 2, mueve esos jugadores de categoría o ajusta la planeación.`
+    );
+  }
+
+  const minGroups = Math.ceil(total / size);
+  const maxGroups = Math.floor(total / 3);
+
+  for (let groupCount = minGroups; groupCount <= maxGroups; groupCount++) {
+    const base = Math.floor(total / groupCount);
+    const extra = total % groupCount;
+    const sizes = Array.from({ length: groupCount }, (_, idx) => base + (idx < extra ? 1 : 0));
+
+    if (sizes.every((n) => n >= 3 && n <= size)) {
+      const chunks: T[][] = [];
+      let offset = 0;
+      for (const n of sizes) {
+        chunks.push(list.slice(offset, offset + n));
+        offset += n;
+      }
+      return chunks;
+    }
+  }
+
+  throw new Error(
+    `No se encontró una distribución válida para ${total} jugadores con grupos de ${size}. Ajusta a 4/5 o mueve jugadores antes de generar.`
+  );
+}
+
+function buildHoleSequence(startHole: number) {
+  const holes: number[] = [];
+  for (let i = 0; i < 18; i++) {
+    holes.push(((startHole - 1 + i) % 18) + 1);
+  }
+  return holes;
+}
+
+function plannedShotgunHole(startHole: number, groupIndexWithinCategory: number) {
+  const seq = buildHoleSequence(startHole);
+  return seq[Math.floor(groupIndexWithinCategory / 2) % seq.length];
+}
+
 export async function generateGroupsByCategory(formData: FormData) {
   const supabase = await createClient();
 
@@ -661,6 +735,7 @@ export async function generateGroupsByCategory(formData: FormData) {
   const round_id = reqStr(formData, "round_id");
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
+  const planRows = normalizePlanRows(formData);
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
@@ -792,12 +867,15 @@ export async function generateGroupsByCategory(formData: FormData) {
     .eq("tournament_id", tournament_id)
     .in("status", ["active", "confirmed"]);
 
+  const plannedCategoryIds = planRows.map((row) => row.id).filter((id) => id !== "NO_CAT");
   const roundCategoryId =
     typeof r.category_id === "string" && r.category_id.trim()
       ? r.category_id.trim()
       : null;
 
-  if (roundCategoryId) {
+  if (plannedCategoryIds.length > 0) {
+    entriesQuery = entriesQuery.in("category_id", plannedCategoryIds);
+  } else if (roundCategoryId) {
     entriesQuery = entriesQuery.eq("category_id", roundCategoryId);
   }
 
@@ -808,8 +886,8 @@ export async function generateGroupsByCategory(formData: FormData) {
   const entries: EntryRow[] = (eData ?? []) as any[];
   if (entries.length === 0) {
     throw new Error(
-      roundCategoryId
-        ? "No hay inscritos activos/confirmados para la categoría de este round."
+      plannedCategoryIds.length > 0 || roundCategoryId
+        ? "No hay inscritos activos/confirmados para las categorías de esta planeación."
         : "No hay inscritos (status active/confirmed) para generar grupos."
     );
   }
@@ -869,7 +947,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     byCat.get(key)!.push(e);
   }
 
-  const catKeys = Array.from(byCat.keys()).sort((a, b) => {
+  const defaultCatKeys = Array.from(byCat.keys()).sort((a, b) => {
     if (a === "NO_CAT") return 1;
     if (b === "NO_CAT") return -1;
 
@@ -904,11 +982,24 @@ export async function generateGroupsByCategory(formData: FormData) {
     return av - bv;
   });
 
+  const planByCategory = new Map(planRows.map((row) => [row.id, row]));
+  const startHoleSequence = [1, 10, 2, 11, 3, 12, 4, 13, 5, 14, 6, 15, 7, 16, 8, 17, 9, 18];
+
+  const catKeys = planRows.length > 0
+    ? planRows.map((row) => row.id).filter((id) => byCat.has(id))
+    : defaultCatKeys;
+
   type EntryGroupItem = (typeof resolved)[number];
-  const groupedChunks: EntryGroupItem[][] = [];
+  const plannedGroups: Array<{
+    categoryId: string;
+    categoryStartHole: number;
+    chunk: EntryGroupItem[];
+    indexWithinCategory: number;
+  }> = [];
 
   for (const k of catKeys) {
-    const list = byCat.get(k)!;
+    const list = byCat.get(k);
+    if (!list || list.length === 0) continue;
 
     list.sort((a, b) => {
       const ahi = a._hi == null ? 9999 : Number(a._hi);
@@ -925,22 +1016,40 @@ export async function generateGroupsByCategory(formData: FormData) {
       );
     });
 
-    groupedChunks.push(...chunkN(list, group_size));
+    const plan = planByCategory.get(k);
+    const preferredSize = plan?.groupSize ?? group_size;
+    const categoryStartHole = plan?.startHole ?? startHoleSequence[plannedGroups.length % startHoleSequence.length];
+    const chunks = buildBalancedChunks(list, preferredSize);
+
+    for (let i = 0; i < chunks.length; i++) {
+      plannedGroups.push({
+        categoryId: k,
+        categoryStartHole,
+        chunk: chunks[i],
+        indexWithinCategory: i,
+      });
+    }
   }
 
-  const totalGroups = groupedChunks.length;
+  if (plannedGroups.length === 0) {
+    throw new Error("No hay grupos válidos para generar con la planeación actual.");
+  }
+
   let groupNo = 1;
 
-  for (let i = 0; i < groupedChunks.length; i++) {
-    const g = groupedChunks[i];
+  for (let i = 0; i < plannedGroups.length; i++) {
+    const planned = plannedGroups[i];
+    const g = planned.chunk;
 
     const tee_time =
       canAutoTeeTimes ? formatHHMM((baseMinutes as number) + i * (interval as number)) : null;
 
     const starting_hole =
-      startType === "shotgun" ? computeShotgunHole(i, totalGroups) : null;
+      startType === "shotgun"
+        ? plannedShotgunHole(planned.categoryStartHole, planned.indexWithinCategory)
+        : null;
 
-    const catId = g[0]?._catId ?? "NO_CAT";
+    const catId = planned.categoryId;
     const meta = catId !== "NO_CAT" ? catMetaById.get(catId) : null;
 
     let notes: string | null = null;
