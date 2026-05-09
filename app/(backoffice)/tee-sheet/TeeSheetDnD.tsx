@@ -55,6 +55,70 @@ function catKey(notes: string | null) {
   return v || "SIN CATEGORÍA";
 }
 
+
+type CategoryColorClasses = {
+  card: string;
+  header: string;
+  stripe: string;
+  player: string;
+  badge: string;
+  cardStyle: React.CSSProperties;
+  headerStyle: React.CSSProperties;
+  stripeStyle: React.CSSProperties;
+  playerStyle: React.CSSProperties;
+  badgeStyle: React.CSSProperties;
+};
+
+const CATEGORY_COLOR_PALETTE = [
+  { bg: "#e0f2fe", header: "#bae6fd", border: "#38bdf8", stripe: "#0284c7", badge: "#7dd3fc" },
+  { bg: "#dcfce7", header: "#bbf7d0", border: "#4ade80", stripe: "#16a34a", badge: "#86efac" },
+  { bg: "#fef3c7", header: "#fde68a", border: "#f59e0b", stripe: "#d97706", badge: "#fcd34d" },
+  { bg: "#ede9fe", header: "#ddd6fe", border: "#8b5cf6", stripe: "#7c3aed", badge: "#c4b5fd" },
+  { bg: "#ffe4e6", header: "#fecdd3", border: "#fb7185", stripe: "#e11d48", badge: "#fda4af" },
+  { bg: "#cffafe", header: "#a5f3fc", border: "#22d3ee", stripe: "#0891b2", badge: "#67e8f9" },
+  { bg: "#ecfccb", header: "#d9f99d", border: "#84cc16", stripe: "#65a30d", badge: "#bef264" },
+  { bg: "#ffedd5", header: "#fed7aa", border: "#fb923c", stripe: "#ea580c", badge: "#fdba74" },
+  { bg: "#fae8ff", header: "#f5d0fe", border: "#d946ef", stripe: "#c026d3", badge: "#f0abfc" },
+  { bg: "#ccfbf1", header: "#99f6e4", border: "#2dd4bf", stripe: "#0d9488", badge: "#5eead4" },
+];
+
+function makeCategoryColor(index: number): CategoryColorClasses {
+  const c = CATEGORY_COLOR_PALETTE[index % CATEGORY_COLOR_PALETTE.length];
+  return {
+    card: "",
+    header: "",
+    stripe: "",
+    player: "",
+    badge: "",
+    cardStyle: {
+      backgroundColor: c.bg,
+      borderColor: c.border,
+    },
+    headerStyle: {
+      backgroundColor: c.header,
+      borderColor: c.border,
+    },
+    stripeStyle: {
+      backgroundColor: c.stripe,
+    },
+    playerStyle: {
+      backgroundColor: "rgba(255,255,255,0.78)",
+      borderColor: c.border,
+    },
+    badgeStyle: {
+      backgroundColor: c.badge,
+      color: "#0f172a",
+    },
+  };
+}
+
+function getCategoryColorClasses(categoryLabel: string | null | undefined) {
+  const key = catKey(categoryLabel ?? "");
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return makeCategoryColor(hash % CATEGORY_COLOR_PALETTE.length);
+}
+
 function nameOf(m: MemberUI) {
   const ln = (m.last_name ?? "").trim();
   const fn = (m.first_name ?? "").trim();
@@ -134,6 +198,22 @@ export default function TeeSheetDnD({
     () => [...groups].sort((a, b) => a.group_no - b.group_no),
     [groups]
   );
+
+  const categoryColorByLabel = useMemo(() => {
+    const labels = Array.from(new Set(groupsSorted.map((g) => catKey(g.notes))));
+    labels.sort((a, b) => {
+      if (a === "SIN CATEGORÍA" && b !== "SIN CATEGORÍA") return 1;
+      if (b === "SIN CATEGORÍA" && a !== "SIN CATEGORÍA") return -1;
+      return a.localeCompare(b);
+    });
+
+    const map = new Map<string, CategoryColorClasses>();
+    labels.forEach((label, index) => {
+      map.set(label, makeCategoryColor(index));
+    });
+
+    return map;
+  }, [groupsSorted]);
 
   const membersCountByGroup = useMemo(() => {
     const m = new Map<string, number>();
@@ -443,6 +523,7 @@ export default function TeeSheetDnD({
                 maxGroupSize={maxGroupSize}
                 qn={qn}
                 highlight={highlightGroupId === g.id}
+                categoryColor={categoryColorByLabel.get(catKey(g.notes)) ?? getCategoryColorClasses(catKey(g.notes))}
                 setRef={(el) => groupElById.current.set(g.id, el)}
               />
             );
@@ -475,6 +556,7 @@ function DroppableGroupCard({
   maxGroupSize,
   qn,
   highlight,
+  categoryColor,
   setRef,
 }: {
   group: GroupUI;
@@ -482,11 +564,15 @@ function DroppableGroupCard({
   maxGroupSize: number;
   qn: string;
   highlight: boolean;
+  categoryColor: CategoryColorClasses;
   setRef: (el: HTMLDivElement | null) => void;
 }) {
   const { setNodeRef: setGroupDropRef, isOver: isOverGroup } = useDroppable({
     id: groupDropId(group.id),
   });
+
+  const categoryLabel = catKey(group.notes);
+  const color = categoryColor;
 
   return (
     <div
@@ -495,14 +581,16 @@ function DroppableGroupCard({
         setGroupDropRef(el);
       }}
       className={[
-        "rounded border bg-white p-0.5",
+        "rounded border p-0.5 shadow-sm transition-colors",
+        color.card,
         highlight ? "ring-2 ring-black" : "",
         isOverGroup ? "ring-2 ring-blue-500" : "",
       ].join(" ")}
+      style={color.cardStyle}
       title="Suelta aquí para mandar al final del grupo"
     >
-      <div className="rounded-sm border bg-gray-50 px-1 py-0.5">
-        <div className="flex items-center justify-between gap-1 border-b border-slate-200 pb-0.5">
+      <div className={["rounded-sm border px-1 py-0.5", color.header].join(" ")} style={color.headerStyle}>
+        <div className="flex items-center justify-between gap-1 border-b border-slate-200/70 pb-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="text-[10px] font-semibold text-slate-400">
               G{group.group_no}
@@ -516,8 +604,8 @@ function DroppableGroupCard({
               {group.starting_label ?? (group.starting_hole ? `H${group.starting_hole}` : "H-")}
             </div>
 
-            <div className="min-w-0 truncate text-[10px] text-slate-700">
-              {group.notes ?? "SIN CATEGORÍA"}
+            <div className={["min-w-0 truncate rounded px-1 py-0.5 text-[10px] font-semibold", color.badge].join(" ")} style={color.badgeStyle}>
+              {categoryLabel}
             </div>
           </div>
 
@@ -526,11 +614,13 @@ function DroppableGroupCard({
           </div>
         </div>
 
+        <div className={["mt-0.5 h-1 rounded-full", color.stripe].join(" ")} style={color.stripeStyle} />
+
         <div className="mt-0.5 space-y-0.5">
           {mem.map((m, idx) => (
             <React.Fragment key={m.entry_id}>
               <DropSlot groupId={group.id} pos={idx + 1} />
-              <PlayerRow member={m} qn={qn} />
+              <PlayerRow member={m} qn={qn} colorClassName={color.player} colorStyle={color.playerStyle} />
             </React.Fragment>
           ))}
 
@@ -574,9 +664,13 @@ function DropSlot({
 function PlayerRow({
   member,
   qn,
+  colorClassName,
+  colorStyle,
 }: {
   member: MemberUI;
   qn: string;
+  colorClassName: string;
+  colorStyle: React.CSSProperties;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -584,6 +678,7 @@ function PlayerRow({
     });
 
   const style: React.CSSProperties = {
+    ...colorStyle,
     transform: transform
       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
       : undefined,
@@ -598,7 +693,8 @@ function PlayerRow({
       ref={setNodeRef}
       style={style}
       className={[
-        "rounded border border-red-400 bg-yellow-100 px-1.5 py-0.5",
+        "rounded border px-1.5 py-0.5 shadow-[0_1px_0_rgba(15,23,42,0.04)]",
+        colorClassName,
         isMatch ? "ring-2 ring-black" : "",
       ].join(" ")}
       {...listeners}
