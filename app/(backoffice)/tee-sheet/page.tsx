@@ -51,7 +51,7 @@ type MemberUI = {
   handicap_index: number | null;
 };
 
-type GroupUI = GroupRow & { members: MemberUI[] };
+type GroupUI = GroupRow & { members: MemberUI[]; starting_label: string | null };
 
 function catKey(notes: string | null) {
   const v = (notes ?? "").trim();
@@ -207,10 +207,32 @@ for (const row of membersRaw) {
   membersByGroup.get(gid)!.push(item);
 }
 
-  const groupsForUI: GroupUI[] = groups.map((g) => ({
-    ...g,
-    members: membersByGroup.get(g.id) ?? [],
-  }));
+  const sortedGroups = [...groups].sort((a, b) => a.group_no - b.group_no);
+  const totalByHole = new Map<number, number>();
+  for (const g of sortedGroups) {
+    if (typeof g.starting_hole !== "number") continue;
+    totalByHole.set(g.starting_hole, (totalByHole.get(g.starting_hole) ?? 0) + 1);
+  }
+
+  const seenByHole = new Map<number, number>();
+  const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
+    let starting_label: string | null = null;
+
+    if (typeof g.starting_hole === "number") {
+      const seen = (seenByHole.get(g.starting_hole) ?? 0) + 1;
+      seenByHole.set(g.starting_hole, seen);
+
+      const total = totalByHole.get(g.starting_hole) ?? 1;
+      const suffix = total > 1 ? (seen === 1 ? "B" : "A") : "A";
+      starting_label = `H${g.starting_hole}${suffix}`;
+    }
+
+    return {
+      ...g,
+      starting_label,
+      members: membersByGroup.get(g.id) ?? [],
+    };
+  });
 
   const categoriesSet = new Set<string>();
   for (const g of groupsForUI) {

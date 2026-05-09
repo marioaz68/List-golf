@@ -296,27 +296,27 @@ export default function TeeSheetDnD({
 
   if (!mounted) {
     return (
-      <section className="border rounded-md p-2 bg-white">
-        <div className="text-sm text-gray-600">Cargando grupos…</div>
+      <section className="border rounded bg-white p-1.5">
+        <div className="text-[11px] text-gray-600">Cargando grupos…</div>
       </section>
     );
   }
 
   return (
-    <section className="space-y-2">
-      <div className="border rounded-md p-2 bg-white">
-        <div className="flex flex-wrap gap-2 items-center justify-between">
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="text-sm font-semibold">Grupos</div>
+    <section className="space-y-1.5">
+      <div className="border rounded bg-white p-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="text-[12px] font-semibold">Grupos</div>
 
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar…"
-              className="border rounded px-2 py-1 text-xs w-[160px]"
+              className="h-6 w-[145px] rounded border px-1.5 text-[11px]"
             />
 
-            <label className="flex items-center gap-1 text-xs select-none">
+            <label className="flex items-center gap-1 text-[11px] select-none">
               <input
                 type="checkbox"
                 checked={onlyOpen}
@@ -325,7 +325,7 @@ export default function TeeSheetDnD({
               Huecos
             </label>
 
-            <label className="flex items-center gap-1 text-xs select-none">
+            <label className="flex items-center gap-1 text-[11px] select-none">
               <input
                 type="checkbox"
                 checked={onlyMatchGroups}
@@ -338,7 +338,7 @@ export default function TeeSheetDnD({
             {(q || category !== "ALL" || onlyOpen || onlyMatchGroups) && (
               <button
                 type="button"
-                className="text-xs underline"
+                className="text-[11px] underline"
                 onClick={() => {
                   setQ("");
                   setCategory(initialCategory || "ALL");
@@ -351,24 +351,24 @@ export default function TeeSheetDnD({
             )}
           </div>
 
-          <div className="text-[11px] text-gray-600">
+          <div className="text-[10px] text-gray-600">
             G: <span className="font-semibold">{visibleGroups.length}</span> · J:{" "}
             <span className="font-semibold">{visiblePlayersCount}</span>
           </div>
         </div>
 
         {qn ? (
-          <div className="mt-2 border rounded p-2 bg-gray-50">
-            <div className="text-[11px] text-gray-700 mb-1">Resultados</div>
+          <div className="mt-1.5 rounded border bg-gray-50 p-1.5">
+            <div className="mb-1 text-[10px] text-gray-700">Resultados</div>
             {searchResults.length === 0 ? (
-              <div className="text-[11px] text-gray-600">Sin resultados.</div>
+              <div className="text-[10px] text-gray-600">Sin resultados.</div>
             ) : (
               <div className="flex flex-wrap gap-1">
                 {searchResults.map((r) => (
                   <button
                     key={r.entry_id}
                     type="button"
-                    className="border bg-white rounded px-2 py-1 text-[11px] hover:bg-gray-100"
+                    className="rounded border bg-white px-1.5 py-0.5 text-[10px] hover:bg-gray-100"
                     onClick={() => jumpToGroup(r.group_id)}
                     title={`Grupo ${r.group_no} · ${r.category_label}`}
                   >
@@ -380,10 +380,10 @@ export default function TeeSheetDnD({
           </div>
         ) : null}
 
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            className="border rounded px-2 py-1 text-xs"
+            className="rounded border px-1.5 py-0.5 text-[11px]"
             onClick={() =>
               startTransition(() => {
                 runAutoBalanceRPC().catch((e: any) =>
@@ -395,18 +395,18 @@ export default function TeeSheetDnD({
             Auto-balance
           </button>
 
-          <div className="text-[11px] text-gray-600">
-            Huecos usa objetivo {targetGroupSize} · máximo manual {maxGroupSize}
+          <div className="text-[10px] text-gray-600">
+            Huecos objetivo {targetGroupSize} · máximo manual {maxGroupSize}
           </div>
         </div>
 
         {lastError ? (
-          <div className="mt-2 border border-red-300 bg-red-50 text-red-800 px-2 py-1 rounded text-xs">
+          <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-1.5 py-1 text-[11px] text-red-800">
             {lastError}
           </div>
         ) : null}
 
-        {isPending ? <div className="mt-1 text-[11px] text-gray-600">Procesando…</div> : null}
+        {isPending ? <div className="mt-1 text-[10px] text-gray-600">Procesando…</div> : null}
       </div>
 
       <DndContext
@@ -416,7 +416,7 @@ export default function TeeSheetDnD({
         collisionDetection={rectIntersection}
         measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       >
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-1.5 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {visibleGroups.map((g) => {
             const mem = [...g.members].sort((a, b) => a.position - b.position);
 
@@ -436,8 +436,8 @@ export default function TeeSheetDnD({
 
         <DragOverlay adjustScale={false}>
           {activeDrag ? (
-            <div className="bg-white shadow-lg rounded border px-2 py-1 touch-none min-w-[180px]">
-              <div className="flex items-center gap-2 text-[11px] leading-none whitespace-nowrap overflow-hidden">
+            <div className="min-w-[170px] touch-none rounded border bg-white px-1.5 py-1 shadow-lg">
+              <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] leading-none">
                 <div className="w-4 shrink-0">{activeDrag.position}</div>
                 <div className="min-w-0 flex-1 truncate font-medium">
                   {nameOf(activeDrag)}
@@ -480,38 +480,38 @@ function DroppableGroupCard({
         setGroupDropRef(el);
       }}
       className={[
-        "border rounded-md bg-white p-1",
+        "rounded border bg-white p-0.5",
         highlight ? "ring-2 ring-black" : "",
         isOverGroup ? "ring-2 ring-blue-500" : "",
       ].join(" ")}
       title="Suelta aquí para mandar al final del grupo"
     >
-      <div className="border rounded-sm px-2 py-1 bg-gray-50">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="text-[11px] font-semibold text-slate-400">
+      <div className="rounded-sm border bg-gray-50 px-1 py-0.5">
+        <div className="flex items-center justify-between gap-1 border-b border-slate-200 pb-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <div className="text-[10px] font-semibold text-slate-400">
               G{group.group_no}
             </div>
 
-            <div className="text-sm font-semibold text-slate-900">
+            <div className="text-[11px] font-semibold text-slate-900">
               {group.tee_time ? group.tee_time : "--:--"}
             </div>
 
-            <div className="text-sm font-semibold text-slate-700">
+            <div className="text-[11px] font-semibold text-slate-700">
               H{group.starting_hole ?? "-"}
             </div>
 
-            <div className="min-w-0 truncate text-sm text-slate-700">
+            <div className="min-w-0 truncate text-[10px] text-slate-700">
               {group.notes ?? "SIN CATEGORÍA"}
             </div>
           </div>
 
-          <div className="shrink-0 text-sm font-semibold text-slate-600">
+          <div className="shrink-0 text-[10px] font-semibold text-slate-600">
             {mem.length}/{maxGroupSize}
           </div>
         </div>
 
-        <div className="mt-2 space-y-1">
+        <div className="mt-0.5 space-y-0.5">
           {mem.map((m, idx) => (
             <React.Fragment key={m.entry_id}>
               <DropSlot groupId={group.id} pos={idx + 1} />
@@ -543,14 +543,15 @@ function DropSlot({
     <div
       ref={setNodeRef}
       className={[
-        "rounded border border-dashed px-2 transition-all",
-        finalSlot ? "py-4" : "py-2",
-        isOver ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-white",
+        "rounded border border-dashed transition-all",
+        finalSlot ? "h-5" : "h-2",
+        isOver ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white",
       ].join(" ")}
+      title={finalSlot ? "Suelta aquí para mandar al final del grupo" : "Suelta aquí"}
     >
-      <div className="text-center text-[11px] text-slate-500">
-        {finalSlot ? "Suelta aquí para mandar al final del grupo" : ""}
-      </div>
+      {finalSlot ? (
+        <div className="text-center text-[9px] leading-5 text-slate-400">final</div>
+      ) : null}
     </div>
   );
 }
@@ -582,23 +583,23 @@ function PlayerRow({
       ref={setNodeRef}
       style={style}
       className={[
-        "rounded border border-red-500 bg-yellow-100 px-2 py-2",
+        "rounded border border-red-400 bg-yellow-100 px-1.5 py-0.5",
         isMatch ? "ring-2 ring-black" : "",
       ].join(" ")}
       {...listeners}
       {...attributes}
       title="Arrastra para mover"
     >
-      <div className="flex items-center gap-2 text-[14px] leading-5">
-        <div className="w-6 shrink-0 font-bold text-blue-700">
+      <div className="flex items-center gap-1.5 text-[11px] leading-4">
+        <div className="w-4 shrink-0 font-bold text-blue-700">
           {member.position}
         </div>
 
-        <div className="min-w-0 flex-1 font-medium text-slate-900 whitespace-normal break-words">
+        <div className="min-w-0 flex-1 truncate font-medium text-slate-900">
           {fullName}
         </div>
 
-        <div className="w-12 shrink-0 text-right font-bold text-green-700">
+        <div className="w-8 shrink-0 text-right font-bold text-green-700">
           {member.handicap_index ?? "-"}
         </div>
       </div>

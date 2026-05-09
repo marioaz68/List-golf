@@ -119,9 +119,48 @@ function formatHHMM(totalMinutes: number) {
 }
 
 function computeShotgunHole(groupIndexZeroBased: number, totalGroups: number) {
-  if (totalGroups <= 18) return (groupIndexZeroBased % 18) + 1;
-  if (totalGroups <= 36) return (Math.floor(groupIndexZeroBased / 2) % 18) + 1;
+  if (totalGroups <= 18) return groupIndexZeroBased + 1;
+
+  const extraOrder = getShotgunExtraHoleOrder();
+  const index = groupIndexZeroBased - 18;
+
+  if (index >= 0 && index < extraOrder.length) return extraOrder[index];
+
   throw new Error("Demasiados grupos para shotgun (máximo 36 con doble salida por hoyo).");
+}
+
+type ShotgunSlot = {
+  hole: number;
+  side: "A" | "B";
+  order: number;
+};
+
+function getShotgunExtraHoleOrder() {
+  // Orden profesional para dobles salidas:
+  // primero H1/H10, después pares 5, después pares 4, al final pares 3.
+  // Si después parametrizamos pares por campo, esta lista se puede sacar de tournament_holes.
+  return [1, 10, 5, 14, 2, 4, 6, 8, 11, 13, 15, 17, 3, 7, 9, 12, 16, 18];
+}
+
+function buildShotgunSlots() {
+  const singles: ShotgunSlot[] = Array.from({ length: 18 }, (_, i) => ({
+    hole: i + 1,
+    side: "A" as const,
+    order: i + 1,
+  }));
+
+  const doubles = getShotgunExtraHoleOrder().map((hole, i) => ({
+    hole,
+    side: "B" as const,
+    order: 100 + i + 1,
+  }));
+
+  return [...singles, ...doubles];
+}
+
+function slotSortKey(slot: ShotgunSlot) {
+  // Vista final: hoyo 1 al 18. Si hay doble salida, primero B y luego A.
+  return slot.hole * 10 + (slot.side === "B" ? 0 : 1);
 }
 
 async function renumberPositions(supabase: any, group_id: string) {
@@ -700,24 +739,15 @@ function buildBalancedChunks<T>(list: T[], preferredSize: number) {
   );
 }
 
-function buildDoubleShotgunLaneSlots(startHole: 1 | 10) {
-  const laneHoles = startHole === 1
-    ? [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    : [10, 11, 12, 13, 14, 15, 16, 17, 18];
-
-  const slots: number[] = [];
-  for (const hole of laneHoles) {
-    slots.push(hole, hole);
-  }
-
-  return slots;
-}
-
 function assignShotgunSlotsByCategoryOrder(
   categories: Array<{ categoryId: string; order: number; chunks: any[][] }>
 ) {
-  const lane1Slots = buildDoubleShotgunLaneSlots(1);
-  const lane10Slots = buildDoubleShotgunLaneSlots(10);
+  const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
+  const slots = buildShotgunSlots();
+
+  const lane1Slots = slots.filter((slot) => slot.hole >= 1 && slot.hole <= 9);
+  const lane10Slots = slots.filter((slot) => slot.hole >= 10 && slot.hole <= 18);
+
   let lane1Cursor = 0;
   let lane10Cursor = 0;
 
@@ -725,26 +755,35 @@ function assignShotgunSlotsByCategoryOrder(
     categoryId: string;
     chunk: any[];
     startingHole: number;
+    startingSide: "A" | "B";
+    displayOrder: number;
+    categoryOrder: number;
     indexWithinCategory: number;
   }> = [];
 
-  for (const category of categories) {
+  for (const category of sortedCategories) {
+    // Orden 1 inicia por el carril 1, orden 2 por el carril 10,
+    // orden 3 continúa detrás del carril 1, orden 4 detrás del 10, etc.
     const useLane10 = category.order % 2 === 0;
     const laneSlots = useLane10 ? lane10Slots : lane1Slots;
     let cursor = useLane10 ? lane10Cursor : lane1Cursor;
 
     if (cursor + category.chunks.length > laneSlots.length) {
-      const laneLabel = useLane10 ? "H10" : "H1";
+      const laneLabel = useLane10 ? "H10-H18" : "H1-H9";
       throw new Error(
         `No caben ${category.chunks.length} grupos de la categoría en el carril ${laneLabel}. Divide el bloque o ajusta categorías.`
       );
     }
 
     for (let i = 0; i < category.chunks.length; i++) {
+      const slot = laneSlots[cursor + i];
       out.push({
         categoryId: category.categoryId,
         chunk: category.chunks[i],
-        startingHole: laneSlots[cursor + i],
+        startingHole: slot.hole,
+        startingSide: slot.side,
+        displayOrder: slotSortKey(slot),
+        categoryOrder: category.order,
         indexWithinCategory: i,
       });
     }
@@ -754,7 +793,8 @@ function assignShotgunSlotsByCategoryOrder(
     else lane1Cursor = cursor;
   }
 
-  return out;
+  // La pantalla final queda ordenada por hoyo: 1B, 1A, 2B, 2A... hasta 18.
+  return out.sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
 export async function generateGroupsByCategory(formData: FormData) {
@@ -1078,7 +1118,11 @@ export async function generateGroupsByCategory(formData: FormData) {
     const g = planned.chunk;
 
     const tee_time =
-      canAutoTeeTimes ? formatHHMM((baseMinutes as number) + i * (interval as number)) : null;
+      startType === "shotgun"
+        ? (typeof r.start_time === "string" && r.start_time.trim() ? r.start_time.trim().slice(0, 5) : null)
+        : canAutoTeeTimes
+          ? formatHHMM((baseMinutes as number) + i * (interval as number))
+          : null;
 
     const starting_hole = startType === "shotgun" ? planned.startingHole : null;
 
