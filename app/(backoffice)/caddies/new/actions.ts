@@ -101,8 +101,16 @@ export async function createCaddieAction(formData: FormData) {
         .eq("whatsapp_phone_e164", whatsapp_phone_e164)
         .maybeSingle();
 
-    if (existingByWhatsappError) throw new Error(existingByWhatsappError.message);
-    if (existingByWhatsapp) throw new Error("Ya existe un caddie con ese WhatsApp");
+    if (existingByWhatsappError) {
+      throw new Error(existingByWhatsappError.message);
+    }
+
+    if (existingByWhatsapp) {
+      return {
+        ok: false,
+        error: "Ya existe un caddie con ese WhatsApp.",
+      };
+    }
   }
 
   if (phone) {
@@ -115,9 +123,15 @@ export async function createCaddieAction(formData: FormData) {
         .eq("phone", phone)
         .maybeSingle();
 
-    if (existingByNamePhoneError) throw new Error(existingByNamePhoneError.message);
+    if (existingByNamePhoneError) {
+      throw new Error(existingByNamePhoneError.message);
+    }
+
     if (existingByNamePhone) {
-      throw new Error("Ya existe un caddie con ese nombre y teléfono");
+      return {
+        ok: false,
+        error: "Ya existe un caddie con ese nombre y teléfono.",
+      };
     }
   }
 
@@ -146,6 +160,10 @@ export async function createCaddieAction(formData: FormData) {
 
   revalidatePath("/caddies");
   revalidatePath("/caddies/new");
+
+  return {
+    ok: true,
+  };
 }
 
 export async function updateCaddieAction(formData: FormData) {
@@ -183,8 +201,16 @@ export async function updateCaddieAction(formData: FormData) {
         .neq("id", caddie_id)
         .maybeSingle();
 
-    if (existingByWhatsappError) throw new Error(existingByWhatsappError.message);
-    if (existingByWhatsapp) throw new Error("Ya existe otro caddie con ese WhatsApp");
+    if (existingByWhatsappError) {
+      throw new Error(existingByWhatsappError.message);
+    }
+
+    if (existingByWhatsapp) {
+      return {
+        ok: false,
+        error: "Ya existe otro caddie con ese WhatsApp.",
+      };
+    }
   }
 
   const { error } = await supabase
@@ -210,6 +236,10 @@ export async function updateCaddieAction(formData: FormData) {
 
   revalidatePath("/caddies");
   revalidatePath("/caddies/new");
+
+  return {
+    ok: true,
+  };
 }
 
 export async function saveCaddieFavoritesAction(formData: FormData) {
