@@ -342,6 +342,7 @@ export default function CaddieClient({
   const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<Set<string>>(
     new Set()
   );
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (!selected) {
@@ -398,7 +399,15 @@ export default function CaddieClient({
   }
 
   async function handleCreateCaddie(formData: FormData) {
-    await createCaddieAction(formData);
+    setFormError("");
+
+    const result = await createCaddieAction(formData);
+
+    if (result?.ok === false) {
+      setFormError(result.error || "No se pudo guardar el caddie.");
+      return;
+    }
+
     setCreateFormKey((prev) => prev + 1);
     setSelected(null);
     setSearchCaddie("");
@@ -406,7 +415,15 @@ export default function CaddieClient({
   }
 
   async function handleUpdateCaddie(formData: FormData) {
-    await updateCaddieAction(formData);
+    setFormError("");
+
+    const result = await updateCaddieAction(formData);
+
+    if (result?.ok === false) {
+      setFormError(result.error || "No se pudo actualizar el caddie.");
+      return;
+    }
+
     router.refresh();
   }
 
@@ -520,6 +537,22 @@ export default function CaddieClient({
               <AntiAutofillTextarea name="notes" style={textareaStyle} />
             </div>
           </div>
+
+          {formError ? (
+            <div
+              style={{
+                border: "1px solid #fecaca",
+                background: "#fef2f2",
+                color: "#b91c1c",
+                borderRadius: 8,
+                padding: "10px 12px",
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              {formError}
+            </div>
+          ) : null}
 
           <div>
             <SubmitButton
