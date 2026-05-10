@@ -173,14 +173,12 @@ function clubColorFromShort(value: string | null) {
 }
 
 function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }) {
-  const [imgFailed, setImgFailed] = useState(false);
-
   const logo = member.club_logo_url || member.club_generated_logo_url || "";
   const shortName = normalizeClubShort(member.club_short_name || member.club_name);
   const color = member.club_primary_color || clubColorFromShort(shortName);
   const title = member.club_name || shortName;
 
-  if (logo && !imgFailed) {
+  if (logo) {
     return (
       <span
         className="shrink-0 overflow-hidden rounded-full border border-slate-300 bg-white shadow-[0_1px_1px_rgba(15,23,42,0.12)]"
@@ -194,7 +192,43 @@ function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }
           style={{ objectFit: "contain", padding: 2 }}
           draggable={false}
           referrerPolicy="no-referrer"
-          onError={() => setImgFailed(true)}
+          onError={(event) => {
+            const img = event.currentTarget;
+
+            if (img.dataset.failed) {
+              img.style.display = "none";
+
+              const parent = img.parentElement;
+              if (parent) {
+                parent.textContent = shortName;
+                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
+                parent.style.color = "#ffffff";
+                parent.style.fontWeight = "900";
+                parent.style.fontSize = "8px";
+                parent.style.letterSpacing = "0.3px";
+              }
+
+              return;
+            }
+
+            img.dataset.failed = "1";
+
+            if (member.club_generated_logo_url) {
+              img.src = member.club_generated_logo_url;
+            } else {
+              img.style.display = "none";
+
+              const parent = img.parentElement;
+              if (parent) {
+                parent.textContent = shortName;
+                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
+                parent.style.color = "#ffffff";
+                parent.style.fontWeight = "900";
+                parent.style.fontSize = "8px";
+                parent.style.letterSpacing = "0.3px";
+              }
+            }
+          }}
         />
       </span>
     );
