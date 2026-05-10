@@ -191,6 +191,44 @@ function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }
           className="block h-full w-full"
           style={{ objectFit: "contain", padding: 2 }}
           draggable={false}
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            const img = event.currentTarget;
+
+            if (img.dataset.failed) {
+              img.style.display = "none";
+
+              const parent = img.parentElement;
+              if (parent) {
+                parent.textContent = shortName;
+                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
+                parent.style.color = "#ffffff";
+                parent.style.fontWeight = "900";
+                parent.style.fontSize = "8px";
+                parent.style.letterSpacing = "0.3px";
+              }
+
+              return;
+            }
+
+            img.dataset.failed = "1";
+
+            if (member.club_generated_logo_url) {
+              img.src = member.club_generated_logo_url;
+            } else {
+              img.style.display = "none";
+
+              const parent = img.parentElement;
+              if (parent) {
+                parent.textContent = shortName;
+                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
+                parent.style.color = "#ffffff";
+                parent.style.fontWeight = "900";
+                parent.style.fontSize = "8px";
+                parent.style.letterSpacing = "0.3px";
+              }
+            }
+          }}
         />
       </span>
     );
