@@ -172,8 +172,30 @@ function clubColorFromShort(value: string | null) {
   return palette[hashString(seed) % palette.length];
 }
 
+function normalizeLogoUrl(value: string | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+
+    if (url.hostname === "www.dropbox.com" || url.hostname === "dropbox.com") {
+      url.hostname = "dl.dropboxusercontent.com";
+      url.searchParams.delete("dl");
+      url.searchParams.delete("raw");
+      return url.toString();
+    }
+
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }) {
-  const logo = member.club_logo_url || member.club_generated_logo_url || "";
+  const officialLogo = normalizeLogoUrl(member.club_logo_url);
+  const generatedLogo = normalizeLogoUrl(member.club_generated_logo_url);
+  const logo = officialLogo || generatedLogo || "";
   const shortName = normalizeClubShort(member.club_short_name || member.club_name);
   const color = member.club_primary_color || clubColorFromShort(shortName);
   const title = member.club_name || shortName;
@@ -192,43 +214,6 @@ function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }
           style={{ objectFit: "contain", padding: 2 }}
           draggable={false}
           referrerPolicy="no-referrer"
-          onError={(event) => {
-            const img = event.currentTarget;
-
-            if (img.dataset.failed) {
-              img.style.display = "none";
-
-              const parent = img.parentElement;
-              if (parent) {
-                parent.textContent = shortName;
-                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
-                parent.style.color = "#ffffff";
-                parent.style.fontWeight = "900";
-                parent.style.fontSize = "8px";
-                parent.style.letterSpacing = "0.3px";
-              }
-
-              return;
-            }
-
-            img.dataset.failed = "1";
-
-            if (member.club_generated_logo_url) {
-              img.src = member.club_generated_logo_url;
-            } else {
-              img.style.display = "none";
-
-              const parent = img.parentElement;
-              if (parent) {
-                parent.textContent = shortName;
-                parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
-                parent.style.color = "#ffffff";
-                parent.style.fontWeight = "900";
-                parent.style.fontSize = "8px";
-                parent.style.letterSpacing = "0.3px";
-              }
-            }
-          }}
         />
       </span>
     );
