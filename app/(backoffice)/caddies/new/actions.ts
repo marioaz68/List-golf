@@ -108,7 +108,7 @@ export async function createCaddieAction(formData: FormData) {
     if (existingByWhatsapp) {
       return {
         ok: false,
-        error: "Ya existe un caddie con ese WhatsApp.",
+        error: "Ya existe un caddie con ese teléfono.",
       };
     }
   }
@@ -208,7 +208,7 @@ export async function updateCaddieAction(formData: FormData) {
     if (existingByWhatsapp) {
       return {
         ok: false,
-        error: "Ya existe otro caddie con ese WhatsApp.",
+        error: "Ya existe otro caddie con ese teléfono.",
       };
     }
   }
