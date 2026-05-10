@@ -1,4 +1,5 @@
 "use client";
+// logo fallback fix v2
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
