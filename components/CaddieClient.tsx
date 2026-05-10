@@ -343,6 +343,8 @@ export default function CaddieClient({
     new Set()
   );
   const [formError, setFormError] = useState("");
+  const [editError, setEditError] = useState("");
+  const editSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!selected) {
@@ -398,6 +400,18 @@ export default function CaddieClient({
     });
   }
 
+  function handleSelectCaddie(caddie: Caddie) {
+    setEditError("");
+    setSelected(caddie);
+
+    window.requestAnimationFrame(() => {
+      editSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   async function handleCreateCaddie(formData: FormData) {
     setFormError("");
 
@@ -415,14 +429,34 @@ export default function CaddieClient({
   }
 
   async function handleUpdateCaddie(formData: FormData) {
-    setFormError("");
+    setEditError("");
 
     const result = await updateCaddieAction(formData);
 
     if (result?.ok === false) {
-      setFormError(result.error || "No se pudo actualizar el caddie.");
+      setEditError(result.error || "No se pudo actualizar el caddie.");
       return;
     }
+
+    setSelected((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        first_name: String(formData.get("first_name") ?? "").trim() || null,
+        last_name: String(formData.get("last_name") ?? "").trim() || null,
+        nickname: String(formData.get("nickname") ?? "").trim() || null,
+        phone: String(formData.get("phone") ?? "").trim() || null,
+        telegram: String(formData.get("telegram") ?? "").trim() || null,
+        whatsapp_phone: String(formData.get("whatsapp_phone") ?? "").trim() || null,
+        whatsapp_phone_e164:
+          String(formData.get("whatsapp_phone_e164") ?? "").trim() || null,
+        email: String(formData.get("email") ?? "").trim() || null,
+        club_id: String(formData.get("club_id") ?? "").trim() || null,
+        level: String(formData.get("level") ?? "").trim() || null,
+        notes: String(formData.get("notes") ?? "").trim() || null,
+      };
+    });
 
     router.refresh();
   }
@@ -641,7 +675,7 @@ export default function CaddieClient({
                         >
                           <button
                             type="button"
-                            onClick={() => setSelected(c)}
+                            onClick={() => handleSelectCaddie(c)}
                             style={ghostButtonStyle}
                           >
                             Editar
@@ -668,7 +702,7 @@ export default function CaddieClient({
       </div>
 
       {selected && (
-        <div style={cardStyle}>
+        <div ref={editSectionRef} style={cardStyle}>
           <div style={cardHeader}>
             <h2 style={titleStyle}>EDITAR CADDIE</h2>
             <p style={subStyle}>{displayCaddieName(selected)}</p>
@@ -800,6 +834,22 @@ export default function CaddieClient({
                 />
               </div>
             </div>
+
+            {editError ? (
+              <div
+                style={{
+                  border: "1px solid #fecaca",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {editError}
+              </div>
+            ) : null}
 
             <div>
               <SubmitButton
