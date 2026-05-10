@@ -53,6 +53,7 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
   club_logo_url: string | null;
@@ -254,6 +255,11 @@ for (const row of membersRaw) {
     ? player.clubs[0] ?? null
     : player?.clubs ?? null;
 
+  const playerClubId =
+    typeof player?.club_id === "string" && player.club_id.trim()
+      ? player.club_id.trim()
+      : null;
+
   const item: MemberUI = {
     entry_id: row.entry_id,
     group_id: gid,
@@ -261,10 +267,13 @@ for (const row of membersRaw) {
     first_name: player?.first_name ?? null,
     last_name: player?.last_name ?? null,
     handicap_index: te?.handicap_index ?? null,
+    club_id: playerClubId,
     club_name: club?.name ?? null,
     club_short_name: club?.short_name ?? null,
-    club_logo_url: club?.logo_url ?? null,
-    club_generated_logo_url: club?.generated_logo_url ?? null,
+    club_logo_url: playerClubId
+      ? `/api/club-logo?club_id=${encodeURIComponent(playerClubId)}`
+      : null,
+    club_generated_logo_url: null,
     club_primary_color: club?.primary_color ?? null,
   };
 

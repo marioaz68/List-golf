@@ -1,5 +1,4 @@
 "use client";
-// logo fallback fix v2
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -25,6 +24,7 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
   club_logo_url: string | null;
@@ -172,30 +172,8 @@ function clubColorFromShort(value: string | null) {
   return palette[hashString(seed) % palette.length];
 }
 
-function normalizeLogoUrl(value: string | null) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-
-  try {
-    const url = new URL(raw);
-
-    if (url.hostname === "www.dropbox.com" || url.hostname === "dropbox.com") {
-      url.hostname = "dl.dropboxusercontent.com";
-      url.searchParams.delete("dl");
-      url.searchParams.delete("raw");
-      return url.toString();
-    }
-
-    return raw;
-  } catch {
-    return raw;
-  }
-}
-
 function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }) {
-  const officialLogo = normalizeLogoUrl(member.club_logo_url);
-  const generatedLogo = normalizeLogoUrl(member.club_generated_logo_url);
-  const logo = officialLogo || generatedLogo || "";
+  const logo = String(member.club_logo_url ?? "").trim();
   const shortName = normalizeClubShort(member.club_short_name || member.club_name);
   const color = member.club_primary_color || clubColorFromShort(shortName);
   const title = member.club_name || shortName;
@@ -213,7 +191,6 @@ function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }
           className="block h-full w-full"
           style={{ objectFit: "contain", padding: 2 }}
           draggable={false}
-          referrerPolicy="no-referrer"
         />
       </span>
     );
