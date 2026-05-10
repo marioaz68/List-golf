@@ -24,6 +24,11 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  club_name: string | null;
+  club_short_name: string | null;
+  club_logo_url: string | null;
+  club_generated_logo_url: string | null;
+  club_primary_color: string | null;
 };
 
 type GroupUI = {
@@ -123,6 +128,87 @@ function nameOf(m: MemberUI) {
   const ln = (m.last_name ?? "").trim();
   const fn = (m.first_name ?? "").trim();
   return `${ln} ${fn}`.trim() || "Jugador";
+}
+
+function normalizeClubShort(value: string | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "CLB";
+
+  return raw
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 3)
+    .toUpperCase() || "CLB";
+}
+
+function hashString(value: string) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function clubColorFromShort(value: string | null) {
+  const palette = [
+    "#0f766e",
+    "#1d4ed8",
+    "#7c3aed",
+    "#be123c",
+    "#b45309",
+    "#15803d",
+    "#0369a1",
+    "#4338ca",
+    "#a21caf",
+    "#0f172a",
+    "#166534",
+    "#92400e",
+  ];
+
+  const seed = normalizeClubShort(value);
+  return palette[hashString(seed) % palette.length];
+}
+
+function ClubMiniLogo({ member, size = 20 }: { member: MemberUI; size?: number }) {
+  const logo = member.club_logo_url || member.club_generated_logo_url || "";
+  const shortName = normalizeClubShort(member.club_short_name || member.club_name);
+  const color = member.club_primary_color || clubColorFromShort(shortName);
+  const title = member.club_name || shortName;
+
+  if (logo) {
+    return (
+      <span
+        className="shrink-0 overflow-hidden rounded-full border border-slate-300 bg-white shadow-[0_1px_1px_rgba(15,23,42,0.12)]"
+        style={{ width: size, height: size }}
+        title={title}
+      >
+        <img
+          src={logo}
+          alt={title}
+          className="block h-full w-full"
+          style={{ objectFit: "contain", padding: 2 }}
+          draggable={false}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex shrink-0 items-center justify-center rounded-full border border-slate-300 text-[8px] font-black text-white shadow-[0_1px_1px_rgba(15,23,42,0.12)]"
+      style={{
+        width: size,
+        height: size,
+        background: `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`,
+        letterSpacing: 0.3,
+      }}
+      title={title}
+    >
+      {shortName}
+    </span>
+  );
 }
 
 function entryDragId(entryId: string) {
@@ -535,6 +621,7 @@ export default function TeeSheetDnD({
             <div className="min-w-[170px] touch-none rounded border bg-white px-1.5 py-1 shadow-lg">
               <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[11px] leading-none">
                 <div className="w-4 shrink-0">{activeDrag.position}</div>
+                <ClubMiniLogo member={activeDrag} size={20} />
                 <div className="min-w-0 flex-1 truncate font-medium">
                   {nameOf(activeDrag)}
                 </div>
@@ -705,6 +792,8 @@ function PlayerRow({
         <div className="w-4 shrink-0 font-bold text-blue-700">
           {member.position}
         </div>
+
+        <ClubMiniLogo member={member} size={20} />
 
         <div className="min-w-0 flex-1 truncate font-medium text-slate-900">
           {fullName}

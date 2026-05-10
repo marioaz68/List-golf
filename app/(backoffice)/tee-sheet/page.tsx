@@ -53,6 +53,11 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  club_name: string | null;
+  club_short_name: string | null;
+  club_logo_url: string | null;
+  club_generated_logo_url: string | null;
+  club_primary_color: string | null;
 };
 
 type GroupUI = GroupRow & { members: MemberUI[]; starting_label: string | null };
@@ -208,7 +213,15 @@ export default async function TeeSheetPage(props: {
               handicap_index,
               players (
                 first_name,
-                last_name
+                last_name,
+                club_id,
+                clubs:clubs (
+                  name,
+                  short_name,
+                  logo_url,
+                  generated_logo_url,
+                  primary_color
+                )
               )
             )
           `)
@@ -237,6 +250,10 @@ for (const row of membersRaw) {
     ? te.players[0] ?? null
     : te?.players ?? null;
 
+  const club = Array.isArray(player?.clubs)
+    ? player.clubs[0] ?? null
+    : player?.clubs ?? null;
+
   const item: MemberUI = {
     entry_id: row.entry_id,
     group_id: gid,
@@ -244,6 +261,11 @@ for (const row of membersRaw) {
     first_name: player?.first_name ?? null,
     last_name: player?.last_name ?? null,
     handicap_index: te?.handicap_index ?? null,
+    club_name: club?.name ?? null,
+    club_short_name: club?.short_name ?? null,
+    club_logo_url: club?.logo_url ?? null,
+    club_generated_logo_url: club?.generated_logo_url ?? null,
+    club_primary_color: club?.primary_color ?? null,
   };
 
   if (!membersByGroup.has(gid)) membersByGroup.set(gid, []);
