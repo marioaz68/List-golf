@@ -36,8 +36,82 @@ function normalizeShortName(value: string | null) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]/g, "")
-    .slice(0, 6)
+    .slice(0, 3)
     .toUpperCase();
+}
+
+function cleanClubWords(value: string) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+const CLUB_SHORT_OVERRIDES: Record<string, string> = {
+  "BOSQUE REAL COUNTRY CLUB": "BRC",
+  "BOSQUE REAL EJECUTIVO": "BRE",
+  "CAMPESTRE CELAYA": "CCY",
+  "CAMPO DE GOLF EL CID": "CID",
+  "CAMPO DE GOLF ZIBATA": "ZIB",
+  "CLUB CAMPESTRE CHILUCA": "CHI",
+  "CLUB CAMPESTRE DE CELAYA": "CCC",
+  "CLUB CAMPESTRE DE LEON": "CCL",
+};
+
+function buildSmartClubShortName(name: string) {
+  const cleaned = cleanClubWords(name);
+  if (!cleaned) return null;
+
+  const override = CLUB_SHORT_OVERRIDES[cleaned];
+  if (override) return override;
+
+  let words = cleaned.split(" ").filter(Boolean);
+
+  // Campo de Golf El Cid -> CID / Campo de Golf Zibatá -> ZIB
+  if (
+    words[0] === "CAMPO" &&
+    words[1] === "DE" &&
+    words[2] === "GOLF"
+  ) {
+    words = words.slice(3).filter((word) => !["EL", "LA", "LOS", "LAS"].includes(word));
+    const mainWord = words[0];
+    if (mainWord) return normalizeShortName(mainWord);
+  }
+
+  // Club Campestre Chiluca -> CHI, but Club Campestre de Celaya -> CCC.
+  if (words[0] === "CLUB" && words[1] === "CAMPESTRE") {
+    const afterCampestre = words.slice(2).filter((word) => word !== "DE");
+    if (afterCampestre.length === 1 && words[2] !== "DE") {
+      return normalizeShortName(afterCampestre[0]);
+    }
+  }
+
+  const ignored = new Set(["DE", "DEL", "LA", "LAS", "LOS", "EL", "Y"]);
+  const meaningful = words.filter((word) => !ignored.has(word));
+
+  if (meaningful.length >= 3) {
+    return normalizeShortName(meaningful.map((word) => word[0]).join(""));
+  }
+
+  if (meaningful.length === 2) {
+    const first = meaningful[0];
+    const second = meaningful[1];
+
+    if (first === "CAMPESTRE" && second.length >= 2) {
+      return normalizeShortName(`${first[0]}${second[0]}${second[second.length - 1]}`);
+    }
+
+    return normalizeShortName(`${first[0]}${second.slice(0, 2)}`);
+  }
+
+  return normalizeShortName(meaningful[0] || cleaned);
+}
+
+function getFinalClubShortName(name: string, submittedShortName: string | null) {
+  return normalizeShortName(submittedShortName) || buildSmartClubShortName(name) || "CLB";
 }
 
 function hashString(value: string) {
@@ -76,8 +150,8 @@ function buildGeneratedLogoDataUrl(params: {
   name: string;
   primary_color?: string | null;
 }) {
-  const shortName = normalizeShortName(params.short_name) || "CLUB";
-  const letters = shortName.slice(0, 3);
+  const shortName = normalizeShortName(params.short_name) || buildSmartClubShortName(params.name) || "CLB";
+  const letters = shortName;
   const bg = params.primary_color || colorFromShortName(shortName, params.name);
 
   const svg = `
@@ -221,7 +295,7 @@ export async function createClub(formData: FormData) {
   const supabase = createAdminClient();
 
   const name = reqStr(formData, "name");
-  const short_name = normalizeShortName(optStr(formData, "short_name"));
+  const short_name = getFinalClubShortName(name, optStr(formData, "short_name"));
   const is_active = boolFromForm(formData, "is_active");
   const normalized_name = normalizeText(name);
   const primary_color =
@@ -269,7 +343,7 @@ export async function updateClub(formData: FormData) {
 
   const club_id = reqStr(formData, "club_id");
   const name = reqStr(formData, "name");
-  const short_name = normalizeShortName(optStr(formData, "short_name"));
+  const short_name = getFinalClubShortName(name, optStr(formData, "short_name"));
   const is_active = boolFromForm(formData, "is_active");
   const normalized_name = normalizeText(name);
   const logo_url = optStr(formData, "logo_url");
