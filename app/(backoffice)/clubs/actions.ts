@@ -145,6 +145,22 @@ function colorFromShortName(shortName: string | null, name: string) {
   return palette[hashString(seed) % palette.length];
 }
 
+
+function normalizeDropboxUrl(url: string | null) {
+  const raw = String(url ?? "").trim();
+
+  if (!raw) return null;
+
+  if (raw.includes("www.dropbox.com")) {
+    return raw
+      .replace("https://www.dropbox.com", "https://dl.dropboxusercontent.com")
+      .replace("&raw=1", "")
+      .replace("?raw=1", "");
+  }
+
+  return raw;
+}
+
 function buildGeneratedLogoDataUrl(params: {
   short_name: string | null;
   name: string;
@@ -300,7 +316,7 @@ export async function createClub(formData: FormData) {
   const normalized_name = normalizeText(name);
   const primary_color =
     optStr(formData, "primary_color") || colorFromShortName(short_name, name);
-  const logo_url = optStr(formData, "logo_url");
+  const logo_url = normalizeDropboxUrl(optStr(formData, "logo_url"));
 
   if (!normalized_name) {
     throw new Error("Falta nombre válido del club.");
@@ -346,7 +362,7 @@ export async function updateClub(formData: FormData) {
   const short_name = getFinalClubShortName(name, optStr(formData, "short_name"));
   const is_active = boolFromForm(formData, "is_active");
   const normalized_name = normalizeText(name);
-  const logo_url = optStr(formData, "logo_url");
+  const logo_url = normalizeDropboxUrl(optStr(formData, "logo_url"));
   const existingClub = await getClubById(club_id);
 
   if (!existingClub) {
@@ -410,7 +426,7 @@ export async function updateClubLogo(formData: FormData) {
   const supabase = createAdminClient();
 
   const club_id = reqStr(formData, "club_id");
-  const logo_url = optStr(formData, "logo_url");
+  const logo_url = normalizeDropboxUrl(optStr(formData, "logo_url"));
   const primary_color = optStr(formData, "primary_color");
 
   const club = await getClubById(club_id);
