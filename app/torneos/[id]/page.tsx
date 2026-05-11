@@ -57,6 +57,9 @@ type RoundRow = {
   id: string;
   round_no: number;
   round_date: string | null;
+  notes: string | null;
+  start_type: string | null;
+  start_time: string | null;
 };
 
 type RoundScoreRow = {
@@ -105,6 +108,27 @@ type RoundStandingSnapshot = {
   played_rounds: number;
 };
 
+type PairingMember = {
+  entry_id: string;
+  position: number;
+  player_name: string;
+  club_label: string | null;
+  category_code: string | null;
+  handicap_index: number | null;
+};
+
+type PublicPairingGroup = {
+  id: string;
+  round_id: string;
+  round_no: number;
+  round_date: string | null;
+  group_no: number;
+  tee_time: string | null;
+  starting_hole: number | null;
+  notes: string | null;
+  members: PairingMember[];
+};
+
 export type LeaderboardRow = {
   entry_id: string;
   player_id: string;
@@ -139,6 +163,8 @@ export type LeaderboardRow = {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const STARTING_ORDER_CONFIRMED_MARKER = "[LIST_GOLF_STARTING_ORDER_CONFIRMED]";
+
 function oneOrNull<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -154,6 +180,10 @@ function normalizeClubLabel(value: ClubRef | ClubRef[] | null | undefined) {
   const club = oneOrNull(value);
   const label = (club?.short_name ?? club?.name ?? "").trim();
   return label || null;
+}
+
+function isStartingOrderConfirmed(notes: string | null | undefined) {
+  return String(notes ?? "").includes(STARTING_ORDER_CONFIRMED_MARKER);
 }
 
 function isDQScore(value: number | null | undefined) {
@@ -189,6 +219,12 @@ function formatDate(date: string | null) {
   }).format(new Date(date));
 }
 
+function formatTime(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "--:--";
+  return raw.slice(0, 5);
+}
+
 function formatScore(value: number | null) {
   return value == null ? "—" : String(value);
 }
@@ -207,6 +243,15 @@ function formatRelative(value: number | null) {
 function formatRelativeOrDQ(value: number | null, isDQ: boolean) {
   if (isDQ) return "DQ";
   return formatRelative(value);
+}
+
+function nameOfPlayer(player: {
+  first_name?: string | null;
+  last_name?: string | null;
+} | null | undefined) {
+  const last = String(player?.last_name ?? "").trim();
+  const first = String(player?.first_name ?? "").trim();
+  return `${last} ${first}`.trim() || "Jugador";
 }
 
 function buildHref(params: {
@@ -580,6 +625,161 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
   );
 }
 
+function PublicTeeSheetView({
+  groups,
+  rounds,
+  tournamentId,
+  selectedCategoryId,
+  selectedRoundId,
+}: {
+  groups: PublicPairingGroup[];
+  rounds: RoundRow[];
+  tournamentId: string;
+  selectedCategoryId: string;
+  selectedRoundId: string | null;
+}) {
+  const confirmedRounds = rounds.filter((round) => isStartingOrderConfirmed(round.notes));
+
+  const filteredGroups = groups
+    .filter((group) => !selectedRoundId || group.round_id === selectedRoundId)
+    .map((group) => ({
+      ...group,
+      members: selectedCategoryId
+        ? group.members.filter((member) => member.category_code === selectedCategoryId)
+        : group.members,
+    }))
+    .filter((group) => group.members.length > 0 || !selectedCategoryId);
+
+  const groupsByRound = new Map<string, PublicPairingGroup[]>();
+  for (const group of filteredGroups) {
+    const list = groupsByRound.get(group.round_id) ?? [];
+    list.push(group);
+    groupsByRound.set(group.round_id, list);
+  }
+
+  if (confirmedRounds.length === 0) {
+    return (
+      <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
+        Aún no hay salidas publicadas. El comité debe confirmar/cerrar el orden definitivo del día en Tee Sheet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={buildHref({
+            tournamentId,
+            categoryId: selectedCategoryId || null,
+            view: "tee-sheet",
+          })}
+          className={sectionPillClasses(!selectedRoundId)}
+        >
+          Todos los días
+        </Link>
+
+        {confirmedRounds.map((round) => (
+          <Link
+            key={round.id}
+            href={buildHref({
+              tournamentId,
+              categoryId: selectedCategoryId || null,
+              roundId: round.id,
+              view: "tee-sheet",
+            })}
+            className={sectionPillClasses(selectedRoundId === round.id)}
+          >
+            R{round.round_no} · {formatDate(round.round_date)}
+          </Link>
+        ))}
+      </div>
+
+      {filteredGroups.length === 0 ? (
+        <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
+          No hay grupos para mostrar con este filtro.
+        </div>
+      ) : null}
+
+      {confirmedRounds
+        .filter((round) => !selectedRoundId || round.id === selectedRoundId)
+        .map((round) => {
+          const roundGroups = groupsByRound.get(round.id) ?? [];
+          if (roundGroups.length === 0) return null;
+
+          return (
+            <section key={round.id} className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-200">
+                    Salidas publicadas
+                  </div>
+                  <h2 className="mt-1 text-xl font-black text-white">
+                    Ronda {round.round_no} · {formatDate(round.round_date)}
+                  </h2>
+                </div>
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                  {roundGroups.length} grupo{roundGroups.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {roundGroups.map((group) => (
+                  <article
+                    key={group.id}
+                    className="overflow-hidden rounded-2xl border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-white/[0.04] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-xs font-black text-cyan-200">
+                          G{group.group_no}
+                        </span>
+                        <span className="text-sm font-bold text-white">
+                          {formatTime(group.tee_time)}
+                        </span>
+                        <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-slate-200">
+                          {group.starting_hole ? `H${group.starting_hole}` : "H-"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-semibold text-slate-400">
+                        {group.members.length} jugador{group.members.length === 1 ? "" : "es"}
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-white/10">
+                      {group.members.map((member) => (
+                        <div
+                          key={`${group.id}-${member.entry_id}`}
+                          className="grid grid-cols-[28px_1fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                        >
+                          <div className="text-center font-black text-cyan-300">
+                            {member.position}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-white">
+                              {member.player_name}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] text-slate-400">
+                              {member.club_label ? <span>{member.club_label}</span> : null}
+                              {member.category_code ? <span>· {member.category_code}</span> : null}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs font-bold text-emerald-300">
+                            {member.handicap_index ?? "—"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+    </div>
+  );
+}
+
 export default async function PublicTournamentPage({
   params,
   searchParams,
@@ -609,7 +809,9 @@ export default async function PublicTournamentPage({
       ? "official"
       : requestedView === "favorites"
         ? "favorites"
-        : "live";
+        : requestedView === "tee-sheet" || requestedView === "salidas"
+          ? "tee-sheet"
+          : "live";
 
   const supabase = await createClient();
 
@@ -706,15 +908,17 @@ export default async function PublicTournamentPage({
 
   const { data: roundsData, error: roundsError } = await supabase
     .from("rounds")
-    .select("id, round_no, round_date")
+    .select("id, round_no, round_date, notes, start_type, start_time")
     .eq("tournament_id", typedTournament.id)
-    .order("round_no", { ascending: true });
+    .order("round_no", { ascending: true })
+    .order("round_date", { ascending: true });
 
   if (roundsError) {
     throw new Error(`Error leyendo rounds: ${roundsError.message}`);
   }
 
   const rounds = (roundsData ?? []) as RoundRow[];
+  const publicTeeSheetRounds = rounds.filter((round) => isStartingOrderConfirmed(round.notes));
 
   const { data: roundScoresData, error: roundScoresError } =
     filteredEntries.length > 0 && rounds.length > 0
@@ -783,9 +987,17 @@ export default async function PublicTournamentPage({
 
   const selectedRound =
     rounds.find((round) => round.id === requestedRoundId) ??
+    (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
     latestRoundWithScores ??
     rounds[0] ??
     null;
+
+  const selectedPublicTeeSheetRoundId =
+    view === "tee-sheet" && publicTeeSheetRounds.some((round) => round.id === requestedRoundId)
+      ? requestedRoundId
+      : view === "tee-sheet"
+        ? null
+        : selectedRound?.id ?? null;
 
   const holeScoresByRoundScoreId = new Map<string, HoleScoreRow[]>();
   for (const row of holeScores) {
@@ -806,33 +1018,35 @@ export default async function PublicTournamentPage({
     .eq("tournament_id", typedTournament.id)
     .not("locked_at", "is", null);
 
-const lockedScorecardMap = new Set(
-  (scorecardsData ?? []).map(
-    (sc) => `${sc.entry_id}_${sc.round_id}`
-  )
-);
-const categoryStatusMap: Record<
-  string,
-  { total: number; closed: number }
-> = {};
-
-filteredEntries.forEach((entry) => {
-  const cat = entry.category?.code ?? "SIN CAT";
-
-  if (!categoryStatusMap[cat]) {
-    categoryStatusMap[cat] = { total: 0, closed: 0 };
-  }
-
-  categoryStatusMap[cat].total += 1;
-
-  const hasClosedRound = rounds.some((round) =>
-    lockedScorecardMap.has(`${entry.id}_${round.id}`)
+  const lockedScorecardMap = new Set(
+    (scorecardsData ?? []).map(
+      (sc) => `${sc.entry_id}_${sc.round_id}`
+    )
   );
 
-  if (hasClosedRound) {
-    categoryStatusMap[cat].closed += 1;
-  }
-});
+  const categoryStatusMap: Record<
+    string,
+    { total: number; closed: number }
+  > = {};
+
+  filteredEntries.forEach((entry) => {
+    const cat = entry.category?.code ?? "SIN CAT";
+
+    if (!categoryStatusMap[cat]) {
+      categoryStatusMap[cat] = { total: 0, closed: 0 };
+    }
+
+    categoryStatusMap[cat].total += 1;
+
+    const hasClosedRound = rounds.some((round) =>
+      lockedScorecardMap.has(`${entry.id}_${round.id}`)
+    );
+
+    if (hasClosedRound) {
+      categoryStatusMap[cat].closed += 1;
+    }
+  });
+
   const leaderboardBase: LeaderboardRow[] = buildLiveLeaderboard({
     filteredEntries,
     rounds,
@@ -860,6 +1074,128 @@ filteredEntries.forEach((entry) => {
     competitionRules: competitionRulesData,
   });
 
+  const publicRoundIds = publicTeeSheetRounds.map((round) => round.id);
+
+  const { data: pairingGroupsData, error: pairingGroupsError } =
+    publicRoundIds.length > 0
+      ? await supabase
+          .from("pairing_groups")
+          .select("id, round_id, group_no, tee_time, starting_hole, notes")
+          .in("round_id", publicRoundIds)
+          .order("round_id", { ascending: true })
+          .order("group_no", { ascending: true })
+      : { data: [], error: null };
+
+  if (pairingGroupsError) {
+    throw new Error(`Error leyendo grupos públicos: ${pairingGroupsError.message}`);
+  }
+
+  const pairingGroupsRaw = (pairingGroupsData ?? []) as Array<{
+    id: string;
+    round_id: string;
+    group_no: number;
+    tee_time: string | null;
+    starting_hole: number | null;
+    notes: string | null;
+  }>;
+
+  const { data: pairingMembersData, error: pairingMembersError } =
+    pairingGroupsRaw.length > 0
+      ? await supabase
+          .from("pairing_group_members")
+          .select(`
+            id,
+            group_id,
+            position,
+            entry_id,
+            tournament_entries (
+              id,
+              handicap_index,
+              player:players (
+                id,
+                first_name,
+                last_name,
+                club,
+                club_id,
+                clubs:clubs (
+                  name,
+                  short_name
+                )
+              ),
+              category:categories (
+                id,
+                code,
+                name
+              )
+            )
+          `)
+          .in(
+            "group_id",
+            pairingGroupsRaw.map((group) => group.id)
+          )
+          .order("position", { ascending: true })
+      : { data: [], error: null };
+
+  if (pairingMembersError) {
+    throw new Error(`Error leyendo miembros públicos: ${pairingMembersError.message}`);
+  }
+
+  const roundById = new Map(rounds.map((round) => [round.id, round]));
+  const membersByGroup = new Map<string, PairingMember[]>();
+
+  for (const row of (pairingMembersData ?? []) as any[]) {
+    const te = Array.isArray(row.tournament_entries)
+      ? row.tournament_entries[0] ?? null
+      : row.tournament_entries ?? null;
+
+    const player = Array.isArray(te?.player)
+      ? te.player[0] ?? null
+      : te?.player ?? null;
+
+    const club = Array.isArray(player?.clubs)
+      ? player.clubs[0] ?? null
+      : player?.clubs ?? null;
+
+    const category = Array.isArray(te?.category)
+      ? te.category[0] ?? null
+      : te?.category ?? null;
+
+    const member: PairingMember = {
+      entry_id: row.entry_id,
+      position: Number(row.position ?? 0),
+      player_name: nameOfPlayer(player),
+      club_label: normalizeClubLabel(club),
+      category_code: category?.code ?? category?.name ?? null,
+      handicap_index: te?.handicap_index ?? null,
+    };
+
+    const list = membersByGroup.get(row.group_id) ?? [];
+    list.push(member);
+    membersByGroup.set(row.group_id, list);
+  }
+
+  const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
+    .map((group) => {
+      const round = roundById.get(group.round_id) ?? null;
+      return {
+        id: group.id,
+        round_id: group.round_id,
+        round_no: round?.round_no ?? 0,
+        round_date: round?.round_date ?? null,
+        group_no: Number(group.group_no ?? 0),
+        tee_time: group.tee_time ?? round?.start_time ?? null,
+        starting_hole: group.starting_hole ?? null,
+        notes: group.notes ?? null,
+        members: (membersByGroup.get(group.id) ?? []).sort(
+          (a, b) => a.position - b.position
+        ),
+      };
+    })
+    .sort((a, b) => {
+      if (a.round_no !== b.round_no) return a.round_no - b.round_no;
+      return a.group_no - b.group_no;
+    });
+
   const playersWithScores = leaderboard.filter((row) => row.hasScores).length;
   const playersPendingScores = Math.max(filteredEntries.length - playersWithScores, 0);
 
@@ -868,14 +1204,18 @@ filteredEntries.forEach((entry) => {
       ? "Resultados oficiales"
       : view === "favorites"
         ? "Mis favoritos"
-        : "Live Scoring";
+        : view === "tee-sheet"
+          ? "Salidas"
+          : "Live Scoring";
 
   const pageDescription =
     view === "official"
       ? "Resultados verificados por la administración del torneo."
       : view === "favorites"
         ? "Seguimiento rápido de los jugadores marcados como favoritos."
-        : "Resultados en tiempo real del torneo con avances de captura y posiciones por categoría.";
+        : view === "tee-sheet"
+          ? "Lista pública de salidas por día, visible solo cuando el comité confirma el orden definitivo."
+          : "Resultados en tiempo real del torneo con avances de captura y posiciones por categoría.";
 
   return (
     <main className="min-h-screen bg-[#08111f] text-white">
@@ -929,6 +1269,17 @@ filteredEntries.forEach((entry) => {
                 className={pillClasses(view === "official")}
               >
                 Leaderboard
+              </Link>
+
+              <Link
+                href={buildHref({
+                  tournamentId: typedTournament.id,
+                  categoryId: selectedCategoryId || null,
+                  view: "tee-sheet",
+                })}
+                className={pillClasses(view === "tee-sheet")}
+              >
+                Salidas
               </Link>
 
               <Link
@@ -1022,10 +1373,10 @@ filteredEntries.forEach((entry) => {
 
                 <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/10 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200">
-                    Capturados
+                    Salidas
                   </p>
                   <p className="mt-2 text-2xl font-black text-white">
-                    {playersWithScores}
+                    {publicPairingGroups.length}
                   </p>
                 </div>
 
@@ -1048,7 +1399,7 @@ filteredEntries.forEach((entry) => {
                   <Link
                     href={buildHref({
                       tournamentId: typedTournament.id,
-                      roundId: selectedRound?.id ?? null,
+                      roundId: view === "tee-sheet" ? selectedPublicTeeSheetRoundId : selectedRound?.id ?? null,
                       view,
                     })}
                     className={sectionPillClasses(!selectedCategoryId)}
@@ -1062,7 +1413,7 @@ filteredEntries.forEach((entry) => {
                       href={buildHref({
                         tournamentId: typedTournament.id,
                         categoryId: category.id,
-                        roundId: selectedRound?.id ?? null,
+                        roundId: view === "tee-sheet" ? selectedPublicTeeSheetRoundId : selectedRound?.id ?? null,
                         view,
                       })}
                       className={sectionPillClasses(selectedCategoryId === category.id)}
@@ -1073,7 +1424,7 @@ filteredEntries.forEach((entry) => {
                 </div>
               ) : null}
 
-              {rounds.length > 0 ? (
+              {view !== "tee-sheet" && rounds.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {rounds.map((round) => (
                     <Link
@@ -1098,25 +1449,34 @@ filteredEntries.forEach((entry) => {
 
       <section className="bg-[#08111f]">
         <div className="mx-auto w-full max-w-[1600px] px-3 py-8 sm:px-4 lg:px-6 xl:px-8">
-          {view === "official" ? (
-  <div className="mb-4 flex flex-wrap gap-2">
-    {Object.entries(categoryStatusMap)
-      .sort((a, b) => a[0].localeCompare(b[0], "es", { sensitivity: "base" }))
-      .map(([cat, stats]) => {
-        const pending = Math.max(stats.total - stats.closed, 0);
+          {view === "tee-sheet" ? (
+            <PublicTeeSheetView
+              groups={publicPairingGroups}
+              rounds={rounds}
+              tournamentId={typedTournament.id}
+              selectedCategoryId={selectedCategory?.code ?? selectedCategory?.name ?? ""}
+              selectedRoundId={selectedPublicTeeSheetRoundId}
+            />
+          ) : view === "official" ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {Object.entries(categoryStatusMap)
+                .sort((a, b) => a[0].localeCompare(b[0], "es", { sensitivity: "base" }))
+                .map(([cat, stats]) => {
+                  const pending = Math.max(stats.total - stats.closed, 0);
 
-        return (
-          <div
-            key={cat}
-            className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-200"
-          >
-            {cat}: {stats.closed}/{stats.total} cerradas
-            {pending > 0 ? ` • faltan ${pending}` : " • completo"}
-          </div>
-        );
-      })}
-  </div>
-) : null}     
+                  return (
+                    <div
+                      key={cat}
+                      className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-200"
+                    >
+                      {cat}: {stats.closed}/{stats.total} cerradas
+                      {pending > 0 ? ` • faltan ${pending}` : " • completo"}
+                    </div>
+                  );
+                })}
+            </div>
+          ) : null}
+
           {view === "favorites" ? (
             <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <FavoritesView
@@ -1125,7 +1485,7 @@ filteredEntries.forEach((entry) => {
                 selectedRoundId={selectedRound?.id ?? null}
               />
             </div>
-          ) : (
+          ) : view === "tee-sheet" ? null : (
             <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <table className="w-full min-w-[1140px] table-auto border-collapse text-[12px]">
                 <thead>
@@ -1329,13 +1689,13 @@ filteredEntries.forEach((entry) => {
 
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                Leaderboard
+                Salidas
               </p>
               <p className="mt-3 text-lg font-bold text-white">
-                Resultados oficiales
+                Grupos por día
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Consulta posiciones, acumulados y detalle por ronda del torneo.
+                Las salidas públicas aparecen cuando el comité confirma el orden definitivo del día.
               </p>
             </div>
 
