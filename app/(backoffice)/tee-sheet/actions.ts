@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -879,7 +880,7 @@ export async function saveCategoryPlanOrder(formData: FormData) {
 }
 
 export async function confirmStartingOrder(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
@@ -923,7 +924,7 @@ export async function confirmStartingOrder(formData: FormData) {
 }
 
 export async function reopenStartingOrder(formData: FormData) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
