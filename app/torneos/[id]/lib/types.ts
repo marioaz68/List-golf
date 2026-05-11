@@ -102,6 +102,7 @@ export type PairingMember = {
   entry_id: string;
   position: number;
   player_name: string;
+  club_id: string | null;
   club_label: string | null;
   category_code: string | null;
   handicap_index: number | null;
@@ -115,6 +116,8 @@ export type PublicPairingGroup = {
   group_no: number;
   tee_time: string | null;
   starting_hole: number | null;
+  /** H1A / H10B en shotgun; en tee time suele ser Hn según `starting_hole`. */
+  starting_hole_label: string | null;
   notes: string | null;
   members: PairingMember[];
 };

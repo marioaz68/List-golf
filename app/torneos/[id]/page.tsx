@@ -7,6 +7,7 @@ import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import PublicLeaderboardTable from "./components/PublicLeaderboardTable";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
+import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
 
 import type {
   Tournament,
@@ -423,10 +424,16 @@ export default async function PublicTournamentPage({
       ? te.category[0] ?? null
       : te?.category ?? null;
 
+    const playerClubId =
+      typeof player?.club_id === "string" && player.club_id.trim()
+        ? player.club_id.trim()
+        : null;
+
     const member: PairingMember = {
       entry_id: row.entry_id,
       position: Number(row.position ?? 0),
       player_name: nameOfPlayer(player),
+      club_id: playerClubId,
       club_label: normalizeClubLabel(club),
       category_code: category?.code ?? category?.name ?? null,
       handicap_index: te?.handicap_index ?? null,
@@ -435,6 +442,29 @@ export default async function PublicTournamentPage({
     const list = membersByGroup.get(row.group_id) ?? [];
     list.push(member);
     membersByGroup.set(row.group_id, list);
+  }
+
+  const labelByGroupId = new Map<string, string | null>();
+  const roundIdsWithGroups = Array.from(
+    new Set(pairingGroupsRaw.map((g) => g.round_id))
+  );
+  for (const roundId of roundIdsWithGroups) {
+    const round = roundById.get(roundId) ?? null;
+    const groupsInRound = pairingGroupsRaw
+      .filter((g) => g.round_id === roundId)
+      .sort((a, b) => Number(a.group_no ?? 0) - Number(b.group_no ?? 0));
+    const n = groupsInRound.length;
+    groupsInRound.forEach((g, idx) => {
+      labelByGroupId.set(
+        g.id,
+        startingHoleLabelForGroup({
+          startType: round?.start_type,
+          groupIndexInRound: idx,
+          groupsInRound: n,
+          starting_hole: g.starting_hole ?? null,
+        })
+      );
+    });
   }
 
   const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
@@ -448,6 +478,7 @@ export default async function PublicTournamentPage({
         group_no: Number(group.group_no ?? 0),
         tee_time: group.tee_time ?? round?.start_time ?? null,
         starting_hole: group.starting_hole ?? null,
+        starting_hole_label: labelByGroupId.get(group.id) ?? null,
         notes: group.notes ?? null,
         members: (membersByGroup.get(group.id) ?? []).sort(
           (a, b) => a.position - b.position
@@ -481,7 +512,7 @@ export default async function PublicTournamentPage({
           : "Resultados en tiempo real del torneo con avances de captura y posiciones por categoría.";
 
   return (
-    <main className="min-h-screen bg-[#08111f] text-white">
+    <div className="min-h-screen bg-[#08111f] text-white">
       <section className="relative overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.12),transparent_25%)]" />
 
@@ -814,6 +845,6 @@ export default async function PublicTournamentPage({
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
