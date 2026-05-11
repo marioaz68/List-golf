@@ -1,5 +1,3 @@
-Last login: Sun May 10 21:09:06 on ttys004
-marioalvarez@MacBook-Air golf-torneo % cat "app/torneos/[id]/page.tsx"
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Fragment } from "react";
