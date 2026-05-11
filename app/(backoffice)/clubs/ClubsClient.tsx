@@ -214,35 +214,83 @@ function colorFromShort(value: string | null) {
   return palette[hashString(seed) % palette.length];
 }
 
+function normalizeLogoUrl(value: string | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+
+    if (url.hostname === "www.dropbox.com" || url.hostname === "dropbox.com") {
+      url.hostname = "dl.dropboxusercontent.com";
+      url.searchParams.delete("dl");
+      url.searchParams.delete("raw");
+      return url.toString();
+    }
+
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 function ClubBadge({
   club,
   size = 42,
 }: {
   club: Pick<
     ClubRow,
-    "name" | "short_name" | "logo_url" | "generated_logo_url" | "primary_color"
+    "id" | "name" | "short_name" | "logo_url" | "generated_logo_url" | "primary_color"
   >;
   size?: number;
 }) {
-  const logo = club.logo_url || club.generated_logo_url || "";
+  const logo = club.id ? `/api/club-logo?club_id=${encodeURIComponent(club.id)}` : "";
   const shortName = normalizeShort(club.short_name);
   const color = club.primary_color || colorFromShort(club.short_name);
 
   if (logo) {
     return (
-      <img
-        src={logo}
-        alt={club.name || shortName}
+      <span
         style={{
           width: size,
           height: size,
           borderRadius: 999,
-          objectFit: "cover",
           border: "2px solid #e2e8f0",
           background: "#ffffff",
-          display: "block",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          padding: 2,
         }}
-      />
+        title={club.name || shortName}
+      >
+        <img
+          src={logo}
+          alt={club.name || shortName}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            display: "block",
+            borderRadius: 999,
+          }}
+          referrerPolicy="no-referrer"
+          onError={(event) => {
+            const img = event.currentTarget;
+            img.style.display = "none";
+            const parent = img.parentElement;
+            if (parent) {
+              parent.textContent = shortName.slice(0, 3);
+              parent.style.background = `radial-gradient(circle at 35% 25%, rgba(255,255,255,.32), ${color} 48%, rgba(2,6,23,.26))`;
+              parent.style.color = "#ffffff";
+              parent.style.fontWeight = "900";
+              parent.style.fontSize = `${Math.max(10, Math.floor(size * 0.28))}px`;
+              parent.style.letterSpacing = "1px";
+            }
+          }}
+        />
+      </span>
     );
   }
 
@@ -278,6 +326,7 @@ function ClubPreviewFromForm({ form }: { form: FormState }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <ClubBadge
         club={{
+          id: "",
           name: form.name,
           short_name: shortName,
           logo_url: form.logo_url,
@@ -393,7 +442,7 @@ export default function ClubsClient({ clubs }: Props) {
     const fd = new FormData();
     fd.set("name", createForm.name);
     fd.set("short_name", createForm.short_name);
-    fd.set("logo_url", createForm.logo_url);
+    fd.set("logo_url", normalizeLogoUrl(createForm.logo_url));
     fd.set("primary_color", createForm.primary_color);
     fd.set("is_active", String(createForm.is_active));
 
@@ -424,7 +473,6 @@ export default function ClubsClient({ clubs }: Props) {
     fd.set("club_id", editForm.id);
     fd.set("name", editForm.name);
     fd.set("short_name", editForm.short_name);
-    fd.set("logo_url", editForm.logo_url);
     fd.set("primary_color", editForm.primary_color);
     fd.set("is_active", String(editForm.is_active));
 
@@ -464,7 +512,7 @@ export default function ClubsClient({ clubs }: Props) {
 
     const fd = new FormData();
     fd.set("club_id", logoForm.club_id);
-    fd.set("logo_url", logoForm.logo_url);
+    fd.set("logo_url", normalizeLogoUrl(logoForm.logo_url));
     fd.set("primary_color", logoForm.primary_color);
 
     startTransition(async () => {
@@ -840,18 +888,6 @@ export default function ClubsClient({ clubs }: Props) {
                                 name: e.target.value,
                               }))
                             }
-                            style={inputStyle}
-                          />
-
-                          <input
-                            value={editForm.logo_url}
-                            onChange={(e) =>
-                              setEditForm((prev) => ({
-                                ...prev,
-                                logo_url: e.target.value,
-                              }))
-                            }
-                            placeholder="URL logo oficial opcional"
                             style={inputStyle}
                           />
 
