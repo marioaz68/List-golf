@@ -102,14 +102,86 @@ export function detailRoundHasScoreData(detail: RoundDetail): boolean {
   return (
     detail.is_dq ||
     detail.gross_score != null ||
-    detail.holes.some((h) => h.strokes != null)
+    detail.holes.some((h) => {
+      if (h.strokes == null) return false;
+      const n = Number(h.strokes);
+      return !Number.isNaN(n);
+    })
   );
+}
+
+function mergeHoleScoresAcrossDuplicates(
+  primary: RoundDetail,
+  siblings: RoundDetail[]
+): RoundDetail {
+  if (siblings.length <= 1) return primary;
+
+  const order = [
+    primary,
+    ...siblings.filter((s) => s.round_id !== primary.round_id),
+  ];
+
+  const pickStrokes = (holeNumber: number): number | null => {
+    for (const d of order) {
+      const h = d.holes.find((x) => x.hole_number === holeNumber);
+      if (h == null || h.strokes == null) continue;
+      const n = Number(h.strokes);
+      if (!Number.isNaN(n)) return n;
+    }
+    return null;
+  };
+
+  const pickPar = (holeNumber: number): number | null => {
+    for (const d of order) {
+      const h = d.holes.find((x) => x.hole_number === holeNumber);
+      if (h?.par != null) {
+        const n = Number(h.par);
+        if (!Number.isNaN(n)) return n;
+      }
+    }
+    return null;
+  };
+
+  const holes: HoleDetail[] = Array.from({ length: 18 }, (_, i) => {
+    const holeNumber = i + 1;
+    return {
+      hole_number: holeNumber,
+      par: pickPar(holeNumber),
+      strokes: pickStrokes(holeNumber),
+    };
+  });
+
+  const played = holes.filter((h) => h.strokes != null);
+  const parPlayed =
+    played.length > 0
+      ? played.reduce((a, h) => a + Number(h.par ?? 0), 0)
+      : null;
+  const grossPlayed =
+    played.length > 0
+      ? played.reduce((a, h) => a + Number(h.strokes ?? 0), 0)
+      : null;
+  const toPar =
+    primary.is_dq || parPlayed == null || grossPlayed == null
+      ? null
+      : grossPlayed - parPlayed;
+
+  return {
+    ...primary,
+    holes,
+    out_score: subtotal(holes, 0, 9, "strokes"),
+    in_score: subtotal(holes, 9, 18, "strokes"),
+    total_score: subtotal(holes, 0, 18, "strokes"),
+    gross_score: primary.is_dq
+      ? primary.gross_score
+      : primary.gross_score ?? grossPlayed,
+    to_par: primary.is_dq ? primary.to_par : toPar ?? primary.to_par,
+  };
 }
 
 /**
  * Filas de detalle para la tabla hoyo por hoyo: solo rondas de la categoría del jugador;
- * si hay varias filas BD con el mismo `round_no` (p. ej. categorías), se muestra una
- * (prioridad: la que ya tiene golpes / gross / DQ).
+ * si hay varias filas BD con el mismo `round_no` (p. ej. categorías), se fusionan los golpes
+ * por hoyo entre esas filas para no perder capturas.
  */
 export function selectLeaderboardDetailsForPlayer(
   row: LeaderboardRow
@@ -137,12 +209,35 @@ export function selectLeaderboardDetailsForPlayer(
     byRoundNo.get(n)!.push(d);
   }
 
+  const cid = String(row.category_id ?? "").trim();
+
   const out: RoundDetail[] = [];
   for (const roundNo of [...byRoundNo.keys()].sort((a, b) => a - b)) {
     const arr = byRoundNo.get(roundNo)!;
-    const best =
-      arr.find((d) => detailRoundHasScoreData(d)) ?? arr[0] ?? null;
-    if (best) out.push(best);
+    const scored = arr.filter((d) => detailRoundHasScoreData(d));
+
+    let primary: RoundDetail | null = null;
+    if (scored.length === 1) {
+      primary = scored[0]!;
+    } else if (scored.length > 1) {
+      primary =
+        scored.find(
+          (d) => cid && String(d.category_id ?? "").trim() === cid
+        ) ?? scored[0]!;
+    } else {
+      primary =
+        arr.find((d) => cid && String(d.category_id ?? "").trim() === cid) ??
+        arr[0] ??
+        null;
+    }
+
+    if (!primary) continue;
+
+    if (arr.length > 1) {
+      out.push(mergeHoleScoresAcrossDuplicates(primary, arr));
+    } else {
+      out.push(primary);
+    }
   }
   return out;
 }
@@ -397,9 +492,9 @@ export function scoreMarker(
       wrapper:
         "relative inline-flex h-7 w-7 items-center justify-center rounded-full",
       outer:
-        "pointer-events-none absolute inset-0 block rounded-full border-[2px] border-rose-400 bg-rose-500/12 shadow-[0_0_0_1px_rgba(251,113,133,0.2)]",
+        "pointer-events-none absolute inset-0 block rounded-full border border-rose-400 bg-rose-500/12",
       inner:
-        "pointer-events-none absolute inset-[4px] block rounded-full border-[2px] border-rose-300",
+        "pointer-events-none absolute inset-[5px] block rounded-full border border-rose-300/90",
       textClass: "relative z-10 font-bold text-white",
     };
   }
@@ -409,7 +504,7 @@ export function scoreMarker(
       wrapper:
         "relative inline-flex h-7 w-7 items-center justify-center rounded-full",
       outer:
-        "pointer-events-none absolute inset-[3px] block rounded-full border-[2px] border-rose-400 bg-rose-500/12",
+        "pointer-events-none absolute inset-[4px] block rounded-full border border-rose-400 bg-rose-500/12",
       textClass: "relative z-10 font-bold text-white",
     };
   }
@@ -417,11 +512,11 @@ export function scoreMarker(
   if (diff >= 2) {
     return {
       wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-[4px]",
+        "relative inline-flex h-7 w-7 items-center justify-center rounded-[3px]",
       outer:
-        "pointer-events-none absolute inset-0 block rounded-[4px] border-[2px] border-amber-200 bg-amber-100/8",
+        "pointer-events-none absolute inset-0 block rounded-[3px] border border-amber-200/95 bg-amber-100/8",
       inner:
-        "pointer-events-none absolute inset-[4px] block rounded-[2px] border-[2px] border-amber-100",
+        "pointer-events-none absolute inset-[5px] block rounded-[2px] border border-amber-100/90",
       textClass: "relative z-10 font-bold text-white",
     };
   }
@@ -429,9 +524,9 @@ export function scoreMarker(
   if (diff === 1) {
     return {
       wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-[4px]",
+        "relative inline-flex h-7 w-7 items-center justify-center rounded-[3px]",
       outer:
-        "pointer-events-none absolute inset-[3px] block rounded-[2px] border-[2px] border-amber-100 bg-amber-100/8",
+        "pointer-events-none absolute inset-[4px] block rounded-[2px] border border-amber-100/90 bg-amber-100/8",
       textClass: "relative z-10 font-bold text-white",
     };
   }

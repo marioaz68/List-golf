@@ -8,7 +8,7 @@ import type {
   LeaderboardRow,
   RoundDetail,
 } from "@/app/torneos/[id]/lib/types";
-import { selectLeaderboardDetailsForPlayer } from "@/app/torneos/[id]/lib/utils";
+import { scoreMarker, selectLeaderboardDetailsForPlayer } from "@/app/torneos/[id]/lib/utils";
 
 type FavoritesViewProps = {
   tournamentId: string;
@@ -281,84 +281,6 @@ function readFavoriteIds(tournamentId: string): string[] {
   }
 
   return Array.from(collected);
-}
-
-function scoreMarker(
-  strokes: number | null,
-  par: number | null
-): {
-  wrapper: string;
-  outer?: string;
-  inner?: string;
-  textClass: string;
-} {
-  if (strokes == null) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-md",
-      textClass: "text-slate-500",
-    };
-  }
-
-  if (par == null) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-md",
-      textClass: "text-white",
-    };
-  }
-
-  const diff = Number(strokes) - Number(par);
-
-  if (diff <= -2) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-full",
-      outer:
-        "pointer-events-none absolute inset-0 block rounded-full border-[2px] border-rose-400 bg-rose-500/12 shadow-[0_0_0_1px_rgba(251,113,133,0.2)]",
-      inner:
-        "pointer-events-none absolute inset-[4px] block rounded-full border-[2px] border-rose-300",
-      textClass: "relative z-10 font-bold text-white",
-    };
-  }
-
-  if (diff === -1) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-full",
-      outer:
-        "pointer-events-none absolute inset-[3px] block rounded-full border-[2px] border-rose-400 bg-rose-500/12",
-      textClass: "relative z-10 font-bold text-white",
-    };
-  }
-
-  if (diff >= 2) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-[4px]",
-      outer:
-        "pointer-events-none absolute inset-0 block rounded-[4px] border-[2px] border-amber-200 bg-amber-100/8",
-      inner:
-        "pointer-events-none absolute inset-[4px] block rounded-[2px] border-[2px] border-amber-100",
-      textClass: "relative z-10 font-bold text-white",
-    };
-  }
-
-  if (diff === 1) {
-    return {
-      wrapper:
-        "relative inline-flex h-8 w-8 items-center justify-center rounded-[4px]",
-      outer:
-        "pointer-events-none absolute inset-[3px] block rounded-[2px] border-[2px] border-amber-100 bg-amber-100/8",
-      textClass: "relative z-10 font-bold text-white",
-    };
-  }
-
-  return {
-    wrapper:
-      "relative inline-flex h-8 w-8 items-center justify-center rounded-md",
-    textClass: "text-white",
-  };
 }
 
 function renderMove(move: number | null) {
