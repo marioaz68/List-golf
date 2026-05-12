@@ -309,6 +309,9 @@ const es = {
     title: "Captura de tarjetas",
     subtitle:
       "Captura rápida por número de inscripción o nombre de jugador inscrito al torneo.",
+    labelSession: "Día y turno",
+    roundsNeedDate:
+      "Hay rondas sin fecha. Asigna fecha a cada ronda en la configuración del torneo para usar captura.",
   },
   scorecards: {
     title: "Tarjeta de puntuación (prueba con Supabase)",
@@ -1007,6 +1010,9 @@ const en: Messages = {
     title: "Score entry",
     subtitle:
       "Quick entry by registration number or name of a player enrolled in the tournament.",
+    labelSession: "Day & wave",
+    roundsNeedDate:
+      "Some rounds have no date. Assign a date to each round in tournament setup to use score entry.",
   },
   scorecards: {
     title: "Live scorecard (Supabase test)",

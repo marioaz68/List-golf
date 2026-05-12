@@ -5,8 +5,12 @@ import ScoreEntryClient from "./ScoreEntryClient";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import {
-  formatRoundSelectLabelShort,
+  buildSessionBlocks,
+  formatSessionDayWaveLabel,
+  representativeRoundId,
+  roundsInSameSession,
   toYyyyMmDd,
+  type SessionRoundFields,
 } from "../tee-sheet/sessionBlock";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +72,7 @@ type EntryJoinRow = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  category_id: string | null;
   player: EntryPlayerRow | EntryPlayerRow[] | null;
 };
 
@@ -75,6 +80,7 @@ type ValidEntryRow = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  category_id: string | null;
   player: EntryPlayerRow;
 };
 
@@ -109,6 +115,17 @@ function categoryCodeFromRound(row: RoundRow): string | null {
   const c = oneOrNull(row.category);
   const raw = (c?.code ?? c?.name ?? "").trim();
   return raw || null;
+}
+
+function sessionCategoryIdSet(
+  rounds: RoundRow[],
+  repRoundId: string
+): Set<string> {
+  return new Set(
+    roundsInSameSession(rounds as SessionRoundFields[], repRoundId)
+      .map((r) => String(r.category_id ?? "").trim())
+      .filter(Boolean)
+  );
 }
 
 function sortRoundsForSelect(a: RoundRow, b: RoundRow) {
@@ -176,7 +193,7 @@ export default async function ScoreEntryPage(props: {
     );
   }
 
-  const roundList = ((rounds ?? []) as RoundRow[])
+  const roundListAll = ((rounds ?? []) as RoundRow[])
     .map((r) => ({
       ...r,
       category_id: r.category_id ?? null,
@@ -187,18 +204,32 @@ export default async function ScoreEntryPage(props: {
     }))
     .sort(sortRoundsForSelect);
 
+  const roundList = roundListAll.filter((r) => toYyyyMmDd(r.round_date));
+  const roundsMissingDate =
+    roundListAll.length > 0 && roundList.length === 0;
+
+  const sessionBlocks =
+    roundList.length > 0
+      ? buildSessionBlocks(roundList as SessionRoundFields[])
+      : [];
+
   let selectedRound: RoundRow | null = null;
 
   if (requestedRoundId) {
-    selectedRound = roundList.find((r) => r.id === requestedRoundId) ?? null;
+    const hit = roundList.find((r) => r.id === requestedRoundId) ?? null;
+    if (hit) {
+      const repId = representativeRoundId(roundList as SessionRoundFields[], hit.id);
+      selectedRound = roundList.find((r) => r.id === repId) ?? hit;
+    }
   }
 
-  if (!selectedRound) {
-    selectedRound =
-      roundList.find((r) => toYyyyMmDd(r.round_date) === today) ??
-      roundList.find((r) => r.round_no === 1) ??
-      roundList[0] ??
-      null;
+  if (!selectedRound && roundList.length > 0) {
+    const todayHit = roundList.find((r) => toYyyyMmDd(r.round_date) === today);
+    const seed = todayHit ?? roundList.find((r) => r.round_no === 1) ?? roundList[0];
+    if (seed) {
+      const repId = representativeRoundId(roundList as SessionRoundFields[], seed.id);
+      selectedRound = roundList.find((r) => r.id === repId) ?? seed;
+    }
   }
 
   if (selectedRound) {
@@ -237,6 +268,8 @@ export default async function ScoreEntryPage(props: {
     }
   }
 
+  let scoringRoundId = selectedRound?.id ?? "";
+
   if (selectedRound && searchRaw) {
     const isNumeric = /^\d+$/.test(searchRaw);
 
@@ -246,6 +279,7 @@ export default async function ScoreEntryPage(props: {
         player_id,
         player_number,
         handicap_index,
+        category_id,
         player:players (
           id,
           first_name,
@@ -256,11 +290,19 @@ export default async function ScoreEntryPage(props: {
       .eq("tournament_id", selectedRound.tournament_id)
       .limit(isNumeric ? 25 : 200);
 
+    let matchedEntry: ValidEntryRow | null = null;
+
     if (entryErr) {
       errorMsg = entryErr.message;
     } else {
       const rawEntries = (entryRows ?? []) as unknown as EntryJoinRow[];
-      const entries = rawEntries.filter(isValidEntry);
+      const sessionCats = sessionCategoryIdSet(roundList, selectedRound.id);
+      const entries = rawEntries.filter(isValidEntry).filter((row) => {
+        if (sessionCats.size === 0) return true;
+        const cid = String(row.category_id ?? "").trim();
+        if (!cid) return true;
+        return sessionCats.has(cid);
+      });
 
       if (isNumeric) {
         const wanted = Number(searchRaw);
@@ -270,6 +312,7 @@ export default async function ScoreEntryPage(props: {
         });
 
         if (found) {
+          matchedEntry = found;
           const p = oneOrNull(found.player);
 
           if (p) {
@@ -302,6 +345,7 @@ export default async function ScoreEntryPage(props: {
         });
 
         if (found) {
+          matchedEntry = found;
           const p = oneOrNull(found.player);
 
           if (p) {
@@ -318,8 +362,21 @@ export default async function ScoreEntryPage(props: {
       }
     }
 
+    scoringRoundId = selectedRound.id;
+    if (player && matchedEntry) {
+      const cat = String(matchedEntry.category_id ?? "").trim();
+      const sess = roundsInSameSession(
+        roundList as SessionRoundFields[],
+        selectedRound.id
+      );
+      const hit = cat
+        ? sess.find((r) => String(r.category_id ?? "").trim() === cat)
+        : sess[0];
+      if (hit) scoringRoundId = hit.id;
+    }
+
     if (player) {
-      const allRoundIds = roundList
+        const allRoundIds = roundListAll
         .filter((r) => r.tournament_id === selectedRound.tournament_id)
         .map((r) => r.id);
 
@@ -338,7 +395,7 @@ export default async function ScoreEntryPage(props: {
         }[];
 
         const selectedRoundScore = roundScores.find(
-          (x) => x.round_id === selectedRound?.id
+          (x) => x.round_id === scoringRoundId
         );
 
         if (selectedRoundScore?.id) {
@@ -393,7 +450,7 @@ export default async function ScoreEntryPage(props: {
 
             capturedRounds = roundScores
               .map((rs) => {
-                const roundMeta = roundList.find((r) => r.id === rs.round_id);
+                const roundMeta = roundListAll.find((r) => r.id === rs.round_id);
                 if (!roundMeta) return null;
 
                 return {
@@ -417,6 +474,12 @@ export default async function ScoreEntryPage(props: {
         <h1 className="text-2xl font-bold text-white">{se.title}</h1>
         <p className="mt-1 text-sm text-white/70">{se.subtitle}</p>
 
+        {roundsMissingDate && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {se.roundsNeedDate}
+          </div>
+        )}
+
         <form className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <input
             type="hidden"
@@ -427,31 +490,30 @@ export default async function ScoreEntryPage(props: {
           <div className="grid gap-4 md:grid-cols-[1fr_260px_auto] md:items-end">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                Ronda
+                {se.labelSession}
               </label>
               <select
                 name="round_id"
                 defaultValue={selectedRound?.id ?? ""}
                 className="w-full min-w-[min(100%,16rem)] max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-black"
               >
-                {roundList.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {formatRoundSelectLabelShort(
-                      {
-                        id: r.id,
-                        tournament_id: r.tournament_id,
-                        category_id: r.category_id,
-                        round_no: r.round_no,
-                        round_date: r.round_date,
-                        start_type: r.start_type,
-                        start_time: r.start_time,
-                        interval_minutes: r.interval_minutes,
-                        wave: r.wave,
-                      },
-                      { categoryCode: categoryCodeFromRound(r) }
-                    )}
-                  </option>
-                ))}
+                {sessionBlocks.length > 0
+                  ? sessionBlocks.map((block) => {
+                      const rep = block[0];
+                      if (!rep) return null;
+                      return (
+                        <option key={rep.id} value={rep.id}>
+                          {formatSessionDayWaveLabel(rep)}
+                        </option>
+                      );
+                    })
+                  : roundList.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {formatSessionDayWaveLabel(
+                          r as unknown as SessionRoundFields
+                        )}
+                      </option>
+                    ))}
               </select>
             </div>
 
@@ -491,13 +553,16 @@ export default async function ScoreEntryPage(props: {
 
         {selectedRound && player && holes.length > 0 && (
           <ScoreEntryClient
-            roundId={selectedRound.id}
+            roundId={scoringRoundId}
             tournamentDayId={null}
             player={player}
             holes={holes}
             existingScores={existingScores}
             capturedRounds={capturedRounds}
-            selectedRoundNo={selectedRound.round_no}
+            selectedRoundNo={
+              roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+              selectedRound.round_no
+            }
           />
         )}
       </div>

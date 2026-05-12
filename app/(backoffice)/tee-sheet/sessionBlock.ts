@@ -193,3 +193,19 @@ export function formatRoundSelectLabelShort(
   if (code) bits.push(`· ${code}`);
   return bits.join(" ").replace(/\s+/g, " ").trim();
 }
+
+/** Solo día + turno para selects de “sesión” (captura): `miércoles 15/10/25 AM`. */
+export function formatSessionDayWaveLabel(rep: SessionRoundFields) {
+  const ymd = toYyyyMmDd(rep.round_date);
+  const bits: string[] = [];
+  if (ymd) {
+    const wd = weekdayLowerSpanish(ymd);
+    if (wd) bits.push(wd);
+    const ds = formatDdMmYy(ymd);
+    if (ds) bits.push(ds);
+  }
+  const wave = String(rep.wave ?? "").trim().toUpperCase();
+  if (wave === "AM" || wave === "PM") bits.push(wave);
+  if (bits.length > 0) return bits.join(" ").trim();
+  return `R${rep.round_no}`;
+}
