@@ -8,6 +8,10 @@ import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import PublicLeaderboardTable from "./components/PublicLeaderboardTable";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
+import {
+  fetchHoleScoresForRoundScores,
+  fetchRoundScoresForPublicLeaderboard,
+} from "./lib/data";
 
 import type {
   Tournament,
@@ -15,7 +19,6 @@ import type {
   TournamentEntryJoinRow,
   ValidTournamentEntry,
   RoundRow,
-  RoundScoreRow,
   HoleScoreRow,
   TournamentHoleRow,
   PairingMember,
@@ -251,37 +254,22 @@ export default async function PublicTournamentPage({
     }))
     .filter((g) => g.rounds.length > 0);
 
-  const { data: roundScoresData, error: roundScoresError } =
+  const roundScores =
     filteredEntries.length > 0 && rounds.length > 0
-      ? await supabase
-          .from("round_scores")
-          .select("id, round_id, player_id, gross_score")
-          .in("player_id", filteredEntries.map((entry) => entry.player_id))
-          .in("round_id", rounds.map((r) => r.id))
-      : { data: [], error: null };
+      ? await fetchRoundScoresForPublicLeaderboard(
+          supabase,
+          filteredEntries.map((entry) => entry.player_id),
+          rounds.map((r) => r.id)
+        )
+      : [];
 
-  if (roundScoresError) {
-    throw new Error(`Error leyendo round_scores: ${roundScoresError.message}`);
-  }
-
-  const roundScores = (roundScoresData ?? []) as RoundScoreRow[];
-
-  const { data: holeScoresData, error: holeScoresError } =
+  const holeScores =
     roundScores.length > 0
-      ? await supabase
-          .from("hole_scores")
-          .select("round_score_id, hole_number, strokes")
-          .in(
-            "round_score_id",
-            roundScores.map((row) => row.id)
-          )
-      : { data: [], error: null };
-
-  if (holeScoresError) {
-    throw new Error(`Error leyendo hole_scores: ${holeScoresError.message}`);
-  }
-
-  const holeScores = (holeScoresData ?? []) as HoleScoreRow[];
+      ? await fetchHoleScoresForRoundScores(
+          supabase,
+          roundScores.map((row) => row.id)
+        )
+      : [];
 
   const { data: tournamentHolesData, error: tournamentHolesError } =
     await supabase
@@ -626,6 +614,7 @@ export default async function PublicTournamentPage({
             <div className="flex flex-wrap items-center gap-2">
               <PublicLanguageToggle locale={locale} />
               <Link
+                scroll={false}
                 href={buildHref({
                   tournamentId: typedTournament.id,
                   categoryId: selectedCategoryId || null,
@@ -638,6 +627,7 @@ export default async function PublicTournamentPage({
               </Link>
 
               <Link
+                scroll={false}
                 href={buildHref({
                   tournamentId: typedTournament.id,
                   categoryId: selectedCategoryId || null,
@@ -650,6 +640,7 @@ export default async function PublicTournamentPage({
               </Link>
 
               <Link
+                scroll={false}
                 href={buildHref({
                   tournamentId: typedTournament.id,
                   categoryId: selectedCategoryId || null,
@@ -661,6 +652,7 @@ export default async function PublicTournamentPage({
               </Link>
 
               <Link
+                scroll={false}
                 href={buildHref({
                   tournamentId: typedTournament.id,
                   categoryId: selectedCategoryId || null,
@@ -776,6 +768,7 @@ export default async function PublicTournamentPage({
               {categories.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   <Link
+                    scroll={false}
                     href={buildHref({
                       tournamentId: typedTournament.id,
                       roundId:
@@ -792,6 +785,7 @@ export default async function PublicTournamentPage({
                   {categories.map((category) => (
                     <Link
                       key={category.id}
+                      scroll={false}
                       href={buildHref({
                         tournamentId: typedTournament.id,
                         categoryId: category.id,
@@ -849,6 +843,7 @@ export default async function PublicTournamentPage({
                             {roundsTodayList.map((round) => (
                               <Link
                                 key={round.id}
+                                scroll={false}
                                 href={buildHref({
                                   tournamentId: typedTournament.id,
                                   categoryId: selectedCategoryId || null,
@@ -893,6 +888,7 @@ export default async function PublicTournamentPage({
                                       {dayRounds.map((round) => (
                                         <Link
                                           key={round.id}
+                                          scroll={false}
                                           href={buildHref({
                                             tournamentId: typedTournament.id,
                                             categoryId:
@@ -932,6 +928,7 @@ export default async function PublicTournamentPage({
                                       {dayRounds.map((round) => (
                                         <Link
                                           key={round.id}
+                                          scroll={false}
                                           href={buildHref({
                                             tournamentId: typedTournament.id,
                                             categoryId:
@@ -962,6 +959,7 @@ export default async function PublicTournamentPage({
                                 {roundsWithoutCalendar.map((round) => (
                                   <Link
                                     key={round.id}
+                                    scroll={false}
                                     href={buildHref({
                                       tournamentId: typedTournament.id,
                                       categoryId:
@@ -992,6 +990,7 @@ export default async function PublicTournamentPage({
                             {roundsInCategoryScope.map((round) => (
                               <Link
                                 key={round.id}
+                                scroll={false}
                                 href={buildHref({
                                   tournamentId: typedTournament.id,
                                   categoryId: selectedCategoryId || null,
@@ -1075,7 +1074,7 @@ export default async function PublicTournamentPage({
               <FavoritesView
                 tournamentId={typedTournament.id}
                 leaderboard={leaderboard}
-                selectedRoundId={selectedRound?.id ?? null}
+                selectedRound={selectedRound}
               />
             </div>
           ) : view === "tee-sheet" ? null : (
@@ -1084,7 +1083,7 @@ export default async function PublicTournamentPage({
               leaderboard={leaderboard}
               view={view === "official" ? "official" : "live"}
               selectedCategoryId={selectedCategoryId}
-              selectedRoundId={selectedRound?.id ?? null}
+              selectedRound={selectedRound}
               requestedDetailId={requestedDetailId}
             />
           )}

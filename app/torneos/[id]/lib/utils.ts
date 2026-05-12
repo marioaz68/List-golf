@@ -8,6 +8,13 @@ import type {
   TournamentEntryJoinRow,
   ValidTournamentEntry,
 } from "./types";
+import {
+  resolveDetailForSelectedRound,
+  roundRowAppliesToEntry,
+  type SelectedRoundMeta,
+} from "@/lib/leaderboard/roundCategoryMatch";
+
+export type { SelectedRoundMeta } from "@/lib/leaderboard/roundCategoryMatch";
 
 const STARTING_ORDER_CONFIRMED_MARKER = "[LIST_GOLF_STARTING_ORDER_CONFIRMED]";
 
@@ -110,19 +117,45 @@ export function detailRoundHasScoreData(detail: RoundDetail): boolean {
   );
 }
 
-function mergeHoleScoresAcrossDuplicates(
-  primary: RoundDetail,
-  siblings: RoundDetail[]
-): RoundDetail {
-  if (siblings.length <= 1) return primary;
+function sortDetailsForMergePriority(
+  arr: RoundDetail[],
+  playerCategoryId: string | null
+): RoundDetail[] {
+  const cid = String(playerCategoryId ?? "").trim();
+  const catMatch = (d: RoundDetail) =>
+    cid !== "" && String(d.category_id ?? "").trim() === cid;
 
-  const order = [
-    primary,
-    ...siblings.filter((s) => s.round_id !== primary.round_id),
-  ];
+  const tier = (d: RoundDetail) => {
+    const s = detailRoundHasScoreData(d);
+    const c = catMatch(d);
+    if (s && c) return 0;
+    if (s) return 1;
+    if (c) return 2;
+    return 3;
+  };
+
+  return [...arr].sort((a, b) => {
+    const ta = tier(a);
+    const tb = tier(b);
+    if (ta !== tb) return ta - tb;
+    return String(a.round_id).localeCompare(String(b.round_id));
+  });
+}
+
+/** Une hoyos de todas las filas `rounds` con el mismo `round_no` (p. ej. por categoría). */
+function mergeRoundDetailGroup(
+  arr: RoundDetail[],
+  playerCategoryId: string | null
+): RoundDetail {
+  if (arr.length === 0) {
+    throw new Error("mergeRoundDetailGroup: empty");
+  }
+  if (arr.length === 1) return arr[0]!;
+
+  const ordered = sortDetailsForMergePriority(arr, playerCategoryId);
 
   const pickStrokes = (holeNumber: number): number | null => {
-    for (const d of order) {
+    for (const d of ordered) {
       const h = d.holes.find((x) => x.hole_number === holeNumber);
       if (h == null || h.strokes == null) continue;
       const n = Number(h.strokes);
@@ -132,7 +165,7 @@ function mergeHoleScoresAcrossDuplicates(
   };
 
   const pickPar = (holeNumber: number): number | null => {
-    for (const d of order) {
+    for (const d of ordered) {
       const h = d.holes.find((x) => x.hole_number === holeNumber);
       if (h?.par != null) {
         const n = Number(h.par);
@@ -141,6 +174,9 @@ function mergeHoleScoresAcrossDuplicates(
     }
     return null;
   };
+
+  const primary = ordered[0]!;
+  const isDQ = ordered.some((d) => d.is_dq);
 
   const holes: HoleDetail[] = Array.from({ length: 18 }, (_, i) => {
     const holeNumber = i + 1;
@@ -161,82 +197,75 @@ function mergeHoleScoresAcrossDuplicates(
       ? played.reduce((a, h) => a + Number(h.strokes ?? 0), 0)
       : null;
   const toPar =
-    primary.is_dq || parPlayed == null || grossPlayed == null
+    isDQ || parPlayed == null || grossPlayed == null
       ? null
       : grossPlayed - parPlayed;
 
+  const grossFromOrdered = ordered.find((d) => d.gross_score != null)
+    ?.gross_score;
+
   return {
     ...primary,
+    is_dq: isDQ,
     holes,
     out_score: subtotal(holes, 0, 9, "strokes"),
     in_score: subtotal(holes, 9, 18, "strokes"),
     total_score: subtotal(holes, 0, 18, "strokes"),
-    gross_score: primary.is_dq
+    gross_score: isDQ
       ? primary.gross_score
-      : primary.gross_score ?? grossPlayed,
-    to_par: primary.is_dq ? primary.to_par : toPar ?? primary.to_par,
+      : grossFromOrdered ?? grossPlayed ?? primary.gross_score,
+    to_par: isDQ ? primary.to_par : toPar ?? primary.to_par,
   };
 }
 
+function detailsForPlayerCategoryScope(
+  details: RoundDetail[],
+  playerCategoryId: string | null
+): RoundDetail[] {
+  const cid = String(playerCategoryId ?? "").trim();
+  if (!cid) return details;
+  const scoped = details.filter((d) =>
+    roundRowAppliesToEntry({ category_id: d.category_id ?? null }, cid)
+  );
+  return scoped.length > 0 ? scoped : details;
+}
+
 /**
- * Filas de detalle para la tabla hoyo por hoyo: solo rondas de la categoría del jugador;
- * si hay varias filas BD con el mismo `round_no` (p. ej. categorías), se fusionan los golpes
- * por hoyo entre esas filas para no perder capturas.
+ * Detalle hoyo por hoyo: agrupa por `round_no` solo entre rondas de la **categoría**
+ * de la jugadora (más rondas “abiertas” sin `category_id`), y fusiona si hace falta.
  */
 export function selectLeaderboardDetailsForPlayer(
   row: LeaderboardRow
 ): RoundDetail[] {
   const catId = row.category_id;
+  const cid = String(catId ?? "").trim();
 
-  let scoped = row.details.filter((d) =>
-    roundBelongsToCategory(
-      { category_id: d.category_id ?? null },
-      catId
-    )
-  );
-
-  if (scoped.length === 0) {
-    scoped = row.details.filter((d) => detailRoundHasScoreData(d));
-  }
-  if (scoped.length === 0) {
-    scoped = row.details;
-  }
+  const scopedDetails = detailsForPlayerCategoryScope(row.details, catId);
 
   const byRoundNo = new Map<number, RoundDetail[]>();
-  for (const d of scoped) {
+  for (const d of scopedDetails) {
     const n = d.round_no;
     if (!byRoundNo.has(n)) byRoundNo.set(n, []);
     byRoundNo.get(n)!.push(d);
   }
 
-  const cid = String(row.category_id ?? "").trim();
-
   const out: RoundDetail[] = [];
   for (const roundNo of [...byRoundNo.keys()].sort((a, b) => a - b)) {
     const arr = byRoundNo.get(roundNo)!;
-    const scored = arr.filter((d) => detailRoundHasScoreData(d));
 
-    let primary: RoundDetail | null = null;
-    if (scored.length === 1) {
-      primary = scored[0]!;
-    } else if (scored.length > 1) {
-      primary =
-        scored.find(
-          (d) => cid && String(d.category_id ?? "").trim() === cid
-        ) ?? scored[0]!;
+    const groupVisible =
+      !cid ||
+      arr.some((d) =>
+        roundBelongsToCategory({ category_id: d.category_id ?? null }, catId)
+      ) ||
+      arr.some((d) => detailRoundHasScoreData(d));
+
+    if (!groupVisible) continue;
+
+    if (arr.length === 1) {
+      out.push(arr[0]!);
     } else {
-      primary =
-        arr.find((d) => cid && String(d.category_id ?? "").trim() === cid) ??
-        arr[0] ??
-        null;
-    }
-
-    if (!primary) continue;
-
-    if (arr.length > 1) {
-      out.push(mergeHoleScoresAcrossDuplicates(primary, arr));
-    } else {
-      out.push(primary);
+      out.push(mergeRoundDetailGroup(arr, catId));
     }
   }
   return out;
@@ -433,27 +462,37 @@ export function holesPlayedCount(details: RoundDetail[]) {
   );
 }
 
-function holesCapturedInRound(
+export function holesCapturedForSelectedRound(
   details: RoundDetail[],
-  roundId: string | null | undefined
+  selectedRound: SelectedRoundMeta | null | undefined,
+  entryCategoryId?: string | null
 ) {
-  if (!roundId) return 0;
-
-  const round = details.find((detail) => detail.round_id === roundId);
+  const round = resolveDetailForSelectedRound(
+    details,
+    selectedRound ?? null,
+    entryCategoryId
+  );
   if (!round) return 0;
   if (round.is_dq) return 18;
-
   return round.holes.filter((hole) => hole.strokes != null).length;
 }
 
 export function formatThru(
   details: RoundDetail[],
-  roundId: string | null | undefined
+  selectedRound: SelectedRoundMeta | null | undefined,
+  entryCategoryId?: string | null
 ) {
-  const round = details.find((detail) => detail.round_id === roundId);
+  if (!selectedRound?.id) return "—";
+
+  const round = resolveDetailForSelectedRound(
+    details,
+    selectedRound,
+    entryCategoryId
+  );
   if (round?.is_dq) return "DQ";
 
-  const count = holesCapturedInRound(details, roundId);
+  const count =
+    round?.holes.filter((hole) => hole.strokes != null).length ?? 0;
 
   if (count <= 0) return "—";
   if (count >= 18) return "F";

@@ -6,14 +6,19 @@ import FavoriteStar from "./FavoriteStar";
 import type {
   HoleDetail,
   LeaderboardRow,
-  RoundDetail,
 } from "@/app/torneos/[id]/lib/types";
-import { scoreMarker, selectLeaderboardDetailsForPlayer } from "@/app/torneos/[id]/lib/utils";
+import {
+  formatThru,
+  holesCapturedForSelectedRound,
+  scoreMarker,
+  selectLeaderboardDetailsForPlayer,
+  type SelectedRoundMeta,
+} from "@/app/torneos/[id]/lib/utils";
 
 type FavoritesViewProps = {
   tournamentId: string;
   leaderboard: LeaderboardRow[];
-  selectedRoundId?: string | null;
+  selectedRound?: SelectedRoundMeta | null;
 };
 
 function formatScore(value: number | null) {
@@ -36,26 +41,6 @@ function subtotal(
   const hasAny = segment.some((hole) => hole[field] != null);
   if (!hasAny) return null;
   return segment.reduce((acc, hole) => acc + Number(hole[field] ?? 0), 0);
-}
-
-function holesCapturedInRound(
-  details: RoundDetail[],
-  roundId: string | null | undefined
-) {
-  if (!roundId) return 0;
-
-  const round = details.find((detail) => detail.round_id === roundId);
-  if (!round) return 0;
-
-  return round.holes.filter((hole) => hole.strokes != null).length;
-}
-
-function formatThru(details: RoundDetail[], roundId: string | null | undefined) {
-  const count = holesCapturedInRound(details, roundId);
-
-  if (count <= 0) return "—";
-  if (count >= 18) return "F";
-  return String(count);
 }
 
 function categoryBucket(code: string | null | undefined) {
@@ -120,7 +105,7 @@ function extractCategoryHandicapSeed(code: string | null | undefined) {
 function compareFavoriteRows(
   a: LeaderboardRow,
   b: LeaderboardRow,
-  selectedRoundId: string | null
+  selectedRound: SelectedRoundMeta | null
 ) {
   const bucketA = categoryBucket(a.category_code);
   const bucketB = categoryBucket(b.category_code);
@@ -157,8 +142,16 @@ function compareFavoriteRows(
   if (a.total_to_par != null && b.total_to_par == null) return -1;
   if (a.total_to_par == null && b.total_to_par != null) return 1;
 
-  const thruA = holesCapturedInRound(a.details, selectedRoundId);
-  const thruB = holesCapturedInRound(b.details, selectedRoundId);
+  const thruA = holesCapturedForSelectedRound(
+    a.details,
+    selectedRound,
+    a.category_id
+  );
+  const thruB = holesCapturedForSelectedRound(
+    b.details,
+    selectedRound,
+    b.category_id
+  );
   if (thruA !== thruB) return thruB - thruA;
 
   return a.player_name.localeCompare(b.player_name, "es", {
@@ -470,7 +463,7 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
 export default function FavoritesView({
   tournamentId,
   leaderboard,
-  selectedRoundId = null,
+  selectedRound = null,
 }: FavoritesViewProps) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -518,8 +511,8 @@ export default function FavoritesView({
 
         return candidates.some((candidate) => favoriteSet.has(candidate));
       })
-      .sort((a, b) => compareFavoriteRows(a, b, selectedRoundId ?? null));
-  }, [favoriteIds, leaderboard, hydrated, selectedRoundId]);
+      .sort((a, b) => compareFavoriteRows(a, b, selectedRound ?? null));
+  }, [favoriteIds, leaderboard, hydrated, selectedRound]);
 
   if (!hydrated) {
     return (
@@ -640,7 +633,7 @@ export default function FavoritesView({
               </td>
 
               <td className="px-2 py-1 text-center font-semibold text-sky-300">
-                {formatThru(row.details, selectedRoundId)}
+                {formatThru(row.details, selectedRound, row.category_id)}
               </td>
 
               <td className="px-2 py-1 text-center">

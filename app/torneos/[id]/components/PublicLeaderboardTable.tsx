@@ -8,6 +8,7 @@ import {
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
+  type SelectedRoundMeta,
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
 
@@ -38,7 +39,7 @@ type PublicLeaderboardTableProps = {
   leaderboard: LeaderboardRow[];
   view: "live" | "official";
   selectedCategoryId: string;
-  selectedRoundId: string | null;
+  selectedRound: SelectedRoundMeta | null;
   requestedDetailId: string;
 };
 
@@ -47,7 +48,7 @@ export default function PublicLeaderboardTable({
   leaderboard,
   view,
   selectedCategoryId,
-  selectedRoundId,
+  selectedRound,
   requestedDetailId,
 }: PublicLeaderboardTableProps) {
   return (
@@ -166,10 +167,11 @@ export default function PublicLeaderboardTable({
                         </div>
 
                         <Link
+                          scroll={false}
                           href={buildDetailToggleHref({
                             tournamentId,
                             categoryId: selectedCategoryId || null,
-                            roundId: selectedRoundId,
+                            roundId: selectedRound?.id ?? null,
                             view,
                             currentDetailId: requestedDetailId || null,
                             nextDetailId: row.entry_id,
@@ -197,7 +199,7 @@ export default function PublicLeaderboardTable({
                     </td>
 
                     <td className="px-1 py-2 text-center font-semibold text-slate-200">
-                      {formatThru(row.details, selectedRoundId)}
+                      {formatThru(row.details, selectedRound, row.category_id)}
                     </td>
 
                     <td className="px-1 py-2 text-center font-semibold text-slate-200">

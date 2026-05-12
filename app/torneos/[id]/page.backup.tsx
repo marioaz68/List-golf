@@ -6,6 +6,11 @@ import FavoriteStar from "@/components/public/FavoriteStar";
 import FavoritesView from "@/components/public/FavoritesView";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
+import {
+  fetchHoleScoresForRoundScores,
+  fetchRoundScoresForPublicLeaderboard,
+} from "./lib/data";
+import { formatThru } from "./lib/utils";
 
 type Tournament = {
   id: string;
@@ -67,7 +72,8 @@ type RoundScoreRow = {
 
 type HoleScoreRow = {
   round_score_id: string;
-  hole_number: number;
+  hole_number?: number | null;
+  hole_no?: number | null;
   strokes: number | null;
 };
 
@@ -302,30 +308,6 @@ function holesPlayedCount(details: RoundDetail[]) {
       acc + detail.holes.filter((hole) => hole.strokes != null).length,
     0
   );
-}
-
-function holesCapturedInRound(
-  details: RoundDetail[],
-  roundId: string | null | undefined
-) {
-  if (!roundId) return 0;
-
-  const round = details.find((detail) => detail.round_id === roundId);
-  if (!round) return 0;
-  if (round.is_dq) return 18;
-
-  return round.holes.filter((hole) => hole.strokes != null).length;
-}
-
-function formatThru(details: RoundDetail[], roundId: string | null | undefined) {
-  const round = details.find((detail) => detail.round_id === roundId);
-  if (round?.is_dq) return "DQ";
-
-  const count = holesCapturedInRound(details, roundId);
-
-  if (count <= 0) return "—";
-  if (count >= 18) return "F";
-  return String(count);
 }
 
 function scoreMarker(
@@ -716,37 +698,22 @@ export default async function PublicTournamentPage({
 
   const rounds = (roundsData ?? []) as RoundRow[];
 
-  const { data: roundScoresData, error: roundScoresError } =
+  const roundScores =
     filteredEntries.length > 0 && rounds.length > 0
-      ? await supabase
-          .from("round_scores")
-          .select("id, round_id, player_id, gross_score")
-          .in("player_id", filteredEntries.map((entry) => entry.player_id))
-          .in("round_id", rounds.map((r) => r.id))
-      : { data: [], error: null };
+      ? await fetchRoundScoresForPublicLeaderboard(
+          supabase,
+          filteredEntries.map((entry) => entry.player_id),
+          rounds.map((r) => r.id)
+        )
+      : [];
 
-  if (roundScoresError) {
-    throw new Error(`Error leyendo round_scores: ${roundScoresError.message}`);
-  }
-
-  const roundScores = (roundScoresData ?? []) as RoundScoreRow[];
-
-  const { data: holeScoresData, error: holeScoresError } =
+  const holeScores =
     roundScores.length > 0
-      ? await supabase
-          .from("hole_scores")
-          .select("round_score_id, hole_number, strokes")
-          .in(
-            "round_score_id",
-            roundScores.map((row) => row.id)
-          )
-      : { data: [], error: null };
-
-  if (holeScoresError) {
-    throw new Error(`Error leyendo hole_scores: ${holeScoresError.message}`);
-  }
-
-  const holeScores = (holeScoresData ?? []) as HoleScoreRow[];
+      ? await fetchHoleScoresForRoundScores(
+          supabase,
+          roundScores.map((row) => row.id)
+        )
+      : [];
 
   const { data: tournamentHolesData, error: tournamentHolesError } =
     await supabase
@@ -1376,7 +1343,7 @@ filteredEntries.forEach((entry) => {
               <FavoritesView
                 tournamentId={typedTournament.id}
                 leaderboard={leaderboard}
-                selectedRoundId={selectedRound?.id ?? null}
+                selectedRound={selectedRound}
               />
             </div>
           ) : (
@@ -1524,7 +1491,7 @@ filteredEntries.forEach((entry) => {
                             </td>
 
                             <td className="px-1 py-2 text-center font-semibold text-slate-200">
-                              {formatThru(row.details, selectedRound?.id ?? null)}
+                              {formatThru(row.details, selectedRound, row.category_id)}
                             </td>
 
                             <td className="px-1 py-2 text-center font-semibold text-slate-200">

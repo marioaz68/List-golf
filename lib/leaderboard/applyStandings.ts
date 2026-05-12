@@ -1,3 +1,9 @@
+import {
+  resolveEffectiveRoundIdForEntry,
+  resolvePreviousRoundRowForEntry,
+  roundRowAppliesToEntry,
+} from "./roundCategoryMatch";
+
 export function applyStandings({
   leaderboardBase,
   rounds,
@@ -21,6 +27,15 @@ export function applyStandings({
 
       for (const detail of row.details) {
         if (!roundIdsUpToCurrent.includes(detail.round_id)) continue;
+
+        if (
+          !roundRowAppliesToEntry(
+            { category_id: detail.category_id ?? null },
+            row.category_id
+          )
+        ) {
+          continue;
+        }
 
         const roundHasAnyHole = detail.holes.some(
           (hole: any) => hole.strokes != null
@@ -221,14 +236,29 @@ export function applyStandings({
       );
     });
 
+    const effectiveRoundId = resolveEffectiveRoundIdForEntry(
+      selectedRound,
+      row.category_id,
+      rounds
+    );
+
+    const effectiveRound =
+      rounds.find((r: any) => r.id === effectiveRoundId) ??
+      selectedRound ??
+      null;
+
     const selectedStanding =
-      standingByRound.find((s: any) => s.round_id === selectedRound?.id) ?? null;
+      standingByRound.find((s: any) => s.round_id === effectiveRoundId) ?? null;
+
+    const prevRoundRow = resolvePreviousRoundRowForEntry(
+      effectiveRound ?? null,
+      row.category_id,
+      rounds
+    );
 
     const previousStanding =
-      selectedRound != null
-        ? standingByRound.find(
-            (s: any) => s.round_no === selectedRound.round_no - 1
-          ) ?? null
+      prevRoundRow != null
+        ? standingByRound.find((s: any) => s.round_id === prevRoundRow.id) ?? null
         : null;
 
     const moveVsPrevious =
@@ -238,13 +268,13 @@ export function applyStandings({
 
     const selectedStandingCategory =
       standingByRoundCategory.find(
-        (s: any) => s.round_id === selectedRound?.id
+        (s: any) => s.round_id === effectiveRoundId
       ) ?? null;
 
     const previousStandingCategory =
-      selectedRound != null
+      prevRoundRow != null
         ? standingByRoundCategory.find(
-            (s: any) => s.round_no === selectedRound.round_no - 1
+            (s: any) => s.round_id === prevRoundRow.id
           ) ?? null
         : null;
 

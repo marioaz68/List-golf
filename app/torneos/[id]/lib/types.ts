@@ -63,7 +63,9 @@ export type RoundScoreRow = {
 
 export type HoleScoreRow = {
   round_score_id: string;
-  hole_number: number;
+  /** Algunas capturas / migraciones usan solo `hole_no`. */
+  hole_number?: number | null;
+  hole_no?: number | null;
   strokes: number | null;
 };
 

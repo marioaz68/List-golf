@@ -1,3 +1,20 @@
+import {
+  resolveDetailForSelectedRound,
+  type SelectedRoundMeta,
+} from "./roundCategoryMatch";
+
+/** Misma convención que captura pública / `captura/tarjeta`: hoyo en `hole_number` o `hole_no`. */
+function holeIndexFromScoreRow(row: {
+  hole_number?: unknown;
+  hole_no?: unknown;
+}): number | null {
+  const raw = row.hole_number ?? row.hole_no;
+  if (raw == null) return null;
+  const n = Number(raw);
+  if (Number.isNaN(n) || n < 1 || n > 18) return null;
+  return n;
+}
+
 export function buildLiveLeaderboard({
   filteredEntries,
   rounds,
@@ -53,14 +70,15 @@ export function buildLiveLeaderboard({
 
       const roundHoleRows = score
         ? [...(holeScoresByRoundScoreId.get(score.id) ?? [])].sort(
-            (a: any, b: any) => Number(a.hole_number) - Number(b.hole_number)
+            (a: any, b: any) =>
+              (holeIndexFromScoreRow(a) ?? 99) - (holeIndexFromScoreRow(b) ?? 99)
           )
         : [];
 
       const holes = Array.from({ length: 18 }, (_, i) => {
         const holeNumber = i + 1;
         const found = roundHoleRows.find(
-          (row: any) => Number(row.hole_number) === holeNumber
+          (row: any) => holeIndexFromScoreRow(row) === holeNumber
         );
 
         return {
@@ -144,9 +162,20 @@ export function buildLiveLeaderboard({
         ? totalToPar
         : null;
 
-    const selectedRoundDetail =
-      details.find((detail: any) => detail.round_id === selectedRound?.id) ??
-      null;
+    const selectedMeta: SelectedRoundMeta | null = selectedRound
+      ? {
+          id: selectedRound.id,
+          round_no: selectedRound.round_no,
+          round_date: selectedRound.round_date ?? null,
+          category_id: selectedRound.category_id ?? null,
+        }
+      : null;
+
+    const selectedRoundDetail = resolveDetailForSelectedRound(
+      details,
+      selectedMeta,
+      entry.category_id
+    );
 
     return {
       entry_id: entry.id,
