@@ -171,10 +171,17 @@ export function buildLiveLeaderboard({
         }
       : null;
 
+    const scoreRoundIds = new Set<string>(
+      playerRoundScores
+        .map((x: any) => String(x.round_id ?? "").trim())
+        .filter(Boolean)
+    );
+
     const selectedRoundDetail = resolveDetailForSelectedRound(
       details,
       selectedMeta,
-      entry.category_id
+      entry.category_id,
+      scoreRoundIds
     );
 
     return {

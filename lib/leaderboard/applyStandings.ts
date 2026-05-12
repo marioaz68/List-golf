@@ -1,4 +1,5 @@
 import {
+  collectRoundIdsWithScoreCapture,
   resolveEffectiveRoundIdForEntry,
   resolvePreviousRoundRowForEntry,
   roundRowAppliesToEntry,
@@ -236,10 +237,13 @@ export function applyStandings({
       );
     });
 
+    const captureRoundIds = collectRoundIdsWithScoreCapture(row.details);
+
     const effectiveRoundId = resolveEffectiveRoundIdForEntry(
       selectedRound,
       row.category_id,
-      rounds
+      rounds,
+      captureRoundIds
     );
 
     const effectiveRound =
@@ -253,7 +257,8 @@ export function applyStandings({
     const prevRoundRow = resolvePreviousRoundRowForEntry(
       effectiveRound ?? null,
       row.category_id,
-      rounds
+      rounds,
+      captureRoundIds
     );
 
     const previousStanding =

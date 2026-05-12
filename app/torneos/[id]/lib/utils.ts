@@ -9,6 +9,7 @@ import type {
   ValidTournamentEntry,
 } from "./types";
 import {
+  collectRoundIdsWithScoreCapture,
   resolveDetailForSelectedRound,
   roundRowAppliesToEntry,
   type SelectedRoundMeta,
@@ -470,7 +471,8 @@ export function holesCapturedForSelectedRound(
   const round = resolveDetailForSelectedRound(
     details,
     selectedRound ?? null,
-    entryCategoryId
+    entryCategoryId,
+    collectRoundIdsWithScoreCapture(details)
   );
   if (!round) return 0;
   if (round.is_dq) return 18;
@@ -487,7 +489,8 @@ export function formatThru(
   const round = resolveDetailForSelectedRound(
     details,
     selectedRound,
-    entryCategoryId
+    entryCategoryId,
+    collectRoundIdsWithScoreCapture(details)
   );
   if (round?.is_dq) return "DQ";
 
