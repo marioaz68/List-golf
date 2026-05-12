@@ -72,7 +72,8 @@ export default async function CoursesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const locale = await getLocale();
-  const courseTitle = messages[locale].courses.title;
+  const co = messages[locale].courses;
+  const courseTitle = co.title;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -222,11 +223,11 @@ export default async function CoursesPage(props: {
 
             <div className="rounded border border-gray-200 bg-gray-50 p-3">
               <label className="mb-1 block text-[10px] font-semibold uppercase text-gray-500">
-                Short campo
+                {co.shortNameLabel}
               </label>
               <input
                 name="short_name"
-                placeholder="Abrev. ej. CCQ"
+                placeholder={co.shortNamePlaceholderCourse}
                 className={`${inputClass} w-full`}
               />
             </div>
@@ -305,12 +306,12 @@ export default async function CoursesPage(props: {
 
             <div className="rounded border border-gray-200 bg-gray-50 p-3">
               <label className="mb-1 block text-[10px] font-semibold uppercase text-gray-500">
-                Short club nuevo
+                {co.shortNameLabel}
               </label>
               <input
                 id="new_club_short_name"
                 name="new_club_short_name"
-                placeholder="Abrev. del club"
+                placeholder={co.shortNamePlaceholderNewClub}
                 className={`${inputClass} w-full`}
               />
             </div>
@@ -394,12 +395,12 @@ export default async function CoursesPage(props: {
 
                 <div className="rounded border border-gray-200 bg-gray-50 p-3">
                   <label className="mb-1 block text-[10px] font-semibold uppercase text-gray-500">
-                    Abrev.
+                    {co.shortNameLabel}
                   </label>
                   <input
                     name="short_name"
                     defaultValue={course.short_name ?? ""}
-                    placeholder="Abrev. ej. CCQ"
+                    placeholder={co.shortNamePlaceholderCourse}
                     className={`${inputClass} w-full`}
                   />
                 </div>

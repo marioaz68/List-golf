@@ -247,7 +247,10 @@ export default function Sidebar() {
   function buildHref(item: MenuItem) {
     const params = new URLSearchParams();
 
-    if (tournamentId && item.requiresTournament) {
+    // Mantener torneo activo en la URL en todo el backoffice (p. ej. /clubs, /courses).
+    // Si no, al salir de pantallas "catálogo" se pierde tournament_id y en modo Operación
+    // desaparecen inscripciones, salidas, etc. (solo quedan ítems sin requiresTournament).
+    if (tournamentId) {
       params.set("tournament_id", tournamentId);
     }
 

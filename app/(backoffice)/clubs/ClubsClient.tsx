@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { AppMessages } from "@/lib/i18n/messages";
+import { fmt } from "@/lib/i18n/fmt";
 import {
   createClub,
   mergeClubIntoWinner,
@@ -27,11 +29,7 @@ type ClubRow = {
 
 type Props = {
   clubs: ClubRow[];
-  copy: {
-    title: string;
-    subtitle: string;
-    searchPlaceholder: string;
-  };
+  copy: AppMessages["clubs"];
 };
 
 type FormState = {
@@ -323,7 +321,13 @@ function ClubBadge({
   );
 }
 
-function ClubPreviewFromForm({ form }: { form: FormState }) {
+function ClubPreviewFromForm({
+  form,
+  copy,
+}: {
+  form: FormState;
+  copy: AppMessages["clubs"];
+}) {
   const shortName = normalizeShort(form.short_name);
   const color = form.primary_color || colorFromShort(shortName);
 
@@ -342,7 +346,7 @@ function ClubPreviewFromForm({ form }: { form: FormState }) {
       <div>
         <div style={{ fontSize: 12, fontWeight: 700 }}>{shortName}</div>
         <div style={{ fontSize: 11, color: "#64748b" }}>
-          {form.logo_url ? "Logo oficial" : "Logo automático"}
+          {form.logo_url ? copy.previewOfficialLogo : copy.previewAutomaticLogo}
         </div>
       </div>
     </div>
@@ -455,20 +459,22 @@ export default function ClubsClient({ clubs, copy }: Props) {
       try {
         const saved = await createClub(fd);
         if (!saved?.id) {
-          throw new Error("No se confirmó el alta del club.");
+          throw new Error(copy.errCreateNotConfirmed);
         }
         setCreateForm(emptyForm());
-        setInfoMsg("Club creado correctamente.");
+        setInfoMsg(copy.infoClubCreated);
         router.refresh();
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Error creando club");
+        setErrorMsg(
+          err instanceof Error ? err.message : copy.errGenericCreateClub
+        );
       }
     });
   }
 
   function submitEdit() {
     if (!editForm.id) {
-      setErrorMsg("No se encontró el club a editar.");
+      setErrorMsg(copy.errClubNotFoundEdit);
       return;
     }
 
@@ -486,22 +492,20 @@ export default function ClubsClient({ clubs, copy }: Props) {
         const saved = await updateClub(fd);
 
         if (!saved?.id) {
-          throw new Error("No se confirmó la actualización del club.");
+          throw new Error(copy.errUpdateNotConfirmed);
         }
 
         if ((saved.short_name ?? null) !== (normalizeShort(editForm.short_name) || null)) {
-          throw new Error(
-            "La base no regresó el short name esperado. No se guardó correctamente."
-          );
+          throw new Error(copy.errShortNameMismatch);
         }
 
         setEditingId(null);
         setEditForm(emptyForm());
-        setInfoMsg("Club actualizado correctamente.");
+        setInfoMsg(copy.infoClubUpdated);
         router.refresh();
       } catch (err) {
         setErrorMsg(
-          err instanceof Error ? err.message : "Error actualizando club"
+          err instanceof Error ? err.message : copy.errGenericUpdateClub
         );
       }
     });
@@ -509,7 +513,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
 
   function submitLogoEdit() {
     if (!logoForm.club_id) {
-      setErrorMsg("No se encontró el club para editar logo.");
+      setErrorMsg(copy.errClubNotFoundLogo);
       return;
     }
 
@@ -524,7 +528,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
       try {
         const saved = await updateClubLogo(fd);
         if (!saved?.id) {
-          throw new Error("No se confirmó la actualización del logo.");
+          throw new Error(copy.errLogoUpdateNotConfirmed);
         }
 
         setLogoEditingId(null);
@@ -533,11 +537,11 @@ export default function ClubsClient({ clubs, copy }: Props) {
           logo_url: "",
           primary_color: "",
         });
-        setInfoMsg("Logo actualizado correctamente.");
+        setInfoMsg(copy.infoLogoUpdated);
         router.refresh();
       } catch (err) {
         setErrorMsg(
-          err instanceof Error ? err.message : "Error actualizando logo"
+          err instanceof Error ? err.message : copy.errGenericUpdateLogo
         );
       }
     });
@@ -552,11 +556,11 @@ export default function ClubsClient({ clubs, copy }: Props) {
     startTransition(async () => {
       try {
         await regenerateClubLogo(fd);
-        setInfoMsg("Logo automático regenerado.");
+        setInfoMsg(copy.infoLogoRegenerated);
         router.refresh();
       } catch (err) {
         setErrorMsg(
-          err instanceof Error ? err.message : "Error regenerando logo"
+          err instanceof Error ? err.message : copy.errGenericRegenerateLogo
         );
       }
     });
@@ -573,17 +577,17 @@ export default function ClubsClient({ clubs, copy }: Props) {
       try {
         const saved = await toggleClubActive(fd);
         if (!saved?.id) {
-          throw new Error("No se confirmó el cambio de estatus.");
+          throw new Error(copy.errToggleNotConfirmed);
         }
         setInfoMsg(
           club.is_active !== false
-            ? "Club desactivado correctamente."
-            : "Club activado correctamente."
+            ? copy.infoClubDeactivated
+            : copy.infoClubActivated
         );
         router.refresh();
       } catch (err) {
         setErrorMsg(
-          err instanceof Error ? err.message : "Error cambiando estatus"
+          err instanceof Error ? err.message : copy.errGenericToggle
         );
       }
     });
@@ -593,12 +597,12 @@ export default function ClubsClient({ clubs, copy }: Props) {
     clearMessages();
 
     if (!mergeSourceId || !mergeTargetId) {
-      setErrorMsg("Selecciona club duplicado y club destino.");
+      setErrorMsg(copy.errMergeSelectBoth);
       return;
     }
 
     if (mergeSourceId === mergeTargetId) {
-      setErrorMsg("El club duplicado y el destino no pueden ser el mismo.");
+      setErrorMsg(copy.errMergeSame);
       return;
     }
 
@@ -611,12 +615,12 @@ export default function ClubsClient({ clubs, copy }: Props) {
         await mergeClubIntoWinner(fd);
         setMergeSourceId("");
         setMergeTargetId("");
-        setInfoMsg(
-          "Fusión aplicada. Se movieron los courses/players al club destino y el club duplicado quedó inactivo."
-        );
+        setInfoMsg(copy.infoMergeDone);
         router.refresh();
       } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : "Error fusionando club");
+        setErrorMsg(
+          err instanceof Error ? err.message : copy.errGenericMerge
+        );
       }
     });
   }
@@ -692,7 +696,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
         }}
       >
         <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-          Alta de club
+          {copy.sectionCreateTitle}
         </div>
 
         <div
@@ -709,7 +713,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             onChange={(e) =>
               setCreateForm((prev) => ({ ...prev, name: e.target.value }))
             }
-            placeholder="Nombre del club"
+            placeholder={copy.placeholderClubName}
             style={inputStyle}
           />
 
@@ -718,7 +722,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             onChange={(e) =>
               setCreateForm((prev) => ({ ...prev, short_name: e.target.value }))
             }
-            placeholder="Short name"
+            placeholder={copy.placeholderShortName}
             style={inputStyle}
           />
 
@@ -739,7 +743,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             onChange={(e) =>
               setCreateForm((prev) => ({ ...prev, logo_url: e.target.value }))
             }
-            placeholder="URL logo oficial opcional"
+            placeholder={copy.placeholderLogoUrlOptional}
             style={inputStyle}
           />
 
@@ -763,7 +767,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                 }))
               }
             />
-            Activo
+            {copy.labelActive}
           </label>
 
           <button
@@ -772,7 +776,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             disabled={isPending}
             style={greenButtonStyle}
           >
-            {isPending ? "Guardando..." : "Crear club"}
+            {isPending ? copy.saving : copy.btnCreateClub}
           </button>
         </div>
 
@@ -784,7 +788,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             padding: 10,
           }}
         >
-          <ClubPreviewFromForm form={createForm} />
+          <ClubPreviewFromForm form={createForm} copy={copy} />
         </div>
       </section>
 
@@ -797,12 +801,11 @@ export default function ClubsClient({ clubs, copy }: Props) {
         }}
       >
         <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-          Fusionar club duplicado
+          {copy.sectionMergeTitle}
         </div>
 
         <div style={{ fontSize: 12, color: "#4b5563" }}>
-          Mueve los courses y players del club duplicado al club bueno y deja el duplicado
-          inactivo. No borra el registro origen.
+          {copy.sectionMergeDesc}
         </div>
 
         <div
@@ -818,10 +821,13 @@ export default function ClubsClient({ clubs, copy }: Props) {
             onChange={(e) => setMergeSourceId(e.target.value)}
             style={selectStyle}
           >
-            <option value="">Club duplicado / origen</option>
+            <option value="">{copy.mergeSelectSource}</option>
             {inactiveClubs.map((club) => (
               <option key={club.id} value={club.id}>
-                {(club.name ?? "—") + ` · courses: ${club.courses_count}`}
+                {fmt(copy.clubOptionWithCourses, {
+                  name: club.name ?? copy.dash,
+                  count: club.courses_count,
+                })}
               </option>
             ))}
           </select>
@@ -831,10 +837,13 @@ export default function ClubsClient({ clubs, copy }: Props) {
             onChange={(e) => setMergeTargetId(e.target.value)}
             style={selectStyle}
           >
-            <option value="">Club bueno / destino</option>
+            <option value="">{copy.mergeSelectTarget}</option>
             {activeClubs.map((club) => (
               <option key={club.id} value={club.id}>
-                {(club.name ?? "—") + ` · courses: ${club.courses_count}`}
+                {fmt(copy.clubOptionWithCourses, {
+                  name: club.name ?? copy.dash,
+                  count: club.courses_count,
+                })}
               </option>
             ))}
           </select>
@@ -845,7 +854,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             disabled={isPending}
             style={primaryButtonStyle}
           >
-            {isPending ? "Fusionando..." : "Fusionar"}
+            {isPending ? copy.merging : copy.btnMerge}
           </button>
         </div>
       </section>
@@ -854,13 +863,13 @@ export default function ClubsClient({ clubs, copy }: Props) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={thStyle}>Logo</th>
-              <th style={thStyle}>Club</th>
-              <th style={thStyle}>Short</th>
-              <th style={thStyle}>Courses</th>
-              <th style={thStyle}>Logo oficial</th>
-              <th style={thStyle}>Estatus</th>
-              <th style={thStyle}>Acciones</th>
+              <th style={thStyle}>{copy.thLogo}</th>
+              <th style={thStyle}>{copy.thClub}</th>
+              <th style={thStyle}>{copy.thShortName}</th>
+              <th style={thStyle}>{copy.thCourses}</th>
+              <th style={thStyle}>{copy.thOfficialLogo}</th>
+              <th style={thStyle}>{copy.thStatus}</th>
+              <th style={thStyle}>{copy.thActions}</th>
             </tr>
           </thead>
 
@@ -868,7 +877,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             {filtered.length === 0 ? (
               <tr>
                 <td style={tdStyle} colSpan={7}>
-                  Sin resultados.
+                  {copy.emptyResults}
                 </td>
               </tr>
             ) : (
@@ -911,7 +920,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                       ) : (
                         <div>
                           <div style={{ fontWeight: 600, color: "#111827" }}>
-                            {club.name || "—"}
+                            {club.name || copy.dash}
                           </div>
                           {club.normalized_name ? (
                             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
@@ -920,7 +929,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                           ) : null}
                           {club.primary_color ? (
                             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-                              Color: {club.primary_color}
+                              {copy.labelColor} {club.primary_color}
                             </div>
                           ) : null}
                         </div>
@@ -937,6 +946,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                               short_name: e.target.value,
                             }))
                           }
+                          placeholder={copy.placeholderShortName}
                           style={inputStyle}
                         />
                       ) : (
@@ -953,7 +963,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             fontWeight: 800,
                           }}
                         >
-                          {club.short_name || "—"}
+                          {club.short_name || copy.dash}
                         </span>
                       )}
                     </td>
@@ -971,7 +981,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                                 logo_url: e.target.value,
                               }))
                             }
-                            placeholder="Pega URL de logo oficial"
+                            placeholder={copy.placeholderPasteOfficialLogoUrl}
                             style={inputStyle}
                           />
 
@@ -994,7 +1004,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                               disabled={isPending}
                               style={primaryButtonStyle}
                             >
-                              {isPending ? "Guardando..." : "Guardar logo"}
+                              {isPending ? copy.saving : copy.btnSaveLogo}
                             </button>
 
                             <button
@@ -1003,7 +1013,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                               disabled={isPending}
                               style={secondaryButtonStyle}
                             >
-                              Cancelar
+                              {copy.cancel}
                             </button>
                           </div>
                         </div>
@@ -1022,7 +1032,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                               fontWeight: 700,
                             }}
                           >
-                            {club.logo_url ? "Oficial" : "Automático"}
+                            {club.logo_url ? copy.badgeOfficial : copy.badgeAutomatic}
                           </span>
                           {club.logo_url ? (
                             <div
@@ -1040,7 +1050,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             </div>
                           ) : (
                             <div style={{ fontSize: 11, color: "#64748b" }}>
-                              Usa iniciales del short name.
+                              {copy.hintUseShortNameInitials}
                             </div>
                           )}
                         </div>
@@ -1068,7 +1078,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                               }))
                             }
                           />
-                          Activo
+                          {copy.labelActive}
                         </label>
                       ) : (
                         <span
@@ -1084,7 +1094,9 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             fontWeight: 600,
                           }}
                         >
-                          {club.is_active !== false ? "Activo" : "Inactivo"}
+                          {club.is_active !== false
+                            ? copy.labelActive
+                            : copy.labelInactive}
                         </span>
                       )}
                     </td>
@@ -1098,7 +1110,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             disabled={isPending}
                             style={primaryButtonStyle}
                           >
-                            {isPending ? "Guardando..." : "Guardar"}
+                            {isPending ? copy.saving : copy.btnSave}
                           </button>
 
                           <button
@@ -1107,7 +1119,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             disabled={isPending}
                             style={secondaryButtonStyle}
                           >
-                            Cancelar
+                            {copy.cancel}
                           </button>
                         </div>
                       ) : (
@@ -1118,7 +1130,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             disabled={isPending}
                             style={secondaryButtonStyle}
                           >
-                            Editar
+                            {copy.btnEdit}
                           </button>
 
                           <button
@@ -1127,7 +1139,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             disabled={isPending}
                             style={logoButtonStyle}
                           >
-                            Logo
+                            {copy.btnLogo}
                           </button>
 
                           <button
@@ -1136,7 +1148,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
                             disabled={isPending}
                             style={logoButtonStyle}
                           >
-                            Regenerar
+                            {copy.btnRegenerate}
                           </button>
 
                           <button
@@ -1149,7 +1161,9 @@ export default function ClubsClient({ clubs, copy }: Props) {
                                 : greenButtonStyle
                             }
                           >
-                            {club.is_active !== false ? "Desactivar" : "Activar"}
+                            {club.is_active !== false
+                              ? copy.deactivate
+                              : copy.activate}
                           </button>
                         </div>
                       )}

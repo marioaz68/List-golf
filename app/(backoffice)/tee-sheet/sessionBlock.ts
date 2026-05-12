@@ -92,18 +92,27 @@ export function roundsInSameSession<T extends SessionRoundFields>(
   return rounds.filter((x) => sessionBlockKey(x) === k).sort(compareRoundsInSession);
 }
 
+/** Extrae `YYYY-MM-DD` desde ISO (`2025-10-15T00:00:00Z`) o cadena corta. */
+export function toYyyyMmDd(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const m = String(raw).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
 function formatDateDdMmYyyy(value: string | null | undefined) {
-  if (!value) return "";
-  const parts = String(value).split("-");
-  if (parts.length !== 3) return String(value);
+  const ymd = toYyyyMmDd(value);
+  if (!ymd) return "";
+  const parts = ymd.split("-");
+  if (parts.length !== 3) return "";
   const [yyyy, mm, dd] = parts;
   return `${dd}/${mm}/${yyyy}`;
 }
 
 /** Nombre del día en minúsculas (es-MX), a partir de fecha YYYY-MM-DD (calendario local). */
 function weekdayLowerSpanish(isoDate: string | null | undefined) {
-  if (!isoDate) return "";
-  const parts = String(isoDate).trim().split("-");
+  const ymd = toYyyyMmDd(isoDate);
+  if (!ymd) return "";
+  const parts = ymd.split("-");
   if (parts.length !== 3) return "";
   const y = Number(parts[0]);
   const m = Number(parts[1]);
@@ -152,4 +161,35 @@ export function formatSessionOptionLabel(rep: SessionRoundFields) {
   }
 
   return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function formatDdMmYy(ymd: string) {
+  const parts = ymd.split("-");
+  if (parts.length !== 3) return "";
+  const [yyyy, mm, dd] = parts;
+  const yy = yyyy.slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
+/**
+ * Etiqueta corta para selects (captura, etc.): `R1 miércoles 15/10/25 AM · AA`.
+ * Sin tipo de salida ni intervalo (eso va en tee-sheet con `formatSessionOptionLabel`).
+ */
+export function formatRoundSelectLabelShort(
+  rep: SessionRoundFields,
+  extras?: { categoryCode?: string | null }
+) {
+  const ymd = toYyyyMmDd(rep.round_date);
+  const bits: string[] = [`R${rep.round_no}`];
+  if (ymd) {
+    const wd = weekdayLowerSpanish(ymd);
+    if (wd) bits.push(wd);
+    const ds = formatDdMmYy(ymd);
+    if (ds) bits.push(ds);
+  }
+  const wave = String(rep.wave ?? "").trim().toUpperCase();
+  if (wave === "AM" || wave === "PM") bits.push(wave);
+  const code = String(extras?.categoryCode ?? "").trim();
+  if (code) bits.push(`· ${code}`);
+  return bits.join(" ").replace(/\s+/g, " ").trim();
 }

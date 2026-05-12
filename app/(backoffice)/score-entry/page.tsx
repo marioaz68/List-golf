@@ -4,6 +4,10 @@ import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  formatRoundSelectLabelShort,
+  toYyyyMmDd,
+} from "../tee-sheet/sessionBlock";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,6 +19,15 @@ type RoundRow = {
   round_no: number;
   round_date: string | null;
   tournament_id: string;
+  category_id: string | null;
+  wave: string | null;
+  start_type: string | null;
+  start_time: string | null;
+  interval_minutes: number | null;
+  category:
+    | { code: string | null; name: string | null }
+    | { code: string | null; name: string | null }[]
+    | null;
 };
 
 type PlayerRow = {
@@ -92,6 +105,26 @@ function oneOrNull<T>(value: T | T[] | null | undefined): T | null {
   return value;
 }
 
+function categoryCodeFromRound(row: RoundRow): string | null {
+  const c = oneOrNull(row.category);
+  const raw = (c?.code ?? c?.name ?? "").trim();
+  return raw || null;
+}
+
+function sortRoundsForSelect(a: RoundRow, b: RoundRow) {
+  const da = toYyyyMmDd(a.round_date) ?? "";
+  const db = toYyyyMmDd(b.round_date) ?? "";
+  if (da !== db) return da.localeCompare(db);
+  const wa = String(a.wave ?? "").localeCompare(String(b.wave ?? ""));
+  if (wa !== 0) return wa;
+  if (a.round_no !== b.round_no) return a.round_no - b.round_no;
+  return String(categoryCodeFromRound(a) ?? "").localeCompare(
+    String(categoryCodeFromRound(b) ?? ""),
+    "es",
+    { sensitivity: "base" }
+  );
+}
+
 function isValidEntry(row: EntryJoinRow): row is ValidEntryRow {
   const player = oneOrNull(row.player);
   return !!player?.id;
@@ -115,7 +148,20 @@ export default async function ScoreEntryPage(props: {
 
   const roundsQuery = supabase
     .from("rounds")
-    .select("id, round_no, round_date, tournament_id")
+    .select(
+      `
+      id,
+      round_no,
+      round_date,
+      tournament_id,
+      category_id,
+      wave,
+      start_type,
+      start_time,
+      interval_minutes,
+      category:categories (code, name)
+    `
+    )
     .order("round_no", { ascending: true });
 
   const { data: rounds, error: roundsErr } = tournamentIdFromQuery
@@ -130,7 +176,16 @@ export default async function ScoreEntryPage(props: {
     );
   }
 
-  const roundList = (rounds ?? []) as RoundRow[];
+  const roundList = ((rounds ?? []) as RoundRow[])
+    .map((r) => ({
+      ...r,
+      category_id: r.category_id ?? null,
+      wave: r.wave ?? null,
+      start_type: r.start_type ?? null,
+      start_time: r.start_time ?? null,
+      interval_minutes: r.interval_minutes ?? null,
+    }))
+    .sort(sortRoundsForSelect);
 
   let selectedRound: RoundRow | null = null;
 
@@ -140,7 +195,7 @@ export default async function ScoreEntryPage(props: {
 
   if (!selectedRound) {
     selectedRound =
-      roundList.find((r) => r.round_date === today) ??
+      roundList.find((r) => toYyyyMmDd(r.round_date) === today) ??
       roundList.find((r) => r.round_no === 1) ??
       roundList[0] ??
       null;
@@ -377,12 +432,24 @@ export default async function ScoreEntryPage(props: {
               <select
                 name="round_id"
                 defaultValue={selectedRound?.id ?? ""}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-black"
+                className="w-full min-w-[min(100%,16rem)] max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-black"
               >
                 {roundList.map((r) => (
                   <option key={r.id} value={r.id}>
-                    Ronda {r.round_no}
-                    {r.round_date ? ` · ${r.round_date}` : ""}
+                    {formatRoundSelectLabelShort(
+                      {
+                        id: r.id,
+                        tournament_id: r.tournament_id,
+                        category_id: r.category_id,
+                        round_no: r.round_no,
+                        round_date: r.round_date,
+                        start_type: r.start_type,
+                        start_time: r.start_time,
+                        interval_minutes: r.interval_minutes,
+                        wave: r.wave,
+                      },
+                      { categoryCode: categoryCodeFromRound(r) }
+                    )}
                   </option>
                 ))}
               </select>

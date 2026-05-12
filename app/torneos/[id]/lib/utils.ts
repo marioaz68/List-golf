@@ -3,6 +3,7 @@ import type {
   EntryCategory,
   HoleDetail,
   RoundDetail,
+  RoundRow,
   TournamentEntryJoinRow,
   ValidTournamentEntry,
 } from "./types";
@@ -65,6 +66,23 @@ export function formatDate(date: string | null) {
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(date));
+}
+
+/** Clave calendario YYYY-MM-DD en UTC (alineada con `formatDate`). */
+export function roundDateUtcKey(roundDate: string | null | undefined) {
+  if (!roundDate) return null;
+  const d = new Date(roundDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+export function utcTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function sortRoundsChrono(a: RoundRow, b: RoundRow) {
+  if (a.round_no !== b.round_no) return a.round_no - b.round_no;
+  return String(a.id).localeCompare(String(b.id));
 }
 
 /** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */

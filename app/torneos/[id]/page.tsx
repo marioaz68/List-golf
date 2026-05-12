@@ -36,9 +36,12 @@ import {
   nameOfPlayer,
   normalizeClubLabel,
   pillClasses,
+  roundDateUtcKey,
   sectionPillClasses,
+  sortRoundsChrono,
   subtotal,
   toValidEntry,
+  utcTodayKey,
 } from "./lib/utils";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
@@ -193,6 +196,30 @@ export default async function PublicTournamentPage({
   const rounds = (roundsData ?? []) as RoundRow[];
   const publicTeeSheetRounds = rounds.filter((round) => isStartingOrderConfirmed(round.notes));
 
+  const todayKey = utcTodayKey();
+  const roundsTodayList = rounds
+    .filter((r) => roundDateUtcKey(r.round_date) === todayKey)
+    .sort(sortRoundsChrono);
+
+  const pastDateKeysSorted = [
+    ...new Set(
+      rounds
+        .map((r) => roundDateUtcKey(r.round_date))
+        .filter((k): k is string => !!k && k < todayKey)
+    ),
+  ].sort((a, b) => b.localeCompare(a));
+
+  const roundsByPastDate = pastDateKeysSorted.map((dateKey) => ({
+    dateKey,
+    rounds: rounds
+      .filter((r) => roundDateUtcKey(r.round_date) === dateKey)
+      .sort(sortRoundsChrono),
+  }));
+
+  const roundsWithoutCalendar = rounds
+    .filter((r) => !roundDateUtcKey(r.round_date))
+    .sort(sortRoundsChrono);
+
   const { data: roundScoresData, error: roundScoresError } =
     filteredEntries.length > 0 && rounds.length > 0
       ? await supabase
@@ -258,10 +285,15 @@ export default async function PublicTournamentPage({
       .sort((a, b) => a.round_no - b.round_no)
       .at(-1) ?? null;
 
+  const defaultRoundLiveFavorite =
+    roundsTodayList[0] ?? latestRoundWithScores ?? rounds[0] ?? null;
+  const defaultRoundOfficial = latestRoundWithScores ?? rounds[0] ?? null;
+
   const selectedRound =
     rounds.find((round) => round.id === requestedRoundId) ??
     (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
-    latestRoundWithScores ??
+    (view === "live" || view === "favorites" ? defaultRoundLiveFavorite : null) ??
+    (view === "official" ? defaultRoundOfficial : null) ??
     rounds[0] ??
     null;
 
@@ -730,22 +762,137 @@ export default async function PublicTournamentPage({
               ) : null}
 
               {view !== "tee-sheet" && rounds.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {rounds.map((round) => (
-                    <Link
-                      key={round.id}
-                      href={buildHref({
-                        tournamentId: typedTournament.id,
-                        categoryId: selectedCategoryId || null,
-                        roundId: round.id,
-                        view,
-                      })}
-                      className={sectionPillClasses(selectedRound?.id === round.id)}
-                    >
-                      R{round.round_no}
-                    </Link>
-                  ))}
-                </div>
+                view === "live" || view === "favorites" ? (
+                  roundsTodayList.length > 0 ||
+                  roundsByPastDate.length > 0 ||
+                  roundsWithoutCalendar.length > 0 ? (
+                    <div className="flex flex-col gap-4">
+                      {roundsTodayList.length > 0 ? (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+                            {pub.liveRoundToday}
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {roundsTodayList.map((round) => (
+                              <Link
+                                key={round.id}
+                                href={buildHref({
+                                  tournamentId: typedTournament.id,
+                                  categoryId: selectedCategoryId || null,
+                                  roundId: round.id,
+                                  view,
+                                })}
+                                className={sectionPillClasses(
+                                  selectedRound?.id === round.id
+                                )}
+                              >
+                                R{round.round_no}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {roundsByPastDate.length > 0 ? (
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+                            {pub.liveRoundHistory}
+                          </span>
+                          <div className="flex flex-col gap-3">
+                            {roundsByPastDate.map(({ dateKey, rounds: dayRounds }) => (
+                              <div
+                                key={dateKey}
+                                className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
+                              >
+                                <span className="shrink-0 text-xs font-semibold text-slate-300">
+                                  {formatDate(dayRounds[0]?.round_date ?? null)}
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                  {dayRounds.map((round) => (
+                                    <Link
+                                      key={round.id}
+                                      href={buildHref({
+                                        tournamentId: typedTournament.id,
+                                        categoryId: selectedCategoryId || null,
+                                        roundId: round.id,
+                                        view,
+                                      })}
+                                      className={sectionPillClasses(
+                                        selectedRound?.id === round.id
+                                      )}
+                                    >
+                                      R{round.round_no}
+                                    </Link>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {roundsWithoutCalendar.length > 0 ? (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+                            {pub.liveRoundUndated}
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {roundsWithoutCalendar.map((round) => (
+                              <Link
+                                key={round.id}
+                                href={buildHref({
+                                  tournamentId: typedTournament.id,
+                                  categoryId: selectedCategoryId || null,
+                                  roundId: round.id,
+                                  view,
+                                })}
+                                className={sectionPillClasses(
+                                  selectedRound?.id === round.id
+                                )}
+                              >
+                                R{round.round_no}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {rounds.map((round) => (
+                        <Link
+                          key={round.id}
+                          href={buildHref({
+                            tournamentId: typedTournament.id,
+                            categoryId: selectedCategoryId || null,
+                            roundId: round.id,
+                            view,
+                          })}
+                          className={sectionPillClasses(selectedRound?.id === round.id)}
+                        >
+                          R{round.round_no}
+                        </Link>
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {rounds.map((round) => (
+                      <Link
+                        key={round.id}
+                        href={buildHref({
+                          tournamentId: typedTournament.id,
+                          categoryId: selectedCategoryId || null,
+                          roundId: round.id,
+                          view,
+                        })}
+                        className={sectionPillClasses(selectedRound?.id === round.id)}
+                      >
+                        R{round.round_no}
+                      </Link>
+                    ))}
+                  </div>
+                )
               ) : null}
             </div>
           )}
