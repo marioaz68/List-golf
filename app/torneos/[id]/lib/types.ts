@@ -82,6 +82,8 @@ export type RoundDetail = {
   round_id: string;
   round_no: number;
   round_date: string | null;
+  /** Alineado con `rounds.category_id` en BD; filtra el detalle hoyo por hoyo por categoría. */
+  category_id?: string | null;
   gross_score: number | null;
   to_par: number | null;
   out_score: number | null;
@@ -129,6 +131,7 @@ export type LeaderboardRow = {
   player_id: string;
   player_name: string;
   player_code: string;
+  club_id: string | null;
   club_label: string | null;
   category_id: string | null;
   category_code: string | null;

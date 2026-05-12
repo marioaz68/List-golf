@@ -2,6 +2,7 @@ import type {
   ClubRef,
   EntryCategory,
   HoleDetail,
+  LeaderboardRow,
   RoundDetail,
   RoundRow,
   TournamentEntryJoinRow,
@@ -94,6 +95,56 @@ export function roundBelongsToCategory(
   const rid = String(round.category_id ?? "").trim();
   if (!rid) return true;
   return rid === selectedCategoryId;
+}
+
+/** Hay captura o resultado en esta ronda para el jugador. */
+export function detailRoundHasScoreData(detail: RoundDetail): boolean {
+  return (
+    detail.is_dq ||
+    detail.gross_score != null ||
+    detail.holes.some((h) => h.strokes != null)
+  );
+}
+
+/**
+ * Filas de detalle para la tabla hoyo por hoyo: solo rondas de la categoría del jugador;
+ * si hay varias filas BD con el mismo `round_no` (p. ej. categorías), se muestra una
+ * (prioridad: la que ya tiene golpes / gross / DQ).
+ */
+export function selectLeaderboardDetailsForPlayer(
+  row: LeaderboardRow
+): RoundDetail[] {
+  const catId = row.category_id;
+
+  let scoped = row.details.filter((d) =>
+    roundBelongsToCategory(
+      { category_id: d.category_id ?? null },
+      catId
+    )
+  );
+
+  if (scoped.length === 0) {
+    scoped = row.details.filter((d) => detailRoundHasScoreData(d));
+  }
+  if (scoped.length === 0) {
+    scoped = row.details;
+  }
+
+  const byRoundNo = new Map<number, RoundDetail[]>();
+  for (const d of scoped) {
+    const n = d.round_no;
+    if (!byRoundNo.has(n)) byRoundNo.set(n, []);
+    byRoundNo.get(n)!.push(d);
+  }
+
+  const out: RoundDetail[] = [];
+  for (const roundNo of [...byRoundNo.keys()].sort((a, b) => a - b)) {
+    const arr = byRoundNo.get(roundNo)!;
+    const best =
+      arr.find((d) => detailRoundHasScoreData(d)) ?? arr[0] ?? null;
+    if (best) out.push(best);
+  }
+  return out;
 }
 
 /** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */

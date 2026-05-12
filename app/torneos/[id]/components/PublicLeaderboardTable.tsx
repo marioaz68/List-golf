@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Fragment } from "react";
+import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import FavoriteStar from "@/components/public/FavoriteStar";
 import type { LeaderboardRow } from "../lib/types";
 import {
@@ -77,7 +78,7 @@ export default function PublicLeaderboardTable({
             <th className="min-w-[320px] border-b border-white/10 px-2 py-2 text-left font-semibold">
               JUGADOR
             </th>
-            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-left font-semibold">
+            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center font-semibold">
               CLUB
             </th>
             <th className="w-[34px] border-b border-white/10 px-1 py-2 text-left font-semibold">
@@ -181,8 +182,14 @@ export default function PublicLeaderboardTable({
                       </div>
                     </td>
 
-                    <td className="px-1 py-2 text-slate-300">
-                      {row.club_label ?? "—"}
+                    <td className="px-1 py-2 text-center align-middle">
+                      <div className="inline-flex justify-center">
+                        <ClubLogoThumb
+                          clubId={row.club_id}
+                          size={36}
+                          title={row.club_label ?? undefined}
+                        />
+                      </div>
                     </td>
 
                     <td className="px-1 py-2 text-slate-300">

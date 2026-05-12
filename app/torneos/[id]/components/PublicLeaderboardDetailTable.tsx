@@ -1,9 +1,11 @@
+import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import type { LeaderboardRow } from "../lib/types";
 import {
   formatRelativeOrDQ,
   formatScore,
   formatScoreOrDQ,
   scoreMarker,
+  selectLeaderboardDetailsForPlayer,
   subtotal,
 } from "../lib/utils";
 
@@ -12,7 +14,13 @@ export default function PublicLeaderboardDetailTable({
 }: {
   row: LeaderboardRow;
 }) {
+  const displayDetails = selectLeaderboardDetailsForPlayer(row);
+
   const baseRound =
+    displayDetails.find((detail) =>
+      detail.holes.some((hole) => hole.par != null)
+    ) ??
+    displayDetails[0] ??
     row.details.find((detail) => detail.holes.some((hole) => hole.par != null)) ??
     row.details[0] ??
     null;
@@ -21,11 +29,18 @@ export default function PublicLeaderboardDetailTable({
 
   return (
     <div className="mx-auto mt-2 w-full max-w-full overflow-x-auto rounded-[24px] border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
-        {row.player_code}
-        {row.club_label ? ` • ${row.club_label}` : ""}
-        {row.category_code ? ` • ${row.category_code}` : ""}
-        {row.is_disqualified ? ` • DQ` : ""}
+      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
+        <ClubLogoThumb
+          clubId={row.club_id}
+          size={28}
+          title={row.club_label ?? undefined}
+        />
+        <div className="min-w-0">
+          {row.player_code}
+          {row.club_label ? ` • ${row.club_label}` : ""}
+          {row.category_code ? ` • ${row.category_code}` : ""}
+          {row.is_disqualified ? ` • DQ` : ""}
+        </div>
       </div>
 
       <table className="w-full min-w-[960px] table-fixed border-collapse text-[10px] text-white sm:text-[11px]">
@@ -97,8 +112,11 @@ export default function PublicLeaderboardDetailTable({
             <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
           </tr>
 
-          {row.details.map((detail, detailIndex) => {
+          {displayDetails.map((detail, detailIndex) => {
             const standing =
+              row.standing_by_round_category.find(
+                (s) => s.round_id === detail.round_id
+              ) ??
               row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
               null;
 

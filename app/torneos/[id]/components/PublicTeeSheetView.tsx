@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicPairingGroup, RoundRow } from "../lib/types";
+import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import {
   buildHref,
   formatPublicSalidasKicker,
@@ -38,31 +39,6 @@ function parseHoleSalida(label: string | null) {
   const raw = m[2]?.toUpperCase();
   const side = raw === "A" || raw === "B" ? raw : null;
   return { hole, side };
-}
-
-function ClubLogoThumb({ clubId }: { clubId: string | null }) {
-  if (!clubId) {
-    return (
-      <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-[10px] font-bold text-slate-500"
-        aria-hidden
-      >
-        —
-      </div>
-    );
-  }
-  const src = `/api/club-logo?club_id=${encodeURIComponent(clubId)}`;
-  return (
-    <img
-      src={src}
-      alt=""
-      width={40}
-      height={40}
-      className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white object-contain p-0.5 shadow-inner shadow-black/20"
-      loading="lazy"
-      decoding="async"
-    />
-  );
 }
 
 export default function PublicTeeSheetView({
@@ -225,7 +201,11 @@ export default function PublicTeeSheetView({
                             key={`${group.id}-${member.entry_id}`}
                             className="flex items-start gap-2 px-2.5 py-2.5 sm:items-center sm:gap-3 sm:px-3 sm:py-2"
                           >
-                            <ClubLogoThumb clubId={member.club_id} />
+                            <ClubLogoThumb
+                              clubId={member.club_id}
+                              size={40}
+                              title={member.club_label ?? undefined}
+                            />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                                 <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-1.5 text-xs font-black text-cyan-200">

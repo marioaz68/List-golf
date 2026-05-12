@@ -1,62 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import ClubLogoThumb from "./ClubLogoThumb";
 import FavoriteStar from "./FavoriteStar";
-
-type HoleDetail = {
-  hole_number: number;
-  par: number | null;
-  strokes: number | null;
-};
-
-type RoundDetail = {
-  round_id: string;
-  round_no: number;
-  round_date: string | null;
-  gross_score: number | null;
-  to_par: number | null;
-  out_score: number | null;
-  in_score: number | null;
-  total_score: number | null;
-  holes: HoleDetail[];
-};
-
-type RoundStandingSnapshot = {
-  round_id: string;
-  round_no: number;
-  pos: number | null;
-  to_par: number | null;
-  gross: number | null;
-  played_rounds: number;
-};
-
-type LeaderboardRow = {
-  entry_id: string;
-  player_id: string;
-  player_name: string;
-  player_code: string;
-  club_label: string | null;
-  category_id: string | null;
-  category_code: string | null;
-  total_to_par: number | null;
-  selected_round_to_par: number | null;
-  total_gross: number | null;
-  selected_round_position: number | null;
-  previous_round_position: number | null;
-  move_vs_previous: number | null;
-  selected_round_position_category: number | null;
-  previous_round_position_category: number | null;
-  move_vs_previous_category: number | null;
-  rounds: Array<{
-    round_id: string;
-    round_no: number;
-    gross_score: number | null;
-  }>;
-  details: RoundDetail[];
-  standing_by_round: RoundStandingSnapshot[];
-  standing_by_round_category: RoundStandingSnapshot[];
-  hasScores: boolean;
-};
+import type {
+  HoleDetail,
+  LeaderboardRow,
+  RoundDetail,
+} from "@/app/torneos/[id]/lib/types";
+import { selectLeaderboardDetailsForPlayer } from "@/app/torneos/[id]/lib/utils";
 
 type FavoritesViewProps = {
   tournamentId: string;
@@ -432,7 +384,13 @@ function renderMove(move: number | null) {
 }
 
 function DetailTable({ row }: { row: LeaderboardRow }) {
+  const displayDetails = selectLeaderboardDetailsForPlayer(row);
+
   const baseRound =
+    displayDetails.find((detail) =>
+      detail.holes.some((hole) => hole.par != null)
+    ) ??
+    displayDetails[0] ??
     row.details.find((detail) => detail.holes.some((hole) => hole.par != null)) ??
     row.details[0] ??
     null;
@@ -441,10 +399,17 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
 
   return (
     <div className="mt-2 overflow-x-auto rounded-[24px] border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
-        {row.player_code}
-        {row.club_label ? ` • ${row.club_label}` : ""}
-        {row.category_code ? ` • ${row.category_code}` : ""}
+      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
+        <ClubLogoThumb
+          clubId={row.club_id}
+          size={28}
+          title={row.club_label ?? undefined}
+        />
+        <div className="min-w-0">
+          {row.player_code}
+          {row.club_label ? ` • ${row.club_label}` : ""}
+          {row.category_code ? ` • ${row.category_code}` : ""}
+        </div>
       </div>
 
       <table className="w-full min-w-[1300px] border-collapse text-[11px] text-white">
@@ -514,7 +479,7 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
             <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
           </tr>
 
-          {row.details.map((detail, detailIndex) => {
+          {displayDetails.map((detail, detailIndex) => {
             const standing =
               row.standing_by_round_category.find((s) => s.round_id === detail.round_id) ??
               null;
@@ -724,7 +689,11 @@ export default function FavoritesView({
                         </div>
 
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                          <span>{row.club_label ?? "—"}</span>
+                          <ClubLogoThumb
+                            clubId={row.club_id}
+                            size={22}
+                            title={row.club_label ?? undefined}
+                          />
                           {row.category_code ? (
                             <>
                               <span>•</span>

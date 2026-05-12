@@ -21,6 +21,11 @@ export function buildLiveLeaderboard({
 
     const fallbackClub = (entry.player.club ?? "").trim() || null;
     const clubLabel = normalizeClubLabel(entry.player.clubs) ?? fallbackClub;
+    const clubIdRaw = entry.player?.club_id;
+    const club_id =
+      typeof clubIdRaw === "string" && clubIdRaw.trim()
+        ? clubIdRaw.trim()
+        : null;
 
     const playerRoundScores = roundScores.filter(
       (score: any) => score.player_id === entry.player_id
@@ -103,6 +108,7 @@ export function buildLiveLeaderboard({
         round_id: round.id,
         round_no: round.round_no,
         round_date: round.round_date,
+        category_id: round.category_id ?? null,
         gross_score: gross,
         to_par: toPar,
         out_score: front,
@@ -147,6 +153,7 @@ export function buildLiveLeaderboard({
       player_id: entry.player_id,
       player_name: playerName || "Jugador sin nombre",
       player_code: getPlayerCode(index),
+      club_id,
       club_label: clubLabel,
       category_id: entry.category_id,
       category_code: entry.category?.code ?? null,

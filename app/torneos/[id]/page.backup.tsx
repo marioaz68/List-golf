@@ -109,6 +109,7 @@ export type LeaderboardRow = {
   player_id: string;
   player_name: string;
   player_code: string;
+  club_id: string | null;
   club_label: string | null;
   category_id: string | null;
   category_code: string | null;
@@ -830,7 +831,6 @@ filteredEntries.forEach((entry) => {
   roundScores,
   holeScoresByRoundScoreId,
   parByHole,
-  lockedScorecardMap,
   selectedRound,
   normalizeClubLabel,
   isDQScore,
