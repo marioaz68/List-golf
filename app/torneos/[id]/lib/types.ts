@@ -86,6 +86,8 @@ export type RoundDetail = {
   round_date: string | null;
   /** Alineado con `rounds.category_id` en BD; filtra el detalle hoyo por hoyo por categoría. */
   category_id?: string | null;
+  /** Alineado con `rounds.wave` (AM/PM) para desambiguar varias R1 el mismo día. */
+  wave?: string | null;
   gross_score: number | null;
   to_par: number | null;
   out_score: number | null;

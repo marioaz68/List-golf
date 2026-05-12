@@ -127,6 +127,7 @@ export function buildLiveLeaderboard({
         round_no: round.round_no,
         round_date: round.round_date,
         category_id: round.category_id ?? null,
+        wave: round.wave ?? null,
         gross_score: gross,
         to_par: toPar,
         out_score: front,
@@ -168,6 +169,7 @@ export function buildLiveLeaderboard({
           round_no: selectedRound.round_no,
           round_date: selectedRound.round_date ?? null,
           category_id: selectedRound.category_id ?? null,
+          wave: selectedRound.wave ?? null,
         }
       : null;
 
