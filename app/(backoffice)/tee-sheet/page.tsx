@@ -9,6 +9,7 @@ import {
   saveCategoryPlanOrder,
 } from "./actions";
 import TeeSheetDnD from "./TeeSheetDnD";
+import TeeSheetRoundSelectWithExport from "./TeeSheetRoundSelectWithExport";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -542,7 +543,7 @@ for (const row of membersRaw) {
 
   return (
     <div className="min-h-screen p-6 space-y-6">
-      <div className="flex items-center justify-between text-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-white">
         <h1 className="text-3xl font-bold tracking-tight">Tee Sheet</h1>
         <div className="rounded-md bg-black/20 px-3 py-1 text-sm font-medium">
           Grupos: {visibleGroups.length} · Jugadores: {visiblePlayers}
@@ -563,17 +564,14 @@ for (const row of membersRaw) {
             ))}
           </select>
 
-          <select
-            name="round_id"
-            defaultValue={effectiveRoundId}
-            className="border border-slate-600 px-3 py-2 rounded bg-white text-slate-950"
-          >
-            {rounds.map((r) => (
-              <option key={r.id} value={r.id}>
-                {roundLabel(r)}
-              </option>
-            ))}
-          </select>
+          <TeeSheetRoundSelectWithExport
+            key={`${effectiveTournamentId}-${effectiveRoundId}`}
+            tournamentId={effectiveTournamentId}
+            defaultRoundId={effectiveRoundId}
+            rounds={rounds.map((r) => ({ id: r.id, label: roundLabel(r) }))}
+            selectClassName="border border-slate-600 px-3 py-2 rounded bg-white text-slate-950"
+            linkClassName="inline-flex shrink-0 items-center rounded border border-emerald-700 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          />
 
           <select
             name="group_size"
