@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -26,7 +26,6 @@ import {
   Repeat2,
   ExternalLink,
   CalendarDays,
-  UsersRound,
   Car,
 } from "lucide-react";
 
@@ -115,13 +114,18 @@ export default function Sidebar() {
     };
   }, [tournamentId]);
 
-  const operationMenu: MenuItem[] = useMemo(
+  /** Navegación diaria del torneo (misma lista en Operación y en Config.). */
+  const tournamentOperationNav: MenuItem[] = useMemo(
     () => [
       { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { name: "Players", href: "/players", icon: Users, requiresTournament: true },
       { name: "Entries", href: "/entries", icon: ClipboardList, requiresTournament: true },
-      { name: "Pairings", href: "/pairings", icon: UsersRound, requiresTournament: true },
-      { name: "Tee Sheet", href: "/tee-sheet", icon: Clock3, requiresTournament: true },
+      {
+        name: "Salidas/Grupos",
+        href: "/tee-sheet",
+        icon: Clock3,
+        requiresTournament: true,
+      },
       { name: "Score Entry", href: "/score-entry", icon: PencilLine, requiresTournament: true },
       { name: "Scorecards", href: "/scorecards", icon: FilePenLine, requiresTournament: true },
       { name: "Leaderboard", href: "/leaderboard", icon: ListOrdered, requiresTournament: true },
@@ -131,7 +135,8 @@ export default function Sidebar() {
     []
   );
 
-  const setupMenu: MenuItem[] = useMemo(
+  /** Solo modo Config.: módulos de armado del torneo (después de la navegación operativa). */
+  const setupExclusiveNav: MenuItem[] = useMemo(
     () => [
       { name: "Torneos", href: "/tournaments", icon: Trophy },
       { name: "Editar torneo", href: "/tournaments/edit", icon: FilePenLine, requiresTournament: true },
@@ -151,12 +156,9 @@ export default function Sidebar() {
       { name: "Reglas de corte", href: "/cut-rules", icon: Scissors, requiresTournament: true },
       { name: "Plantillas cat.", href: "/category-templates", icon: Layers3 },
       { name: "Usuarios", href: "/users", icon: Shield },
-      { name: "Reports", href: "/reports", icon: BarChart3, requiresTournament: true },
     ],
     []
   );
-
-  const menu = mode === "operation" ? operationMenu : setupMenu;
 
   function setSidebarMode(nextMode: SidebarMode) {
     setMode(nextMode);
@@ -201,9 +203,23 @@ export default function Sidebar() {
     return tournamentId ? `/torneos/${tournamentId}` : "/tournaments";
   }
 
-  const visibleMenu = menu.filter(
-    (item) => !item.requiresTournament || !!tournamentId
+  const operationVisible = useMemo(
+    () =>
+      tournamentOperationNav.filter(
+        (item) => !item.requiresTournament || !!tournamentId
+      ),
+    [tournamentOperationNav, tournamentId]
   );
+
+  const visibleMenu = useMemo(() => {
+    if (mode === "operation") return operationVisible;
+    const setupOnlyVisible = setupExclusiveNav.filter(
+      (item) => !item.requiresTournament || !!tournamentId
+    );
+    return [...operationVisible, ...setupOnlyVisible];
+  }, [mode, operationVisible, setupExclusiveNav, tournamentId]);
+
+  const operationVisibleCount = operationVisible.length;
 
   const modeLabel = mode === "operation" ? "Operación" : "Configuración";
   const nextMode: SidebarMode = mode === "operation" ? "setup" : "operation";
@@ -286,23 +302,36 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {visibleMenu.map((item) => {
+        {visibleMenu.map((item, idx) => {
           const Icon = item.icon;
           const active = isActive(item);
+          const showSetupHeading =
+            mode === "setup" &&
+            idx === operationVisibleCount &&
+            visibleMenu.length > operationVisibleCount;
 
           return (
-            <Link
-              key={`${item.name}-${item.href}`}
-              href={buildHref(item)}
-              className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm transition ${
-                active
-                  ? "bg-[#63BC46] text-black"
-                  : "text-white/80 hover:bg-white/10"
-              }`}
-            >
-              <Icon size={18} />
-              <span className="truncate">{item.name}</span>
-            </Link>
+            <Fragment key={`${item.name}-${item.href}`}>
+              {showSetupHeading ? (
+                <div
+                  className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40"
+                  role="presentation"
+                >
+                  Configuración del torneo
+                </div>
+              ) : null}
+              <Link
+                href={buildHref(item)}
+                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm transition ${
+                  active
+                    ? "bg-[#63BC46] text-black"
+                    : "text-white/80 hover:bg-white/10"
+                }`}
+              >
+                <Icon size={18} />
+                <span className="truncate">{item.name}</span>
+              </Link>
+            </Fragment>
           );
         })}
 
