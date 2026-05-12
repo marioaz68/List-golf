@@ -100,11 +100,38 @@ function formatDateDdMmYyyy(value: string | null | undefined) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/** Nombre del día en minúsculas (es-MX), a partir de fecha YYYY-MM-DD (calendario local). */
+function weekdayLowerSpanish(isoDate: string | null | undefined) {
+  if (!isoDate) return "";
+  const parts = String(isoDate).trim().split("-");
+  if (parts.length !== 3) return "";
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return "";
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat("es-MX", { weekday: "long" }).format(dt).toLowerCase();
+  } catch {
+    const names = [
+      "domingo",
+      "lunes",
+      "martes",
+      "miércoles",
+      "jueves",
+      "viernes",
+      "sábado",
+    ];
+    return names[dt.getDay()] ?? "";
+  }
+}
+
 export function formatSessionOptionLabel(rep: SessionRoundFields) {
   const dateStr = formatDateDdMmYyyy(rep.round_date);
+  const weekday = weekdayLowerSpanish(rep.round_date);
   const wave = String(rep.wave ?? "").trim().toUpperCase();
-  const waveLabel =
-    wave === "AM" ? "Mañana (AM)" : wave === "PM" ? "Tarde (PM)" : "";
+  const waveToken = wave === "AM" || wave === "PM" ? wave : "";
 
   const st = normalizeStartTypeForSession(rep.start_type);
   const typeLabel = st === "shotgun" ? "Shotgun" : st === "tee_times" ? "Tee times" : "—";
@@ -113,7 +140,8 @@ export function formatSessionOptionLabel(rep: SessionRoundFields) {
 
   const parts: string[] = [`R${rep.round_no}`];
   if (dateStr) parts.push(`· ${dateStr}`);
-  if (waveLabel) parts.push(`· ${waveLabel}`);
+  if (weekday) parts.push(`· ${weekday}`);
+  if (waveToken) parts.push(`· ${waveToken}`);
   parts.push(`· ${typeLabel}`);
   if (time) parts.push(time);
   if (

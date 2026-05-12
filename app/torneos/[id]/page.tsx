@@ -172,7 +172,7 @@ export default async function PublicTournamentPage({
 
   const { data: roundsData, error: roundsError } = await supabase
     .from("rounds")
-    .select("id, round_no, round_date, notes, start_type, start_time")
+    .select("id, round_no, round_date, notes, start_type, start_time, wave")
     .eq("tournament_id", typedTournament.id)
     .order("round_no", { ascending: true })
     .order("round_date", { ascending: true });

@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { PublicPairingGroup, RoundRow } from "../lib/types";
 import {
   buildHref,
-  formatDate,
+  formatPublicSalidasKicker,
+  formatPublicTeeSheetRoundPill,
+  formatPublicTeeSheetSectionTitle,
   formatTime,
   isStartingOrderConfirmed,
   sectionPillClasses,
@@ -116,7 +118,7 @@ export default function PublicTeeSheetView({
             })}
             className={sectionPillClasses(selectedRoundId === round.id)}
           >
-            R{round.round_no} · {formatDate(round.round_date)}
+            {formatPublicTeeSheetRoundPill(round)}
           </Link>
         ))}
       </div>
@@ -135,15 +137,18 @@ export default function PublicTeeSheetView({
           );
           if (roundGroups.length === 0) return null;
 
+          const salidasKicker = formatPublicSalidasKicker(round);
+
           return (
             <section key={round.id} className="space-y-3">
               <div className="flex flex-col gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-4">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200 sm:text-xs">
                     Salidas publicadas
+                    {salidasKicker ? ` · ${salidasKicker}` : ""}
                   </div>
                   <h2 className="mt-1 break-words text-lg font-black text-white sm:text-xl">
-                    Ronda {round.round_no} · {formatDate(round.round_date)}
+                    {formatPublicTeeSheetSectionTitle(round)}
                   </h2>
                 </div>
                 <div className="shrink-0 self-start rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-200 sm:self-auto">

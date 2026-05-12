@@ -50,6 +50,7 @@ export type RoundRow = {
   notes: string | null;
   start_type: string | null;
   start_time: string | null;
+  wave?: string | null;
 };
 
 export type RoundScoreRow = {

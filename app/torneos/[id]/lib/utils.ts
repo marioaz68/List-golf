@@ -67,6 +67,67 @@ export function formatDate(date: string | null) {
   }).format(new Date(date));
 }
 
+/** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */
+export function formatWeekdayEsMxUtc(date: string | null) {
+  if (!date) return "";
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      weekday: "long",
+      timeZone: "UTC",
+    })
+      .format(new Date(date))
+      .toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+export function formatWaveToken(wave: string | null | undefined) {
+  const w = String(wave ?? "").trim().toUpperCase();
+  return w === "AM" || w === "PM" ? w : "";
+}
+
+/** Texto tipo `miércoles · AM` para encabezados de salidas públicas. */
+export function formatPublicSalidasKicker(round: {
+  round_date: string | null;
+  wave?: string | null;
+}) {
+  const wd = formatWeekdayEsMxUtc(round.round_date);
+  const wave = formatWaveToken(round.wave);
+  if (wd && wave) return `${wd} · ${wave}`;
+  if (wd) return wd;
+  if (wave) return wave;
+  return "";
+}
+
+/** Chip / enlace: `R1 · 15 oct 2025 · miércoles · AM`. */
+export function formatPublicTeeSheetRoundPill(round: {
+  round_no: number;
+  round_date: string | null;
+  wave?: string | null;
+}) {
+  const bits = [`R${round.round_no}`, formatDate(round.round_date)];
+  const wd = formatWeekdayEsMxUtc(round.round_date);
+  const wave = formatWaveToken(round.wave);
+  if (wd) bits.push(wd);
+  if (wave) bits.push(wave);
+  return bits.join(" · ");
+}
+
+/** Título de bloque: `Ronda 1 · 15 oct 2025 · miércoles · AM`. */
+export function formatPublicTeeSheetSectionTitle(round: {
+  round_no: number;
+  round_date: string | null;
+  wave?: string | null;
+}) {
+  const bits = [`Ronda ${round.round_no}`, formatDate(round.round_date)];
+  const wd = formatWeekdayEsMxUtc(round.round_date);
+  const wave = formatWaveToken(round.wave);
+  if (wd) bits.push(wd);
+  if (wave) bits.push(wave);
+  return bits.join(" · ");
+}
+
 export function formatTime(value: string | null | undefined) {
   const raw = String(value ?? "").trim();
   if (!raw) return "--:--";
