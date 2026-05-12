@@ -12,7 +12,7 @@ export type SessionRoundFields = {
   wave?: string | null;
 };
 
-function normalizeTime(value: string | null | undefined) {
+export function normalizeTime(value: string | null | undefined) {
   const s = String(value ?? "").trim();
   const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!m) return s;

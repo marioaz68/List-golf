@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
@@ -7,6 +8,8 @@ import { messages } from "@/lib/i18n/messages";
 import {
   buildSessionBlocks,
   formatSessionDayWaveLabel,
+  normalizeStartTypeForSession,
+  normalizeTime,
   representativeRoundId,
   roundsInSameSession,
   toYyyyMmDd,
@@ -84,8 +87,56 @@ type ValidEntryRow = {
   player: EntryPlayerRow;
 };
 
+const ENTRY_SELECT_FOR_LOOKUP = `
+        player_id,
+        player_number,
+        handicap_index,
+        category_id,
+        player:players (
+          id,
+          first_name,
+          last_name,
+          handicap_index
+        )
+      `;
+
+type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
+
+/** Todas las inscripciones del torneo (paginado; PostgREST suele limitar ~1000 por request). */
+async function fetchAllTournamentEntriesForLookup(
+  supabase: ServerSupabase,
+  tournamentId: string
+): Promise<{ rows: EntryJoinRow[]; error: PostgrestError | null }> {
+  const pageSize = 1000;
+  let from = 0;
+  const acc: EntryJoinRow[] = [];
+  for (;;) {
+    const { data, error } = await supabase
+      .from("tournament_entries")
+      .select(ENTRY_SELECT_FOR_LOOKUP)
+      .eq("tournament_id", tournamentId)
+      .order("player_number", { ascending: true, nullsFirst: false })
+      .range(from, from + pageSize - 1);
+    if (error) return { rows: acc, error };
+    const chunk = (data ?? []) as unknown as EntryJoinRow[];
+    acc.push(...chunk);
+    if (chunk.length < pageSize) break;
+    from += pageSize;
+    if (from > 40_000) break;
+  }
+  return { rows: acc, error: null };
+}
+
 function normalizeText(s: string) {
   return s.trim();
+}
+
+/** Compara nombres sin depender de mayúsculas ni acentos (NFD). */
+function foldDiacritics(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
 }
 
 function playerFullName(p: {
@@ -93,6 +144,59 @@ function playerFullName(p: {
   last_name: string | null;
 }) {
   return [p.first_name ?? "", p.last_name ?? ""].join(" ").trim().toLowerCase();
+}
+
+function entryMatchesNameQuery(
+  p: EntryPlayerRow,
+  qRaw: string
+): boolean {
+  const q = normalizeText(qRaw).toLowerCase();
+  if (!q) return false;
+  const full = foldDiacritics(playerFullName(p));
+  const fq = foldDiacritics(q);
+  if (full.includes(fq)) return true;
+  const first = foldDiacritics((p.first_name ?? "").trim().toLowerCase());
+  const last = foldDiacritics((p.last_name ?? "").trim().toLowerCase());
+  if (first.includes(fq) || last.includes(fq)) return true;
+  const tokens = q.split(/\s+/).filter(Boolean).map((t) => foldDiacritics(t));
+  if (tokens.length <= 1) return false;
+  return tokens.every((tok) => full.includes(tok));
+}
+
+function resolveScoringRoundId(
+  rounds: RoundRow[],
+  selectedRound: RoundRow,
+  entryCategoryId: string | null
+): string {
+  const cat = String(entryCategoryId ?? "").trim();
+  const sess = roundsInSameSession(
+    rounds as SessionRoundFields[],
+    selectedRound.id
+  );
+  if (!cat) return sess[0]?.id ?? selectedRound.id;
+  const inSess = sess.find(
+    (r) => String(r.category_id ?? "").trim() === cat
+  );
+  if (inSess) return inSess.id;
+
+  const ymd = toYyyyMmDd(selectedRound.round_date);
+  const wave = String(selectedRound.wave ?? "").trim().toUpperCase();
+  const st = normalizeStartTypeForSession(selectedRound.start_type);
+  const t0 = normalizeTime(selectedRound.start_time);
+  const rn = selectedRound.round_no;
+
+  const alt =
+    rounds.find((r) => {
+      if (toYyyyMmDd(r.round_date) !== ymd) return false;
+      if (String(r.wave ?? "").trim().toUpperCase() !== wave) return false;
+      if (normalizeStartTypeForSession(r.start_type) !== st) return false;
+      if (normalizeTime(r.start_time) !== t0) return false;
+      if (r.round_no !== rn) return false;
+      if (String(r.category_id ?? "").trim() !== cat) return false;
+      return true;
+    }) ?? null;
+
+  return alt?.id ?? selectedRound.id;
 }
 
 function buildDefaultHoles(): HoleRow[] {
@@ -115,17 +219,6 @@ function categoryCodeFromRound(row: RoundRow): string | null {
   const c = oneOrNull(row.category);
   const raw = (c?.code ?? c?.name ?? "").trim();
   return raw || null;
-}
-
-function sessionCategoryIdSet(
-  rounds: RoundRow[],
-  repRoundId: string
-): Set<string> {
-  return new Set(
-    roundsInSameSession(rounds as SessionRoundFields[], repRoundId)
-      .map((r) => String(r.category_id ?? "").trim())
-      .filter(Boolean)
-  );
 }
 
 function sortRoundsForSelect(a: RoundRow, b: RoundRow) {
@@ -273,43 +366,52 @@ export default async function ScoreEntryPage(props: {
   if (selectedRound && searchRaw) {
     const isNumeric = /^\d+$/.test(searchRaw);
 
-    const { data: entryRows, error: entryErr } = await supabase
-      .from("tournament_entries")
-      .select(`
-        player_id,
-        player_number,
-        handicap_index,
-        category_id,
-        player:players (
-          id,
-          first_name,
-          last_name,
-          handicap_index
-        )
-      `)
-      .eq("tournament_id", selectedRound.tournament_id)
-      .limit(isNumeric ? 25 : 200);
+    let entryRows: EntryJoinRow[] = [];
+    let entryErr: PostgrestError | null = null;
+
+    if (isNumeric) {
+      const wanted = Number(searchRaw);
+      const { data, error } = await supabase
+        .from("tournament_entries")
+        .select(ENTRY_SELECT_FOR_LOOKUP)
+        .eq("tournament_id", selectedRound.tournament_id)
+        .eq("player_number", wanted);
+      entryErr = error;
+      entryRows = (data ?? []) as unknown as EntryJoinRow[];
+
+      if (!error && entryRows.length === 0) {
+        const full = await fetchAllTournamentEntriesForLookup(
+          supabase,
+          selectedRound.tournament_id
+        );
+        entryErr = full.error;
+        entryRows = full.rows;
+      }
+    } else {
+      const full = await fetchAllTournamentEntriesForLookup(
+        supabase,
+        selectedRound.tournament_id
+      );
+      entryErr = full.error;
+      entryRows = full.rows;
+    }
 
     let matchedEntry: ValidEntryRow | null = null;
 
     if (entryErr) {
       errorMsg = entryErr.message;
     } else {
-      const rawEntries = (entryRows ?? []) as unknown as EntryJoinRow[];
-      const sessionCats = sessionCategoryIdSet(roundList, selectedRound.id);
-      const entries = rawEntries.filter(isValidEntry).filter((row) => {
-        if (sessionCats.size === 0) return true;
-        const cid = String(row.category_id ?? "").trim();
-        if (!cid) return true;
-        return sessionCats.has(cid);
-      });
+      const entries = entryRows.filter(isValidEntry);
 
       if (isNumeric) {
         const wanted = Number(searchRaw);
-
-        const found = entries.find((row) => {
-          return row.player_number != null && Number(row.player_number) === wanted;
-        });
+        const found =
+          entries.find((row) => {
+            return (
+              row.player_number != null &&
+              Number(row.player_number) === wanted
+            );
+          }) ?? null;
 
         if (found) {
           matchedEntry = found;
@@ -329,20 +431,12 @@ export default async function ScoreEntryPage(props: {
       }
 
       if (!player) {
-        const q = searchRaw.toLowerCase();
-
-        const found = entries.find((row) => {
-          const p = oneOrNull(row.player);
-          if (!p) return false;
-
-          const full = playerFullName(p);
-
-          return (
-            full.includes(q) ||
-            (p.first_name ?? "").toLowerCase().includes(q) ||
-            (p.last_name ?? "").toLowerCase().includes(q)
-          );
-        });
+        const found =
+          entries.find((row) => {
+            const p = oneOrNull(row.player);
+            if (!p) return false;
+            return entryMatchesNameQuery(p, searchRaw);
+          }) ?? null;
 
         if (found) {
           matchedEntry = found;
@@ -362,18 +456,11 @@ export default async function ScoreEntryPage(props: {
       }
     }
 
-    scoringRoundId = selectedRound.id;
-    if (player && matchedEntry) {
-      const cat = String(matchedEntry.category_id ?? "").trim();
-      const sess = roundsInSameSession(
-        roundList as SessionRoundFields[],
-        selectedRound.id
-      );
-      const hit = cat
-        ? sess.find((r) => String(r.category_id ?? "").trim() === cat)
-        : sess[0];
-      if (hit) scoringRoundId = hit.id;
-    }
+    scoringRoundId = resolveScoringRoundId(
+      roundList,
+      selectedRound,
+      matchedEntry ? String(matchedEntry.category_id ?? "").trim() || null : null
+    );
 
     if (player) {
         const allRoundIds = roundListAll
