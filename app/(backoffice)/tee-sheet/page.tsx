@@ -9,7 +9,6 @@ import {
   saveCategoryPlanOrder,
 } from "./actions";
 import TeeSheetDnD from "./TeeSheetDnD";
-import TeeSheetRoundSelectWithExport from "./TeeSheetRoundSelectWithExport";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -550,28 +549,41 @@ for (const row of membersRaw) {
         </div>
       </div>
 
-      <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm space-y-3">
-        <form method="GET" action="/tee-sheet" className="flex flex-wrap gap-3 items-center">
-          <select
-            name="tournament_id"
-            defaultValue={effectiveTournamentId}
-            className="border border-slate-600 px-3 py-2 rounded bg-white text-slate-950"
-          >
-            {tournaments.map((t) => (
-              <option key={t.id} value={t.id}>
-                {tournamentLabel(t)}
-              </option>
-            ))}
-          </select>
+      <section className="border border-slate-300 rounded-lg bg-white p-4 text-slate-950 shadow-sm space-y-3">
+        <form method="GET" action="/tee-sheet" className="flex flex-wrap gap-3 items-end">
+          <div className="flex min-w-[min(100%,12rem)] flex-1 flex-col gap-1 sm:max-w-md">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Torneo
+            </span>
+            <select
+              name="tournament_id"
+              defaultValue={effectiveTournamentId}
+              className="w-full border border-slate-600 rounded bg-white px-3 py-2 text-slate-950"
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {tournamentLabel(t)}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <TeeSheetRoundSelectWithExport
-            key={`${effectiveTournamentId}-${effectiveRoundId}`}
-            tournamentId={effectiveTournamentId}
-            defaultRoundId={effectiveRoundId}
-            rounds={rounds.map((r) => ({ id: r.id, label: roundLabel(r) }))}
-            selectClassName="border border-slate-600 px-3 py-2 rounded bg-white text-slate-950"
-            linkClassName="inline-flex shrink-0 items-center rounded border border-emerald-700 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-          />
+          <div className="flex min-w-0 flex-col gap-1 sm:max-w-xl">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Ronda
+            </span>
+            <select
+              name="round_id"
+              defaultValue={effectiveRoundId}
+              className="min-w-[12rem] max-w-[min(100vw-2rem,22rem)] border border-slate-600 rounded bg-white px-3 py-2 text-slate-950 sm:min-w-[14rem]"
+            >
+              {rounds.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {roundLabel(r)}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <select
             name="group_size"

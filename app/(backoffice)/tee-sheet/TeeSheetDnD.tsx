@@ -14,6 +14,7 @@ import {
   MeasuringStrategy,
   rectIntersection,
 } from "@dnd-kit/core";
+import { FileSpreadsheet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { moveEntryToGroupPosition, balanceGroupsByCategory } from "./actions";
 
@@ -343,6 +344,12 @@ export default function TeeSheetDnD({
     return c;
   }, [visibleGroups, qn]);
 
+  const exportExcelHref = useMemo(
+    () =>
+      `/api/tee-sheet/export?tournament_id=${encodeURIComponent(tournamentId)}&round_id=${encodeURIComponent(roundId)}`,
+    [tournamentId, roundId]
+  );
+
   const searchResults = useMemo(() => {
     if (!qn) return [];
     const out: {
@@ -580,6 +587,15 @@ export default function TeeSheetDnD({
           <div className="text-[10px] text-gray-600">
             Huecos objetivo {targetGroupSize} · máximo manual {maxGroupSize}
           </div>
+
+          <a
+            href={exportExcelHref}
+            className="ml-auto inline-flex items-center gap-1 rounded border border-emerald-700 bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700"
+            title="Descarga CSV de la ronda actual (compatible con Excel)"
+          >
+            <FileSpreadsheet className="size-3.5 shrink-0 opacity-95" aria-hidden />
+            Exportar Excel
+          </a>
         </div>
 
         {lastError ? (
