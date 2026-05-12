@@ -1,5 +1,12 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
+import {
+  buildSessionBlocks,
+  formatSessionOptionLabel,
+  representativeRoundId,
+  roundsInSameSession,
+} from "./sessionBlock";
 import {
   clearGroups,
   confirmStartingOrder,
@@ -28,9 +35,10 @@ type Round = {
   category_id: string | null;
   round_no: number;
   round_date: string | null;
-  start_type: "tee_times" | "shotgun";
+  start_type: string;
   start_time: string | null;
   interval_minutes: number | null;
+  wave: string | null;
   notes: string | null;
   categories?: {
     code: string | null;
@@ -40,6 +48,7 @@ type Round = {
 
 type GroupRow = {
   id: string;
+  round_id: string;
   group_no: number;
   tee_time: string | null;
   starting_hole: number | null;
@@ -75,38 +84,7 @@ function catSort(a: string, b: string) {
 }
 
 
-type ShotgunSlot = {
-  hole: number;
-  side: "A" | "B";
-};
-
 const STARTING_ORDER_CONFIRMED_MARKER = "[LIST_GOLF_STARTING_ORDER_CONFIRMED]";
-
-function getShotgunExtraHoleOrder() {
-  const primary = [1, 10];
-  const par5 = [5, 9, 14, 18];
-  const par4 = [2, 4, 6, 11, 13, 15, 17];
-  const par3 = [8, 3, 7, 12, 16];
-
-  return [...primary, ...par5, ...par4, ...par3];
-}
-
-function buildShotgunSlots(totalGroups: number): ShotgunSlot[] {
-  const extraNeeded = Math.max(0, totalGroups - 18);
-  const doubleHoles = new Set(getShotgunExtraHoleOrder().slice(0, extraNeeded));
-  const slots: ShotgunSlot[] = [];
-
-  for (let hole = 1; hole <= 18; hole++) {
-    if (doubleHoles.has(hole)) {
-      slots.push({ hole, side: "B" });
-      slots.push({ hole, side: "A" });
-    } else {
-      slots.push({ hole, side: "A" });
-    }
-  }
-
-  return slots.slice(0, totalGroups);
-}
 
 function isStartingOrderConfirmed(notes: string | null | undefined) {
   return String(notes ?? "").includes(STARTING_ORDER_CONFIRMED_MARKER);
@@ -157,6 +135,7 @@ export default async function TeeSheetPage(props: {
           start_time,
           interval_minutes,
           notes,
+          wave,
           categories:categories (
             code,
             name
@@ -171,7 +150,41 @@ export default async function TeeSheetPage(props: {
   }
 
   const rounds: Round[] = (rData ?? []) as any[];
-  const effectiveRoundId = roundId || rounds[0]?.id || "";
+  const sessionBlocks = buildSessionBlocks(rounds);
+  const defaultRoundId = sessionBlocks[0]?.[0]?.id ?? rounds[0]?.id ?? "";
+
+  const roundIdKnown = Boolean(roundId && rounds.some((r) => r.id === roundId));
+  const effectiveRoundId = roundIdKnown
+    ? representativeRoundId(rounds, roundId)
+    : defaultRoundId;
+
+  if (
+    roundId &&
+    roundIdKnown &&
+    representativeRoundId(rounds, roundId) !== roundId
+  ) {
+    const qs = new URLSearchParams({
+      tournament_id: effectiveTournamentId,
+      round_id: representativeRoundId(rounds, roundId),
+      group_size: String(effectiveGroupSize),
+    });
+    if (catParam && catParam !== "ALL") {
+      qs.set("cat", catParam);
+    }
+    redirect(`/tee-sheet?${qs.toString()}`);
+  }
+
+  if (roundId && !roundIdKnown && defaultRoundId) {
+    const qs = new URLSearchParams({
+      tournament_id: effectiveTournamentId,
+      round_id: defaultRoundId,
+      group_size: String(effectiveGroupSize),
+    });
+    if (catParam && catParam !== "ALL") {
+      qs.set("cat", catParam);
+    }
+    redirect(`/tee-sheet?${qs.toString()}`);
+  }
 
   if ((!tournamentId && effectiveTournamentId) || (!roundId && effectiveRoundId)) {
     const qs = new URLSearchParams({
@@ -187,13 +200,19 @@ export default async function TeeSheetPage(props: {
     redirect(`/tee-sheet?${qs.toString()}`);
   }
 
-  const { data: gData, error: gErr } = effectiveRoundId
-    ? await supabase
-        .from("pairing_groups")
-        .select("id,group_no,tee_time,starting_hole,notes")
-        .eq("round_id", effectiveRoundId)
-        .order("group_no", { ascending: true })
-    : { data: [], error: null };
+  const selectedRound = rounds.find((r) => r.id === effectiveRoundId) ?? null;
+  const blockRounds = effectiveRoundId ? roundsInSameSession(rounds, effectiveRoundId) : [];
+  const blockRoundIds = blockRounds.map((r) => r.id);
+
+  const { data: gData, error: gErr } =
+    effectiveRoundId && blockRoundIds.length > 0
+      ? await supabase
+          .from("pairing_groups")
+          .select("id,round_id,group_no,tee_time,starting_hole,notes")
+          .in("round_id", blockRoundIds)
+          .order("round_id", { ascending: true })
+          .order("group_no", { ascending: true })
+      : { data: [], error: null };
 
   if (gErr) {
     throw new Error("Error leyendo grupos: " + gErr.message);
@@ -281,16 +300,40 @@ for (const row of membersRaw) {
   membersByGroup.get(gid)!.push(item);
 }
 
-  const sortedGroups = [...groups].sort((a, b) => a.group_no - b.group_no);
-  const shotgunSlots = buildShotgunSlots(sortedGroups.length);
+  const roundOrder = new Map(blockRounds.map((r, i) => [r.id, i]));
+  const sortedGroups = [...groups].sort((a, b) => {
+    const oa = roundOrder.get(a.round_id) ?? 999;
+    const ob = roundOrder.get(b.round_id) ?? 999;
+    if (oa !== ob) return oa - ob;
+    return a.group_no - b.group_no;
+  });
 
-  const groupsForUI: GroupUI[] = sortedGroups.map((g, index) => {
-    const slot = shotgunSlots[index];
-    const starting_label = slot
-      ? `H${slot.hole}${slot.side}`
-      : typeof g.starting_hole === "number"
-        ? `H${g.starting_hole}`
-        : null;
+  const groupsByDbRound = new Map<string, GroupRow[]>();
+  for (const g of sortedGroups) {
+    const list = groupsByDbRound.get(g.round_id) ?? [];
+    list.push(g);
+    groupsByDbRound.set(g.round_id, list);
+  }
+  for (const list of groupsByDbRound.values()) {
+    list.sort((a, b) => a.group_no - b.group_no);
+  }
+
+  const roundMetaById = new Map(blockRounds.map((r) => [r.id, r]));
+
+  const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
+    const list = groupsByDbRound.get(g.round_id) ?? [];
+    const idxInRound = list.findIndex((x) => x.id === g.id);
+    const meta = roundMetaById.get(g.round_id);
+    const startType = meta?.start_type ?? selectedRound?.start_type ?? null;
+    const salida = startingHoleLabelForGroup({
+      startType,
+      groupIndexInRound: Math.max(0, idxInRound),
+      groupsInRound: list.length,
+      starting_hole: g.starting_hole,
+    });
+    const starting_label =
+      salida ??
+      (typeof g.starting_hole === "number" ? `H${g.starting_hole}` : null);
 
     return {
       ...g,
@@ -323,43 +366,9 @@ for (const row of membersRaw) {
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
 
-  const roundCategoryLabel = (r: Round) => {
-    const rawCategory = Array.isArray(r.categories)
-      ? r.categories[0] ?? null
-      : r.categories ?? null;
-
-    const code = rawCategory?.code?.trim() || "";
-    const name = rawCategory?.name?.trim() || "";
-
-    if (code && name) return `${code} — ${name}`;
-    if (code) return code;
-    if (name) return name;
-    return "Todas las categorías";
-  };
-
-  const roundLabel = (r: Round) =>
-    `R${r.round_no}` +
-    (r.round_date ? ` (${r.round_date})` : "") +
-    ` — ${roundCategoryLabel(r)}` +
-    ` — ${r.start_type}` +
-    (r.start_time ? ` ${r.start_time}` : "") +
-    (r.interval_minutes ? ` / ${r.interval_minutes}min` : "");
-
-
-  const selectedRound = rounds.find((r) => r.id === effectiveRoundId) ?? null;
-  const startingOrderConfirmed = isStartingOrderConfirmed(selectedRound?.notes);
-
-  const blockRounds = selectedRound
-    ? rounds.filter((r) => {
-        return (
-          r.tournament_id === selectedRound.tournament_id &&
-          r.round_no === selectedRound.round_no &&
-          String(r.round_date ?? "") === String(selectedRound.round_date ?? "") &&
-          String(r.start_type ?? "") === String(selectedRound.start_type ?? "") &&
-          String(r.start_time ?? "") === String(selectedRound.start_time ?? "")
-        );
-      })
-    : [];
+  const startingOrderConfirmed = blockRounds.some((r) =>
+    isStartingOrderConfirmed(r.notes)
+  );
 
   const blockCategoryIds = Array.from(
     new Set(
@@ -479,7 +488,7 @@ for (const row of membersRaw) {
   const planRecommendation = (() => {
     if (!selectedRound) return "Selecciona una ronda/bloque para analizar.";
     if (planTotalPlayers === 0) return "No hay jugadores activos/confirmados para este bloque.";
-    if (selectedRound.start_type !== "shotgun") {
+    if (String(selectedRound.start_type ?? "").toLowerCase() !== "shotgun") {
       return planTotalGroups4 <= shotgunSimpleCapacity
         ? "Tee times: grupos de 4 funcionan bien para esta cantidad."
         : "Tee times: revisa el intervalo y la ventana disponible de salidas.";
@@ -570,18 +579,22 @@ for (const row of membersRaw) {
 
           <div className="flex min-w-0 flex-col gap-1 sm:max-w-xl">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Ronda
+              Día / turno
             </span>
             <select
               name="round_id"
               defaultValue={effectiveRoundId}
               className="min-w-[12rem] max-w-[min(100vw-2rem,22rem)] border border-slate-600 rounded bg-white px-3 py-2 text-slate-950 sm:min-w-[14rem]"
             >
-              {rounds.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {roundLabel(r)}
-                </option>
-              ))}
+              {sessionBlocks.map((block) => {
+                const rep = block[0];
+                if (!rep) return null;
+                return (
+                  <option key={rep.id} value={rep.id}>
+                    {formatSessionOptionLabel(rep)}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

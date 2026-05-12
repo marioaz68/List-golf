@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import Papa from "papaparse";
+import ExcelJS from "exceljs";
 import { createClient } from "@/utils/supabase/server";
 import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
+import { roundsInSameSession } from "@/app/(backoffice)/tee-sheet/sessionBlock";
 
 export const dynamic = "force-dynamic";
 
 type RoundRow = {
   id: string;
   tournament_id: string;
+  category_id?: string | null;
   round_no: number;
   round_date: string | null;
   start_type: string | null;
   start_time: string | null;
+  wave?: string | null;
   categories?:
     | { code: string | null; name: string | null }
     | { code: string | null; name: string | null }[]
@@ -48,6 +51,22 @@ function playerName(first: string | null, last: string | null) {
   const b = String(first ?? "").trim();
   return `${a} ${b}`.trim() || "—";
 }
+
+const EXPORT_COLUMNS = [
+  "Torneo",
+  "Ronda",
+  "Fecha ronda",
+  "Tipo salida",
+  "Categoría ronda",
+  "Grupo",
+  "Hora tee",
+  "Salida",
+  "Categoría grupo",
+  "Pos",
+  "Jugador",
+  "Club",
+  "HCP",
+] as const;
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -87,10 +106,12 @@ export async function GET(request: NextRequest) {
       `
       id,
       tournament_id,
+      category_id,
       round_no,
       round_date,
       start_type,
       start_time,
+      wave,
       categories:categories (
         code,
         name
@@ -116,8 +137,34 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const rounds = [round];
-  const roundIds = [roundId];
+  const { data: allRoundsData, error: allRErr } = await supabase
+    .from("rounds")
+    .select(
+      `
+      id,
+      tournament_id,
+      category_id,
+      round_no,
+      round_date,
+      start_type,
+      start_time,
+      wave,
+      categories:categories (
+        code,
+        name
+      )
+    `
+    )
+    .eq("tournament_id", tournamentId);
+
+  if (allRErr) {
+    return NextResponse.json({ error: allRErr.message }, { status: 500 });
+  }
+
+  const allForSession = (allRoundsData ?? []) as RoundRow[];
+  const sessionRounds = roundsInSameSession(allForSession, roundId);
+  const rounds = sessionRounds.length > 0 ? sessionRounds : [round];
+  const roundIds = rounds.map((r) => r.id);
 
   const { data: gData, error: gErr } = await supabase
     .from("pairing_groups")
@@ -280,7 +327,36 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const csv = "\uFEFF" + Papa.unparse(rows);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "List.golf";
+  const sheet = workbook.addWorksheet("Salidas", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+
+  sheet.addRow([...EXPORT_COLUMNS]);
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE2EFDA" },
+  };
+
+  for (const r of rows) {
+    sheet.addRow(EXPORT_COLUMNS.map((key) => r[key] ?? ""));
+  }
+
+  EXPORT_COLUMNS.forEach((key, colIdx) => {
+    const samples = rows.map((row) => String(row[key] ?? ""));
+    const width = Math.min(
+      48,
+      Math.max(key.length, ...samples.map((s) => s.length), 10)
+    );
+    sheet.getColumn(colIdx + 1).width = width;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+
   const safeTournament = tournamentName
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -290,12 +366,13 @@ export async function GET(request: NextRequest) {
   const datePart = String(round.round_date ?? "")
     .replace(/[^\d-]/g, "")
     .slice(0, 10);
-  const filename = `salidas_R${round.round_no}${datePart ? `_${datePart}` : ""}_${safeTournament}.csv`;
+  const filename = `salidas_R${round.round_no}${datePart ? `_${datePart}` : ""}_${safeTournament}.xlsx`;
 
-  return new NextResponse(csv, {
+  return new NextResponse(buffer, {
     status: 200,
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       "Cache-Control": "no-store",
     },

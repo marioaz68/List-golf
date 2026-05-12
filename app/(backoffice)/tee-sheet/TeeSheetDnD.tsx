@@ -591,7 +591,7 @@ export default function TeeSheetDnD({
           <a
             href={exportExcelHref}
             className="ml-auto inline-flex items-center gap-1 rounded border border-emerald-700 bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700"
-            title="Descarga CSV de la ronda actual (compatible con Excel)"
+            title="Descarga archivo Excel (.xlsx) de la ronda actual"
           >
             <FileSpreadsheet className="size-3.5 shrink-0 opacity-95" aria-hidden />
             Exportar Excel
