@@ -143,7 +143,7 @@ function sortDetailsForMergePriority(
   });
 }
 
-/** Une hoyos de todas las filas `rounds` con el mismo `round_no` (p. ej. por categoría). */
+/** Une hoyos de todas las filas `rounds` con el mismo round_id real. */
 function mergeRoundDetailGroup(
   arr: RoundDetail[],
   playerCategoryId: string | null
@@ -232,8 +232,11 @@ function detailsForPlayerCategoryScope(
 }
 
 /**
- * Detalle hoyo por hoyo: agrupa por `round_no` solo entre rondas de la **categoría**
- * de la jugadora (más rondas “abiertas” sin `category_id`), y fusiona si hace falta.
+ * Detalle hoyo por hoyo.
+ *
+ * Importante: NO agrupamos solo por round_no porque en este torneo existen varias R1
+ * con la misma fecha/wave pero diferente category_id. Agrupar solo por round_no mezcla
+ * R1 A con R1 B y deja detalles vacíos aunque round_scores/hole_scores sí existan.
  */
 export function selectLeaderboardDetailsForPlayer(
   row: LeaderboardRow
@@ -243,16 +246,32 @@ export function selectLeaderboardDetailsForPlayer(
 
   const scopedDetails = detailsForPlayerCategoryScope(row.details, catId);
 
-  const byRoundNo = new Map<number, RoundDetail[]>();
+  const byRoundKey = new Map<string, RoundDetail[]>();
   for (const d of scopedDetails) {
-    const n = d.round_no;
-    if (!byRoundNo.has(n)) byRoundNo.set(n, []);
-    byRoundNo.get(n)!.push(d);
+    const key = [d.round_no, d.round_id, d.category_id ?? ""].join("|");
+
+    if (!byRoundKey.has(key)) {
+      byRoundKey.set(key, []);
+    }
+
+    byRoundKey.get(key)!.push(d);
   }
 
   const out: RoundDetail[] = [];
-  for (const roundNo of [...byRoundNo.keys()].sort((a, b) => a - b)) {
-    const arr = byRoundNo.get(roundNo)!;
+  for (const key of [...byRoundKey.keys()].sort((a, b) => {
+    const [aRoundNo = "", aRoundId = "", aCategoryId = ""] = a.split("|");
+    const [bRoundNo = "", bRoundId = "", bCategoryId = ""] = b.split("|");
+
+    const na = Number(aRoundNo);
+    const nb = Number(bRoundNo);
+    if (na !== nb) return na - nb;
+
+    const catCompare = aCategoryId.localeCompare(bCategoryId);
+    if (catCompare !== 0) return catCompare;
+
+    return aRoundId.localeCompare(bRoundId);
+  })) {
+    const arr = byRoundKey.get(key)!;
 
     const groupVisible =
       !cid ||
