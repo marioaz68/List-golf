@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
-import SearchInput from "@/components/ui/SearchInput";
 import StealthTextInput from "@/components/ui/StealthTextInput";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 
 type Player = {
   id: string;
@@ -30,6 +30,8 @@ export default function SinglePlayerEntryPanel({
   tournamentId: string;
   categories: Category[];
 }) {
+  const { t } = useAppLocale();
+  const ts = t.entries.single;
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Record<string, string>>({});
   const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
@@ -70,14 +72,14 @@ export default function SinglePlayerEntryPanel({
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
-          Inscribir jugador
+          {ts.title}
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
           <StealthTextInput
             value={search}
             onChange={setSearch}
-            placeholder="Buscar nombre o club..."
+            placeholder={ts.searchPlaceholder}
             style={{
               minWidth: 220,
               height: 28,
@@ -98,7 +100,7 @@ export default function SinglePlayerEntryPanel({
             href={`/players/new?returnTournament=${tournamentId}`}
             className="inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
           >
-            Nuevo jugador
+            {ts.newPlayer}
           </a>
         </div>
       </div>
@@ -108,22 +110,22 @@ export default function SinglePlayerEntryPanel({
           <thead className="sticky top-0 z-10 bg-gray-200 text-black">
             <tr>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                Jugador
+                {ts.thPlayer}
               </th>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                Club
+                {ts.thClub}
               </th>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                HI
+                {ts.thHi}
               </th>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                Edad
+                {ts.thAge}
               </th>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                Categoría
+                {ts.thCategory}
               </th>
               <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                Acción
+                {ts.thAction}
               </th>
             </tr>
           </thead>
@@ -169,16 +171,16 @@ export default function SinglePlayerEntryPanel({
                         disabled={isSubmittingThisPlayer}
                         className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black disabled:cursor-wait disabled:bg-gray-100"
                       >
-                        <option value="">Categoría normal</option>
+                        <option value="">{ts.categoryNormal}</option>
                         {ageCategories.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.code ? `${c.code} - ` : ""}
-                            {c.name ?? "Sin nombre"}
+                            {c.name ?? ts.unnamed}
                           </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="text-gray-500">Auto</span>
+                      <span className="text-gray-500">{ts.auto}</span>
                     )}
                   </td>
 
@@ -189,7 +191,7 @@ export default function SinglePlayerEntryPanel({
                         disabled
                         className="inline-flex min-h-6 cursor-not-allowed items-center justify-center rounded border border-gray-300 bg-gray-200 px-2 text-[10px] font-medium leading-none text-gray-400"
                       >
-                        Sin HI
+                        {ts.noHi}
                       </button>
                     ) : (
                       <form
@@ -213,7 +215,7 @@ export default function SinglePlayerEntryPanel({
                               : "inline-flex min-h-6 items-center justify-center rounded border border-green-700 bg-green-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-green-800"
                           }
                         >
-                          {isSubmittingThisPlayer ? "Inscribiendo..." : "Inscribir"}
+                          {isSubmittingThisPlayer ? ts.enrolling : ts.enroll}
                         </button>
                       </form>
                     )}
@@ -228,7 +230,7 @@ export default function SinglePlayerEntryPanel({
                   colSpan={6}
                   className="border border-gray-300 px-2 py-2 text-center text-[11px] text-gray-700"
                 >
-                  No se encontró jugador en la lista general.
+                  {ts.emptySearch}
                 </td>
               </tr>
             ) : null}

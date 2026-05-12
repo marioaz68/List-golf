@@ -3,6 +3,8 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import HeaderBar from "@/components/ui/HeaderBar";
 import PrizeRulesEditor from "./PrizeRulesEditor";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -80,6 +82,10 @@ function HeaderBlock({
 export default async function PrizeRulesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const pr = messages[locale].prizeRules;
+  const common = messages[locale].common;
+  const nav = messages[locale].sidebar.nav;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -115,9 +121,9 @@ export default async function PrizeRulesPage(props: {
   if (!effectiveTournamentId) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold leading-none text-white">Reglas de Premios</h1>
+        <h1 className="text-lg font-bold leading-none text-white">{pr.title}</h1>
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
-          No hay torneos creados todavía. Primero crea un torneo para configurar premios.
+          {pr.noTournaments}
         </div>
       </div>
     );
@@ -125,29 +131,29 @@ export default async function PrizeRulesPage(props: {
 
   return (
     <div className="space-y-2 p-2 md:p-3">
-      <h1 className="text-lg font-bold leading-none text-white">Reglas de Premios</h1>
+      <h1 className="text-lg font-bold leading-none text-white">{pr.title}</h1>
 
       <div className="flex flex-wrap gap-1.5">
         <a href={`/cut-rules?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Reglas de Corte
+          {pr.linkCut}
         </a>
         <a href={`/categories?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Categorías
+          {nav.categories}
         </a>
         <a href={`/rounds?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Rondas
+          {nav.rounds}
         </a>
         <a href={`/leaderboard?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Leaderboard
+          {pr.linkLeaderboard}
         </a>
       </div>
 
       <form method="GET" action="/prize-rules" className="space-y-2">
         <HeaderBlock
-          title="TORNEO"
+          title={common.tournament}
           actions={
             <button type="submit" style={buttonStyle}>
-              Cambiar
+              {common.change}
             </button>
           }
         >

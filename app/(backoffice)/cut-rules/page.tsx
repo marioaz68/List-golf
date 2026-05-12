@@ -4,6 +4,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import CutRulesEditor from "./CutRulesEditor";
 import HeaderBar from "@/components/ui/HeaderBar";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -108,6 +110,11 @@ function HeaderBlock({
 export default async function CutRulesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const cu = messages[locale].cutRules;
+  const comp = messages[locale].competitionRules;
+  const common = messages[locale].common;
+  const nav = messages[locale].sidebar.nav;
   const supabase = await createClient();
   const supabaseAdmin = createAdminClient();
   const sp = props.searchParams ? await props.searchParams : {};
@@ -194,13 +201,10 @@ export default async function CutRulesPage(props: {
   if (!effectiveTournamentId) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold leading-none text-white">
-          Reglas de Corte
-        </h1>
+        <h1 className="text-lg font-bold leading-none text-white">{cu.title}</h1>
 
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
-          No hay torneos creados todavía. Primero crea un torneo para configurar
-          reglas de corte.
+          {cu.noTournaments}
         </div>
       </div>
     );
@@ -208,53 +212,51 @@ export default async function CutRulesPage(props: {
 
   return (
     <div className="space-y-2 p-2 md:p-3">
-      <h1 className="text-lg font-bold leading-none text-white">
-        Reglas de Corte
-      </h1>
+      <h1 className="text-lg font-bold leading-none text-white">{cu.title}</h1>
 
       <div className="flex flex-wrap gap-1.5">
         <a
           href={`/rounds?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Rondas
+          {nav.rounds}
         </a>
 
         <a
           href={`/categories?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Categorías
+          {nav.categories}
         </a>
 
         <a
           href={`/category-tee-rules?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Reglas de Salidas
+          {cu.linkTeeRules}
         </a>
 
         <a
           href={`/competition-rules?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Competencia
+          {cu.linkCompetition}
         </a>
 
         <a
           href={`/prize-rules?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Premios
+          {comp.linkPrizes}
         </a>
       </div>
 
       <form method="GET" action="/cut-rules" className="space-y-2">
         <HeaderBlock
-          title="TORNEO"
+          title={common.tournament}
           actions={
             <button type="submit" style={buttonStyle}>
-              Cambiar
+              {common.change}
             </button>
           }
         >
@@ -277,7 +279,7 @@ export default async function CutRulesPage(props: {
 
       {saved === "1" ? (
         <div className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-[11px] font-semibold leading-snug text-green-800">
-          Reglas guardadas correctamente.
+          {cu.savedOk}
         </div>
       ) : null}
 

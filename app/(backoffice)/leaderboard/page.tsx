@@ -1,5 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { unstable_noStore as noStore } from "next/cache";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -163,6 +165,8 @@ export default async function LeaderboardPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   noStore();
+  const locale = await getLocale();
+  const leaderboardTitle = messages[locale].leaderboard.title;
 
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
@@ -191,7 +195,7 @@ export default async function LeaderboardPage(props: {
   if (tournaments.length === 0) {
     return (
       <div className="p-3">
-        <h1 className="text-lg font-bold leading-none text-gray-900">Leaderboard</h1>
+        <h1 className="text-lg font-bold leading-none text-gray-900">{leaderboardTitle}</h1>
         <div className="mt-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
           No hay torneos creados.
         </div>
@@ -409,7 +413,7 @@ export default async function LeaderboardPage(props: {
       <div className="mx-auto max-w-7xl space-y-2">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div className="min-w-0">
-            <h1 className="text-lg font-bold leading-none text-gray-900">Leaderboard</h1>
+            <h1 className="text-lg font-bold leading-none text-gray-900">{leaderboardTitle}</h1>
             <p className="mt-1 text-[11px] leading-none text-gray-600">
               Torneo seleccionado:{" "}
               <span className="font-semibold">

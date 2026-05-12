@@ -6,6 +6,8 @@ import {
 } from "./actions";
 import { createAdminClient } from "@/utils/supabase/admin";
 import SubmitButton from "@/components/ui/SubmitButton";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -437,6 +439,8 @@ export default async function CaddiesPage({
   searchParams: Promise<SP>;
 }) {
   const sp = await searchParams;
+  const locale = await getLocale();
+  const cd = messages[locale].caddies;
   const tournamentId = String(getParam(sp, "tournament_id") ?? "").trim();
   const roundId = String(getParam(sp, "round_id") ?? "").trim();
 
@@ -636,22 +640,22 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h1 style={titleStyle}>CADDIES</h1>
-            <p style={subStyle}>Asignación operativa de caddies por torneo y ronda</p>
+            <h1 style={titleStyle}>{cd.title}</h1>
+            <p style={subStyle}>{cd.subtitle}</p>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/caddies/new" style={buttonStyle}>
-              Alta / Catálogo
+              {cd.catalog}
             </Link>
             <Link href="/tournaments" style={ghostButtonStyle}>
-              Torneos
+              {cd.tournaments}
             </Link>
             <Link href="/entries" style={ghostButtonStyle}>
-              Entries
+              {cd.entries}
             </Link>
             <Link href="/score-entry" style={ghostButtonStyle}>
-              Score Entry
+              {cd.scoreEntry}
             </Link>
           </div>
         </div>
@@ -660,8 +664,8 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h2 style={titleStyle}>FILTROS</h2>
-            <p style={subStyle}>Filtra asignaciones por torneo y ronda</p>
+            <h2 style={titleStyle}>{cd.filters}</h2>
+            <p style={subStyle}>{cd.filtersHint}</p>
           </div>
         </div>
 
@@ -750,7 +754,7 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h2 style={titleStyle}>ASIGNAR CADDIE POR RONDA</h2>
+            <h2 style={titleStyle}>{cd.assignHeading}</h2>
             <p style={subStyle}>
               Los caddies ya usados en esta ronda se ocultan del selector.
             </p>
@@ -871,7 +875,7 @@ export default async function CaddiesPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h2 style={titleStyle}>ASIGNACIONES</h2>
+            <h2 style={titleStyle}>{cd.assignments}</h2>
             <p style={subStyle}>
               Solo se muestran asignaciones activas. Quitar conserva historial.
             </p>

@@ -3,6 +3,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import CompetitionRulesEditor from "./CompetitionRulesEditor";
 import HeaderBar from "@/components/ui/HeaderBar";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -85,8 +87,14 @@ function HeaderBlock({
 export default async function CompetitionRulesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const cr = messages[locale].competitionRules;
+  const common = messages[locale].common;
+  const nav = messages[locale].sidebar.nav;
   const supabase = createAdminClient();
   const sp = props.searchParams ? await props.searchParams : {};
+  const saved =
+    typeof sp.saved === "string" && sp.saved.length > 0 ? sp.saved : "";
 
   const tournamentId =
     typeof sp.tournament_id === "string" ? sp.tournament_id : "";
@@ -145,13 +153,10 @@ export default async function CompetitionRulesPage(props: {
   if (!effectiveTournamentId) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold leading-none text-white">
-          Reglas de Competencia
-        </h1>
+        <h1 className="text-lg font-bold leading-none text-white">{cr.title}</h1>
 
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
-          No hay torneos creados todavía. Primero crea un torneo para configurar
-          reglas de competencia.
+          {cr.noTournaments}
         </div>
       </div>
     );
@@ -159,31 +164,29 @@ export default async function CompetitionRulesPage(props: {
 
   return (
     <div className="space-y-2 p-2 md:p-3">
-      <h1 className="text-lg font-bold leading-none text-white">
-        Reglas de Competencia
-      </h1>
+      <h1 className="text-lg font-bold leading-none text-white">{cr.title}</h1>
 
       <div className="flex flex-wrap gap-1.5">
         <a href={`/categories?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Categorías
+          {nav.categories}
         </a>
         <a href={`/cut-rules?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Cortes
+          {cr.linkCuts}
         </a>
         <a href={`/prize-rules?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Premios
+          {cr.linkPrizes}
         </a>
         <a href={`/rounds?tournament_id=${effectiveTournamentId}`} style={buttonStyle}>
-          Rondas
+          {nav.rounds}
         </a>
       </div>
 
       <form method="GET" action="/competition-rules" className="space-y-2">
         <HeaderBlock
-          title="TORNEO"
+          title={common.tournament}
           actions={
             <button type="submit" style={buttonStyle}>
-              Cambiar
+              {common.change}
             </button>
           }
         >
@@ -203,6 +206,12 @@ export default async function CompetitionRulesPage(props: {
           </div>
         </HeaderBlock>
       </form>
+
+      {saved ? (
+        <div className="rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-[11px] font-semibold leading-snug text-green-800">
+          {cr.savedOk}
+        </div>
+      ) : null}
 
       <CompetitionRulesEditor
         key={editorKey}

@@ -40,6 +40,9 @@ import {
   subtotal,
   toValidEntry,
 } from "./lib/utils";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
+import { PublicLanguageToggle } from "@/components/i18n/PublicLanguageToggle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -84,6 +87,12 @@ export default async function PublicTournamentPage({
   } = await supabase.auth.getUser();
 
   const isLoggedIn = !!user;
+
+  const locale = await getLocale();
+  const pub = messages[locale].publicTournament;
+  const pts = messages[locale].publicTeeSheet;
+  const common = messages[locale].common;
+  const sb = messages[locale].sidebar;
 
   const tournamentResponse = isLoggedIn
     ? await supabase
@@ -495,21 +504,21 @@ export default async function PublicTournamentPage({
 
   const pageTitle =
     view === "official"
-      ? "Resultados oficiales"
+      ? pub.pageTitleOfficial
       : view === "favorites"
-        ? "Mis favoritos"
+        ? pub.pageTitleFavorites
         : view === "tee-sheet"
-          ? "Salidas"
-          : "Live Scoring";
+          ? pub.pageTitleTeeSheet
+          : pub.pageTitleLive;
 
   const pageDescription =
     view === "official"
-      ? "Resultados verificados por la administración del torneo."
+      ? pub.pageDescOfficial
       : view === "favorites"
-        ? "Seguimiento rápido de los jugadores marcados como favoritos."
+        ? pub.pageDescFavorites
         : view === "tee-sheet"
-          ? "Lista pública de salidas por día, visible solo cuando el comité confirma el orden definitivo."
-          : "Resultados en tiempo real del torneo con avances de captura y posiciones por categoría.";
+          ? pub.pageDescTeeSheet
+          : pub.pageDescLive;
 
   return (
     <div className="min-h-screen bg-[#08111f] text-white">
@@ -523,24 +532,25 @@ export default async function PublicTournamentPage({
                 href="/"
                 className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
               >
-                ← Inicio
+                {pub.home}
               </Link>
 
               <Link
                 href="/#torneos"
                 className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
               >
-                Ver torneos
+                {pub.seeTournaments}
               </Link>
 
               {isLoggedIn ? (
                 <Link href="/tournaments" className={adminPillClasses()}>
-                  Ir a lista de torneos
+                  {pub.adminList}
                 </Link>
               ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <PublicLanguageToggle locale={locale} />
               <Link
                 href={buildHref({
                   tournamentId: typedTournament.id,
@@ -550,7 +560,7 @@ export default async function PublicTournamentPage({
                 })}
                 className={pillClasses(view === "live")}
               >
-                Live Scoring
+                {pub.live}
               </Link>
 
               <Link
@@ -562,7 +572,7 @@ export default async function PublicTournamentPage({
                 })}
                 className={pillClasses(view === "official")}
               >
-                Leaderboard
+                {pub.leaderboard}
               </Link>
 
               <Link
@@ -573,7 +583,7 @@ export default async function PublicTournamentPage({
                 })}
                 className={pillClasses(view === "tee-sheet")}
               >
-                Salidas
+                {pub.teeSheet}
               </Link>
 
               <Link
@@ -585,7 +595,7 @@ export default async function PublicTournamentPage({
                 })}
                 className={pillClasses(view === "favorites")}
               >
-                Favoritos
+                {pub.favorites}
               </Link>
 
               <Link
@@ -595,7 +605,7 @@ export default async function PublicTournamentPage({
                 })}
                 className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
               >
-                ✍️ Firma electrónica
+                {pub.eSignature}
               </Link>
             </div>
           </div>
@@ -606,7 +616,7 @@ export default async function PublicTournamentPage({
                 <div className="relative h-40 w-28 overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
                   <img
                     src={posterUrl}
-                    alt="Poster torneo"
+                    alt={pub.posterAlt}
                     className="h-full w-full object-cover"
                   />
                 </div>
@@ -615,11 +625,11 @@ export default async function PublicTournamentPage({
 
             <div>
               <div className="mb-3 inline-flex items-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300">
-                Torneo público
+                {pub.publicBadge}
               </div>
 
               <h1 className="max-w-4xl text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
-                {typedTournament.name ?? "Sin nombre"}
+                {typedTournament.name ?? sb.noName}
               </h1>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -628,8 +638,8 @@ export default async function PublicTournamentPage({
                 </span>
 
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                  {filteredEntries.length} jugador
-                  {filteredEntries.length === 1 ? "" : "es"}
+                  {filteredEntries.length}{" "}
+                  {filteredEntries.length === 1 ? pub.playerOne : pub.playersMany}
                 </span>
 
                 <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
@@ -638,13 +648,14 @@ export default async function PublicTournamentPage({
 
                 {selectedCategory ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                    Categoría: {selectedCategory.code ?? selectedCategory.name ?? "—"}
+                    {pub.categoryChip}{" "}
+                    {selectedCategory.code ?? selectedCategory.name ?? "—"}
                   </span>
                 ) : null}
 
                 {selectedRound ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                    Ronda {selectedRound.round_no}
+                    {pub.roundChip} {selectedRound.round_no}
                   </span>
                 ) : null}
               </div>
@@ -658,7 +669,7 @@ export default async function PublicTournamentPage({
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 bg-[#0c1728] p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Rondas
+                    {pub.statRounds}
                   </p>
                   <p className="mt-2 text-2xl font-black text-white">
                     {rounds.length}
@@ -667,7 +678,7 @@ export default async function PublicTournamentPage({
 
                 <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/10 p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200">
-                    Salidas
+                    {pub.statStarts}
                   </p>
                   <p className="mt-2 text-2xl font-black text-white">
                     {publicPairingGroups.length}
@@ -676,7 +687,7 @@ export default async function PublicTournamentPage({
 
                 <div className="rounded-2xl border border-white/10 bg-[#0c1728] p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Pendientes
+                    {pub.statPending}
                   </p>
                   <p className="mt-2 text-2xl font-black text-white">
                     {playersPendingScores}
@@ -698,7 +709,7 @@ export default async function PublicTournamentPage({
                     })}
                     className={sectionPillClasses(!selectedCategoryId)}
                   >
-                    Todas las categorías
+                    {pub.allCategories}
                   </Link>
 
                   {categories.map((category) => (
@@ -712,7 +723,7 @@ export default async function PublicTournamentPage({
                       })}
                       className={sectionPillClasses(selectedCategoryId === category.id)}
                     >
-                      {category.code ?? category.name ?? "Sin categoría"}
+                      {category.code ?? category.name ?? common.noCategory}
                     </Link>
                   ))}
                 </div>
@@ -750,11 +761,26 @@ export default async function PublicTournamentPage({
               tournamentId={typedTournament.id}
               selectedCategoryId={selectedCategory?.code ?? selectedCategory?.name ?? ""}
               selectedRoundId={selectedPublicTeeSheetRoundId}
+              labels={{
+                empty: pts.empty,
+                allDays: pts.allDays,
+                noGroupsFilter: pts.noGroupsFilter,
+                publishedStarts: pts.publishedStarts,
+                groupOne: pts.groupOne,
+                groupMany: pts.groupMany,
+                startingTee: pts.startingTee,
+                playerOne: pts.playerOne,
+                playersMany: pts.playersMany,
+              }}
             />
           ) : view === "official" ? (
             <div className="mb-4 flex flex-wrap gap-2">
               {Object.entries(categoryStatusMap)
-                .sort((a, b) => a[0].localeCompare(b[0], "es", { sensitivity: "base" }))
+                .sort((a, b) =>
+                  a[0].localeCompare(b[0], locale === "en" ? "en" : "es", {
+                    sensitivity: "base",
+                  })
+                )
                 .map(([cat, stats]) => {
                   const pending = Math.max(stats.total - stats.closed, 0);
 
@@ -763,8 +789,10 @@ export default async function PublicTournamentPage({
                       key={cat}
                       className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-200"
                     >
-                      {cat}: {stats.closed}/{stats.total} cerradas
-                      {pending > 0 ? ` • faltan ${pending}` : " • completo"}
+                      {cat}: {stats.closed}/{stats.total} {pub.officialChipClosed}
+                      {pending > 0
+                        ? ` • ${pub.officialChipPending} ${pending}`
+                        : ` • ${pub.officialChipDone}`}
                     </div>
                   );
                 })}
@@ -797,38 +825,26 @@ export default async function PublicTournamentPage({
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                Live Scoring
+                {pub.cardLiveKicker}
               </p>
-              <p className="mt-3 text-lg font-bold text-white">
-                Seguimiento en vivo
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Captura visible públicamente sin entrar al sistema administrativo.
-              </p>
+              <p className="mt-3 text-lg font-bold text-white">{pub.cardLiveTitle}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardLiveBody}</p>
             </div>
 
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                Salidas
+                {pub.cardTeeKicker}
               </p>
-              <p className="mt-3 text-lg font-bold text-white">
-                Grupos por día
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Las salidas públicas aparecen cuando el comité confirma el orden definitivo del día.
-              </p>
+              <p className="mt-3 text-lg font-bold text-white">{pub.cardTeeTitle}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardTeeBody}</p>
             </div>
 
             <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-500/10 p-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
-                Firma electrónica
+                {pub.cardSignKicker}
               </p>
-              <p className="mt-3 text-lg font-bold text-white">
-                Acceso directo a firmas
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-200">
-                Ingresa a la captura y validación de firma del jugador y marker.
-              </p>
+              <p className="mt-3 text-lg font-bold text-white">{pub.cardSignTitle}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-200">{pub.cardSignBody}</p>
 
               <div className="mt-4">
                 <Link
@@ -838,7 +854,7 @@ export default async function PublicTournamentPage({
                   })}
                   className="inline-flex min-h-9 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-4 text-sm font-bold text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
                 >
-                  Ir a firma electrónica
+                  {pub.cardSignCta}
                 </Link>
               </div>
             </div>

@@ -1,5 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import ClubsClient from "./ClubsClient";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,6 +55,8 @@ function scoreClub(row: ClubRow) {
 }
 
 export default async function ClubsPage() {
+  const locale = await getLocale();
+  const clubCopy = messages[locale].clubs;
   const supabase = await createClient();
 
   const [clubsRes, coursesRes] = await Promise.all([
@@ -116,5 +120,5 @@ export default async function ClubsPage() {
     );
   });
 
-  return <ClubsClient clubs={ordered} />;
+  return <ClubsClient clubs={ordered} copy={clubCopy} />;
 }

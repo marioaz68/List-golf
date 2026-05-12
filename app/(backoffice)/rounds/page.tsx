@@ -5,6 +5,8 @@ import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { createRound, updateRound, deleteRound } from "./actions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import HeaderBar from "@/components/ui/HeaderBar";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -219,6 +221,9 @@ function HeaderBlock({
 export default async function RoundsPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const roundsCopy = messages[locale].rounds;
+  const common = messages[locale].common;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -235,7 +240,7 @@ export default async function RoundsPage(props: {
   if (tErr) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">{roundsCopy.title}</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando torneos: {tErr.message}
         </p>
@@ -258,7 +263,7 @@ export default async function RoundsPage(props: {
     return (
       <div className="space-y-2 p-2 md:p-3">
         <header className="space-y-1">
-          <h1 className="text-lg font-bold text-white">Rounds</h1>
+          <h1 className="text-lg font-bold text-white">{roundsCopy.title}</h1>
           <p className="text-[11px] leading-snug text-white/85">
             No hay torneos disponibles.
           </p>
@@ -299,7 +304,7 @@ export default async function RoundsPage(props: {
   if (categoriesRes.error) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">{roundsCopy.title}</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando categorías: {categoriesRes.error.message}
         </p>
@@ -310,7 +315,7 @@ export default async function RoundsPage(props: {
   if (roundsRes.error) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">{roundsCopy.title}</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando rounds: {roundsRes.error.message}
         </p>
@@ -361,29 +366,28 @@ export default async function RoundsPage(props: {
   return (
     <div className="space-y-2 p-2 md:p-3">
       <header className="space-y-1">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">{roundsCopy.title}</h1>
         <p className="text-[11px] leading-snug text-white/85">
-          Configura el calendario del torneo por día, ronda, categoría, turno y
-          horario.
+          {roundsCopy.subtitle}
         </p>
       </header>
 
       <form method="GET" action="/rounds" className="space-y-2">
         <HeaderBlock
-          title="TORNEO"
+          title={common.tournament}
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
               <button type="submit" className={primaryButtonClass}>
-                Cambiar
+                {common.change}
               </button>
               <a href="/tournaments/new" className={secondaryButtonClass}>
-                + Nuevo torneo
+                {roundsCopy.newTournament}
               </a>
               <a
                 href={`/cut-rules?tournament_id=${effectiveTournamentId}`}
                 className={secondaryButtonClass}
               >
-                Reglas corte
+                {roundsCopy.cutRulesLink}
               </a>
             </div>
           }

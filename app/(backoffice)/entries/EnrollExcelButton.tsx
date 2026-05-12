@@ -2,8 +2,10 @@ import { enrollExcelPlayersToTournament } from "./actions";
 
 export default function EnrollExcelButton({
   tournament_id,
+  importLabel,
 }: {
   tournament_id: string;
+  importLabel: string;
 }) {
   return (
     <form
@@ -24,7 +26,7 @@ export default function EnrollExcelButton({
         type="submit"
         className="rounded bg-black px-3 py-2 text-sm text-white hover:opacity-90"
       >
-        Importar del Excel
+        {importLabel}
       </button>
     </form>
   );

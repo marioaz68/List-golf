@@ -11,6 +11,8 @@ import PlayerRowActions from "@/components/PlayerRowActions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import StealthTextInput from "@/components/ui/StealthTextInput";
 import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import { fmt } from "@/lib/i18n/fmt";
 
 type RoundSignature = {
   round_no: number;
@@ -74,14 +76,17 @@ function badgeClass(status: string | null) {
   }
 }
 
-function badgeLabel(status: string | null) {
+function badgeLabel(
+  status: string | null,
+  te: ReturnType<typeof useAppLocale>["t"]["entries"]["list"]
+) {
   switch ((status ?? "").toLowerCase()) {
     case "confirmed":
-      return "Activo";
+      return te.statusActive;
     case "withdrawn":
-      return "Baja";
+      return te.statusWithdrawn;
     case "dq":
-      return "DQ";
+      return te.statusDQ;
     default:
       return status ?? "-";
   }
@@ -127,6 +132,8 @@ export default function EntriesListPanel({
   tournamentId: string;
   categories: Category[];
 }) {
+  const { t, locale } = useAppLocale();
+  const te = t.entries.list;
   const [search, setSearch] = useState("");
   const [club, setClub] = useState("");
   const [category, setCategory] = useState("");
@@ -137,9 +144,9 @@ export default function EntriesListPanel({
       if (e.players?.club_label) set.add(e.players.club_label);
     });
     return [...set].sort((a, b) =>
-      a.localeCompare(b, "es", { sensitivity: "base" })
+      a.localeCompare(b, locale === "en" ? "en" : "es", { sensitivity: "base" })
     );
-  }, [entries]);
+  }, [entries, locale]);
 
   const categoryCodes = useMemo(() => {
     const set = new Set<string>();
@@ -147,9 +154,9 @@ export default function EntriesListPanel({
       if (e.categories?.code) set.add(e.categories.code);
     });
     return [...set].sort((a, b) =>
-      a.localeCompare(b, "es", { sensitivity: "base" })
+      a.localeCompare(b, locale === "en" ? "en" : "es", { sensitivity: "base" })
     );
-  }, [entries]);
+  }, [entries, locale]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -167,7 +174,7 @@ export default function EntriesListPanel({
           const sig =
             e.round_signatures?.find((r) => r.round_no === roundNo) ?? null;
           const count = getSignatureCount(sig);
-          return `r${roundNo} ${count} firmas`;
+          return fmt(te.roundSigTitle, { round: roundNo, count }).toLowerCase();
         })
         .join(" ")
         .toLowerCase();
@@ -183,7 +190,7 @@ export default function EntriesListPanel({
         (!category || e.categories?.code === category)
       );
     });
-  }, [entries, search, club, category]);
+  }, [entries, search, club, category, te.roundSigTitle]);
 
   async function handleGenerateLinks(entryId: string) {
     try {
@@ -191,7 +198,7 @@ export default function EntriesListPanel({
         new URLSearchParams(window.location.search).get("round_id") ?? "";
 
       if (!roundId) {
-        alert("No se encontró round_id en la URL.");
+        alert(te.alertNoRoundId);
         return;
       }
 
@@ -201,19 +208,19 @@ export default function EntriesListPanel({
         entry_id: entryId,
       });
 
-      const msg = `Jugador:
+      const msg = `${te.linksPlayer}
 ${res.player_url}
 
-Marcador:
+${te.linksMarker}
 ${res.marker_url}
 
-Testigo:
+${te.linksWitness}
 ${res.witness_url}`;
 
       await navigator.clipboard.writeText(msg);
-      alert("Ligas copiadas al portapapeles");
+      alert(te.linksCopied);
     } catch (err: any) {
-      alert(err?.message ?? "Error generando ligas");
+      alert(err?.message ?? te.linksError);
     }
   }
 
@@ -221,14 +228,14 @@ ${res.witness_url}`;
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
         <div className="font-semibold uppercase text-gray-700">
-          Jugadores inscritos
+          {te.heading}
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
           <StealthTextInput
             value={search}
             onChange={setSearch}
-            placeholder="#, nombre, club, estatus o ronda..."
+            placeholder={te.searchPlaceholder}
             style={{
               minWidth: 180,
               height: 28,
@@ -246,7 +253,7 @@ ${res.witness_url}`;
             onChange={(e) => setClub(e.target.value)}
             className="h-7 px-2"
           >
-            <option value="">Club</option>
+            <option value="">{te.optionClub}</option>
             {clubs.map((c) => (
               <option key={c}>{c}</option>
             ))}
@@ -257,7 +264,7 @@ ${res.witness_url}`;
             onChange={(e) => setCategory(e.target.value)}
             className="h-7 px-2"
           >
-            <option value="">Cat</option>
+            <option value="">{te.optionCat}</option>
             {categoryCodes.map((c) => (
               <option key={c}>{c}</option>
             ))}
@@ -273,15 +280,15 @@ ${res.witness_url}`;
         <table className="min-w-[1320px] w-max whitespace-nowrap text-[11px]">
           <thead className="sticky top-0 z-10 bg-gray-200">
             <tr>
-              <th className="px-1 py-1 text-left">#</th>
-              <th className="px-1 py-1 text-left">Jugador</th>
-              <th className="px-1 py-1 text-left">Club</th>
-              <th className="px-1 py-1 text-left">Hcp</th>
-              <th className="px-1 py-1 text-left">Cat</th>
-              <th className="px-1 py-1 text-left">Estatus</th>
-              <th className="px-1 py-1 text-left">Firmas</th>
+              <th className="px-1 py-1 text-left">{te.thNumber}</th>
+              <th className="px-1 py-1 text-left">{te.thPlayer}</th>
+              <th className="px-1 py-1 text-left">{te.thClub}</th>
+              <th className="px-1 py-1 text-left">{te.thHcp}</th>
+              <th className="px-1 py-1 text-left">{te.thCat}</th>
+              <th className="px-1 py-1 text-left">{te.thStatus}</th>
+              <th className="px-1 py-1 text-left">{te.thSignatures}</th>
               <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
-                Acciones
+                {te.thActions}
               </th>
             </tr>
           </thead>
@@ -323,7 +330,7 @@ ${res.witness_url}`;
                         e.status
                       )}`}
                     >
-                      {badgeLabel(e.status)}
+                      {badgeLabel(e.status, te)}
                     </span>
                   </td>
 
@@ -339,7 +346,10 @@ ${res.witness_url}`;
                           <div
                             key={roundNo}
                             className="flex flex-col items-center gap-1"
-                            title={`R${roundNo}: ${getSignatureCount(sig)} firma(s)`}
+                            title={fmt(te.roundSigTitle, {
+                              round: roundNo,
+                              count: getSignatureCount(sig),
+                            })}
                           >
                             <span className="text-[9px] font-semibold text-gray-700">
                               R{roundNo}
@@ -363,7 +373,7 @@ ${res.witness_url}`;
                           onClick={() => handleGenerateLinks(e.id)}
                           className="h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
                         >
-                          FIRMAS
+                          {te.btnSignatures}
                         </button>
                       </div>
 
@@ -375,9 +385,7 @@ ${res.witness_url}`;
                           className="w-full"
                           onSubmit={(event) => {
                             if (
-                              !window.confirm(
-                                "¿Eliminar definitivamente? Se eliminará si no tiene hoyos capturados."
-                              )
+                              !window.confirm(te.confirmDelete)
                             ) {
                               event.preventDefault();
                             }
@@ -391,11 +399,11 @@ ${res.witness_url}`;
                           />
 
                           <SubmitButton
-                            pendingText="Eliminando..."
+                            pendingText={te.deletePending}
                             className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
                             pendingClassName="h-7 w-full cursor-wait rounded border border-red-400 bg-red-400 text-[11px] font-bold text-white"
                           >
-                            ELIMINAR
+                            {te.btnDelete}
                           </SubmitButton>
                         </form>
                       </div>
@@ -406,7 +414,7 @@ ${res.witness_url}`;
                             action={restoreEntry}
                             className="w-full"
                             onSubmit={(event) => {
-                              if (!window.confirm("¿Reactivar este jugador en el torneo?")) {
+                              if (!window.confirm(te.confirmRestoreWithdrawn)) {
                                 event.preventDefault();
                               }
                             }}
@@ -419,11 +427,11 @@ ${res.witness_url}`;
                             />
 
                             <SubmitButton
-                              pendingText="Restaurando..."
+                              pendingText={te.restorePending}
                               className={`${BTN_BASE} w-full border-green-700 bg-green-700`}
                               pendingClassName={`${BTN_BASE} w-full cursor-wait border-green-400 bg-green-400`}
                             >
-                              REA
+                              {te.btnRea}
                             </SubmitButton>
                           </form>
                         ) : (
@@ -431,7 +439,7 @@ ${res.witness_url}`;
                             action={withdrawEntry}
                             className="w-full"
                             onSubmit={(event) => {
-                              if (!window.confirm("¿Dar de baja a este jugador del torneo?")) {
+                              if (!window.confirm(te.confirmWithdraw)) {
                                 event.preventDefault();
                               }
                             }}
@@ -444,11 +452,11 @@ ${res.witness_url}`;
                             />
 
                             <SubmitButton
-                              pendingText="Dando de baja..."
+                              pendingText={te.withdrawPending}
                               className={`${BTN_BASE} w-full border-amber-600 bg-amber-600`}
                               pendingClassName={`${BTN_BASE} w-full cursor-wait border-amber-400 bg-amber-400`}
                             >
-                              Baja
+                              {te.btnWithdraw}
                             </SubmitButton>
                           </form>
                         )}
@@ -460,7 +468,7 @@ ${res.witness_url}`;
                             action={restoreEntry}
                             className="w-full"
                             onSubmit={(event) => {
-                              if (!window.confirm("¿Quitar DQ y regresar el jugador a activo?")) {
+                              if (!window.confirm(te.confirmRestoreDq)) {
                                 event.preventDefault();
                               }
                             }}
@@ -473,11 +481,11 @@ ${res.witness_url}`;
                             />
 
                             <SubmitButton
-                              pendingText="Restaurando..."
+                              pendingText={te.restorePending}
                               className={`${BTN_BASE} w-full border-sky-700 bg-sky-700`}
                               pendingClassName={`${BTN_BASE} w-full cursor-wait border-sky-400 bg-sky-400`}
                             >
-                              REA
+                              {te.btnRea}
                             </SubmitButton>
                           </form>
                         ) : (
@@ -486,9 +494,7 @@ ${res.witness_url}`;
                             className="w-full"
                             onSubmit={(event) => {
                               if (
-                                !window.confirm(
-                                  "¿Marcar DQ? Esto pondrá 400 a la ronda actual/última del torneo y dejará al jugador como DQ."
-                                )
+                                !window.confirm(te.confirmDq)
                               ) {
                                 event.preventDefault();
                               }
@@ -502,11 +508,11 @@ ${res.witness_url}`;
                             />
 
                             <SubmitButton
-                              pendingText="Marcando DQ..."
+                              pendingText={te.dqPending}
                               className={`${BTN_BASE} w-full border-red-700 bg-red-700`}
                               pendingClassName={`${BTN_BASE} w-full cursor-wait border-red-400 bg-red-400`}
                             >
-                              DQ
+                              {te.btnDq}
                             </SubmitButton>
                           </form>
                         )}
@@ -554,7 +560,7 @@ ${res.witness_url}`;
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-2 text-gray-600">
-                  Sin resultados
+                  {te.noResults}
                 </td>
               </tr>
             ) : null}

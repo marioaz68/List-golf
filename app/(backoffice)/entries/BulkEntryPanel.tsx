@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { addSelectedEntries } from "./actions";
 import StealthTextInput from "@/components/ui/StealthTextInput";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import { fmt } from "@/lib/i18n/fmt";
 
 type Player = {
   id: string;
@@ -55,6 +57,8 @@ function InlineSpinner() {
 
 function SubmitEntriesButton({ selectedCount }: { selectedCount: number }) {
   const { pending } = useFormStatus();
+  const { t } = useAppLocale();
+  const tb = t.entries.bulk;
 
   return (
     <button
@@ -66,10 +70,10 @@ function SubmitEntriesButton({ selectedCount }: { selectedCount: number }) {
       {pending ? (
         <>
           <InlineSpinner />
-          Inscribiendo...
+          {tb.enrolling}
         </>
       ) : (
-        `Inscribir seleccionados (${selectedCount})`
+        fmt(tb.enrollSelected, { n: selectedCount })
       )}
     </button>
   );
@@ -82,6 +86,8 @@ export default function BulkEntryPanel({
   tournamentId: string;
   players: Player[];
 }) {
+  const { t, locale } = useAppLocale();
+  const tb = t.entries.bulk;
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [club, setClub] = useState("");
@@ -96,8 +102,10 @@ export default function BulkEntryPanel({
       if (p.club_label) set.add(p.club_label);
     });
 
-    return [...set].sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
-  }, [players]);
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, locale === "en" ? "en" : "es", { sensitivity: "base" })
+    );
+  }, [players, locale]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -155,14 +163,14 @@ export default function BulkEntryPanel({
       <div className="flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1">
         <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
-            Inscripción masiva
+            {tb.title}
           </div>
 
           <div className="flex flex-wrap items-center gap-1">
             <StealthTextInput
               value={search}
               onChange={setSearch}
-              placeholder="Buscar nombre o club..."
+              placeholder={tb.searchPlaceholder}
               style={{
                 minWidth: 160,
                 height: 28,
@@ -180,7 +188,7 @@ export default function BulkEntryPanel({
               onChange={(e) => setClub(e.target.value)}
               className="h-7 min-w-[130px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
             >
-              <option value="">Todos los clubs</option>
+              <option value="">{tb.allClubs}</option>
               {clubs.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -193,7 +201,7 @@ export default function BulkEntryPanel({
               onChange={(e) => setCategory(e.target.value)}
               className="h-7 min-w-[110px] rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
             >
-              <option value="">Todas cat.</option>
+              <option value="">{tb.allCats}</option>
               <option value="SCR">SCR</option>
               <option value="AA">AA</option>
               <option value="A">A</option>
@@ -213,10 +221,10 @@ export default function BulkEntryPanel({
               {isSelectingVisible ? (
                 <>
                   <InlineSpinner />
-                  Seleccionando...
+                  {tb.selectVisibleBusy}
                 </>
               ) : (
-                "Seleccionar visibles"
+                tb.selectVisible
               )}
             </button>
 
@@ -230,10 +238,10 @@ export default function BulkEntryPanel({
               {isClearingVisible ? (
                 <>
                   <InlineSpinner />
-                  Limpiando...
+                  {tb.clearVisibleBusy}
                 </>
               ) : (
-                "Limpiar visibles"
+                tb.clearVisible
               )}
             </button>
           </div>
@@ -241,15 +249,15 @@ export default function BulkEntryPanel({
 
         <div className="flex flex-wrap items-center gap-1">
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Visibles: {filtered.length}
+            {tb.visibleCount} {filtered.length}
           </div>
 
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Seleccionados: {selectedCount}
+            {tb.selectedCount} {selectedCount}
           </div>
 
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Seleccionados visibles: {selectedVisibleCount}
+            {tb.selectedVisibleCount} {selectedVisibleCount}
           </div>
         </div>
       </div>
@@ -262,19 +270,19 @@ export default function BulkEntryPanel({
             <thead className="sticky top-0 z-10 bg-gray-200 text-black">
               <tr>
                 <th className="w-[46px] border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                  Sel
+                  {tb.thSel}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  Jugador
+                  {tb.thPlayer}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  Club
+                  {tb.thClub}
                 </th>
                 <th className="w-[64px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  HI
+                  {tb.thHi}
                 </th>
                 <th className="w-[56px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                  Cat
+                  {tb.thCat}
                 </th>
               </tr>
             </thead>
@@ -321,7 +329,7 @@ export default function BulkEntryPanel({
                     colSpan={5}
                     className="border border-gray-300 px-2 py-2 text-center text-[11px] text-gray-700"
                   >
-                    Sin jugadores para mostrar
+                    {tb.emptyPlayers}
                   </td>
                 </tr>
               ) : null}

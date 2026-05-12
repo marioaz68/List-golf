@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { savePrizeRulesSnapshot } from "./actions";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 
 type PrizeRuleRow = {
   id: string;
@@ -90,6 +91,7 @@ export default function PrizeRulesEditor({
   tournamentId: string;
   rules: PrizeRuleRow[];
 }) {
+  const { t } = useAppLocale();
   const [rows, setRows] = useState<PrizeRuleRow[]>(
     [...rules].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999))
   );
@@ -317,7 +319,9 @@ export default function PrizeRulesEditor({
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Base</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Prioridad</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Único</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Leaderboard</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                  {t.editors.leaderboardColumn}
+                </th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Modo</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Rondas</th>
                 <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Activo</th>

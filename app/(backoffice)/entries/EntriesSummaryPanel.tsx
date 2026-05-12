@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import { fmt } from "@/lib/i18n/fmt";
 
 type Entry = {
   id: string;
@@ -28,11 +30,16 @@ export default function EntriesSummaryPanel({
 }: {
   entries: Entry[];
 }) {
+  const { t } = useAppLocale();
+  const tsu = t.entries.summary;
+  const noCat = t.common.noCategory;
+  const noClub = tsu.noClub;
+
   const categorySummary = useMemo(() => {
     const map: Record<string, CategorySummaryRow> = {};
 
     entries.forEach((e) => {
-      const code = e.categories?.code ?? "Sin categoría";
+      const code = e.categories?.code ?? noCat;
       const name = e.categories?.name ?? "";
       const maxPlayers =
         e.categories?.max_players === undefined ||
@@ -57,18 +64,18 @@ export default function EntriesSummaryPanel({
     });
 
     return Object.values(map).sort((a, b) => b.count - a.count);
-  }, [entries]);
+  }, [entries, noCat]);
 
   const clubSummary = useMemo(() => {
     const map: Record<string, number> = {};
 
     entries.forEach((e) => {
-      const club = e.players?.club_label ?? "Sin club";
+      const club = e.players?.club_label ?? noClub;
       map[club] = (map[club] ?? 0) + 1;
     });
 
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [entries]);
+  }, [entries, noClub]);
 
   const totalPlayers = entries.length;
   const totalCategories = categorySummary.length;
@@ -78,18 +85,18 @@ export default function EntriesSummaryPanel({
     <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-col gap-1 rounded border border-gray-200 bg-gray-50 px-1.5 py-1 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
-          Resumen del torneo
+          {tsu.title}
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Jugadores: {totalPlayers}
+            {tsu.players} {totalPlayers}
           </div>
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Categorías: {totalCategories}
+            {tsu.categories} {totalCategories}
           </div>
           <div className="rounded border border-gray-300 bg-white px-2 py-[5px] text-[10px] font-medium leading-none text-gray-600">
-            Clubs: {totalClubs}
+            {tsu.clubs} {totalClubs}
           </div>
         </div>
       </div>
@@ -97,7 +104,7 @@ export default function EntriesSummaryPanel({
       <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
         <div className="space-y-1 rounded border border-gray-200 bg-white">
           <div className="border-b border-gray-200 bg-gray-50 px-1.5 py-1 text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
-            Jugadores por categoría
+            {tsu.byCategory}
           </div>
 
           <div className="max-h-[560px] overflow-auto">
@@ -105,16 +112,16 @@ export default function EntriesSummaryPanel({
               <thead className="sticky top-0 z-10 bg-gray-200 text-black">
                 <tr>
                   <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                    Categoría
+                    {tsu.thCategory}
                   </th>
                   <th className="w-[90px] border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                    Inscritos
+                    {tsu.thEnrolled}
                   </th>
                   <th className="w-[90px] border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                    Cupo
+                    {tsu.thQuota}
                   </th>
                   <th className="w-[90px] border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
-                    Estado
+                    {tsu.thState}
                   </th>
                 </tr>
               </thead>
@@ -150,15 +157,15 @@ export default function EntriesSummaryPanel({
                       <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
                         {isFull ? (
                           <span className="inline-flex rounded border border-red-300 bg-red-100 px-1.5 py-[3px] text-[10px] font-semibold text-red-800">
-                            LLENA
+                            {tsu.full}
                           </span>
                         ) : hasLimit ? (
                           <span className="inline-flex rounded border border-green-300 bg-green-50 px-1.5 py-[3px] text-[10px] font-semibold text-green-800">
-                            {remaining} libres
+                            {fmt(tsu.spotsFree, { n: remaining ?? 0 })}
                           </span>
                         ) : (
                           <span className="inline-flex rounded border border-gray-300 bg-gray-50 px-1.5 py-[3px] text-[10px] font-semibold text-gray-600">
-                            Sin límite
+                            {tsu.noLimit}
                           </span>
                         )}
                       </td>
@@ -172,7 +179,7 @@ export default function EntriesSummaryPanel({
                       colSpan={4}
                       className="border border-gray-300 px-2 py-2 text-[11px] text-gray-700"
                     >
-                      Sin datos
+                      {tsu.noData}
                     </td>
                   </tr>
                 ) : null}
@@ -183,7 +190,7 @@ export default function EntriesSummaryPanel({
 
         <div className="space-y-1 rounded border border-gray-200 bg-white">
           <div className="border-b border-gray-200 bg-gray-50 px-1.5 py-1 text-[11px] font-semibold uppercase leading-none tracking-[0.03em] text-gray-700">
-            Jugadores por club
+            {tsu.byClub}
           </div>
 
           <div className="max-h-[560px] overflow-auto">
@@ -191,10 +198,10 @@ export default function EntriesSummaryPanel({
               <thead className="sticky top-0 z-10 bg-gray-200 text-black">
                 <tr>
                   <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                    Club
+                    {tsu.thClub}
                   </th>
                   <th className="w-[90px] border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
-                    Jugadores
+                    {tsu.thPlayers}
                   </th>
                 </tr>
               </thead>
@@ -217,7 +224,7 @@ export default function EntriesSummaryPanel({
                       colSpan={2}
                       className="border border-gray-300 px-2 py-2 text-[11px] text-gray-700"
                     >
-                      Sin datos
+                      {tsu.noData}
                     </td>
                   </tr>
                 ) : null}

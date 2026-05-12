@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { addSelectedEntries } from "./actions";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import { fmt } from "@/lib/i18n/fmt";
 
 type Player = {
   id: string;
@@ -31,6 +33,8 @@ export default function PlayersBulkSelector({
   tournamentId: string;
   players: Player[];
 }) {
+  const { t, locale } = useAppLocale();
+  const bs = t.entries.bulkSelector;
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [clubFilter, setClubFilter] = useState("");
@@ -43,8 +47,10 @@ export default function PlayersBulkSelector({
       if (p.club) set.add(p.club);
     });
 
-    return [...set].sort();
-  }, [players]);
+    return [...set].sort((a, b) =>
+      a.localeCompare(b, locale === "en" ? "en" : "es", { sensitivity: "base" })
+    );
+  }, [players, locale]);
 
   const filtered = useMemo(() => {
     return players.filter((p) => {
@@ -92,13 +98,13 @@ export default function PlayersBulkSelector({
     <section className="rounded-lg border border-gray-300 bg-white/95 p-4 space-y-4">
 
       <h2 className="font-semibold text-black">
-        Inscripción masiva de jugadores
+        {bs.title}
       </h2>
 
       <div className="flex flex-wrap gap-3">
 
         <input
-          placeholder="Buscar jugador..."
+          placeholder={bs.searchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="rounded border border-gray-300 px-3 py-2"
@@ -109,7 +115,7 @@ export default function PlayersBulkSelector({
           onChange={(e) => setCategoryFilter(e.target.value)}
           className="rounded border border-gray-300 px-3 py-2"
         >
-          <option value="">Todas categorías</option>
+          <option value="">{bs.allCategories}</option>
           <option value="SCR">SCR</option>
           <option value="AA">AA</option>
           <option value="A">A</option>
@@ -124,7 +130,7 @@ export default function PlayersBulkSelector({
           onChange={(e) => setClubFilter(e.target.value)}
           className="rounded border border-gray-300 px-3 py-2"
         >
-          <option value="">Todos los clubes</option>
+          <option value="">{bs.allClubs}</option>
 
           {clubs.map((c) => (
             <option key={c}>{c}</option>
@@ -136,7 +142,7 @@ export default function PlayersBulkSelector({
           className="btn3d"
           onClick={toggleAll}
         >
-          Seleccionar visibles
+          {bs.selectVisible}
         </button>
       </div>
 
@@ -149,11 +155,11 @@ export default function PlayersBulkSelector({
 
             <thead className="bg-gray-200 text-black">
               <tr>
-                <th className="border p-2">Sel</th>
-                <th className="border p-2">Jugador</th>
-                <th className="border p-2">Club</th>
-                <th className="border p-2">HI</th>
-                <th className="border p-2">Categoría</th>
+                <th className="border p-2">{bs.thSel}</th>
+                <th className="border p-2">{bs.thPlayer}</th>
+                <th className="border p-2">{bs.thClub}</th>
+                <th className="border p-2">{bs.thHi}</th>
+                <th className="border p-2">{bs.thCategory}</th>
               </tr>
             </thead>
 
@@ -204,7 +210,7 @@ export default function PlayersBulkSelector({
             className="btn3d-green"
             disabled={selectedCount === 0}
           >
-            Inscribir seleccionados ({selectedCount})
+            {fmt(bs.enrollSelected, { n: selectedCount })}
           </button>
 
         </div>

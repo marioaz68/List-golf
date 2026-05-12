@@ -27,6 +27,11 @@ type ClubRow = {
 
 type Props = {
   clubs: ClubRow[];
+  copy: {
+    title: string;
+    subtitle: string;
+    searchPlaceholder: string;
+  };
 };
 
 type FormState = {
@@ -344,7 +349,7 @@ function ClubPreviewFromForm({ form }: { form: FormState }) {
   );
 }
 
-export default function ClubsClient({ clubs }: Props) {
+export default function ClubsClient({ clubs, copy }: Props) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -631,10 +636,10 @@ export default function ClubsClient({ clubs }: Props) {
       >
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>
-            Clubs
+            {copy.title}
           </div>
           <div style={{ fontSize: 13, color: "#4b5563", marginTop: 4 }}>
-            Catálogo maestro de clubs, logos oficiales y logos automáticos
+            {copy.subtitle}
           </div>
         </div>
 
@@ -642,7 +647,7 @@ export default function ClubsClient({ clubs }: Props) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar club..."
+            placeholder={copy.searchPlaceholder}
             style={inputStyle}
           />
         </div>

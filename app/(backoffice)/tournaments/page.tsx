@@ -4,6 +4,8 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { togglePublic, toggleArchive } from "./actions";
 import PosterUploadInline from "./PosterUploadInline";
 import SubmitButton from "@/components/ui/SubmitButton";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -301,7 +303,10 @@ function normalizeText(value: string | null | undefined) {
     .toLowerCase();
 }
 
-function uniqueClubOptions(rows: Pick<TournamentRow, "club_name">[]) {
+function uniqueClubOptions(
+  rows: Pick<TournamentRow, "club_name">[],
+  sortLocale: string
+) {
   const seen = new Set<string>();
   const list: string[] = [];
 
@@ -316,7 +321,7 @@ function uniqueClubOptions(rows: Pick<TournamentRow, "club_name">[]) {
     list.push(raw);
   }
 
-  return list.sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+  return list.sort((a, b) => a.localeCompare(b, sortLocale, { sensitivity: "base" }));
 }
 
 const statusBadge = (status: string | null): React.CSSProperties => {
@@ -414,10 +419,14 @@ function visibilityBadge(
   };
 }
 
-function visibilityLabel(isPublic: boolean | null, isArchived: boolean | null) {
-  if (isArchived) return "Archivado";
-  if (isPublic) return "Público";
-  return "Oculto";
+function visibilityLabel(
+  isPublic: boolean | null,
+  isArchived: boolean | null,
+  v: { archived: string; public: string; hidden: string }
+) {
+  if (isArchived) return v.archived;
+  if (isPublic) return v.public;
+  return v.hidden;
 }
 
 function countLinkStyle(n: number): React.CSSProperties {
@@ -490,6 +499,10 @@ export default async function TournamentsPage({
   searchParams: Promise<SP>;
 }) {
   const sp = await searchParams;
+  const locale = await getLocale();
+  const tm = messages[locale].tournaments;
+  const nav = messages[locale].sidebar.nav;
+  const sortLocale = locale === "en" ? "en" : "es";
 
   const club = (getParam(sp, "club") ?? "").trim();
   const from = normalizeDateInput(getParam(sp, "from") ?? "");
@@ -566,7 +579,8 @@ export default async function TournamentsPage({
       (row) => ({
         club_name: row.club_name,
       })
-    )
+    ),
+    sortLocale
   );
 
   const categoriesByTournament = countByTournament(categoriesRes.data);
@@ -584,22 +598,22 @@ export default async function TournamentsPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h1 style={titleStyle}>TORNEOS</h1>
-            <p style={subStyle}>Control maestro de operación</p>
+            <h1 style={titleStyle}>{tm.title}</h1>
+            <p style={subStyle}>{tm.subtitle}</p>
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/" style={ghostButtonStyle}>
-              Home pública
+              {tm.linkPublicHome}
             </Link>
 
             <Link href="/#torneos" style={ghostButtonStyle}>
-              Torneos públicos
+              {tm.linkPublicTournaments}
             </Link>
 
             {!isScoreCapture ? (
               <Link href="/tournaments/new" style={buttonStyle}>
-                Nuevo torneo
+                {tm.newTournament}
               </Link>
             ) : null}
           </div>
@@ -609,10 +623,8 @@ export default async function TournamentsPage({
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
-            <h2 style={titleStyle}>BUSCADOR / ORDENADOR</h2>
-            <p style={subStyle}>
-              Filtra por club y por rango de fechas del torneo
-            </p>
+            <h2 style={titleStyle}>{tm.searchHeading}</h2>
+            <p style={subStyle}>{tm.searchHint}</p>
           </div>
         </div>
 
@@ -620,13 +632,13 @@ export default async function TournamentsPage({
           <div style={filtersGridStyle}>
             <div style={{ ...fieldWrapStyle, ...clubFieldStyle }}>
               <label htmlFor="club" style={labelStyle}>
-                Club
+                {tm.labelClub}
               </label>
               <input
                 id="club"
                 name="club"
                 defaultValue={club}
-                placeholder="Escribe club y selecciona sugerencia"
+                placeholder={tm.clubPlaceholder}
                 style={fieldStyle}
                 list="club-options"
                 autoComplete="off"
@@ -640,7 +652,7 @@ export default async function TournamentsPage({
 
             <div style={{ ...fieldWrapStyle, ...dateFieldStyle }}>
               <label htmlFor="from" style={labelStyle}>
-                Fecha desde
+                {tm.labelDateFrom}
               </label>
               <input
                 id="from"
@@ -653,7 +665,7 @@ export default async function TournamentsPage({
 
             <div style={{ ...fieldWrapStyle, ...dateFieldStyle }}>
               <label htmlFor="to" style={labelStyle}>
-                Fecha hasta
+                {tm.labelDateTo}
               </label>
               <input
                 id="to"
@@ -666,15 +678,15 @@ export default async function TournamentsPage({
 
             <div style={buttonGroupWrapStyle}>
               <button type="submit" style={buttonStyle}>
-                Filtrar
+                {tm.filter}
               </button>
 
               <Link href="/tournaments" style={ghostButtonStyle}>
-                Limpiar
+                {tm.clear}
               </Link>
 
               <Link href="/tournaments" style={ghostButtonStyle}>
-                Todos por fecha
+                {tm.allByDate}
               </Link>
             </div>
           </div>
@@ -683,33 +695,36 @@ export default async function TournamentsPage({
         <div style={filtersNoteStyle}>
           {hasFilters ? (
             <>
-              Mostrando <strong>{tournaments.length}</strong> torneo
-              {tournaments.length === 1 ? "" : "s"} filtrado
-              {tournaments.length === 1 ? "" : "s"}
+              {tm.filterShowing}{" "}
+              <strong>{tournaments.length}</strong>{" "}
+              {tournaments.length === 1 ? tm.tournamentOne : tm.tournamentMany}{" "}
+              {tournaments.length === 1 ? tm.filteredOne : tm.filteredMany}
               {club ? (
                 <>
                   {" "}
-                  por club <strong>{club}</strong>
+                  {tm.byClub} <strong>{club}</strong>
                 </>
               ) : null}
               {from ? (
                 <>
                   {" "}
-                  desde <strong>{formatDate(from)}</strong>
+                  {tm.wordFrom} <strong>{formatDate(from)}</strong>
                 </>
               ) : null}
               {to ? (
                 <>
                   {" "}
-                  hasta <strong>{formatDate(to)}</strong>
+                  {tm.wordTo} <strong>{formatDate(to)}</strong>
                 </>
               ) : null}
-              . Orden: <strong>más reciente a más viejo</strong>.
+              . {tm.orderPrefix}{" "}
+              <strong>{tm.orderNewestFirst}</strong>.
             </>
           ) : (
             <>
-              Mostrando <strong>todos los torneos</strong> ordenados de{" "}
-              <strong>más reciente a más viejo</strong>.
+              {tm.filterAllIntro}{" "}
+              <strong>{tm.filterAllTournaments}</strong> {tm.filterAllOrdered}{" "}
+              <strong>{tm.orderNewestFirst}</strong>.
             </>
           )}
         </div>
@@ -720,20 +735,20 @@ export default async function TournamentsPage({
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th style={thStyle}>Fecha</th>
-                <th style={thStyle}>Torneo</th>
-                <th style={thStyle}>Estatus</th>
-                <th style={thStyle}>Público</th>
-                <th style={thStyle}>Club</th>
-                <th style={thStyle}>Campo</th>
-                <th style={thStyle}>Hoyos</th>
-                <th style={thStyle}>Categorías</th>
-                <th style={thStyle}>Entries</th>
-                <th style={thStyle}>Salidas</th>
-                <th style={thStyle}>Reglas</th>
-                <th style={thStyle}>Rondas</th>
-                <th style={thStyle}>Staff</th>
-                <th style={thStyle}>Acciones</th>
+                <th style={thStyle}>{tm.thDate}</th>
+                <th style={thStyle}>{tm.thTournament}</th>
+                <th style={thStyle}>{tm.thStatus}</th>
+                <th style={thStyle}>{tm.thPublic}</th>
+                <th style={thStyle}>{tm.thClub}</th>
+                <th style={thStyle}>{tm.thCourse}</th>
+                <th style={thStyle}>{tm.thHoles}</th>
+                <th style={thStyle}>{tm.thCategories}</th>
+                <th style={thStyle}>{tm.colEntries}</th>
+                <th style={thStyle}>{tm.thTeeSets}</th>
+                <th style={thStyle}>{tm.thRules}</th>
+                <th style={thStyle}>{tm.thRounds}</th>
+                <th style={thStyle}>{tm.thStaff}</th>
+                <th style={thStyle}>{tm.thActions}</th>
               </tr>
             </thead>
 
@@ -805,7 +820,7 @@ export default async function TournamentsPage({
                               padding: 8,
                             }}
                           >
-                            Sin poster
+                            {tm.noPoster}
                           </div>
                         )}
 
@@ -822,11 +837,11 @@ export default async function TournamentsPage({
                           </Link>
 
                           <p style={subStyle}>
-                            Club: {displayClubName(t.club_name, clubs)}
+                            {tm.clubLine} {displayClubName(t.club_name, clubs)}
                           </p>
 
                           <p style={subStyle}>
-                            Campo: {displayCourseName(t.course_name, courses)}
+                            {tm.courseLine} {displayCourseName(t.course_name, courses)}
                           </p>
                         </div>
                       </div>
@@ -851,7 +866,7 @@ export default async function TournamentsPage({
 
                     <td style={tdStyle}>
                       <span style={visibilityBadge(isPublic, isArchived)}>
-                        {visibilityLabel(isPublic, isArchived)}
+                        {visibilityLabel(isPublic, isArchived, tm.visibility)}
                       </span>
                     </td>
 
@@ -919,7 +934,7 @@ export default async function TournamentsPage({
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Pública
+                            {tm.btnPublic}
                           </Link>
                         ) : null}
 
@@ -928,7 +943,7 @@ export default async function TournamentsPage({
                             href={`/tournaments/edit?tournament_id=${t.id}`}
                             style={ghostButtonStyle}
                           >
-                            Editar
+                            {tm.edit}
                           </Link>
                         ) : null}
 
@@ -936,14 +951,14 @@ export default async function TournamentsPage({
                           href={`/entries?tournament_id=${t.id}`}
                           style={ghostButtonStyle}
                         >
-                          Entries
+                          {nav.entries}
                         </Link>
 
                         <Link
                           href={`/score-entry?tournament_id=${t.id}`}
                           style={scoreButtonStyle}
                         >
-                          Scores
+                          {tm.scores}
                         </Link>
 
                         {!isScoreCapture ? (
@@ -958,10 +973,10 @@ export default async function TournamentsPage({
                               style={inlineFormStyle}
                             >
                               <SubmitButton
-                                pendingText="Actualizando..."
+                                pendingText={tm.updating}
                                 className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-900"
                               >
-                                {isPublic ? "Ocultar" : "Mostrar"}
+                                {isPublic ? tm.hide : tm.show}
                               </SubmitButton>
                             </form>
 
@@ -970,10 +985,10 @@ export default async function TournamentsPage({
                               style={inlineFormStyle}
                             >
                               <SubmitButton
-                                pendingText="Actualizando..."
+                                pendingText={tm.updating}
                                 className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-900"
                               >
-                                {isArchived ? "Reactivar" : "Archivar"}
+                                {isArchived ? tm.reactivate : tm.archive}
                               </SubmitButton>
                             </form>
                           </>
@@ -987,7 +1002,7 @@ export default async function TournamentsPage({
               {tournaments.length === 0 ? (
                 <tr>
                   <td style={tdStyle} colSpan={14}>
-                    No hay torneos registrados con esos filtros.
+                    {tm.emptyWithFilters}
                   </td>
                 </tr>
               ) : null}

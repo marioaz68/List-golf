@@ -16,6 +16,17 @@ type PublicTeeSheetViewProps = {
   tournamentId: string;
   selectedCategoryId: string;
   selectedRoundId: string | null;
+  labels: {
+    empty: string;
+    allDays: string;
+    noGroupsFilter: string;
+    publishedStarts: string;
+    groupOne: string;
+    groupMany: string;
+    startingTee: string;
+    playerOne: string;
+    playersMany: string;
+  };
 };
 
 /** Interpreta etiquetas tipo `H1A`, `H10B` o `H12` (tee time). */
@@ -60,6 +71,7 @@ export default function PublicTeeSheetView({
   tournamentId,
   selectedCategoryId,
   selectedRoundId,
+  labels,
 }: PublicTeeSheetViewProps) {
   const confirmedRounds = rounds.filter((round) =>
     isStartingOrderConfirmed(round.notes)
@@ -87,8 +99,7 @@ export default function PublicTeeSheetView({
   if (confirmedRounds.length === 0) {
     return (
       <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
-        Aún no hay salidas publicadas. El comité debe confirmar/cerrar el orden
-        definitivo del día en Tee Sheet.
+        {labels.empty}
       </div>
     );
   }
@@ -104,7 +115,7 @@ export default function PublicTeeSheetView({
           })}
           className={sectionPillClasses(!selectedRoundId)}
         >
-          Todos los días
+          {labels.allDays}
         </Link>
 
         {confirmedRounds.map((round) => (
@@ -125,7 +136,7 @@ export default function PublicTeeSheetView({
 
       {filteredGroups.length === 0 ? (
         <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
-          No hay grupos para mostrar con este filtro.
+          {labels.noGroupsFilter}
         </div>
       ) : null}
 
@@ -144,7 +155,7 @@ export default function PublicTeeSheetView({
               <div className="flex flex-col gap-2 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-4">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200 sm:text-xs">
-                    Salidas publicadas
+                    {labels.publishedStarts}
                     {salidasKicker ? ` · ${salidasKicker}` : ""}
                   </div>
                   <h2 className="mt-1 break-words text-lg font-black text-white sm:text-xl">
@@ -152,7 +163,8 @@ export default function PublicTeeSheetView({
                   </h2>
                 </div>
                 <div className="shrink-0 self-start rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold text-slate-200 sm:self-auto">
-                  {roundGroups.length} grupo{roundGroups.length === 1 ? "" : "s"}
+                  {roundGroups.length}{" "}
+                  {roundGroups.length === 1 ? labels.groupOne : labels.groupMany}
                 </div>
               </div>
 
@@ -185,7 +197,7 @@ export default function PublicTeeSheetView({
                               </span>
                               {side ? (
                                 <span className="rounded-md border border-amber-300/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100">
-                                  Salida {side}
+                                  {labels.startingTee} {side}
                                 </span>
                               ) : null}
                             </>
@@ -200,8 +212,10 @@ export default function PublicTeeSheetView({
                           )}
                         </div>
                         <div className="text-[10px] font-semibold text-slate-400 sm:text-[11px]">
-                          {group.members.length} jugador
-                          {group.members.length === 1 ? "" : "es"}
+                          {group.members.length}{" "}
+                          {group.members.length === 1
+                            ? labels.playerOne
+                            : labels.playersMany}
                         </div>
                       </div>
 

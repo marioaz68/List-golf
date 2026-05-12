@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import HeaderBar from "@/components/ui/HeaderBar";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import SinglePlayerEntryPanel from "./SinglePlayerEntryPanel";
 import BulkEntryPanel from "./BulkEntryPanel";
 import EntriesListPanel from "./EntriesListPanel";
@@ -325,6 +327,11 @@ export default async function EntriesPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = (await searchParams) ?? {};
+  const locale = await getLocale();
+  const entriesTitle = messages[locale].entries.title;
+  const ep = messages[locale].entries.page;
+  const excelImport = messages[locale].entries.excel.import;
+  const noName = messages[locale].sidebar.noName;
   const requestedTournamentId =
     typeof params.tournament_id === "string" ? params.tournament_id : "";
   const activeTab = normalizeTab(params.tab);
@@ -534,10 +541,13 @@ export default async function EntriesPage({
 
   return (
     <main className="space-y-2 p-2">
-      <HeaderBlock title="Entries">
+      <HeaderBlock title={entriesTitle}>
         <div className="flex flex-wrap items-center gap-1">
           {selectedTournamentId && !registrationsClosed ? (
-            <EnrollExcelButton tournament_id={selectedTournamentId} />
+            <EnrollExcelButton
+              tournament_id={selectedTournamentId}
+              importLabel={excelImport}
+            />
           ) : null}
         </div>
       </HeaderBlock>
@@ -548,7 +558,7 @@ export default async function EntriesPage({
 
           <div className="grid gap-1">
             <label className="text-[10px] font-semibold uppercase tracking-[0.03em] text-gray-600">
-              Torneo
+              {ep.tournamentLabel}
             </label>
             <select
               name="tournament_id"
@@ -557,7 +567,7 @@ export default async function EntriesPage({
             >
               {tournaments.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name ?? "Sin nombre"}
+                  {t.name ?? noName}
                   {t.status ? ` (${t.status})` : ""}
                 </option>
               ))}
@@ -568,7 +578,7 @@ export default async function EntriesPage({
             type="submit"
             className="inline-flex min-h-7 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-gray-800"
           >
-            Cargar
+            {ep.load}
           </button>
         </form>
       </section>
@@ -585,16 +595,21 @@ export default async function EntriesPage({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="space-y-0.5">
                 <div className="text-[12px] font-semibold">
-                  {registrationsClosed ? "Inscripciones cerradas" : "Inscripciones abiertas"}
+                  {registrationsClosed
+                    ? ep.registrationClosedTitle
+                    : ep.registrationOpenTitle}
                 </div>
                 <div className="text-[11px]">
                   {registrationsClosed
-                    ? "La inscripción, edición de categoría/handicap y eliminación de jugadores está bloqueada."
-                    : "Puedes inscribir jugadores, editar categoría/handicap y eliminar inscritos."}
+                    ? ep.registrationBlocked
+                    : ep.registrationOpen}
                 </div>
                 {selectedTournament?.registration_closed_at ? (
                   <div className="text-[10px] opacity-80">
-                    Cerrado: {new Date(selectedTournament.registration_closed_at).toLocaleString("es-MX")}
+                    {ep.closedAtPrefix}{" "}
+                    {new Date(selectedTournament.registration_closed_at).toLocaleString(
+                      locale === "en" ? "en-US" : "es-MX"
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -605,14 +620,14 @@ export default async function EntriesPage({
                   <input type="hidden" name="tab" value={activeTab} />
                   <input
                     name="registration_status_note"
-                    placeholder="Motivo para reabrir"
+                    placeholder={ep.reopenPlaceholder}
                     className="h-7 w-[180px] rounded border border-red-300 bg-white px-2 text-[11px] text-black"
                   />
                   <button
                     type="submit"
                     className="inline-flex min-h-7 items-center justify-center rounded border border-red-700 bg-red-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-red-800"
                   >
-                    Reabrir inscripciones
+                    {ep.reopenButton}
                   </button>
                 </form>
               ) : (
@@ -621,14 +636,14 @@ export default async function EntriesPage({
                   <input type="hidden" name="tab" value={activeTab} />
                   <input
                     name="registration_status_note"
-                    placeholder="Motivo del cierre"
+                    placeholder={ep.closePlaceholder}
                     className="h-7 w-[180px] rounded border border-green-300 bg-white px-2 text-[11px] text-black"
                   />
                   <button
                     type="submit"
                     className="inline-flex min-h-7 items-center justify-center rounded border border-green-700 bg-green-700 px-2.5 text-[11px] font-medium leading-none text-white shadow-sm hover:bg-green-800"
                   >
-                    Cerrar inscripciones
+                    {ep.closeRegistration}
                   </button>
                 </form>
               )}
@@ -642,19 +657,19 @@ export default async function EntriesPage({
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
                   {bulkSelected !== null ? (
                     <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
-                      Seleccionados: {bulkSelected}
+                      {ep.bulkFeedbackSelected} {bulkSelected}
                     </span>
                   ) : null}
 
                   {bulkAdded !== null ? (
                     <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
-                      Agregados: {bulkAdded}
+                      {ep.bulkFeedbackAdded} {bulkAdded}
                     </span>
                   ) : null}
 
                   {bulkSkipped !== null ? (
                     <span className="rounded border border-current/20 bg-white/60 px-2 py-1">
-                      Ya inscritos: {bulkSkipped}
+                      {ep.bulkFeedbackSkipped} {bulkSkipped}
                     </span>
                   ) : null}
                 </div>
@@ -668,28 +683,28 @@ export default async function EntriesPage({
                 href={tabHref(selectedTournamentId, "manual")}
                 className={tabClasses(activeTab === "manual")}
               >
-                Manual
+                {ep.tabManual}
               </a>
 
               <a
                 href={tabHref(selectedTournamentId, "bulk")}
                 className={tabClasses(activeTab === "bulk")}
               >
-                Masiva
+                {ep.tabBulk}
               </a>
 
               <a
                 href={tabHref(selectedTournamentId, "entries")}
                 className={tabClasses(activeTab === "entries")}
               >
-                Inscritos
+                {ep.tabEntries}
               </a>
 
               <a
                 href={tabHref(selectedTournamentId, "summary")}
                 className={tabClasses(activeTab === "summary")}
               >
-                Resumen
+                {ep.tabSummary}
               </a>
             </div>
           </section>
@@ -697,7 +712,7 @@ export default async function EntriesPage({
           {activeTab === "manual" ? (
             registrationsClosed ? (
               <section className="rounded border border-red-300 bg-red-50 p-3 text-[12px] text-red-900 shadow-sm">
-                Inscripciones cerradas. Reabre el torneo para inscribir jugadores manualmente.
+                {ep.manualClosedMsg}
               </section>
             ) : (
               <SinglePlayerEntryPanel
@@ -713,7 +728,7 @@ export default async function EntriesPage({
           {activeTab === "bulk" ? (
             registrationsClosed ? (
               <section className="rounded border border-red-300 bg-red-50 p-3 text-[12px] text-red-900 shadow-sm">
-                Inscripciones cerradas. Reabre el torneo para usar inscripción masiva.
+                {ep.bulkClosedNote}
               </section>
             ) : (
               <BulkEntryPanel
@@ -737,7 +752,7 @@ export default async function EntriesPage({
         </>
       ) : (
         <section className="rounded border border-gray-300 bg-white p-3 text-[12px] text-gray-700 shadow-sm">
-          No hay torneo seleccionado.
+          {ep.noTournamentSelected}
         </section>
       )}
     </main>

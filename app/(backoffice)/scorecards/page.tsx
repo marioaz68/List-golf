@@ -4,6 +4,8 @@ import {
   createSignatureRequestAction,
   getOrCreateScorecardAction,
 } from "./actions";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 import ScorecardPreview from "@/components/scorecards/ScorecardPreview";
 import MarkerSignForm from "@/components/scorecards/MarkerSignForm";
@@ -52,6 +54,8 @@ function fullName(player: PlayerRow | null) {
 }
 
 export default async function ScorecardsTestPage() {
+  const locale = await getLocale();
+  const sc = messages[locale].scorecards;
   const supabase = await createClient();
 
   const scorecard = await getOrCreateScorecardAction({
@@ -149,12 +153,8 @@ export default async function ScorecardsTestPage() {
     <main className="space-y-6 p-6 text-sm">
       {/* HEADER */}
       <section className="rounded-lg border p-4">
-        <h1 className="mb-2 text-lg font-bold">
-          Scorecard real conectado a Supabase
-        </h1>
-        <p className="text-slate-600">
-          Firma digital completa: marcador + jugador + testigo.
-        </p>
+        <h1 className="mb-2 text-lg font-bold">{sc.title}</h1>
+        <p className="text-slate-600">{sc.subtitle}</p>
       </section>
 
       {/* TARJETA */}

@@ -2,6 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 
 type SubmitButtonProps = {
   children: ReactNode;
@@ -14,13 +15,15 @@ type SubmitButtonProps = {
 
 export function RoundSubmitButton({
   children,
-  pendingText = "Guardando...",
+  pendingText,
   style,
   className,
   disabled = false,
   form,
 }: SubmitButtonProps) {
   const { pending } = useFormStatus();
+  const { t } = useAppLocale();
+  const pendingLabel = pendingText ?? t.rounds.formSaving;
   const isDisabled = pending || disabled;
 
   return (
@@ -37,7 +40,7 @@ export function RoundSubmitButton({
         boxShadow: pending ? "0 1px 0 #1f2937, 0 2px 5px rgba(0,0,0,0.18)" : style?.boxShadow,
       }}
     >
-      {pending ? pendingText : children}
+      {pending ? pendingLabel : children}
     </button>
   );
 }
@@ -50,6 +53,8 @@ type DeleteButtonProps = {
 
 export function RoundDeleteButton({ style, className, form }: DeleteButtonProps) {
   const { pending } = useFormStatus();
+  const { t } = useAppLocale();
+  const r = t.rounds;
 
   return (
     <button
@@ -67,14 +72,12 @@ export function RoundDeleteButton({ style, className, form }: DeleteButtonProps)
       onClick={(event) => {
         if (pending) return;
 
-        const ok = window.confirm(
-          "¿Borrar esta ronda? Si tiene grupos o scores relacionados, la base puede impedir el borrado."
-        );
+        const ok = window.confirm(r.confirmDeleteRound);
 
         if (!ok) event.preventDefault();
       }}
     >
-      {pending ? "Borrando..." : "Borrar"}
+      {pending ? r.formDeleting : r.btnDelete}
     </button>
   );
 }

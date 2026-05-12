@@ -5,6 +5,8 @@ import {
   saveCourseHoles,
   saveCourseTeeSets,
 } from "./actions";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -69,6 +71,8 @@ const inputClass =
 export default async function CoursesPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const courseTitle = messages[locale].courses.title;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -168,7 +172,7 @@ export default async function CoursesPage(props: {
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold text-gray-900">Campos de golf</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{courseTitle}</h1>
 
         <form
           method="GET"

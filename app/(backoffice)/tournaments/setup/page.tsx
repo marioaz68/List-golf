@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import {
   applyCourseToTournament,
   applyCategoryTemplateToTournament,
@@ -113,11 +115,11 @@ function buildAbbr(v: string | null | undefined) {
     .join("");
 }
 
-function formatCourseOption(course: Course) {
+function formatCourseOption(course: Course, courseWithoutName: string) {
   const courseName = String(course.name ?? "").trim();
   const clubName = String(course.club_name ?? "").trim();
 
-  if (!courseName && !clubName) return "Campo sin nombre";
+  if (!courseName && !clubName) return courseWithoutName;
 
   if (courseName && clubName && sameText(courseName, clubName)) {
     return `${courseName} (${buildAbbr(clubName)})`;
@@ -377,6 +379,8 @@ export default async function TournamentSetupPage({
   searchParams?: Promise<SP>;
 }) {
   const sp = searchParams ? await searchParams : {};
+  const locale = await getLocale();
+  const ts = messages[locale].tournamentSetup;
   const selectedTournamentId = firstOf(sp?.tournament_id) ?? "";
   const selectedClubName = firstOf(sp?.club_name) ?? "";
   const selectedInitClubName = firstOf(sp?.init_club_name) ?? "";
@@ -555,17 +559,17 @@ export default async function TournamentSetupPage({
             const code = String(c.code ?? "").trim();
             const name = String(c.name ?? "").trim();
             if (code && name) return `${code} - ${name}`;
-            return code || name || "Sin nombre";
+            return code || name || ts.unnamed;
           })
           .join(" · ")
-      : "Sin categorías cargadas";
+      : ts.noCategoriesLoaded;
 
   const currentRoundsText =
     selectedTournamentRounds.length > 0
       ? selectedTournamentRounds
           .map((r) => `R${r.round_no}${r.date ? ` (${r.date})` : ""}`)
           .join(" · ")
-      : "Sin rondas cargadas";
+      : ts.noRoundsLoaded;
 
   const currentCourseId =
     filteredCourses.find(
@@ -579,17 +583,16 @@ export default async function TournamentSetupPage({
       <section style={cardStyle}>
         <div style={headerBar}>
           <div style={titleWrap}>
-            <h1 style={titleStyle}>Configuración de torneo</h1>
+            <h1 style={titleStyle}>{ts.pageTitle}</h1>
             <p style={subtitleStyle}>
-              Torneos existentes · generar campos, aplicar plantilla y preparar
-              operación.
+              {ts.pageSubtitle}
             </p>
           </div>
 
           <form method="get" style={rightTools}>
             <div style={fieldWrap}>
               <label htmlFor="tournament_id" style={labelStyle}>
-                Torneo
+                {ts.labelTournament}
               </label>
               <select
                 id="tournament_id"
@@ -597,7 +600,7 @@ export default async function TournamentSetupPage({
                 defaultValue={selectedTournament?.id ?? ""}
                 style={selectStyle}
               >
-                <option value="">Selecciona torneo</option>
+                <option value="">{ts.selectTournament}</option>
                 {tournaments.map((t) => (
                   <option key={t.id} value={t.id}>
                     {safeText(t.name)}
@@ -607,7 +610,7 @@ export default async function TournamentSetupPage({
             </div>
 
             <button type="submit" style={buttonSecondary}>
-              Cambiar
+              {ts.change}
             </button>
 
             <Link
@@ -619,7 +622,7 @@ export default async function TournamentSetupPage({
                 textDecoration: "none",
               }}
             >
-              Nuevo torneo
+              {ts.newTournament}
             </Link>
           </form>
         </div>
@@ -638,7 +641,7 @@ export default async function TournamentSetupPage({
                   flexWrap: "wrap",
                 }}
               >
-                <h2 style={sectionTitle}>Resumen del torneo</h2>
+                <h2 style={sectionTitle}>{ts.summaryTitle}</h2>
 
                 <div style={actionLinks}>
                   <Link
@@ -650,7 +653,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Categorías
+                    {ts.linkCategories}
                   </Link>
 
                   <Link
@@ -662,7 +665,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Salidas
+                    {ts.linkStarters}
                   </Link>
 
                   <Link
@@ -674,7 +677,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Rondas
+                    {ts.linkRounds}
                   </Link>
 
                   <Link
@@ -686,41 +689,41 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Captura scores
+                    {ts.linkScoreEntry}
                   </Link>
                 </div>
               </div>
 
               <div style={infoGrid}>
                 <div style={infoBox}>
-                  <div style={infoLabel}>Torneo</div>
+                  <div style={infoLabel}>{ts.infoTournament}</div>
                   <div style={infoValue}>{safeText(selectedTournament.name)}</div>
                 </div>
 
                 <div style={infoBox}>
-                  <div style={infoLabel}>Club</div>
+                  <div style={infoLabel}>{ts.infoClub}</div>
                   <div style={infoValue}>{clubSummary}</div>
                 </div>
 
                 <div style={infoBox}>
-                  <div style={infoLabel}>Campo</div>
+                  <div style={infoLabel}>{ts.infoCourse}</div>
                   <div style={infoValue}>{courseSummary}</div>
                 </div>
 
                 <div style={infoBox}>
-                  <div style={infoLabel}>Abrev.</div>
+                  <div style={infoLabel}>{ts.infoAbbr}</div>
                   <div style={infoValue}>{abbrSummary}</div>
                 </div>
 
                 <div style={infoBox}>
-                  <div style={infoLabel}>Inicio</div>
+                  <div style={infoLabel}>{ts.infoStart}</div>
                   <div style={infoValue}>
                     {safeText(selectedTournament.start_date)}
                   </div>
                 </div>
 
                 <div style={infoBox}>
-                  <div style={infoLabel}>Categorías</div>
+                  <div style={infoLabel}>{ts.infoCategories}</div>
                   <div style={infoValue}>{selectedTournamentCategoriesCount}</div>
                 </div>
               </div>
@@ -730,28 +733,27 @@ export default async function TournamentSetupPage({
           <section style={cardStyle}>
             <div style={{ display: "grid", gap: 12 }}>
               <div>
-                <h2 style={sectionTitle}>Inicialización rápida</h2>
+                <h2 style={sectionTitle}>{ts.quickInitTitle}</h2>
                 <p style={sectionSubtle}>
-                  Genera campo del torneo, categorías desde plantilla y rondas
-                  base en una sola acción.
+                  {ts.quickInitSubtitle}
                 </p>
               </div>
 
               <div style={currentStateGrid}>
                 <div style={currentStateBox}>
-                  <div style={infoLabel}>Campo actual</div>
+                  <div style={infoLabel}>{ts.currentCourse}</div>
                   <div style={infoValue}>{courseSummary}</div>
                 </div>
 
                 <div style={currentStateBox}>
-                  <div style={infoLabel}>Categorías actuales</div>
+                  <div style={infoLabel}>{ts.currentCategories}</div>
                   <div style={{ ...infoValue, fontSize: 12, fontWeight: 500 }}>
                     {currentCategoriesText}
                   </div>
                 </div>
 
                 <div style={currentStateBox}>
-                  <div style={infoLabel}>Rondas actuales</div>
+                  <div style={infoLabel}>{ts.currentRounds}</div>
                   <div style={{ ...infoValue, fontSize: 12, fontWeight: 500 }}>
                     {currentRoundsText}
                   </div>
@@ -773,7 +775,7 @@ export default async function TournamentSetupPage({
                 <div style={formRow}>
                   <div style={{ ...fieldWrap, minWidth: 240 }}>
                     <label htmlFor="init_club_name" style={labelStyle}>
-                      Club
+                      {ts.labelClub}
                     </label>
                     <select
                       id="init_club_name"
@@ -781,7 +783,7 @@ export default async function TournamentSetupPage({
                       defaultValue={effectiveInitClub}
                       style={selectStyle}
                     >
-                      <option value="">Todos</option>
+                      <option value="">{ts.all}</option>
                       {clubOptions.map((club) => (
                         <option key={club} value={club}>
                           {club}
@@ -791,7 +793,7 @@ export default async function TournamentSetupPage({
                   </div>
 
                   <button type="submit" style={buttonSecondary}>
-                    Ver campos
+                    {ts.viewCourses}
                   </button>
                 </div>
               </form>
@@ -818,7 +820,7 @@ export default async function TournamentSetupPage({
 
                 <div style={formRow}>
                   <div style={{ ...fieldWrap, minWidth: 240 }}>
-                    <label style={labelStyle}>Club</label>
+                    <label style={labelStyle}>{ts.labelClub}</label>
                     <input
                       value={effectiveInitClub || ""}
                       readOnly
@@ -828,7 +830,7 @@ export default async function TournamentSetupPage({
 
                   <div style={{ ...fieldWrap, minWidth: 320, flex: 1 }}>
                     <label htmlFor="init_course_id" style={labelStyle}>
-                      Campo base
+                      {ts.baseCourse}
                     </label>
                     <select
                       id="init_course_id"
@@ -838,11 +840,11 @@ export default async function TournamentSetupPage({
                       required
                     >
                       <option value="">
-                        {currentCourseId ? "Cambiar campo base" : "Selecciona campo"}
+                        {currentCourseId ? ts.changeBaseCourse : ts.selectCourse}
                       </option>
                       {filteredInitCourses.map((course) => (
                         <option key={course.id} value={course.id}>
-                          {formatCourseOption(course)}
+                          {formatCourseOption(course, ts.courseWithoutName)}
                         </option>
                       ))}
                     </select>
@@ -850,7 +852,7 @@ export default async function TournamentSetupPage({
 
                   <div style={{ ...fieldWrap, minWidth: 280, flex: 1 }}>
                     <label htmlFor="init_template_id" style={labelStyle}>
-                      Modificar categorías
+                      {ts.modifyCategories}
                     </label>
                     <select
                       id="init_template_id"
@@ -860,8 +862,8 @@ export default async function TournamentSetupPage({
                     >
                       <option value="">
                         {selectedTournamentCategoriesCount > 0
-                          ? "Dejar categorías actuales"
-                          : "Selecciona plantilla"}
+                          ? ts.leaveCurrentCategories
+                          : ts.selectTemplate}
                       </option>
                       {categoryTemplates.map((tpl) => (
                         <option key={tpl.id} value={tpl.id}>
@@ -873,7 +875,7 @@ export default async function TournamentSetupPage({
 
                   <div style={{ ...fieldWrap, minWidth: 120 }}>
                     <label htmlFor="rounds_count" style={labelStyle}>
-                      Rondas
+                      {ts.roundsShort}
                     </label>
                     <select
                       id="rounds_count"
@@ -893,15 +895,12 @@ export default async function TournamentSetupPage({
                   </div>
 
                   <button type="submit" style={buttonPrimary}>
-                    Inicializar torneo
+                    {ts.initTournament}
                   </button>
                 </div>
 
                 <div style={compactMuted}>
-                  Reemplaza <strong>tournament_holes</strong> y{" "}
-                  <strong>rounds</strong>. Si eliges plantilla, también reemplaza{" "}
-                  <strong>categories</strong>. Si el torneo no tiene fecha de
-                  inicio, las rondas se crearán usando la fecha de hoy.
+                  {ts.initWarning}
                 </div>
               </form>
             </div>
@@ -911,10 +910,9 @@ export default async function TournamentSetupPage({
             <section style={cardStyle}>
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
-                  <h2 style={sectionTitle}>Campo</h2>
+                  <h2 style={sectionTitle}>{ts.sectionCourse}</h2>
                   <p style={sectionSubtle}>
-                    Selecciona club y campo base para generar la tarjeta del
-                    torneo en <strong>tournament_holes</strong>.
+                    {ts.sectionCourseDesc}
                   </p>
                 </div>
 
@@ -933,7 +931,7 @@ export default async function TournamentSetupPage({
                   <div style={formRow}>
                     <div style={{ ...fieldWrap, minWidth: 240 }}>
                       <label htmlFor="club_name" style={labelStyle}>
-                        Club
+                        {ts.labelClub}
                       </label>
                       <select
                         id="club_name"
@@ -941,7 +939,7 @@ export default async function TournamentSetupPage({
                         defaultValue={effectiveCourseClub}
                         style={selectStyle}
                       >
-                        <option value="">Todos</option>
+                        <option value="">{ts.all}</option>
                         {clubOptions.map((club) => (
                           <option key={club} value={club}>
                             {club}
@@ -951,7 +949,7 @@ export default async function TournamentSetupPage({
                     </div>
 
                     <button type="submit" style={buttonSecondary}>
-                      Ver campos
+                      {ts.viewCourses}
                     </button>
                   </div>
                 </form>
@@ -978,7 +976,7 @@ export default async function TournamentSetupPage({
 
                   <div style={formRow}>
                     <div style={{ ...fieldWrap, minWidth: 240 }}>
-                      <label style={labelStyle}>Club</label>
+                      <label style={labelStyle}>{ts.labelClub}</label>
                       <input
                         value={effectiveCourseClub || ""}
                         readOnly
@@ -988,7 +986,7 @@ export default async function TournamentSetupPage({
 
                     <div style={{ ...fieldWrap, minWidth: 320, flex: 1 }}>
                       <label htmlFor="course_id" style={labelStyle}>
-                        Campo base
+                        {ts.baseCourse}
                       </label>
                       <select
                         id="course_id"
@@ -998,24 +996,23 @@ export default async function TournamentSetupPage({
                         required
                       >
                         <option value="">
-                          {currentCourseId ? "Cambiar campo base" : "Selecciona campo"}
+                          {currentCourseId ? ts.changeBaseCourse : ts.selectCourse}
                         </option>
                         {filteredCourses.map((course) => (
                           <option key={course.id} value={course.id}>
-                            {formatCourseOption(course)}
+                            {formatCourseOption(course, ts.courseWithoutName)}
                           </option>
                         ))}
                       </select>
                     </div>
 
                     <button type="submit" style={buttonPrimary}>
-                      Generar campos del torneo
+                      {ts.generateCourseFields}
                     </button>
                   </div>
 
                   <div style={compactMuted}>
-                    Esta acción reemplaza los registros actuales de{" "}
-                    <strong>tournament_holes</strong>.
+                    {ts.replaceHolesOnly}
                   </div>
                 </form>
 
@@ -1023,9 +1020,9 @@ export default async function TournamentSetupPage({
                   <table style={tableStyle}>
                     <thead>
                       <tr>
-                        <th style={{ ...thStyle, width: 100 }}>HOYO</th>
-                        <th style={{ ...thStyle, width: 120 }}>PAR</th>
-                        <th style={{ ...thStyle, width: 140 }}>VENTAJA</th>
+                        <th style={{ ...thStyle, width: 100 }}>{ts.thHole}</th>
+                        <th style={{ ...thStyle, width: 120 }}>{ts.thPar}</th>
+                        <th style={{ ...thStyle, width: 140 }}>{ts.thHandicap}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1040,7 +1037,7 @@ export default async function TournamentSetupPage({
                       ) : (
                         <tr>
                           <td style={tdStyle} colSpan={3}>
-                            Este torneo todavía no tiene campos generados.
+                            {ts.noCourseGenerated}
                           </td>
                         </tr>
                       )}
@@ -1053,9 +1050,9 @@ export default async function TournamentSetupPage({
             <section style={cardStyle}>
               <div style={{ display: "grid", gap: 12 }}>
                 <div>
-                  <h2 style={sectionTitle}>Categorías</h2>
+                  <h2 style={sectionTitle}>{ts.sectionCategories}</h2>
                   <p style={sectionSubtle}>
-                    Aplica una plantilla existente al torneo actual.
+                    {ts.sectionCategoriesDesc}
                   </p>
                 </div>
 
@@ -1082,7 +1079,7 @@ export default async function TournamentSetupPage({
                   <div style={formRow}>
                     <div style={{ ...fieldWrap, minWidth: 320, flex: 1 }}>
                       <label htmlFor="template_id" style={labelStyle}>
-                        Modificar categorías
+                        {ts.modifyCategories}
                       </label>
                       <select
                         id="template_id"
@@ -1093,8 +1090,8 @@ export default async function TournamentSetupPage({
                       >
                         <option value="">
                           {selectedTournamentCategoriesCount > 0
-                            ? "Cambiar categorías actuales"
-                            : "Selecciona plantilla"}
+                            ? ts.replaceCurrentCategories
+                            : ts.selectTemplate}
                         </option>
                         {categoryTemplates.map((tpl) => (
                           <option key={tpl.id} value={tpl.id}>
@@ -1113,28 +1110,27 @@ export default async function TournamentSetupPage({
                       }
                       disabled={categoryTemplates.length === 0}
                     >
-                      Aplicar plantilla
+                      {ts.applyTemplate}
                     </button>
                   </div>
 
                   <div style={compactMuted}>
-                    Categorías actuales: {currentCategoriesText}
+                    {ts.currentCategoriesPrefix} {currentCategoriesText}
                   </div>
 
                   <div style={compactMuted}>
-                    Esta acción elimina primero las categorías actuales del torneo
-                    y luego carga las de la plantilla seleccionada.
+                    {ts.deleteCategoriesWarning}
                   </div>
 
                   {categoryTemplates.length === 0 && (
                     <div style={compactMuted}>
-                      No hay plantillas activas disponibles.
+                      {ts.noActiveTemplates}
                     </div>
                   )}
                 </form>
 
                 <div style={compactMuted}>
-                  Después puedes afinar detalles en el módulo de categorías.
+                  {ts.fineTuneHint}
                 </div>
               </div>
             </section>
@@ -1142,9 +1138,9 @@ export default async function TournamentSetupPage({
             <section style={cardStyle}>
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
-                  <h2 style={sectionTitle}>Salidas</h2>
+                  <h2 style={sectionTitle}>{ts.sectionStarters}</h2>
                   <p style={sectionSubtle}>
-                    Bloque listo para seleccionar salidas y reglas por torneo.
+                    {ts.sectionStartersDesc}
                   </p>
                 </div>
 
@@ -1158,7 +1154,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Abrir salidas
+                    {ts.openStarters}
                   </Link>
 
                   <Link
@@ -1170,7 +1166,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Reglas de salidas
+                    {ts.teeRules}
                   </Link>
                 </div>
               </div>
@@ -1179,10 +1175,9 @@ export default async function TournamentSetupPage({
             <section style={cardStyle}>
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
-                  <h2 style={sectionTitle}>Tipo de torneo y rondas</h2>
+                  <h2 style={sectionTitle}>{ts.sectionRoundsType}</h2>
                   <p style={sectionSubtle}>
-                    Desde aquí puedes continuar con parámetros operativos,
-                    rondas y reglas complementarias.
+                    {ts.sectionRoundsTypeDesc}
                   </p>
                 </div>
 
@@ -1196,7 +1191,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Abrir rondas
+                    {ts.openRounds}
                   </Link>
 
                   <Link
@@ -1208,7 +1203,7 @@ export default async function TournamentSetupPage({
                       textDecoration: "none",
                     }}
                   >
-                    Cut rules
+                    {ts.linkCutRules}
                   </Link>
                 </div>
               </div>
@@ -1218,8 +1213,8 @@ export default async function TournamentSetupPage({
       ) : (
         <section style={cardStyle}>
           <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>
-            No hay torneos disponibles. Primero crea uno en{" "}
-            <strong>/tournaments/new</strong>.
+            {ts.noTournamentsBefore}{" "}
+            <strong>{ts.noTournamentsPath}</strong>.
           </p>
         </section>
       )}

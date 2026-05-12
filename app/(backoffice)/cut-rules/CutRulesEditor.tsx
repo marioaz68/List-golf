@@ -2,6 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { saveCutRulesSnapshot } from "./actions";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+
+function fmt(template: string, vars: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) =>
+    String(vars[key] ?? "")
+  );
+}
 
 type RoundRow = {
   id: string;
@@ -79,27 +86,6 @@ const redButtonStyle: React.CSSProperties = {
   boxShadow: "0 3px 0 #7f1d1d, 0 4px 8px rgba(0,0,0,0.22)",
 };
 
-const RANKING_BASIS_OPTIONS = [
-  { value: "gross_total", label: "Gross total" },
-  { value: "net_total", label: "Neto total" },
-  { value: "points_total", label: "Puntos total" },
-  { value: "gross_round", label: "Gross ronda" },
-  { value: "net_round", label: "Neto ronda" },
-  { value: "points_round", label: "Puntos ronda" },
-] as const;
-
-const RANKING_MODE_OPTIONS = [
-  { value: "tournament_to_date", label: "Acumulado torneo" },
-  { value: "specified_rounds", label: "Rango De/A" },
-  { value: "last_round_only", label: "Solo última ronda" },
-] as const;
-
-const ADVANCEMENT_TYPE_OPTIONS = [
-  { value: "top_n", label: "Top N" },
-  { value: "top_percent", label: "Top %" },
-  { value: "all", label: "Sin corte / pasan todos" },
-] as const;
-
 function splitCodes(value: string) {
   return String(value ?? "")
     .split(",")
@@ -131,6 +117,44 @@ export default function CutRulesEditor({
   tieBreakProfiles: TieBreakProfileRow[];
   rules: RuleRow[];
 }) {
+  const { t } = useAppLocale();
+  const ce = t.cutRules.editor;
+  const rankingBasisOptions = useMemo(
+    () =>
+      (
+        [
+          "gross_total",
+          "net_total",
+          "points_total",
+          "gross_round",
+          "net_round",
+          "points_round",
+        ] as const
+      ).map((value) => ({
+        value,
+        label: ce.rankingBasisLabels[value],
+      })),
+    [ce.rankingBasisLabels]
+  );
+  const rankingModeOptions = useMemo(
+    () =>
+      (["tournament_to_date", "specified_rounds", "last_round_only"] as const).map(
+        (value) => ({
+          value,
+          label: ce.rankingModeLabels[value],
+        })
+      ),
+    [ce.rankingModeLabels]
+  );
+  const advancementTypeOptions = useMemo(
+    () =>
+      (["top_n", "top_percent", "all"] as const).map((value) => ({
+        value,
+        label: ce.advancementLabels[value],
+      })),
+    [ce.advancementLabels]
+  );
+
   const [rows, setRows] = useState<RuleRow[]>(
     [...rules]
       .map((r) => ({
@@ -212,7 +236,7 @@ export default function CutRulesEditor({
 
   function addRow() {
     if (!canAddRule) {
-      setMsg("Primero debes crear rondas y categorías para definir reglas.");
+      setMsg(ce.addRowNeed);
       return;
     }
 
@@ -294,12 +318,12 @@ export default function CutRulesEditor({
 
   function validate() {
     if (uniqueRounds.length < 1) {
-      setMsg("Primero debes crear al menos 1 ronda.");
+      setMsg(ce.valNeedRound);
       return false;
     }
 
     if (sortedCategories.length < 1) {
-      setMsg("Primero debes crear categorías.");
+      setMsg(ce.valNeedCategories);
       return false;
     }
 
@@ -307,32 +331,32 @@ export default function CutRulesEditor({
       const r = normalizedRows[i];
 
       if (!Number.isFinite(r.from_round_no) || r.from_round_no < 1) {
-        setMsg(`Ronda origen inválida en fila ${i + 1}.`);
+        setMsg(fmt(ce.valFromRoundInvalid, { row: i + 1 }));
         return false;
       }
 
       if (!Number.isFinite(r.to_round_no) || r.to_round_no < 1) {
-        setMsg(`Ronda destino inválida en fila ${i + 1}.`);
+        setMsg(fmt(ce.valToRoundInvalid, { row: i + 1 }));
         return false;
       }
 
       if (r.to_round_no < r.from_round_no) {
-        setMsg(`La ronda destino debe ser mayor o igual que la origen en fila ${i + 1}.`);
+        setMsg(fmt(ce.valToRoundOrder, { row: i + 1 }));
         return false;
       }
 
       if (!r.scope_value) {
-        setMsg(`Selecciona al menos una categoría en fila ${i + 1}.`);
+        setMsg(fmt(ce.valPickCategory, { row: i + 1 }));
         return false;
       }
 
       if (r.advancement_type !== "all" && !Number.isFinite(r.advancement_value)) {
-        setMsg(`Valor de corte inválido en fila ${i + 1}.`);
+        setMsg(fmt(ce.valCutValueInvalid, { row: i + 1 }));
         return false;
       }
 
       if (r.advancement_type === "top_n" && r.advancement_value < 1) {
-        setMsg(`Top N debe ser mayor o igual a 1 en fila ${i + 1}.`);
+        setMsg(fmt(ce.valTopN, { row: i + 1 }));
         return false;
       }
 
@@ -340,7 +364,7 @@ export default function CutRulesEditor({
         r.advancement_type === "top_percent" &&
         (r.advancement_value <= 0 || r.advancement_value > 100)
       ) {
-        setMsg(`Top % debe estar entre 0 y 100 en fila ${i + 1}.`);
+        setMsg(fmt(ce.valTopPercent, { row: i + 1 }));
         return false;
       }
 
@@ -348,7 +372,7 @@ export default function CutRulesEditor({
         r.gross_exemption_enabled &&
         (!Number.isFinite(r.gross_exemption_top_n) || r.gross_exemption_top_n < 1)
       ) {
-        setMsg(`Top Gross protegido debe ser mayor o igual a 1 en fila ${i + 1}.`);
+        setMsg(fmt(ce.valGrossExempt, { row: i + 1 }));
         return false;
       }
     }
@@ -367,7 +391,7 @@ export default function CutRulesEditor({
     <div className="space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2 shadow-sm">
       {!canAddRule && (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800">
-          Debes tener rondas y categorías creadas en este torneo para configurar cortes.
+          {ce.prerequisiteBanner}
         </div>
       )}
 
@@ -382,12 +406,10 @@ export default function CutRulesEditor({
           }}
           disabled={!canAddRule}
         >
-          Nueva regla
+          {ce.newRule}
         </button>
 
-        <div className="text-[11px] leading-snug text-gray-700">
-          Los cortes se configuran por categoría. Selecciona una o varias categorías por regla.
-        </div>
+        <div className="text-[11px] leading-snug text-gray-700">{ce.helperLine}</div>
       </div>
 
       <form
@@ -405,20 +427,20 @@ export default function CutRulesEditor({
           <table className="min-w-[1720px] w-full border-collapse text-[11px] leading-none">
             <thead>
               <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Orden</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Categorías</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">De</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">A</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Base</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Modo</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Tipo</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Corte</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Empates</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Protección Gross</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Desempate</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Activo</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Notas</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Acciones</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thOrder}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thCategories}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thFrom}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTo}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thBasis}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thMode}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thType}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thCut}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTies}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thGrossProtection}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTieBreak}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thActive}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thNotes}</th>
+                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thActions}</th>
               </tr>
             </thead>
 
@@ -429,7 +451,7 @@ export default function CutRulesEditor({
                     colSpan={14}
                     className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                   >
-                    No hay reglas todavía.
+                    {ce.noRulesYet}
                   </td>
                 </tr>
               ) : (
@@ -465,11 +487,11 @@ export default function CutRulesEditor({
 
                         {selectedCodes.length > 0 ? (
                           <div className="mt-1 text-[10px] leading-snug text-gray-600">
-                            Seleccionadas: {selectedCodes.join(", ")}
+                            {ce.selectedPrefix} {selectedCodes.join(", ")}
                           </div>
                         ) : (
                           <div className="mt-1 text-[10px] leading-snug text-red-600">
-                            Selecciona al menos una categoría
+                            {ce.pickOneCategory}
                           </div>
                         )}
                       </td>
@@ -482,7 +504,7 @@ export default function CutRulesEditor({
                         >
                           {uniqueRounds.map((x) => (
                             <option key={x.round_no} value={x.round_no}>
-                              R{x.round_no}
+                              {`${ce.roundOptionPrefix}${x.round_no}`}
                             </option>
                           ))}
                         </select>
@@ -496,7 +518,7 @@ export default function CutRulesEditor({
                         >
                           {uniqueRounds.map((x) => (
                             <option key={x.round_no} value={x.round_no}>
-                              R{x.round_no}
+                              {`${ce.roundOptionPrefix}${x.round_no}`}
                             </option>
                           ))}
                         </select>
@@ -508,7 +530,7 @@ export default function CutRulesEditor({
                           onChange={(e) => updateRow(r.id, "ranking_basis", e.target.value)}
                           className={fieldClass}
                         >
-                          {RANKING_BASIS_OPTIONS.map((o) => (
+                          {rankingBasisOptions.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
                             </option>
@@ -522,7 +544,7 @@ export default function CutRulesEditor({
                           onChange={(e) => updateRow(r.id, "ranking_mode", e.target.value)}
                           className={fieldClass}
                         >
-                          {RANKING_MODE_OPTIONS.map((o) => (
+                          {rankingModeOptions.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
                             </option>
@@ -536,7 +558,7 @@ export default function CutRulesEditor({
                           onChange={(e) => updateRow(r.id, "advancement_type", e.target.value)}
                           className={fieldClass}
                         >
-                          {ADVANCEMENT_TYPE_OPTIONS.map((o) => (
+                          {advancementTypeOptions.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
                             </option>
@@ -547,7 +569,7 @@ export default function CutRulesEditor({
                       <td className="border border-gray-300 px-1.5 py-[3px]">
                         {r.advancement_type === "all" ? (
                           <div className="h-7 w-28 rounded border border-emerald-300 bg-emerald-50 px-2 text-[11px] leading-7 text-emerald-800">
-                            Pasan todos
+                            {ce.passAll}
                           </div>
                         ) : (
                           <input
@@ -578,7 +600,7 @@ export default function CutRulesEditor({
                             className={checkboxClass}
                           />
 
-                          <span className="text-[10px] leading-none text-gray-700">Top Gross</span>
+                          <span className="text-[10px] leading-none text-gray-700">{ce.topGross}</span>
 
                           {r.gross_exemption_enabled ? (
                             <input
@@ -590,7 +612,7 @@ export default function CutRulesEditor({
                               className="h-7 w-14 rounded border border-gray-300 bg-gray-100 px-1 text-[11px] leading-none text-black"
                             />
                           ) : (
-                            <span className="text-[10px] leading-none text-gray-400">No</span>
+                            <span className="text-[10px] leading-none text-gray-400">{ce.noExemption}</span>
                           )}
                         </div>
                       </td>
@@ -601,7 +623,7 @@ export default function CutRulesEditor({
                           onChange={(e) => updateRow(r.id, "tie_break_profile_id", e.target.value || null)}
                           className={fieldClass}
                         >
-                          <option value="">Sin desempate</option>
+                          <option value="">{ce.noTieBreak}</option>
                           {tieBreakProfiles.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name ?? p.id.slice(0, 8)}
@@ -625,22 +647,22 @@ export default function CutRulesEditor({
                           value={r.notes ?? ""}
                           onChange={(e) => updateRow(r.id, "notes", e.target.value)}
                           className={fieldClass}
-                          placeholder="Observaciones"
+                          placeholder={ce.observationsPlaceholder}
                         />
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px]">
                         <div className="flex flex-nowrap items-center gap-1">
-                          <button type="button" onClick={() => moveUp(r.id)} style={buttonStyle} title="Subir">
+                          <button type="button" onClick={() => moveUp(r.id)} style={buttonStyle} title={ce.titleMoveUp}>
                             ↑
                           </button>
 
-                          <button type="button" onClick={() => moveDown(r.id)} style={buttonStyle} title="Bajar">
+                          <button type="button" onClick={() => moveDown(r.id)} style={buttonStyle} title={ce.titleMoveDown}>
                             ↓
                           </button>
 
                           <button type="button" onClick={() => removeRow(r.id)} style={redButtonStyle}>
-                            Borrar
+                            {ce.delete}
                           </button>
                         </div>
                       </td>
@@ -654,7 +676,7 @@ export default function CutRulesEditor({
 
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="submit" style={buttonStyle}>
-            Guardar reglas
+            {ce.saveRules}
           </button>
 
           {msg && <div className="text-[11px] leading-snug text-red-600">{msg}</div>}

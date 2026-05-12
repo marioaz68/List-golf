@@ -1,5 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
 import {
   buildSessionBlocks,
@@ -93,6 +95,8 @@ function isStartingOrderConfirmed(notes: string | null | undefined) {
 export default async function TeeSheetPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const teeTitle = messages[locale].teeSheet.title;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -505,7 +509,7 @@ for (const row of membersRaw) {
     return (
       <div className="min-h-screen p-6 space-y-6">
         <div className="flex items-center justify-between text-white">
-          <h1 className="text-3xl font-bold tracking-tight">Tee Sheet</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         </div>
 
         <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm">
@@ -519,7 +523,7 @@ for (const row of membersRaw) {
     return (
       <div className="min-h-screen p-6 space-y-6">
         <div className="flex items-center justify-between text-white">
-          <h1 className="text-3xl font-bold tracking-tight">Tee Sheet</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         </div>
 
         <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm space-y-3">
@@ -552,7 +556,7 @@ for (const row of membersRaw) {
   return (
     <div className="min-h-screen p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 text-white">
-        <h1 className="text-3xl font-bold tracking-tight">Tee Sheet</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         <div className="rounded-md bg-black/20 px-3 py-1 text-sm font-medium">
           Grupos: {visibleGroups.length} · Jugadores: {visiblePlayers}
         </div>

@@ -5,6 +5,8 @@ import Image from "next/image";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import type { AppMessages } from "@/lib/i18n/messages";
 import {
   LayoutDashboard,
   Trophy,
@@ -31,8 +33,10 @@ import {
 
 type SidebarMode = "operation" | "setup";
 
+type NavKey = keyof AppMessages["sidebar"]["nav"];
+
 type MenuItem = {
-  name: string;
+  nameKey: NavKey;
   href: string;
   icon: React.ComponentType<{ size?: number }>;
   query?: Record<string, string>;
@@ -48,6 +52,7 @@ type TournamentMini = {
 const STORAGE_KEY = "listgolf_sidebar_mode";
 
 export default function Sidebar() {
+  const { t } = useAppLocale();
   const pathname = usePathname();
 
   const [mode, setMode] = useState<SidebarMode>("operation");
@@ -117,20 +122,55 @@ export default function Sidebar() {
   /** Navegación diaria del torneo (misma lista en Operación y en Config.). */
   const tournamentOperationNav: MenuItem[] = useMemo(
     () => [
-      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { name: "Players", href: "/players", icon: Users, requiresTournament: true },
-      { name: "Entries", href: "/entries", icon: ClipboardList, requiresTournament: true },
+      { nameKey: "dashboard", href: "/dashboard", icon: LayoutDashboard },
       {
-        name: "Salidas/Grupos",
+        nameKey: "players",
+        href: "/players",
+        icon: Users,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "entries",
+        href: "/entries",
+        icon: ClipboardList,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "teeSheet",
         href: "/tee-sheet",
         icon: Clock3,
         requiresTournament: true,
       },
-      { name: "Score Entry", href: "/score-entry", icon: PencilLine, requiresTournament: true },
-      { name: "Scorecards", href: "/scorecards", icon: FilePenLine, requiresTournament: true },
-      { name: "Leaderboard", href: "/leaderboard", icon: ListOrdered, requiresTournament: true },
-      { name: "Caddies", href: "/caddies", icon: Car, requiresTournament: true },
-      { name: "Reports", href: "/reports", icon: BarChart3, requiresTournament: true },
+      {
+        nameKey: "scoreEntry",
+        href: "/score-entry",
+        icon: PencilLine,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "scorecards",
+        href: "/scorecards",
+        icon: FilePenLine,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "leaderboard",
+        href: "/leaderboard",
+        icon: ListOrdered,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "caddies",
+        href: "/caddies",
+        icon: Car,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "reports",
+        href: "/reports",
+        icon: BarChart3,
+        requiresTournament: true,
+      },
     ],
     []
   );
@@ -138,24 +178,58 @@ export default function Sidebar() {
   /** Solo modo Config.: módulos de armado del torneo (después de la navegación operativa). */
   const setupExclusiveNav: MenuItem[] = useMemo(
     () => [
-      { name: "Torneos", href: "/tournaments", icon: Trophy },
-      { name: "Editar torneo", href: "/tournaments/edit", icon: FilePenLine, requiresTournament: true },
-      { name: "Setup torneo", href: "/tournaments/setup", icon: Settings, requiresTournament: true },
-      { name: "Clubs", href: "/clubs", icon: Building2 },
-      { name: "Campos", href: "/courses", icon: MapPinned },
+      { nameKey: "tournaments", href: "/tournaments", icon: Trophy },
       {
-        name: "Categorías",
+        nameKey: "editTournament",
+        href: "/tournaments/edit",
+        icon: FilePenLine,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "tournamentSetup",
+        href: "/tournaments/setup",
+        icon: Settings,
+        requiresTournament: true,
+      },
+      { nameKey: "clubs", href: "/clubs", icon: Building2 },
+      { nameKey: "courses", href: "/courses", icon: MapPinned },
+      {
+        nameKey: "categories",
         href: "/categories",
         icon: Layers3,
         query: { tab: "editor" },
         requiresTournament: true,
       },
-      { name: "Rounds", href: "/rounds", icon: CalendarDays, requiresTournament: true },
-      { name: "Tee Sets", href: "/tee-sets", icon: Trophy, requiresTournament: true },
-      { name: "Hoyos torneo", href: "/tournament-holes", icon: Map, requiresTournament: true },
-      { name: "Reglas de corte", href: "/cut-rules", icon: Scissors, requiresTournament: true },
-      { name: "Plantillas cat.", href: "/category-templates", icon: Layers3 },
-      { name: "Usuarios", href: "/users", icon: Shield },
+      {
+        nameKey: "rounds",
+        href: "/rounds",
+        icon: CalendarDays,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "teeSets",
+        href: "/tee-sets",
+        icon: Trophy,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "tournamentHoles",
+        href: "/tournament-holes",
+        icon: Map,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "cutRules",
+        href: "/cut-rules",
+        icon: Scissors,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "categoryTemplates",
+        href: "/category-templates",
+        icon: Layers3,
+      },
+      { nameKey: "users", href: "/users", icon: Shield },
     ],
     []
   );
@@ -221,9 +295,11 @@ export default function Sidebar() {
 
   const operationVisibleCount = operationVisible.length;
 
-  const modeLabel = mode === "operation" ? "Operación" : "Configuración";
+  const modeLabel =
+    mode === "operation" ? t.sidebar.operation : t.sidebar.configuration;
   const nextMode: SidebarMode = mode === "operation" ? "setup" : "operation";
-  const nextModeLabel = nextMode === "operation" ? "Operación" : "Configuración";
+  const nextModeLabel =
+    nextMode === "operation" ? t.sidebar.operation : t.sidebar.configuration;
 
   if (pathname === "/") {
     return null;
@@ -247,13 +323,13 @@ export default function Sidebar() {
         {tournamentId ? (
           <>
             <div className="text-xs uppercase tracking-wide text-white/40">
-              Torneo activo
+              {t.sidebar.activeTournament}
             </div>
 
             <div className="mt-1 line-clamp-2 text-sm font-semibold leading-snug">
               {loadingTournament
-                ? "Cargando..."
-                : tournament?.name || "Sin nombre"}
+                ? t.sidebar.loading
+                : tournament?.name || t.sidebar.noName}
             </div>
 
             {tournament?.status && (
@@ -264,14 +340,14 @@ export default function Sidebar() {
           </>
         ) : (
           <div className="text-xs text-white/35">
-            Sin torneo seleccionado
+            {t.sidebar.noTournament}
           </div>
         )}
       </div>
 
       <div className="border-b border-white/10 px-3 py-3">
         <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-          Modo {modeLabel}
+          {t.sidebar.modePrefix} {modeLabel}
         </div>
 
         <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/20 p-1">
@@ -284,7 +360,7 @@ export default function Sidebar() {
                 : "text-white/70 hover:bg-white/10"
             }`}
           >
-            Operación
+            {t.sidebar.operation}
           </button>
 
           <button
@@ -296,7 +372,7 @@ export default function Sidebar() {
                 : "text-white/70 hover:bg-white/10"
             }`}
           >
-            Config.
+            {t.sidebar.configShort}
           </button>
         </div>
       </div>
@@ -311,13 +387,13 @@ export default function Sidebar() {
             visibleMenu.length > operationVisibleCount;
 
           return (
-            <Fragment key={`${item.name}-${item.href}`}>
+            <Fragment key={`${item.nameKey}-${item.href}`}>
               {showSetupHeading ? (
                 <div
                   className="px-4 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40"
                   role="presentation"
                 >
-                  Configuración del torneo
+                  {t.sidebar.setupSection}
                 </div>
               ) : null}
               <Link
@@ -329,7 +405,7 @@ export default function Sidebar() {
                 }`}
               >
                 <Icon size={18} />
-                <span className="truncate">{item.name}</span>
+                <span className="truncate">{t.sidebar.nav[item.nameKey]}</span>
               </Link>
             </Fragment>
           );
@@ -337,7 +413,7 @@ export default function Sidebar() {
 
         {visibleMenu.length === 0 ? (
           <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-xs text-white/50">
-            Selecciona un torneo para ver este menú.
+            {t.sidebar.selectTournamentHint}
           </div>
         ) : null}
       </nav>
@@ -352,7 +428,7 @@ export default function Sidebar() {
           } ${!tournamentId ? "opacity-60" : ""}`}
         >
           <ExternalLink size={18} />
-          Página pública
+          {t.sidebar.publicPage}
         </Link>
 
         <button
@@ -361,7 +437,7 @@ export default function Sidebar() {
           className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-white/85 hover:bg-white/10"
         >
           <Repeat2 size={18} />
-          Cambiar a {nextModeLabel}
+          {t.sidebar.switchTo} {nextModeLabel}
         </button>
 
         <Link
@@ -373,10 +449,10 @@ export default function Sidebar() {
           }`}
         >
           <ArrowLeftCircle size={18} />
-          Listado de torneos
+          {t.sidebar.listTournaments}
         </Link>
 
-        <div className="pt-1 text-xs text-white/35">List.golf</div>
+        <div className="pt-1 text-xs text-white/35">{t.sidebar.brand}</div>
       </div>
     </aside>
   );

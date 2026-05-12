@@ -155,7 +155,7 @@ export default async function RoundsPage(props: {
   if (tErr) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">Rondas</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando torneos: {tErr.message}
         </p>
@@ -192,7 +192,7 @@ export default async function RoundsPage(props: {
   if (cErr) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">Rondas</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando categorías: {cErr.message}
         </p>
@@ -222,7 +222,7 @@ export default async function RoundsPage(props: {
   if (rErr) {
     return (
       <div className="space-y-2 p-2 md:p-3">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">Rondas</h1>
         <p className="text-[11px] leading-snug text-red-200">
           Error cargando rounds: {rErr.message}
         </p>
@@ -247,7 +247,7 @@ export default async function RoundsPage(props: {
   return (
     <div className="space-y-2 p-2 md:p-3">
       <header className="space-y-1">
-        <h1 className="text-lg font-bold text-white">Rounds</h1>
+        <h1 className="text-lg font-bold text-white">Rondas</h1>
         <p className="text-[11px] leading-snug text-white/85">
           Crea y configura rondas por torneo, categoría, día, turno y tipo de salida.
         </p>

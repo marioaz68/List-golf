@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { saveCompetitionRulesSnapshot } from "./actions";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import type { AppMessages } from "@/lib/i18n/messages";
 
 type CategoryRow = {
   id: string;
@@ -89,7 +91,11 @@ function toNullableNumber(value: unknown) {
   return Number.isFinite(n) ? n : null;
 }
 
-function makeInitialRows(categories: CategoryRow[], rules: CompetitionRuleRow[]) {
+function makeInitialRows(
+  categories: CategoryRow[],
+  rules: CompetitionRuleRow[],
+  unnamedCategory: string
+) {
   const rulesByCategory = new Map<string, CompetitionRuleRow>();
 
   const sortedRules = [...rules].sort((a, b) => {
@@ -117,7 +123,7 @@ function makeInitialRows(categories: CategoryRow[], rules: CompetitionRuleRow[])
       return {
         category_id: category.id,
         code: String(category.code ?? "").trim() || category.id.slice(0, 8),
-        name: String(category.name ?? "").trim() || "Sin nombre",
+        name: String(category.name ?? "").trim() || unnamedCategory,
         sort_order: category.sort_order ?? 9999,
         scoring_format: scoringFormat,
         leaderboard_basis: existing?.leaderboard_basis ?? defaultBasis,
@@ -131,21 +137,33 @@ function makeInitialRows(categories: CategoryRow[], rules: CompetitionRuleRow[])
     });
 }
 
-function basisLabel(value: string) {
-  if (value === "gross") return "Gross";
-  if (value === "net") return "Neto";
-  if (value === "both") return "Ambos";
-  if (value === "stableford") return "Stableford";
+function fmt(template: string, vars: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) =>
+    String(vars[key] ?? "")
+  );
+}
+
+function basisLabel(value: string, ce: AppMessages["competitionRules"]["editor"]) {
+  if (value === "gross") return ce.basisGross;
+  if (value === "net") return ce.basisNet;
+  if (value === "both") return ce.basisBoth;
+  if (value === "stableford") return ce.basisStableford;
   return value;
 }
 
-function scoringFormatLabel(value: string) {
-  if (value === "stableford") return "Stableford";
-  return "Stroke Play";
+function scoringFormatLabel(
+  value: string,
+  ce: AppMessages["competitionRules"]["editor"]
+) {
+  if (value === "stableford") return ce.scoringStableford;
+  return ce.scoringStrokePlay;
 }
 
-function netPlacesLabel(value: number | null) {
-  if (value === null) return "Todos";
+function netPlacesLabel(
+  value: number | null,
+  ce: AppMessages["competitionRules"]["editor"]
+) {
+  if (value === null) return ce.netPlacesAll;
   return String(value);
 }
 
@@ -158,18 +176,22 @@ export default function CompetitionRulesEditor({
   categories: CategoryRow[];
   rules: CompetitionRuleRow[];
 }) {
-  const [rows, setRows] = useState<EditorRow[]>(() => makeInitialRows(categories, rules));
+  const { t } = useAppLocale();
+  const ce = t.competitionRules.editor;
+  const [rows, setRows] = useState<EditorRow[]>(() =>
+    makeInitialRows(categories, rules, ce.unnamedCategory)
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (!initialized) {
-      setRows(makeInitialRows(categories, rules));
+      setRows(makeInitialRows(categories, rules, ce.unnamedCategory));
       setMsg(null);
       setInitialized(true);
     }
-  }, [categories, rules, initialized]);
+  }, [categories, rules, initialized, ce.unnamedCategory]);
 
   const normalizedRows = useMemo(
     () =>
@@ -198,12 +220,12 @@ export default function CompetitionRulesEditor({
       return (
         row.code.toLowerCase().includes(q) ||
         row.name.toLowerCase().includes(q) ||
-        scoringFormatLabel(row.scoring_format).toLowerCase().includes(q) ||
-        basisLabel(row.leaderboard_basis).toLowerCase().includes(q) ||
-        basisLabel(row.prize_basis).toLowerCase().includes(q)
+        scoringFormatLabel(row.scoring_format, ce).toLowerCase().includes(q) ||
+        basisLabel(row.leaderboard_basis, ce).toLowerCase().includes(q) ||
+        basisLabel(row.prize_basis, ce).toLowerCase().includes(q)
       );
     });
-  }, [filter, rows]);
+  }, [filter, rows, ce]);
 
   function updateRow(
     categoryId: string,
@@ -275,72 +297,74 @@ export default function CompetitionRulesEditor({
 
   function validate() {
     if (!tournamentId) {
-      setMsg("Falta tournament_id.");
+      setMsg(ce.valMissingTournamentId);
       return false;
     }
 
     if (normalizedRows.length === 0) {
-      setMsg("Este torneo no tiene categorías para configurar.");
+      setMsg(ce.valNoCategories);
       return false;
     }
 
     for (let i = 0; i < normalizedRows.length; i++) {
       const row = normalizedRows[i];
       const original = rows[i];
-      const label = original ? `${original.code} - ${original.name}` : `fila ${i + 1}`;
+      const label = original
+        ? `${original.code} - ${original.name}`
+        : fmt(ce.rowFallback, { n: i + 1 });
 
       if (!row.category_id) {
-        setMsg(`Falta category_id en ${label}.`);
+        setMsg(fmt(ce.valMissingCategoryId, { label }));
         return false;
       }
 
       if (!Number.isFinite(row.handicap_percentage)) {
-        setMsg(`% handicap inválido en ${label}.`);
+        setMsg(fmt(ce.valHandicapNotNumber, { label }));
         return false;
       }
 
       if (row.handicap_percentage < 0 || row.handicap_percentage > 150) {
-        setMsg(`% handicap debe estar entre 0 y 150 en ${label}.`);
+        setMsg(fmt(ce.valHandicapRange, { label }));
         return false;
       }
 
       if (!Number.isFinite(row.gross_prize_places)) {
-        setMsg(`Lugares Gross inválidos en ${label}.`);
+        setMsg(fmt(ce.valGrossPlacesInvalid, { label }));
         return false;
       }
 
       if (row.gross_prize_places < 0) {
-        setMsg(`Lugares Gross no puede ser negativo en ${label}.`);
+        setMsg(fmt(ce.valGrossPlacesNegative, { label }));
         return false;
       }
 
       if (row.net_prize_places !== null && !Number.isFinite(row.net_prize_places)) {
-        setMsg(`Lugares Neto inválidos en ${label}.`);
+        setMsg(fmt(ce.valNetPlacesInvalid, { label }));
         return false;
       }
 
       if (row.net_prize_places !== null && row.net_prize_places < 0) {
-        setMsg(`Lugares Neto no puede ser negativo en ${label}.`);
+        setMsg(fmt(ce.valNetPlacesNegative, { label }));
         return false;
       }
 
       if (row.scoring_format === "stableford" && row.leaderboard_basis !== "stableford") {
-        setMsg(`Si ${label} es Stableford, el leaderboard debe ser Stableford.`);
+        setMsg(fmt(ce.valSfLbMismatch, { label }));
         return false;
       }
 
       if (row.scoring_format === "stableford" && row.prize_basis !== "stableford") {
-        setMsg(`Si ${label} es Stableford, los premios deben ser Stableford.`);
+        setMsg(fmt(ce.valSfPrizeMismatch, { label }));
         return false;
       }
 
       if (row.scoring_format === "stroke_play" && row.leaderboard_basis === "stableford") {
-        setMsg(`Si ${label} es Stroke Play, el leaderboard no puede ser Stableford.`);
+        setMsg(fmt(ce.valSpLbSf, { label }));
         return false;
       }
 
       if (row.scoring_format === "stroke_play" && row.prize_basis === "stableford") {
-        setMsg(`Si ${label} es Stroke Play, los premios no pueden ser Stableford.`);
+        setMsg(fmt(ce.valSpPrizeSf, { label }));
         return false;
       }
     }
@@ -356,22 +380,20 @@ export default function CompetitionRulesEditor({
   return (
     <div className="space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[11px] leading-snug text-gray-700">
-          Configura la modalidad por categoría antes de calcular cortes, leaderboard y premios.
-        </div>
+        <div className="text-[11px] leading-snug text-gray-700">{ce.introBlurb}</div>
 
         <div className="flex flex-wrap items-center gap-1 text-[11px] text-gray-700">
           <span className="rounded border border-gray-300 bg-gray-100 px-2 py-1">
-            Categorías: {rows.length}
+            {ce.badgeCategories} {rows.length}
           </span>
           <span className="rounded border border-gray-300 bg-gray-100 px-2 py-1">
-            Activas: {activeCount}
+            {ce.badgeActive} {activeCount}
           </span>
           <span className="rounded border border-gray-300 bg-gray-100 px-2 py-1">
-            Stableford: {stablefordCount}
+            {ce.badgeStableford} {stablefordCount}
           </span>
           <span className="rounded border border-gray-300 bg-gray-100 px-2 py-1">
-            HCP 80%: {eightyCount}
+            {ce.badgeHcp80} {eightyCount}
           </span>
         </div>
       </div>
@@ -382,12 +404,10 @@ export default function CompetitionRulesEditor({
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="h-7 min-w-[220px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black"
-          placeholder="Buscar categoría, modalidad o base"
+          placeholder={ce.filterPlaceholder}
         />
 
-        <div className="text-[11px] leading-snug text-gray-600">
-          Neto vacío = premiar a todos los demás después de Gross.
-        </div>
+        <div className="text-[11px] leading-snug text-gray-600">{ce.netEmptyHint}</div>
       </div>
 
       <form
@@ -405,37 +425,37 @@ export default function CompetitionRulesEditor({
             <thead>
               <tr className="bg-gray-200 text-gray-900">
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Orden
+                  {ce.thOrder}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Categoría
+                  {ce.thCategory}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Modalidad
+                  {ce.thFormat}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Leaderboard
+                  {t.editors.leaderboardColumn}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Premios
+                  {ce.thPrizes}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  % HCP
+                  {ce.thHcpPct}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Gross
+                  {ce.thGross}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Neto
+                  {ce.thNet}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-center font-semibold">
-                  Activa
+                  {ce.thActive}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Notas
+                  {ce.thNotes}
                 </th>
                 <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
-                  Resumen
+                  {ce.thSummary}
                 </th>
               </tr>
             </thead>
@@ -447,7 +467,7 @@ export default function CompetitionRulesEditor({
                     colSpan={11}
                     className="border border-gray-300 px-2 py-3 text-center text-[11px] text-gray-500"
                   >
-                    No hay categorías que coincidan con el filtro.
+                    {ce.noFilterMatch}
                   </td>
                 </tr>
               ) : (
@@ -474,8 +494,8 @@ export default function CompetitionRulesEditor({
                         }
                         className={fieldClass}
                       >
-                        <option value="stroke_play">Stroke Play</option>
-                        <option value="stableford">Stableford</option>
+                        <option value="stroke_play">{ce.scoringStrokePlay}</option>
+                        <option value="stableford">{ce.scoringStableford}</option>
                       </select>
                     </td>
 
@@ -493,12 +513,12 @@ export default function CompetitionRulesEditor({
                         disabled={r.scoring_format === "stableford"}
                       >
                         {r.scoring_format === "stableford" ? (
-                          <option value="stableford">Stableford</option>
+                          <option value="stableford">{ce.basisStableford}</option>
                         ) : (
                           <>
-                            <option value="gross">Gross</option>
-                            <option value="net">Neto</option>
-                            <option value="both">Ambos</option>
+                            <option value="gross">{ce.basisGross}</option>
+                            <option value="net">{ce.basisNet}</option>
+                            <option value="both">{ce.basisBoth}</option>
                           </>
                         )}
                       </select>
@@ -518,12 +538,12 @@ export default function CompetitionRulesEditor({
                         disabled={r.scoring_format === "stableford"}
                       >
                         {r.scoring_format === "stableford" ? (
-                          <option value="stableford">Stableford</option>
+                          <option value="stableford">{ce.basisStableford}</option>
                         ) : (
                           <>
-                            <option value="gross">Gross</option>
-                            <option value="net">Neto</option>
-                            <option value="both">Ambos</option>
+                            <option value="gross">{ce.basisGross}</option>
+                            <option value="net">{ce.basisNet}</option>
+                            <option value="both">{ce.basisBoth}</option>
                           </>
                         )}
                       </select>
@@ -579,7 +599,7 @@ export default function CompetitionRulesEditor({
                           )
                         }
                         className={shortFieldClass}
-                        placeholder="Todos"
+                        placeholder={ce.netPlacesAll}
                         disabled={r.scoring_format === "stableford"}
                       />
                     </td>
@@ -599,19 +619,26 @@ export default function CompetitionRulesEditor({
                         value={r.notes}
                         onChange={(e) => updateRow(r.category_id, "notes", e.target.value)}
                         className={noteFieldClass}
-                        placeholder="Observaciones"
+                        placeholder={ce.observationsPlaceholder}
                       />
                     </td>
 
                     <td className="border border-gray-300 px-1.5 py-[3px] min-w-[220px] text-[10px] leading-tight text-gray-700">
                       <div>
-                        {scoringFormatLabel(r.scoring_format)} · LB {basisLabel(r.leaderboard_basis)}
+                        {scoringFormatLabel(r.scoring_format, ce)} · {ce.summaryLbPrefix}{" "}
+                        {basisLabel(r.leaderboard_basis, ce)}
                       </div>
                       <div>
-                        Premios {basisLabel(r.prize_basis)} · HCP {r.handicap_percentage}%
+                        {fmt(ce.summaryPrizesHandicap, {
+                          prizeBasis: basisLabel(r.prize_basis, ce),
+                          pct: r.handicap_percentage,
+                        })}
                       </div>
                       <div>
-                        Gross {r.gross_prize_places} · Neto {netPlacesLabel(r.net_prize_places)}
+                        {fmt(ce.summaryGrossNet, {
+                          gross: r.gross_prize_places,
+                          net: netPlacesLabel(r.net_prize_places, ce),
+                        })}
                       </div>
                     </td>
                   </tr>
@@ -623,14 +650,12 @@ export default function CompetitionRulesEditor({
 
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="submit" style={greenButtonStyle}>
-            Guardar reglas de competencia
+            {ce.saveButton}
           </button>
 
           {msg && <div className="text-[11px] leading-snug text-red-600">{msg}</div>}
 
-          <div className="text-[11px] leading-snug text-gray-600">
-            Se guardan todas las categorías del torneo para que el leaderboard y premios lean una sola fuente.
-          </div>
+          <div className="text-[11px] leading-snug text-gray-600">{ce.saveFooterNote}</div>
         </div>
       </form>
     </div>

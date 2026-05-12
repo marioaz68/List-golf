@@ -3,6 +3,8 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import TeeSetsEditor from "./TeeSetsEditor";
 import HeaderBar from "@/components/ui/HeaderBar";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -72,6 +74,10 @@ function HeaderBlock({
 export default async function TeeSetsPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
+  const locale = await getLocale();
+  const ts = messages[locale].teeSets;
+  const common = messages[locale].common;
+  const nav = messages[locale].sidebar.nav;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -137,28 +143,28 @@ export default async function TeeSetsPage(props: {
 
   return (
     <div className="space-y-2 p-2 md:p-3">
-      <h1 className="text-lg font-bold leading-none text-white">Salidas</h1>
+      <h1 className="text-lg font-bold leading-none text-white">{ts.title}</h1>
 
       <div className="flex flex-wrap gap-1.5">
         <a
           href={`/categories?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Categorías
+          {nav.categories}
         </a>
 
         <a
           href={`/category-tee-rules?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Reglas de Salidas
+          {ts.teeRulesLink}
         </a>
       </div>
 
       <form method="GET" action="/tee-sets" className="space-y-2">
         <HeaderBlock
-          title="TORNEO"
-          actions={<button style={buttonStyle}>Cambiar</button>}
+          title={common.tournament}
+          actions={<button style={buttonStyle}>{common.change}</button>}
         >
           <div className="min-w-0">
             <select

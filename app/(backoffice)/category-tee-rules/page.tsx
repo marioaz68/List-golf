@@ -138,7 +138,7 @@ export default async function CategoryTeeRulesPage(props: {
           href={`/tee-sets?tournament_id=${effectiveTournamentId}`}
           style={buttonStyle}
         >
-          Salidas
+          Sets de salida
         </a>
       </div>
 

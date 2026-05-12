@@ -2,6 +2,8 @@ import { createClient } from "@/utils/supabase/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -99,6 +101,8 @@ export default async function ScoreEntryPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   noStore();
+  const locale = await getLocale();
+  const se = messages[locale].scoreEntry;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -355,11 +359,8 @@ export default async function ScoreEntryPage(props: {
   return (
     <div className="p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
-        <h1 className="text-2xl font-bold text-white">Captura de scores</h1>
-        <p className="mt-1 text-sm text-white/70">
-          Captura rápida por número de inscripción o nombre de jugador inscrito al
-          torneo.
-        </p>
+        <h1 className="text-2xl font-bold text-white">{se.title}</h1>
+        <p className="mt-1 text-sm text-white/70">{se.subtitle}</p>
 
         <form className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <input

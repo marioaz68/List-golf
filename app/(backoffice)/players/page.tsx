@@ -2,6 +2,8 @@ import { createClient } from "@/utils/supabase/server";
 import PlayerRowActions from "@/components/PlayerRowActions";
 import NewPlayerSection from "./NewPlayerSection";
 import { unstable_noStore as noStore } from "next/cache";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -221,6 +223,8 @@ export default async function PlayersPage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   noStore();
+  const locale = await getLocale();
+  const playerTitle = messages[locale].players.title;
   const supabase = await createClient();
 
   const sp = props.searchParams ? await props.searchParams : {};
@@ -242,7 +246,7 @@ export default async function PlayersPage(props: {
   if (tErr) {
     return (
       <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
+        <h1 className="mb-1 text-lg font-bold leading-none">{playerTitle}</h1>
         <p className="text-sm text-red-600">Error torneos: {tErr.message}</p>
       </div>
     );
@@ -273,7 +277,7 @@ export default async function PlayersPage(props: {
   if (catErr) {
     return (
       <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
+        <h1 className="mb-1 text-lg font-bold leading-none">{playerTitle}</h1>
         <p className="text-sm text-red-600">Error categorías: {catErr.message}</p>
       </div>
     );
@@ -306,7 +310,7 @@ export default async function PlayersPage(props: {
   if (rulesErr) {
     return (
       <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
+        <h1 className="mb-1 text-lg font-bold leading-none">{playerTitle}</h1>
         <p className="text-sm text-red-600">
           Error reglas de categoría: {rulesErr.message}
         </p>
@@ -396,7 +400,7 @@ export default async function PlayersPage(props: {
   if (playersErr) {
     return (
       <div className="p-3">
-        <h1 className="mb-1 text-lg font-bold leading-none">Players</h1>
+        <h1 className="mb-1 text-lg font-bold leading-none">{playerTitle}</h1>
         <p className="text-sm text-red-600">Error players: {playersErr.message}</p>
       </div>
     );
@@ -468,7 +472,7 @@ export default async function PlayersPage(props: {
     <div className="space-y-2 p-2 md:p-3">
       <header className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
-          <h1 className="text-lg font-bold leading-none text-white">Players</h1>
+          <h1 className="text-lg font-bold leading-none text-white">{playerTitle}</h1>
           <p className="mt-1 text-[11px] leading-snug text-white/90">
             Mostrando {sorted.length} jugadores {q ? `(búsqueda: "${q}")` : ""}
             {effectiveTournamentId
