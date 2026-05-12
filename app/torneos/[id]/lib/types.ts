@@ -47,6 +47,7 @@ export type RoundRow = {
   id: string;
   round_no: number;
   round_date: string | null;
+  category_id?: string | null;
   notes: string | null;
   start_type: string | null;
   start_time: string | null;

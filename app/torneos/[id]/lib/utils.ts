@@ -85,6 +85,17 @@ export function sortRoundsChrono(a: RoundRow, b: RoundRow) {
   return String(a.id).localeCompare(String(b.id));
 }
 
+/** Ronda sin categoría = aplica a todas; si no hay categoría seleccionada, no filtra. */
+export function roundBelongsToCategory(
+  round: Pick<RoundRow, "category_id">,
+  selectedCategoryId: string | null | undefined
+): boolean {
+  if (!selectedCategoryId) return true;
+  const rid = String(round.category_id ?? "").trim();
+  if (!rid) return true;
+  return rid === selectedCategoryId;
+}
+
 /** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */
 export function formatWeekdayEsMxUtc(date: string | null) {
   if (!date) return "";

@@ -4,7 +4,6 @@ export function buildLiveLeaderboard({
   roundScores,
   holeScoresByRoundScoreId,
   parByHole,
-  lockedScorecardMap,
   selectedRound,
   normalizeClubLabel,
   isDQScore,
@@ -44,11 +43,8 @@ export function buildLiveLeaderboard({
     });
 
     const details = rounds.map((round: any) => {
-      const isLockedRound = lockedScorecardMap.has(`${entry.id}_${round.id}`);
-
-      const score = isLockedRound
-        ? playerRoundScores.find((row: any) => row.round_id === round.id) ?? null
-        : null;
+      const score =
+        playerRoundScores.find((row: any) => row.round_id === round.id) ?? null;
 
       const roundHoleRows = score
         ? [...(holeScoresByRoundScoreId.get(score.id) ?? [])].sort(

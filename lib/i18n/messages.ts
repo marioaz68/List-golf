@@ -682,7 +682,11 @@ const es = {
     officialChipDone: "completo",
     liveRoundToday: "Hoy",
     liveRoundHistory: "Historial",
+    liveRoundFuture: "Próximas fechas",
     liveRoundUndated: "Sin fecha en calendario",
+    viewingRoundKicker: "Viendo",
+    noRoundSelected: "Elige categoría; la ronda por defecto es la de hoy para esa categoría.",
+    historicRoundsToggle: "Histórico: otras fechas y rondas",
   },
   publicTeeSheet: {
     empty:
@@ -1377,7 +1381,11 @@ const en: Messages = {
     officialChipDone: "complete",
     liveRoundToday: "Today",
     liveRoundHistory: "Past days",
+    liveRoundFuture: "Upcoming dates",
     liveRoundUndated: "No calendar date",
+    viewingRoundKicker: "Viewing",
+    noRoundSelected: "Pick a category; the default round is today for that category.",
+    historicRoundsToggle: "History: other dates & rounds",
   },
   publicTeeSheet: {
     empty:
