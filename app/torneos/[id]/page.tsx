@@ -32,6 +32,7 @@ import {
   buildHref,
   buildScorecardsHref,
   formatDate,
+  formatDateWithWeekday,
   getPlayerCode,
   holesPlayedCount,
   isDQScore,
@@ -824,7 +825,11 @@ export default async function PublicTournamentPage({
                               {selectedRound.round_date ? (
                                 <span className="text-slate-300">
                                   {" "}
-                                  · {formatDate(selectedRound.round_date)}
+                                  ·{" "}
+                                  {formatDateWithWeekday(
+                                    selectedRound.round_date,
+                                    locale,
+                                  )}
                                 </span>
                               ) : null}
                             </>
@@ -884,7 +889,10 @@ export default async function PublicTournamentPage({
                                     className="flex flex-col gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
                                   >
                                     <span className="shrink-0 text-xs font-semibold text-slate-300">
-                                      {formatDate(dayRounds[0]?.round_date ?? null)}
+                                      {formatDateWithWeekday(
+                                        dayRounds[0]?.round_date ?? null,
+                                        locale,
+                                      )}
                                     </span>
                                     <div className="flex flex-wrap gap-2">
                                       {dayRounds.map((round) => (
@@ -924,7 +932,10 @@ export default async function PublicTournamentPage({
                                     className="flex flex-col gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
                                   >
                                     <span className="shrink-0 text-xs font-semibold text-slate-300">
-                                      {formatDate(dayRounds[0]?.round_date ?? null)}
+                                      {formatDateWithWeekday(
+                                        dayRounds[0]?.round_date ?? null,
+                                        locale,
+                                      )}
                                     </span>
                                     <div className="flex flex-wrap gap-2">
                                       {dayRounds.map((round) => (
@@ -1007,7 +1018,11 @@ export default async function PublicTournamentPage({
                                 {round.round_date ? (
                                   <span className="text-[10px] text-white/50">
                                     {" "}
-                                    · {formatDate(round.round_date)}
+                                    ·{" "}
+                                    {formatDateWithWeekday(
+                                      round.round_date,
+                                      locale,
+                                    )}
                                   </span>
                                 ) : null}
                               </Link>

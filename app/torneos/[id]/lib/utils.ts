@@ -77,6 +77,23 @@ export function formatDate(date: string | null) {
   }).format(new Date(date));
 }
 
+/** Fecha de ronda con día de la semana (UTC, alineado con `formatDate`). */
+export function formatDateWithWeekday(date: string | null, locale: "es" | "en") {
+  if (!date) {
+    return locale === "en" ? "Date TBD" : "Fecha por definir";
+  }
+
+  const loc = locale === "en" ? "en-US" : "es-MX";
+
+  return new Intl.DateTimeFormat(loc, {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(date));
+}
+
 /** Clave calendario YYYY-MM-DD en UTC (alineada con `formatDate`). */
 export function roundDateUtcKey(roundDate: string | null | undefined) {
   if (!roundDate) return null;

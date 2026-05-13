@@ -609,6 +609,8 @@ export default async function ScoreEntryPage(props: {
                 Número de inscripción o nombre
               </label>
               <input
+                id="score-entry-player-search"
+                key={`score-entry-q-${searchRaw || ""}`}
                 type="text"
                 name="q"
                 defaultValue={searchRaw}

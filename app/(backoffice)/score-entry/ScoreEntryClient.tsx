@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { savePlayerScores, type SaveScoresState } from "./actions";
 
 type Hole = {
@@ -58,6 +59,7 @@ export default function ScoreEntryClient({
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const router = useRouter();
 
   const holeIndexMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -151,10 +153,22 @@ export default function ScoreEntryClient({
   useEffect(() => {
     if (!saveState.ok || !saveState.message) return;
 
-    window.setTimeout(() => {
-      focusIndex(findFirstEmptyIndex(scores));
-    }, 50);
-  }, [saveState.ok, saveState.message]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (typeof window === "undefined") return;
+
+    const sp = new URLSearchParams(window.location.search);
+    sp.delete("q");
+    const query = sp.toString();
+    const path = window.location.pathname;
+    const url = query ? `${path}?${query}` : path;
+
+    router.replace(url, { scroll: false });
+
+    const t = window.setTimeout(() => {
+      document.getElementById("score-entry-player-search")?.focus();
+    }, 120);
+
+    return () => window.clearTimeout(t);
+  }, [saveState.ok, saveState.message, router]);
 
   function handleChange(
     holeNumber: number,
