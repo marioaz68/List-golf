@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Fragment } from "react";
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import FavoriteStar from "@/components/public/FavoriteStar";
+import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
 import {
   buildDetailToggleHref,
@@ -41,6 +42,7 @@ type PublicLeaderboardTableProps = {
   selectedCategoryId: string;
   selectedRound: SelectedRoundMeta | null;
   requestedDetailId: string;
+  detailLabels: PublicDetailTableLabels;
 };
 
 export default function PublicLeaderboardTable({
@@ -50,6 +52,7 @@ export default function PublicLeaderboardTable({
   selectedCategoryId,
   selectedRound,
   requestedDetailId,
+  detailLabels,
 }: PublicLeaderboardTableProps) {
   return (
     <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
@@ -227,12 +230,11 @@ export default function PublicLeaderboardTable({
                         colSpan={12}
                         className="border-b border-white/10 bg-[#08111f]/70 px-3 pb-4 pt-2"
                       >
-                        <div className="mx-auto w-full max-w-[1400px]">
-                          <PublicLeaderboardDetailTable
-                            row={row}
-                            selectedRound={selectedRound}
-                          />
-                        </div>
+                        <PublicLeaderboardDetailTable
+                          row={row}
+                          selectedRound={selectedRound}
+                          labels={detailLabels}
+                        />
                       </td>
                     </tr>
                   ) : null}

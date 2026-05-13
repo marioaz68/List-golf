@@ -1,5 +1,6 @@
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import type { LeaderboardRow, RoundDetail } from "../lib/types";
+import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import {
   collectRoundIdsWithScoreCapture,
   resolveDetailForSelectedRound,
@@ -45,12 +46,34 @@ function getDisplayDetails({
   return selectLeaderboardDetailsForPlayer(row).filter(hasHoleOrGross);
 }
 
+const stickyLabelBase =
+  "sticky left-0 border-b border-r border-white/10 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.55)]";
+
+function ThNineCol({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <th className="w-[56px] border-b border-white/10 px-1 py-1.5 text-center font-semibold leading-tight">
+      <span className="block text-[11px] font-bold text-cyan-50">{title}</span>
+      <span className="mt-0.5 block whitespace-normal text-[8.5px] font-semibold leading-snug text-cyan-200/90">
+        {subtitle}
+      </span>
+    </th>
+  );
+}
+
 export default function PublicLeaderboardDetailTable({
   row,
   selectedRound,
+  labels,
 }: {
   row: LeaderboardRow;
   selectedRound: SelectedRoundMeta | null;
+  labels: PublicDetailTableLabels;
 }) {
   const displayDetails = getDisplayDetails({ row, selectedRound });
 
@@ -80,47 +103,45 @@ export default function PublicLeaderboardDetailTable({
         </div>
       </div>
 
-      <table className="w-full min-w-[960px] table-fixed border-collapse text-[10px] text-white sm:text-[11px]">
+      <table className="w-full min-w-[960px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
-            <th className="w-[70px] border-b border-white/10 px-2 py-2 text-left font-semibold">
-              HOYOS
+            <th
+              className={`${stickyLabelBase} z-20 w-[70px] min-w-[70px] bg-cyan-950 px-2 py-2 text-left font-semibold`}
+            >
+              {labels.holesCol}
             </th>
 
             {Array.from({ length: 18 }, (_, i) => (
               <th
                 key={`hdr-${row.entry_id}-${i + 1}`}
-                className="w-[34px] border-b border-white/10 px-1 py-2 text-center font-semibold"
+                className="w-[34px] whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
               >
                 {i + 1}
               </th>
             ))}
 
-            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              OUT
-            </th>
-            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              IN
-            </th>
-            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              TOT
-            </th>
+            <ThNineCol title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
+            <ThNineCol title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
+            <ThNineCol title={labels.totalTitle} subtitle={labels.totalSub} />
             <th className="w-[52px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              GROSS
+              {labels.gross}
             </th>
             <th className="w-[64px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              TO PAR
+              {labels.toPar}
             </th>
             <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              POS
+              {labels.pos}
             </th>
           </tr>
         </thead>
 
         <tbody>
           <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
-            <td className="border-b border-white/10 px-2 py-2 font-semibold">
-              Par
+            <td
+              className={`${stickyLabelBase} z-20 w-[70px] min-w-[70px] bg-emerald-950 px-2 py-2 font-semibold`}
+            >
+              {labels.parRow}
             </td>
 
             {Array.from({ length: 18 }, (_, i) => {
@@ -152,10 +173,10 @@ export default function PublicLeaderboardDetailTable({
           {displayDetails.length === 0 ? (
             <tr>
               <td
-                colSpan={27}
+                colSpan={26}
                 className="border-b border-white/10 px-3 py-5 text-center text-xs text-slate-400"
               >
-                No hay captura para la ronda seleccionada.
+                {labels.noCapture}
               </td>
             </tr>
           ) : (
@@ -167,6 +188,9 @@ export default function PublicLeaderboardDetailTable({
                 row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
                 null;
 
+              const stripeBg =
+                detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+
               return (
                 <tr
                   key={`detail-${row.entry_id}-${detail.round_id}`}
@@ -176,7 +200,9 @@ export default function PublicLeaderboardDetailTable({
                       : "bg-[#0b1728] text-white"
                   }
                 >
-                  <td className="border-b border-white/10 px-2 py-1.5 font-semibold text-cyan-100">
+                  <td
+                    className={`${stickyLabelBase} z-10 w-[70px] min-w-[70px] px-2 py-1.5 font-semibold text-cyan-100 ${stripeBg}`}
+                  >
                     R{detail.round_no}
                   </td>
 

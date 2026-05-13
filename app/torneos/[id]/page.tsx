@@ -8,6 +8,7 @@ import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import PublicLeaderboardTable from "./components/PublicLeaderboardTable";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
+import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
   fetchHoleScoresForRoundScores,
   fetchRoundScoresForPublicLeaderboard,
@@ -97,6 +98,7 @@ export default async function PublicTournamentPage({
 
   const locale = await getLocale();
   const pub = messages[locale].publicTournament;
+  const detailTableLabels = detailLabelsFromPublicTournament(pub);
   const pts = messages[locale].publicTeeSheet;
   const common = messages[locale].common;
   const sb = messages[locale].sidebar;
@@ -1075,6 +1077,7 @@ export default async function PublicTournamentPage({
                 tournamentId={typedTournament.id}
                 leaderboard={leaderboard}
                 selectedRound={selectedRound}
+                detailLabels={detailTableLabels}
               />
             </div>
           ) : view === "tee-sheet" ? null : (
@@ -1085,6 +1088,7 @@ export default async function PublicTournamentPage({
               selectedCategoryId={selectedCategoryId}
               selectedRound={selectedRound}
               requestedDetailId={requestedDetailId}
+              detailLabels={detailTableLabels}
             />
           )}
         </div>

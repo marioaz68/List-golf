@@ -14,11 +14,13 @@ import {
   selectLeaderboardDetailsForPlayer,
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
+import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
 
 type FavoritesViewProps = {
   tournamentId: string;
   leaderboard: LeaderboardRow[];
   selectedRound?: SelectedRoundMeta | null;
+  detailLabels: PublicDetailTableLabels;
 };
 
 function formatScore(value: number | null) {
@@ -298,7 +300,27 @@ function renderMove(move: number | null) {
   );
 }
 
-function DetailTable({ row }: { row: LeaderboardRow }) {
+const stickyLabelBaseFav =
+  "sticky left-0 border-b border-r border-white/10 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.55)]";
+
+function ThNineColFav({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <th className="border-b border-white/10 px-1 py-1.5 text-center font-semibold leading-tight">
+      <span className="block text-[11px] font-bold text-cyan-50">{title}</span>
+      <span className="mt-0.5 block whitespace-normal text-[8.5px] font-semibold text-cyan-200/85">
+        {subtitle}
+      </span>
+    </th>
+  );
+}
+
+function DetailTable({
+  row,
+  labels,
+}: {
+  row: LeaderboardRow;
+  labels: PublicDetailTableLabels;
+}) {
   const displayDetails = selectLeaderboardDetailsForPlayer(row);
 
   const baseRound =
@@ -327,45 +349,43 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
         </div>
       </div>
 
-      <table className="w-full min-w-[1300px] border-collapse text-[11px] text-white">
+      <table className="w-full min-w-[1300px] border-separate border-spacing-0 text-[11px] text-white">
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
-            <th className="border-b border-white/10 px-2 py-2 text-left font-semibold">
-              HOYOS
+            <th
+              className={`${stickyLabelBaseFav} z-20 min-w-[72px] bg-cyan-950 px-2 py-2 text-left font-semibold`}
+            >
+              {labels.holesCol}
             </th>
             {Array.from({ length: 18 }, (_, i) => (
               <th
                 key={`hdr-${row.entry_id}-${i + 1}`}
-                className="border-b border-white/10 px-1 py-2 text-center font-semibold"
+                className="whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
               >
                 {i + 1}
               </th>
             ))}
+            <ThNineColFav title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
+            <ThNineColFav title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
+            <ThNineColFav title={labels.totalTitle} subtitle={labels.totalSub} />
             <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              OUT
+              {labels.gross}
             </th>
             <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              IN
+              {labels.toPar}
             </th>
             <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              TOT
-            </th>
-            <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              GROSS
-            </th>
-            <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              TO PAR
-            </th>
-            <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              POS
+              {labels.pos}
             </th>
           </tr>
         </thead>
 
         <tbody>
           <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
-            <td className="border-b border-white/10 px-2 py-2 font-semibold">
-              Par
+            <td
+              className={`${stickyLabelBaseFav} z-20 min-w-[72px] bg-emerald-950 px-2 py-2 font-semibold`}
+            >
+              {labels.parRow}
             </td>
 
             {Array.from({ length: 18 }, (_, i) => {
@@ -399,6 +419,9 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
               row.standing_by_round_category.find((s) => s.round_id === detail.round_id) ??
               null;
 
+            const stripeBg =
+              detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+
             return (
               <tr
                 key={`detail-${row.entry_id}-${detail.round_id}`}
@@ -408,7 +431,9 @@ function DetailTable({ row }: { row: LeaderboardRow }) {
                     : "bg-[#0b1728] text-white"
                 }
               >
-                <td className="border-b border-white/10 px-2 py-1.5 font-semibold text-cyan-100">
+                <td
+                  className={`${stickyLabelBaseFav} z-10 min-w-[72px] px-2 py-1.5 font-semibold text-cyan-100 ${stripeBg}`}
+                >
                   R{detail.round_no}
                 </td>
 
@@ -464,6 +489,7 @@ export default function FavoritesView({
   tournamentId,
   leaderboard,
   selectedRound = null,
+  detailLabels,
 }: FavoritesViewProps) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -628,7 +654,7 @@ export default function FavoritesView({
                     </div>
                   </summary>
 
-                  <DetailTable row={row} />
+                  <DetailTable row={row} labels={detailLabels} />
                 </details>
               </td>
 

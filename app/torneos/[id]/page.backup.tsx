@@ -10,7 +10,9 @@ import {
   fetchHoleScoresForRoundScores,
   fetchRoundScoresForPublicLeaderboard,
 } from "./lib/data";
+import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import { formatThru } from "./lib/utils";
+import { messages } from "@/lib/i18n/messages";
 
 type Tournament = {
   id: string;
@@ -592,6 +594,10 @@ export default async function PublicTournamentPage({
       : requestedView === "favorites"
         ? "favorites"
         : "live";
+
+  const detailTableLabels = detailLabelsFromPublicTournament(
+    messages.es.publicTournament,
+  );
 
   const supabase = await createClient();
 
@@ -1344,6 +1350,7 @@ filteredEntries.forEach((entry) => {
                 tournamentId={typedTournament.id}
                 leaderboard={leaderboard}
                 selectedRound={selectedRound}
+                detailLabels={detailTableLabels}
               />
             </div>
           ) : (
