@@ -571,28 +571,37 @@ export function formatThru(
   return String(count);
 }
 
+export type ScoreMarkerOptions = { compact?: boolean };
+
 export function scoreMarker(
   strokes: number | null,
-  par: number | null
+  par: number | null,
+  opts?: ScoreMarkerOptions
 ): {
   wrapper: string;
   outer?: string;
   inner?: string;
   textClass: string;
 } {
+  const compact = opts?.compact === true;
+  const box = compact
+    ? "relative inline-flex h-[18px] w-[18px] items-center justify-center"
+    : "relative inline-flex h-7 w-7 items-center justify-center";
+  const inSm = compact ? "inset-[2px]" : "inset-[4px]";
+  const inSm2 = compact ? "inset-[3px]" : "inset-[5px]";
+  const inTight = compact ? "inset-[2px]" : "inset-[4px]";
+
   if (strokes == null) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-md",
-      textClass: "text-slate-500",
+      wrapper: `${box} rounded-md`,
+      textClass: compact ? "text-[9px] text-slate-500" : "text-slate-500",
     };
   }
 
   if (par == null) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-md",
-      textClass: "text-white",
+      wrapper: `${box} rounded-md`,
+      textClass: compact ? "text-[9px] text-white" : "text-white",
     };
   }
 
@@ -600,51 +609,50 @@ export function scoreMarker(
 
   if (diff <= -2) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-full",
+      wrapper: `${box} rounded-full`,
       outer:
         "pointer-events-none absolute inset-0 block rounded-full border border-rose-400 bg-rose-500/12",
-      inner:
-        "pointer-events-none absolute inset-[5px] block rounded-full border border-rose-300/90",
-      textClass: "relative z-10 font-bold text-white",
+      inner: `pointer-events-none absolute ${inSm2} block rounded-full border border-rose-300/90`,
+      textClass: compact
+        ? "relative z-10 text-[9px] font-bold text-white"
+        : "relative z-10 font-bold text-white",
     };
   }
 
   if (diff === -1) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-full",
-      outer:
-        "pointer-events-none absolute inset-[4px] block rounded-full border border-rose-400 bg-rose-500/12",
-      textClass: "relative z-10 font-bold text-white",
+      wrapper: `${box} rounded-full`,
+      outer: `pointer-events-none absolute ${inSm} block rounded-full border border-rose-400 bg-rose-500/12`,
+      textClass: compact
+        ? "relative z-10 text-[9px] font-bold text-white"
+        : "relative z-10 font-bold text-white",
     };
   }
 
   if (diff >= 2) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-[3px]",
+      wrapper: `${box} rounded-[2px]`,
       outer:
-        "pointer-events-none absolute inset-0 block rounded-[3px] border border-amber-200/95 bg-amber-100/8",
-      inner:
-        "pointer-events-none absolute inset-[5px] block rounded-[2px] border border-amber-100/90",
-      textClass: "relative z-10 font-bold text-white",
+        "pointer-events-none absolute inset-0 block rounded-[2px] border border-amber-200/95 bg-amber-100/8",
+      inner: `pointer-events-none absolute ${inSm2} block rounded-[1px] border border-amber-100/90`,
+      textClass: compact
+        ? "relative z-10 text-[9px] font-bold text-white"
+        : "relative z-10 font-bold text-white",
     };
   }
 
   if (diff === 1) {
     return {
-      wrapper:
-        "relative inline-flex h-7 w-7 items-center justify-center rounded-[3px]",
-      outer:
-        "pointer-events-none absolute inset-[4px] block rounded-[2px] border border-amber-100/90 bg-amber-100/8",
-      textClass: "relative z-10 font-bold text-white",
+      wrapper: `${box} rounded-[2px]`,
+      outer: `pointer-events-none absolute ${inTight} block rounded-[1px] border border-amber-100/90 bg-amber-100/8`,
+      textClass: compact
+        ? "relative z-10 text-[9px] font-bold text-white"
+        : "relative z-10 font-bold text-white",
     };
   }
 
   return {
-    wrapper:
-      "relative inline-flex h-7 w-7 items-center justify-center rounded-md",
-    textClass: "text-white",
+    wrapper: `${box} rounded-md`,
+    textClass: compact ? "relative z-10 text-[9px] text-white" : "text-white",
   };
 }

@@ -54,10 +54,26 @@ export function applyStandings({
           continue;
         }
 
+        let detailStrokeHoles = 0;
         for (const hole of detail.holes) {
           if (hole.strokes != null) {
             gross += Number(hole.strokes);
             par += Number(hole.par ?? 0);
+            holesPlayed += 1;
+            detailStrokeHoles += 1;
+          }
+        }
+
+        // Tarjeta con gross pero sin hoyos en fila (captura resumida / otra fuente)
+        if (detailStrokeHoles === 0 && detail.gross_score != null) {
+          const g = Number(detail.gross_score);
+          if (!Number.isNaN(g)) {
+            const parTotal = detail.holes.reduce(
+              (acc: number, hole: any) => acc + Number(hole.par ?? 0),
+              0
+            );
+            gross += g;
+            par += parTotal;
             holesPlayed += 1;
           }
         }
@@ -137,7 +153,7 @@ export function applyStandings({
       generalMap.set(item.player_id, {
         round_id: round.id,
         round_no: round.round_no,
-        pos: item.to_par != null ? currentPosGeneral : null,
+        pos: currentPosGeneral,
         to_par: item.to_par,
         gross: item.gross,
         played_rounds: item.played_rounds,
@@ -188,7 +204,7 @@ export function applyStandings({
         categoryStandingMap.set(item.player_id, {
           round_id: round.id,
           round_no: round.round_no,
-          pos: item.to_par != null ? currentPosCategory : null,
+          pos: currentPosCategory,
           to_par: item.to_par,
           gross: item.gross,
           played_rounds: item.played_rounds,

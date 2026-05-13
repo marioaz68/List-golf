@@ -3,23 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import ClubLogoThumb from "./ClubLogoThumb";
 import FavoriteStar from "./FavoriteStar";
-import type {
-  HoleDetail,
-  LeaderboardRow,
-  RoundDetail,
-} from "@/app/torneos/[id]/lib/types";
-import {
-  collectRoundIdsWithScoreCapture,
-  resolveDetailForSelectedRound,
-} from "@/lib/leaderboard/roundCategoryMatch";
+import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
+import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
 import {
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
   publicLeaderboardCompactPlayerName,
-  scoreMarker,
-  selectLeaderboardDetailsForPlayer,
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
@@ -30,59 +21,6 @@ type FavoritesViewProps = {
   selectedRound?: SelectedRoundMeta | null;
   detailLabels: PublicDetailTableLabels;
 };
-
-function formatScore(value: number | null) {
-  return value == null ? "—" : String(value);
-}
-
-function formatRelative(value: number | null) {
-  if (value == null) return "—";
-  if (value === 0) return "E";
-  return value > 0 ? `+${value}` : String(value);
-}
-
-function subtotal(
-  holes: HoleDetail[],
-  start: number,
-  end: number,
-  field: "par" | "strokes"
-): number | null {
-  const segment = holes.slice(start, end);
-  const hasAny = segment.some((hole) => hole[field] != null);
-  if (!hasAny) return null;
-  return segment.reduce((acc, hole) => acc + Number(hole[field] ?? 0), 0);
-}
-
-function hasHoleOrGross(detail: RoundDetail) {
-  return (
-    detail.is_dq ||
-    detail.gross_score != null ||
-    detail.holes.some((hole) => hole.strokes != null)
-  );
-}
-
-function getDisplayDetails({
-  row,
-  selectedRound,
-}: {
-  row: LeaderboardRow;
-  selectedRound: SelectedRoundMeta | null;
-}) {
-  if (selectedRound?.id) {
-    const selectedDetail = resolveDetailForSelectedRound(
-      row.details,
-      selectedRound,
-      row.category_id,
-      collectRoundIdsWithScoreCapture(row.details)
-    );
-
-    if (selectedDetail) {
-      return [selectedDetail];
-    }
-  }
-
-  return selectLeaderboardDetailsForPlayer(row).filter(hasHoleOrGross);
-}
 
 function categoryBucket(code: string | null | undefined) {
   const value = (code ?? "").trim().toLowerCase();
@@ -339,344 +277,10 @@ function renderMove(move: number | null) {
   );
 }
 
-const stickyLabelBaseFav =
-  "sticky left-0 border-b border-r border-white/10 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.55)]";
-
 const stickyNameHeadFav =
   "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#1a2838] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)]";
 const stickyNameBodyFav =
   "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#0c1728] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)] group-hover:bg-[#101c2c]";
-
-function ThNineColFav({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <th className="border-b border-white/10 px-1 py-1.5 text-center font-semibold leading-tight">
-      <span className="block text-[11px] font-bold text-cyan-50">{title}</span>
-      {subtitle ? (
-        <span className="mt-0.5 block whitespace-normal text-[8.5px] font-semibold leading-snug text-cyan-200/85">
-          {subtitle}
-        </span>
-      ) : null}
-    </th>
-  );
-}
-
-function GrossToParPosHeadsFav({ labels }: { labels: PublicDetailTableLabels }) {
-  return (
-    <>
-      <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-        {labels.gross}
-      </th>
-      <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-        {labels.toPar}
-      </th>
-      <th className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-        {labels.pos}
-      </th>
-    </>
-  );
-}
-
-function DetailTable({
-  row,
-  labels,
-  selectedRound,
-}: {
-  row: LeaderboardRow;
-  labels: PublicDetailTableLabels;
-  selectedRound: SelectedRoundMeta | null;
-}) {
-  const displayDetails = getDisplayDetails({ row, selectedRound });
-
-  const baseRound =
-    displayDetails.find((detail) =>
-      detail.holes.some((hole) => hole.par != null)
-    ) ??
-    displayDetails[0] ??
-    row.details.find((detail) => detail.holes.some((hole) => hole.par != null)) ??
-    row.details[0] ??
-    null;
-
-  const baseHoles = baseRound?.holes ?? [];
-
-  const inline = labels.detailTotalsPlacement === "inline-after-nines";
-  const emptyColSpan = inline ? 24 : 25;
-  const tableMinW = inline ? "min-w-[1180px]" : "min-w-[1300px]";
-
-  return (
-    <div className="mt-2 overflow-x-auto rounded-[24px] border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
-        <ClubLogoThumb
-          clubId={row.club_id}
-          size={28}
-          title={row.club_label ?? undefined}
-        />
-        <div className="min-w-0">
-          {row.player_code}
-          {row.club_label ? ` • ${row.club_label}` : ""}
-          {row.category_code ? ` • ${row.category_code}` : ""}
-        </div>
-      </div>
-
-      <table className={`w-full ${tableMinW} border-separate border-spacing-0 text-[11px] text-white`}>
-        <thead>
-          <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
-            <th
-              className={`${stickyLabelBaseFav} z-20 min-w-[72px] bg-cyan-950 px-2 py-2 text-left font-semibold`}
-            >
-              {labels.holesCol}
-            </th>
-            {inline ? (
-              <>
-                {Array.from({ length: 9 }, (_, i) => (
-                  <th
-                    key={`hdr-${row.entry_id}-${i + 1}`}
-                    className="whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
-                  >
-                    {i + 1}
-                  </th>
-                ))}
-                <ThNineColFav title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
-                {Array.from({ length: 9 }, (_, i) => (
-                  <th
-                    key={`hdr-${row.entry_id}-${i + 10}`}
-                    className="whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
-                  >
-                    {i + 10}
-                  </th>
-                ))}
-                <ThNineColFav title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
-                <GrossToParPosHeadsFav labels={labels} />
-              </>
-            ) : (
-              <>
-                {Array.from({ length: 18 }, (_, i) => (
-                  <th
-                    key={`hdr-${row.entry_id}-${i + 1}`}
-                    className="whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
-                  >
-                    {i + 1}
-                  </th>
-                ))}
-                <ThNineColFav title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
-                <ThNineColFav title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
-                <ThNineColFav title={labels.totalTitle} subtitle={labels.totalSub} />
-                <GrossToParPosHeadsFav labels={labels} />
-              </>
-            )}
-          </tr>
-        </thead>
-
-        <tbody>
-          <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
-            <td
-              className={`${stickyLabelBaseFav} z-20 min-w-[72px] bg-emerald-950 px-2 py-2 font-semibold`}
-            >
-              {labels.parRow}
-            </td>
-
-            {inline ? (
-              <>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = baseHoles[i];
-                  return (
-                    <td
-                      key={`par-${row.entry_id}-${i + 1}`}
-                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
-                    >
-                      {formatScore(hole?.par ?? null)}
-                    </td>
-                  );
-                })}
-                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-                  {formatScore(subtotal(baseHoles, 0, 9, "par"))}
-                </td>
-                {Array.from({ length: 9 }, (_, i) => {
-                  const hole = baseHoles[i + 9];
-                  return (
-                    <td
-                      key={`par-${row.entry_id}-${i + 10}`}
-                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
-                    >
-                      {formatScore(hole?.par ?? null)}
-                    </td>
-                  );
-                })}
-                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-                  {formatScore(subtotal(baseHoles, 9, 18, "par"))}
-                </td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-              </>
-            ) : (
-              <>
-                {Array.from({ length: 18 }, (_, i) => {
-                  const hole = baseHoles[i];
-                  return (
-                    <td
-                      key={`par-${row.entry_id}-${i + 1}`}
-                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
-                    >
-                      {formatScore(hole?.par ?? null)}
-                    </td>
-                  );
-                })}
-
-                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-                  {formatScore(subtotal(baseHoles, 0, 9, "par"))}
-                </td>
-                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-                  {formatScore(subtotal(baseHoles, 9, 18, "par"))}
-                </td>
-                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-                  {formatScore(subtotal(baseHoles, 0, 18, "par"))}
-                </td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-              </>
-            )}
-          </tr>
-
-          {displayDetails.length === 0 ? (
-            <tr>
-              <td
-                colSpan={emptyColSpan}
-                className="border-b border-white/10 px-3 py-5 text-center text-xs text-slate-400"
-              >
-                {labels.noCapture}
-              </td>
-            </tr>
-          ) : (
-            displayDetails.map((detail, detailIndex) => {
-              const standing =
-                row.standing_by_round_category.find((s) => s.round_id === detail.round_id) ??
-                row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
-                null;
-
-              const stripeBg =
-                detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
-
-              return (
-                <tr
-                  key={`detail-${row.entry_id}-${detail.round_id}`}
-                  className={
-                    detailIndex % 2 === 0
-                      ? "bg-white/[0.03] text-white"
-                      : "bg-[#0b1728] text-white"
-                  }
-                >
-                  <td
-                    className={`${stickyLabelBaseFav} z-10 min-w-[72px] px-2 py-1.5 font-semibold text-cyan-100 ${stripeBg}`}
-                  >
-                    R{detail.round_no}
-                  </td>
-
-                  {inline ? (
-                    <>
-                      {detail.holes.slice(0, 9).map((hole) => {
-                        const marker = scoreMarker(hole.strokes, hole.par);
-
-                        return (
-                          <td
-                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
-                            className="border-b border-white/10 px-1 py-1 text-center"
-                          >
-                            <span className={marker.wrapper}>
-                              {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
-                              {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
-                              <span
-                                className={`relative z-10 text-[11px] font-semibold ${marker.textClass}`}
-                              >
-                                {formatScore(hole.strokes)}
-                              </span>
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                        {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
-                      </td>
-
-                      {detail.holes.slice(9, 18).map((hole) => {
-                        const marker = scoreMarker(hole.strokes, hole.par);
-
-                        return (
-                          <td
-                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
-                            className="border-b border-white/10 px-1 py-1 text-center"
-                          >
-                            <span className={marker.wrapper}>
-                              {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
-                              {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
-                              <span
-                                className={`relative z-10 text-[11px] font-semibold ${marker.textClass}`}
-                              >
-                                {formatScore(hole.strokes)}
-                              </span>
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                        {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      {detail.holes.map((hole) => {
-                        const marker = scoreMarker(hole.strokes, hole.par);
-
-                        return (
-                          <td
-                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
-                            className="border-b border-white/10 px-1 py-1 text-center"
-                          >
-                            <span className={marker.wrapper}>
-                              {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
-                              {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
-                              <span
-                                className={`relative z-10 text-[11px] font-semibold ${marker.textClass}`}
-                              >
-                                {formatScore(hole.strokes)}
-                              </span>
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                        {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
-                      </td>
-                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                        {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
-                      </td>
-                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                        {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
-                      </td>
-                    </>
-                  )}
-
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {formatScore(detail.gross_score)}
-                  </td>
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {formatRelative(detail.to_par)}
-                  </td>
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
 
 export default function FavoritesView({
   tournamentId,
@@ -774,7 +378,10 @@ export default function FavoritesView({
             <th className="w-[50px] border-b border-white/10 px-0.5 py-1.5 text-center text-[8px] font-semibold leading-tight sm:w-[52px]">
               POS
             </th>
-            <th className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]">
+            <th
+              className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]"
+              title="Movimiento vs la posición de la ronda anterior (a partir de R2)"
+            >
               MV
             </th>
             <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
@@ -853,7 +460,7 @@ export default function FavoritesView({
                       </div>
                     </summary>
 
-                    <DetailTable
+                    <PublicLeaderboardDetailTable
                       row={row}
                       labels={detailLabels}
                       selectedRound={selectedRound ?? null}

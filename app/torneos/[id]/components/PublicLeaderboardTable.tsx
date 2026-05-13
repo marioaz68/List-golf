@@ -95,7 +95,10 @@ export default function PublicLeaderboardTable({
                 POS
               </th>
             )}
-            <th className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]">
+            <th
+              className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]"
+              title="Movimiento vs la posición de la ronda anterior (a partir de R2)"
+            >
               MV
             </th>
             <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
@@ -129,7 +132,9 @@ export default function PublicLeaderboardTable({
                 ? "DQ"
                 : view === "official"
                   ? row.selected_round_position ?? index + 1
-                  : row.selected_round_position_category ?? "—";
+                  : row.selected_round_position_category ??
+                    row.selected_round_position ??
+                    index + 1;
 
               const move = row.is_disqualified
                 ? null
@@ -242,7 +247,7 @@ export default function PublicLeaderboardTable({
                     <tr>
                       <td
                         colSpan={9}
-                        className="border-b border-white/10 bg-[#08111f]/70 px-3 pb-4 pt-2"
+                        className="border-b border-white/10 bg-[#08111f]/70 px-1 pb-2 pt-1.5 sm:px-2"
                       >
                         <PublicLeaderboardDetailTable
                           row={row}
