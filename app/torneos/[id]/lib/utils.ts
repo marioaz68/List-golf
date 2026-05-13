@@ -111,6 +111,39 @@ export function sortRoundsChrono(a: RoundRow, b: RoundRow) {
   return String(a.id).localeCompare(String(b.id));
 }
 
+function nameTokens(full: string): string[] {
+  return full.trim().split(/\s+/).filter(Boolean);
+}
+
+/** Primer nombre + primer apellido (tokens 1 y 2). */
+function baseTwoPartPlayerName(full: string): string {
+  const p = nameTokens(full);
+  if (p.length === 0) return full.trim() || "—";
+  if (p.length === 1) return p[0]!;
+  return `${p[0]} ${p[1]}`;
+}
+
+/**
+ * Nombre compacto para tablas públicas (vivo / favoritos).
+ * Si en la misma categoría hay otro jugador con el mismo nombre corto, añade inicial del segundo apellido (3er token).
+ */
+export function publicLeaderboardCompactPlayerName(
+  row: LeaderboardRow,
+  leaderboard: LeaderboardRow[]
+): string {
+  const full = row.player_name?.trim() || "—";
+  const base = baseTwoPartPlayerName(full);
+  const cat = String(row.category_id ?? "");
+  const peers = leaderboard.filter((r) => String(r.category_id ?? "") === cat);
+  const dupes = peers.filter(
+    (r) => baseTwoPartPlayerName(r.player_name) === base
+  );
+  if (dupes.length < 2) return base;
+  const p = nameTokens(full);
+  if (p.length >= 3) return `${base} ${p[2]!.charAt(0).toUpperCase()}.`;
+  return base;
+}
+
 /** Ronda sin categoría = aplica a todas; si no hay categoría seleccionada, no filtra. */
 export function roundBelongsToCategory(
   round: Pick<RoundRow, "category_id">,

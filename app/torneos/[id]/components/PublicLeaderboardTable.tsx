@@ -9,14 +9,15 @@ import {
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
+  publicLeaderboardCompactPlayerName,
   type SelectedRoundMeta,
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
 
-const stickyHead =
-  "sticky border-b border-r border-white/10 bg-[#1a2838] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)]";
-const stickyBody =
-  "sticky border-b border-r border-white/10 bg-[#0c1728] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)] group-hover:bg-[#101c2c]";
+const stickyNameHead =
+  "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#1a2838] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)]";
+const stickyNameBody =
+  "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#0c1728] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)] group-hover:bg-[#101c2c]";
 
 function renderMove(move: number | null) {
   if (move == null || move === 0) {
@@ -25,7 +26,7 @@ function renderMove(move: number | null) {
 
   if (move > 0) {
     return (
-      <span className="inline-flex items-center gap-1 font-semibold text-emerald-400">
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-400">
         <span>▲</span>
         <span>{move}</span>
       </span>
@@ -33,7 +34,7 @@ function renderMove(move: number | null) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 font-semibold text-rose-400">
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-rose-400">
       <span>▼</span>
       <span>{Math.abs(move)}</span>
     </span>
@@ -59,73 +60,55 @@ export default function PublicLeaderboardTable({
   requestedDetailId,
   detailLabels,
 }: PublicLeaderboardTableProps) {
-  const posW = view === "official" ? "w-[54px]" : "w-[62px]";
-  const posLeft = "left-[42px]";
-  const mvLeft = view === "official" ? "left-[96px]" : "left-[104px]";
-  const codLeft = view === "official" ? "left-[130px]" : "left-[138px]";
-  const playerLeft = view === "official" ? "left-[176px]" : "left-[184px]";
-  const playerColW = "w-[164px]";
-  const clubLeft = view === "official" ? "left-[340px]" : "left-[348px]";
+  const posW = view === "official" ? "w-[44px]" : "w-[50px]";
+  const nameCol = "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
 
   return (
     <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="w-full min-w-[1020px] border-separate border-spacing-0 text-[11px] text-white">
+      <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
-              className={`${stickyHead} left-0 z-[20] w-[42px] px-1 py-2 text-center text-[10px] font-semibold`}
+              className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]"
+              title="Club"
             >
+              C
+            </th>
+            <th
+              className={`${stickyNameHead} ${nameCol} px-1 py-1.5 text-left text-[9px] font-semibold sm:px-1.5`}
+            >
+              JUG
+            </th>
+            <th className="w-[30px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[32px]">
               ★
             </th>
-
             {view === "official" ? (
               <th
-                className={`${stickyHead} ${posLeft} z-[21] w-[54px] px-1 py-2 text-center text-[10px] font-semibold`}
+                className={`${posW} border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold`}
               >
                 POS
               </th>
             ) : (
               <th
-                className={`${stickyHead} ${posLeft} z-[21] w-[62px] px-1 py-2 text-center text-[10px] font-semibold leading-tight`}
+                className={`${posW} border-b border-white/10 px-0.5 py-1.5 text-center text-[8px] font-semibold leading-tight`}
               >
-                POS CAT
+                POS
               </th>
             )}
-
-            <th
-              className={`${stickyHead} ${mvLeft} z-[22] w-[34px] px-1 py-2 text-center text-[10px] font-semibold`}
-            >
+            <th className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]">
               MV
             </th>
-            <th
-              className={`${stickyHead} ${codLeft} z-[23] w-[46px] px-1 py-2 text-center text-[10px] font-semibold`}
-            >
-              COD
+            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
+              THR
             </th>
-            <th
-              className={`${stickyHead} ${playerLeft} z-[24] ${playerColW} px-2 py-2 text-left text-[10px] font-semibold`}
-            >
-              JUGADOR
+            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
+              HOY
             </th>
-            <th
-              className={`${stickyHead} ${clubLeft} z-[25] w-[44px] px-1 py-2 text-center text-[10px] font-semibold`}
-            >
-              CLUB
+            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
+              GR
             </th>
-            <th className="w-[32px] border-b border-white/10 px-1 py-2 text-left text-[10px] font-semibold">
-              CAT
-            </th>
-            <th className="w-[38px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
-              THRU
-            </th>
-            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
-              RONDA
-            </th>
-            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
-              TOTAL
-            </th>
-            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
-              GROSS
+            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
+              TOT
             </th>
           </tr>
         </thead>
@@ -134,7 +117,7 @@ export default function PublicLeaderboardTable({
           {leaderboard.length === 0 ? (
             <tr>
               <td
-                colSpan={12}
+                colSpan={9}
                 className="px-4 py-10 text-center text-sm text-slate-400"
               >
                 No hay jugadores para mostrar en esta vista.
@@ -155,59 +138,47 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
+              const shortName = publicLeaderboardCompactPlayerName(
+                row,
+                leaderboard
+              );
 
               return (
                 <Fragment key={row.entry_id}>
                   <tr className="group border-b border-white/10 bg-transparent align-top text-white transition hover:bg-white/[0.03]">
-                    <td
-                      className={`${stickyBody} left-0 z-[20] w-[42px] px-1 py-1.5 text-center`}
-                    >
-                      <FavoriteStar
-                        tournamentId={tournamentId}
-                        playerId={row.player_id}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs leading-none transition hover:bg-white/10"
-                      />
+                    <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center align-middle sm:w-[34px]">
+                      <div className="inline-flex justify-center">
+                        <ClubLogoThumb
+                          clubId={row.club_id}
+                          size={24}
+                          title={row.club_label ?? undefined}
+                        />
+                      </div>
                     </td>
 
                     <td
-                      className={`${stickyBody} ${posLeft} z-[21] ${posW} px-1 py-1.5 text-center text-[12px] font-bold text-cyan-300`}
+                      className={`${stickyNameBody} ${nameCol} px-1 py-1 sm:px-1.5`}
                     >
-                      {position}
-                    </td>
-
-                    <td
-                      className={`${stickyBody} ${mvLeft} z-[22] w-[34px] px-1 py-1.5 text-center`}
-                    >
-                      {renderMove(move)}
-                    </td>
-
-                    <td
-                      className={`${stickyBody} ${codLeft} z-[23] w-[46px] px-1 py-1.5 text-center font-mono text-[10px] text-slate-300`}
-                    >
-                      {row.player_code}
-                    </td>
-
-                    <td
-                      className={`${stickyBody} ${playerLeft} z-[24] ${playerColW} px-2 py-1.5`}
-                    >
-                      <div className="flex min-w-0 items-center gap-1">
+                      <div className="flex min-w-0 items-center gap-0.5">
                         <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-center gap-1">
-                            <span
-                              title={row.player_name}
-                              className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold leading-snug text-white"
-                            >
-                              {row.player_name}
-                            </span>
-
-                            {row.is_disqualified ? (
-                              <span className="shrink-0 inline-flex rounded border border-red-400/40 bg-red-500/10 px-1 py-[1px] text-[9px] font-bold text-red-300">
-                                DQ
-                              </span>
-                            ) : null}
+                          <div
+                            title={row.player_name}
+                            className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
+                          >
+                            {shortName}
                           </div>
+                          <div
+                            className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
+                            title={row.player_code}
+                          >
+                            {row.player_code}
+                          </div>
+                          {row.is_disqualified ? (
+                            <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
+                              DQ
+                            </span>
+                          ) : null}
                         </div>
-
                         <Link
                           scroll={false}
                           href={buildDetailToggleHref({
@@ -218,7 +189,7 @@ export default function PublicLeaderboardTable({
                             currentDetailId: requestedDetailId || null,
                             nextDetailId: row.entry_id,
                           })}
-                          className="inline-flex h-5 w-4 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-semibold text-cyan-300 transition hover:bg-cyan-400/15"
+                          className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
                           aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
                         >
                           {isOpen ? "▴" : "▾"}
@@ -226,49 +197,51 @@ export default function PublicLeaderboardTable({
                       </div>
                     </td>
 
+                    <td className="w-[30px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[32px]">
+                      <FavoriteStar
+                        tournamentId={tournamentId}
+                        playerId={row.player_id}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] leading-none transition hover:bg-white/10 sm:h-6 sm:w-6"
+                      />
+                    </td>
+
                     <td
-                      className={`${stickyBody} ${clubLeft} z-[25] w-[44px] px-1 py-1.5 text-center align-middle`}
+                      className={`${posW} border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:text-[12px]`}
                     >
-                      <div className="inline-flex justify-center">
-                        <ClubLogoThumb
-                          clubId={row.club_id}
-                          size={28}
-                          title={row.club_label ?? undefined}
-                        />
-                      </div>
+                      {position}
                     </td>
 
-                    <td className="border-b border-white/10 px-1 py-1.5 text-[10px] text-slate-300">
-                      {row.category_code ?? "—"}
+                    <td className="w-[26px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[28px]">
+                      {renderMove(move)}
                     </td>
 
-                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
+                    <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
                       {formatThru(row.details, selectedRound, row.category_id)}
                     </td>
 
-                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
+                    <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
                       {formatRelativeOrDQ(
                         row.selected_round_to_par,
                         row.is_disqualified
                       )}
                     </td>
 
-                    <td className="border-b border-white/10 px-1 py-1.5 text-center text-[12px] font-bold text-white">
+                    <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
+                      {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
+                    </td>
+
+                    <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
                       {formatRelativeOrDQ(
                         row.total_to_par,
                         row.is_disqualified
                       )}
-                    </td>
-
-                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
-                      {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
                     </td>
                   </tr>
 
                   {isOpen ? (
                     <tr>
                       <td
-                        colSpan={12}
+                        colSpan={9}
                         className="border-b border-white/10 bg-[#08111f]/70 px-3 pb-4 pt-2"
                       >
                         <PublicLeaderboardDetailTable

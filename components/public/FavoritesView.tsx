@@ -13,8 +13,11 @@ import {
   resolveDetailForSelectedRound,
 } from "@/lib/leaderboard/roundCategoryMatch";
 import {
+  formatRelativeOrDQ,
+  formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
+  publicLeaderboardCompactPlayerName,
   scoreMarker,
   selectLeaderboardDetailsForPlayer,
   type SelectedRoundMeta,
@@ -339,10 +342,10 @@ function renderMove(move: number | null) {
 const stickyLabelBaseFav =
   "sticky left-0 border-b border-r border-white/10 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.55)]";
 
-const favMainStickyHead =
-  "sticky border-b border-r border-white/10 bg-[#1a2838] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)]";
-const favMainStickyBody =
-  "sticky border-b border-r border-white/10 bg-[#0c1728] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)] group-hover:bg-[#101c2c]";
+const stickyNameHeadFav =
+  "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#1a2838] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)]";
+const stickyNameBodyFav =
+  "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#0c1728] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)] group-hover:bg-[#101c2c]";
 
 function ThNineColFav({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -746,161 +749,159 @@ export default function FavoritesView({
     );
   }
 
+  const nameCol =
+    "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
+
   return (
     <div className="overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="w-full min-w-[980px] border-separate border-spacing-0 text-[11px] text-white">
+      <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
-              className={`${favMainStickyHead} left-0 z-[20] w-[44px] px-1.5 py-2 text-center text-[10px] font-semibold`}
+              className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]"
+              title="Club"
             >
+              C
+            </th>
+            <th
+              className={`${stickyNameHeadFav} ${nameCol} px-1 py-1.5 text-left text-[9px] font-semibold sm:px-1.5`}
+            >
+              JUG
+            </th>
+            <th className="w-[30px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[32px]">
               ★
             </th>
-            <th
-              className={`${favMainStickyHead} left-[44px] z-[21] w-[64px] px-1.5 py-2 text-center text-[10px] font-semibold leading-tight`}
-            >
-              POS CAT
+            <th className="w-[50px] border-b border-white/10 px-0.5 py-1.5 text-center text-[8px] font-semibold leading-tight sm:w-[52px]">
+              POS
             </th>
-            <th
-              className={`${favMainStickyHead} left-[108px] z-[22] w-[62px] px-1.5 py-2 text-center text-[10px] font-semibold`}
-            >
-              MOVE
+            <th className="w-[26px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[28px]">
+              MV
             </th>
-            <th
-              className={`${favMainStickyHead} left-[170px] z-[23] w-[76px] px-1.5 py-2 text-center text-[10px] font-semibold`}
-            >
-              CÓDIGO
+            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
+              THR
             </th>
-            <th
-              className={`${favMainStickyHead} left-[246px] z-[24] w-[164px] px-2 py-2 text-left text-[10px] font-semibold`}
-            >
-              JUGADOR
-            </th>
-            <th
-              className={`${favMainStickyHead} left-[410px] z-[25] w-[44px] px-1 py-2 text-center text-[10px] font-semibold`}
-            >
-              CLUB
-            </th>
-            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
-              THRU
-            </th>
-            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
-              CAT
-            </th>
-            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
+            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
               HOY
             </th>
-            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
-              TOTAL
+            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
+              GR
+            </th>
+            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
+              TOT
             </th>
           </tr>
         </thead>
 
         <tbody>
-          {favoriteRows.map((row) => (
-            <tr
-              key={row.entry_id}
-              className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]"
-            >
-              <td
-                className={`${favMainStickyBody} left-0 z-[20] w-[44px] px-1.5 py-1 text-center`}
-              >
-                <FavoriteStar
-                  tournamentId={tournamentId}
-                  playerId={row.player_id}
-                />
-              </td>
+          {favoriteRows.map((row) => {
+            const shortName = publicLeaderboardCompactPlayerName(
+              row,
+              leaderboard
+            );
 
-              <td
-                className={`${favMainStickyBody} left-[44px] z-[21] w-[64px] px-1.5 py-1 text-center text-[13px] font-semibold text-cyan-300`}
+            return (
+              <tr
+                key={row.entry_id}
+                className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]"
               >
-                {row.selected_round_position_category ??
-                  row.selected_round_position ??
-                  "—"}
-              </td>
+                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center align-middle sm:w-[34px]">
+                  <div className="inline-flex justify-center">
+                    <ClubLogoThumb
+                      clubId={row.club_id}
+                      size={24}
+                      title={row.club_label ?? undefined}
+                    />
+                  </div>
+                </td>
 
-              <td
-                className={`${favMainStickyBody} left-[108px] z-[22] w-[62px] px-1.5 py-1 text-center`}
-              >
-                {renderMove(
-                  row.move_vs_previous_category ?? row.move_vs_previous
-                )}
-              </td>
-
-              <td
-                className={`${favMainStickyBody} left-[170px] z-[23] w-[76px] px-1.5 py-1 text-center font-mono text-[10px] text-slate-300`}
-              >
-                {row.player_code}
-              </td>
-
-              <td
-                className={`${favMainStickyBody} left-[246px] z-[24] w-[164px] px-2 py-1`}
-              >
-                <details className="group/details">
-                  <summary className="cursor-pointer list-none">
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="min-w-0 flex-1">
-                        <div
-                          title={row.player_name}
-                          className="truncate text-[11px] font-semibold leading-snug text-white"
-                        >
-                          {row.player_name}
+                <td className={`${stickyNameBodyFav} ${nameCol} px-1 py-1 sm:px-1.5`}>
+                  <details className="group/details">
+                    <summary className="cursor-pointer list-none">
+                      <div className="flex min-w-0 items-start justify-between gap-0.5">
+                        <div className="min-w-0 flex-1">
+                          <div
+                            title={row.player_name}
+                            className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
+                          >
+                            {shortName}
+                          </div>
+                          <div
+                            className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
+                            title={row.player_code}
+                          >
+                            {row.player_code}
+                          </div>
+                          {row.category_code ? (
+                            <div className="mt-0.5 truncate text-[8px] text-slate-400 sm:text-[9px]">
+                              {row.category_code}
+                            </div>
+                          ) : null}
+                          {row.is_disqualified ? (
+                            <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
+                              DQ
+                            </span>
+                          ) : null}
                         </div>
 
-                        {row.category_code ? (
-                          <div className="mt-0.5 truncate text-[9px] text-slate-400">
-                            {row.category_code}
-                          </div>
-                        ) : null}
+                        <div
+                          className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
+                          title="Ver detalle"
+                          aria-label="Ver detalle"
+                        >
+                          ▾
+                        </div>
                       </div>
+                    </summary>
 
-                      <div
-                        className="shrink-0 inline-flex h-5 w-4 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-semibold text-cyan-300"
-                        title="Ver detalle"
-                        aria-label="Ver detalle"
-                      >
-                        ▾
-                      </div>
-                    </div>
-                  </summary>
+                    <DetailTable
+                      row={row}
+                      labels={detailLabels}
+                      selectedRound={selectedRound ?? null}
+                    />
+                  </details>
+                </td>
 
-                  <DetailTable
-                    row={row}
-                    labels={detailLabels}
-                    selectedRound={selectedRound ?? null}
+                <td className="w-[30px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[32px]">
+                  <FavoriteStar
+                    tournamentId={tournamentId}
+                    playerId={row.player_id}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] leading-none transition hover:bg-white/10 sm:h-6 sm:w-6"
                   />
-                </details>
-              </td>
+                </td>
 
-              <td
-                className={`${favMainStickyBody} left-[410px] z-[25] w-[44px] px-1 py-1 text-center align-middle`}
-              >
-                <div className="inline-flex justify-center">
-                  <ClubLogoThumb
-                    clubId={row.club_id}
-                    size={28}
-                    title={row.club_label ?? undefined}
-                  />
-                </div>
-              </td>
+                <td className="w-[50px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
+                  {row.selected_round_position_category ??
+                    row.selected_round_position ??
+                    "—"}
+                </td>
 
-              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px] font-semibold text-sky-300">
-                {formatThru(row.details, selectedRound, row.category_id)}
-              </td>
+                <td className="w-[26px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[28px]">
+                  {renderMove(
+                    row.move_vs_previous_category ?? row.move_vs_previous
+                  )}
+                </td>
 
-              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px]">
-                {row.category_code ?? "—"}
-              </td>
+                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                  {formatThru(row.details, selectedRound, row.category_id)}
+                </td>
 
-              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px] font-semibold">
-                {formatRelative(row.selected_round_to_par)}
-              </td>
+                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                  {formatRelativeOrDQ(
+                    row.selected_round_to_par,
+                    row.is_disqualified
+                  )}
+                </td>
 
-              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[11px] font-semibold text-cyan-300">
-                {formatRelative(row.total_to_par)}
-              </td>
-            </tr>
-          ))}
+                <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
+                  {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
+                </td>
+
+                <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
+                  {formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
