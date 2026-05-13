@@ -1,5 +1,9 @@
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
-import type { LeaderboardRow } from "../lib/types";
+import type { LeaderboardRow, RoundDetail } from "../lib/types";
+import {
+  collectRoundIdsWithScoreCapture,
+  resolveDetailForSelectedRound,
+} from "@/lib/leaderboard/roundCategoryMatch";
 import {
   formatRelativeOrDQ,
   formatScore,
@@ -7,20 +11,53 @@ import {
   scoreMarker,
   selectLeaderboardDetailsForPlayer,
   subtotal,
+  type SelectedRoundMeta,
 } from "../lib/utils";
+
+function hasHoleOrGross(detail: RoundDetail) {
+  return (
+    detail.is_dq ||
+    detail.gross_score != null ||
+    detail.holes.some((hole) => hole.strokes != null)
+  );
+}
+
+function getDisplayDetails({
+  row,
+  selectedRound,
+}: {
+  row: LeaderboardRow;
+  selectedRound: SelectedRoundMeta | null;
+}) {
+  if (selectedRound?.id) {
+    const selectedDetail = resolveDetailForSelectedRound(
+      row.details,
+      selectedRound,
+      row.category_id,
+      collectRoundIdsWithScoreCapture(row.details)
+    );
+
+    if (selectedDetail) {
+      return [selectedDetail];
+    }
+  }
+
+  return selectLeaderboardDetailsForPlayer(row).filter(hasHoleOrGross);
+}
 
 export default function PublicLeaderboardDetailTable({
   row,
+  selectedRound,
 }: {
   row: LeaderboardRow;
+  selectedRound: SelectedRoundMeta | null;
 }) {
-  const displayDetails = selectLeaderboardDetailsForPlayer(row);
+  const displayDetails = getDisplayDetails({ row, selectedRound });
 
   const baseRound =
     displayDetails.find((detail) =>
       detail.holes.some((hole) => hole.par != null)
     ) ??
-    displayDetails[0] ??
     row.details.find((detail) => detail.holes.some((hole) => hole.par != null)) ??
     row.details[0] ??
     null;
@@ -112,69 +149,80 @@ export default function PublicLeaderboardDetailTable({
             <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
           </tr>
 
-          {displayDetails.map((detail, detailIndex) => {
-            const standing =
-              row.standing_by_round_category.find(
-                (s) => s.round_id === detail.round_id
-              ) ??
-              row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
-              null;
-
-            return (
-              <tr
-                key={`detail-${row.entry_id}-${detail.round_id}`}
-                className={
-                  detailIndex % 2 === 0
-                    ? "bg-white/[0.03] text-white"
-                    : "bg-[#0b1728] text-white"
-                }
+          {displayDetails.length === 0 ? (
+            <tr>
+              <td
+                colSpan={27}
+                className="border-b border-white/10 px-3 py-5 text-center text-xs text-slate-400"
               >
-                <td className="border-b border-white/10 px-2 py-1.5 font-semibold text-cyan-100">
-                  R{detail.round_no}
-                </td>
+                No hay captura para la ronda seleccionada.
+              </td>
+            </tr>
+          ) : (
+            displayDetails.map((detail, detailIndex) => {
+              const standing =
+                row.standing_by_round_category.find(
+                  (s) => s.round_id === detail.round_id
+                ) ??
+                row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
+                null;
 
-                {detail.holes.map((hole) => {
-                  const marker = scoreMarker(hole.strokes, hole.par);
+              return (
+                <tr
+                  key={`detail-${row.entry_id}-${detail.round_id}`}
+                  className={
+                    detailIndex % 2 === 0
+                      ? "bg-white/[0.03] text-white"
+                      : "bg-[#0b1728] text-white"
+                  }
+                >
+                  <td className="border-b border-white/10 px-2 py-1.5 font-semibold text-cyan-100">
+                    R{detail.round_no}
+                  </td>
 
-                  return (
-                    <td
-                      key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
-                      className="border-b border-white/10 px-1 py-1 text-center"
-                    >
-                      <span className={marker.wrapper}>
-                        {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
-                        {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
-                        <span
-                          className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
-                        >
-                          {formatScore(hole.strokes)}
+                  {detail.holes.map((hole) => {
+                    const marker = scoreMarker(hole.strokes, hole.par);
+
+                    return (
+                      <td
+                        key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                        className="border-b border-white/10 px-1 py-1 text-center"
+                      >
+                        <span className={marker.wrapper}>
+                          {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
+                          {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
+                          <span
+                            className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
+                          >
+                            {formatScore(hole.strokes)}
+                          </span>
                         </span>
-                      </span>
-                    </td>
-                  );
-                })}
+                      </td>
+                    );
+                  })}
 
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
-                </td>
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
-                </td>
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
-                </td>
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {formatScoreOrDQ(detail.gross_score, detail.is_dq)}
-                </td>
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {formatRelativeOrDQ(detail.to_par, detail.is_dq)}
-                </td>
-                <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                  {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
-                </td>
-              </tr>
-            );
-          })}
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
+                  </td>
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
+                  </td>
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
+                  </td>
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {formatScoreOrDQ(detail.gross_score, detail.is_dq)}
+                  </td>
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {formatRelativeOrDQ(detail.to_par, detail.is_dq)}
+                  </td>
+                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                    {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
+                  </td>
+                </tr>
+              );
+            })
+          )}
         </tbody>
       </table>
     </div>

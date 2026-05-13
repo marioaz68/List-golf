@@ -228,7 +228,10 @@ export default function PublicLeaderboardTable({
                         className="border-b border-white/10 bg-[#08111f]/70 px-3 pb-4 pt-2"
                       >
                         <div className="mx-auto w-full max-w-[1400px]">
-                          <PublicLeaderboardDetailTable row={row} />
+                          <PublicLeaderboardDetailTable
+                            row={row}
+                            selectedRound={selectedRound}
+                          />
                         </div>
                       </td>
                     </tr>
