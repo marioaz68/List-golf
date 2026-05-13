@@ -1351,6 +1351,8 @@ filteredEntries.forEach((entry) => {
                 leaderboard={leaderboard}
                 selectedRound={selectedRound}
                 detailLabels={detailTableLabels}
+                selectedCategoryId={selectedCategoryId}
+                requestedDetailId={requestedDetailId}
               />
             </div>
           ) : (

@@ -1059,6 +1059,8 @@ export default async function PublicTournamentPage({
                 leaderboard={leaderboard}
                 selectedRound={selectedRound}
                 detailLabels={detailTableLabels}
+                selectedCategoryId={selectedCategoryId}
+                requestedDetailId={requestedDetailId}
               />
             </div>
           ) : view === "tee-sheet" ? null : (

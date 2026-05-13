@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import ClubLogoThumb from "./ClubLogoThumb";
 import FavoriteStar from "./FavoriteStar";
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
 import {
+  buildDetailToggleHref,
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
@@ -20,6 +22,8 @@ type FavoritesViewProps = {
   leaderboard: LeaderboardRow[];
   selectedRound?: SelectedRoundMeta | null;
   detailLabels: PublicDetailTableLabels;
+  selectedCategoryId: string;
+  requestedDetailId: string;
 };
 
 function categoryBucket(code: string | null | undefined) {
@@ -287,6 +291,8 @@ export default function FavoritesView({
   leaderboard,
   selectedRound = null,
   detailLabels,
+  selectedCategoryId,
+  requestedDetailId,
 }: FavoritesViewProps) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -405,108 +411,120 @@ export default function FavoritesView({
               row,
               leaderboard
             );
+            const isOpen = requestedDetailId === row.entry_id;
 
             return (
-              <tr
-                key={row.entry_id}
-                className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]"
-              >
-                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center align-middle sm:w-[34px]">
-                  <div className="inline-flex justify-center">
-                    <ClubLogoThumb
-                      clubId={row.club_id}
-                      size={24}
-                      title={row.club_label ?? undefined}
-                    />
-                  </div>
-                </td>
+              <Fragment key={row.entry_id}>
+                <tr className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]">
+                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center align-middle sm:w-[34px]">
+                    <div className="inline-flex justify-center">
+                      <ClubLogoThumb
+                        clubId={row.club_id}
+                        size={24}
+                        title={row.club_label ?? undefined}
+                      />
+                    </div>
+                  </td>
 
-                <td className={`${stickyNameBodyFav} ${nameCol} px-1 py-1 sm:px-1.5`}>
-                  <details className="group/details">
-                    <summary className="cursor-pointer list-none">
-                      <div className="flex min-w-0 items-start justify-between gap-0.5">
-                        <div className="min-w-0 flex-1">
-                          <div
-                            title={row.player_name}
-                            className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
-                          >
-                            {shortName}
-                          </div>
-                          <div
-                            className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
-                            title={row.player_code}
-                          >
-                            {row.player_code}
-                          </div>
-                          {row.category_code ? (
-                            <div className="mt-0.5 truncate text-[8px] text-slate-400 sm:text-[9px]">
-                              {row.category_code}
-                            </div>
-                          ) : null}
-                          {row.is_disqualified ? (
-                            <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
-                              DQ
-                            </span>
-                          ) : null}
-                        </div>
-
+                  <td className={`${stickyNameBodyFav} ${nameCol} px-1 py-1 sm:px-1.5`}>
+                    <div className="flex min-w-0 items-center gap-0.5">
+                      <div className="min-w-0 flex-1">
                         <div
-                          className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
-                          title="Ver detalle"
-                          aria-label="Ver detalle"
+                          title={row.player_name}
+                          className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
                         >
-                          ▾
+                          {shortName}
                         </div>
+                        <div
+                          className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
+                          title={row.player_code}
+                        >
+                          {row.player_code}
+                        </div>
+                        {row.category_code ? (
+                          <div className="mt-0.5 truncate text-[8px] text-slate-400 sm:text-[9px]">
+                            {row.category_code}
+                          </div>
+                        ) : null}
+                        {row.is_disqualified ? (
+                          <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
+                            DQ
+                          </span>
+                        ) : null}
                       </div>
-                    </summary>
+                      <Link
+                        scroll={false}
+                        href={buildDetailToggleHref({
+                          tournamentId,
+                          categoryId: selectedCategoryId || null,
+                          roundId: selectedRound?.id ?? null,
+                          view: "favorites",
+                          currentDetailId: requestedDetailId || null,
+                          nextDetailId: row.entry_id,
+                        })}
+                        className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
+                        aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
+                      >
+                        {isOpen ? "▴" : "▾"}
+                      </Link>
+                    </div>
+                  </td>
 
-                    <PublicLeaderboardDetailTable
-                      row={row}
-                      labels={detailLabels}
-                      selectedRound={selectedRound ?? null}
+                  <td className="w-[30px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[32px]">
+                    <FavoriteStar
+                      tournamentId={tournamentId}
+                      playerId={row.player_id}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] leading-none transition hover:bg-white/10 sm:h-6 sm:w-6"
                     />
-                  </details>
-                </td>
+                  </td>
 
-                <td className="w-[30px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[32px]">
-                  <FavoriteStar
-                    tournamentId={tournamentId}
-                    playerId={row.player_id}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] leading-none transition hover:bg-white/10 sm:h-6 sm:w-6"
-                  />
-                </td>
+                  <td className="w-[50px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
+                    {row.selected_round_position_category ??
+                      row.selected_round_position ??
+                      "—"}
+                  </td>
 
-                <td className="w-[50px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
-                  {row.selected_round_position_category ??
-                    row.selected_round_position ??
-                    "—"}
-                </td>
+                  <td className="w-[26px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[28px]">
+                    {renderMove(
+                      row.move_vs_previous_category ?? row.move_vs_previous
+                    )}
+                  </td>
 
-                <td className="w-[26px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[28px]">
-                  {renderMove(
-                    row.move_vs_previous_category ?? row.move_vs_previous
-                  )}
-                </td>
+                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                    {formatThru(row.details, selectedRound, row.category_id)}
+                  </td>
 
-                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
-                  {formatThru(row.details, selectedRound, row.category_id)}
-                </td>
+                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                    {formatRelativeOrDQ(
+                      row.selected_round_to_par,
+                      row.is_disqualified
+                    )}
+                  </td>
 
-                <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
-                  {formatRelativeOrDQ(
-                    row.selected_round_to_par,
-                    row.is_disqualified
-                  )}
-                </td>
+                  <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
+                    {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
+                  </td>
 
-                <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
-                  {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
-                </td>
+                  <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
+                    {formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
+                  </td>
+                </tr>
 
-                <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                  {formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
-                </td>
-              </tr>
+                {isOpen ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="border-b border-white/5 bg-[#08111f]/70 px-1 pb-2 pt-1.5 sm:px-2"
+                    >
+                      <PublicLeaderboardDetailTable
+                        row={row}
+                        labels={detailLabels}
+                        selectedRound={selectedRound ?? null}
+                      />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>

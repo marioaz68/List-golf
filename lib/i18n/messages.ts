@@ -1403,13 +1403,14 @@ const en: Messages = {
     historicRoundsToggle: "History: other dates & rounds",
     detailHolesCol: "HOLES",
     detailParRow: "Par",
+    /** Same grid as Spanish: holes 1–9, OUT, 10–18, IN, then GROSS / TO PAR / POS (no 18-hole total column). */
     detailFirstNineTitle: "OUT",
-    detailFirstNineSub: "Front nine · holes 1–9",
+    detailFirstNineSub: "",
     detailSecondNineTitle: "IN",
-    detailSecondNineSub: "Back nine · holes 10–18",
+    detailSecondNineSub: "",
     detailTotalTitle: "TOT",
-    detailTotalSub: "18 holes · OUT+IN",
-    detailTotalsPlacement: "trailing-after-18" as
+    detailTotalSub: "",
+    detailTotalsPlacement: "inline-after-nines" as
       | "inline-after-nines"
       | "trailing-after-18",
     detailGross: "GROSS",
