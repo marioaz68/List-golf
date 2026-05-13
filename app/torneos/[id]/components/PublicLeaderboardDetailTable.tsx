@@ -59,10 +59,28 @@ function ThNineCol({
   return (
     <th className="w-[56px] border-b border-white/10 px-1 py-1.5 text-center font-semibold leading-tight">
       <span className="block text-[11px] font-bold text-cyan-50">{title}</span>
-      <span className="mt-0.5 block whitespace-normal text-[8.5px] font-semibold leading-snug text-cyan-200/90">
-        {subtitle}
-      </span>
+      {subtitle ? (
+        <span className="mt-0.5 block whitespace-normal text-[8.5px] font-semibold leading-snug text-cyan-200/90">
+          {subtitle}
+        </span>
+      ) : null}
     </th>
+  );
+}
+
+function GrossToParPosHeads({ labels }: { labels: PublicDetailTableLabels }) {
+  return (
+    <>
+      <th className="w-[52px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+        {labels.gross}
+      </th>
+      <th className="w-[64px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+        {labels.toPar}
+      </th>
+      <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+        {labels.pos}
+      </th>
+    </>
   );
 }
 
@@ -87,6 +105,10 @@ export default function PublicLeaderboardDetailTable({
 
   const baseHoles = baseRound?.holes ?? [];
 
+  const inline = labels.detailTotalsPlacement === "inline-after-nines";
+  const emptyColSpan = inline ? 24 : 25;
+  const tableMinW = inline ? "min-w-[900px]" : "min-w-[960px]";
+
   return (
     <div className="mx-auto mt-2 w-full max-w-full overflow-x-auto rounded-[24px] border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-slate-300">
@@ -103,7 +125,9 @@ export default function PublicLeaderboardDetailTable({
         </div>
       </div>
 
-      <table className="w-full min-w-[960px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
+      <table
+        className={`w-full ${tableMinW} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+      >
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
             <th
@@ -112,27 +136,44 @@ export default function PublicLeaderboardDetailTable({
               {labels.holesCol}
             </th>
 
-            {Array.from({ length: 18 }, (_, i) => (
-              <th
-                key={`hdr-${row.entry_id}-${i + 1}`}
-                className="w-[34px] whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
-              >
-                {i + 1}
-              </th>
-            ))}
-
-            <ThNineCol title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
-            <ThNineCol title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
-            <ThNineCol title={labels.totalTitle} subtitle={labels.totalSub} />
-            <th className="w-[52px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {labels.gross}
-            </th>
-            <th className="w-[64px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {labels.toPar}
-            </th>
-            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {labels.pos}
-            </th>
+            {inline ? (
+              <>
+                {Array.from({ length: 9 }, (_, i) => (
+                  <th
+                    key={`hdr-${row.entry_id}-${i + 1}`}
+                    className="w-[34px] whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
+                  >
+                    {i + 1}
+                  </th>
+                ))}
+                <ThNineCol title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
+                {Array.from({ length: 9 }, (_, i) => (
+                  <th
+                    key={`hdr-${row.entry_id}-${i + 10}`}
+                    className="w-[34px] whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
+                  >
+                    {i + 10}
+                  </th>
+                ))}
+                <ThNineCol title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
+                <GrossToParPosHeads labels={labels} />
+              </>
+            ) : (
+              <>
+                {Array.from({ length: 18 }, (_, i) => (
+                  <th
+                    key={`hdr-${row.entry_id}-${i + 1}`}
+                    className="w-[34px] whitespace-nowrap border-b border-white/10 px-1 py-2 text-center font-semibold"
+                  >
+                    {i + 1}
+                  </th>
+                ))}
+                <ThNineCol title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
+                <ThNineCol title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
+                <ThNineCol title={labels.totalTitle} subtitle={labels.totalSub} />
+                <GrossToParPosHeads labels={labels} />
+              </>
+            )}
           </tr>
         </thead>
 
@@ -144,36 +185,73 @@ export default function PublicLeaderboardDetailTable({
               {labels.parRow}
             </td>
 
-            {Array.from({ length: 18 }, (_, i) => {
-              const hole = baseHoles[i];
-              return (
-                <td
-                  key={`par-${row.entry_id}-${i + 1}`}
-                  className="border-b border-white/10 px-1 py-2 text-center font-semibold"
-                >
-                  {formatScore(hole?.par ?? null)}
+            {inline ? (
+              <>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = baseHoles[i];
+                  return (
+                    <td
+                      key={`par-${row.entry_id}-${i + 1}`}
+                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
+                    >
+                      {formatScore(hole?.par ?? null)}
+                    </td>
+                  );
+                })}
+                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
+                  {formatScore(subtotal(baseHoles, 0, 9, "par"))}
                 </td>
-              );
-            })}
-
-            <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {formatScore(subtotal(baseHoles, 0, 9, "par"))}
-            </td>
-            <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {formatScore(subtotal(baseHoles, 9, 18, "par"))}
-            </td>
-            <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
-              {formatScore(subtotal(baseHoles, 0, 18, "par"))}
-            </td>
-            <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-            <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
-            <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const hole = baseHoles[i + 9];
+                  return (
+                    <td
+                      key={`par-${row.entry_id}-${i + 10}`}
+                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
+                    >
+                      {formatScore(hole?.par ?? null)}
+                    </td>
+                  );
+                })}
+                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
+                  {formatScore(subtotal(baseHoles, 9, 18, "par"))}
+                </td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+              </>
+            ) : (
+              <>
+                {Array.from({ length: 18 }, (_, i) => {
+                  const hole = baseHoles[i];
+                  return (
+                    <td
+                      key={`par-${row.entry_id}-${i + 1}`}
+                      className="border-b border-white/10 px-1 py-2 text-center font-semibold"
+                    >
+                      {formatScore(hole?.par ?? null)}
+                    </td>
+                  );
+                })}
+                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
+                  {formatScore(subtotal(baseHoles, 0, 9, "par"))}
+                </td>
+                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
+                  {formatScore(subtotal(baseHoles, 9, 18, "par"))}
+                </td>
+                <td className="border-b border-white/10 px-1 py-2 text-center font-semibold">
+                  {formatScore(subtotal(baseHoles, 0, 18, "par"))}
+                </td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+                <td className="border-b border-white/10 px-1 py-2 text-center">—</td>
+              </>
+            )}
           </tr>
 
           {displayDetails.length === 0 ? (
             <tr>
               <td
-                colSpan={26}
+                colSpan={emptyColSpan}
                 className="border-b border-white/10 px-3 py-5 text-center text-xs text-slate-400"
               >
                 {labels.noCapture}
@@ -206,36 +284,99 @@ export default function PublicLeaderboardDetailTable({
                     R{detail.round_no}
                   </td>
 
-                  {detail.holes.map((hole) => {
-                    const marker = scoreMarker(hole.strokes, hole.par);
-
-                    return (
-                      <td
-                        key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
-                        className="border-b border-white/10 px-1 py-1 text-center"
-                      >
-                        <span className={marker.wrapper}>
-                          {marker.outer ? <span aria-hidden className={marker.outer} /> : null}
-                          {marker.inner ? <span aria-hidden className={marker.inner} /> : null}
-                          <span
-                            className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
+                  {inline ? (
+                    <>
+                      {detail.holes.slice(0, 9).map((hole) => {
+                        const marker = scoreMarker(hole.strokes, hole.par);
+                        return (
+                          <td
+                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                            className="border-b border-white/10 px-1 py-1 text-center"
                           >
-                            {formatScore(hole.strokes)}
-                          </span>
-                        </span>
+                            <span className={marker.wrapper}>
+                              {marker.outer ? (
+                                <span aria-hidden className={marker.outer} />
+                              ) : null}
+                              {marker.inner ? (
+                                <span aria-hidden className={marker.inner} />
+                              ) : null}
+                              <span
+                                className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
+                              >
+                                {formatScore(hole.strokes)}
+                              </span>
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                        {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
                       </td>
-                    );
-                  })}
+                      {detail.holes.slice(9, 18).map((hole) => {
+                        const marker = scoreMarker(hole.strokes, hole.par);
+                        return (
+                          <td
+                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                            className="border-b border-white/10 px-1 py-1 text-center"
+                          >
+                            <span className={marker.wrapper}>
+                              {marker.outer ? (
+                                <span aria-hidden className={marker.outer} />
+                              ) : null}
+                              {marker.inner ? (
+                                <span aria-hidden className={marker.inner} />
+                              ) : null}
+                              <span
+                                className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
+                              >
+                                {formatScore(hole.strokes)}
+                              </span>
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                        {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      {detail.holes.map((hole) => {
+                        const marker = scoreMarker(hole.strokes, hole.par);
 
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
-                  </td>
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
-                  </td>
-                  <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
-                    {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
-                  </td>
+                        return (
+                          <td
+                            key={`score-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                            className="border-b border-white/10 px-1 py-1 text-center"
+                          >
+                            <span className={marker.wrapper}>
+                              {marker.outer ? (
+                                <span aria-hidden className={marker.outer} />
+                              ) : null}
+                              {marker.inner ? (
+                                <span aria-hidden className={marker.inner} />
+                              ) : null}
+                              <span
+                                className={`relative z-10 text-[10px] font-semibold ${marker.textClass}`}
+                              >
+                                {formatScore(hole.strokes)}
+                              </span>
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                        {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
+                      </td>
+                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                        {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
+                      </td>
+                      <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
+                        {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
+                      </td>
+                    </>
+                  )}
+
                   <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold">
                     {formatScoreOrDQ(detail.gross_score, detail.is_dq)}
                   </td>

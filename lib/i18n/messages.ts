@@ -689,12 +689,15 @@ const es = {
     historicRoundsToggle: "Histórico: otras fechas y rondas",
     detailHolesCol: "HOYOS",
     detailParRow: "Par",
-    detailFirstNineTitle: "IN",
-    detailFirstNineSub: "1ª vuelta · hoyos 1–9",
-    detailSecondNineTitle: "OUT",
-    detailSecondNineSub: "2ª vuelta · hoyos 10–18",
+    detailFirstNineTitle: "1ª",
+    detailFirstNineSub: "",
+    detailSecondNineTitle: "2ª",
+    detailSecondNineSub: "",
     detailTotalTitle: "TOT",
     detailTotalSub: "Total 18 · suma 1ª+2ª",
+    detailTotalsPlacement: "inline-after-nines" as
+      | "inline-after-nines"
+      | "trailing-after-18",
     detailGross: "GROSS",
     detailToPar: "TO PAR",
     detailPos: "POS",
@@ -1406,6 +1409,9 @@ const en: Messages = {
     detailSecondNineSub: "Back nine · holes 10–18",
     detailTotalTitle: "TOT",
     detailTotalSub: "18 holes · OUT+IN",
+    detailTotalsPlacement: "trailing-after-18" as
+      | "inline-after-nines"
+      | "trailing-after-18",
     detailGross: "GROSS",
     detailToPar: "TO PAR",
     detailPos: "POS",

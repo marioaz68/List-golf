@@ -1,3 +1,6 @@
+/** Subtotales: tras hoyos 1–9 y 10–18 (es) vs bloque final tras los 18 (en). */
+export type DetailTotalsPlacement = "inline-after-nines" | "trailing-after-18";
+
 /** Etiquetas de la tabla hoyo por hoyo (torneo público / favoritos). */
 export type PublicDetailTableLabels = {
   holesCol: string;
@@ -12,6 +15,7 @@ export type PublicDetailTableLabels = {
   toPar: string;
   pos: string;
   noCapture: string;
+  detailTotalsPlacement: DetailTotalsPlacement;
 };
 
 type Pub = {
@@ -27,6 +31,7 @@ type Pub = {
   detailToPar: string;
   detailPos: string;
   detailNoCapture: string;
+  detailTotalsPlacement: DetailTotalsPlacement;
 };
 
 export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLabels {
@@ -43,5 +48,6 @@ export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLab
     toPar: pub.detailToPar,
     pos: pub.detailPos,
     noCapture: pub.detailNoCapture,
+    detailTotalsPlacement: pub.detailTotalsPlacement,
   };
 }
