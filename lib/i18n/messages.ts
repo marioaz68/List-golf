@@ -1403,18 +1403,18 @@ const en: Messages = {
     historicRoundsToggle: "History: other dates & rounds",
     detailHolesCol: "HOLES",
     detailParRow: "Par",
-    /** Same grid as Spanish: holes 1–9, OUT, 10–18, IN, then GROSS / TO PAR / POS (no 18-hole total column). */
+    /** US card: holes 1–9, OUT (front nine total), 10–18, IN (back nine total), then GR / vs / POS. */
     detailFirstNineTitle: "OUT",
     detailFirstNineSub: "",
     detailSecondNineTitle: "IN",
     detailSecondNineSub: "",
-    detailTotalTitle: "TOT",
+    detailTotalTitle: "",
     detailTotalSub: "",
     detailTotalsPlacement: "inline-after-nines" as
       | "inline-after-nines"
       | "trailing-after-18",
-    detailGross: "GROSS",
-    detailToPar: "TO PAR",
+    detailGross: "GR",
+    detailToPar: "vs",
     detailPos: "POS",
     detailNoCapture: "No scores for the selected round.",
   },

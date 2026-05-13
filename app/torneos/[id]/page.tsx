@@ -1053,16 +1053,14 @@ export default async function PublicTournamentPage({
           ) : null}
 
           {view === "favorites" ? (
-            <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-              <FavoritesView
-                tournamentId={typedTournament.id}
-                leaderboard={leaderboard}
-                selectedRound={selectedRound}
-                detailLabels={detailTableLabels}
-                selectedCategoryId={selectedCategoryId}
-                requestedDetailId={requestedDetailId}
-              />
-            </div>
+            <FavoritesView
+              tournamentId={typedTournament.id}
+              leaderboard={leaderboard}
+              selectedRound={selectedRound}
+              detailLabels={detailTableLabels}
+              selectedCategoryId={selectedCategoryId}
+              requestedDetailId={requestedDetailId}
+            />
           ) : view === "tee-sheet" ? null : (
             <PublicLeaderboardTable
               tournamentId={typedTournament.id}

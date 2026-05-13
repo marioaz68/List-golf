@@ -247,13 +247,15 @@ export default function PublicLeaderboardTable({
                     <tr>
                       <td
                         colSpan={9}
-                        className="border-b border-white/10 bg-[#08111f]/70 px-1 pb-2 pt-1.5 sm:px-2"
+                        className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top"
                       >
-                        <PublicLeaderboardDetailTable
-                          row={row}
-                          selectedRound={selectedRound}
-                          labels={detailLabels}
-                        />
+                        <div className="w-full min-w-0 px-1 pb-2 pt-1.5 sm:px-2">
+                          <PublicLeaderboardDetailTable
+                            row={row}
+                            selectedRound={selectedRound}
+                            labels={detailLabels}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ) : null}

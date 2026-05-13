@@ -68,14 +68,15 @@ function ThNineCol({
   title: string;
   subtitle: string;
 }) {
+  const sub = subtitle?.trim();
   return (
     <th className="w-[34px] min-w-[32px] max-w-[42px] border-b border-white/10 px-0.5 py-0.5 text-center align-bottom sm:w-[38px] sm:max-w-[44px]">
-      <span className="block truncate text-[7px] font-bold leading-tight text-cyan-50 sm:text-[8px]">
+      <span className="block truncate text-center text-[9px] font-bold leading-none text-cyan-50 sm:text-[10px]">
         {title}
       </span>
-      {subtitle ? (
+      {sub ? (
         <span className="mt-0.5 block truncate text-[6px] font-semibold leading-tight text-cyan-200/80 sm:text-[7px]">
-          {subtitle}
+          {sub}
         </span>
       ) : null}
     </th>
@@ -120,7 +121,9 @@ export default function PublicLeaderboardDetailTable({
   const baseHoles = baseRound?.holes ?? [];
 
   const inline = labels.detailTotalsPlacement === "inline-after-nines";
-  const emptyColSpan = inline ? 24 : 25;
+  const showEighteenTotalCol =
+    !inline && Boolean(labels.totalTitle?.trim());
+  const emptyColSpan = inline ? 24 : showEighteenTotalCol ? 25 : 24;
   const tableMinW = inline ? "min-w-[540px]" : "min-w-[580px]";
 
   const stickyHead =
@@ -189,7 +192,9 @@ export default function PublicLeaderboardDetailTable({
                 ))}
                 <ThNineCol title={labels.firstNineTitle} subtitle={labels.firstNineSub} />
                 <ThNineCol title={labels.secondNineTitle} subtitle={labels.secondNineSub} />
-                <ThNineCol title={labels.totalTitle} subtitle={labels.totalSub} />
+                {showEighteenTotalCol ? (
+                  <ThNineCol title={labels.totalTitle} subtitle={labels.totalSub} />
+                ) : null}
                 <GrossToParPosHeads labels={labels} />
               </>
             )}
@@ -253,9 +258,11 @@ export default function PublicLeaderboardDetailTable({
                 <td className={`${totalTd} bg-emerald-950/90`}>
                   {formatScore(subtotal(baseHoles, 9, 18, "par"))}
                 </td>
-                <td className={`${totalTd} bg-emerald-950/90`}>
-                  {formatScore(subtotal(baseHoles, 0, 18, "par"))}
-                </td>
+                {showEighteenTotalCol ? (
+                  <td className={`${totalTd} bg-emerald-950/90`}>
+                    {formatScore(subtotal(baseHoles, 0, 18, "par"))}
+                  </td>
+                ) : null}
                 <td className={`${totalTd} bg-emerald-950/90`}>—</td>
                 <td className={`${totalTd} bg-emerald-950/90`}>—</td>
                 <td className={`${totalTd} bg-emerald-950/90`}>—</td>
@@ -382,9 +389,11 @@ export default function PublicLeaderboardDetailTable({
                       <td className={`${totalTd} ${stripeBg}`}>
                         {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
                       </td>
-                      <td className={`${totalTd} ${stripeBg}`}>
-                        {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
-                      </td>
+                      {showEighteenTotalCol ? (
+                        <td className={`${totalTd} ${stripeBg}`}>
+                          {detail.is_dq ? "DQ" : formatScore(detail.total_score)}
+                        </td>
+                      ) : null}
                     </>
                   )}
 

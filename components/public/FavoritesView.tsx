@@ -363,7 +363,7 @@ export default function FavoritesView({
     "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
 
   return (
-    <div className="overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-white/10 text-slate-300">
@@ -514,13 +514,15 @@ export default function FavoritesView({
                   <tr>
                     <td
                       colSpan={9}
-                      className="border-b border-white/5 bg-[#08111f]/70 px-1 pb-2 pt-1.5 sm:px-2"
+                      className="border-b border-white/5 bg-[#08111f]/70 p-0 align-top"
                     >
-                      <PublicLeaderboardDetailTable
-                        row={row}
-                        labels={detailLabels}
-                        selectedRound={selectedRound ?? null}
-                      />
+                      <div className="w-full min-w-0 px-1 pb-2 pt-1.5 sm:px-2">
+                        <PublicLeaderboardDetailTable
+                          row={row}
+                          labels={detailLabels}
+                          selectedRound={selectedRound ?? null}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ) : null}
