@@ -363,8 +363,8 @@ export default function FavoritesView({
     "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
 
   return (
-    <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
+    <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <table className="table-fixed w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
@@ -415,8 +415,8 @@ export default function FavoritesView({
 
             return (
               <Fragment key={row.entry_id}>
-                <tr className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]">
-                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center align-middle sm:w-[34px]">
+                <tr className="group border-b border-white/10 align-top text-white transition hover:bg-white/[0.03]">
+                  <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center align-middle sm:w-[34px]">
                     <div className="inline-flex justify-center">
                       <ClubLogoThumb
                         clubId={row.club_id}
@@ -470,7 +470,7 @@ export default function FavoritesView({
                     </div>
                   </td>
 
-                  <td className="w-[30px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[32px]">
+                  <td className="w-[30px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[32px]">
                     <FavoriteStar
                       tournamentId={tournamentId}
                       playerId={row.player_id}
@@ -478,34 +478,34 @@ export default function FavoritesView({
                     />
                   </td>
 
-                  <td className="w-[50px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
+                  <td className="w-[50px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
                     {row.selected_round_position_category ??
                       row.selected_round_position ??
                       "—"}
                   </td>
 
-                  <td className="w-[26px] border-b border-white/5 px-0.5 py-1 text-center sm:w-[28px]">
+                  <td className="w-[26px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[28px]">
                     {renderMove(
                       row.move_vs_previous_category ?? row.move_vs_previous
                     )}
                   </td>
 
-                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                  <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
                     {formatThru(row.details, selectedRound, row.category_id)}
                   </td>
 
-                  <td className="w-[32px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
+                  <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
                     {formatRelativeOrDQ(
                       row.selected_round_to_par,
                       row.is_disqualified
                     )}
                   </td>
 
-                  <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
+                  <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
                     {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
                   </td>
 
-                  <td className="w-[34px] border-b border-white/5 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
+                  <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
                     {formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
                   </td>
                 </tr>
@@ -514,9 +514,9 @@ export default function FavoritesView({
                   <tr>
                     <td
                       colSpan={9}
-                      className="border-b border-white/5 bg-[#08111f]/70 p-0 align-top"
+                      className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                     >
-                      <div className="w-full min-w-0 px-1 pb-2 pt-1.5 sm:px-2">
+                      <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
                         <PublicLeaderboardDetailTable
                           row={row}
                           labels={detailLabels}

@@ -11,5 +11,7 @@ export async function setUserLocale(locale: Locale) {
     path: "/",
     maxAge: COOKIE_MAX_AGE,
     sameSite: "lax",
+    /** Safari móvil en HTTPS suele ignorar cookies sin Secure en producción. */
+    secure: process.env.NODE_ENV === "production",
   });
 }

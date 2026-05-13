@@ -64,8 +64,8 @@ export default function PublicLeaderboardTable({
   const nameCol = "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
 
   return (
-    <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
+    <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <table className="table-fixed w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
@@ -247,9 +247,9 @@ export default function PublicLeaderboardTable({
                     <tr>
                       <td
                         colSpan={9}
-                        className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top"
+                        className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                       >
-                        <div className="w-full min-w-0 px-1 pb-2 pt-1.5 sm:px-2">
+                        <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
                           <PublicLeaderboardDetailTable
                             row={row}
                             selectedRound={selectedRound}

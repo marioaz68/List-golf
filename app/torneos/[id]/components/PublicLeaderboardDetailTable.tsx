@@ -136,7 +136,7 @@ export default function PublicLeaderboardDetailTable({
     `${stickyLabelBase} w-[40px] min-w-[40px] max-w-[44px] px-1 py-0.5 text-left text-[8px] font-semibold leading-tight text-cyan-100 sm:w-[44px] sm:min-w-[44px] sm:text-[9px] ${stripeBg}`;
 
   return (
-    <div className="mt-1.5 w-full min-w-0 overflow-x-auto rounded-xl border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] [-webkit-overflow-scrolling:touch]">
+    <div className="mt-1.5 inline-block w-max min-w-0 max-w-full rounded-xl border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <div className="flex min-w-0 items-center gap-1.5 border-b border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] font-semibold text-slate-300 sm:text-[10px]">
         <ClubLogoThumb
           clubId={row.club_id}
@@ -152,7 +152,7 @@ export default function PublicLeaderboardDetailTable({
       </div>
 
       <table
-        className={`w-full ${tableMinW} border-separate border-spacing-0 text-[9px] text-white sm:text-[10px]`}
+        className={`w-max min-w-full ${tableMinW} border-separate border-spacing-0 text-[9px] text-white sm:text-[10px]`}
       >
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
