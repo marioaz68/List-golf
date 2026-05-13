@@ -498,6 +498,36 @@ export function pillClasses(active: boolean) {
     : "inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700";
 }
 
+const publicTourNavCell =
+  "flex min-h-10 w-full max-w-full items-center justify-center whitespace-normal text-balance px-2 py-2 text-center text-[10px] font-bold leading-snug sm:min-h-9 sm:px-2.5 sm:text-[11px] sm:leading-tight";
+
+/** Live / leaderboard / tee / favorites: fills equal-width grid cells (ES + EN copy). */
+export function publicTournamentViewPillClasses(active: boolean) {
+  return active
+    ? `${publicTourNavCell} rounded-md border border-cyan-300 bg-gradient-to-b from-cyan-300 to-cyan-500 text-[#08111f] shadow-[0_3px_0_#0e7490,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-cyan-200 hover:to-cyan-400`
+    : `${publicTourNavCell} rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700`;
+}
+
+const publicTourOutboundCell =
+  "flex min-h-10 w-full max-w-full items-center justify-center whitespace-normal text-balance px-2 py-2 text-center text-[10px] font-bold leading-snug text-white sm:min-h-9 sm:px-2.5 sm:text-[11px] sm:leading-tight";
+
+/** Home + browse tournaments (+ admin): slate gradient, grid cell. */
+export function publicTournamentOutboundNavClasses() {
+  return `${publicTourOutboundCell} rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700`;
+}
+
+/** Admin + e-signature in hero nav grid (emerald). */
+export function publicTournamentEmeraldHeroNavClasses() {
+  return `${publicTourOutboundCell} rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600`;
+}
+
+/** `repeat(auto-fit, minmax(...))` so buttons stay even in ES/EN on phone + desktop. */
+export const publicTournamentPrimaryNavGridClass =
+  "grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12.5rem),1fr))]";
+
+export const publicTournamentSecondaryNavGridClass =
+  "grid w-full gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10.75rem),1fr))]";
+
 export function adminPillClasses() {
   return "inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600";
 }

@@ -28,7 +28,6 @@ import type {
 } from "./lib/types";
 
 import {
-  adminPillClasses,
   buildHref,
   buildScorecardsHref,
   formatDate,
@@ -40,7 +39,11 @@ import {
   isStartingOrderConfirmed,
   nameOfPlayer,
   normalizeClubLabel,
-  pillClasses,
+  publicTournamentEmeraldHeroNavClasses,
+  publicTournamentOutboundNavClasses,
+  publicTournamentPrimaryNavGridClass,
+  publicTournamentSecondaryNavGridClass,
+  publicTournamentViewPillClasses,
   roundBelongsToCategory,
   roundDateUtcKey,
   sectionPillClasses,
@@ -588,31 +591,37 @@ export default async function PublicTournamentPage({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.12),transparent_25%)]" />
 
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mb-5 flex flex-col gap-4">
+            <div className="flex w-full justify-end">
+              <PublicLanguageToggle locale={locale} />
+            </div>
+
+            <div className={publicTournamentSecondaryNavGridClass}>
               <Link
                 href="/"
-                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
+                className={publicTournamentOutboundNavClasses()}
               >
                 {pub.home}
               </Link>
 
               <Link
                 href="/#torneos"
-                className="inline-flex min-h-8 items-center justify-center rounded-md border border-slate-600 bg-gradient-to-b from-slate-700 to-slate-800 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#0f172a,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-slate-600 hover:to-slate-700"
+                className={publicTournamentOutboundNavClasses()}
               >
                 {pub.seeTournaments}
               </Link>
 
               {isLoggedIn ? (
-                <Link href="/tournaments" className={adminPillClasses()}>
+                <Link
+                  href="/tournaments"
+                  className={publicTournamentEmeraldHeroNavClasses()}
+                >
                   {pub.adminList}
                 </Link>
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <PublicLanguageToggle locale={locale} />
+            <div className={publicTournamentPrimaryNavGridClass}>
               <Link
                 scroll={false}
                 href={buildHref({
@@ -621,7 +630,7 @@ export default async function PublicTournamentPage({
                   roundId: selectedRound?.id ?? null,
                   view: "live",
                 })}
-                className={pillClasses(view === "live")}
+                className={publicTournamentViewPillClasses(view === "live")}
               >
                 {pub.live}
               </Link>
@@ -634,7 +643,9 @@ export default async function PublicTournamentPage({
                   roundId: selectedRound?.id ?? null,
                   view: "official",
                 })}
-                className={pillClasses(view === "official")}
+                className={publicTournamentViewPillClasses(
+                  view === "official"
+                )}
               >
                 {pub.leaderboard}
               </Link>
@@ -646,7 +657,9 @@ export default async function PublicTournamentPage({
                   categoryId: selectedCategoryId || null,
                   view: "tee-sheet",
                 })}
-                className={pillClasses(view === "tee-sheet")}
+                className={publicTournamentViewPillClasses(
+                  view === "tee-sheet"
+                )}
               >
                 {pub.teeSheet}
               </Link>
@@ -659,7 +672,9 @@ export default async function PublicTournamentPage({
                   roundId: selectedRound?.id ?? null,
                   view: "favorites",
                 })}
-                className={pillClasses(view === "favorites")}
+                className={publicTournamentViewPillClasses(
+                  view === "favorites"
+                )}
               >
                 {pub.favorites}
               </Link>
@@ -669,7 +684,7 @@ export default async function PublicTournamentPage({
                   tournamentId: typedTournament.id,
                   roundId: selectedRound?.id ?? null,
                 })}
-                className="inline-flex min-h-8 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-3 text-[11px] font-bold leading-none text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
+                className={publicTournamentEmeraldHeroNavClasses()}
               >
                 {pub.eSignature}
               </Link>

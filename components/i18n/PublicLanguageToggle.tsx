@@ -36,7 +36,7 @@ export function PublicLanguageToggle({ locale }: { locale: Locale }) {
   );
 
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/60 px-1.5 py-1">
+    <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/60 px-1.5 py-1">
       <span className="hidden text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:inline">
         {t.language.label}
       </span>
