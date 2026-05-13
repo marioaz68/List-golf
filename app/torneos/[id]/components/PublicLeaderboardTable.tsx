@@ -13,6 +13,11 @@ import {
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
 
+const stickyHead =
+  "sticky border-b border-r border-white/10 bg-[#1a2838] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)]";
+const stickyBody =
+  "sticky border-b border-r border-white/10 bg-[#0c1728] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)] group-hover:bg-[#101c2c]";
+
 function renderMove(move: number | null) {
   if (move == null || move === 0) {
     return <span className="text-slate-500">—</span>;
@@ -54,50 +59,72 @@ export default function PublicLeaderboardTable({
   requestedDetailId,
   detailLabels,
 }: PublicLeaderboardTableProps) {
+  const posW = view === "official" ? "w-[54px]" : "w-[62px]";
+  const posLeft = "left-[42px]";
+  const mvLeft = view === "official" ? "left-[96px]" : "left-[104px]";
+  const codLeft = view === "official" ? "left-[130px]" : "left-[138px]";
+  const playerLeft = view === "official" ? "left-[176px]" : "left-[184px]";
+  const playerColW = "w-[164px]";
+  const clubLeft = view === "official" ? "left-[340px]" : "left-[348px]";
+
   return (
     <div className="w-full overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="w-full min-w-[1140px] table-auto border-collapse text-[12px]">
+      <table className="w-full min-w-[1020px] border-separate border-spacing-0 text-[11px] text-white">
         <thead>
           <tr className="bg-white/10 text-slate-300">
-            <th className="w-[42px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th
+              className={`${stickyHead} left-0 z-[20] w-[42px] px-1 py-2 text-center text-[10px] font-semibold`}
+            >
               ★
             </th>
 
             {view === "official" ? (
-              <th className="w-[54px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+              <th
+                className={`${stickyHead} ${posLeft} z-[21] w-[54px] px-1 py-2 text-center text-[10px] font-semibold`}
+              >
                 POS
               </th>
             ) : (
-              <th className="w-[62px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+              <th
+                className={`${stickyHead} ${posLeft} z-[21] w-[62px] px-1 py-2 text-center text-[10px] font-semibold leading-tight`}
+              >
                 POS CAT
               </th>
             )}
 
-            <th className="w-[34px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th
+              className={`${stickyHead} ${mvLeft} z-[22] w-[34px] px-1 py-2 text-center text-[10px] font-semibold`}
+            >
               MV
             </th>
-            <th className="w-[46px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th
+              className={`${stickyHead} ${codLeft} z-[23] w-[46px] px-1 py-2 text-center text-[10px] font-semibold`}
+            >
               COD
             </th>
-            <th className="min-w-[320px] border-b border-white/10 px-2 py-2 text-left font-semibold">
+            <th
+              className={`${stickyHead} ${playerLeft} z-[24] ${playerColW} px-2 py-2 text-left text-[10px] font-semibold`}
+            >
               JUGADOR
             </th>
-            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th
+              className={`${stickyHead} ${clubLeft} z-[25] w-[44px] px-1 py-2 text-center text-[10px] font-semibold`}
+            >
               CLUB
             </th>
-            <th className="w-[34px] border-b border-white/10 px-1 py-2 text-left font-semibold">
+            <th className="w-[32px] border-b border-white/10 px-1 py-2 text-left text-[10px] font-semibold">
               CAT
             </th>
-            <th className="w-[40px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th className="w-[38px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
               THRU
             </th>
-            <th className="w-[46px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
               RONDA
             </th>
-            <th className="w-[46px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th className="w-[44px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
               TOTAL
             </th>
-            <th className="w-[52px] border-b border-white/10 px-1 py-2 text-center font-semibold">
+            <th className="w-[48px] border-b border-white/10 px-1 py-2 text-center text-[10px] font-semibold">
               GROSS
             </th>
           </tr>
@@ -131,38 +158,50 @@ export default function PublicLeaderboardTable({
 
               return (
                 <Fragment key={row.entry_id}>
-                  <tr className="border-b border-white/10 bg-transparent align-top text-white transition hover:bg-white/[0.03]">
-                    <td className="px-1 py-2 text-center">
+                  <tr className="group border-b border-white/10 bg-transparent align-top text-white transition hover:bg-white/[0.03]">
+                    <td
+                      className={`${stickyBody} left-0 z-[20] w-[42px] px-1 py-1.5 text-center`}
+                    >
                       <FavoriteStar
                         tournamentId={tournamentId}
                         playerId={row.player_id}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-sm leading-none transition hover:bg-white/10"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs leading-none transition hover:bg-white/10"
                       />
                     </td>
 
-                    <td className="px-1 py-2 text-center font-bold text-cyan-300">
+                    <td
+                      className={`${stickyBody} ${posLeft} z-[21] ${posW} px-1 py-1.5 text-center text-[12px] font-bold text-cyan-300`}
+                    >
                       {position}
                     </td>
 
-                    <td className="px-1 py-2 text-center">{renderMove(move)}</td>
+                    <td
+                      className={`${stickyBody} ${mvLeft} z-[22] w-[34px] px-1 py-1.5 text-center`}
+                    >
+                      {renderMove(move)}
+                    </td>
 
-                    <td className="px-1 py-2 text-center font-mono text-[11px] text-slate-300">
+                    <td
+                      className={`${stickyBody} ${codLeft} z-[23] w-[46px] px-1 py-1.5 text-center font-mono text-[10px] text-slate-300`}
+                    >
                       {row.player_code}
                     </td>
 
-                    <td className="w-full px-2 py-2">
-                      <div className="flex min-w-0 w-full items-center gap-1.5">
+                    <td
+                      className={`${stickyBody} ${playerLeft} z-[24] ${playerColW} px-2 py-1.5`}
+                    >
+                      <div className="flex min-w-0 items-center gap-1">
                         <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 w-full items-center gap-1.5">
+                          <div className="flex min-w-0 items-center gap-1">
                             <span
                               title={row.player_name}
-                              className="block min-w-0 w-full overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-semibold leading-tight text-white"
+                              className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-semibold leading-snug text-white"
                             >
                               {row.player_name}
                             </span>
 
                             {row.is_disqualified ? (
-                              <span className="shrink-0 inline-flex rounded border border-red-400/40 bg-red-500/10 px-1.5 py-[1px] text-[10px] font-bold text-red-300">
+                              <span className="shrink-0 inline-flex rounded border border-red-400/40 bg-red-500/10 px-1 py-[1px] text-[9px] font-bold text-red-300">
                                 DQ
                               </span>
                             ) : null}
@@ -179,7 +218,7 @@ export default function PublicLeaderboardTable({
                             currentDetailId: requestedDetailId || null,
                             nextDetailId: row.entry_id,
                           })}
-                          className="inline-flex h-6 w-5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[10px] font-semibold text-cyan-300 transition hover:bg-cyan-400/15"
+                          className="inline-flex h-5 w-4 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-semibold text-cyan-300 transition hover:bg-cyan-400/15"
                           aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
                         >
                           {isOpen ? "▴" : "▾"}
@@ -187,39 +226,41 @@ export default function PublicLeaderboardTable({
                       </div>
                     </td>
 
-                    <td className="px-1 py-2 text-center align-middle">
+                    <td
+                      className={`${stickyBody} ${clubLeft} z-[25] w-[44px] px-1 py-1.5 text-center align-middle`}
+                    >
                       <div className="inline-flex justify-center">
                         <ClubLogoThumb
                           clubId={row.club_id}
-                          size={36}
+                          size={28}
                           title={row.club_label ?? undefined}
                         />
                       </div>
                     </td>
 
-                    <td className="px-1 py-2 text-slate-300">
+                    <td className="border-b border-white/10 px-1 py-1.5 text-[10px] text-slate-300">
                       {row.category_code ?? "—"}
                     </td>
 
-                    <td className="px-1 py-2 text-center font-semibold text-slate-200">
+                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
                       {formatThru(row.details, selectedRound, row.category_id)}
                     </td>
 
-                    <td className="px-1 py-2 text-center font-semibold text-slate-200">
+                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
                       {formatRelativeOrDQ(
                         row.selected_round_to_par,
                         row.is_disqualified
                       )}
                     </td>
 
-                    <td className="px-1 py-2 text-center font-bold text-white">
+                    <td className="border-b border-white/10 px-1 py-1.5 text-center text-[12px] font-bold text-white">
                       {formatRelativeOrDQ(
                         row.total_to_par,
                         row.is_disqualified
                       )}
                     </td>
 
-                    <td className="px-1 py-2 text-center font-semibold text-slate-200">
+                    <td className="border-b border-white/10 px-1 py-1.5 text-center font-semibold text-slate-200">
                       {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
                     </td>
                   </tr>

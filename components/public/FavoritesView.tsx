@@ -339,6 +339,11 @@ function renderMove(move: number | null) {
 const stickyLabelBaseFav =
   "sticky left-0 border-b border-r border-white/10 shadow-[6px_0_14px_-6px_rgba(0,0,0,0.55)]";
 
+const favMainStickyHead =
+  "sticky border-b border-r border-white/10 bg-[#1a2838] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)]";
+const favMainStickyBody =
+  "sticky border-b border-r border-white/10 bg-[#0c1728] shadow-[4px_0_12px_-4px_rgba(0,0,0,0.45)] group-hover:bg-[#101c2c]";
+
 function ThNineColFav({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <th className="border-b border-white/10 px-1 py-1.5 text-center font-semibold leading-tight">
@@ -742,35 +747,50 @@ export default function FavoritesView({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1000px] border-collapse text-[12px]">
+    <div className="overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <table className="w-full min-w-[980px] border-separate border-spacing-0 text-[11px] text-white">
         <thead>
           <tr className="bg-white/10 text-slate-300">
-            <th className="w-[48px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th
+              className={`${favMainStickyHead} left-0 z-[20] w-[44px] px-1.5 py-2 text-center text-[10px] font-semibold`}
+            >
               ★
             </th>
-            <th className="w-[72px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th
+              className={`${favMainStickyHead} left-[44px] z-[21] w-[64px] px-1.5 py-2 text-center text-[10px] font-semibold leading-tight`}
+            >
               POS CAT
             </th>
-            <th className="w-[70px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th
+              className={`${favMainStickyHead} left-[108px] z-[22] w-[62px] px-1.5 py-2 text-center text-[10px] font-semibold`}
+            >
               MOVE
             </th>
-            <th className="w-[84px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th
+              className={`${favMainStickyHead} left-[170px] z-[23] w-[76px] px-1.5 py-2 text-center text-[10px] font-semibold`}
+            >
               CÓDIGO
             </th>
-            <th className="w-[180px] border-b border-white/10 px-3 py-2 text-left font-semibold">
+            <th
+              className={`${favMainStickyHead} left-[246px] z-[24] w-[164px] px-2 py-2 text-left text-[10px] font-semibold`}
+            >
               JUGADOR
             </th>
-            <th className="w-[70px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th
+              className={`${favMainStickyHead} left-[410px] z-[25] w-[44px] px-1 py-2 text-center text-[10px] font-semibold`}
+            >
+              CLUB
+            </th>
+            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
               THRU
             </th>
-            <th className="w-[78px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
               CAT
             </th>
-            <th className="w-[78px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
               HOY
             </th>
-            <th className="w-[78px] border-b border-white/10 px-2 py-2 text-center font-semibold">
+            <th className="w-[56px] border-b border-white/10 px-1.5 py-2 text-center text-[10px] font-semibold">
               TOTAL
             </th>
           </tr>
@@ -780,57 +800,62 @@ export default function FavoritesView({
           {favoriteRows.map((row) => (
             <tr
               key={row.entry_id}
-              className="border-b border-white/5 align-top text-white"
+              className="group border-b border-white/5 align-top text-white transition hover:bg-white/[0.03]"
             >
-              <td className="px-2 py-1.5 text-center">
+              <td
+                className={`${favMainStickyBody} left-0 z-[20] w-[44px] px-1.5 py-1 text-center`}
+              >
                 <FavoriteStar
                   tournamentId={tournamentId}
                   playerId={row.player_id}
                 />
               </td>
 
-              <td className="px-2 py-1 text-center text-[18px] font-semibold text-cyan-300">
+              <td
+                className={`${favMainStickyBody} left-[44px] z-[21] w-[64px] px-1.5 py-1 text-center text-[13px] font-semibold text-cyan-300`}
+              >
                 {row.selected_round_position_category ??
                   row.selected_round_position ??
                   "—"}
               </td>
 
-              <td className="px-2 py-1 text-center">
+              <td
+                className={`${favMainStickyBody} left-[108px] z-[22] w-[62px] px-1.5 py-1 text-center`}
+              >
                 {renderMove(
                   row.move_vs_previous_category ?? row.move_vs_previous
                 )}
               </td>
 
-              <td className="px-2 py-1 text-center font-mono text-[11px] text-slate-300">
+              <td
+                className={`${favMainStickyBody} left-[170px] z-[23] w-[76px] px-1.5 py-1 text-center font-mono text-[10px] text-slate-300`}
+              >
                 {row.player_code}
               </td>
 
-              <td className="px-3 py-1">
-                <details className="group">
+              <td
+                className={`${favMainStickyBody} left-[246px] z-[24] w-[164px] px-2 py-1`}
+              >
+                <details className="group/details">
                   <summary className="cursor-pointer list-none">
                     <div className="flex items-start justify-between gap-1">
-                      <div className="min-w-0">
-                        <div className="truncate text-[12px] font-semibold leading-tight text-white">
+                      <div className="min-w-0 flex-1">
+                        <div
+                          title={row.player_name}
+                          className="truncate text-[11px] font-semibold leading-snug text-white"
+                        >
                           {row.player_name}
                         </div>
 
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
-                          <ClubLogoThumb
-                            clubId={row.club_id}
-                            size={22}
-                            title={row.club_label ?? undefined}
-                          />
-                          {row.category_code ? (
-                            <>
-                              <span>•</span>
-                              <span>{row.category_code}</span>
-                            </>
-                          ) : null}
-                        </div>
+                        {row.category_code ? (
+                          <div className="mt-0.5 truncate text-[9px] text-slate-400">
+                            {row.category_code}
+                          </div>
+                        ) : null}
                       </div>
 
                       <div
-                        className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[11px] font-semibold text-cyan-300"
+                        className="shrink-0 inline-flex h-5 w-4 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[9px] font-semibold text-cyan-300"
                         title="Ver detalle"
                         aria-label="Ver detalle"
                       >
@@ -847,19 +872,31 @@ export default function FavoritesView({
                 </details>
               </td>
 
-              <td className="px-2 py-1 text-center font-semibold text-sky-300">
+              <td
+                className={`${favMainStickyBody} left-[410px] z-[25] w-[44px] px-1 py-1 text-center align-middle`}
+              >
+                <div className="inline-flex justify-center">
+                  <ClubLogoThumb
+                    clubId={row.club_id}
+                    size={28}
+                    title={row.club_label ?? undefined}
+                  />
+                </div>
+              </td>
+
+              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px] font-semibold text-sky-300">
                 {formatThru(row.details, selectedRound, row.category_id)}
               </td>
 
-              <td className="px-2 py-1 text-center">
+              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px]">
                 {row.category_code ?? "—"}
               </td>
 
-              <td className="px-2 py-1 text-center font-semibold">
+              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[10px] font-semibold">
                 {formatRelative(row.selected_round_to_par)}
               </td>
 
-              <td className="px-2 py-1 text-center font-semibold text-cyan-300">
+              <td className="border-b border-white/5 px-1.5 py-1 text-center text-[11px] font-semibold text-cyan-300">
                 {formatRelative(row.total_to_par)}
               </td>
             </tr>

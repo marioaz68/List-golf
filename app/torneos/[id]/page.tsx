@@ -564,9 +564,6 @@ export default async function PublicTournamentPage({
       return a.group_no - b.group_no;
     });
 
-  const playersWithScores = leaderboard.filter((row) => row.hasScores).length;
-  const playersPendingScores = Math.max(filteredEntries.length - playersWithScores, 0);
-
   const pageTitle =
     view === "official"
       ? pub.pageTitleOfficial
@@ -679,7 +676,7 @@ export default async function PublicTournamentPage({
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[auto,1fr,0.85fr] lg:items-end">
+          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[auto,1fr] lg:items-end">
             {posterUrl ? (
               <div className="flex justify-center lg:justify-start">
                 <div className="relative h-40 w-28 overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl shadow-black/30">
@@ -732,37 +729,6 @@ export default async function PublicTournamentPage({
               <p className="mt-5 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
                 {pageDescription}
               </p>
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-2xl shadow-cyan-950/20 backdrop-blur">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/10 bg-[#0c1728] p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    {pub.statRounds}
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-white">
-                    {rounds.length}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/10 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200">
-                    {pub.statStarts}
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-white">
-                    {publicPairingGroups.length}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-[#0c1728] p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                    {pub.statPending}
-                  </p>
-                  <p className="mt-2 text-2xl font-black text-white">
-                    {playersPendingScores}
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
 
