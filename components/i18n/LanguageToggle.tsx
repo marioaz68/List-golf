@@ -19,21 +19,35 @@ export default function LanguageToggle() {
     });
   }
 
-  const btn = (code: Locale, label: string) => (
-    <button
-      key={code}
-      type="button"
-      disabled={pending}
-      onClick={() => pick(code)}
-      className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition ${
-        locale === code
-          ? "bg-[#63BC46] text-black shadow-sm"
-          : "text-white/70 hover:bg-white/10"
-      } ${pending ? "opacity-50" : ""}`}
-    >
-      {label}
-    </button>
-  );
+  const btn = (code: Locale, label: string) => {
+    const isActive = locale === code;
+    const ariaLabel =
+      code === "es"
+        ? isActive
+          ? t.language.ariaEsActive
+          : t.language.ariaEsInactive
+        : isActive
+          ? t.language.ariaEnActive
+          : t.language.ariaEnInactive;
+
+    return (
+      <button
+        key={code}
+        type="button"
+        disabled={pending}
+        onClick={() => pick(code)}
+        aria-label={ariaLabel}
+        aria-pressed={isActive}
+        className={`rounded-md px-2.5 py-1 text-[11px] font-bold transition ${
+          isActive
+            ? "bg-[#63BC46] text-black shadow-sm"
+            : "text-white/70 hover:bg-white/10"
+        } ${pending ? "opacity-50" : ""}`}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
     <div className="flex items-center gap-2">

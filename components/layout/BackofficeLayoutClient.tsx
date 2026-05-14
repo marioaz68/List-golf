@@ -51,7 +51,10 @@ export default function BackofficeLayoutClient({
       <BrowserBehaviorFix />
       <AppLocaleProvider locale={locale}>
         <BackofficeNavProvider>
-          <div className="flex min-h-screen overflow-hidden bg-[#0F1720] text-white">
+          <div
+            className="flex min-h-screen overflow-hidden bg-[#0F1720] text-white"
+            lang={locale}
+          >
             <MobileBackdrop />
             <Sidebar />
 

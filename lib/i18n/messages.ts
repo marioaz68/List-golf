@@ -5,6 +5,10 @@ const es = {
     label: "Idioma",
     es: "ES",
     en: "EN",
+    ariaEsActive: "Idioma actual: español",
+    ariaEsInactive: "Cambiar la interfaz a español",
+    ariaEnActive: "Idioma actual: inglés",
+    ariaEnInactive: "Cambiar la interfaz a inglés",
   },
   sidebar: {
     activeTournament: "Torneo activo",
@@ -795,6 +799,10 @@ const en: Messages = {
     label: "Language",
     es: "ES",
     en: "EN",
+    ariaEsActive: "Current language: Spanish",
+    ariaEsInactive: "Switch interface to Spanish",
+    ariaEnActive: "Current language: English",
+    ariaEnInactive: "Switch interface to English",
   },
   sidebar: {
     activeTournament: "Active tournament",

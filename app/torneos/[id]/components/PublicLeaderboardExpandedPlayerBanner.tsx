@@ -1,9 +1,15 @@
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
 
+const sep = (
+  <span className="shrink-0 select-none text-slate-500" aria-hidden>
+    ·
+  </span>
+);
+
 /**
- * Al expandir el detalle hoyo por hoyo, la fila principal suele mostrar nombre abreviado
- * (primer apellido oculto si no hay homónimos). Este bloque muestra identidad completa.
+ * Al expandir el detalle hoyo por hoyo, la fila principal suele mostrar nombre abreviado.
+ * Una sola fila compacta (scroll horizontal si no cabe) con nombre completo y meta.
  */
 export default function PublicLeaderboardExpandedPlayerBanner({
   row,
@@ -18,31 +24,32 @@ export default function PublicLeaderboardExpandedPlayerBanner({
   const club = row.club_label?.trim();
 
   return (
-    <div className="mb-2 rounded-lg border border-cyan-500/25 bg-[#0c1728]/95 px-2 py-2 sm:px-3">
-      <p className="text-[12px] font-bold leading-snug text-white sm:text-sm">
-        {fullName}
-      </p>
-      <p className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[10px] leading-snug text-slate-300 sm:text-[11px]">
-        <span>
-          <span className="font-semibold text-cyan-200/95">
-            {labels.detailExpandedCategoryLabel}
-          </span>
-          {": "}
-          <span className="font-medium text-slate-100">{cat}</span>
+    <div className="mb-1.5 flex min-w-0 flex-nowrap items-center gap-x-1 overflow-x-auto rounded-lg border border-cyan-500/25 bg-[#0c1728]/95 px-2 py-1.5 text-[10px] leading-tight text-slate-200 [-webkit-overflow-scrolling:touch] sm:text-[11px]">
+      <span className="shrink-0 font-bold text-white">{fullName}</span>
+      {sep}
+      <span className="shrink-0 whitespace-nowrap">
+        <span className="font-semibold text-cyan-200/95">
+          {labels.detailExpandedCategoryLabel}
         </span>
-        <span className="font-mono text-[10px] text-slate-400 sm:text-[11px]">
-          {code}
-        </span>
-        {club ? (
-          <span className="min-w-0">
+        <span className="text-slate-500">:</span>
+        <span className="font-medium text-slate-100">{cat}</span>
+      </span>
+      {sep}
+      <span className="shrink-0 whitespace-nowrap font-mono text-slate-300">
+        {code}
+      </span>
+      {club ? (
+        <>
+          {sep}
+          <span className="min-w-0 shrink whitespace-nowrap">
             <span className="font-semibold text-cyan-200/95">
               {labels.detailExpandedClubLabel}
             </span>
-            {": "}
-            <span className="break-words text-slate-200">{club}</span>
+            <span className="text-slate-500">:</span>
+            <span className="text-slate-100">{club}</span>
           </span>
-        ) : null}
-      </p>
+        </>
+      ) : null}
     </div>
   );
 }
