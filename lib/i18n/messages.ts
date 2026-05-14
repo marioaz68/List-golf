@@ -747,6 +747,27 @@ const es = {
     playerOne: "jugador",
     playersMany: "jugadores",
   },
+  publicInstall: {
+    button: "Icono listgolf.club",
+    aria: "Crear icono de listgolf.club en tu teléfono",
+    title: "Acceso directo en tu teléfono",
+    intro:
+      "Guarda un acceso en la pantalla de inicio para abrir listgolf.club con un solo toque.",
+    installNow: "Instalar en este dispositivo",
+    iosTitle: "iPhone o iPad (Safari)",
+    iosSteps: [
+      "Toca el botón Compartir (cuadrado con flecha hacia arriba).",
+      "Baja y elige «Añadir a inicio» o «Add to Home Screen».",
+      "Confirma el nombre (p. ej. List.golf) y toca Añadir.",
+    ],
+    androidTitle: "Android (Chrome)",
+    androidSteps: [
+      "Toca el menú ⋮ (tres puntos) arriba a la derecha.",
+      "Elige «Instalar app», «Añadir a pantalla de inicio» o «Install app».",
+      "Confirma; se creará el icono en tu inicio.",
+    ],
+    close: "Listo",
+  },
 };
 
 type Messages = typeof es;
@@ -1493,6 +1514,27 @@ const en: Messages = {
     startingTee: "Tee",
     playerOne: "player",
     playersMany: "players",
+  },
+  publicInstall: {
+    button: "listgolf.club icon",
+    aria: "Save listgolf.club shortcut on your phone",
+    title: "Shortcut on your phone",
+    intro:
+      "Add listgolf.club to your home screen to open it in one tap.",
+    installNow: "Install on this device",
+    iosTitle: "iPhone or iPad (Safari)",
+    iosSteps: [
+      "Tap the Share button (square with an arrow pointing up).",
+      "Scroll and choose “Add to Home Screen”.",
+      "Confirm the name (e.g. List.golf) and tap Add.",
+    ],
+    androidTitle: "Android (Chrome)",
+    androidSteps: [
+      "Tap the ⋮ menu (top right).",
+      "Choose “Install app” or “Add to Home screen”.",
+      "Confirm; the icon will appear on your home screen.",
+    ],
+    close: "Done",
   },
 };
 
