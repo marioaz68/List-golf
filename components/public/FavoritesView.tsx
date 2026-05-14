@@ -6,6 +6,7 @@ import ClubLogoThumb from "./ClubLogoThumb";
 import FavoriteStar from "./FavoriteStar";
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
+import PublicLeaderboardExpandedPlayerBanner from "@/app/torneos/[id]/components/PublicLeaderboardExpandedPlayerBanner";
 import {
   buildDetailToggleHref,
   formatRelativeOrDQ,
@@ -517,6 +518,10 @@ export default function FavoritesView({
                       className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                     >
                       <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
+                        <PublicLeaderboardExpandedPlayerBanner
+                          row={row}
+                          labels={detailLabels}
+                        />
                         <PublicLeaderboardDetailTable
                           row={row}
                           labels={detailLabels}

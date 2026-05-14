@@ -13,6 +13,7 @@ import {
   type SelectedRoundMeta,
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
+import PublicLeaderboardExpandedPlayerBanner from "./PublicLeaderboardExpandedPlayerBanner";
 
 const stickyNameHead =
   "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#1a2838] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)]";
@@ -259,6 +260,10 @@ export default function PublicLeaderboardTable({
                         className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                       >
                         <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
+                          <PublicLeaderboardExpandedPlayerBanner
+                            row={row}
+                            labels={detailLabels}
+                          />
                           <PublicLeaderboardDetailTable
                             row={row}
                             selectedRound={selectedRound}

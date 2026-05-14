@@ -15,6 +15,9 @@ export type PublicDetailTableLabels = {
   toPar: string;
   pos: string;
   noCapture: string;
+  /** Encabezado al expandir detalle (nombre completo vs nombre abreviado en tabla). */
+  detailExpandedCategoryLabel: string;
+  detailExpandedClubLabel: string;
   detailTotalsPlacement: DetailTotalsPlacement;
 };
 
@@ -31,6 +34,8 @@ type Pub = {
   detailToPar: string;
   detailPos: string;
   detailNoCapture: string;
+  detailExpandedCategoryLabel: string;
+  detailExpandedClubLabel: string;
   detailTotalsPlacement: DetailTotalsPlacement;
 };
 
@@ -48,6 +53,8 @@ export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLab
     toPar: pub.detailToPar,
     pos: pub.detailPos,
     noCapture: pub.detailNoCapture,
+    detailExpandedCategoryLabel: pub.detailExpandedCategoryLabel,
+    detailExpandedClubLabel: pub.detailExpandedClubLabel,
     detailTotalsPlacement: pub.detailTotalsPlacement,
   };
 }
