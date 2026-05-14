@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "deploy:vercel:prod": "npx vercel deploy --prod --yes",
+    "deploy:vercel:staging": "npx vercel deploy --yes",
+    "deploy:vercel:both": "bash scripts/deploy-staging-and-main.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
