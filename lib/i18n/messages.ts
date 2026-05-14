@@ -21,6 +21,8 @@ const es = {
     listTournaments: "Listado de torneos",
     brand: "List.golf",
     selectTournamentHint: "Selecciona un torneo para ver este menú.",
+    openMenu: "Abrir menú de navegación",
+    closeMenu: "Cerrar menú",
     nav: {
       dashboard: "Panel principal",
       players: "Jugadores",
@@ -799,6 +801,8 @@ const en: Messages = {
     listTournaments: "Tournament list",
     brand: "List.golf",
     selectTournamentHint: "Select a tournament to see this menu.",
+    openMenu: "Open navigation menu",
+    closeMenu: "Close menu",
     nav: {
       dashboard: "Dashboard",
       players: "Players",

@@ -6,6 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import { useBackofficeNav } from "@/components/layout/BackofficeNavContext";
 import type { AppMessages } from "@/lib/i18n/messages";
 import {
   LayoutDashboard,
@@ -29,6 +30,7 @@ import {
   ExternalLink,
   CalendarDays,
   Car,
+  X,
 } from "lucide-react";
 
 type SidebarMode = "operation" | "setup";
@@ -54,6 +56,7 @@ const STORAGE_KEY = "listgolf_sidebar_mode";
 export default function Sidebar() {
   const { t } = useAppLocale();
   const pathname = usePathname();
+  const { open, setOpen } = useBackofficeNav();
 
   const [mode, setMode] = useState<SidebarMode>("operation");
   const [tournamentId, setTournamentId] = useState<string | null>(null);
@@ -236,6 +239,7 @@ export default function Sidebar() {
 
   function setSidebarMode(nextMode: SidebarMode) {
     setMode(nextMode);
+    setOpen(false);
 
     try {
       window.localStorage.setItem(STORAGE_KEY, nextMode);
@@ -309,17 +313,36 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="flex min-h-screen w-64 flex-col bg-[#1C252D] text-white">
-      <div className="border-b border-white/10 px-6 py-5">
-        <Link href="/tournaments" className="flex items-center">
-          <Image
-            src="/logo-main.png"
-            alt="List.golf"
-            width={150}
-            height={48}
-            priority
-          />
-        </Link>
+    <aside
+      className={`flex min-h-0 flex-col border-r border-white/10 bg-[#1C252D] text-white shadow-2xl transition-transform duration-200 ease-out md:shadow-none w-[min(19rem,88vw)] shrink-0 md:w-64 fixed inset-y-0 left-0 z-40 h-dvh overflow-y-auto overscroll-y-contain md:static md:z-auto md:h-auto md:min-h-screen md:max-h-none ${
+        open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      }`}
+    >
+      <div className="border-b border-white/10 px-4 py-4 md:px-6 md:py-5">
+        <div className="flex items-center justify-between gap-2">
+          <Link
+            href="/tournaments"
+            className="flex min-w-0 flex-1 items-center"
+            onClick={() => setOpen(false)}
+          >
+            <Image
+              src="/logo-main.png"
+              alt="List.golf"
+              width={150}
+              height={48}
+              priority
+              className="h-8 w-auto max-w-[120px] object-contain md:h-auto md:max-w-[150px]"
+            />
+          </Link>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border border-white/10 p-2 text-white/80 transition hover:bg-white/10 md:hidden"
+            aria-label={t.sidebar.closeMenu}
+            onClick={() => setOpen(false)}
+          >
+            <X size={20} strokeWidth={2} />
+          </button>
+        </div>
       </div>
 
       <div className="border-b border-white/10 px-4 py-4">
@@ -401,14 +424,19 @@ export default function Sidebar() {
               ) : null}
               <Link
                 href={buildHref(item)}
-                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm transition ${
+                onClick={() => setOpen(false)}
+                className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition md:px-4 md:py-3 ${
                   active
                     ? "bg-[#63BC46] text-black"
                     : "text-white/80 hover:bg-white/10"
                 }`}
               >
-                <Icon size={18} />
-                <span className="truncate">{t.sidebar.nav[item.nameKey]}</span>
+                <span className="flex shrink-0">
+                  <Icon size={18} />
+                </span>
+                <span className="min-w-0 flex-1 truncate leading-snug">
+                  {t.sidebar.nav[item.nameKey]}
+                </span>
               </Link>
             </Fragment>
           );
@@ -424,35 +452,45 @@ export default function Sidebar() {
       <div className="space-y-2 border-t border-white/10 p-4">
         <Link
           href={buildPublicTournamentHref()}
-          className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm ${
+          onClick={() => setOpen(false)}
+          className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
             pathname.startsWith("/torneos/")
               ? "bg-[#63BC46] text-black"
               : "text-white/85 hover:bg-white/10"
           } ${!tournamentId ? "opacity-60" : ""}`}
         >
-          <ExternalLink size={18} />
-          {t.sidebar.publicPage}
+          <span className="flex shrink-0">
+            <ExternalLink size={18} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{t.sidebar.publicPage}</span>
         </Link>
 
         <button
           type="button"
           onClick={() => setSidebarMode(nextMode)}
-          className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-white/85 hover:bg-white/10"
+          className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10 md:px-4 md:py-3"
         >
-          <Repeat2 size={18} />
-          {t.sidebar.switchTo} {nextModeLabel}
+          <span className="flex shrink-0">
+            <Repeat2 size={18} />
+          </span>
+          <span className="min-w-0 flex-1 break-words leading-snug">
+            {t.sidebar.switchTo} {nextModeLabel}
+          </span>
         </button>
 
         <Link
           href="/tournaments"
-          className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm ${
+          onClick={() => setOpen(false)}
+          className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
             pathname === "/tournaments"
               ? "bg-[#63BC46] text-black"
               : "text-white/85 hover:bg-white/10"
           }`}
         >
-          <ArrowLeftCircle size={18} />
-          {t.sidebar.listTournaments}
+          <span className="flex shrink-0">
+            <ArrowLeftCircle size={18} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{t.sidebar.listTournaments}</span>
         </Link>
 
         <div className="pt-1 text-xs text-white/35">{t.sidebar.brand}</div>
