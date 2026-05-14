@@ -51,16 +51,27 @@ export async function fetchHoleScoresForRoundScores(
 
   for (let i = 0; i < roundScoreIds.length; i += HOLE_SCORE_ID_CHUNK) {
     const chunk = roundScoreIds.slice(i, i + HOLE_SCORE_ID_CHUNK);
-    const { data, error } = await supabase
-      .from("hole_scores")
-      .select("round_score_id, hole_number, hole_no, strokes")
-      .in("round_score_id", chunk);
+    let from = 0;
 
-    if (error) {
-      throw new Error(`Error leyendo hole_scores: ${error.message}`);
+    for (;;) {
+      const { data, error } = await supabase
+        .from("hole_scores")
+        .select("round_score_id, hole_number, hole_no, strokes")
+        .in("round_score_id", chunk)
+        .order("round_score_id", { ascending: true })
+        .order("hole_number", { ascending: true, nullsFirst: false })
+        .range(from, from + POSTGREST_PAGE - 1);
+
+      if (error) {
+        throw new Error(`Error leyendo hole_scores: ${error.message}`);
+      }
+
+      const batch = (data ?? []) as HoleScoreRow[];
+      collected.push(...batch);
+
+      if (batch.length < POSTGREST_PAGE) break;
+      from += POSTGREST_PAGE;
     }
-
-    collected.push(...((data ?? []) as HoleScoreRow[]));
   }
 
   return collected;

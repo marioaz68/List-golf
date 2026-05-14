@@ -15,6 +15,41 @@ function holeIndexFromScoreRow(row: {
   return n;
 }
 
+function countHolesWithStrokes(
+  roundScoreId: string,
+  holeScoresByRoundScoreId: Map<string, any[]>
+): number {
+  const rows = holeScoresByRoundScoreId.get(roundScoreId) ?? [];
+  let n = 0;
+  for (const r of rows) {
+    if (holeIndexFromScoreRow(r) == null) continue;
+    if (r.strokes == null) continue;
+    if (Number.isNaN(Number(r.strokes))) continue;
+    n++;
+  }
+  return n;
+}
+
+/** Si hay más de un `round_scores` para la misma ronda, usar el que tenga más hoyos con golpes (evita filas huérfanas vs captura real). */
+function pickRoundScoreRowForRound(
+  playerRoundScores: any[],
+  roundId: string,
+  holeScoresByRoundScoreId: Map<string, any[]>
+): any | null {
+  const cands = playerRoundScores.filter((s) => s.round_id === roundId);
+  if (cands.length === 0) return null;
+  if (cands.length === 1) return cands[0];
+  return [...cands].sort((a, b) => {
+    const ca = countHolesWithStrokes(a.id, holeScoresByRoundScoreId);
+    const cb = countHolesWithStrokes(b.id, holeScoresByRoundScoreId);
+    if (cb !== ca) return cb - ca;
+    const ha = a.gross_score != null ? 1 : 0;
+    const hb = b.gross_score != null ? 1 : 0;
+    if (hb !== ha) return hb - ha;
+    return String(a.id).localeCompare(String(b.id));
+  })[0];
+}
+
 export function buildLiveLeaderboard({
   filteredEntries,
   rounds,
@@ -49,9 +84,11 @@ export function buildLiveLeaderboard({
     );
 
     const roundsSummary = rounds.map((round: any) => {
-      const found =
-        playerRoundScores.find((score: any) => score.round_id === round.id) ??
-        null;
+      const found = pickRoundScoreRowForRound(
+        playerRoundScores,
+        round.id,
+        holeScoresByRoundScoreId
+      );
 
       const roundIsDQ =
         isDQScore(found?.gross_score ?? null) || isDQStatus(entry.status);
@@ -65,8 +102,11 @@ export function buildLiveLeaderboard({
     });
 
     const details = rounds.map((round: any) => {
-      const score =
-        playerRoundScores.find((row: any) => row.round_id === round.id) ?? null;
+      const score = pickRoundScoreRowForRound(
+        playerRoundScores,
+        round.id,
+        holeScoresByRoundScoreId
+      );
 
       const roundHoleRows = score
         ? [...(holeScoresByRoundScoreId.get(score.id) ?? [])].sort(
