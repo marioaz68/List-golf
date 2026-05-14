@@ -59,6 +59,26 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
+/** Sin `overflow: hidden` para que `thead` sticky funcione dentro del scroll interno. */
+const tableCardStyle: React.CSSProperties = {
+  ...cardStyle,
+  overflow: "visible",
+};
+
+/**
+ * Scroll propio de la tabla: altura limitada para que `position: sticky` en `th`
+ * funcione de forma fiable (evita el `overflow-x: auto` que fuerza scrollport vertical).
+ */
+const tableStickyScrollStyle: React.CSSProperties = {
+  width: "100%",
+  maxHeight: "min(78dvh, calc(100dvh - 11rem))",
+  minHeight: 0,
+  overflow: "auto",
+  WebkitOverflowScrolling: "touch",
+  borderRadius: 12,
+  background: "#ffffff",
+};
+
 const cardHeader: React.CSSProperties = {
   padding: "10px 12px",
   borderBottom: "1px solid #e5e7eb",
@@ -99,6 +119,10 @@ const thStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "#334155",
   whiteSpace: "nowrap",
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
+  boxShadow: "0 1px 0 rgba(226, 232, 240, 0.9)",
 };
 
 const tdStyle: React.CSSProperties = {
@@ -748,8 +772,8 @@ export default async function TournamentsPage({
         </div>
       </div>
 
-      <div style={cardStyle}>
-        <div style={{ overflowX: "auto" }}>
+      <div style={tableCardStyle}>
+        <div style={tableStickyScrollStyle}>
           <table style={tableStyle}>
             <thead>
               <tr>
