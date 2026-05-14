@@ -281,7 +281,7 @@ export default function Sidebar() {
   }
 
   function buildPublicTournamentHref() {
-    return tournamentId ? `/torneos/${tournamentId}` : "/tournaments";
+    return tournamentId ? `/torneos/${tournamentId}` : "/";
   }
 
   const operationVisible = useMemo(
@@ -454,10 +454,10 @@ export default function Sidebar() {
           href={buildPublicTournamentHref()}
           onClick={() => setOpen(false)}
           className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
-            pathname.startsWith("/torneos/")
+            pathname.startsWith("/torneos/") || pathname === "/"
               ? "bg-[#63BC46] text-black"
               : "text-white/85 hover:bg-white/10"
-          } ${!tournamentId ? "opacity-60" : ""}`}
+          }`}
         >
           <span className="flex shrink-0">
             <ExternalLink size={18} />
