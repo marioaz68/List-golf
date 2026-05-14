@@ -82,6 +82,9 @@ export function PublicInstallShortcut({ locale }: { locale: Locale }) {
               {t.title}
             </h2>
             <p className="mt-2 text-sm text-slate-300">{t.intro}</p>
+            <p className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-snug text-amber-50">
+              {t.osNote}
+            </p>
 
             {deferred ? (
               <button

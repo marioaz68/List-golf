@@ -591,11 +591,15 @@ export default async function PublicTournamentPage({
       <section className="relative overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.12),transparent_25%)]" />
 
-        <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="relative mx-auto max-w-7xl px-4 pb-8 pt-2 sm:px-6 lg:px-8">
           <div className="mb-5 flex flex-col gap-4">
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <PublicInstallShortcut locale={locale} />
-              <PublicLanguageToggle locale={locale} />
+            <div className="-mx-4 flex w-[calc(100%+2rem)] flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6 lg:-mx-8 lg:w-[calc(100%+4rem)] lg:px-8">
+              <div className="flex shrink-0 justify-start">
+                <PublicInstallShortcut locale={locale} />
+              </div>
+              <div className="flex shrink-0 justify-end">
+                <PublicLanguageToggle locale={locale} />
+              </div>
             </div>
 
             <div className={publicTournamentSecondaryNavGridClass}>

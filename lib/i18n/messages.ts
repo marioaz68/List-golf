@@ -753,7 +753,9 @@ const es = {
     aria: "Crear icono de listgolf.club en tu teléfono",
     title: "Acceso directo en tu teléfono",
     intro:
-      "Guarda un acceso en la pantalla de inicio para abrir listgolf.club con un solo toque.",
+      "Aquí no se descarga un archivo ni el navegador pide un permiso especial. Lo que haces es guardar un acceso en tu pantalla de inicio, como un marcador con icono.",
+    osNote:
+      "En iPhone/iPad (Safari) Apple no permite que un botón de la página «instale» solo; por eso no verás permiso. Debes usar Compartir → Añadir a inicio (pasos abajo). En Android, si aparece «Instalar en este dispositivo», es el instalador de Chrome; si no aparece, usa el menú ⋮.",
     installNow: "Instalar en este dispositivo",
     iosTitle: "iPhone o iPad (Safari)",
     iosSteps: [
@@ -1522,7 +1524,9 @@ const en: Messages = {
     aria: "Save listgolf.club shortcut on your phone",
     title: "Shortcut on your phone",
     intro:
-      "Add listgolf.club to your home screen to open it in one tap.",
+      "Nothing is downloaded as a separate file and there is no special permission dialog. You are adding a home-screen shortcut—like a bookmark with an icon.",
+    osNote:
+      "On iPhone/iPad (Safari), Apple does not let websites trigger install by themselves, so you will not see a permission prompt. Use Share → Add to Home Screen (steps below). On Android, if you see “Install on this device”, that is Chrome’s web app installer; if not, use the ⋮ menu.",
     installNow: "Install on this device",
     iosTitle: "iPhone or iPad (Safari)",
     iosSteps: [

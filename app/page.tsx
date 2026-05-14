@@ -381,23 +381,26 @@ export default async function HomePage({
   return (
     <main className="min-h-screen bg-[#08111f] text-white">
       <section className="border-b border-white/10 bg-[#08111f]">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:px-5">
+          <div className="flex min-w-0 shrink-0 justify-start">
+            <PublicInstallShortcut locale={locale} />
+          </div>
+          <div className="flex shrink-0 justify-end">
+            <PublicLanguageToggle locale={locale} />
+          </div>
+        </div>
+
         <div className="mx-auto max-w-[1700px] px-4 py-4 sm:px-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
-                {h.title}
-              </h1>
-              <p className="mt-0.5 text-xs text-slate-400 sm:text-sm">
-                {h.subtitle}
-              </p>
-              <p className="mt-2 max-w-3xl text-[11px] leading-snug text-slate-500 sm:text-xs">
-                {h.scopeHint}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:pt-0.5">
-              <PublicInstallShortcut locale={locale} />
-              <PublicLanguageToggle locale={locale} />
-            </div>
+          <div className="mb-4 min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
+              {h.title}
+            </h1>
+            <p className="mt-0.5 text-xs text-slate-400 sm:text-sm">
+              {h.subtitle}
+            </p>
+            <p className="mt-2 max-w-3xl text-[11px] leading-snug text-slate-500 sm:text-xs">
+              {h.scopeHint}
+            </p>
           </div>
 
           <form
