@@ -29,7 +29,6 @@ import type {
 
 import {
   buildHref,
-  buildScorecardsHref,
   formatDate,
   formatDateWithWeekday,
   getPlayerCode,
@@ -684,16 +683,6 @@ export default async function PublicTournamentPage({
               >
                 {pub.favorites}
               </Link>
-
-              <Link
-                href={buildScorecardsHref({
-                  tournamentId: typedTournament.id,
-                  roundId: selectedRound?.id ?? null,
-                })}
-                className={publicTournamentEmeraldHeroNavClasses()}
-              >
-                {pub.eSignature}
-              </Link>
             </div>
           </div>
 
@@ -1098,7 +1087,7 @@ export default async function PublicTournamentPage({
 
       <section className="bg-[#08111f]">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                 {pub.cardLiveKicker}
@@ -1113,26 +1102,6 @@ export default async function PublicTournamentPage({
               </p>
               <p className="mt-3 text-lg font-bold text-white">{pub.cardTeeTitle}</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardTeeBody}</p>
-            </div>
-
-            <div className="rounded-[28px] border border-emerald-400/20 bg-emerald-500/10 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
-                {pub.cardSignKicker}
-              </p>
-              <p className="mt-3 text-lg font-bold text-white">{pub.cardSignTitle}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-200">{pub.cardSignBody}</p>
-
-              <div className="mt-4">
-                <Link
-                  href={buildScorecardsHref({
-                    tournamentId: typedTournament.id,
-                    roundId: selectedRound?.id ?? null,
-                  })}
-                  className="inline-flex min-h-9 items-center justify-center rounded-md border border-emerald-400 bg-gradient-to-b from-emerald-500 to-emerald-700 px-4 text-sm font-bold text-white shadow-[0_3px_0_#065f46,0_4px_8px_rgba(0,0,0,0.25)] transition hover:from-emerald-400 hover:to-emerald-600"
-                >
-                  {pub.cardSignCta}
-                </Link>
-              </div>
             </div>
           </div>
         </div>
