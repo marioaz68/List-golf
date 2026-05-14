@@ -7,6 +7,10 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import HeaderBar from "@/components/ui/HeaderBar";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -700,10 +704,10 @@ export default async function RoundsPage(props: {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div style={backofficeTableStickyScroll}>
                   <table className="w-full min-w-[1280px] border-collapse text-[11px] text-black">
-                    <thead>
-                      <tr className="bg-gray-200 text-left text-gray-900">
+                    <thead className={twStickyTheadGray50}>
+                      <tr className="text-left text-gray-900">
                         <th className="border border-gray-300 px-1.5 py-1.5 font-semibold">
                           Ronda
                         </th>

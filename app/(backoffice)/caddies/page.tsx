@@ -8,6 +8,11 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScrollCardBody,
+  cardStyleAllowTableSticky,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -104,6 +109,8 @@ const cardStyle: React.CSSProperties = {
   overflow: "hidden",
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
+
+const caddiesTableCardStyle = cardStyleAllowTableSticky(cardStyle);
 
 const cardHeader: React.CSSProperties = {
   padding: "10px 12px",
@@ -206,17 +213,13 @@ const currentCaddieBoxStyle: React.CSSProperties = {
   minWidth: 190,
 };
 
-const tableWrapStyle: React.CSSProperties = {
-  overflowX: "auto",
-};
-
 const tableStyle: React.CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
   fontSize: 12,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   textAlign: "left",
   padding: "10px 10px",
   borderBottom: "1px solid #e5e7eb",
@@ -226,7 +229,7 @@ const thStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "#334155",
   whiteSpace: "nowrap",
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "10px 10px",
@@ -751,7 +754,7 @@ export default async function CaddiesPage({
         </div>
       </div>
 
-      <div style={cardStyle}>
+      <div style={caddiesTableCardStyle}>
         <div style={cardHeader}>
           <div>
             <h2 style={titleStyle}>{cd.assignHeading}</h2>
@@ -770,7 +773,7 @@ export default async function CaddiesPage({
             No hay jugadores con grupo asignado en esa ronda.
           </div>
         ) : (
-          <div style={tableWrapStyle}>
+          <div style={backofficeTableStickyScrollCardBody}>
             <table style={tableStyle}>
               <thead>
                 <tr>
@@ -872,7 +875,7 @@ export default async function CaddiesPage({
         )}
       </div>
 
-      <div style={cardStyle}>
+      <div style={caddiesTableCardStyle}>
         <div style={cardHeader}>
           <div>
             <h2 style={titleStyle}>{cd.assignments}</h2>
@@ -882,7 +885,7 @@ export default async function CaddiesPage({
           </div>
         </div>
 
-        <div style={tableWrapStyle}>
+        <div style={backofficeTableStickyScrollCardBody}>
           <table style={tableStyle}>
             <thead>
               <tr>

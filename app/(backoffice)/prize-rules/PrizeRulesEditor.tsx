@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { savePrizeRulesSnapshot } from "./actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 type PrizeRuleRow = {
   id: string;
@@ -307,26 +311,83 @@ export default function PrizeRulesEditor({
         <input type="hidden" name="rows_json" value={JSON.stringify(normalizedRows)} />
         <input type="hidden" name="delete_ids_json" value={JSON.stringify(deleteIds)} />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="min-w-[1420px] w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Orden</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Scope</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Valor</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Premio</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Pos.</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Base</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Prioridad</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Único</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Orden
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Scope
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Valor
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Premio
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Pos.
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Base
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Prioridad
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Único
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   {t.editors.leaderboardColumn}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Modo</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Rondas</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Activo</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Notas</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Acciones</th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Modo
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Rondas
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Activo
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Notas
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Acciones
+                </th>
               </tr>
             </thead>
 

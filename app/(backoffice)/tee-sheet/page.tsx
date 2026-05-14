@@ -2,6 +2,10 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadSlate50,
+} from "@/lib/ui/backofficeTableSticky";
 import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
 import {
   buildSessionBlocks,
@@ -670,9 +674,14 @@ for (const row of membersRaw) {
         </div>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_300px]">
-          <div className="overflow-x-auto rounded border border-slate-200">
+          <div
+            className="rounded border border-slate-200"
+            style={backofficeTableStickyScroll}
+          >
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600">
+              <thead
+                className={`text-left text-xs uppercase tracking-wide text-slate-600 ${twStickyTheadSlate50}`}
+              >
                 <tr>
                   <th className="px-3 py-2">Orden</th>
                   <th className="px-3 py-2">Categoría</th>

@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { saveTemplateItemsSnapshot } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Row = {
   id: string;
@@ -272,35 +276,56 @@ export default function TemplateItemsEditor({
           value={JSON.stringify(deleteIds)}
         />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Orden
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Activa
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Género
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Grupo
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Code
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Nombre
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Min
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Max
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Acciones
                 </th>
               </tr>

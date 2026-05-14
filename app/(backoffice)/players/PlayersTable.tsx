@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
+
 type Player = {
   id: string;
   first_name: string | null;
@@ -13,10 +18,11 @@ type Player = {
 
 export default function PlayersTable({ players }: { players: Player[] }) {
   return (
-    <div className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
+    <div className="rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
+      <div style={backofficeTableStickyScroll}>
       <table className="w-full border-collapse text-[11px] leading-none">
-        <thead>
-          <tr className="bg-gray-200 text-left text-gray-900">
+        <thead className={twStickyTheadGray50}>
+          <tr className="text-left text-gray-900">
             <th className="border border-gray-300 px-1.5 py-1 font-semibold">Nombre</th>
             <th className="border border-gray-300 px-1.5 py-1 font-semibold">
               Handicap Index
@@ -66,6 +72,7 @@ export default function PlayersTable({ players }: { players: Player[] }) {
           ) : null}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,11 @@ import {
   assignUserTournamentRoleAction,
   removeUserTournamentRoleAction,
 } from "./actions";
+import {
+  backofficeTableStickyScrollCardBody,
+  cardStyleAllowTableSticky,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -59,6 +64,8 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
+const usersMainListCardStyle = cardStyleAllowTableSticky(cardStyle);
+
 const cardHeader: React.CSSProperties = {
   padding: "10px 12px",
   borderBottom: "1px solid #e5e7eb",
@@ -99,17 +106,13 @@ const buttonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const tableWrapStyle: React.CSSProperties = {
-  overflowX: "auto",
-};
-
 const tableStyle: React.CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
   fontSize: 12,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   textAlign: "left",
   padding: "10px 10px",
   borderBottom: "1px solid #e5e7eb",
@@ -120,7 +123,7 @@ const thStyle: React.CSSProperties = {
   color: "#334155",
   whiteSpace: "nowrap",
   verticalAlign: "top",
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "10px 10px",
@@ -581,7 +584,7 @@ export default async function UsersPage({
 
   return (
     <div style={pageWrap}>
-      <div style={cardStyle}>
+      <div style={usersMainListCardStyle}>
         <div style={cardHeader}>
           <div>
             <h1 style={titleStyle}>USUARIOS</h1>
@@ -604,7 +607,7 @@ export default async function UsersPage({
             Error cargando usuarios: {usersError.message}
           </div>
         ) : (
-          <div style={tableWrapStyle}>
+          <div style={backofficeTableStickyScrollCardBody}>
             <table style={tableStyle}>
               <thead>
                 <tr>

@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { addSelectedEntries } from "./actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { fmt } from "@/lib/i18n/fmt";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Player = {
   id: string;
@@ -149,11 +153,12 @@ export default function PlayersBulkSelector({
       <form action={addSelectedEntries}>
         <input type="hidden" name="tournament_id" value={tournamentId} />
 
-        <div className="max-h-[420px] overflow-auto border border-gray-300">
-
+        <div
+          className="border border-gray-300"
+          style={backofficeTableStickyScroll}
+        >
           <table className="w-full border-collapse">
-
-            <thead className="bg-gray-200 text-black">
+            <thead className={twStickyTheadGray50}>
               <tr>
                 <th className="border p-2">{bs.thSel}</th>
                 <th className="border p-2">{bs.thPlayer}</th>

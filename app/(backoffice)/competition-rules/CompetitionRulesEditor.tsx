@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { saveCompetitionRulesSnapshot } from "./actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 import type { AppMessages } from "@/lib/i18n/messages";
 
 type CategoryRow = {
@@ -420,41 +424,66 @@ export default function CompetitionRulesEditor({
         <input type="hidden" name="tournament_id" value={tournamentId} />
         <input type="hidden" name="rows_json" value={JSON.stringify(normalizedRows)} />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="min-w-[1260px] w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thOrder}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thCategory}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thFormat}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {t.editors.leaderboardColumn}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thPrizes}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thHcpPct}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thGross}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thNet}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-center font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-center font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thActive}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thNotes}
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[4px] text-left font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] text-left font-semibold ${twStickyThGray200}`}
+                >
                   {ce.thSummary}
                 </th>
               </tr>

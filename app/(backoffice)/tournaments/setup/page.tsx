@@ -4,6 +4,10 @@ import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import {
+  backofficeTableStickyScroll,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
+import {
   applyCourseToTournament,
   applyCategoryTemplateToTournament,
   initializeTournament,
@@ -315,8 +319,8 @@ const infoValue: React.CSSProperties = {
   lineHeight: 1.2,
 };
 
-const holesWrap: React.CSSProperties = {
-  overflowX: "auto",
+const holesTableViewport: React.CSSProperties = {
+  ...backofficeTableStickyScroll,
   border: "1px solid #e5e7eb",
   borderRadius: 10,
 };
@@ -327,7 +331,7 @@ const tableStyle: React.CSSProperties = {
   minWidth: 460,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   textAlign: "left",
   fontSize: 11,
   fontWeight: 800,
@@ -338,7 +342,7 @@ const thStyle: React.CSSProperties = {
   borderBottom: "1px solid #e5e7eb",
   background: "#f9fafb",
   whiteSpace: "nowrap",
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "7px 10px",
@@ -1016,7 +1020,7 @@ export default async function TournamentSetupPage({
                   </div>
                 </form>
 
-                <div style={holesWrap}>
+                <div style={holesTableViewport}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>

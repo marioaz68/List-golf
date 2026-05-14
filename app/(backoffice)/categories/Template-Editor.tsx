@@ -6,6 +6,10 @@ import {
   saveTournamentCategoriesAsTemplate,
 } from "./actions";
 import SubmitButton from "@/components/ui/SubmitButton";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Row = {
   id: string;
@@ -331,52 +335,69 @@ export default function CategoryTemplateEditor({
 
         <div className="rounded-lg border border-gray-300 bg-white">
           <div
-            className="overflow-x-auto"
+            className="min-w-max"
             style={{
-              paddingBottom: "12px",
+              ...backofficeTableStickyScroll,
+              paddingBottom: 12,
               scrollbarGutter: "stable",
             }}
           >
-            <div
-              className="min-w-max"
-              style={{
-                paddingBottom: "12px",
-              }}
-            >
               <table className="w-full min-w-[1140px] border-collapse text-[11px] leading-none">
                 <thead>
-                  <tr className="bg-gray-200 text-gray-900">
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                  <tr className="text-gray-900">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Orden
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Activa
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Género
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Grupo
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Edad Min
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Code
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Nombre
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Min
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Max
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Cupo
                     </th>
-                    <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                    <th
+                      className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                    >
                       Acciones
                     </th>
                   </tr>
@@ -572,7 +593,6 @@ export default function CategoryTemplateEditor({
                   )}
                 </tbody>
               </table>
-            </div>
           </div>
         </div>
 

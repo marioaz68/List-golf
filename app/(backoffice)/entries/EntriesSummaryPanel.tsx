@@ -3,6 +3,10 @@
 import { useMemo } from "react";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { fmt } from "@/lib/i18n/fmt";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Entry = {
   id: string;
@@ -107,9 +111,9 @@ export default function EntriesSummaryPanel({
             {tsu.byCategory}
           </div>
 
-          <div className="max-h-[560px] overflow-auto">
+          <div style={backofficeTableStickyScroll}>
             <table className="w-full border-collapse text-[11px] text-black">
-              <thead className="sticky top-0 z-10 bg-gray-200 text-black">
+              <thead className={twStickyTheadGray50}>
                 <tr>
                   <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                     {tsu.thCategory}
@@ -193,9 +197,9 @@ export default function EntriesSummaryPanel({
             {tsu.byClub}
           </div>
 
-          <div className="max-h-[560px] overflow-auto">
+          <div style={backofficeTableStickyScroll}>
             <table className="w-full border-collapse text-[11px] text-black">
-              <thead className="sticky top-0 z-10 bg-gray-200 text-black">
+              <thead className={twStickyTheadGray50}>
                 <tr>
                   <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                     {tsu.thClub}

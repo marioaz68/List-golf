@@ -6,6 +6,11 @@ import {
   assignTournamentRoleAction,
   removeTournamentRoleAction,
 } from "./actions";
+import {
+  backofficeTableStickyScrollCardBody,
+  cardStyleAllowTableSticky,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -63,20 +68,7 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
 };
 
-const staffTableCardStyle: React.CSSProperties = {
-  ...cardStyle,
-  overflow: "visible",
-};
-
-const tableStickyScrollStyle: React.CSSProperties = {
-  width: "100%",
-  maxHeight: "min(78dvh, calc(100dvh - 11rem))",
-  minHeight: 0,
-  overflow: "auto",
-  WebkitOverflowScrolling: "touch",
-  borderRadius: "0 0 12px 12px",
-  background: "#ffffff",
-};
+const staffTableCardStyle = cardStyleAllowTableSticky(cardStyle);
 
 const cardHeader: React.CSSProperties = {
   padding: "10px 12px",
@@ -171,7 +163,7 @@ const tableStyle: React.CSSProperties = {
   fontSize: 12,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   textAlign: "left",
   padding: "10px 10px",
   borderBottom: "1px solid #e5e7eb",
@@ -180,11 +172,7 @@ const thStyle: React.CSSProperties = {
   letterSpacing: 0.4,
   textTransform: "uppercase",
   color: "#334155",
-  position: "sticky",
-  top: 0,
-  zIndex: 2,
-  boxShadow: "0 1px 0 rgba(226, 232, 240, 0.9)",
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "10px 10px",
@@ -463,7 +451,7 @@ export default async function TournamentStaffPage({
               </div>
             </div>
 
-            <div style={tableStickyScrollStyle}>
+            <div style={backofficeTableStickyScrollCardBody}>
               <table style={tableStyle}>
                 <thead>
                   <tr>

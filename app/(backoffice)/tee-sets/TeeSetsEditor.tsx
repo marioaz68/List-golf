@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { saveTeeSetCatalogAndSelectionAction } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Row = {
   id: string;
@@ -223,16 +227,41 @@ export default function TeeSetsEditor({
         <input type="hidden" name="tournament_id" value={tournamentId} />
         <input type="hidden" name="rows_json" value={JSON.stringify(normalizedRows)} />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">Usar</th>
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">Orden</th>
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">Code</th>
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">Nombre</th>
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">Color</th>
-                <th className="border border-gray-300 px-1.5 py-[4px] font-semibold">
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
+                  Usar
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
+                  Orden
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
+                  Code
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
+                  Nombre
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
+                  Color
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[4px] font-semibold ${twStickyThGray200}`}
+                >
                   Acciones
                 </th>
               </tr>

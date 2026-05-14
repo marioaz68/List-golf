@@ -2,6 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { saveCategoryTeeRulesSnapshot } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 type CategoryRow = {
   id: string;
@@ -268,31 +272,56 @@ export default function CategoryTeeRulesEditor({
         <input type="hidden" name="rows_json" value={JSON.stringify(normalizedRows)} />
         <input type="hidden" name="delete_ids_json" value={JSON.stringify(deleteIds)} />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Orden</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Orden
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Categoría
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">Salida</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  Salida
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Edad Min
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Edad Max
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Género
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Hcp Min
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Hcp Max
                 </th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
                   Acciones
                 </th>
               </tr>

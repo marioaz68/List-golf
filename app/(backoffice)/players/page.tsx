@@ -4,6 +4,10 @@ import NewPlayerSection from "./NewPlayerSection";
 import { unstable_noStore as noStore } from "next/cache";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -557,10 +561,11 @@ export default async function PlayersPage(props: {
 
       <NewPlayerSection />
 
-      <section className="overflow-auto rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
+      <section className="rounded-lg border border-gray-300 bg-white/95 p-1.5 shadow-sm">
+        <div style={backofficeTableStickyScroll}>
         <table className="min-w-[1800px] w-full border-collapse text-[11px] leading-none">
-          <thead>
-            <tr className="bg-gray-200 text-left text-gray-900">
+          <thead className={twStickyTheadGray50}>
+            <tr className="text-left text-gray-900">
               <th className="border border-gray-300 px-1.5 py-1 font-semibold">
                 Nombre
               </th>
@@ -698,6 +703,7 @@ export default async function PlayersPage(props: {
             ) : null}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );

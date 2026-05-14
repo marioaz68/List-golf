@@ -4,6 +4,10 @@ import { applyCategoryTemplate, deleteCategoryTemplate } from "./actions";
 import { redirect } from "next/navigation";
 import CategoryTemplateEditor from "./Template-Editor";
 import HeaderBar from "@/components/ui/HeaderBar";
+import {
+  backofficeTableStickyScroll,
+  twStickyThDarkGlass,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -398,18 +402,52 @@ export default async function CategoriesPage(props: {
           </div>
         </div>
 
-        <div className="mt-3 overflow-x-auto">
+        <div
+          className="mt-3 min-w-0"
+          style={{
+            ...backofficeTableStickyScroll,
+            background: "transparent",
+          }}
+        >
           <div className="min-w-max pb-3">
             <table className="min-w-full text-[11px] text-white">
               <thead>
-                <tr className="border-b border-white/10 text-white/60">
-                  <th className="px-2 py-1 text-left font-semibold">Código</th>
-                  <th className="px-2 py-1 text-left font-semibold">Nombre</th>
-                  <th className="px-2 py-1 text-left font-semibold">Género</th>
-                  <th className="px-2 py-1 text-left font-semibold">Grupo</th>
-                  <th className="px-2 py-1 text-left font-semibold">Hcp min</th>
-                  <th className="px-2 py-1 text-left font-semibold">Hcp max</th>
-                  <th className="px-2 py-1 text-left font-semibold">Edad min</th>
+                <tr className="border-b border-white/10">
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Código
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Nombre
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Género
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Grupo
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Hcp min
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Hcp max
+                  </th>
+                  <th
+                    className={`px-2 py-1 text-left font-semibold ${twStickyThDarkGlass}`}
+                  >
+                    Edad min
+                  </th>
                 </tr>
               </thead>
 

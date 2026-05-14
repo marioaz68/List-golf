@@ -3,6 +3,10 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { savePlayerScores, type SaveScoresState } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Hole = {
   hole_number: number;
@@ -343,10 +347,10 @@ export default function ScoreEntryClient({
             Rondas capturadas
           </div>
 
-          <div className="overflow-x-auto">
+          <div style={backofficeTableStickyScroll}>
             <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
-              <thead>
-                <tr className="bg-gray-50">
+              <thead className={twStickyTheadGray50}>
+                <tr>
                   <th className="w-16 border-b border-gray-200 px-1 py-1 text-left font-semibold">
                     RONDA
                   </th>
@@ -435,9 +439,10 @@ export default function ScoreEntryClient({
       )}
 
       <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+        <div style={backofficeTableStickyScroll}>
         <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
-          <thead>
-            <tr className="bg-gray-50">
+          <thead className={twStickyTheadGray50}>
+            <tr>
               <th className="w-12 border-b border-gray-200 px-1 py-1 text-left font-semibold">
                 VENT
               </th>
@@ -575,6 +580,7 @@ export default function ScoreEntryClient({
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       {saveState.message && (

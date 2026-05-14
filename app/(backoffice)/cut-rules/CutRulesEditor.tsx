@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { saveCutRulesSnapshot } from "./actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import {
+  backofficeTableStickyScroll,
+  twStickyThGray200,
+} from "@/lib/ui/backofficeTableSticky";
 
 function fmt(template: string, vars: Record<string, string | number>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) =>
@@ -423,24 +427,83 @@ export default function CutRulesEditor({
         <input type="hidden" name="rows_json" value={JSON.stringify(normalizedRows)} />
         <input type="hidden" name="delete_ids_json" value={JSON.stringify(deleteIds)} />
 
-        <div className="overflow-x-auto rounded-lg border border-gray-300 bg-white">
+        <div
+          className="rounded-lg border border-gray-300 bg-white"
+          style={backofficeTableStickyScroll}
+        >
           <table className="min-w-[1720px] w-full border-collapse text-[11px] leading-none">
             <thead>
-              <tr className="bg-gray-200 text-gray-900">
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thOrder}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thCategories}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thFrom}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTo}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thBasis}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thMode}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thType}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thCut}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTies}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thGrossProtection}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thTieBreak}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thActive}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thNotes}</th>
-                <th className="border border-gray-300 px-1.5 py-[3px] font-semibold">{ce.thActions}</th>
+              <tr className="text-gray-900">
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thOrder}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thCategories}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thFrom}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thTo}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thBasis}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thMode}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thType}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thCut}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thTies}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thGrossProtection}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thTieBreak}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thActive}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thNotes}
+                </th>
+                <th
+                  className={`border border-gray-300 px-1.5 py-[3px] font-semibold ${twStickyThGray200}`}
+                >
+                  {ce.thActions}
+                </th>
               </tr>
             </thead>
 

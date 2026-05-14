@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { addEntry } from "./actions";
 import StealthTextInput from "@/components/ui/StealthTextInput";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Player = {
   id: string;
@@ -105,9 +109,12 @@ export default function SinglePlayerEntryPanel({
         </div>
       </div>
 
-      <div className="max-h-[560px] overflow-auto rounded border border-gray-300">
+      <div
+        className="rounded border border-gray-300"
+        style={backofficeTableStickyScroll}
+      >
         <table className="w-full border-collapse text-[11px] text-black">
-          <thead className="sticky top-0 z-10 bg-gray-200 text-black">
+          <thead className={twStickyTheadGray50}>
             <tr>
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 {ts.thPlayer}

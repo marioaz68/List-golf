@@ -6,6 +6,10 @@ import { addSelectedEntries } from "./actions";
 import StealthTextInput from "@/components/ui/StealthTextInput";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { fmt } from "@/lib/i18n/fmt";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Player = {
   id: string;
@@ -265,9 +269,12 @@ export default function BulkEntryPanel({
       <form action={addSelectedEntries} className="space-y-1">
         <input type="hidden" name="tournament_id" value={tournamentId} />
 
-        <div className="max-h-[560px] overflow-auto rounded border border-gray-300">
+        <div
+          className="rounded border border-gray-300"
+          style={backofficeTableStickyScroll}
+        >
           <table className="w-full border-collapse text-[11px] text-black">
-            <thead className="sticky top-0 z-10 bg-gray-200 text-black">
+            <thead className={twStickyTheadGray50}>
               <tr>
                 <th className="w-[46px] border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
                   {tb.thSel}

@@ -13,6 +13,10 @@ import StealthTextInput from "@/components/ui/StealthTextInput";
 import { createScorecardWithTokensAction } from "@/app/(backoffice)/scorecards/actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { fmt } from "@/lib/i18n/fmt";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 type RoundSignature = {
   round_no: number;
@@ -276,9 +280,14 @@ ${res.witness_url}`;
         </div>
       </div>
 
-      <div className="max-h-[560px] overflow-auto border">
+      <div
+        style={{
+          ...backofficeTableStickyScroll,
+          border: "1px solid rgb(209 213 219)",
+        }}
+      >
         <table className="min-w-[1320px] w-max whitespace-nowrap text-[11px]">
-          <thead className="sticky top-0 z-10 bg-gray-200">
+          <thead className={twStickyTheadGray50}>
             <tr>
               <th className="px-1 py-1 text-left">{te.thNumber}</th>
               <th className="px-1 py-1 text-left">{te.thPlayer}</th>

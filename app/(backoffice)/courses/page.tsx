@@ -7,6 +7,10 @@ import {
 } from "./actions";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -431,9 +435,9 @@ export default async function CoursesPage(props: {
             <form action={saveCourseHoles}>
               <input type="hidden" name="course_id" value={course.id} />
 
-              <div className="overflow-x-auto">
+              <div style={backofficeTableStickyScroll}>
                 <table className="w-full border-collapse text-[11px]">
-                  <thead className="bg-gray-100 text-gray-900">
+                  <thead className={twStickyTheadGray50}>
                     <tr>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
                         HOYO
@@ -521,9 +525,9 @@ export default async function CoursesPage(props: {
                 )}
               />
 
-              <div className="overflow-x-auto">
+              <div style={backofficeTableStickyScroll}>
                 <table className="w-full border-collapse text-[11px]">
-                  <thead className="bg-gray-100 text-gray-900">
+                  <thead className={twStickyTheadGray50}>
                     <tr>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
                         ORDEN

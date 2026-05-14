@@ -12,6 +12,11 @@ import {
   updateClub,
   updateClubLogo,
 } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  cardStyleAllowTableSticky,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
 
 type ClubRow = {
   id: string;
@@ -56,12 +61,14 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
 };
 
-const tableWrapStyle: React.CSSProperties = {
-  ...cardStyle,
-  overflow: "hidden",
+const clubsTableSectionStyle = cardStyleAllowTableSticky(cardStyle);
+
+const clubsTableScrollStyle: React.CSSProperties = {
+  ...backofficeTableStickyScroll,
+  borderRadius: 10,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   padding: "9px 10px",
   borderBottom: "1px solid #e5e7eb",
   fontSize: 12,
@@ -70,7 +77,7 @@ const thStyle: React.CSSProperties = {
   color: "#374151",
   background: "#f8fafc",
   fontWeight: 700,
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "9px 10px",
@@ -859,8 +866,9 @@ export default function ClubsClient({ clubs, copy }: Props) {
         </div>
       </section>
 
-      <section style={tableWrapStyle}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <section style={clubsTableSectionStyle}>
+        <div style={clubsTableScrollStyle}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <th style={thStyle}>{copy.thLogo}</th>
@@ -1174,6 +1182,7 @@ export default function ClubsClient({ clubs, copy }: Props) {
             )}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );

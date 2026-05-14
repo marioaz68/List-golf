@@ -1,6 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { saveTournamentHoles, seedTournamentHoles } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -163,10 +167,10 @@ export default async function TournamentHolesPage(props: {
         <form action={saveTournamentHoles} className="space-y-4">
           <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
 
-          <div className="overflow-x-auto">
+          <div style={backofficeTableStickyScroll}>
             <table className="min-w-[520px] w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100 text-left">
+              <thead className={twStickyTheadGray50}>
+                <tr className="text-left">
                   <th className="w-28 border p-2">Hoyo</th>
                   <th className="w-40 border p-2">Par</th>
                   <th className="w-48 border p-2">HCP hoyo</th>

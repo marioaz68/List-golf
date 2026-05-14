@@ -2,6 +2,10 @@ import { createClient } from "@/utils/supabase/server";
 import { unstable_noStore as noStore } from "next/cache";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -111,52 +115,54 @@ function categoryLabel(row: { category_code: string | null; category_name: strin
 
 function renderTable(title: string, rows: LeaderboardRow[], rounds: RoundRow[]) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-2 py-1.5 text-[11px] font-semibold leading-none text-gray-800">
         {title}
       </div>
 
-      <table className="w-full border-collapse text-[11px] leading-none">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-1.5 py-1 text-left font-semibold">Pos</th>
-            <th className="px-1.5 py-1 text-left font-semibold">#</th>
-            <th className="px-1.5 py-1 text-left font-semibold">Jugador</th>
-            <th className="px-1.5 py-1 text-left font-semibold">Cat</th>
-            <th className="px-1.5 py-1 text-center font-semibold">HCP</th>
-
-            {rounds.map((r) => (
-              <th key={r.id} className="px-1.5 py-1 text-center font-semibold">
-                R{r.round_no}
-              </th>
-            ))}
-
-            <th className="px-1.5 py-1 text-center font-semibold">Rds</th>
-            <th className="px-1.5 py-1 text-center font-semibold">Total</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {rows.map((row) => (
-            <tr key={`${title}-${row.player_id}`} className="border-t border-gray-100">
-              <td className="px-1.5 py-[3px] font-semibold">{row.pos}</td>
-              <td className="px-1.5 py-[3px]">{row.player_number ?? "-"}</td>
-              <td className="px-1.5 py-[3px] whitespace-nowrap">{row.name}</td>
-              <td className="px-1.5 py-[3px]">{row.category_code ?? "-"}</td>
-              <td className="px-1.5 py-[3px] text-center">{row.handicap_torneo ?? "-"}</td>
+      <div style={backofficeTableStickyScroll}>
+        <table className="w-full border-collapse text-[11px] leading-none">
+          <thead className={twStickyTheadGray50}>
+            <tr>
+              <th className="px-1.5 py-1 text-left font-semibold">Pos</th>
+              <th className="px-1.5 py-1 text-left font-semibold">#</th>
+              <th className="px-1.5 py-1 text-left font-semibold">Jugador</th>
+              <th className="px-1.5 py-1 text-left font-semibold">Cat</th>
+              <th className="px-1.5 py-1 text-center font-semibold">HCP</th>
 
               {rounds.map((r) => (
-                <td key={r.id} className="px-1.5 py-[3px] text-center">
-                  {row.round_scores[r.round_no] ?? ""}
-                </td>
+                <th key={r.id} className="px-1.5 py-1 text-center font-semibold">
+                  R{r.round_no}
+                </th>
               ))}
 
-              <td className="px-1.5 py-[3px] text-center">{row.rounds_played}</td>
-              <td className="px-1.5 py-[3px] text-center font-bold">{row.total_gross}</td>
+              <th className="px-1.5 py-1 text-center font-semibold">Rds</th>
+              <th className="px-1.5 py-1 text-center font-semibold">Total</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${title}-${row.player_id}`} className="border-t border-gray-100">
+                <td className="px-1.5 py-[3px] font-semibold">{row.pos}</td>
+                <td className="px-1.5 py-[3px]">{row.player_number ?? "-"}</td>
+                <td className="px-1.5 py-[3px] whitespace-nowrap">{row.name}</td>
+                <td className="px-1.5 py-[3px]">{row.category_code ?? "-"}</td>
+                <td className="px-1.5 py-[3px] text-center">{row.handicap_torneo ?? "-"}</td>
+
+                {rounds.map((r) => (
+                  <td key={r.id} className="px-1.5 py-[3px] text-center">
+                    {row.round_scores[r.round_no] ?? ""}
+                  </td>
+                ))}
+
+                <td className="px-1.5 py-[3px] text-center">{row.rounds_played}</td>
+                <td className="px-1.5 py-[3px] text-center font-bold">{row.total_gross}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

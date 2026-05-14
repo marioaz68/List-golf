@@ -1,6 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { saveCourseHoles, seedCourseHoles } from "./actions";
+import {
+  backofficeTableStickyScroll,
+  twStickyTheadGray50,
+} from "@/lib/ui/backofficeTableSticky";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -175,9 +179,9 @@ export default async function CourseHolesPage(props: {
         <form action={saveCourseHoles} className="space-y-1">
           <input type="hidden" name="course_id" value={effectiveCourseId} />
 
-          <div className="overflow-x-auto rounded border border-gray-300">
+          <div className="rounded border border-gray-300" style={backofficeTableStickyScroll}>
             <table className="min-w-[520px] w-full border-collapse text-[11px] text-black">
-              <thead className="bg-gray-200 text-black">
+              <thead className={twStickyTheadGray50}>
                 <tr>
                   <th className="w-24 border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                     Hoyo

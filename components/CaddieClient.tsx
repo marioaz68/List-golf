@@ -10,6 +10,10 @@ import {
 } from "@/app/(backoffice)/caddies/new/actions";
 import SubmitButton from "@/components/ui/SubmitButton";
 import StealthTextInput from "@/components/ui/StealthTextInput";
+import {
+  backofficeTableStickyScroll,
+  thStyleWithSticky,
+} from "@/lib/ui/backofficeTableSticky";
 
 type Club = {
   id: string;
@@ -158,8 +162,8 @@ const dangerButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const tableWrapStyle: React.CSSProperties = {
-  overflowX: "auto",
+const caddieTableScroll: React.CSSProperties = {
+  ...backofficeTableStickyScroll,
   border: "1px solid #e5e7eb",
   borderRadius: 8,
 };
@@ -170,7 +174,7 @@ const tableStyle: React.CSSProperties = {
   fontSize: 12,
 };
 
-const thStyle: React.CSSProperties = {
+const thStyle = thStyleWithSticky({
   textAlign: "left",
   padding: "8px 10px",
   borderBottom: "1px solid #e5e7eb",
@@ -180,7 +184,7 @@ const thStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "#334155",
   whiteSpace: "nowrap",
-};
+});
 
 const tdStyle: React.CSSProperties = {
   padding: "8px 10px",
@@ -617,7 +621,7 @@ export default function CaddieClient({
             {...antiSafariProps}
           />
 
-          <div style={tableWrapStyle}>
+          <div style={caddieTableScroll}>
             <table style={tableStyle}>
               <thead>
                 <tr>
