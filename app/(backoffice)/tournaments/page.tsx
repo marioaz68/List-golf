@@ -44,9 +44,11 @@ type CountRow = {
 };
 
 const pageWrap: React.CSSProperties = {
-  padding: "16px 20px",
+  padding: "clamp(10px, 2.5vw, 16px) clamp(12px, 3vw, 20px)",
   display: "grid",
-  gap: 14,
+  gap: 12,
+  maxWidth: "100%",
+  boxSizing: "border-box",
 };
 
 const cardStyle: React.CSSProperties = {
@@ -208,44 +210,6 @@ const nameLinkStyle: React.CSSProperties = {
   lineHeight: 1.25,
 };
 
-const filtersFormStyle: React.CSSProperties = {
-  padding: 12,
-  display: "grid",
-  gap: 12,
-};
-
-const filtersGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-  gap: 10,
-  alignItems: "end",
-};
-
-const clubFieldStyle: React.CSSProperties = {
-  gridColumn: "span 4",
-  minWidth: 0,
-};
-
-const dateFieldStyle: React.CSSProperties = {
-  gridColumn: "span 2",
-  minWidth: 0,
-};
-
-const buttonGroupWrapStyle: React.CSSProperties = {
-  gridColumn: "span 4",
-  minWidth: 0,
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  alignItems: "center",
-  justifyContent: "flex-start",
-};
-
-const fieldWrapStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
 const labelStyle: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
@@ -267,10 +231,64 @@ const fieldStyle: React.CSSProperties = {
   minWidth: 0,
 };
 
+const filtersFormStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  display: "grid",
+  gap: 10,
+  maxWidth: "100%",
+  boxSizing: "border-box",
+};
+
+/** Fila única que envuelve en móvil sin columnas microscópicas (evita el grid 12-col). */
+const filtersRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px 10px",
+  alignItems: "flex-end",
+  maxWidth: "100%",
+};
+
+const clubFieldStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  flex: "1 1 12rem",
+  minWidth: 0,
+  maxWidth: "min(100%, 22rem)",
+};
+
+const dateFieldStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  flex: "0 1 9.25rem",
+  width: "min(100%, 9.25rem)",
+  minWidth: "min(100%, 8.5rem)",
+  maxWidth: "100%",
+};
+
+const dateInputStyle: React.CSSProperties = {
+  ...fieldStyle,
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+};
+
+const buttonGroupWrapStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  alignItems: "center",
+  justifyContent: "flex-start",
+  flex: "1 1 10rem",
+  minWidth: 0,
+};
+
 const filtersNoteStyle: React.CSSProperties = {
   padding: "0 12px 12px",
   fontSize: 12,
   color: "#475569",
+  lineHeight: 1.45,
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };
 
 function getParam(sp: SP, key: string) {
@@ -629,8 +647,8 @@ export default async function TournamentsPage({
         </div>
 
         <form method="get" style={filtersFormStyle}>
-          <div style={filtersGridStyle}>
-            <div style={{ ...fieldWrapStyle, ...clubFieldStyle }}>
+          <div style={filtersRowStyle}>
+            <div style={clubFieldStyle}>
               <label htmlFor="club" style={labelStyle}>
                 {tm.labelClub}
               </label>
@@ -650,7 +668,7 @@ export default async function TournamentsPage({
               </datalist>
             </div>
 
-            <div style={{ ...fieldWrapStyle, ...dateFieldStyle }}>
+            <div style={dateFieldStyle}>
               <label htmlFor="from" style={labelStyle}>
                 {tm.labelDateFrom}
               </label>
@@ -659,11 +677,11 @@ export default async function TournamentsPage({
                 name="from"
                 type="date"
                 defaultValue={from}
-                style={fieldStyle}
+                style={dateInputStyle}
               />
             </div>
 
-            <div style={{ ...fieldWrapStyle, ...dateFieldStyle }}>
+            <div style={dateFieldStyle}>
               <label htmlFor="to" style={labelStyle}>
                 {tm.labelDateTo}
               </label>
@@ -672,7 +690,7 @@ export default async function TournamentsPage({
                 name="to"
                 type="date"
                 defaultValue={to}
-                style={fieldStyle}
+                style={dateInputStyle}
               />
             </div>
 
