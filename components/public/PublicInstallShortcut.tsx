@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { Smartphone } from "lucide-react";
 import { messages } from "@/lib/i18n/messages";
-import type { Locale } from "@/lib/i18n/locale";
+import { readLocaleFromDocumentCookie, type Locale } from "@/lib/i18n/locale";
 
 type BeforeInstallPromptLike = {
   preventDefault: () => void;
@@ -13,11 +13,17 @@ type BeforeInstallPromptLike = {
 
 export function PublicInstallShortcut({ locale }: { locale: Locale }) {
   const titleId = useId();
-  const t = messages[locale].publicInstall;
+  const [uiLocale, setUiLocale] = useState<Locale>(locale);
   const [open, setOpen] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptLike | null>(
     null
   );
+
+  const t = messages[uiLocale].publicInstall;
+
+  useEffect(() => {
+    setUiLocale(locale);
+  }, [locale]);
 
   useEffect(() => {
     const onBip = (e: Event) => {
@@ -49,6 +55,11 @@ export function PublicInstallShortcut({ locale }: { locale: Locale }) {
     }
   }, [deferred]);
 
+  function handleOpenModal() {
+    setUiLocale(readLocaleFromDocumentCookie());
+    setOpen(true);
+  }
+
   return (
     <>
       <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/60 px-1.5 py-1">
@@ -57,7 +68,7 @@ export function PublicInstallShortcut({ locale }: { locale: Locale }) {
         </span>
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={handleOpenModal}
           className="inline-flex max-w-[10.5rem] items-center gap-1 rounded-md border border-white/15 bg-slate-800/80 px-2 py-1 text-[10px] font-bold leading-none text-slate-200 transition hover:bg-slate-700 sm:max-w-[12rem]"
           aria-label={t.aria}
         >
@@ -96,7 +107,10 @@ export function PublicInstallShortcut({ locale }: { locale: Locale }) {
               </button>
             ) : null}
 
-            <div className="mt-4 space-y-4 text-sm text-slate-200">
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {t.stepsLead}
+            </p>
+            <div className="mt-2 space-y-4 text-sm text-slate-200">
               <div>
                 <p className="font-semibold text-cyan-200">{t.iosTitle}</p>
                 <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-slate-300">
