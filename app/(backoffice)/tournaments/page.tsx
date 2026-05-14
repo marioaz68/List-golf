@@ -284,9 +284,10 @@ const buttonGroupWrapStyle: React.CSSProperties = {
   flexWrap: "wrap",
   gap: 8,
   alignItems: "center",
-  justifyContent: "flex-start",
-  flex: "1 1 10rem",
+  justifyContent: "flex-end",
+  flex: "0 1 auto",
   minWidth: 0,
+  marginLeft: "auto",
 };
 
 const filtersNoteStyle: React.CSSProperties = {
@@ -299,8 +300,26 @@ const filtersNoteStyle: React.CSSProperties = {
 };
 
 /** Compacta solo en viewport estrecho; los inline styles del form ganan sin esto. */
-const tournamentsDateFiltersMobileCss = `
+const tournamentsFilterExtraCss = `
+#tournaments-list-filters .tournaments-date-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 22px;
+  flex: 0 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+}
+@media (min-width: 768px) {
+  #tournaments-list-filters .tournaments-date-range {
+    gap: 12px 30px;
+  }
+}
 @media (max-width: 767px) {
+  #tournaments-list-filters .tournaments-date-range {
+    width: 100%;
+    gap: 12px 18px !important;
+  }
   #tournaments-list-filters .tournaments-date-field {
     flex: 0 1 6.75rem !important;
     width: min(100%, 6.75rem) !important;
@@ -370,6 +389,17 @@ function uniqueClubOptions(
   }
 
   return list.sort((a, b) => a.localeCompare(b, sortLocale, { sensitivity: "base" }));
+}
+
+/** Alinea el valor del query con un club anfitrión conocido (lista cerrada). */
+function canonicalClubFilter(requested: string, hostClubNames: string[]): string {
+  const t = requested.trim();
+  if (!t) return "";
+  for (const o of hostClubNames) {
+    if (o === t) return o;
+    if (normalizeText(o) === normalizeText(t)) return o;
+  }
+  return "";
 }
 
 const statusBadge = (status: string | null): React.CSSProperties => {
@@ -552,7 +582,7 @@ export default async function TournamentsPage({
   const nav = messages[locale].sidebar.nav;
   const sortLocale = locale === "en" ? "en" : "es";
 
-  const club = (getParam(sp, "club") ?? "").trim();
+  const clubFromUrl = (getParam(sp, "club") ?? "").trim();
   const from = normalizeDateInput(getParam(sp, "from") ?? "");
   const to = normalizeDateInput(getParam(sp, "to") ?? "");
 
@@ -565,6 +595,21 @@ export default async function TournamentsPage({
   const roles = user ? await getUserRoles(supabase, user.id) : [];
   const isScoreCapture = roles.includes("score_capture");
 
+  const { data: hostClubRows, error: hostClubErr } = await supabase
+    .from("tournaments")
+    .select("club_name")
+    .not("club_name", "is", null);
+
+  if (hostClubErr) {
+    throw new Error(`Error leyendo clubes anfitriones: ${hostClubErr.message}`);
+  }
+
+  const clubOptions = uniqueClubOptions(
+    (hostClubRows ?? []) as Pick<TournamentRow, "club_name">[],
+    sortLocale
+  );
+  const club = canonicalClubFilter(clubFromUrl, clubOptions);
+
   let tournamentsQuery = supabase
     .from("tournaments")
     .select(
@@ -574,7 +619,7 @@ export default async function TournamentsPage({
     .order("created_at", { ascending: false });
 
   if (club) {
-    tournamentsQuery = tournamentsQuery.ilike("club_name", `%${club}%`);
+    tournamentsQuery = tournamentsQuery.ilike("club_name", club);
   }
 
   if (from) {
@@ -596,7 +641,6 @@ export default async function TournamentsPage({
     holesRes,
     staffRes,
     entriesRes,
-    clubsFilterRes,
   ] = await Promise.all([
     tournamentsQuery,
     supabase.from("courses").select("id, name, short_name"),
@@ -611,7 +655,6 @@ export default async function TournamentsPage({
       .select("id, tournament_id")
       .eq("is_active", true),
     supabase.from("tournament_entries").select("id, tournament_id"),
-    supabase.from("tournaments").select("club_name"),
   ]);
 
   if (tournamentsRes.error) {
@@ -621,15 +664,6 @@ export default async function TournamentsPage({
   const tournaments = (tournamentsRes.data ?? []) as TournamentRow[];
   const courses = (coursesRes.data ?? []) as CourseRow[];
   const clubs = (clubsRes.data ?? []) as ClubRow[];
-
-  const clubOptions = uniqueClubOptions(
-    ((clubsFilterRes.data ?? []) as Array<{ club_name: string | null }>).map(
-      (row) => ({
-        club_name: row.club_name,
-      })
-    ),
-    sortLocale
-  );
 
   const categoriesByTournament = countByTournament(categoriesRes.data);
   const roundsByTournament = countByTournament(roundsRes.data);
@@ -643,7 +677,7 @@ export default async function TournamentsPage({
 
   return (
     <div style={pageWrap}>
-      <style dangerouslySetInnerHTML={{ __html: tournamentsDateFiltersMobileCss }} />
+      <style dangerouslySetInnerHTML={{ __html: tournamentsFilterExtraCss }} />
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
@@ -683,22 +717,17 @@ export default async function TournamentsPage({
               <label htmlFor="club" style={labelStyle}>
                 {tm.labelClub}
               </label>
-              <input
-                id="club"
-                name="club"
-                defaultValue={club}
-                placeholder={tm.clubPlaceholder}
-                style={fieldStyle}
-                list="club-options"
-                autoComplete="off"
-              />
-              <datalist id="club-options">
+              <select id="club" name="club" defaultValue={club} style={fieldStyle}>
+                <option value="">{tm.clubSelectAll}</option>
                 {clubOptions.map((clubName) => (
-                  <option key={clubName} value={clubName} />
+                  <option key={clubName} value={clubName}>
+                    {displayClubName(clubName, clubs)}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </div>
 
+            <div className="tournaments-date-range">
             <div className="tournaments-date-field" style={dateFieldStyle}>
               <label htmlFor="from" style={labelStyle}>
                 {tm.labelDateFrom}
@@ -725,6 +754,7 @@ export default async function TournamentsPage({
                 className="tournaments-date-input"
                 style={dateInputStyle}
               />
+            </div>
             </div>
 
             <div style={buttonGroupWrapStyle}>
