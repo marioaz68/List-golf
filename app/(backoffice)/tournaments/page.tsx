@@ -298,6 +298,29 @@ const filtersNoteStyle: React.CSSProperties = {
   overflowWrap: "anywhere",
 };
 
+/** Compacta solo en viewport estrecho; los inline styles del form ganan sin esto. */
+const tournamentsDateFiltersMobileCss = `
+@media (max-width: 767px) {
+  #tournaments-list-filters .tournaments-date-field {
+    flex: 0 1 6.75rem !important;
+    width: min(100%, 6.75rem) !important;
+    min-width: min(100%, 6.25rem) !important;
+    max-width: min(100%, 7rem) !important;
+    gap: 4px !important;
+  }
+  #tournaments-list-filters .tournaments-date-field > label {
+    font-size: 10px !important;
+    letter-spacing: 0.2px !important;
+  }
+  #tournaments-list-filters .tournaments-date-input {
+    height: 30px !important;
+    font-size: 11px !important;
+    padding: 0 6px !important;
+    border-radius: 6px !important;
+  }
+}
+`;
+
 function getParam(sp: SP, key: string) {
   const value = sp[key];
   return Array.isArray(value) ? value[0] : value;
@@ -620,6 +643,7 @@ export default async function TournamentsPage({
 
   return (
     <div style={pageWrap}>
+      <style dangerouslySetInnerHTML={{ __html: tournamentsDateFiltersMobileCss }} />
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
@@ -653,7 +677,7 @@ export default async function TournamentsPage({
           </div>
         </div>
 
-        <form method="get" style={filtersFormStyle}>
+        <form id="tournaments-list-filters" method="get" style={filtersFormStyle}>
           <div style={filtersRowStyle}>
             <div style={clubFieldStyle}>
               <label htmlFor="club" style={labelStyle}>
@@ -675,7 +699,7 @@ export default async function TournamentsPage({
               </datalist>
             </div>
 
-            <div style={dateFieldStyle}>
+            <div className="tournaments-date-field" style={dateFieldStyle}>
               <label htmlFor="from" style={labelStyle}>
                 {tm.labelDateFrom}
               </label>
@@ -684,11 +708,12 @@ export default async function TournamentsPage({
                 name="from"
                 type="date"
                 defaultValue={from}
+                className="tournaments-date-input"
                 style={dateInputStyle}
               />
             </div>
 
-            <div style={dateFieldStyle}>
+            <div className="tournaments-date-field" style={dateFieldStyle}>
               <label htmlFor="to" style={labelStyle}>
                 {tm.labelDateTo}
               </label>
@@ -697,6 +722,7 @@ export default async function TournamentsPage({
                 name="to"
                 type="date"
                 defaultValue={to}
+                className="tournaments-date-input"
                 style={dateInputStyle}
               />
             </div>
