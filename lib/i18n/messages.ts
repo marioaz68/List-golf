@@ -78,6 +78,10 @@ const es = {
     statusHistoric: "Histórico",
     scopeHint:
       "Activos: ya iniciaron y aún no cierran (si hay fecha de cierre, hasta ese día; si no, hasta 4 semanas después del inicio). Futuros: inicio posterior a hoy. Históricos: ya cerraron (cierre anterior a hoy; sin cierre, pasadas 4 semanas desde el inicio).",
+    loadErrorTitle: "No pudimos cargar el listado de torneos",
+    loadErrorBody:
+      "Suele deberse a permisos en Supabase (RLS): el rol anónimo necesita poder leer tournaments, clubs y courses para los datos públicos. Revisa también en Vercel los runtime logs de esta petición.",
+    loadErrorTechnical: "Detalle del servidor",
   },
   dashboard: {
     title: "Panel principal",
@@ -825,6 +829,10 @@ const en: Messages = {
     statusHistoric: "Past",
     scopeHint:
       "Active: started and not closed yet (uses end date when set; otherwise up to 4 weeks after the start). Upcoming: start after today. Past: already closed (end before today; without an end date, after 4 weeks from the start).",
+    loadErrorTitle: "We couldn’t load the tournament list",
+    loadErrorBody:
+      "This is often a Supabase RLS issue: the anonymous role needs SELECT on tournaments, clubs, and courses for public data. Check Vercel runtime logs for this request as well.",
+    loadErrorTechnical: "Server detail",
   },
   dashboard: {
     title: "Dashboard",

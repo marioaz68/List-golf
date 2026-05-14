@@ -48,6 +48,17 @@ function firstValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function decodeCityParam(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const spaced = trimmed.replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(spaced);
+  } catch {
+    return spaced;
+  }
+}
+
 function parseLocalNoon(dateStr: string): Date {
   const s = dateStr.trim().slice(0, 10);
   return new Date(`${s}T12:00:00`);
@@ -154,6 +165,35 @@ function cardStatus(
 const selectFieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-white/10 bg-[#0c1728] px-3 py-2 text-sm text-white";
 
+function PublicHomeLoadError({
+  h,
+  detailMessage,
+}: {
+  h: (typeof messages)["es"]["publicHome"];
+  detailMessage: string;
+}) {
+  return (
+    <main className="min-h-screen bg-[#08111f] text-white">
+      <section className="border-b border-white/10 bg-[#08111f]">
+        <div className="mx-auto max-w-[1700px] px-4 py-8 sm:px-5">
+          <h1 className="text-lg font-semibold text-white sm:text-xl">
+            {h.loadErrorTitle}
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm text-slate-300">{h.loadErrorBody}</p>
+          <details className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+            <summary className="cursor-pointer text-sm font-semibold text-cyan-300">
+              {h.loadErrorTechnical}
+            </summary>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-xs text-slate-400">
+              {detailMessage}
+            </pre>
+          </details>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -165,9 +205,7 @@ export default async function HomePage({
   const params = await searchParams;
   const selectedClub = firstValue(params.club).trim();
   const selectedCityRaw = firstValue(params.city).trim();
-  const selectedCity = selectedCityRaw
-    ? decodeURIComponent(selectedCityRaw.replace(/\+/g, " "))
-    : "";
+  const selectedCity = decodeCityParam(selectedCityRaw);
 
   const scopeParam = firstValue(params.scope).trim();
   const legacyStatus = firstValue(params.status).trim();
@@ -188,8 +226,8 @@ export default async function HomePage({
     .eq("is_archived", false);
 
   if (tournamentsError) {
-    throw new Error(
-      `Error leyendo torneos públicos: ${tournamentsError.message}`
+    return (
+      <PublicHomeLoadError h={h} detailMessage={tournamentsError.message} />
     );
   }
 
@@ -221,7 +259,7 @@ export default async function HomePage({
       .in("id", clubIds);
 
     if (clubsError) {
-      throw new Error(`Error leyendo clubs: ${clubsError.message}`);
+      return <PublicHomeLoadError h={h} detailMessage={clubsError.message} />;
     }
 
     clubsMap = new Map(
@@ -239,7 +277,7 @@ export default async function HomePage({
       .in("id", courseIds);
 
     if (coursesError) {
-      throw new Error(`Error leyendo campos: ${coursesError.message}`);
+      return <PublicHomeLoadError h={h} detailMessage={coursesError.message} />;
     }
 
     coursesMap = new Map(
