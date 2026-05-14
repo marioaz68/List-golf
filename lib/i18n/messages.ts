@@ -737,6 +737,13 @@ const es = {
     detailToPar: "TO PAR",
     detailPos: "POS",
     detailNoCapture: "No hay captura para la ronda seleccionada.",
+    leaderboardEmptyView: "No hay jugadores para mostrar en esta vista.",
+    playerSearchPlaceholder: "Buscar jugador, club o categoría…",
+    playerSearchAria: "Filtrar la tabla por nombre, club o categoría",
+    playerSearchHint:
+      "Filtra la vista actual. Si no sabes la categoría, elige «Todas las categorías» arriba y busca aquí.",
+    playerSearchNoMatches: "Ningún jugador coincide con tu búsqueda.",
+    playerSearchCount: "{shown} de {total}",
   },
   publicTeeSheet: {
     empty:
@@ -1514,6 +1521,13 @@ const en: Messages = {
     detailToPar: "vs",
     detailPos: "POS",
     detailNoCapture: "No scores for the selected round.",
+    leaderboardEmptyView: "No players to show in this view.",
+    playerSearchPlaceholder: "Search player, club, or category…",
+    playerSearchAria: "Filter the table by name, club, or category",
+    playerSearchHint:
+      "Filters the current view. If you do not know the category, pick \"All categories\" above and search here.",
+    playerSearchNoMatches: "No player matches your search.",
+    playerSearchCount: "{shown} of {total}",
   },
   publicTeeSheet: {
     empty:

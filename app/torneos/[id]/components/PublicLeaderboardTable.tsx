@@ -44,6 +44,9 @@ function renderMove(move: number | null) {
 type PublicLeaderboardTableProps = {
   tournamentId: string;
   leaderboard: LeaderboardRow[];
+  /** Para nombres compactos cuando `leaderboard` es un subconjunto filtrado (misma categoría que en la lista completa). */
+  peerRowsForNameCompact?: LeaderboardRow[];
+  emptyLeaderboardLabel?: string;
   view: "live" | "official";
   selectedCategoryId: string;
   selectedRound: SelectedRoundMeta | null;
@@ -54,12 +57,18 @@ type PublicLeaderboardTableProps = {
 export default function PublicLeaderboardTable({
   tournamentId,
   leaderboard,
+  peerRowsForNameCompact,
+  emptyLeaderboardLabel,
   view,
   selectedCategoryId,
   selectedRound,
   requestedDetailId,
   detailLabels,
 }: PublicLeaderboardTableProps) {
+  const peerRows = peerRowsForNameCompact ?? leaderboard;
+  const emptyLabel =
+    emptyLeaderboardLabel ??
+    "No hay jugadores para mostrar en esta vista.";
   const posW = view === "official" ? "w-[44px]" : "w-[50px]";
   const nameCol = "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
 
@@ -123,7 +132,7 @@ export default function PublicLeaderboardTable({
                 colSpan={9}
                 className="px-4 py-10 text-center text-sm text-slate-400"
               >
-                No hay jugadores para mostrar en esta vista.
+                {emptyLabel}
               </td>
             </tr>
           ) : (
@@ -145,7 +154,7 @@ export default function PublicLeaderboardTable({
               const isOpen = requestedDetailId === row.entry_id;
               const shortName = publicLeaderboardCompactPlayerName(
                 row,
-                leaderboard
+                peerRows
               );
 
               return (

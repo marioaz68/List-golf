@@ -5,7 +5,7 @@ import FavoritesView from "@/components/public/FavoritesView";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
-import PublicLeaderboardTable from "./components/PublicLeaderboardTable";
+import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
@@ -1072,14 +1072,22 @@ export default async function PublicTournamentPage({
               requestedDetailId={requestedDetailId}
             />
           ) : view === "tee-sheet" ? null : (
-            <PublicLeaderboardTable
+            <PublicLeaderboardWithSearch
               tournamentId={typedTournament.id}
-              leaderboard={leaderboard}
+              fullLeaderboard={leaderboard}
               view={view === "official" ? "official" : "live"}
               selectedCategoryId={selectedCategoryId}
               selectedRound={selectedRound}
               requestedDetailId={requestedDetailId}
               detailLabels={detailTableLabels}
+              labels={{
+                placeholder: pub.playerSearchPlaceholder,
+                ariaLabel: pub.playerSearchAria,
+                hint: pub.playerSearchHint,
+                noMatches: pub.playerSearchNoMatches,
+                leaderboardEmpty: pub.leaderboardEmptyView,
+                countTemplate: pub.playerSearchCount,
+              }}
             />
           )}
         </div>
