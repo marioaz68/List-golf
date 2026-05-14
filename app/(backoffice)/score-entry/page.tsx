@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
@@ -71,23 +72,33 @@ type EntryPlayerRow = {
   handicap_index: number | null;
 };
 
+type CategoryMini = {
+  code: string | null;
+  name: string | null;
+};
+
 type EntryJoinRow = {
+  id: string;
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
   category_id: string | null;
   player: EntryPlayerRow | EntryPlayerRow[] | null;
+  category: CategoryMini | CategoryMini[] | null;
 };
 
 type ValidEntryRow = {
+  id: string;
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
   category_id: string | null;
   player: EntryPlayerRow;
+  category: CategoryMini | null;
 };
 
 const ENTRY_SELECT_FOR_LOOKUP = `
+        id,
         player_id,
         player_number,
         handicap_index,
@@ -97,6 +108,10 @@ const ENTRY_SELECT_FOR_LOOKUP = `
           first_name,
           last_name,
           handicap_index
+        ),
+        category:categories (
+          code,
+          name
         )
       `;
 
@@ -235,9 +250,18 @@ function sortRoundsForSelect(a: RoundRow, b: RoundRow) {
   );
 }
 
-function isValidEntry(row: EntryJoinRow): row is ValidEntryRow {
+function toValidEntry(row: EntryJoinRow): ValidEntryRow | null {
   const player = oneOrNull(row.player);
-  return !!player?.id;
+  if (!player?.id || !row.id) return null;
+  return {
+    id: row.id,
+    player_id: row.player_id,
+    player_number: row.player_number,
+    handicap_index: row.handicap_index,
+    category_id: row.category_id,
+    player,
+    category: oneOrNull(row.category),
+  };
 }
 
 export default async function ScoreEntryPage(props: {
@@ -250,6 +274,8 @@ export default async function ScoreEntryPage(props: {
   const sp = props.searchParams ? await props.searchParams : {};
 
   const searchRaw = typeof sp.q === "string" ? normalizeText(sp.q) : "";
+  const requestedEntryId =
+    typeof sp.entry_id === "string" ? sp.entry_id.trim() : "";
   const requestedRoundId = typeof sp.round_id === "string" ? sp.round_id : "";
   const tournamentIdFromQuery =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
@@ -342,6 +368,7 @@ export default async function ScoreEntryPage(props: {
   let existingScores: Record<number, number> = {};
   let capturedRounds: CapturedRoundRow[] = [];
   let errorMsg = "";
+  let ambiguousCandidates: ValidEntryRow[] = [];
 
   if (selectedRound) {
     const { data: holesData, error: holesErr } = await supabase
@@ -401,58 +428,43 @@ export default async function ScoreEntryPage(props: {
     if (entryErr) {
       errorMsg = entryErr.message;
     } else {
-      const entries = entryRows.filter(isValidEntry);
+      const entries: ValidEntryRow[] = entryRows
+        .map((row) => toValidEntry(row as EntryJoinRow))
+        .filter((row): row is ValidEntryRow => row !== null);
 
-      if (isNumeric) {
-        const wanted = Number(searchRaw);
-        const found =
-          entries.find((row) => {
-            return (
+      const wantedNum = isNumeric ? Number(searchRaw) : NaN;
+
+      const candidates = isNumeric
+        ? entries.filter(
+            (row) =>
               row.player_number != null &&
-              Number(row.player_number) === wanted
-            );
-          }) ?? null;
+              Number(row.player_number) === wantedNum
+          )
+        : entries.filter((row) =>
+            entryMatchesNameQuery(row.player, searchRaw)
+          );
 
-        if (found) {
-          matchedEntry = found;
-          const p = oneOrNull(found.player);
-
-          if (p) {
-            player = {
-              id: p.id,
-              player_number: found.player_number,
-              first_name: p.first_name,
-              last_name: p.last_name,
-              handicap_index: p.handicap_index,
-              handicap_torneo: found.handicap_index,
-            };
-          }
-        }
+      if (requestedEntryId) {
+        matchedEntry =
+          candidates.find((c) => c.id === requestedEntryId) ?? null;
+      }
+      if (!matchedEntry && candidates.length === 1) {
+        matchedEntry = candidates[0]!;
+      }
+      if (!matchedEntry && candidates.length > 1) {
+        ambiguousCandidates = candidates;
       }
 
-      if (!player) {
-        const found =
-          entries.find((row) => {
-            const p = oneOrNull(row.player);
-            if (!p) return false;
-            return entryMatchesNameQuery(p, searchRaw);
-          }) ?? null;
-
-        if (found) {
-          matchedEntry = found;
-          const p = oneOrNull(found.player);
-
-          if (p) {
-            player = {
-              id: p.id,
-              player_number: found.player_number,
-              first_name: p.first_name,
-              last_name: p.last_name,
-              handicap_index: p.handicap_index,
-              handicap_torneo: found.handicap_index,
-            };
-          }
-        }
+      if (matchedEntry) {
+        const p = matchedEntry.player;
+        player = {
+          id: p.id,
+          player_number: matchedEntry.player_number,
+          first_name: p.first_name,
+          last_name: p.last_name,
+          handicap_index: p.handicap_index,
+          handicap_torneo: matchedEntry.handicap_index,
+        };
       }
     }
 
@@ -634,9 +646,56 @@ export default async function ScoreEntryPage(props: {
           </div>
         )}
 
-        {selectedRound && searchRaw && !player && !errorMsg && (
+        {selectedRound &&
+          searchRaw &&
+          ambiguousCandidates.length > 1 &&
+          !player &&
+          !errorMsg && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+              <p className="font-semibold">{se.searchAmbiguousTitle}</p>
+              <ul className="mt-3 space-y-2">
+                {ambiguousCandidates.map((e) => {
+                  const p = e.player;
+                  const fullName = [p.first_name, p.last_name]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim();
+                  const cat = (e.category?.code ?? e.category?.name ?? "")
+                    .trim();
+                  const qs = new URLSearchParams();
+                  qs.set("tournament_id", selectedRound.tournament_id);
+                  qs.set("round_id", requestedRoundId || selectedRound.id);
+                  qs.set("q", searchRaw);
+                  qs.set("entry_id", e.id);
+                  const href = `/score-entry?${qs.toString()}`;
+                  return (
+                    <li key={e.id}>
+                      <Link
+                        href={href}
+                        className="block rounded-md border border-amber-300/80 bg-white px-3 py-2 font-medium text-amber-950 underline-offset-2 hover:bg-amber-100/80 hover:underline"
+                      >
+                        <span className="text-gray-900">{fullName || "—"}</span>
+                        <span className="mt-0.5 block text-xs font-normal text-gray-600">
+                          {e.player_number != null
+                            ? `#${e.player_number}`
+                            : "—"}
+                          {cat ? ` · ${cat}` : ""}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+        {selectedRound &&
+          searchRaw &&
+          !player &&
+          !errorMsg &&
+          ambiguousCandidates.length === 0 && (
           <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-            No encontré jugador inscrito con “{searchRaw}”.
+            {se.searchNotFound.replace("{q}", searchRaw)}
           </div>
         )}
 

@@ -350,6 +350,9 @@ const es = {
     labelSession: "Día y turno",
     roundsNeedDate:
       "Hay rondas sin fecha. Asigna fecha a cada ronda en la configuración del torneo para usar captura.",
+    searchAmbiguousTitle:
+      "Varios jugadores coinciden con la búsqueda. Elige la inscripción correcta:",
+    searchNotFound: "No encontré jugador inscrito con «{q}».",
   },
   scorecards: {
     title: "Tarjeta de puntuación (prueba con Supabase)",
@@ -1145,6 +1148,9 @@ const en: Messages = {
     labelSession: "Day & wave",
     roundsNeedDate:
       "Some rounds have no date. Assign a date to each round in tournament setup to use score entry.",
+    searchAmbiguousTitle:
+      "Several players match your search. Pick the correct enrollment:",
+    searchNotFound: "No enrolled player matches \"{q}\".",
   },
   scorecards: {
     title: "Live scorecard (Supabase test)",

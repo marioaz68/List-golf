@@ -161,6 +161,7 @@ export default function ScoreEntryClient({
 
     const sp = new URLSearchParams(window.location.search);
     sp.delete("q");
+    sp.delete("entry_id");
     const query = sp.toString();
     const path = window.location.pathname;
     const url = query ? `${path}?${query}` : path;
