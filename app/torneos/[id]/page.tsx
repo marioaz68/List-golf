@@ -55,6 +55,7 @@ import {
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import { PublicLanguageToggle } from "@/components/i18n/PublicLanguageToggle";
+import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -592,7 +593,8 @@ export default async function PublicTournamentPage({
 
         <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="mb-5 flex flex-col gap-4">
-            <div className="flex w-full justify-end">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <PublicInstallShortcut locale={locale} />
               <PublicLanguageToggle locale={locale} />
             </div>
 

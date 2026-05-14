@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useId, useState } from "react";
-import { usePathname } from "next/navigation";
 import { Smartphone } from "lucide-react";
 import { messages } from "@/lib/i18n/messages";
 import type { Locale } from "@/lib/i18n/locale";
@@ -12,14 +11,7 @@ type BeforeInstallPromptLike = {
   userChoice: Promise<{ outcome: string }>;
 };
 
-function isPublicPath(pathname: string | null) {
-  if (!pathname) return false;
-  if (pathname === "/") return true;
-  return pathname.startsWith("/torneos/");
-}
-
 export function PublicInstallShortcut({ locale }: { locale: Locale }) {
-  const pathname = usePathname();
   const titleId = useId();
   const t = messages[locale].publicInstall;
   const [open, setOpen] = useState(false);
@@ -57,21 +49,22 @@ export function PublicInstallShortcut({ locale }: { locale: Locale }) {
     }
   }, [deferred]);
 
-  if (!isPublicPath(pathname)) {
-    return null;
-  }
-
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed right-3 top-[4.75rem] z-40 flex max-w-[min(100vw-1.5rem,14rem)] items-center gap-1.5 rounded-full border border-white/15 bg-[#0c1728]/95 px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm transition hover:border-cyan-400/40 hover:bg-[#0f1d32] sm:top-[5.25rem] sm:text-xs"
-        aria-label={t.aria}
-      >
-        <Smartphone className="h-3.5 w-3.5 shrink-0 text-cyan-300" aria-hidden />
-        <span className="truncate leading-tight">{t.button}</span>
-      </button>
+      <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/60 px-1.5 py-1">
+        <span className="hidden text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:inline">
+          {t.rowLabel}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex max-w-[10.5rem] items-center gap-1 rounded-md border border-white/15 bg-slate-800/80 px-2 py-1 text-[10px] font-bold leading-none text-slate-200 transition hover:bg-slate-700 sm:max-w-[12rem]"
+          aria-label={t.aria}
+        >
+          <Smartphone className="h-3 w-3 shrink-0 text-cyan-300" aria-hidden />
+          <span className="truncate">{t.button}</span>
+        </button>
+      </div>
 
       {open ? (
         <div

@@ -748,7 +748,8 @@ const es = {
     playersMany: "jugadores",
   },
   publicInstall: {
-    button: "Icono listgolf.club",
+    rowLabel: "Icono",
+    button: "listgolf.club",
     aria: "Crear icono de listgolf.club en tu teléfono",
     title: "Acceso directo en tu teléfono",
     intro:
@@ -1516,7 +1517,8 @@ const en: Messages = {
     playersMany: "players",
   },
   publicInstall: {
-    button: "listgolf.club icon",
+    rowLabel: "Icon",
+    button: "listgolf.club",
     aria: "Save listgolf.club shortcut on your phone",
     title: "Shortcut on your phone",
     intro:

@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import { PublicLanguageToggle } from "@/components/i18n/PublicLanguageToggle";
+import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 
 type SearchParams = Promise<{
   club?: string | string[];
@@ -393,7 +394,8 @@ export default async function HomePage({
                 {h.scopeHint}
               </p>
             </div>
-            <div className="flex shrink-0 justify-end sm:pt-0.5">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:pt-0.5">
+              <PublicInstallShortcut locale={locale} />
               <PublicLanguageToggle locale={locale} />
             </div>
           </div>

@@ -2,8 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "@/components/AppHeader";
-import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
-import { getLocale } from "@/lib/i18n/server";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,13 +32,11 @@ export const viewport: Viewport = {
   themeColor: "#08111f",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const locale = await getLocale();
-
   return (
     <html lang="es">
       <body
@@ -48,7 +44,6 @@ export default async function RootLayout({
       >
         <div className="min-h-screen bg-[#08111f]">
           <AppHeader />
-          <PublicInstallShortcut locale={locale} />
           <main>{children}</main>
         </div>
       </body>
