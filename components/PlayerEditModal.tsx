@@ -33,6 +33,8 @@ type Player = {
   shirt_size?: string | null;
   shoe_size?: string | number | null;
   birth_year?: number | null;
+  telegram_user_id?: string | null;
+  telegram_chat_id?: string | null;
 };
 
 type Category = {
@@ -154,6 +156,8 @@ export default function PlayerEditModal({
   const [birthYear, setBirthYear] = useState<string>("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [telegramUserId, setTelegramUserId] = useState("");
+  const [telegramChatId, setTelegramChatId] = useState("");
   const [club, setClub] = useState("");
   const [clubId, setClubId] = useState<string | null>(null);
   const [shirtSize, setShirtSize] = useState("");
@@ -175,6 +179,8 @@ export default function PlayerEditModal({
   const birthYearInputNameRef = useRef(`lg_p_${Date.now()}`);
   const phoneInputNameRef = useRef(`lg_q_${Date.now()}`);
   const emailInputNameRef = useRef(`lg_r_${Date.now()}`);
+  const telegramUserIdInputNameRef = useRef(`lg_tg_uid_${Date.now()}`);
+  const telegramChatIdInputNameRef = useRef(`lg_tg_cid_${Date.now()}`);
   const clubInputNameRef = useRef(`lg_s_${Date.now()}`);
 
   const antiSafariInputProps = {
@@ -333,6 +339,8 @@ export default function PlayerEditModal({
       setBirthYear(player?.birth_year == null ? "" : String(player.birth_year));
       setPhone(player?.phone ?? "");
       setEmail(player?.email ?? "");
+      setTelegramUserId(player?.telegram_user_id?.trim() ?? "");
+      setTelegramChatId(player?.telegram_chat_id?.trim() ?? "");
       setClub(player?.club ?? "");
       setClubId(player?.club_id ?? null);
       setShirtSize(player?.shirt_size ?? "");
@@ -528,6 +536,19 @@ export default function PlayerEditModal({
       : null;
     const cleanEmail = email.trim().toLowerCase() || null;
 
+    const tgUid = telegramUserId.trim();
+    const tgCid = telegramChatId.trim();
+
+    if (tgUid && !/^\d+$/.test(tgUid)) {
+      alert("El ID de usuario de Telegram debe ser solo números (o vacío).");
+      return;
+    }
+
+    if (tgCid && !/^\d+$/.test(tgCid)) {
+      alert("El chat ID de Telegram debe ser solo números (o vacío).");
+      return;
+    }
+
     if (cleanInitials && cleanInitials.length < 2) {
       alert("Iniciales debe tener entre 2 y 6 letras.");
       return;
@@ -603,6 +624,8 @@ export default function PlayerEditModal({
         shirt_size: shirtSize.trim() || null,
         shoe_size: shoeSize.trim() || null,
         birth_year: birthYear.trim() ? Number(birthYear) : null,
+        telegram_user_id: tgUid || null,
+        telegram_chat_id: tgCid || null,
       });
 
       if (!result.ok) {
@@ -820,41 +843,76 @@ export default function PlayerEditModal({
             </label>
 
             <label style={labelStyle}>
-  Shirt Size
-  <select
-    value={shirtSize}
-    onChange={(e) => setShirtSize(e.target.value)}
-    style={fieldStyle}
-  >
-    <option value="">Seleccionar</option>
-    <option>XS</option>
-    <option>S</option>
-    <option>M</option>
-    <option>L</option>
-    <option>XL</option>
-    <option>XXL</option>
-  </select>
-</label>
+              Telegram — user ID
+              <input
+                type="text"
+                inputMode="numeric"
+                name={telegramUserIdInputNameRef.current}
+                {...antiSafariInputProps}
+                value={telegramUserId}
+                onChange={(e) =>
+                  setTelegramUserId(e.target.value.replace(/\D/g, ""))
+                }
+                placeholder="Ej. 123456789"
+                style={fieldStyle}
+              />
+              <span style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}>
+                El que devuelve el bot o @userinfobot; vacío = sin vínculo.
+              </span>
+            </label>
 
-<label style={labelStyle}>
-  Shoe Size
-  <select
-    value={shoeSize}
-    onChange={(e) => setShoeSize(e.target.value)}
-    style={fieldStyle}
-  >
-    <option value="">Seleccionar</option>
-    {[
-      6, 6.5, 7, 7.5, 8, 8.5,
-      9, 9.5, 10, 10.5, 11, 11.5,
-      12, 12.5, 13, 13.5, 14
-    ].map((n) => (
-      <option key={n} value={String(n)}>
-        {n}
-      </option>
-    ))}
-  </select>
-</label>
+            <label style={labelStyle}>
+              Telegram — chat ID (opcional)
+              <input
+                type="text"
+                inputMode="numeric"
+                name={telegramChatIdInputNameRef.current}
+                {...antiSafariInputProps}
+                value={telegramChatId}
+                onChange={(e) =>
+                  setTelegramChatId(e.target.value.replace(/\D/g, ""))
+                }
+                placeholder="Suele coincidir con user ID en DM"
+                style={fieldStyle}
+              />
+            </label>
+
+            <label style={labelStyle}>
+              Shirt Size
+              <select
+                value={shirtSize}
+                onChange={(e) => setShirtSize(e.target.value)}
+                style={fieldStyle}
+              >
+                <option value="">Seleccionar</option>
+                <option>XS</option>
+                <option>S</option>
+                <option>M</option>
+                <option>L</option>
+                <option>XL</option>
+                <option>XXL</option>
+              </select>
+            </label>
+
+            <label style={labelStyle}>
+              Shoe Size
+              <select
+                value={shoeSize}
+                onChange={(e) => setShoeSize(e.target.value)}
+                style={fieldStyle}
+              >
+                <option value="">Seleccionar</option>
+                {[
+                  6, 6.5, 7, 7.5, 8, 8.5,
+                  9, 9.5, 10, 10.5, 11, 11.5,
+                  12, 12.5, 13, 13.5, 14
+                ].map((n) => (
+                  <option key={n} value={String(n)}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <div ref={clubBoxRef} style={{ position: "relative" }}>
               <label style={labelStyle}>

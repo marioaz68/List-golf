@@ -44,6 +44,8 @@ function renderMove(move: number | null) {
 
 type PublicLeaderboardTableProps = {
   tournamentId: string;
+  embed?: boolean;
+  fromAdmin?: boolean;
   leaderboard: LeaderboardRow[];
   /** Para nombres compactos cuando `leaderboard` es un subconjunto filtrado (misma categoría que en la lista completa). */
   peerRowsForNameCompact?: LeaderboardRow[];
@@ -57,6 +59,8 @@ type PublicLeaderboardTableProps = {
 
 export default function PublicLeaderboardTable({
   tournamentId,
+  embed = false,
+  fromAdmin = false,
   leaderboard,
   peerRowsForNameCompact,
   emptyLeaderboardLabel,
@@ -198,6 +202,8 @@ export default function PublicLeaderboardTable({
                           scroll={false}
                           href={buildDetailToggleHref({
                             tournamentId,
+                            embed: embed || undefined,
+                            fromAdmin: fromAdmin || undefined,
                             categoryId: selectedCategoryId || null,
                             roundId: selectedRound?.id ?? null,
                             view,

@@ -30,13 +30,10 @@ function countHolesWithStrokes(
   return n;
 }
 
-/** Si hay más de un `round_scores` para la misma ronda, usar el que tenga más hoyos con golpes (evita filas huérfanas vs captura real). */
-function pickRoundScoreRowForRound(
-  playerRoundScores: any[],
-  roundId: string,
+function pickBestRoundScoreRow(
+  cands: any[],
   holeScoresByRoundScoreId: Map<string, any[]>
 ): any | null {
-  const cands = playerRoundScores.filter((s) => s.round_id === roundId);
   if (cands.length === 0) return null;
   if (cands.length === 1) return cands[0];
   return [...cands].sort((a, b) => {
@@ -48,6 +45,56 @@ function pickRoundScoreRowForRound(
     if (hb !== ha) return hb - ha;
     return String(a.id).localeCompare(String(b.id));
   })[0];
+}
+
+/**
+ * Si hay más de un `round_scores` para la misma ronda, usar el que tenga más hoyos.
+ * Si la captura está en otra fila `rounds` con el mismo `round_no` (por categoría), también la encuentra.
+ */
+function pickRoundScoreRowForRound(
+  playerRoundScores: any[],
+  round: { id: string; round_no: number; category_id?: string | null },
+  entryCategoryId: string | null | undefined,
+  holeScoresByRoundScoreId: Map<string, any[]>,
+  allRounds: Array<{ id: string; round_no: number; category_id?: string | null }>
+): any | null {
+  const direct = pickBestRoundScoreRow(
+    playerRoundScores.filter((s) => s.round_id === round.id),
+    holeScoresByRoundScoreId
+  );
+  if (direct) return direct;
+
+  const cat = String(entryCategoryId ?? "").trim();
+  const altRoundIds = allRounds
+    .filter((r) => r.round_no === round.round_no && r.id !== round.id)
+    .filter((r) => {
+      const rc = String(r.category_id ?? "").trim();
+      if (!cat) return true;
+      if (!rc) return true;
+      return rc === cat;
+    })
+    .map((r) => r.id);
+
+  const altCands = playerRoundScores.filter((s) =>
+    altRoundIds.includes(String(s.round_id))
+  );
+
+  const fromCategoryAlt = pickBestRoundScoreRow(
+    altCands,
+    holeScoresByRoundScoreId
+  );
+  if (fromCategoryAlt) return fromCategoryAlt;
+
+  // Captura en otra fila `rounds` del mismo round_no (p. ej. DA vs AA)
+  const sameNoRoundIds = allRounds
+    .filter((r) => r.round_no === round.round_no && r.id !== round.id)
+    .map((r) => r.id);
+
+  const sameNoCands = playerRoundScores.filter((s) =>
+    sameNoRoundIds.includes(String(s.round_id))
+  );
+
+  return pickBestRoundScoreRow(sameNoCands, holeScoresByRoundScoreId);
 }
 
 export function buildLiveLeaderboard({
@@ -86,8 +133,10 @@ export function buildLiveLeaderboard({
     const roundsSummary = rounds.map((round: any) => {
       const found = pickRoundScoreRowForRound(
         playerRoundScores,
-        round.id,
-        holeScoresByRoundScoreId
+        round,
+        entry.category_id,
+        holeScoresByRoundScoreId,
+        rounds
       );
 
       const roundIsDQ =
@@ -104,8 +153,10 @@ export function buildLiveLeaderboard({
     const details = rounds.map((round: any) => {
       const score = pickRoundScoreRowForRound(
         playerRoundScores,
-        round.id,
-        holeScoresByRoundScoreId
+        round,
+        entry.category_id,
+        holeScoresByRoundScoreId,
+        rounds
       );
 
       const roundHoleRows = score

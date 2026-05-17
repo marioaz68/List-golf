@@ -1,21 +1,25 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient, createClient } from "@/utils/supabase/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
-import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
+import {
+  checkTournamentAccess,
+  requireTournamentAccess,
+} from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
+import RepairCapturesButton from "./RepairCapturesButton";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import { fmt } from "@/lib/i18n/fmt";
+import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
+import { roundRowAppliesToEntry } from "@/lib/leaderboard/roundCategoryMatch";
+import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
+import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
 import {
-  buildSessionBlocks,
-  formatSessionDayWaveLabel,
-  normalizeStartTypeForSession,
-  normalizeTime,
-  representativeRoundId,
-  roundsInSameSession,
-  toYyyyMmDd,
-  type SessionRoundFields,
-} from "../tee-sheet/sessionBlock";
+  fetchTournamentRegistrationStatus,
+  isRegistrationClosed,
+} from "@/lib/tournaments/registrationGate";
+import { toYyyyMmDd, type SessionRoundFields } from "../tee-sheet/sessionBlock";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -54,9 +58,20 @@ type HoleRow = {
 };
 
 type HoleScoreRow = {
-  hole_number: number;
+  hole_number: number | null;
+  hole_no?: number | null;
   strokes: number | null;
 };
+
+function holeNoFromScoreRow(row: {
+  hole_number?: number | null;
+  hole_no?: number | null;
+}) {
+  const raw = row.hole_number ?? row.hole_no;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 18 ? n : null;
+}
 
 type CapturedRoundRow = {
   round_id: string;
@@ -178,42 +193,6 @@ function entryMatchesNameQuery(
   return tokens.every((tok) => full.includes(tok));
 }
 
-function resolveScoringRoundId(
-  rounds: RoundRow[],
-  selectedRound: RoundRow,
-  entryCategoryId: string | null
-): string {
-  const cat = String(entryCategoryId ?? "").trim();
-  const sess = roundsInSameSession(
-    rounds as SessionRoundFields[],
-    selectedRound.id
-  );
-  if (!cat) return sess[0]?.id ?? selectedRound.id;
-  const inSess = sess.find(
-    (r) => String(r.category_id ?? "").trim() === cat
-  );
-  if (inSess) return inSess.id;
-
-  const ymd = toYyyyMmDd(selectedRound.round_date);
-  const wave = String(selectedRound.wave ?? "").trim().toUpperCase();
-  const st = normalizeStartTypeForSession(selectedRound.start_type);
-  const t0 = normalizeTime(selectedRound.start_time);
-  const rn = selectedRound.round_no;
-
-  const alt =
-    rounds.find((r) => {
-      if (toYyyyMmDd(r.round_date) !== ymd) return false;
-      if (String(r.wave ?? "").trim().toUpperCase() !== wave) return false;
-      if (normalizeStartTypeForSession(r.start_type) !== st) return false;
-      if (normalizeTime(r.start_time) !== t0) return false;
-      if (r.round_no !== rn) return false;
-      if (String(r.category_id ?? "").trim() !== cat) return false;
-      return true;
-    }) ?? null;
-
-  return alt?.id ?? selectedRound.id;
-}
-
 function buildDefaultHoles(): HoleRow[] {
   const pars = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 3, 4, 4];
 
@@ -280,8 +259,6 @@ export default async function ScoreEntryPage(props: {
   const tournamentIdFromQuery =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
 
-  const today = new Date().toISOString().slice(0, 10);
-
   const roundsQuery = supabase
     .from("rounds")
     .select(
@@ -327,33 +304,19 @@ export default async function ScoreEntryPage(props: {
   const roundsMissingDate =
     roundListAll.length > 0 && roundList.length === 0;
 
-  const sessionBlocks =
-    roundList.length > 0
-      ? buildSessionBlocks(roundList as SessionRoundFields[])
-      : [];
+  const effectiveTournamentId =
+    tournamentIdFromQuery ||
+    (requestedRoundId
+      ? roundListAll.find((r) => r.id === requestedRoundId)?.tournament_id ?? ""
+      : "") ||
+    roundListAll[0]?.tournament_id ||
+    "";
 
-  let selectedRound: RoundRow | null = null;
+  let canRepairCaptures = false;
 
-  if (requestedRoundId) {
-    const hit = roundList.find((r) => r.id === requestedRoundId) ?? null;
-    if (hit) {
-      const repId = representativeRoundId(roundList as SessionRoundFields[], hit.id);
-      selectedRound = roundList.find((r) => r.id === repId) ?? hit;
-    }
-  }
-
-  if (!selectedRound && roundList.length > 0) {
-    const todayHit = roundList.find((r) => toYyyyMmDd(r.round_date) === today);
-    const seed = todayHit ?? roundList.find((r) => r.round_no === 1) ?? roundList[0];
-    if (seed) {
-      const repId = representativeRoundId(roundList as SessionRoundFields[], seed.id);
-      selectedRound = roundList.find((r) => r.id === repId) ?? seed;
-    }
-  }
-
-  if (selectedRound) {
+  if (effectiveTournamentId) {
     await requireTournamentAccess({
-      tournamentId: selectedRound.tournament_id,
+      tournamentId: effectiveTournamentId,
       allowedRoles: [
         "super_admin",
         "club_admin",
@@ -361,20 +324,48 @@ export default async function ScoreEntryPage(props: {
         "score_capture",
       ],
     });
+
+    const repairAccess = await checkTournamentAccess({
+      tournamentId: effectiveTournamentId,
+      allowedRoles: [
+        "super_admin",
+        "club_admin",
+        "tournament_director",
+      ],
+    });
+    canRepairCaptures = repairAccess.ok;
   }
 
   let player: PlayerRow | null = null;
   let holes: HoleRow[] = buildDefaultHoles();
   let existingScores: Record<number, number> = {};
   let capturedRounds: CapturedRoundRow[] = [];
+  let misalignedCapturedRounds: CapturedRoundRow[] = [];
   let errorMsg = "";
   let ambiguousCandidates: ValidEntryRow[] = [];
+  let roundClosed = false;
+  let entryIdForScorecard = "";
+  let priorRoundGateMessage = "";
+  let scoringRoundBlocked = false;
+  let captureRoundNotice = "";
+  let entryCategoryLabel = messages[locale].common.noCategory;
+  let registrationOpenMessage = "";
 
-  if (selectedRound) {
+  if (effectiveTournamentId) {
+    const regStatus = await fetchTournamentRegistrationStatus(
+      supabase,
+      effectiveTournamentId
+    );
+    if (!isRegistrationClosed(regStatus)) {
+      registrationOpenMessage = se.registrationOpenGate;
+    }
+  }
+
+  if (effectiveTournamentId) {
     const { data: holesData, error: holesErr } = await supabase
       .from("tournament_holes")
       .select("hole_number, par, handicap_index")
-      .eq("tournament_id", selectedRound.tournament_id)
+      .eq("tournament_id", effectiveTournamentId)
       .order("hole_number", { ascending: true });
 
     if (holesErr) {
@@ -388,9 +379,9 @@ export default async function ScoreEntryPage(props: {
     }
   }
 
-  let scoringRoundId = selectedRound?.id ?? "";
+  let scoringRoundId = "";
 
-  if (selectedRound && searchRaw) {
+  if (effectiveTournamentId && searchRaw && !registrationOpenMessage) {
     const isNumeric = /^\d+$/.test(searchRaw);
 
     let entryRows: EntryJoinRow[] = [];
@@ -401,7 +392,7 @@ export default async function ScoreEntryPage(props: {
       const { data, error } = await supabase
         .from("tournament_entries")
         .select(ENTRY_SELECT_FOR_LOOKUP)
-        .eq("tournament_id", selectedRound.tournament_id)
+        .eq("tournament_id", effectiveTournamentId)
         .eq("player_number", wanted);
       entryErr = error;
       entryRows = (data ?? []) as unknown as EntryJoinRow[];
@@ -409,7 +400,7 @@ export default async function ScoreEntryPage(props: {
       if (!error && entryRows.length === 0) {
         const full = await fetchAllTournamentEntriesForLookup(
           supabase,
-          selectedRound.tournament_id
+          effectiveTournamentId
         );
         entryErr = full.error;
         entryRows = full.rows;
@@ -417,7 +408,7 @@ export default async function ScoreEntryPage(props: {
     } else {
       const full = await fetchAllTournamentEntriesForLookup(
         supabase,
-        selectedRound.tournament_id
+        effectiveTournamentId
       );
       entryErr = full.error;
       entryRows = full.rows;
@@ -456,6 +447,11 @@ export default async function ScoreEntryPage(props: {
       }
 
       if (matchedEntry) {
+        entryIdForScorecard = matchedEntry.id;
+        entryCategoryLabel =
+          matchedEntry.category?.code?.trim() ||
+          matchedEntry.category?.name?.trim() ||
+          messages[locale].common.noCategory;
         const p = matchedEntry.player;
         player = {
           id: p.id,
@@ -468,15 +464,119 @@ export default async function ScoreEntryPage(props: {
       }
     }
 
-    scoringRoundId = resolveScoringRoundId(
-      roundList,
-      selectedRound,
-      matchedEntry ? String(matchedEntry.category_id ?? "").trim() || null : null
-    );
+    if (matchedEntry) {
+      try {
+        const gateCtx = await loadCategoryRoundGateContext(
+          supabase,
+          effectiveTournamentId
+        );
+        const roundsForCapture = roundListAll.filter(
+          (r) => r.tournament_id === effectiveTournamentId
+        ) as SessionRoundFields[];
 
-    if (player) {
+        const capture = await resolveEntryCaptureRound(supabase, {
+          entryId: matchedEntry.id,
+          entryCategoryId: matchedEntry.category_id,
+          tournamentId: effectiveTournamentId,
+          rounds: roundsForCapture,
+          lookups: gateCtx.lookups,
+        });
+
+        if (!capture.ok) {
+          if (capture.reason === "prior_not_closed") {
+            scoringRoundBlocked = true;
+            const catLabel =
+              matchedEntry.category?.code?.trim() ||
+              matchedEntry.category?.name?.trim() ||
+              messages[locale].common.noCategory;
+            priorRoundGateMessage = fmt(se.priorRoundGate, {
+              round: capture.targetRoundNo,
+              prior: capture.priorRoundNo,
+              category: catLabel,
+            });
+          } else if (capture.reason === "all_closed") {
+            scoringRoundBlocked = true;
+            priorRoundGateMessage = `Este jugador ya tiene cerradas todas sus rondas (hasta R${capture.lastRoundNo}).`;
+          } else {
+            scoringRoundBlocked = true;
+            priorRoundGateMessage =
+              "No hay ronda configurada para la categoría de este jugador.";
+          }
+        } else {
+          scoringRoundId = capture.roundId;
+          const catLabel =
+            matchedEntry.category?.code?.trim() ||
+            matchedEntry.category?.name?.trim() ||
+            "categoría";
+          const when = capture.sessionLabel?.trim();
+          captureRoundNotice = when
+            ? `Capturando ${when} · inscripción ${catLabel}. Día y turno según salidas y rondas del torneo.`
+            : `Capturando R${capture.roundNo} · inscripción ${catLabel}.`;
+        }
+      } catch (e) {
+        errorMsg =
+          e instanceof Error
+            ? e.message
+            : "Error resolviendo la ronda de captura";
+      }
+    }
+
+    if (matchedEntry && player && scoringRoundId && !scoringRoundBlocked) {
+      try {
+        const admin = await createAdminClient();
+        const sync = await syncCaptureToEntryRound(admin, {
+          tournamentId: effectiveTournamentId,
+          entryId: matchedEntry.id,
+          playerId: player.id,
+          sessionRoundId: scoringRoundId,
+          entryCategoryId: matchedEntry.category_id,
+          rounds: roundListAll as SessionRoundFields[],
+        });
+        scoringRoundId = sync.targetRoundId;
+        if (sync.holesCopied > 0 || sync.prunedRoundScoreIds.length > 0) {
+          captureRoundNotice = [
+            captureRoundNotice,
+            sync.holesCopied > 0
+              ? `Se consolidaron ${sync.holesCopied} hoyos en la ronda de su inscripción.`
+              : "",
+            sync.prunedRoundScoreIds.length > 0
+              ? "Se eliminó un registro duplicado de captura anterior."
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+        }
+
+        if (sync.holesCopied > 0) {
+          const { data: rsAfterSync } = await admin
+            .from("round_scores")
+            .select("id")
+            .eq("round_id", scoringRoundId)
+            .eq("player_id", player.id)
+            .maybeSingle();
+
+          if (rsAfterSync?.id) {
+            const { data: holesAfterSync } = await admin
+              .from("hole_scores")
+              .select("hole_number, hole_no, strokes")
+              .eq("round_score_id", rsAfterSync.id)
+              .order("hole_number", { ascending: true });
+
+            for (const row of (holesAfterSync ?? []) as HoleScoreRow[]) {
+              const holeNo = holeNoFromScoreRow(row);
+              if (holeNo == null || row.strokes == null) continue;
+              existingScores[holeNo] = Number(row.strokes);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[score-entry] syncCaptureToEntryRound:", e);
+      }
+    }
+
+    if (player && !scoringRoundBlocked) {
         const allRoundIds = roundListAll
-        .filter((r) => r.tournament_id === selectedRound.tournament_id)
+        .filter((r) => r.tournament_id === effectiveTournamentId)
         .map((r) => r.id);
 
       const { data: roundScoresData, error: roundScoresErr } = await supabase
@@ -500,7 +600,7 @@ export default async function ScoreEntryPage(props: {
         if (selectedRoundScore?.id) {
           const { data: holeScoreData, error: holeScoreErr } = await supabase
             .from("hole_scores")
-            .select("hole_number, strokes")
+            .select("hole_number, hole_no, strokes")
             .eq("round_score_id", selectedRoundScore.id)
             .order("hole_number", { ascending: true });
 
@@ -508,7 +608,9 @@ export default async function ScoreEntryPage(props: {
             errorMsg = holeScoreErr.message;
           } else {
             for (const row of (holeScoreData ?? []) as HoleScoreRow[]) {
-              existingScores[row.hole_number] = Number(row.strokes ?? 0);
+              const holeNo = holeNoFromScoreRow(row);
+              if (holeNo == null || row.strokes == null) continue;
+              existingScores[holeNo] = Number(row.strokes);
             }
           }
         }
@@ -518,7 +620,7 @@ export default async function ScoreEntryPage(props: {
 
           const { data: allHoleScores, error: allHoleScoresErr } = await supabase
             .from("hole_scores")
-            .select("round_score_id, hole_number, strokes")
+            .select("round_score_id, hole_number, hole_no, strokes")
             .in("round_score_id", roundScoreIds)
             .order("hole_number", { ascending: true });
 
@@ -539,15 +641,18 @@ export default async function ScoreEntryPage(props: {
 
             for (const row of (allHoleScores ?? []) as Array<{
               round_score_id: string;
-              hole_number: number;
+              hole_number: number | null;
+              hole_no?: number | null;
               strokes: number | null;
             }>) {
               const entry = byRoundScoreId.get(row.round_score_id);
               if (!entry) continue;
-              entry.scores[row.hole_number] = Number(row.strokes ?? 0);
+              const holeNo = holeNoFromScoreRow(row);
+              if (holeNo == null || row.strokes == null) continue;
+              entry.scores[holeNo] = Number(row.strokes);
             }
 
-            capturedRounds = roundScores
+            const rows = roundScores
               .map((rs) => {
                 const roundMeta = roundListAll.find((r) => r.id === rs.round_id);
                 if (!roundMeta) return null;
@@ -559,8 +664,87 @@ export default async function ScoreEntryPage(props: {
                   scores: byRoundScoreId.get(rs.id)?.scores ?? {},
                 } satisfies CapturedRoundRow;
               })
-              .filter(Boolean)
-              .sort((a, b) => a!.round_no - b!.round_no) as CapturedRoundRow[];
+              .filter(Boolean) as CapturedRoundRow[];
+
+            if (matchedEntry) {
+              misalignedCapturedRounds = rows
+                .filter((row) => {
+                  const meta = roundListAll.find((r) => r.id === row.round_id);
+                  if (!meta) return false;
+                  return !roundRowAppliesToEntry(
+                    { category_id: meta.category_id ?? null },
+                    matchedEntry.category_id
+                  );
+                })
+                .sort((a, b) => a.round_no - b.round_no);
+
+            }
+
+            capturedRounds = rows
+              .filter((row) => {
+                if (!matchedEntry) return true;
+                const meta = roundListAll.find((r) => r.id === row.round_id);
+                if (!meta) return true;
+                return roundRowAppliesToEntry(
+                  { category_id: meta.category_id ?? null },
+                  matchedEntry.category_id
+                );
+              })
+              .sort((a, b) => a.round_no - b.round_no);
+
+            const scoringMeta =
+              roundListAll.find((r) => r.id === scoringRoundId) ?? null;
+            const hasExisting = Object.keys(existingScores).length > 0;
+            if (
+              hasExisting &&
+              scoringMeta &&
+              !capturedRounds.some((r) => r.round_id === scoringRoundId)
+            ) {
+              capturedRounds.push({
+                round_id: scoringRoundId,
+                round_no: scoringMeta.round_no,
+                round_date: scoringMeta.round_date,
+                scores: { ...existingScores },
+              });
+              capturedRounds.sort((a, b) => a.round_no - b.round_no);
+            }
+
+            if (
+              Object.keys(existingScores).length === 0 &&
+              misalignedCapturedRounds.length > 0
+            ) {
+              const scoringNo =
+                roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+                roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+                1;
+              const hint =
+                misalignedCapturedRounds.find((r) => r.round_no === scoringNo) ??
+                misalignedCapturedRounds[0];
+              if (hint?.scores && Object.keys(hint.scores).length > 0) {
+                Object.assign(existingScores, hint.scores);
+                captureRoundNotice = [
+                  captureRoundNotice,
+                  "Se recuperaron hoyos de una captura anterior mal ubicada; al guardar quedan en la inscripción del jugador.",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+              }
+            }
+          }
+        }
+
+        if (entryIdForScorecard && scoringRoundId) {
+          const { data: scorecardRow, error: scorecardErr } = await supabase
+            .from("scorecards")
+            .select("locked_at")
+            .eq("entry_id", entryIdForScorecard)
+            .eq("round_id", scoringRoundId)
+            .maybeSingle();
+
+          if (scorecardErr) {
+            errorMsg = scorecardErr.message;
+          } else {
+            roundClosed = Boolean(scorecardRow?.locked_at);
           }
         }
       }
@@ -573,6 +757,12 @@ export default async function ScoreEntryPage(props: {
         <h1 className="text-2xl font-bold text-white">{se.title}</h1>
         <p className="mt-1 text-sm text-white/70">{se.subtitle}</p>
 
+        {registrationOpenMessage && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+            {registrationOpenMessage}
+          </div>
+        )}
+
         {roundsMissingDate && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             {se.roundsNeedDate}
@@ -583,39 +773,10 @@ export default async function ScoreEntryPage(props: {
           <input
             type="hidden"
             name="tournament_id"
-            value={selectedRound?.tournament_id ?? tournamentIdFromQuery}
+            value={effectiveTournamentId}
           />
 
-          <div className="grid gap-4 md:grid-cols-[1fr_260px_auto] md:items-end">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                {se.labelSession}
-              </label>
-              <select
-                name="round_id"
-                defaultValue={selectedRound?.id ?? ""}
-                className="w-full min-w-[min(100%,16rem)] max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-black"
-              >
-                {sessionBlocks.length > 0
-                  ? sessionBlocks.map((block) => {
-                      const rep = block[0];
-                      if (!rep) return null;
-                      return (
-                        <option key={rep.id} value={rep.id}>
-                          {formatSessionDayWaveLabel(rep)}
-                        </option>
-                      );
-                    })
-                  : roundList.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {formatSessionDayWaveLabel(
-                          r as unknown as SessionRoundFields
-                        )}
-                      </option>
-                    ))}
-              </select>
-            </div>
-
+          <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 Número de inscripción o nombre
@@ -623,17 +784,26 @@ export default async function ScoreEntryPage(props: {
               <input
                 id="score-entry-player-search"
                 key={`score-entry-q-${searchRaw || ""}`}
-                type="text"
+                type="search"
                 name="q"
                 defaultValue={searchRaw}
                 placeholder="25 o Mario"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-black placeholder:text-gray-400"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                disabled={!effectiveTournamentId || !!registrationOpenMessage}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base text-black placeholder:text-gray-400 disabled:opacity-50"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Categoría, día, turno y ronda pendiente salen de inscripción,
+                salidas y rondas. Solo captura hoyos.
+              </p>
             </div>
 
             <button
               type="submit"
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white"
+              disabled={!effectiveTournamentId || !!registrationOpenMessage}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               Buscar
             </button>
@@ -646,7 +816,13 @@ export default async function ScoreEntryPage(props: {
           </div>
         )}
 
-        {selectedRound &&
+        {priorRoundGateMessage && (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {priorRoundGateMessage}
+          </div>
+        )}
+
+        {effectiveTournamentId &&
           searchRaw &&
           ambiguousCandidates.length > 1 &&
           !player &&
@@ -663,8 +839,7 @@ export default async function ScoreEntryPage(props: {
                   const cat = (e.category?.code ?? e.category?.name ?? "")
                     .trim();
                   const qs = new URLSearchParams();
-                  qs.set("tournament_id", selectedRound.tournament_id);
-                  qs.set("round_id", requestedRoundId || selectedRound.id);
+                  qs.set("tournament_id", effectiveTournamentId);
                   qs.set("q", searchRaw);
                   qs.set("entry_id", e.id);
                   const href = `/score-entry?${qs.toString()}`;
@@ -689,7 +864,7 @@ export default async function ScoreEntryPage(props: {
             </div>
           )}
 
-        {selectedRound &&
+        {effectiveTournamentId &&
           searchRaw &&
           !player &&
           !errorMsg &&
@@ -699,18 +874,29 @@ export default async function ScoreEntryPage(props: {
           </div>
         )}
 
-        {selectedRound && player && holes.length > 0 && (
+        {effectiveTournamentId && canRepairCaptures && (
+          <RepairCapturesButton tournamentId={effectiveTournamentId} />
+        )}
+
+        {effectiveTournamentId &&
+          player &&
+          holes.length > 0 &&
+          !scoringRoundBlocked &&
+          scoringRoundId && (
           <ScoreEntryClient
             roundId={scoringRoundId}
+            tournamentId={effectiveTournamentId}
             tournamentDayId={null}
             player={player}
             holes={holes}
             existingScores={existingScores}
             capturedRounds={capturedRounds}
             selectedRoundNo={
-              roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
-              selectedRound.round_no
+              roundListAll.find((r) => r.id === scoringRoundId)?.round_no ?? 1
             }
+            entryCategoryLabel={entryCategoryLabel}
+            roundClosed={roundClosed}
+            captureRoundNotice={captureRoundNotice || undefined}
           />
         )}
       </div>

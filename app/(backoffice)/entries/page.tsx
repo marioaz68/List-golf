@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { fetchScorecardsForEntries } from "@/lib/entries/fetchScorecardsForEntries";
 import { createClient } from "@/utils/supabase/server";
 import HeaderBar from "@/components/ui/HeaderBar";
 import { getLocale } from "@/lib/i18n/server";
@@ -9,6 +11,11 @@ import EntriesListPanel from "./EntriesListPanel";
 import EntriesSummaryPanel from "./EntriesSummaryPanel";
 import EnrollExcelButton from "./EnrollExcelButton";
 import { closeTournamentRegistration, reopenTournamentRegistration } from "./actions";
+import {
+  ENTRY_SELECT_WITH_KIT,
+  ENTRY_SELECT_WITHOUT_KIT,
+  isMissingTelegramKitColumnsError,
+} from "@/lib/entries/telegramKitColumns";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -73,6 +80,8 @@ type EntryPlayerRaw = {
   shoe_size: string | null;
   birth_year: number | null;
   clubs: ClubRef | ClubRef[] | null;
+  telegram_user_id?: string | null;
+  telegram_chat_id?: string | null;
 };
 
 type EntryCategoryRaw = {
@@ -85,6 +94,7 @@ type EntryCategoryRaw = {
 type RoundRow = {
   id: string;
   round_no: number | null;
+  category_id?: string | null;
 };
 
 type ScorecardSignatureRaw = Record<string, unknown>;
@@ -93,6 +103,7 @@ type ScorecardRow = {
   id: string;
   entry_id: string | null;
   round_id: string | null;
+  locked_at?: string | null;
   scorecard_signatures?: ScorecardSignatureRaw[] | null;
 };
 
@@ -101,6 +112,8 @@ type RoundSignature = {
   player_signed: boolean;
   marker_signed: boolean;
   witness_signed: boolean;
+  captured: boolean;
+  closed: boolean;
 };
 
 type EntryRowBase = {
@@ -109,6 +122,8 @@ type EntryRowBase = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  telegram_kit_sent_at?: string | null;
+  telegram_kit_received_at?: string | null;
   players: EntryPlayerRaw | EntryPlayerRaw[] | null;
   categories: EntryCategoryRaw | EntryCategoryRaw[] | null;
 };
@@ -119,6 +134,8 @@ type EntryRow = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  telegram_kit_sent_at?: string | null;
+  telegram_kit_received_at?: string | null;
   round_signatures: RoundSignature[];
   players: {
     id: string;
@@ -137,6 +154,8 @@ type EntryRow = {
     shirt_size: string | null;
     shoe_size: string | null;
     birth_year: number | null;
+    telegram_user_id?: string | null;
+    telegram_chat_id?: string | null;
   } | null;
   categories: {
     id: string;
@@ -279,15 +298,94 @@ function signatureIsSigned(sig: ScorecardSignatureRaw): boolean {
   return true;
 }
 
+function roundRowForEntry(
+  rounds: RoundRow[],
+  roundNo: number,
+  categoryId: string | null
+): RoundRow | null {
+  const matching = rounds.filter((r) => r.round_no === roundNo);
+  if (matching.length === 0) return null;
+
+  const cat = String(categoryId ?? "").trim();
+  if (cat) {
+    const byCat = matching.find((r) => String(r.category_id ?? "").trim() === cat);
+    if (byCat) return byCat;
+  }
+
+  return matching[0] ?? null;
+}
+
+/** Captura solo en la ronda de la categoría del inscrito (no otra fila R1 del torneo). */
+function buildCapturedByEntryRound(
+  entries: Array<{ id: string; player_id: string; category_id: string | null }>,
+  rounds: RoundRow[],
+  roundScores: Array<{
+    id: string;
+    player_id: string | null;
+    round_id: string | null;
+    gross_score: number | null;
+  }>,
+  holeScores: Array<{ round_score_id: string }>
+): Set<string> {
+  const holeCountByRoundScore = new Map<string, number>();
+  for (const row of holeScores) {
+    holeCountByRoundScore.set(
+      row.round_score_id,
+      (holeCountByRoundScore.get(row.round_score_id) ?? 0) + 1
+    );
+  }
+
+  const scoresByPlayerRound = new Map<
+    string,
+    { id: string; gross_score: number | null }
+  >();
+  for (const rs of roundScores) {
+    const playerId = String(rs.player_id ?? "").trim();
+    const roundId = String(rs.round_id ?? "").trim();
+    if (!playerId || !roundId) continue;
+    scoresByPlayerRound.set(`${playerId}_${roundId}`, {
+      id: rs.id,
+      gross_score: rs.gross_score,
+    });
+  }
+
+  const captured = new Set<string>();
+  for (const entry of entries) {
+    const playerId = String(entry.player_id ?? "").trim();
+    if (!playerId) continue;
+
+    for (const roundNo of [1, 2, 3]) {
+      const round = roundRowForEntry(rounds, roundNo, entry.category_id);
+      if (!round?.id) continue;
+
+      const rs = scoresByPlayerRound.get(`${playerId}_${round.id}`);
+      if (!rs) continue;
+
+      const hasHoles = (holeCountByRoundScore.get(rs.id) ?? 0) > 0;
+      const hasGross = rs.gross_score != null;
+      if (hasHoles || hasGross) {
+        captured.add(`${entry.id}_${roundNo}`);
+      }
+    }
+  }
+
+  return captured;
+}
+
 function buildRoundSignatures(
   entryId: string,
+  categoryId: string | null,
   rounds: RoundRow[],
-  scorecards: ScorecardRow[]
+  scorecards: ScorecardRow[],
+  capturedByEntryRound: Set<string>
 ): RoundSignature[] {
-  return rounds.map((round) => {
-    const scorecard = scorecards.find(
-      (sc) => sc.entry_id === entryId && sc.round_id === round.id
-    );
+  return [1, 2, 3].map((roundNo) => {
+    const round = roundRowForEntry(rounds, roundNo, categoryId);
+    const scorecard = round
+      ? scorecards.find(
+          (sc) => sc.entry_id === entryId && sc.round_id === round.id
+        )
+      : null;
 
     const signatures = Array.isArray(scorecard?.scorecard_signatures)
       ? scorecard!.scorecard_signatures!
@@ -296,10 +394,12 @@ function buildRoundSignatures(
     const signedRows = signatures.filter(signatureIsSigned);
 
     return {
-      round_no: round.round_no ?? 0,
+      round_no: roundNo,
       player_signed: signedRows.some((sig) => signatureRole(sig) === "player"),
       marker_signed: signedRows.some((sig) => signatureRole(sig) === "marker"),
       witness_signed: signedRows.some((sig) => signatureRole(sig) === "witness"),
+      captured: capturedByEntryRound.has(`${entryId}_${roundNo}`),
+      closed: Boolean(scorecard?.locked_at),
     };
   });
 }
@@ -330,6 +430,7 @@ export default async function EntriesPage({
   const locale = await getLocale();
   const entriesTitle = messages[locale].entries.title;
   const ep = messages[locale].entries.page;
+  const kitContentLabel = messages[locale].entries.telegramKitContent.title;
   const excelImport = messages[locale].entries.excel.import;
   const noName = messages[locale].sidebar.noName;
   const requestedTournamentId =
@@ -416,55 +517,45 @@ export default async function EntriesPage({
   let entries: EntryRow[] = [];
 
   if (selectedTournamentId) {
-    const entriesRes = await supabase
+    const entriesResKit = await supabase
       .from("tournament_entries")
-      .select(`
-        id,
-        player_id,
-        player_number,
-        handicap_index,
-        status,
-        players:players (
-          id,
-          first_name,
-          last_name,
-          gender,
-          handicap_index,
-          handicap_torneo,
-          phone,
-          email,
-          club,
-          club_id,
-          initials,
-          ghin_number,
-          shirt_size,
-          shoe_size,
-          birth_year,
-          clubs:clubs (
-            name,
-            short_name
-          )
-        ),
-        categories:categories (
-          id,
-          code,
-          name,
-          max_players
-        )
-      `)
+      .select(ENTRY_SELECT_WITH_KIT)
       .eq("tournament_id", selectedTournamentId)
       .order("player_number", { ascending: true, nullsFirst: false });
 
-    if (entriesRes.error) {
-      throw new Error(`Error leyendo tournament_entries: ${entriesRes.error.message}`);
-    }
+    let entryRows: EntryRowBase[];
 
-    const entryRows = (entriesRes.data ?? []) as unknown as EntryRowBase[];
+    if (
+      entriesResKit.error &&
+      isMissingTelegramKitColumnsError(entriesResKit.error)
+    ) {
+      const entriesResBase = await supabase
+        .from("tournament_entries")
+        .select(ENTRY_SELECT_WITHOUT_KIT)
+        .eq("tournament_id", selectedTournamentId)
+        .order("player_number", { ascending: true, nullsFirst: false });
+
+      if (entriesResBase.error) {
+        throw new Error(
+          `Error leyendo tournament_entries: ${entriesResBase.error.message}`
+        );
+      }
+
+      entryRows = (entriesResBase.data ?? []) as unknown as EntryRowBase[];
+    } else {
+      if (entriesResKit.error) {
+        throw new Error(
+          `Error leyendo tournament_entries: ${entriesResKit.error.message}`
+        );
+      }
+
+      entryRows = (entriesResKit.data ?? []) as unknown as EntryRowBase[];
+    }
     const entryIds = entryRows.map((e) => e.id);
 
     const roundsRes = await supabase
       .from("rounds")
-      .select("id, round_no")
+      .select("id, round_no, category_id")
       .eq("tournament_id", selectedTournamentId)
       .order("round_no", { ascending: true });
 
@@ -477,23 +568,66 @@ export default async function EntriesPage({
       .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0));
 
     let scorecards: ScorecardRow[] = [];
+    let capturedByEntryRound = new Set<string>();
+
+    const roundIds = rounds.map((r) => r.id);
+    const playerIds = entryRows.map((e) => e.player_id).filter(Boolean);
 
     if (entryIds.length > 0) {
-      const scorecardsRes = await supabase
-        .from("scorecards")
-        .select(`
-          id,
-          entry_id,
-          round_id,
-          scorecard_signatures (*)
-        `)
-        .in("entry_id", entryIds);
+      const scorecardsData = await fetchScorecardsForEntries(supabase, entryIds);
+      scorecards = scorecardsData as unknown as ScorecardRow[];
+    }
 
-      if (scorecardsRes.error) {
-        throw new Error(`Error leyendo scorecards con firmas: ${scorecardsRes.error.message}`);
+    if (roundIds.length > 0 && playerIds.length > 0) {
+      const roundScoresRes = await supabase
+        .from("round_scores")
+        .select("id, player_id, round_id, gross_score")
+        .in("round_id", roundIds)
+        .in("player_id", playerIds);
+
+      if (roundScoresRes.error) {
+        throw new Error(
+          `Error leyendo round_scores: ${roundScoresRes.error.message}`
+        );
       }
 
-      scorecards = (scorecardsRes.data ?? []) as unknown as ScorecardRow[];
+      const roundScores = (roundScoresRes.data ?? []) as Array<{
+        id: string;
+        player_id: string | null;
+        round_id: string | null;
+        gross_score: number | null;
+      }>;
+
+      const roundScoreIds = roundScores.map((rs) => rs.id);
+      let holeScores: Array<{ round_score_id: string }> = [];
+
+      if (roundScoreIds.length > 0) {
+        const holeScoresRes = await supabase
+          .from("hole_scores")
+          .select("round_score_id")
+          .in("round_score_id", roundScoreIds);
+
+        if (holeScoresRes.error) {
+          throw new Error(
+            `Error leyendo hole_scores: ${holeScoresRes.error.message}`
+          );
+        }
+
+        holeScores = (holeScoresRes.data ?? []) as Array<{
+          round_score_id: string;
+        }>;
+      }
+
+      capturedByEntryRound = buildCapturedByEntryRound(
+        entryRows.map((e) => ({
+          id: e.id,
+          player_id: e.player_id,
+          category_id: oneOrNull(e.categories)?.id ?? null,
+        })),
+        rounds,
+        roundScores,
+        holeScores
+      );
     }
 
     entries = entryRows.map((e) => {
@@ -506,7 +640,15 @@ export default async function EntriesPage({
         player_number: e.player_number,
         handicap_index: e.handicap_index,
         status: e.status,
-        round_signatures: buildRoundSignatures(e.id, rounds, scorecards),
+        telegram_kit_sent_at: e.telegram_kit_sent_at ?? null,
+        telegram_kit_received_at: e.telegram_kit_received_at ?? null,
+        round_signatures: buildRoundSignatures(
+          e.id,
+          category?.id ?? null,
+          rounds,
+          scorecards,
+          capturedByEntryRound
+        ),
         players: player
           ? {
               id: player.id,
@@ -525,6 +667,8 @@ export default async function EntriesPage({
               shirt_size: player.shirt_size,
               shoe_size: player.shoe_size,
               birth_year: player.birth_year,
+              telegram_user_id: player.telegram_user_id ?? null,
+              telegram_chat_id: player.telegram_chat_id ?? null,
             }
           : null,
         categories: category
@@ -542,7 +686,15 @@ export default async function EntriesPage({
   return (
     <main className="space-y-2 p-2">
       <HeaderBlock title={entriesTitle}>
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedTournamentId ? (
+            <Link
+              href={`/entries/telegram-kit-content?tournament_id=${encodeURIComponent(selectedTournamentId)}`}
+              className="rounded border border-sky-700 bg-sky-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-sky-700"
+            >
+              {kitContentLabel}
+            </Link>
+          ) : null}
           {selectedTournamentId && !registrationsClosed ? (
             <EnrollExcelButton
               tournament_id={selectedTournamentId}

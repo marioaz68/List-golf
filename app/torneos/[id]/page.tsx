@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient } from "@/utils/supabase/server";
+import { createClient, createAdminClient } from "@/utils/supabase/server";
+import {
+  buildLockedScorecardLookups,
+  isEntryRoundClosed,
+} from "@/lib/leaderboard/lockedScorecards";
+import { fetchLockedScorecardsForTournament } from "@/lib/leaderboard/fetchLockedScorecards";
 import FavoritesView from "@/components/public/FavoritesView";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
+import OfficialCategoryClosePanel from "./components/OfficialCategoryClosePanel";
+import { buildCategoryRoundCloseCards } from "./lib/categoryRoundCloseStatus";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
+  fetchAllTournamentEntries,
   fetchHoleScoresForRoundScores,
   fetchRoundScoresForPublicLeaderboard,
 } from "./lib/data";
@@ -69,10 +77,15 @@ export default async function PublicTournamentPage({
     round_id?: string;
     view?: string;
     detail_id?: string;
+    embed?: string;
+    from?: string;
   }>;
 }) {
   const { id } = await params;
   const sp = (await searchParams) ?? {};
+
+  const isEmbed = String(sp.embed ?? "").trim() === "1";
+  const fromAdmin = String(sp.from ?? "").trim() === "admin";
 
   const requestedCategoryId =
     typeof sp.category_id === "string" ? sp.category_id.trim() : "";
@@ -131,38 +144,12 @@ export default async function PublicTournamentPage({
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tournament-posters/${typedTournament.poster_path}`
     : null;
 
-  const { data: entriesData, error: entriesError } = await supabase
-    .from("tournament_entries")
-    .select(`
-      id,
-      player_id,
-      category_id,
-      status,
-      player:players (
-        id,
-        first_name,
-        last_name,
-        club,
-        club_id,
-        clubs:clubs (
-          name,
-          short_name
-        )
-      ),
-      category:categories (
-        id,
-        code,
-        name
-      )
-    `)
-    .eq("tournament_id", typedTournament.id)
-    .limit(500);
+  const entriesData = await fetchAllTournamentEntries(
+    supabase,
+    typedTournament.id
+  );
 
-  if (entriesError) {
-    throw new Error(`Error leyendo tournament_entries: ${entriesError.message}`);
-  }
-
-  const allEntries = ((entriesData ?? []) as TournamentEntryJoinRow[])
+  const allEntries = (entriesData as TournamentEntryJoinRow[])
     .map(toValidEntry)
     .filter((entry): entry is ValidTournamentEntry => !!entry);
 
@@ -260,10 +247,12 @@ export default async function PublicTournamentPage({
     }))
     .filter((g) => g.rounds.length > 0);
 
+  const adminSupabase = await createAdminClient();
+
   const roundScores =
     filteredEntries.length > 0 && rounds.length > 0
       ? await fetchRoundScoresForPublicLeaderboard(
-          supabase,
+          adminSupabase,
           filteredEntries.map((entry) => entry.player_id),
           rounds.map((r) => r.id)
         )
@@ -272,7 +261,7 @@ export default async function PublicTournamentPage({
   const holeScores =
     roundScores.length > 0
       ? await fetchHoleScoresForRoundScores(
-          supabase,
+          adminSupabase,
           roundScores.map((row) => row.id)
         )
       : [];
@@ -354,40 +343,26 @@ export default async function PublicTournamentPage({
     .eq("tournament_id", typedTournament.id)
     .maybeSingle();
 
-  const { data: scorecardsData } = await supabase
-    .from("scorecards")
-    .select("entry_id, round_id, locked_at")
-    .eq("tournament_id", typedTournament.id)
-    .not("locked_at", "is", null);
-
-  const lockedScorecardMap = new Set(
-    (scorecardsData ?? []).map(
-      (sc) => `${sc.entry_id}_${sc.round_id}`
-    )
+  const scorecardsData = await fetchLockedScorecardsForTournament(
+    adminSupabase,
+    typedTournament.id
   );
 
-  const categoryStatusMap: Record<
-    string,
-    { total: number; closed: number }
-  > = {};
+  const lockedLookups = buildLockedScorecardLookups(
+    scorecardsData as Array<{
+      entry_id: string;
+      round_id: string;
+      locked_at: string | null;
+    }>,
+    rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
+  );
 
-  filteredEntries.forEach((entry) => {
-    const cat = entry.category?.code ?? "SIN CAT";
-
-    if (!categoryStatusMap[cat]) {
-      categoryStatusMap[cat] = { total: 0, closed: 0 };
-    }
-
-    categoryStatusMap[cat].total += 1;
-
-    const hasClosedRound = rounds.some((round) =>
-      lockedScorecardMap.has(`${entry.id}_${round.id}`)
-    );
-
-    if (hasClosedRound) {
-      categoryStatusMap[cat].closed += 1;
-    }
-  });
+  const categoryRoundCloseCards = buildCategoryRoundCloseCards(
+    allEntries,
+    selectedRound,
+    lockedLookups,
+    typedTournament.id
+  );
 
   const leaderboardBase = buildLiveLeaderboard({
     filteredEntries,
@@ -414,6 +389,14 @@ export default async function PublicTournamentPage({
     leaderboard: leaderboardWithStandings,
     competitionRules: competitionRulesData,
   });
+
+  /** Vista oficial: solo filas con tarjeta cerrada en la ronda seleccionada. Live y favoritos usan siempre `leaderboard` completo. */
+  const officialLeaderboard: LeaderboardRow[] =
+    selectedRound?.id != null
+      ? leaderboard.filter((row) =>
+          isEntryRoundClosed(row.entry_id, selectedRound, lockedLookups)
+        )
+      : leaderboard;
 
   const publicRoundIds = publicTeeSheetRounds.map((round) => round.id);
 
@@ -585,22 +568,70 @@ export default async function PublicTournamentPage({
           ? pub.pageDescTeeSheet
           : pub.pageDescLive;
 
+  const tHref = (opts: {
+    categoryId?: string | null;
+    roundId?: string | null;
+    view?: string | null;
+    detailId?: string | null;
+  }) =>
+    buildHref({
+      tournamentId: typedTournament.id,
+      embed: isEmbed,
+      fromAdmin: isEmbed && fromAdmin,
+      ...opts,
+    });
+
+  const adminLeaderboardHref = (() => {
+    const qs = new URLSearchParams();
+    qs.set("tournament_id", typedTournament.id);
+    if (view) qs.set("view", view);
+    if (requestedCategoryId) qs.set("category_id", requestedCategoryId);
+    const roundBack = requestedRoundId || selectedRound?.id;
+    if (roundBack) qs.set("round_id", roundBack);
+    return `/leaderboard?${qs.toString()}`;
+  })();
+
   return (
-    <div className="min-h-screen bg-[#08111f] text-white">
+    <div
+      className={`bg-[#08111f] text-white ${isEmbed ? "min-h-0" : "min-h-screen"}`}
+    >
+      {isEmbed && fromAdmin ? (
+        <div className="sticky top-0 z-50 border-b border-white/10 bg-[#08111f]/95 px-3 py-2.5 backdrop-blur-sm sm:px-4">
+          <Link
+            href={adminLeaderboardHref}
+            className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+          >
+            <span aria-hidden>←</span>
+            Volver a administración
+          </Link>
+        </div>
+      ) : null}
+
       <section className="relative overflow-hidden border-b border-white/10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.12),transparent_25%)]" />
 
-        <div className="relative mx-auto max-w-7xl px-4 pb-8 pt-2 sm:px-6 lg:px-8">
+        <div
+          className={`relative mx-auto max-w-7xl sm:px-6 lg:px-8 ${
+            isEmbed ? "px-2 pb-4 pt-1 sm:px-6" : "px-4 pb-8 pt-2"
+          }`}
+        >
           <div className="mb-5 flex flex-col gap-4">
-            <div className="-mx-4 flex w-[calc(100%+2rem)] flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6 lg:-mx-8 lg:w-[calc(100%+4rem)] lg:px-8">
-              <div className="flex shrink-0 justify-start">
-                <PublicInstallShortcut locale={locale} />
+            {!isEmbed ? (
+              <div className="-mx-4 flex w-[calc(100%+2rem)] flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6 lg:-mx-8 lg:w-[calc(100%+4rem)] lg:px-8">
+                <div className="flex shrink-0 justify-start">
+                  <PublicInstallShortcut locale={locale} />
+                </div>
+                <div className="flex shrink-0 justify-end">
+                  <PublicLanguageToggle locale={locale} />
+                </div>
               </div>
-              <div className="flex shrink-0 justify-end">
+            ) : (
+              <div className="flex justify-end border-b border-white/10 pb-2">
                 <PublicLanguageToggle locale={locale} />
               </div>
-            </div>
+            )}
 
+            {!isEmbed ? (
             <div className={publicTournamentSecondaryNavGridClass}>
               <Link
                 href="/"
@@ -625,12 +656,12 @@ export default async function PublicTournamentPage({
                 </Link>
               ) : null}
             </div>
+            ) : null}
 
             <div className={publicTournamentPrimaryNavGridClass}>
               <Link
                 scroll={false}
-                href={buildHref({
-                  tournamentId: typedTournament.id,
+                href={tHref({
                   categoryId: selectedCategoryId || null,
                   roundId: selectedRound?.id ?? null,
                   view: "live",
@@ -642,8 +673,7 @@ export default async function PublicTournamentPage({
 
               <Link
                 scroll={false}
-                href={buildHref({
-                  tournamentId: typedTournament.id,
+                href={tHref({
                   categoryId: selectedCategoryId || null,
                   roundId: selectedRound?.id ?? null,
                   view: "official",
@@ -657,8 +687,7 @@ export default async function PublicTournamentPage({
 
               <Link
                 scroll={false}
-                href={buildHref({
-                  tournamentId: typedTournament.id,
+                href={tHref({
                   categoryId: selectedCategoryId || null,
                   view: "tee-sheet",
                 })}
@@ -671,8 +700,7 @@ export default async function PublicTournamentPage({
 
               <Link
                 scroll={false}
-                href={buildHref({
-                  tournamentId: typedTournament.id,
+                href={tHref({
                   categoryId: selectedCategoryId || null,
                   roundId: selectedRound?.id ?? null,
                   view: "favorites",
@@ -748,8 +776,7 @@ export default async function PublicTournamentPage({
                 <div className="flex flex-wrap gap-2">
                   <Link
                     scroll={false}
-                    href={buildHref({
-                      tournamentId: typedTournament.id,
+                    href={tHref({
                       roundId:
                         view === "tee-sheet"
                           ? selectedPublicTeeSheetRoundId
@@ -765,8 +792,7 @@ export default async function PublicTournamentPage({
                     <Link
                       key={category.id}
                       scroll={false}
-                      href={buildHref({
-                        tournamentId: typedTournament.id,
+                      href={tHref({
                         categoryId: category.id,
                         roundId:
                           view === "tee-sheet"
@@ -827,8 +853,7 @@ export default async function PublicTournamentPage({
                               <Link
                                 key={round.id}
                                 scroll={false}
-                                href={buildHref({
-                                  tournamentId: typedTournament.id,
+                                href={tHref({
                                   categoryId: selectedCategoryId || null,
                                   roundId: round.id,
                                   view,
@@ -875,8 +900,7 @@ export default async function PublicTournamentPage({
                                         <Link
                                           key={round.id}
                                           scroll={false}
-                                          href={buildHref({
-                                            tournamentId: typedTournament.id,
+                                          href={tHref({
                                             categoryId:
                                               selectedCategoryId || null,
                                             roundId: round.id,
@@ -918,8 +942,7 @@ export default async function PublicTournamentPage({
                                         <Link
                                           key={round.id}
                                           scroll={false}
-                                          href={buildHref({
-                                            tournamentId: typedTournament.id,
+                                          href={tHref({
                                             categoryId:
                                               selectedCategoryId || null,
                                             roundId: round.id,
@@ -949,8 +972,7 @@ export default async function PublicTournamentPage({
                                   <Link
                                     key={round.id}
                                     scroll={false}
-                                    href={buildHref({
-                                      tournamentId: typedTournament.id,
+                                    href={tHref({
                                       categoryId:
                                         selectedCategoryId || null,
                                       roundId: round.id,
@@ -980,8 +1002,7 @@ export default async function PublicTournamentPage({
                               <Link
                                 key={round.id}
                                 scroll={false}
-                                href={buildHref({
-                                  tournamentId: typedTournament.id,
+                                href={tHref({
                                   categoryId: selectedCategoryId || null,
                                   roundId: round.id,
                                   view,
@@ -1037,29 +1058,18 @@ export default async function PublicTournamentPage({
               }}
             />
           ) : view === "official" ? (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {Object.entries(categoryStatusMap)
-                .sort((a, b) =>
-                  a[0].localeCompare(b[0], locale === "en" ? "en" : "es", {
-                    sensitivity: "base",
-                  })
-                )
-                .map(([cat, stats]) => {
-                  const pending = Math.max(stats.total - stats.closed, 0);
-
-                  return (
-                    <div
-                      key={cat}
-                      className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold text-cyan-200"
-                    >
-                      {cat}: {stats.closed}/{stats.total} {pub.officialChipClosed}
-                      {pending > 0
-                        ? ` • ${pub.officialChipPending} ${pending}`
-                        : ` • ${pub.officialChipDone}`}
-                    </div>
-                  );
-                })}
-            </div>
+            <OfficialCategoryClosePanel
+              cards={categoryRoundCloseCards}
+              labels={{
+                closed: pub.officialChipClosed,
+                pending: pub.officialChipPending,
+                complete: pub.officialChipDone,
+                showPendingList: pub.officialShowPendingList,
+                hidePendingList: pub.officialHidePendingList,
+                pendingHeading: pub.officialPendingHeading,
+                captureCta: pub.officialCaptureCta,
+              }}
+            />
           ) : null}
 
           {view === "favorites" ? (
@@ -1074,7 +1084,14 @@ export default async function PublicTournamentPage({
           ) : view === "tee-sheet" ? null : (
             <PublicLeaderboardWithSearch
               tournamentId={typedTournament.id}
-              fullLeaderboard={leaderboard}
+              embed={isEmbed}
+              fromAdmin={fromAdmin}
+              fullLeaderboard={
+                view === "official" ? officialLeaderboard : leaderboard
+              }
+              peerRowsForNameCompact={
+                view === "official" ? leaderboard : undefined
+              }
               view={view === "official" ? "official" : "live"}
               selectedCategoryId={selectedCategoryId}
               selectedRound={selectedRound}
@@ -1093,27 +1110,29 @@ export default async function PublicTournamentPage({
         </div>
       </section>
 
-      <section className="bg-[#08111f]">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                {pub.cardLiveKicker}
-              </p>
-              <p className="mt-3 text-lg font-bold text-white">{pub.cardLiveTitle}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardLiveBody}</p>
-            </div>
+      {!isEmbed ? (
+        <section className="bg-[#08111f]">
+          <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                  {pub.cardLiveKicker}
+                </p>
+                <p className="mt-3 text-lg font-bold text-white">{pub.cardLiveTitle}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardLiveBody}</p>
+              </div>
 
-            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                {pub.cardTeeKicker}
-              </p>
-              <p className="mt-3 text-lg font-bold text-white">{pub.cardTeeTitle}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardTeeBody}</p>
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                  {pub.cardTeeKicker}
+                </p>
+                <p className="mt-3 text-lg font-bold text-white">{pub.cardTeeTitle}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{pub.cardTeeBody}</p>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

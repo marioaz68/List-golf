@@ -76,3 +76,58 @@ export async function fetchHoleScoresForRoundScores(
 
   return collected;
 }
+
+const ENTRY_SELECT = `
+  id,
+  player_id,
+  player_number,
+  category_id,
+  status,
+  player:players (
+    id,
+    first_name,
+    last_name,
+    club,
+    club_id,
+    clubs:clubs (
+      name,
+      short_name
+    )
+  ),
+  category:categories (
+    id,
+    code,
+    name
+  )
+`;
+
+/** Inscripciones del torneo (paginado; evita truncar por límite PostgREST). */
+export async function fetchAllTournamentEntries(
+  supabase: SupabaseClient,
+  tournamentId: string
+) {
+  const collected: unknown[] = [];
+  let from = 0;
+
+  for (;;) {
+    const { data, error } = await supabase
+      .from("tournament_entries")
+      .select(ENTRY_SELECT)
+      .eq("tournament_id", tournamentId)
+      .order("player_number", { ascending: true, nullsFirst: false })
+      .range(from, from + POSTGREST_PAGE - 1);
+
+    if (error) {
+      throw new Error(`Error leyendo tournament_entries: ${error.message}`);
+    }
+
+    const batch = data ?? [];
+    collected.push(...batch);
+
+    if (batch.length < POSTGREST_PAGE) break;
+    from += POSTGREST_PAGE;
+    if (from > 50_000) break;
+  }
+
+  return collected;
+}

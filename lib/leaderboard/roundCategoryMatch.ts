@@ -88,6 +88,7 @@ export function resolveDetailForSelectedRound<
     category_id?: string | null;
     wave?: string | null;
     is_dq?: boolean;
+    gross_score?: number | null;
     to_par?: number | null;
     holes: Array<{ strokes?: number | null }>;
   },
@@ -126,7 +127,17 @@ export function resolveDetailForSelectedRound<
 
   // —— 2) Varios `round_scores` (p. ej. duplicados A+B): categoría inscripción + metadata ——
   if (scoredDetails.length > 0) {
-    if (scoredDetails.length === 1) return scoredDetails[0]!;
+    const detailHasCapture = (d: T) =>
+      Boolean(d.is_dq) ||
+      d.gross_score != null ||
+      (d.holes ?? []).some(
+        (h) => h.strokes != null && !Number.isNaN(Number(h.strokes))
+      );
+
+    if (scoredDetails.length === 1) {
+      const only = scoredDetails[0]!;
+      if (detailHasCapture(only)) return only;
+    }
 
     if (ec) {
       const byCatWaveDate = scoredDetails.find(
@@ -166,6 +177,40 @@ export function resolveDetailForSelectedRound<
     return [...scoredDetails].sort((a, b) =>
       String(a.round_id).localeCompare(String(b.round_id))
     )[0]!;
+  }
+
+  // Captura en otra fila `rounds` del mismo round_no (p. ej. inscrita DB, score en A).
+  const sameNoCaptured = details.filter(
+    (d) =>
+      sameNo(d) &&
+      (Boolean(d.is_dq) ||
+        d.gross_score != null ||
+        (d.holes ?? []).some(
+          (h) => h.strokes != null && !Number.isNaN(Number(h.strokes))
+        ))
+  );
+  if (sameNoCaptured.length > 0) {
+    if (ec) {
+      const byEntryCat = sameNoCaptured.find(
+        (d) => trimId(d.category_id) === ec && sameDate(d) && sameWave(d)
+      );
+      if (byEntryCat) return byEntryCat;
+
+      const byEntryCatLoose = sameNoCaptured.find(
+        (d) => trimId(d.category_id) === ec
+      );
+      if (byEntryCatLoose) return byEntryCatLoose;
+    }
+
+    const applies = sameNoCaptured.find((d) =>
+      roundRowAppliesToEntry(
+        { category_id: d.category_id ?? null },
+        entryCategoryId
+      )
+    );
+    if (applies) return applies;
+
+    if (sameNoCaptured.length === 1) return sameNoCaptured[0]!;
   }
 
   // —— 3) Aún no hay scores: no inventar otro round_id; alinear por categoría + metadata ——

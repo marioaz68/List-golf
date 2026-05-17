@@ -15,6 +15,7 @@ export type AppModule =
   | "entries"
   | "rounds"
   | "score-entry"
+  | "leaderboard"
   | "caddies";
 
 export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
@@ -57,6 +58,14 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "score_capture",
   ],
 
+  leaderboard: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "viewer",
+  ],
+
   caddies: [
     "super_admin",
     "club_admin",
@@ -89,6 +98,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/entries")) return "entries";
   if (pathname.startsWith("/rounds")) return "rounds";
   if (pathname.startsWith("/score-entry")) return "score-entry";
+  if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/caddies")) return "caddies";
 
   return null;

@@ -4,6 +4,12 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { listCategoriesBlockedForRound } from "@/lib/rounds/categoryRoundGate";
+import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
+import {
+  assertRegistrationClosedForTeeSheet,
+  fetchTournamentRegistrationStatus,
+} from "@/lib/tournaments/registrationGate";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -962,6 +968,12 @@ export async function generateGroupsByCategory(formData: FormData) {
 
   await ensureStartingOrderIsEditable(supabase, round_id);
 
+  const registrationStatus = await fetchTournamentRegistrationStatus(
+    supabase,
+    tournament_id
+  );
+  assertRegistrationClosedForTeeSheet(registrationStatus);
+
   for (let i = 0; i < planRows.length; i++) {
     const row = planRows[i];
     if (row.id === "NO_CAT") continue;
@@ -977,12 +989,38 @@ export async function generateGroupsByCategory(formData: FormData) {
 
   const { data: r, error: rErr } = await supabase
     .from("rounds")
-    .select("id, tournament_id, category_id, start_type, start_time, interval_minutes")
+    .select(
+      "id, tournament_id, category_id, round_no, start_type, start_time, interval_minutes"
+    )
     .eq("id", round_id)
     .single();
 
   if (rErr || !r) throw new Error("No se pudo leer round: " + (rErr?.message ?? ""));
   if (r.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
+
+  const targetRoundNo = Number(r.round_no ?? 0);
+  if (targetRoundNo > 1) {
+    const categoryIdsToCheck = planRows
+      .map((row) => row.id)
+      .filter((id) => id !== "NO_CAT");
+
+    if (categoryIdsToCheck.length > 0) {
+      const gateCtx = await loadCategoryRoundGateContext(supabase, tournament_id);
+      const blockedIds = listCategoriesBlockedForRound(
+        gateCtx.entries,
+        gateCtx.rounds,
+        targetRoundNo,
+        categoryIdsToCheck,
+        gateCtx.lookups
+      );
+
+      if (blockedIds.length > 0) {
+        throw new Error(
+          `No se pueden generar salidas de la ronda ${targetRoundNo}: la ronda ${targetRoundNo - 1} debe estar cerrada para todas las categorías del plan (${blockedIds.length} pendiente(s)).`
+        );
+      }
+    }
+  }
 
   const startType = (r.start_type as "tee_times" | "shotgun") ?? "tee_times";
 

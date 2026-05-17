@@ -28,6 +28,7 @@ export type EntryCategory = {
 export type TournamentEntryJoinRow = {
   id: string;
   player_id: string;
+  player_number: number | null;
   category_id: string | null;
   status: string | null;
   player: EntryPlayer | EntryPlayer[] | null;
@@ -37,6 +38,7 @@ export type TournamentEntryJoinRow = {
 export type ValidTournamentEntry = {
   id: string;
   player_id: string;
+  player_number: number | null;
   category_id: string | null;
   status: string | null;
   player: EntryPlayer;

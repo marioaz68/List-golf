@@ -4,9 +4,9 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { savePlayerScores, type SaveScoresState } from "./actions";
 import {
-  backofficeTableStickyScroll,
-  twStickyTheadGray50,
-} from "@/lib/ui/backofficeTableSticky";
+  CapturedRoundsScorecard,
+  EditableScorecard,
+} from "./ScoreEntryScorecardTables";
 
 type Hole = {
   hole_number: number;
@@ -37,29 +37,31 @@ const initialSaveState: SaveScoresState = {
   message: "",
 };
 
-function sumByHoles(
-  holes: Hole[],
-  values: Record<number, string | number | undefined>
-) {
-  return holes.reduce((acc, h) => acc + Number(values[h.hole_number] || 0), 0);
-}
-
 export default function ScoreEntryClient({
   roundId,
+  tournamentId,
   tournamentDayId,
   player,
   holes,
   existingScores,
   capturedRounds,
   selectedRoundNo,
+  entryCategoryLabel,
+  roundClosed = false,
+  captureRoundNotice,
 }: {
   roundId: string;
+  tournamentId: string;
   tournamentDayId?: string | null;
   player: PlayerLite | null;
   holes: Hole[];
   existingScores: ExistingScores;
   capturedRounds: CapturedRound[];
   selectedRoundNo: number;
+  /** Categoría del inscrito (inscripciones cerradas); no se modifica en captura. */
+  entryCategoryLabel: string;
+  roundClosed?: boolean;
+  captureRoundNotice?: string;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -92,6 +94,9 @@ export default function ScoreEntryClient({
   });
 
   const [activeIndex, setActiveIndex] = useState(0);
+  const [saveMode, setSaveMode] = useState<
+    "save" | "save_and_close" | "open_round"
+  >("save");
 
   const [saveState, formAction, isPending] = useActionState(
     savePlayerScores,
@@ -104,6 +109,15 @@ export default function ScoreEntryClient({
   }, [player]);
 
   const playerHcp = player?.handicap_torneo ?? player?.handicap_index ?? null;
+
+  const filledHoleCount = useMemo(
+    () =>
+      holes.filter((h) => String(scores[h.hole_number] ?? "").trim() !== "")
+        .length,
+    [holes, scores]
+  );
+
+  const canCloseRound = filledHoleCount >= 18;
 
   function findFirstEmptyIndex(nextScores: Record<number, string>) {
     for (let i = 0; i < holes.length; i++) {
@@ -149,15 +163,22 @@ export default function ScoreEntryClient({
     const firstEmpty = findFirstEmptyIndex(init);
     setActiveIndex(firstEmpty);
 
-    window.setTimeout(() => {
-      focusIndex(firstEmpty);
-    }, 0);
-  }, [holes, existingScores, player?.id, roundId]);
+    if (!roundClosed) {
+      window.setTimeout(() => {
+        focusIndex(firstEmpty);
+      }, 0);
+    }
+  }, [holes, existingScores, player?.id, roundId, roundClosed]);
 
   useEffect(() => {
     if (!saveState.ok || !saveState.message) return;
 
     if (typeof window === "undefined") return;
+
+    if (saveMode === "open_round") {
+      router.refresh();
+      return;
+    }
 
     const sp = new URLSearchParams(window.location.search);
     sp.delete("q");
@@ -166,6 +187,16 @@ export default function ScoreEntryClient({
     const path = window.location.pathname;
     const url = query ? `${path}?${query}` : path;
 
+    // Solo refresh: evita navegación extra que, con sesión recién refrescada, podía mandar a /login.
+    router.refresh();
+
+    if (saveMode === "save_and_close") {
+      const t = window.setTimeout(() => {
+        document.getElementById("score-entry-player-search")?.focus();
+      }, 120);
+      return () => window.clearTimeout(t);
+    }
+
     router.replace(url, { scroll: false });
 
     const t = window.setTimeout(() => {
@@ -173,13 +204,15 @@ export default function ScoreEntryClient({
     }, 120);
 
     return () => window.clearTimeout(t);
-  }, [saveState.ok, saveState.message, router]);
+  }, [saveState.ok, saveState.message, saveMode, router]);
 
   function handleChange(
     holeNumber: number,
     index: number,
     e: React.ChangeEvent<HTMLInputElement>
   ) {
+    if (roundClosed) return;
+
     const raw = e.target.value;
 
     if (raw === "") {
@@ -222,6 +255,8 @@ export default function ScoreEntryClient({
     index: number,
     e: React.KeyboardEvent<HTMLInputElement>
   ) {
+    if (roundClosed) return;
+
     const input = e.currentTarget;
 
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
@@ -266,40 +301,6 @@ export default function ScoreEntryClient({
     }
   }
 
-  const front9 = useMemo(() => sumByHoles(frontHoles, scores), [frontHoles, scores]);
-  const back9 = useMemo(() => sumByHoles(backHoles, scores), [backHoles, scores]);
-  const total = front9 + back9;
-
-  function renderInputCell(h: Hole) {
-    const idx = holeIndexMap.get(h.hole_number) ?? 0;
-
-    return (
-      <td
-        key={`input-${h.hole_number}`}
-        className="border-b border-gray-100 px-0.5 py-1 text-center"
-      >
-        <input
-          ref={(el) => {
-            inputRefs.current[idx] = el;
-          }}
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={scores[h.hole_number] ?? ""}
-          onFocus={() => setActiveIndex(idx)}
-          onClick={() => setActiveIndex(idx)}
-          onChange={(e) => handleChange(h.hole_number, idx, e)}
-          onKeyDown={(e) => handleKeyDown(h.hole_number, idx, e)}
-          className={`h-8 w-full min-w-0 rounded border bg-white px-0 py-0 text-center text-xs text-black outline-none ${
-            activeIndex === idx
-              ? "border-green-600 ring-2 ring-green-200"
-              : "border-gray-300 focus:border-green-600"
-          }`}
-        />
-      </td>
-    );
-  }
-
   if (!player?.id) {
     return (
       <div className="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
@@ -311,8 +312,10 @@ export default function ScoreEntryClient({
   return (
     <form ref={formRef} action={formAction} className="mt-3 space-y-3">
       <input type="hidden" name="round_id" value={roundId} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
       <input type="hidden" name="player_id" value={player.id} />
       <input type="hidden" name="tournament_day_id" value={tournamentDayId ?? ""} />
+      <input type="hidden" name="save_mode" value={saveMode} />
 
       {holes.map((h) => (
         <input
@@ -324,265 +327,70 @@ export default function ScoreEntryClient({
         />
       ))}
 
+      {captureRoundNotice ? (
+        <div className="mb-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          {captureRoundNotice}
+        </div>
+      ) : null}
+
       <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm">
           <div className="font-semibold text-black">
             #{player.player_number ?? "-"} · {playerName || "Jugador sin nombre"}
           </div>
+          <div
+            className="rounded bg-indigo-100 px-2 py-0.5 font-medium text-indigo-900"
+            title="Definida al inscribir y cerrar inscripciones; no se modifica en captura"
+          >
+            Inscripción: {entryCategoryLabel}
+          </div>
           <div className="text-gray-600">HCP: {playerHcp ?? "-"}</div>
           <div className="text-gray-500">
             Celda activa: hoyo {holes[activeIndex]?.hole_number ?? "-"}
           </div>
-          <div className="rounded bg-green-100 px-2 py-0.5 text-green-800">
-            Capturando R{selectedRoundNo}
-          </div>
-          <div className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
-            Guardar: Cmd/Ctrl + S
-          </div>
+          {roundClosed ? (
+            <div className="rounded bg-slate-200 px-2 py-0.5 font-medium text-slate-800">
+              R{selectedRoundNo} Cerrada
+            </div>
+          ) : (
+            <div className="rounded bg-green-100 px-2 py-0.5 text-green-800">
+              Capturando R{selectedRoundNo}
+            </div>
+          )}
+          {!roundClosed && (
+            <div className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
+              Guardar: Cmd/Ctrl + S
+            </div>
+          )}
         </div>
       </div>
 
-      {capturedRounds.length > 0 && (
-        <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-          <div className="mb-2 text-sm font-semibold text-gray-800">
-            Rondas capturadas
-          </div>
+      <CapturedRoundsScorecard
+        capturedRounds={capturedRounds}
+        frontHoles={frontHoles}
+        backHoles={backHoles}
+        selectedRoundNo={selectedRoundNo}
+      />
 
-          <div style={backofficeTableStickyScroll}>
-            <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
-              <thead className={twStickyTheadGray50}>
-                <tr>
-                  <th className="w-16 border-b border-gray-200 px-1 py-1 text-left font-semibold">
-                    RONDA
-                  </th>
+      <EditableScorecard
+        holes={holes}
+        frontHoles={frontHoles}
+        backHoles={backHoles}
+        scores={scores}
+        activeIndex={activeIndex}
+        inputRefs={inputRefs}
+        readOnly={roundClosed}
+        onFocusIndex={setActiveIndex}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+      />
 
-                  {frontHoles.map((h) => (
-                    <th
-                      key={`capt-front-${h.hole_number}`}
-                      className="border-b border-gray-200 px-0.5 py-1 text-center font-semibold"
-                    >
-                      {h.hole_number}
-                    </th>
-                  ))}
-
-                  <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                    F9
-                  </th>
-
-                  {backHoles.map((h) => (
-                    <th
-                      key={`capt-back-${h.hole_number}`}
-                      className="border-b border-gray-200 px-0.5 py-1 text-center font-semibold"
-                    >
-                      {h.hole_number}
-                    </th>
-                  ))}
-
-                  <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                    B9
-                  </th>
-                  <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                    TOT
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {capturedRounds.map((r) => {
-                  const rowFront9 = sumByHoles(frontHoles, r.scores);
-                  const rowBack9 = sumByHoles(backHoles, r.scores);
-                  const rowTotal = rowFront9 + rowBack9;
-
-                  return (
-                    <tr
-                      key={r.round_id}
-                      className={r.round_no === selectedRoundNo ? "bg-green-50" : "bg-white"}
-                    >
-                      <td className="border-b border-gray-100 px-1 py-1 text-left font-semibold">
-                        R{r.round_no}
-                      </td>
-
-                      {frontHoles.map((h) => (
-                        <td
-                          key={`${r.round_id}-front-${h.hole_number}`}
-                          className="border-b border-gray-100 px-0.5 py-1 text-center"
-                        >
-                          {r.scores[h.hole_number] ?? ""}
-                        </td>
-                      ))}
-
-                      <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                        {rowFront9 || ""}
-                      </td>
-
-                      {backHoles.map((h) => (
-                        <td
-                          key={`${r.round_id}-back-${h.hole_number}`}
-                          className="border-b border-gray-100 px-0.5 py-1 text-center"
-                        >
-                          {r.scores[h.hole_number] ?? ""}
-                        </td>
-                      ))}
-
-                      <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                        {rowBack9 || ""}
-                      </td>
-                      <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                        {rowTotal || ""}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {roundClosed && (
+        <p className="text-sm text-slate-600">
+          Tarjeta entregada y cerrada (firmas jugador y testigo). Usa «Abrir
+          ronda» solo si necesitas corregir scores.
+        </p>
       )}
-
-      <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-        <div style={backofficeTableStickyScroll}>
-        <table className="w-full table-fixed border-collapse text-[10px] text-black md:text-xs">
-          <thead className={twStickyTheadGray50}>
-            <tr>
-              <th className="w-12 border-b border-gray-200 px-1 py-1 text-left font-semibold">
-                VENT
-              </th>
-
-              {frontHoles.map((h) => (
-                <th
-                  key={`hcp-front-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center text-[9px] text-gray-700"
-                >
-                  {h.handicap_index}
-                </th>
-              ))}
-
-              <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                F9
-              </th>
-
-              {backHoles.map((h) => (
-                <th
-                  key={`hcp-back-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center text-[9px] text-gray-700"
-                >
-                  {h.handicap_index}
-                </th>
-              ))}
-
-              <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                B9
-              </th>
-              <th className="w-14 border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                TOT
-              </th>
-            </tr>
-
-            <tr className="bg-gray-50">
-              <th className="w-12 border-b border-gray-200 px-1 py-1 text-left font-semibold">
-                HOYO
-              </th>
-
-              {frontHoles.map((h) => (
-                <th
-                  key={`hole-front-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center font-semibold"
-                >
-                  {h.hole_number}
-                </th>
-              ))}
-
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                F9
-              </th>
-
-              {backHoles.map((h) => (
-                <th
-                  key={`hole-back-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center font-semibold"
-                >
-                  {h.hole_number}
-                </th>
-              ))}
-
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                B9
-              </th>
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                TOT
-              </th>
-            </tr>
-
-            <tr className="bg-gray-50">
-              <th className="w-12 border-b border-gray-200 px-1 py-1 text-left font-semibold">
-                PAR
-              </th>
-
-              {frontHoles.map((h) => (
-                <th
-                  key={`par-front-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center text-[9px] text-gray-700"
-                >
-                  {h.par}
-                </th>
-              ))}
-
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                {sumByHoles(
-                  frontHoles,
-                  Object.fromEntries(frontHoles.map((h) => [h.hole_number, h.par]))
-                )}
-              </th>
-
-              {backHoles.map((h) => (
-                <th
-                  key={`par-back-${h.hole_number}`}
-                  className="border-b border-gray-200 px-0.5 py-1 text-center text-[9px] text-gray-700"
-                >
-                  {h.par}
-                </th>
-              ))}
-
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                {sumByHoles(
-                  backHoles,
-                  Object.fromEntries(backHoles.map((h) => [h.hole_number, h.par]))
-                )}
-              </th>
-              <th className="border-b border-gray-200 px-1 py-1 text-center font-semibold">
-                {sumByHoles(
-                  holes,
-                  Object.fromEntries(holes.map((h) => [h.hole_number, h.par]))
-                )}
-              </th>
-            </tr>
-          </thead>
-
-          <tbody>
-            <tr>
-              <td className="border-b border-gray-100 px-1 py-1 text-left text-[10px] font-semibold">
-                SCORE
-              </td>
-
-              {frontHoles.map((h) => renderInputCell(h))}
-
-              <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                {front9 || ""}
-              </td>
-
-              {backHoles.map((h) => renderInputCell(h))}
-
-              <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                {back9 || ""}
-              </td>
-              <td className="border-b border-gray-100 px-1 py-1 text-center font-semibold">
-                {total || ""}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
 
       {saveState.message && (
         <div
@@ -597,13 +405,50 @@ export default function ScoreEntryClient({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
-        >
-          {isPending ? "Guardando..." : "Guardar scores"}
-        </button>
+        {roundClosed ? (
+          <button
+            type="submit"
+            disabled={isPending}
+            onClick={() => setSaveMode("open_round")}
+            className="rounded-lg border border-amber-700 bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {isPending && saveMode === "open_round"
+              ? "Abriendo..."
+              : "Abrir ronda"}
+          </button>
+        ) : (
+          <>
+            <button
+              type="submit"
+              disabled={isPending}
+              onClick={() => setSaveMode("save")}
+              className="rounded-lg border border-green-800 bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
+            >
+              {isPending && saveMode === "save"
+                ? "Guardando..."
+                : "Guardar scores"}
+            </button>
+            <button
+              type="submit"
+              disabled={isPending || !canCloseRound}
+              onClick={() => setSaveMode("save_and_close")}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              title={
+                canCloseRound
+                  ? "Entrega en mesa: firmas jugador y testigo; cuenta para el leaderboard oficial"
+                  : `Capture los 18 hoyos antes de cerrar (${filledHoleCount}/18)`
+              }
+            >
+              {isPending && saveMode === "save_and_close"
+                ? "Guardando..."
+                : "Guardar y cerrar ronda"}
+            </button>
+            <span className="text-xs text-gray-500">
+              «Guardar scores» para borrador; «Cerrar ronda» solo con los 18
+              hoyos capturados (tarjeta firmada jugador + testigo).
+            </span>
+          </>
+        )}
       </div>
     </form>
   );

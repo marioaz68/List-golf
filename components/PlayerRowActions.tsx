@@ -21,6 +21,8 @@ type PlayerModalData = {
   shirt_size: string | null;
   shoe_size: string | null;
   birth_year?: number | null;
+  telegram_user_id?: string | null;
+  telegram_chat_id?: string | null;
 };
 
 type Category = {

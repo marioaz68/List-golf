@@ -146,6 +146,102 @@ const es = {
       linksMarker: "Marcador:",
       linksWitness: "Testigo:",
       roundSigTitle: "R{round}: {count} firma(s)",
+      roundBallCaptured: "R{round}: capturada",
+      roundBallCapturedOpen: "R{round}: capturada, sin cerrar",
+      roundBallPending: "R{round}: sin capturar",
+      roundBallClosed: "R{round}: cerrada",
+      roundBallLegend:
+        "Rojo: sin capturar · Ámbar: capturada sin cerrar · Verde: tarjeta cerrada",
+      btnTelegramKit: "KIT",
+      btnTelegramKitTitle: "Guía Telegram para este jugador",
+    },
+    telegramKit: {
+      title: "Kit de conexión Telegram",
+      backToEntries: "← Volver a inscritos",
+      playerLabel: "Jugador",
+      tournamentLabel: "Torneo",
+      botUsernameLabel: "Bot de Telegram del torneo",
+      botUsernameHint:
+        "Dile al jugador que busque este usuario en Telegram, pulse Iniciar y escriba HOLA. Copia el @ para dictárselo.",
+      copyBotUsername: "Copiar @usuario",
+      copied: "Copiado",
+      staffScriptTitle: "Qué decirle al jugador",
+      staffScript:
+        "«Abre Telegram, busca @{bot}, pulsa Iniciar y escribe HOLA. Si el bot te reconoce, ya estamos enlazados; si no, copia tu ID numérico y se lo damos al comité en esta pantalla.»",
+      phaseConnect: "Paso 1 — Conectar Telegram",
+      phaseVerify: "Paso 2 — Verificar enlace",
+      phaseDeliver: "Paso 3 — Entregar kit",
+      statusLinked: "Telegram vinculado en la ficha (user ID guardado).",
+      statusNotLinked: "Aún no hay Telegram vinculado.",
+      statusKitSent: "Kit enviado por Telegram; esperando que el jugador responda RECIBIDO.",
+      statusKitReceived: "El jugador confirmó recibido del kit.",
+      step1Title: "1. Abrir el bot en Telegram",
+      step1BodyConfigured:
+        "El jugador debe abrir el bot con el usuario de arriba, pulsar «Iniciar» y escribir HOLA.",
+      step1BodyNotConfigured:
+        "Configura NEXT_PUBLIC_TELEGRAM_BOT_USERNAME en el servidor (ej. @ListGolfBot).",
+      openBotLink: "Abrir bot en Telegram",
+      step2Title: "2. Obtener el ID si el bot no reconoce al jugador",
+      step2Body:
+        "Pide que escriba HOLA o ID al bot @listgolf. El bot responderá con un número entre líneas ━━━━. También puedes usar @userinfobot. Abajo aparecen los últimos que escribieron al bot sin vincular.",
+      pendingLinksTitle: "Últimos mensajes al bot (sin vincular)",
+      pendingLinksHint:
+        "Si el jugador ya escribió HOLA, busca su nombre aquí y pulsa «Usar este ID».",
+      pendingLinksEmpty:
+        "Nadie sin vincular ha escrito al bot recientemente. Que el jugador envíe HOLA o ID a @listgolf.",
+      pendingLinksUseId: "Usar este ID",
+      openUserinfobot: "Abrir @userinfobot",
+      step3Title: "3. Guardar ID en la ficha",
+      step3Body:
+        "Guarda el ID para que el bot identifique a este jugador en adelante.",
+      verifyTitle: "Verificar que el enlace funciona",
+      verifyBody:
+        "Envía un mensaje de prueba al Telegram del jugador. Si lo recibe, el vínculo es correcto.",
+      btnVerify: "Enviar verificación por Telegram",
+      verified: "Mensaje de verificación enviado.",
+      deliverTitle: "Entregar kit del torneo",
+      deliverBody:
+        "Envía por Telegram el contenido del kit y pide al jugador que responda RECIBIDO cuando lo haya leído.",
+      kitPreviewLabel: "Vista previa del mensaje",
+      kitExtraNote: "Nota adicional para el jugador (opcional)",
+      btnDeliverKit: "Enviar kit por Telegram",
+      kitSent: "Kit enviado. Espera que el jugador escriba RECIBIDO al bot.",
+      formTitle: "Registrar ID en la ficha del jugador",
+      fieldUserId: "Telegram user ID (solo números)",
+      fieldChatId: "Chat ID (opcional)",
+      fieldChatHint:
+        "Suele coincidir con el user id en chats privados; déjalo vacío si no lo necesitas.",
+      btnSave: "Guardar en ficha",
+      btnClear: "Quitar vínculo Telegram",
+      saving: "Guardando…",
+      missingParams: "Faltan torneo o jugador en la liga.",
+      notEnrolled: "Este jugador no está inscrito en el torneo indicado.",
+      invalidUserId: "El user ID debe contener solo dígitos.",
+      saveError: "No se pudo guardar",
+      saved: "Guardado correctamente.",
+      partialDeliveryLabel: "Entrega parcial (el jugador aún debe recibir algo)",
+      partialPendingPlaceholder:
+        "Ej. credencial, gorra, reglamento impreso…",
+      partialPendingHint:
+        "Si marcas esto, el jugador podrá responder RECIBIDO PARCIAL y luego RECIBIDO cuando tenga todo.",
+      statusKitPartial: "Recibió el kit de forma parcial.",
+      linkKitContent: "Editar contenido del kit del torneo",
+      statusKitPendingItems: "Pendiente de entregar:",
+    },
+    telegramKitContent: {
+      title: "Contenido del kit Telegram",
+      backEntries: "← Inscripciones",
+      tournament: "Torneo",
+      loadTournament: "Cargar",
+      editing: "Editando",
+      greeting: "Saludo",
+      body: "Cuerpo del mensaje",
+      footer: "Instrucciones finales (RECIBIDO / PARCIAL)",
+      placeholders:
+        "Variables: {player_name}, {tournament_name}. Un renglón por línea en el cuerpo.",
+      save: "Guardar plantilla",
+      saved: "Plantilla guardada.",
+      noTournaments: "No hay torneos.",
     },
     bulk: {
       title: "Inscripción masiva",
@@ -251,6 +347,12 @@ const es = {
   },
   teeSheet: {
     title: "Salidas/Grupos",
+    registrationOpenGate:
+      "Inscripciones abiertas. Cierra inscripciones antes de generar salidas y grupos (R1, R2…).",
+    priorRoundGate:
+      "No se pueden generar salidas de la ronda {round} hasta cerrar la ronda {prior} en: {categories}.",
+    priorRoundGateAction:
+      "Cierra la ronda anterior para toda la categoría en la vista oficial o captura de tarjetas.",
   },
   rounds: {
     title: "Rondas",
@@ -346,13 +448,17 @@ const es = {
   scoreEntry: {
     title: "Captura de tarjetas",
     subtitle:
-      "Captura rápida por número de inscripción o nombre de jugador inscrito al torneo.",
+      "Busca al jugador por número de inscripción o nombre. El sistema asigna categoría, día, turno y ronda según inscripción, salidas y rondas.",
     labelSession: "Día y turno",
     roundsNeedDate:
       "Hay rondas sin fecha. Asigna fecha a cada ronda en la configuración del torneo para usar captura.",
     searchAmbiguousTitle:
       "Varios jugadores coinciden con la búsqueda. Elige la inscripción correcta:",
     searchNotFound: "No encontré jugador inscrito con «{q}».",
+    priorRoundGate:
+      "No se puede capturar la ronda {round}: la ronda {prior} debe estar cerrada para todos los jugadores activos de la categoría {category}.",
+    registrationOpenGate:
+      "Inscripciones abiertas. Cierra inscripciones antes de capturar tarjetas en torneo.",
   },
   scorecards: {
     title: "Tarjeta de puntuación (prueba con Supabase)",
@@ -722,6 +828,12 @@ const es = {
     officialChipClosed: "cerradas",
     officialChipPending: "faltan",
     officialChipDone: "completo",
+    officialCloseRoundLabel: "Ronda {n} · estado por categoría",
+    officialShowPendingList: "Ver {n} pendientes",
+    officialHidePendingList: "Ocultar lista",
+    officialPendingHeading: "Pendientes de cerrar",
+    officialCaptureCta: "Capturar",
+    officialPendingManyHint: "Faltan {n} jugadores por cerrar",
     liveRoundToday: "Hoy",
     liveRoundHistory: "Historial",
     liveRoundFuture: "Próximas fechas",
@@ -767,31 +879,126 @@ const es = {
     playersMany: "jugadores",
   },
   publicInstall: {
-    rowLabel: "Icono",
-    button: "listgolf.club",
-    aria: "Crear icono de listgolf.club en tu teléfono",
-    title: "Cómo poner el icono en tu pantalla de inicio",
+    rowLabel: "Acceso",
+    button: "Icono / acceso",
+    aria: "Ver cómo crear acceso directo a listgolf.club",
+    title: "Acceso rápido a List.golf",
     intro:
-      "No se descarga un archivo aparte. Es un acceso directo (como un marcador con icono). En iPhone hay que tocar varias veces en Safari; no es automático.",
-    osNote:
-      "Importante: solo tocar «Compartir» no crea el icono. Después tienes que elegir «Añadir a inicio» y, en la pantalla siguiente, tocar «Añadir» arriba a la derecha. Si te saltas ese último paso, no verás el icono en tu inicio.",
+      "Crea un icono para abrir el torneo con un toque. Los pasos cambian según si usas iPhone, Android o Mac.",
     installNow: "Instalar en este dispositivo",
-    iosTitle: "iPhone o iPad (usa Safari)",
-    iosSteps: [
-      "Abre listgolf.club en Safari. Si entraste por WhatsApp, Facebook o Instagram, busca «Abrir en Safari» o copia el enlace y ábrelo en Safari.",
-      "Abajo (o arriba a la derecha en iPad) toca el botón del cuadrado con flecha hacia arriba. Eso es «Compartir» y solo abre un menú; todavía no hay icono en el inicio.",
-      "En ese menú, desplázate hacia abajo y toca «Añadir a inicio». No elijas «Mensajes», «Mail» ni similares: esas opciones solo comparten el enlace, no crean el icono.",
-      "Verás una vista previa con el nombre (p. ej. List.golf). Arriba a la derecha toca «Añadir». Sin ese toque final, iOS no guarda el acceso en tu pantalla de inicio.",
-      "Sal con el botón de inicio o gesto: en tus iconos debería aparecer List.golf (o el nombre que viste).",
-    ],
-    androidTitle: "Android (Chrome u otro navegador)",
-    androidSteps: [
-      "Toca los tres puntos ⋮ arriba a la derecha.",
-      "Elige «Añadir a pantalla de inicio» o «Instalar app» (el texto puede variar según el móvil).",
-      "Si sale un cuadro de confirmación, acéptalo. Al terminar, busca el nuevo icono en tu pantalla de inicio.",
-    ],
-    stepsLead: "Pasos detallados:",
+    stepsLead: "Sigue estos pasos (con imagen):",
+    otherDevices: "Otras plataformas",
     close: "Entendido",
+    highlightShare: "Compartir",
+    highlightMenu: "Menú ⋮",
+    ios: {
+      title: "iPhone o iPad",
+      note: "Usa Safari. En iPhone no existe «Añadir a inicio» en Chrome.",
+      steps: [
+        {
+          text: "Abre listgolf.club en Safari (no dentro de WhatsApp ni Instagram).",
+          visual: "ios-share",
+        },
+        {
+          text: "Abajo, toca el botón Compartir (cuadrado con flecha ↑). Solo abre un menú.",
+          visual: "ios-share",
+          highlight: "Compartir",
+        },
+        {
+          text: "En el menú, baja y toca «Añadir a inicio» (no Mensajes ni Mail).",
+          visual: "ios-add-home",
+        },
+        {
+          text: "Arriba a la derecha toca «Añadir». Sin ese paso no aparece el icono.",
+          visual: "ios-confirm",
+        },
+      ],
+    },
+    android: {
+      title: "Android",
+      note: "Chrome u otro navegador similar.",
+      steps: [
+        {
+          text: "Arriba a la derecha, toca el menú de tres puntos ⋮.",
+          visual: "android-menu",
+          highlight: "Menú ⋮",
+        },
+        {
+          text: "Elige «Añadir a pantalla de inicio» o «Instalar app» y confirma.",
+          visual: "android-install",
+        },
+      ],
+    },
+    macSafari: {
+      title: "Mac con Safari",
+      note: "En Mac no hay «Añadir a inicio» como en el iPhone. En Safari se usa «Añadir al Dock» (icono en la barra inferior).",
+      steps: [
+        {
+          text: "Abre listgolf.club en Safari (no en Chrome).",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "En la barra de menú arriba: Archivo → «Añadir al Dock…» (en inglés: File → Add to Dock).",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "Confirma en el cuadro. El icono queda en el Dock de tu Mac.",
+          visual: "mac-dock-result",
+        },
+      ],
+    },
+    macChrome: {
+      title: "Mac con Chrome",
+      note: "Puedes instalar la app web o crear un acceso en el Dock.",
+      steps: [
+        {
+          text: "Busca el icono ⊕ «Instalar» en la barra de direcciones (a la derecha de la URL).",
+          visual: "chrome-install",
+        },
+        {
+          text: "Si no aparece: menú ⋮ → «Instalar List.golf…» o «Crear acceso directo».",
+          visual: "chrome-install",
+        },
+      ],
+    },
+    macOther: {
+      title: "Mac (otro navegador)",
+      note: "Prueba Safari (Archivo → Añadir al Dock) o Chrome (Instalar).",
+      steps: [
+        {
+          text: "Recomendado: abre el sitio en Safari y usa Archivo → Añadir al Dock.",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "Alternativa: guarda un marcador en la barra de favoritos para acceso rápido.",
+          visual: "bookmark-bar",
+        },
+      ],
+    },
+    desktopChrome: {
+      title: "Computadora (Chrome / Edge)",
+      note: "Instalación como app o acceso directo.",
+      steps: [
+        {
+          text: "En la barra de direcciones, clic en «Instalar» o el icono ⊕.",
+          visual: "chrome-install",
+        },
+        {
+          text: "O menú del navegador → Instalar / Crear acceso directo.",
+          visual: "chrome-install",
+        },
+      ],
+    },
+    desktopOther: {
+      title: "Computadora",
+      note: "Usa el marcador del navegador o prueba Chrome para instalar la app.",
+      steps: [
+        {
+          text: "Arrastra el icono del candado o la URL a la barra de favoritos.",
+          visual: "bookmark-bar",
+        },
+      ],
+    },
   },
 };
 
@@ -943,6 +1150,100 @@ const en: Messages = {
       linksMarker: "Marker:",
       linksWitness: "Witness:",
       roundSigTitle: "R{round}: {count} signature(s)",
+      roundBallCaptured: "R{round}: captured",
+      roundBallCapturedOpen: "R{round}: captured, not closed",
+      roundBallPending: "R{round}: not captured",
+      roundBallClosed: "R{round}: closed",
+      roundBallLegend:
+        "Red: not captured · Amber: captured, not closed · Green: scorecard closed",
+      btnTelegramKit: "KIT",
+      btnTelegramKitTitle: "Telegram setup for this player",
+    },
+    telegramKit: {
+      title: "Telegram connection kit",
+      backToEntries: "← Back to entries",
+      playerLabel: "Player",
+      tournamentLabel: "Tournament",
+      botUsernameLabel: "Tournament Telegram bot",
+      botUsernameHint:
+        "Tell the player to find this username in Telegram, tap Start, and send HOLA. Copy the @ to read it aloud.",
+      copyBotUsername: "Copy @username",
+      copied: "Copied",
+      staffScriptTitle: "What to tell the player",
+      staffScript:
+        "«Open Telegram, search for @{bot}, tap Start, and send HOLA. If the bot recognizes you, we're linked; if not, copy your numeric ID and we'll save it here.»",
+      phaseConnect: "Step 1 — Connect Telegram",
+      phaseVerify: "Step 2 — Verify link",
+      phaseDeliver: "Step 3 — Deliver kit",
+      statusLinked: "Telegram linked on file (user ID saved).",
+      statusNotLinked: "Telegram not linked yet.",
+      statusKitSent: "Kit sent on Telegram; waiting for player to reply RECIBIDO.",
+      statusKitReceived: "Player confirmed kit received.",
+      step1Title: "1. Open the bot in Telegram",
+      step1BodyConfigured:
+        "The player should open the bot using the username above, tap Start, and send HOLA.",
+      step1BodyNotConfigured:
+        "Set NEXT_PUBLIC_TELEGRAM_BOT_USERNAME on the server (e.g. @ListGolfBot).",
+      openBotLink: "Open bot in Telegram",
+      step2Title: "2. Get the ID if the bot does not recognize the player",
+      step2Body:
+        "Ask them to send HOLA or ID to the tournament bot. The bot replies with a number between ━━━━ lines. You can also use @userinfobot. Recent unlinked contacts appear below.",
+      pendingLinksTitle: "Recent bot messages (unlinked)",
+      pendingLinksHint:
+        "If they already sent HOLA, find their name here and tap «Use this ID».",
+      pendingLinksEmpty:
+        "No recent unlinked contacts. Have the player send HOLA or ID to the bot.",
+      pendingLinksUseId: "Use this ID",
+      openUserinfobot: "Open @userinfobot",
+      step3Title: "3. Save ID on profile",
+      step3Body: "Saving the ID lets the bot recognize this player from Telegram.",
+      verifyTitle: "Verify the link works",
+      verifyBody:
+        "Send a test message to the player's Telegram. If they receive it, the link is correct.",
+      btnVerify: "Send verification via Telegram",
+      verified: "Verification message sent.",
+      deliverTitle: "Deliver tournament kit",
+      deliverBody:
+        "Send the kit contents on Telegram and ask the player to reply RECIBIDO when done.",
+      kitPreviewLabel: "Message preview",
+      kitExtraNote: "Extra note for the player (optional)",
+      btnDeliverKit: "Send kit via Telegram",
+      kitSent: "Kit sent. Wait for the player to message RECIBIDO to the bot.",
+      formTitle: "Save ID on player profile",
+      fieldUserId: "Telegram user ID (digits only)",
+      fieldChatId: "Chat ID (optional)",
+      fieldChatHint:
+        "Often matches the user id in private chats; leave empty if unsure.",
+      btnSave: "Save to profile",
+      btnClear: "Remove Telegram link",
+      saving: "Saving…",
+      missingParams: "Tournament or player is missing from the link.",
+      notEnrolled: "This player is not entered in the selected tournament.",
+      invalidUserId: "User ID must be digits only.",
+      saveError: "Could not save",
+      saved: "Saved successfully.",
+      partialDeliveryLabel: "Partial delivery (player still owes kit items)",
+      partialPendingPlaceholder: "E.g. credential, hat, printed rules…",
+      partialPendingHint:
+        "If checked, the player can reply RECIBIDO PARCIAL then RECIBIDO when complete.",
+      statusKitPartial: "Kit partially received.",
+      linkKitContent: "Edit tournament kit content",
+      statusKitPendingItems: "Still to deliver:",
+    },
+    telegramKitContent: {
+      title: "Telegram kit content",
+      backEntries: "← Entries",
+      tournament: "Tournament",
+      loadTournament: "Load",
+      editing: "Editing",
+      greeting: "Greeting",
+      body: "Message body",
+      footer: "Closing instructions (RECIBIDO / partial)",
+      placeholders:
+        "Variables: {player_name}, {tournament_name}. Use line breaks in the body.",
+      save: "Save template",
+      saved: "Template saved.",
+      noTournaments: "No tournaments.",
     },
     bulk: {
       title: "Bulk entry",
@@ -1048,6 +1349,12 @@ const en: Messages = {
   },
   teeSheet: {
     title: "Starters / Groups",
+    registrationOpenGate:
+      "Registration is still open. Close registration before generating tee sheet groups (R1, R2…).",
+    priorRoundGate:
+      "Cannot generate round {round} tee sheet until round {prior} is closed for: {categories}.",
+    priorRoundGateAction:
+      "Close the previous round for every active player in that category (official view or score entry).",
   },
   rounds: {
     title: "Rounds",
@@ -1151,6 +1458,10 @@ const en: Messages = {
     searchAmbiguousTitle:
       "Several players match your search. Pick the correct enrollment:",
     searchNotFound: "No enrolled player matches \"{q}\".",
+    priorRoundGate:
+      "Round {round} score entry is blocked: round {prior} must be closed for all active players in category {category}.",
+    registrationOpenGate:
+      "Registration is still open. Close registration before capturing scorecards.",
   },
   scorecards: {
     title: "Live scorecard (Supabase test)",
@@ -1514,6 +1825,12 @@ const en: Messages = {
     officialChipClosed: "closed",
     officialChipPending: "missing",
     officialChipDone: "complete",
+    officialCloseRoundLabel: "Round {n} · status by category",
+    officialShowPendingList: "Show {n} pending",
+    officialHidePendingList: "Hide list",
+    officialPendingHeading: "Not yet closed",
+    officialCaptureCta: "Enter scores",
+    officialPendingManyHint: "{n} players still to close",
     liveRoundToday: "Today",
     liveRoundHistory: "Past days",
     liveRoundFuture: "Upcoming dates",
@@ -1560,31 +1877,126 @@ const en: Messages = {
     playersMany: "players",
   },
   publicInstall: {
-    rowLabel: "Icon",
-    button: "listgolf.club",
-    aria: "Save listgolf.club shortcut on your phone",
-    title: "Put the icon on your home screen",
+    rowLabel: "Shortcut",
+    button: "App icon",
+    aria: "How to add a listgolf.club shortcut",
+    title: "Quick access to List.golf",
     intro:
-      "Nothing is downloaded as a separate file. It is a shortcut (a bookmark with an icon). On iPhone you tap several times in Safari; it is not automatic.",
-    osNote:
-      "Important: tapping Share alone does not create the icon. You must then choose “Add to Home Screen” and, on the next screen, tap “Add” at the top right. If you skip that last step, no icon appears on your home screen.",
+      "Add an icon to open the tournament in one tap. Steps differ for iPhone, Android, and Mac.",
     installNow: "Install on this device",
-    iosTitle: "iPhone or iPad (use Safari)",
-    iosSteps: [
-      "Open listgolf.club in Safari. If you opened the link inside WhatsApp, Facebook, or Instagram, use “Open in Safari” or copy the link and open it in Safari.",
-      "Tap the square-with-up-arrow button (Share) at the bottom (or top right on iPad). That only opens a menu; there is still no icon on your home screen yet.",
-      "In that menu, scroll down and tap “Add to Home Screen”. Do not pick Messages, Mail, etc.—those only share the link; they do not create the icon.",
-      "You will see a preview with a name (e.g. List.golf). Tap “Add” at the top right. Without that final tap, iOS does not save the shortcut to your home screen.",
-      "Go home: you should see the List.golf icon (or the name you saw) among your apps.",
-    ],
-    androidTitle: "Android (Chrome or similar)",
-    androidSteps: [
-      "Tap the three dots ⋮ at the top right.",
-      "Choose “Add to Home screen” or “Install app” (wording may vary by phone).",
-      "If a confirmation dialog appears, accept it. Then look for the new icon on your home screen.",
-    ],
-    stepsLead: "Detailed steps:",
+    stepsLead: "Follow these steps (with pictures):",
+    otherDevices: "Other platforms",
     close: "Got it",
+    highlightShare: "Share",
+    highlightMenu: "Menu ⋮",
+    ios: {
+      title: "iPhone or iPad",
+      note: "Use Safari. Chrome on iPhone does not offer “Add to Home Screen”.",
+      steps: [
+        {
+          text: "Open listgolf.club in Safari (not inside WhatsApp or Instagram).",
+          visual: "ios-share",
+        },
+        {
+          text: "At the bottom, tap Share (square with up arrow ↑). This only opens a menu.",
+          visual: "ios-share",
+          highlight: "Share",
+        },
+        {
+          text: "Scroll the menu and tap “Add to Home Screen” (not Messages or Mail).",
+          visual: "ios-add-home",
+        },
+        {
+          text: "Tap “Add” at the top right. Without this, the icon is not saved.",
+          visual: "ios-confirm",
+        },
+      ],
+    },
+    android: {
+      title: "Android",
+      note: "Chrome or a similar browser.",
+      steps: [
+        {
+          text: "Tap the three-dot menu ⋮ at the top right.",
+          visual: "android-menu",
+          highlight: "Menu ⋮",
+        },
+        {
+          text: "Choose “Add to Home screen” or “Install app” and confirm.",
+          visual: "android-install",
+        },
+      ],
+    },
+    macSafari: {
+      title: "Mac with Safari",
+      note: "There is no “Add to Home Screen” like on iPhone. In Safari use “Add to Dock” (icon in the bottom bar).",
+      steps: [
+        {
+          text: "Open listgolf.club in Safari (not Chrome).",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "Top menu bar: File → “Add to Dock…”",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "Confirm in the dialog. The icon appears in your Mac Dock.",
+          visual: "mac-dock-result",
+        },
+      ],
+    },
+    macChrome: {
+      title: "Mac with Chrome",
+      note: "Install as a web app or create a Dock shortcut.",
+      steps: [
+        {
+          text: "Look for the ⊕ Install control in the address bar.",
+          visual: "chrome-install",
+        },
+        {
+          text: "Or ⋮ menu → “Install List.golf…” / “Create shortcut”.",
+          visual: "chrome-install",
+        },
+      ],
+    },
+    macOther: {
+      title: "Mac (other browser)",
+      note: "Try Safari (File → Add to Dock) or Chrome (Install).",
+      steps: [
+        {
+          text: "Recommended: open the site in Safari and use File → Add to Dock.",
+          visual: "mac-file-dock",
+        },
+        {
+          text: "Or save a bookmark to the favorites bar for quick access.",
+          visual: "bookmark-bar",
+        },
+      ],
+    },
+    desktopChrome: {
+      title: "Computer (Chrome / Edge)",
+      note: "Install as an app or shortcut.",
+      steps: [
+        {
+          text: "Click Install or the ⊕ icon in the address bar.",
+          visual: "chrome-install",
+        },
+        {
+          text: "Or browser menu → Install / Create shortcut.",
+          visual: "chrome-install",
+        },
+      ],
+    },
+    desktopOther: {
+      title: "Computer",
+      note: "Use a bookmark or try Chrome to install the app.",
+      steps: [
+        {
+          text: "Drag the URL to the bookmarks bar for quick access.",
+          visual: "bookmark-bar",
+        },
+      ],
+    },
   },
 };
 

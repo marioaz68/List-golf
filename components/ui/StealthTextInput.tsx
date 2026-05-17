@@ -49,6 +49,8 @@ function moveCaretToEnd(element: HTMLElement) {
  * - Reducir predictive text, Grammarly y ayudas invasivas.
  * - Mantener el cursor estable mientras el usuario escribe.
  *
+ * Nota: no usamos inputMode="none" en el div editable porque en móvil
+ * (iOS/Android) suele impedir que aparezca el teclado virtual.
  * Si pasas "name", también genera un input hidden para formularios nativos.
  */
 export default function StealthTextInput({
@@ -65,6 +67,14 @@ export default function StealthTextInput({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const isFocusedRef = useRef(false);
   const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setAttribute("autocomplete", "off");
+    editor.setAttribute("autocorrect", "off");
+    editor.setAttribute("autocapitalize", "off");
+  }, []);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -136,11 +146,7 @@ export default function StealthTextInput({
         data-gramm="false"
         data-gramm_editor="false"
         data-enable-grammarly="false"
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
         spellCheck={false}
-        {...({ inputMode: "none" } as any)}
         onInput={emitChange}
         onBeforeInput={(event) => {
           // Evita saltos raros cuando Safari intenta insertar predicción inline.
@@ -171,20 +177,22 @@ export default function StealthTextInput({
           emitChange();
         }}
         onKeyDown={handleKeyDown}
-        style={{
-          ...style,
-          display: "flex",
-          alignItems: "center",
-          outline: focused ? "2px solid rgba(37,99,235,0.35)" : "none",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          userSelect: "text",
-          WebkitUserSelect: "text",
-          WebkitUserModify: "read-write-plaintext-only" as any,
-          WebkitTextSecurity: "none" as any,
-          caretColor: "#111827",
-          cursor: "text",
-        }}
+        style={
+          {
+            ...style,
+            display: "flex",
+            alignItems: "center",
+            outline: focused ? "2px solid rgba(37,99,235,0.35)" : "none",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            userSelect: "text",
+            WebkitUserSelect: "text",
+            WebkitUserModify: "read-write-plaintext-only",
+            WebkitTextSecurity: "none",
+            caretColor: "#111827",
+            cursor: "text",
+          } as CSSProperties
+        }
       />
 
       <style jsx>{`

@@ -2,6 +2,13 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import { fmt } from "@/lib/i18n/fmt";
+import { listCategoriesBlockedForRound } from "@/lib/rounds/categoryRoundGate";
+import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
+import {
+  fetchTournamentRegistrationStatus,
+  isRegistrationClosed,
+} from "@/lib/tournaments/registrationGate";
 import {
   backofficeTableStickyScroll,
   twStickyTheadSlate50,
@@ -101,6 +108,7 @@ export default async function TeeSheetPage(props: {
 }) {
   const locale = await getLocale();
   const teeTitle = messages[locale].teeSheet.title;
+  const ts = messages[locale].teeSheet;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
@@ -509,6 +517,58 @@ for (const row of membersRaw) {
     return "No cabe en este bloque. Divide categorías en otra sesión o reduce jugadores del bloque.";
   })();
 
+  let teeSheetRoundGateMessage = "";
+  let teeSheetGenerateBlocked = false;
+  let teeSheetRegistrationMessage = "";
+
+  if (effectiveTournamentId) {
+    const regStatus = await fetchTournamentRegistrationStatus(
+      supabase,
+      effectiveTournamentId
+    );
+    if (!isRegistrationClosed(regStatus)) {
+      teeSheetGenerateBlocked = true;
+      teeSheetRegistrationMessage = ts.registrationOpenGate;
+    }
+  }
+
+  if (selectedRound && selectedRound.round_no > 1 && effectiveTournamentId) {
+    const categoryIdsToCheck =
+      blockCategoryIds.length > 0
+        ? blockCategoryIds
+        : planRows.map((row) => row.id).filter((id) => id !== "NO_CAT");
+
+    if (categoryIdsToCheck.length > 0) {
+      const gateCtx = await loadCategoryRoundGateContext(
+        supabase,
+        effectiveTournamentId
+      );
+      const blockedIds = listCategoriesBlockedForRound(
+        gateCtx.entries,
+        gateCtx.rounds,
+        selectedRound.round_no,
+        categoryIdsToCheck,
+        gateCtx.lookups
+      );
+
+      if (blockedIds.length > 0) {
+        teeSheetGenerateBlocked = true;
+        const blockedLabels = blockedIds
+          .map((id) => {
+            const c = allPlanCategories.find((x) => x.id === id);
+            return [c?.code, c?.name].filter(Boolean).join(" — ") || id;
+          })
+          .join(", ");
+
+        teeSheetRoundGateMessage = fmt(ts.priorRoundGate, {
+          round: selectedRound.round_no,
+          prior: selectedRound.round_no - 1,
+          categories: blockedLabels,
+        });
+      }
+    }
+  }
+
   if (!effectiveTournamentId) {
     return (
       <div className="min-h-screen p-6 space-y-6">
@@ -658,6 +718,19 @@ for (const row of membersRaw) {
           </div>
         ) : null}
 
+        {teeSheetRegistrationMessage ? (
+          <div className="mb-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+            {teeSheetRegistrationMessage}
+          </div>
+        ) : null}
+
+        {teeSheetRoundGateMessage ? (
+          <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            <p>{teeSheetRoundGateMessage}</p>
+            <p className="mt-1 text-xs text-amber-900">{ts.priorRoundGateAction}</p>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Planeación editable del bloque</h2>
@@ -667,7 +740,7 @@ for (const row of membersRaw) {
           </div>
 
           <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
-            Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4: {" "}
+            Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4:{" "}
             <span className="font-semibold">{planTotalGroups4}</span> · G5: {" "}
             <span className="font-semibold">{planTotalGroups5}</span>
           </div>
@@ -779,7 +852,11 @@ for (const row of membersRaw) {
           <button
             type="submit"
             className="rounded bg-black px-4 py-2 font-medium text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={planRows.length === 0 || startingOrderConfirmed}
+            disabled={
+              planRows.length === 0 ||
+              startingOrderConfirmed ||
+              teeSheetGenerateBlocked
+            }
           >
             Generar grupos con este orden
           </button>

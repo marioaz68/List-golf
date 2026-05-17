@@ -64,6 +64,8 @@ type Player = {
   ghin_number: string | null;
   shirt_size: string | null;
   shoe_size: string | null;
+  telegram_user_id?: string | null;
+  telegram_chat_id?: string | null;
 };
 
 type PlayerWithCategory = Player & {
@@ -375,6 +377,8 @@ export default async function PlayersPage(props: {
       ghin_number,
       shirt_size,
       shoe_size,
+      telegram_user_id,
+      telegram_chat_id,
       club_id,
       clubs (
         name,
@@ -682,6 +686,9 @@ export default async function PlayersPage(props: {
                         ghin_number: p.ghin_number,
                         shirt_size: p.shirt_size,
                         shoe_size: p.shoe_size,
+                        birth_year: p.birth_year ?? null,
+                        telegram_user_id: p.telegram_user_id ?? null,
+                        telegram_chat_id: p.telegram_chat_id ?? null,
                       }}
                       tournamentId={effectiveTournamentId}
                       canDelete={true}

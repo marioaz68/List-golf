@@ -21,6 +21,8 @@ type SavePlayerInput = {
   ghin_number?: string | null;
   shirt_size?: string | null;
   shoe_size?: string | number | null;
+  telegram_user_id?: string | null;
+  telegram_chat_id?: string | null;
 };
 
 function toNullableString(value: unknown) {
@@ -75,6 +77,16 @@ function buildPlayerPayload(input: SavePlayerInput) {
     payload.shoe_size = shoeSize;
   }
 
+  if (Object.prototype.hasOwnProperty.call(input, "telegram_user_id")) {
+    const tid = toNullableString(input.telegram_user_id);
+    payload.telegram_user_id = tid && /^\d+$/.test(tid) ? tid : null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "telegram_chat_id")) {
+    const cid = toNullableString(input.telegram_chat_id);
+    payload.telegram_chat_id = cid && /^\d+$/.test(cid) ? cid : null;
+  }
+
   return payload;
 }
 
@@ -98,6 +110,27 @@ export async function savePlayerAction(input: SavePlayerInput) {
   try {
     const supabase = await createAdminClient();
     const playerId = toNullableString(input.id);
+
+    if (Object.prototype.hasOwnProperty.call(input, "telegram_user_id")) {
+      const raw = toNullableString(input.telegram_user_id);
+      if (raw && !/^\d+$/.test(raw)) {
+        return {
+          ok: false,
+          message: "El ID de usuario de Telegram debe contener solo dígitos.",
+        };
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "telegram_chat_id")) {
+      const raw = toNullableString(input.telegram_chat_id);
+      if (raw && !/^\d+$/.test(raw)) {
+        return {
+          ok: false,
+          message: "El chat ID de Telegram debe contener solo dígitos o dejarse vacío.",
+        };
+      }
+    }
+
     const payload = buildPlayerPayload(input);
 
     const validationError = validatePlayerPayload(payload);

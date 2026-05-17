@@ -42,7 +42,11 @@ export type PublicLeaderboardSearchLabels = {
 
 type Props = {
   tournamentId: string;
+  embed?: boolean;
+  fromAdmin?: boolean;
   fullLeaderboard: LeaderboardRow[];
+  /** Lista completa (p. ej. live) para abreviaturas de nombre cuando `fullLeaderboard` es un subconjunto (vista oficial). */
+  peerRowsForNameCompact?: LeaderboardRow[];
   view: "live" | "official";
   selectedCategoryId: string;
   selectedRound: SelectedRoundMeta | null;
@@ -53,7 +57,10 @@ type Props = {
 
 export default function PublicLeaderboardWithSearch({
   tournamentId,
+  embed = false,
+  fromAdmin = false,
   fullLeaderboard,
+  peerRowsForNameCompact,
   view,
   selectedCategoryId,
   selectedRound,
@@ -103,7 +110,7 @@ export default function PublicLeaderboardWithSearch({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={labels.placeholder}
             aria-label={labels.ariaLabel}
-            className="w-full max-w-md rounded-xl border border-white/15 bg-[#0c1728] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 outline-none ring-cyan-400/40 placeholder:text-slate-500 focus:border-cyan-400/50 focus:ring-2"
+            className="w-full max-w-md rounded-xl border border-white/15 bg-[#0c1728] px-3 py-2 text-base text-white shadow-inner shadow-black/20 outline-none ring-cyan-400/40 placeholder:text-slate-500 focus:border-cyan-400/50 focus:ring-2 sm:text-sm"
           />
           <p className="mt-1.5 text-[11px] leading-snug text-slate-400 sm:text-xs">
             {labels.hint}
@@ -118,8 +125,10 @@ export default function PublicLeaderboardWithSearch({
 
       <PublicLeaderboardTable
         tournamentId={tournamentId}
+        embed={embed}
+        fromAdmin={fromAdmin}
         leaderboard={filtered}
-        peerRowsForNameCompact={fullLeaderboard}
+        peerRowsForNameCompact={peerRowsForNameCompact ?? fullLeaderboard}
         emptyLeaderboardLabel={emptyLabel}
         view={view}
         selectedCategoryId={selectedCategoryId}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   deleteEntry,
@@ -23,6 +24,8 @@ type RoundSignature = {
   player_signed?: boolean | null;
   marker_signed?: boolean | null;
   witness_signed?: boolean | null;
+  captured?: boolean;
+  closed?: boolean;
 };
 
 type Category = {
@@ -35,12 +38,32 @@ type Category = {
   min_age: number | null;
 };
 
+function kitButtonLabel(
+  base: string,
+  entry: {
+    players?: { telegram_user_id?: string | null } | null;
+    telegram_kit_sent_at?: string | null;
+    telegram_kit_received_at?: string | null;
+  }
+) {
+  const linked = Boolean(entry.players?.telegram_user_id?.trim());
+  const received = Boolean(entry.telegram_kit_received_at?.trim());
+  const sent = Boolean(entry.telegram_kit_sent_at?.trim());
+
+  if (received) return `${base} ✓✓`;
+  if (sent) return `${base} ◐`;
+  if (linked) return `${base} ✓`;
+  return base;
+}
+
 type Entry = {
   id: string;
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  telegram_kit_sent_at?: string | null;
+  telegram_kit_received_at?: string | null;
   round_signatures?: RoundSignature[] | null;
   players: {
     id: string;
@@ -59,6 +82,8 @@ type Entry = {
     shirt_size?: string | null;
     shoe_size?: string | null;
     birth_year?: number | null;
+    telegram_user_id?: string | null;
+    telegram_chat_id?: string | null;
   } | null;
   categories: {
     id: string;
@@ -105,17 +130,28 @@ function getSignatureCount(sig?: RoundSignature | null) {
 }
 
 function getBallClass(sig?: RoundSignature | null) {
-  const count = getSignatureCount(sig);
-
-  if (count >= 3) {
-    return "bg-green-600";
-  }
-
-  if (count === 2) {
-    return "bg-blue-600";
-  }
-
+  if (sig?.closed) return "bg-green-600";
+  if (sig?.captured) return "bg-amber-500";
   return "bg-red-600";
+}
+
+function roundBallTitle(
+  sig: RoundSignature | null,
+  roundNo: number,
+  te: ReturnType<typeof useAppLocale>["t"]["entries"]["list"]
+) {
+  if (!sig) {
+    return fmt(te.roundBallPending, { round: roundNo });
+  }
+  if (sig.closed) {
+    const count = getSignatureCount(sig);
+    return `${fmt(te.roundBallClosed, { round: roundNo })} · ${fmt(te.roundSigTitle, { round: roundNo, count })}`;
+  }
+  if (sig.captured) {
+    const count = getSignatureCount(sig);
+    return `${fmt(te.roundBallCapturedOpen, { round: roundNo })} · ${fmt(te.roundSigTitle, { round: roundNo, count })}`;
+  }
+  return fmt(te.roundBallPending, { round: roundNo });
 }
 
 
@@ -125,7 +161,7 @@ const BTN_BASE =
 const SLOT_SM = "w-[72px] shrink-0";
 const SLOT_MD = "w-[84px] shrink-0";
 const SLOT_EDIT = "w-[110px] shrink-0";
-const ACTIONS_COL = "min-w-[560px] w-[560px]";
+const ACTIONS_COL = "min-w-[648px] w-[648px]";
 
 export default function EntriesListPanel({
   entries,
@@ -177,8 +213,7 @@ export default function EntriesListPanel({
         .map((roundNo) => {
           const sig =
             e.round_signatures?.find((r) => r.round_no === roundNo) ?? null;
-          const count = getSignatureCount(sig);
-          return fmt(te.roundSigTitle, { round: roundNo, count }).toLowerCase();
+          return roundBallTitle(sig, roundNo, te).toLowerCase();
         })
         .join(" ")
         .toLowerCase();
@@ -242,12 +277,12 @@ ${res.witness_url}`;
             placeholder={te.searchPlaceholder}
             style={{
               minWidth: 180,
-              height: 28,
+              height: 36,
               borderRadius: 6,
               border: "1px solid #d1d5db",
               background: "#ffffff",
               color: "#000000",
-              fontSize: 11,
+              fontSize: 16,
               padding: "0 8px",
             }}
           />
@@ -278,6 +313,9 @@ ${res.witness_url}`;
             {filtered.length}/{entries.length}
           </div>
         </div>
+        <p className="mt-1 w-full text-[10px] leading-snug text-gray-500">
+          {te.roundBallLegend}
+        </p>
       </div>
 
       <div
@@ -355,10 +393,7 @@ ${res.witness_url}`;
                           <div
                             key={roundNo}
                             className="flex flex-col items-center gap-1"
-                            title={fmt(te.roundSigTitle, {
-                              round: roundNo,
-                              count: getSignatureCount(sig),
-                            })}
+                            title={roundBallTitle(sig, roundNo, te)}
                           >
                             <span className="text-[9px] font-semibold text-gray-700">
                               R{roundNo}
@@ -375,7 +410,19 @@ ${res.witness_url}`;
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[560px] items-center gap-2 overflow-x-auto whitespace-nowrap">
+                    <div className="flex min-w-[648px] items-center gap-2 overflow-x-auto whitespace-nowrap">
+                      <div className={SLOT_MD}>
+                        <Link
+                          href={`/entries/telegram-kit?tournament_id=${encodeURIComponent(
+                            tournamentId
+                          )}&player_id=${encodeURIComponent(e.player_id)}`}
+                          title={te.btnTelegramKitTitle}
+                          className="inline-flex h-7 w-full items-center justify-center rounded border border-sky-900 bg-sky-700 text-[11px] font-bold text-white hover:bg-sky-800"
+                        >
+                          {kitButtonLabel(te.btnTelegramKit, e)}
+                        </Link>
+                      </div>
+
                       <div className={SLOT_MD}>
                         <button
                           type="button"
@@ -555,6 +602,10 @@ ${res.witness_url}`;
                                   shirt_size: e.players.shirt_size ?? null,
                                   shoe_size: e.players.shoe_size ?? null,
                                   birth_year: e.players.birth_year ?? null,
+                                  telegram_user_id:
+                                    e.players.telegram_user_id ?? null,
+                                  telegram_chat_id:
+                                    e.players.telegram_chat_id ?? null,
                                 }
                               : null
                           }

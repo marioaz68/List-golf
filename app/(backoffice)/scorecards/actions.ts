@@ -14,6 +14,9 @@ import {
   signScorecard,
   updateScorecardState,
 } from "@/lib/scorecards";
+import { alignCaptureToScorecardRound } from "@/lib/scorecards/alignCaptureToScorecardRound";
+import { resolveRoundIdForEntry } from "@/lib/rounds/resolveRoundForEntry";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 /**
  * Construye tarjeta (solo lógica, no DB)
@@ -159,6 +162,46 @@ export async function signScorecardAction(input: {
 
   const savedAuditLog = await saveScorecardAuditLog(auditLog);
 
+  if (updatedScorecard.locked_at) {
+    const admin = createAdminClient();
+    const { data: scRow } = await admin
+      .from("scorecards")
+      .select("tournament_id, entry_id, round_id")
+      .eq("id", input.scorecard_id)
+      .maybeSingle();
+
+    const { data: entryRow } = scRow?.entry_id
+      ? await admin
+          .from("tournament_entries")
+          .select("player_id")
+          .eq("id", scRow.entry_id)
+          .maybeSingle()
+      : { data: null };
+
+    if (
+      scRow?.tournament_id &&
+      scRow.entry_id &&
+      scRow.round_id &&
+      entryRow?.player_id
+    ) {
+      try {
+        await alignCaptureToScorecardRound(admin, {
+          tournamentId: String(scRow.tournament_id),
+          entryId: String(scRow.entry_id),
+          playerId: String(entryRow.player_id),
+          scorecardRoundId: String(scRow.round_id),
+        });
+      } catch (e) {
+        console.error("[signScorecardAction] alignCapture:", e);
+      }
+
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/score-entry");
+      revalidatePath("/leaderboard");
+      revalidatePath(`/torneos/${scRow.tournament_id}`);
+    }
+  }
+
   return {
     signature: signResult.signature,
     savedSignature,
@@ -188,6 +231,7 @@ export async function signScorecardByTokenAction(input: {
   signed_text?: string | null;
   signature_payload?: string | null;
 }) {
+  const admin = createAdminClient();
   const request = await getSignatureRequestByToken(input.token);
 
   const signerName =
@@ -272,6 +316,45 @@ export async function signScorecardByTokenAction(input: {
 
   const savedAuditLog = await saveScorecardAuditLog(auditLog);
 
+  if (updatedScorecard.locked_at) {
+    const { data: scRow } = await admin
+      .from("scorecards")
+      .select("tournament_id, entry_id, round_id")
+      .eq("id", request.scorecard_id)
+      .maybeSingle();
+
+    const { data: entryRow } = scRow?.entry_id
+      ? await admin
+          .from("tournament_entries")
+          .select("player_id")
+          .eq("id", scRow.entry_id)
+          .maybeSingle()
+      : { data: null };
+
+    if (
+      scRow?.tournament_id &&
+      scRow.entry_id &&
+      scRow.round_id &&
+      entryRow?.player_id
+    ) {
+      try {
+        await alignCaptureToScorecardRound(admin, {
+          tournamentId: String(scRow.tournament_id),
+          entryId: String(scRow.entry_id),
+          playerId: String(entryRow.player_id),
+          scorecardRoundId: String(scRow.round_id),
+        });
+      } catch (e) {
+        console.error("[signScorecardByToken] alignCapture:", e);
+      }
+
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/score-entry");
+      revalidatePath("/leaderboard");
+      revalidatePath(`/torneos/${scRow.tournament_id}`);
+    }
+  }
+
   return {
     request,
     signature: signResult.signature,
@@ -348,9 +431,50 @@ export async function createScorecardWithTokensAction(input: {
   round_id: string;
   entry_id: string;
 }) {
+  const admin = createAdminClient();
+
+  const { data: entryRow, error: entryErr } = await admin
+    .from("tournament_entries")
+    .select("category_id")
+    .eq("id", input.entry_id)
+    .maybeSingle();
+
+  if (entryErr) {
+    throw new Error(`Error leyendo inscripción: ${entryErr.message}`);
+  }
+
+  const { data: roundsData, error: roundsErr } = await admin
+    .from("rounds")
+    .select(
+      "id, tournament_id, round_no, round_date, category_id, wave, start_type, start_time, interval_minutes"
+    )
+    .eq("tournament_id", input.tournament_id);
+
+  if (roundsErr) {
+    throw new Error(`Error leyendo rondas: ${roundsErr.message}`);
+  }
+
+  const rounds = (roundsData ?? []).map((r) => ({
+    id: String(r.id),
+    tournament_id: String(r.tournament_id),
+    round_no: Number(r.round_no),
+    round_date: r.round_date ?? null,
+    category_id: r.category_id ?? null,
+    wave: r.wave ?? null,
+    start_type: r.start_type ?? null,
+    start_time: r.start_time ?? null,
+    interval_minutes: r.interval_minutes ?? null,
+  }));
+
+  const resolvedRoundId = resolveRoundIdForEntry(
+    rounds,
+    input.round_id,
+    entryRow?.category_id ?? null
+  );
+
   const scorecard = await getOrCreateScorecard({
     tournament_id: input.tournament_id,
-    round_id: input.round_id,
+    round_id: resolvedRoundId,
     entry_id: input.entry_id,
   });
 

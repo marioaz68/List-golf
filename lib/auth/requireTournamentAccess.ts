@@ -7,7 +7,9 @@ type AllowedRole =
   | "tournament_director"
   | "score_capture"
   | "checkin"
-  | "viewer";
+  | "viewer"
+  | "entries_operator"
+  | "caddie_manager";
 
 type Options = {
   tournamentId: string | null | undefined;
@@ -15,13 +17,19 @@ type Options = {
   redirectTo?: string;
 };
 
-export async function requireTournamentAccess({
+export type TournamentAccessResult =
+  | { ok: true }
+  | { ok: false; reason: "no_tournament" | "no_user" | "no_tournament_row" | "forbidden" };
+
+/**
+ * Comprueba acceso sin redirigir (para server actions).
+ */
+export async function checkTournamentAccess({
   tournamentId,
   allowedRoles = [],
-  redirectTo = "/tournaments",
-}: Options) {
+}: Pick<Options, "tournamentId" | "allowedRoles">): Promise<TournamentAccessResult> {
   if (!tournamentId) {
-    redirect(redirectTo);
+    return { ok: false, reason: "no_tournament" };
   }
 
   const supabase = await createClient();
@@ -32,7 +40,7 @@ export async function requireTournamentAccess({
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    redirect("/login");
+    return { ok: false, reason: "no_user" };
   }
 
   const { data: tournament, error: tournamentError } = await supabase
@@ -42,7 +50,7 @@ export async function requireTournamentAccess({
     .single();
 
   if (tournamentError || !tournament) {
-    redirect(redirectTo);
+    return { ok: false, reason: "no_tournament_row" };
   }
 
   const { data: globalRows } = await supabase
@@ -54,7 +62,7 @@ export async function requireTournamentAccess({
     globalRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
 
   if (globalCodes.includes("super_admin")) {
-    return;
+    return { ok: true };
   }
 
   if (tournament.club_id) {
@@ -68,7 +76,7 @@ export async function requireTournamentAccess({
       clubRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
 
     if (clubCodes.includes("club_admin")) {
-      return;
+      return { ok: true };
     }
   }
 
@@ -82,14 +90,45 @@ export async function requireTournamentAccess({
     tournamentRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
 
   if (allowedRoles.length === 0) {
-    if (tournamentCodes.length > 0) return;
+    if (tournamentCodes.length > 0) return { ok: true };
   } else {
     const hasAllowedRole = allowedRoles.some((role) =>
       tournamentCodes.includes(role)
     );
 
-    if (hasAllowedRole) return;
+    if (hasAllowedRole) return { ok: true };
+  }
+
+  return { ok: false, reason: "forbidden" };
+}
+
+export async function requireTournamentAccess({
+  tournamentId,
+  allowedRoles = [],
+  redirectTo = "/tournaments",
+}: Options) {
+  const access = await checkTournamentAccess({ tournamentId, allowedRoles });
+
+  if (access.ok) return;
+
+  if (access.reason === "no_user") {
+    redirect("/login");
   }
 
   redirect(redirectTo);
+}
+
+export function tournamentAccessDeniedMessage(
+  reason: "no_tournament" | "no_user" | "no_tournament_row" | "forbidden"
+): string {
+  switch (reason) {
+    case "no_user":
+      return "Tu sesión expiró. Recarga la página e inicia sesión de nuevo (no se perdió el trabajo si ya guardaste).";
+    case "forbidden":
+      return "No tienes permiso para capturar en este torneo.";
+    case "no_tournament_row":
+      return "No se encontró el torneo.";
+    default:
+      return "Falta el torneo en la solicitud.";
+  }
 }

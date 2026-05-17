@@ -107,15 +107,15 @@ const dangerButtonStyle: CSSProperties = {
 
 const fieldStyle: CSSProperties = {
   width: "100%",
-  height: 28,
+  height: 36,
   padding: "0 8px",
   marginTop: 3,
   borderRadius: 6,
   border: "1px solid #d1d5db",
   background: "#f3f4f6",
   color: "#111827",
-  fontSize: 11,
-  lineHeight: 1,
+  fontSize: 16,
+  lineHeight: 1.25,
 };
 
 const labelStyle: CSSProperties = {

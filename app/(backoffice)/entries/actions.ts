@@ -4,6 +4,9 @@ import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
+import { isMissingTelegramKitColumnsError } from "@/lib/entries/telegramKitColumns";
+import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
+import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -1272,6 +1275,332 @@ export async function reopenTournamentRegistration(formData: FormData) {
 
   revalidatePath("/entries");
   redirect(`/entries?tournament_id=${tournament_id}&tab=${tab}`);
+}
+
+async function ensureEntriesTelegramKitAccess(tournament_id: string) {
+  await requireTournamentAccess({
+    tournamentId: tournament_id,
+    allowedRoles: [
+      "super_admin",
+      "club_admin",
+      "tournament_director",
+      "checkin",
+      "score_capture",
+      "entries_operator",
+      "caddie_manager",
+    ],
+  });
+}
+
+export async function savePlayerTelegramFromKit(formData: FormData) {
+  const tournamentId = reqStr(formData, "tournament_id");
+  const playerId = reqStr(formData, "player_id");
+  const clearing = String(formData.get("clear_telegram") ?? "") === "1";
+
+  const backBase = `/entries/telegram-kit?tournament_id=${encodeURIComponent(
+    tournamentId
+  )}&player_id=${encodeURIComponent(playerId)}`;
+
+  await ensureEntriesTelegramKitAccess(tournamentId);
+
+  const admin = await createAdminClient();
+
+  const { data: entryRow, error: entryErr } = await admin
+    .from("tournament_entries")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (entryErr) {
+    redirect(`${backBase}&err=${encodeURIComponent(entryErr.message)}`);
+  }
+
+  if (!entryRow?.id) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Este jugador no está inscrito en este torneo."
+      )}`
+    );
+  }
+
+  if (clearing) {
+    const { error: upErr } = await admin
+      .from("players")
+      .update({ telegram_user_id: null, telegram_chat_id: null })
+      .eq("id", playerId);
+
+    if (upErr) {
+      redirect(`${backBase}&err=${encodeURIComponent(upErr.message)}`);
+    }
+
+    revalidatePath("/entries");
+    revalidatePath("/entries/telegram-kit");
+    redirect(`${backBase}&saved=1`);
+  }
+
+  const telegramUserIdRaw = String(formData.get("telegram_user_id") ?? "").trim();
+  const telegramChatIdRaw = String(formData.get("telegram_chat_id") ?? "").trim();
+
+  if (!telegramUserIdRaw) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Escribe el user ID de Telegram o usa «Quitar vínculo»."
+      )}`
+    );
+  }
+
+  if (!/^\d+$/.test(telegramUserIdRaw)) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "El user ID de Telegram debe ser solo dígitos."
+      )}`
+    );
+  }
+
+  if (telegramChatIdRaw && !/^\d+$/.test(telegramChatIdRaw)) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "El chat ID debe ser solo dígitos o vacío."
+      )}`
+    );
+  }
+
+  const patch: { telegram_user_id: string; telegram_chat_id: string | null } = {
+    telegram_user_id: telegramUserIdRaw,
+    telegram_chat_id:
+      telegramChatIdRaw && /^\d+$/.test(telegramChatIdRaw)
+        ? telegramChatIdRaw
+        : null,
+  };
+
+  const { error: upErr } = await admin
+    .from("players")
+    .update(patch)
+    .eq("id", playerId);
+
+  if (upErr) {
+    redirect(`${backBase}&err=${encodeURIComponent(upErr.message)}`);
+  }
+
+  await admin
+    .from("telegram_pending_links")
+    .delete()
+    .eq("telegram_user_id", telegramUserIdRaw);
+
+  revalidatePath("/entries");
+  revalidatePath("/entries/telegram-kit");
+  redirect(`${backBase}&saved=1`);
+}
+
+export async function verifyTelegramLinkFromKit(formData: FormData) {
+  const tournamentId = reqStr(formData, "tournament_id");
+  const playerId = reqStr(formData, "player_id");
+
+  const backBase = `/entries/telegram-kit?tournament_id=${encodeURIComponent(
+    tournamentId
+  )}&player_id=${encodeURIComponent(playerId)}`;
+
+  await ensureEntriesTelegramKitAccess(tournamentId);
+
+  const admin = await createAdminClient();
+
+  const { data: row, error } = await admin
+    .from("tournament_entries")
+    .select(
+      `
+      id,
+      players:players (
+        id,
+        first_name,
+        last_name,
+        telegram_user_id,
+        telegram_chat_id
+      ),
+      tournaments:tournaments ( name )
+    `
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (error) {
+    redirect(`${backBase}&err=${encodeURIComponent(error.message)}`);
+  }
+
+  if (!row?.id) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Este jugador no está inscrito en este torneo."
+      )}`
+    );
+  }
+
+  const player = Array.isArray(row.players) ? row.players[0] : row.players;
+  const tournament = Array.isArray(row.tournaments)
+    ? row.tournaments[0]
+    : row.tournaments;
+
+  const tgUid = String(player?.telegram_user_id ?? "").trim();
+  if (!tgUid) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Primero guarda el user ID de Telegram en la ficha."
+      )}`
+    );
+  }
+
+  const chatId =
+    String(player?.telegram_chat_id ?? "").trim() || tgUid;
+  const playerName =
+    `${player?.first_name ?? ""} ${player?.last_name ?? ""}`.trim() || "jugador";
+  const tournamentName = String(tournament?.name ?? "").trim() || "el torneo";
+
+  const ping = [
+    `Hola ${playerName},`,
+    "",
+    `Verificación List.golf — torneo «${tournamentName}».`,
+    "Si ves este mensaje, tu Telegram está vinculado correctamente.",
+    "",
+    "Escribe HOLA o INICIO cuando quieras.",
+  ].join("\n");
+
+  const sent = await sendTelegramMessage({ chatId, text: ping });
+  if (!sent.ok) {
+    redirect(`${backBase}&err=${encodeURIComponent(sent.error)}`);
+  }
+
+  if (!player?.telegram_chat_id?.trim()) {
+    await admin
+      .from("players")
+      .update({ telegram_chat_id: chatId })
+      .eq("id", playerId);
+  }
+
+  revalidatePath("/entries/telegram-kit");
+  redirect(`${backBase}&verified=1`);
+}
+
+export async function deliverTelegramKit(formData: FormData) {
+  const tournamentId = reqStr(formData, "tournament_id");
+  const playerId = reqStr(formData, "player_id");
+  const extraNote = optStr(formData, "kit_extra_note");
+  const partialDelivery =
+    String(formData.get("kit_partial_delivery") ?? "") === "1";
+  const pendingItems = partialDelivery
+    ? optStr(formData, "kit_pending_items")
+    : "";
+
+  const backBase = `/entries/telegram-kit?tournament_id=${encodeURIComponent(
+    tournamentId
+  )}&player_id=${encodeURIComponent(playerId)}`;
+
+  await ensureEntriesTelegramKitAccess(tournamentId);
+
+  const admin = await createAdminClient();
+
+  const { data: row, error } = await admin
+    .from("tournament_entries")
+    .select(
+      `
+      id,
+      telegram_kit_sent_at,
+      players:players (
+        id,
+        first_name,
+        last_name,
+        telegram_user_id,
+        telegram_chat_id
+      ),
+      tournaments:tournaments ( name )
+    `
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (error) {
+    redirect(`${backBase}&err=${encodeURIComponent(error.message)}`);
+  }
+
+  if (!row?.id) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Este jugador no está inscrito en este torneo."
+      )}`
+    );
+  }
+
+  const player = Array.isArray(row.players) ? row.players[0] : row.players;
+  const tournament = Array.isArray(row.tournaments)
+    ? row.tournaments[0]
+    : row.tournaments;
+
+  const tgUid = String(player?.telegram_user_id ?? "").trim();
+  if (!tgUid) {
+    redirect(
+      `${backBase}&err=${encodeURIComponent(
+        "Vincula Telegram antes de entregar el kit."
+      )}`
+    );
+  }
+
+  const chatId =
+    String(player?.telegram_chat_id ?? "").trim() || tgUid;
+  const playerName =
+    `${player?.first_name ?? ""} ${player?.last_name ?? ""}`.trim() || "jugador";
+  const tournamentName = String(tournament?.name ?? "").trim() || "el torneo";
+
+  const { data: kitContentRow } = await admin
+    .from("tournament_telegram_kit_content")
+    .select("greeting_line, body_lines, footer_line")
+    .eq("tournament_id", tournamentId)
+    .maybeSingle();
+
+  const kitText = buildTelegramKitMessage({
+    playerName,
+    tournamentName,
+    extraNote,
+    pendingItems: pendingItems || null,
+    content: kitContentRow ?? null,
+  });
+
+  const sent = await sendTelegramMessage({ chatId, text: kitText });
+  if (!sent.ok) {
+    redirect(`${backBase}&err=${encodeURIComponent(sent.error)}`);
+  }
+
+  const { error: upErr } = await admin
+    .from("tournament_entries")
+    .update({
+      telegram_kit_sent_at: new Date().toISOString(),
+      telegram_kit_received_at: null,
+      telegram_kit_partial_received_at: null,
+      telegram_kit_pending_items: pendingItems || null,
+    })
+    .eq("id", row.id);
+
+  if (upErr) {
+    if (isMissingTelegramKitColumnsError(upErr)) {
+      redirect(
+        `${backBase}&err=${encodeURIComponent(
+          "Falta migración Supabase: telegram_kit_sent_at y telegram_kit_received_at en tournament_entries."
+        )}`
+      );
+    }
+    redirect(`${backBase}&err=${encodeURIComponent(upErr.message)}`);
+  }
+
+  if (!player?.telegram_chat_id?.trim()) {
+    await admin
+      .from("players")
+      .update({ telegram_chat_id: chatId })
+      .eq("id", playerId);
+  }
+
+  revalidatePath("/entries");
+  revalidatePath("/entries/telegram-kit");
+  redirect(`${backBase}&kit_sent=1`);
 }
 
 export async function updateEntryCategoryInline(formData: FormData) {

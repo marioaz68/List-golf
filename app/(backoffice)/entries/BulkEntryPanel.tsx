@@ -177,12 +177,12 @@ export default function BulkEntryPanel({
               placeholder={tb.searchPlaceholder}
               style={{
                 minWidth: 160,
-                height: 28,
+                height: 36,
                 borderRadius: 6,
                 border: "1px solid #d1d5db",
                 background: "#ffffff",
                 color: "#000000",
-                fontSize: 11,
+                fontSize: 16,
                 padding: "0 8px",
               }}
             />

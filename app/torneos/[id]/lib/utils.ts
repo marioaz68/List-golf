@@ -59,6 +59,10 @@ export function toValidEntry(
   return {
     id: row.id,
     player_id: row.player_id,
+    player_number:
+      row.player_number != null && Number.isFinite(Number(row.player_number))
+        ? Number(row.player_number)
+        : null,
     category_id: row.category_id,
     status: row.status ?? null,
     player,
@@ -443,9 +447,15 @@ export function buildHref(params: {
   roundId?: string | null;
   view?: string | null;
   detailId?: string | null;
+  /** Mantiene la vista embebida en administración (`/leaderboard`). */
+  embed?: boolean;
+  /** Vuelta al módulo Leaderboard del backoffice (móvil). */
+  fromAdmin?: boolean;
 }) {
   const sp = new URLSearchParams();
 
+  if (params.embed) sp.set("embed", "1");
+  if (params.fromAdmin) sp.set("from", "admin");
   if (params.view) sp.set("view", params.view);
   if (params.categoryId) sp.set("category_id", params.categoryId);
   if (params.roundId) sp.set("round_id", params.roundId);
@@ -465,12 +475,16 @@ export function buildDetailToggleHref(params: {
   view?: string | null;
   currentDetailId?: string | null;
   nextDetailId?: string | null;
+  embed?: boolean;
+  fromAdmin?: boolean;
 }) {
   return buildHref({
     tournamentId: params.tournamentId,
     categoryId: params.categoryId ?? null,
     roundId: params.roundId ?? null,
     view: params.view ?? null,
+    embed: params.embed,
+    fromAdmin: params.fromAdmin,
     detailId:
       params.currentDetailId === params.nextDetailId
         ? null
