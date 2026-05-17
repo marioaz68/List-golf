@@ -1,4 +1,7 @@
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import { scoreRoundDetail } from "@/lib/leaderboard/competitionScoring";
+import { scoringFormatLabel } from "@/lib/leaderboard/competitionDisplay";
 import type { LeaderboardRow, RoundDetail } from "../lib/types";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import {
@@ -99,15 +102,65 @@ function GrossToParPosHeads({ labels }: { labels: PublicDetailTableLabels }) {
   );
 }
 
+function detailTotalsForRule(
+  detail: RoundDetail,
+  rule: CategoryCompetitionRule,
+  handicapIndex: number | null | undefined
+) {
+  const scored = scoreRoundDetail(detail, rule, handicapIndex);
+  if (detail.is_dq) {
+    return { primary: "DQ" as const, secondary: "DQ" as const };
+  }
+  if (rule.scoring_format === "stableford") {
+    return {
+      primary:
+        scored.stablefordPoints != null
+          ? formatScore(scored.stablefordPoints)
+          : "—",
+      secondary:
+        scored.gross != null ? formatScore(scored.gross) : "—",
+    };
+  }
+  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+    return {
+      primary:
+        scored.netToPar != null
+          ? formatRelativeOrDQ(scored.netToPar, false)
+          : "—",
+      secondary:
+        scored.gross != null ? formatScore(scored.gross) : "—",
+    };
+  }
+  return {
+    primary:
+      scored.gross != null ? formatScore(scored.gross) : "—",
+    secondary:
+      scored.toPar != null
+        ? formatRelativeOrDQ(scored.toPar, false)
+        : "—",
+  };
+}
+
 export default function PublicLeaderboardDetailTable({
   row,
   selectedRound,
   labels,
+  competitionRule,
+  handicapIndex = null,
 }: {
   row: LeaderboardRow;
   selectedRound: SelectedRoundMeta | null;
   labels: PublicDetailTableLabels;
+  competitionRule?: CategoryCompetitionRule | null;
+  handicapIndex?: number | null;
 }) {
+  const rule =
+    competitionRule ??
+    ({
+      scoring_format: row.scoring_format ?? "stroke_play",
+      leaderboard_basis: row.leaderboard_basis ?? "gross",
+      handicap_percentage: 100,
+    } as CategoryCompetitionRule);
   const displayDetails = getDisplayDetails({ row, selectedRound });
 
   const baseRound =
@@ -147,6 +200,7 @@ export default function PublicLeaderboardDetailTable({
           {row.player_code}
           {row.club_label ? ` · ${row.club_label}` : ""}
           {row.category_code ? ` · ${row.category_code}` : ""}
+          {` · ${scoringFormatLabel(rule)}`}
           {row.is_disqualified ? ` · DQ` : ""}
         </div>
       </div>
@@ -290,6 +344,7 @@ export default function PublicLeaderboardDetailTable({
 
               const stripeBg =
                 detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+              const totals = detailTotalsForRule(detail, rule, handicapIndex);
 
               return (
                 <tr
@@ -398,10 +453,10 @@ export default function PublicLeaderboardDetailTable({
                   )}
 
                   <td className={`${totalTd} ${stripeBg}`}>
-                    {formatScoreOrDQ(detail.gross_score, detail.is_dq)}
+                    {totals.primary}
                   </td>
                   <td className={`${totalTd} ${stripeBg}`}>
-                    {formatRelativeOrDQ(detail.to_par, detail.is_dq)}
+                    {totals.secondary}
                   </td>
                   <td className={`${totalTd} ${stripeBg}`}>
                     {detail.is_dq ? "DQ" : standing?.pos ?? "—"}

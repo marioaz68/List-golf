@@ -33,6 +33,7 @@ export type TournamentEntryJoinRow = {
   player_number: number | null;
   category_id: string | null;
   status: string | null;
+  handicap_index?: number | null;
   player: EntryPlayer | EntryPlayer[] | null;
   category: EntryCategory | EntryCategory[] | null;
 };
@@ -43,6 +44,7 @@ export type ValidTournamentEntry = {
   player_number: number | null;
   category_id: string | null;
   status: string | null;
+  handicap_index: number | null;
   player: EntryPlayer;
   category: EntryCategory | null;
 };

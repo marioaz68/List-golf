@@ -5,14 +5,19 @@ import {
   scoreCellClass,
   scoreColClass,
 } from "../lib/publicLeaderboardColumns";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import type { LeaderboardRow } from "../lib/types";
 import type { SelectedRoundMeta } from "../lib/utils";
 
 type Props = {
   selectedRound: SelectedRoundMeta | null | undefined;
+  rulesMap: Map<string, CategoryCompetitionRule>;
+  handicapByPlayerId: Map<string, number | null>;
 };
 
-export function PublicLeaderboardRoundScoreHeaders({ selectedRound }: Props) {
+export function PublicLeaderboardRoundScoreHeaders({
+  selectedRound,
+}: Pick<Props, "selectedRound">) {
   const columnNos = publicLeaderboardScoreColumnNos(selectedRound);
   const selectedNo = selectedRound?.round_no ?? 1;
 
@@ -38,6 +43,8 @@ export function PublicLeaderboardRoundScoreHeaders({ selectedRound }: Props) {
 export function PublicLeaderboardRoundScoreCells({
   row,
   selectedRound,
+  rulesMap,
+  handicapByPlayerId,
 }: Props & { row: LeaderboardRow }) {
   const columnNos = publicLeaderboardScoreColumnNos(selectedRound);
 
@@ -45,7 +52,12 @@ export function PublicLeaderboardRoundScoreCells({
     <>
       {columnNos.map((roundNo) => (
         <td key={roundNo} className={scoreCellClass}>
-          {roundDetailForPublicColumn(row, roundNo)}
+          {roundDetailForPublicColumn(
+            row,
+            roundNo,
+            rulesMap,
+            handicapByPlayerId
+          )}
         </td>
       ))}
     </>

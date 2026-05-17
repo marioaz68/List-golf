@@ -56,6 +56,12 @@ export function toValidEntry(
   const player = oneOrNull(row.player);
   if (!player?.id || !row.player_id) return null;
 
+  const entryHcp = row.handicap_index;
+  const hcpNum =
+    entryHcp != null && Number.isFinite(Number(entryHcp))
+      ? Number(entryHcp)
+      : null;
+
   return {
     id: row.id,
     player_id: row.player_id,
@@ -65,6 +71,7 @@ export function toValidEntry(
         : null,
     category_id: row.category_id,
     status: row.status ?? null,
+    handicap_index: hcpNum,
     player,
     category: normalizeCategory(row.category),
   };

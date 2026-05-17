@@ -10,12 +10,18 @@ import FavoritesView from "@/components/public/FavoritesView";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
+import { applyCompetitionStandings } from "@/lib/leaderboard/competitionStandings";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
   computePublicCutLines,
   primaryCutLineForCategory,
   type RoundAdvancementRule,
 } from "@/lib/cuts/computeCutLine";
+import type { TieBreakStep } from "@/lib/cuts/tieBreak";
+import {
+  defaultRuleForCategory,
+  rulesByCategoryId,
+} from "@/lib/leaderboard/categoryCompetitionRules";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
 import OfficialCategoryClosePanel from "./components/OfficialCategoryClosePanel";
 import { buildCategoryRoundCloseCards } from "./lib/categoryRoundCloseStatus";
@@ -399,7 +405,7 @@ export default async function PublicTournamentPage({
   const { data: advancementRulesRows } = await supabase
     .from("round_advancement_rules")
     .select(
-      "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, is_active"
+      "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, is_active"
     )
     .eq("tournament_id", typedTournament.id)
     .eq("is_active", true);
@@ -409,12 +415,51 @@ export default async function PublicTournamentPage({
   const advancementRulesList = (advancementRulesRows ??
     []) as RoundAdvancementRule[];
 
+  const competitionRulesMap = rulesByCategoryId(competitionRulesList);
+
+  const profileIds = [
+    ...new Set(
+      advancementRulesList
+        .map((r) => String(r.tie_break_profile_id ?? "").trim())
+        .filter(Boolean)
+    ),
+  ];
+
+  const tieBreakStepsByProfileId = new Map<string, TieBreakStep[]>();
+  if (profileIds.length > 0) {
+    const { data: tieSteps } = await supabase
+      .from("tie_break_steps")
+      .select(
+        "tie_break_profile_id, step_no, method, basis, round_scope, hole_scope, handicap_mode, direction, value_text"
+      )
+      .in("tie_break_profile_id", profileIds)
+      .order("step_no", { ascending: true });
+
+    for (const step of tieSteps ?? []) {
+      const pid = String(step.tie_break_profile_id ?? "");
+      if (!pid) continue;
+      const bucket = tieBreakStepsByProfileId.get(pid) ?? [];
+      bucket.push(step as TieBreakStep);
+      tieBreakStepsByProfileId.set(pid, bucket);
+    }
+  }
+
   const handicapByPlayerId = new Map<string, number | null>();
   for (const entry of allEntries) {
     const hcp =
-      entry.player.handicap_torneo ?? entry.player.handicap_index ?? null;
+      entry.handicap_index ??
+      entry.player.handicap_torneo ??
+      entry.player.handicap_index ??
+      null;
     handicapByPlayerId.set(entry.player_id, hcp != null ? Number(hcp) : null);
   }
+
+  const headerCompetitionRule = selectedCategoryId
+    ? competitionRulesMap.get(selectedCategoryId) ??
+      defaultRuleForCategory(selectedCategoryId)
+    : null;
+
+  const handicapsByPlayerId = Object.fromEntries(handicapByPlayerId);
 
   const categoryRoundCloseCards = buildCategoryRoundCloseCards(
     allEntries,
@@ -446,11 +491,19 @@ export default async function PublicTournamentPage({
 
   const selectedRoundNo = selectedRound?.round_no ?? 1;
 
-  const leaderboardScored: LeaderboardRow[] = applyCompetitionRules({
+  const leaderboardScoredBase: LeaderboardRow[] = applyCompetitionRules({
     leaderboard: leaderboardWithStandings,
     competitionRules: competitionRulesList,
     handicapByPlayerId,
     maxRoundNo: selectedRoundNo,
+  });
+
+  const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
+    leaderboard: leaderboardScoredBase,
+    rounds,
+    selectedRound,
+    competitionRules: competitionRulesList,
+    handicapByPlayerId,
   });
 
   const publicCutLines = computePublicCutLines({
@@ -464,6 +517,7 @@ export default async function PublicTournamentPage({
     selectedRoundNo,
     selectedCategoryId: selectedCategoryId || null,
     handicapByPlayerId,
+    tieBreakStepsByProfileId,
   });
 
   const leaderboard: LeaderboardRow[] = leaderboardScored.map((row) => {
@@ -1179,6 +1233,8 @@ export default async function PublicTournamentPage({
               selectedCategoryId={selectedCategoryId}
               requestedDetailId={requestedDetailId}
               cutLine={activePublicCutLine}
+              competitionRules={competitionRulesList}
+              handicapsByPlayerId={handicapsByPlayerId}
             />
           ) : view === "tee-sheet" ? null : (
             <PublicLeaderboardWithSearch
@@ -1205,6 +1261,9 @@ export default async function PublicTournamentPage({
                 countTemplate: pub.playerSearchCount,
               }}
               cutLine={activePublicCutLine}
+              competitionRules={competitionRulesList}
+              handicapsByPlayerId={handicapsByPlayerId}
+              headerCompetitionRule={headerCompetitionRule}
             />
           )}
         </div>

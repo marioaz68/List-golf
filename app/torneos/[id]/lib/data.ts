@@ -83,6 +83,7 @@ const ENTRY_SELECT = `
   player_number,
   category_id,
   status,
+  handicap_index,
   player:players (
     id,
     first_name,

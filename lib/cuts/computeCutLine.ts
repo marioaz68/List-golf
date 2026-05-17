@@ -1,13 +1,16 @@
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import {
-  cumulativeLeaderboardValue,
-  scoreRoundDetail,
-} from "@/lib/leaderboard/competitionScoring";
-import {
-  defaultRuleForCategory,
   rulesByCategoryId,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  compareByTieBreakSteps,
+  type TieBreakStep,
+} from "./tieBreak";
+import {
+  higherIsBetterForRankingBasis,
+  rankValueForAdvancementRule,
+} from "./cutRanking";
 
 export type RoundAdvancementRule = {
   from_round_no: number;
@@ -25,6 +28,10 @@ export type RoundAdvancementRule = {
   advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
   include_ties: boolean;
+  gross_exemption_enabled?: boolean;
+  gross_exemption_top_n?: number;
+  tie_break_profile_id?: string | null;
+  sort_order?: number | null;
   is_active: boolean;
 };
 
@@ -37,6 +44,14 @@ export type PublicCutLine = {
 };
 
 type CategoryMeta = { id: string; code: string | null };
+
+type RankedCutPlayer = {
+  entryId: string;
+  playerId: string;
+  primaryValue: number | null;
+  grossValue: number | null;
+  detail: ReturnType<typeof rankValueForAdvancementRule>["detail"];
+};
 
 function splitCodes(value: string) {
   return String(value ?? "")
@@ -73,101 +88,245 @@ function ruleAppliesToRow(
   }
 }
 
-function rankValueForCut(
-  row: LeaderboardRow,
-  rule: RoundAdvancementRule,
-  throughRoundNo: number,
-  rulesMap: Map<string, CategoryCompetitionRule>,
-  handicapByPlayerId: Map<string, number | null>
-): number | null {
-  const catRule =
-    rulesMap.get(String(row.category_id ?? "")) ??
-    defaultRuleForCategory(row.category_id);
-
-  const hcp = handicapByPlayerId.get(row.player_id) ?? null;
-
-  if (rule.ranking_basis === "points_total" || rule.ranking_basis === "points_round") {
-    const details =
-      rule.ranking_basis === "points_round"
-        ? row.details.filter((d) => d.round_no === throughRoundNo)
-        : row.details.filter((d) => d.round_no <= throughRoundNo);
-    let pts = 0;
-    let has = false;
-    for (const d of details) {
-      const s = scoreRoundDetail(d, catRule, hcp);
-      if (s.stablefordPoints != null) {
-        pts += s.stablefordPoints;
-        has = true;
-      }
-    }
-    return has ? pts : null;
-  }
-
-  if (
-    rule.ranking_basis === "gross_round" ||
-    rule.ranking_basis === "net_round"
-  ) {
-    const detail = row.details.find((d) => d.round_no === throughRoundNo);
-    if (!detail) return null;
-    const s = scoreRoundDetail(detail, catRule, hcp);
-    if (rule.ranking_basis === "net_round") return s.netToPar;
-    return s.toPar ?? s.gross;
-  }
-
-  const cum = cumulativeLeaderboardValue(
-    row.details,
-    catRule,
-    hcp,
-    throughRoundNo
-  );
-
-  if (rule.ranking_basis === "net_total") {
-    return cum.displayToPar;
-  }
-
-  return cum.sortValue;
-}
-
-function sortForCut(a: number | null, b: number | null, higherIsBetter: boolean) {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  if (a === b) return 0;
-  if (higherIsBetter) return b - a;
-  return a - b;
-}
-
-function madeCutEntryIds(
-  ranked: Array<{ entryId: string; value: number | null }>,
-  topN: number,
+function comparePrimary(
+  a: RankedCutPlayer,
+  b: RankedCutPlayer,
   higherIsBetter: boolean
-): Set<string> {
-  const eligible = ranked.filter((r) => r.value != null);
-  if (eligible.length === 0) return new Set();
-
-  const limit = Math.min(topN, eligible.length);
-  const cutValue = eligible[limit - 1]!.value!;
-
-  const ids = new Set<string>();
-  for (const row of ranked) {
-    if (row.value == null) continue;
-    const makes = higherIsBetter
-      ? row.value >= cutValue
-      : row.value <= cutValue;
-    if (makes) ids.add(row.entryId);
-  }
-  return ids;
+): number {
+  const av = a.primaryValue;
+  const bv = b.primaryValue;
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  if (av === bv) return 0;
+  return higherIsBetter ? bv - av : av - bv;
 }
 
-function topNFromRule(
-  rule: RoundAdvancementRule,
-  fieldSize: number
-): number {
+function sortCutField(
+  players: RankedCutPlayer[],
+  higherIsBetter: boolean,
+  tieBreakSteps: TieBreakStep[],
+  rulesMap: Map<string, CategoryCompetitionRule>,
+  handicapByPlayerId: Map<string, number | null>,
+  categoryId: string
+): RankedCutPlayer[] {
+  const catRule =
+    rulesMap.get(categoryId) ?? rulesMap.get(String(categoryId)) ?? null;
+
+  return [...players].sort((a, b) => {
+    const primary = comparePrimary(a, b, higherIsBetter);
+    if (primary !== 0) return primary;
+
+    if (tieBreakSteps.length > 0 && catRule) {
+      const tb = compareByTieBreakSteps(a.detail, b.detail, tieBreakSteps, {
+        catRule,
+        handicapIndexA: handicapByPlayerId.get(a.playerId) ?? null,
+        handicapIndexB: handicapByPlayerId.get(b.playerId) ?? null,
+      });
+      if (tb !== 0) return tb;
+    }
+
+    if (a.grossValue != null && b.grossValue != null && a.grossValue !== b.grossValue) {
+      return a.grossValue - b.grossValue;
+    }
+
+    return a.entryId.localeCompare(b.entryId);
+  });
+}
+
+function topNFromRule(rule: RoundAdvancementRule, fieldSize: number): number {
   if (rule.advancement_type === "top_percent") {
     const pct = Math.max(0, Math.min(100, Number(rule.advancement_value)));
     return Math.max(1, Math.ceil((fieldSize * pct) / 100));
   }
   return Math.max(1, Math.trunc(Number(rule.advancement_value)));
+}
+
+function madeCutFromRanking(
+  ranked: RankedCutPlayer[],
+  rule: RoundAdvancementRule,
+  higherIsBetter: boolean,
+  tieBreakSteps: TieBreakStep[]
+): Set<string> {
+  const eligible = ranked.filter((r) => r.primaryValue != null);
+  if (eligible.length === 0) return new Set();
+
+  const topN = Math.min(topNFromRule(rule, eligible.length), eligible.length);
+
+  if (tieBreakSteps.length > 0 || !rule.include_ties) {
+    return new Set(eligible.slice(0, topN).map((r) => r.entryId));
+  }
+
+  const cutValue = eligible[topN - 1]!.primaryValue!;
+  const ids = new Set<string>();
+  for (const row of eligible) {
+    if (row.primaryValue == null) continue;
+    const makes = higherIsBetter
+      ? row.primaryValue >= cutValue
+      : row.primaryValue <= cutValue;
+    if (makes) ids.add(row.entryId);
+  }
+  return ids;
+}
+
+function applyGrossExemption(
+  madeCut: Set<string>,
+  ranked: RankedCutPlayer[],
+  rule: RoundAdvancementRule
+): Set<string> {
+  if (!rule.gross_exemption_enabled) return madeCut;
+  const n = Math.max(0, Math.trunc(Number(rule.gross_exemption_top_n ?? 0)));
+  if (n <= 0) return madeCut;
+
+  const byGross = [...ranked]
+    .filter((r) => r.grossValue != null)
+    .sort((a, b) => (a.grossValue ?? 0) - (b.grossValue ?? 0));
+
+  const next = new Set(madeCut);
+  for (const row of byGross.slice(0, n)) {
+    next.add(row.entryId);
+  }
+  return next;
+}
+
+function cutLabelForRule(
+  rule: RoundAdvancementRule,
+  selectedRoundNo: number,
+  tieBreakSteps: TieBreakStep[]
+): string {
+  const tieNote =
+    tieBreakSteps.length > 0
+      ? " · desempate"
+      : rule.include_ties
+        ? " · empates"
+        : "";
+
+  if (rule.advancement_type === "all") {
+    return `CORTE · Pasan todos (→ R${rule.to_round_no})`;
+  }
+
+  if (rule.advancement_type === "top_percent") {
+    return `CORTE · Top ${rule.advancement_value}% (→ R${rule.to_round_no})${tieNote}`;
+  }
+
+  return `CORTE · Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
+}
+
+function computeLineForRule(
+  rule: RoundAdvancementRule,
+  rowsInCat: LeaderboardRow[],
+  categoryId: string,
+  catCode: string | null,
+  params: {
+    selectedRoundNo: number;
+    categories: CategoryMeta[];
+    rulesMap: Map<string, CategoryCompetitionRule>;
+    handicapByPlayerId: Map<string, number | null>;
+    tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
+  }
+): PublicCutLine | null {
+  const scoped = rowsInCat.filter((r) =>
+    ruleAppliesToRow(rule, r, params.categories)
+  );
+  if (scoped.length === 0) return null;
+
+  if (rule.advancement_type === "all") {
+    return {
+      categoryId,
+      categoryCode: catCode,
+      afterPosition: scoped.length,
+      label: cutLabelForRule(rule, params.selectedRoundNo, []),
+      madeCutEntryIds: new Set(scoped.map((r) => r.entry_id)),
+    };
+  }
+
+  const higherIsBetter = higherIsBetterForRankingBasis(rule.ranking_basis);
+  const tieBreakSteps = rule.tie_break_profile_id
+    ? params.tieBreakStepsByProfileId.get(rule.tie_break_profile_id) ?? []
+    : [];
+
+  const ranked: RankedCutPlayer[] = scoped.map((row) => {
+    const v = rankValueForAdvancementRule(
+      row,
+      rule,
+      params.selectedRoundNo,
+      params.rulesMap,
+      params.handicapByPlayerId
+    );
+    return {
+      entryId: row.entry_id,
+      playerId: row.player_id,
+      primaryValue: v.primary,
+      grossValue: v.gross,
+      detail: v.detail,
+    };
+  });
+
+  const sorted = sortCutField(
+    ranked,
+    higherIsBetter,
+    tieBreakSteps,
+    params.rulesMap,
+    params.handicapByPlayerId,
+    categoryId
+  );
+
+  let madeCut = madeCutFromRanking(
+    sorted,
+    rule,
+    higherIsBetter,
+    tieBreakSteps
+  );
+  madeCut = applyGrossExemption(madeCut, sorted, rule);
+
+  let afterPosition = 0;
+  for (const row of sorted) {
+    if (!madeCut.has(row.entryId)) break;
+    afterPosition += 1;
+  }
+  if (afterPosition <= 0) return null;
+
+  return {
+    categoryId,
+    categoryCode: catCode,
+    afterPosition,
+    label: cutLabelForRule(rule, params.selectedRoundNo, tieBreakSteps),
+    madeCutEntryIds: madeCut,
+  };
+}
+
+/** Combina varias líneas de corte de la misma categoría (intersección = deben cumplir todas). */
+export function mergeCutLinesForCategory(
+  lines: PublicCutLine[],
+  categoryId: string | null
+): PublicCutLine | null {
+  const catLines = categoryId
+    ? lines.filter((l) => l.categoryId === categoryId)
+    : lines;
+  if (catLines.length === 0) return null;
+  if (catLines.length === 1) return catLines[0]!;
+
+  let merged: Set<string> | null = null;
+  for (const line of catLines) {
+    if (merged === null) {
+      merged = new Set(line.madeCutEntryIds);
+    } else {
+      for (const id of merged) {
+        if (!line.madeCutEntryIds.has(id)) merged.delete(id);
+      }
+    }
+  }
+
+  const primary = catLines[0]!;
+  const afterPosition = Math.min(...catLines.map((l) => l.afterPosition));
+
+  return {
+    categoryId: primary.categoryId,
+    categoryCode: primary.categoryCode,
+    afterPosition,
+    label: catLines.map((l) => l.label).join(" · "),
+    madeCutEntryIds: merged ?? new Set(),
+  };
 }
 
 /**
@@ -181,22 +340,28 @@ export function computePublicCutLines(params: {
   selectedRoundNo: number;
   selectedCategoryId: string | null;
   handicapByPlayerId: Map<string, number | null>;
+  tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
 }): PublicCutLine[] {
   const { leaderboard, selectedRoundNo } = params;
   if (selectedRoundNo <= 1) return [];
 
-  const activeRules = params.advancementRules.filter(
-    (r) =>
-      r.is_active &&
-      r.to_round_no === selectedRoundNo &&
-      r.from_round_no < selectedRoundNo &&
-      r.advancement_type !== "all"
-  );
+  const activeRules = params.advancementRules
+    .filter(
+      (r) =>
+        r.is_active &&
+        r.to_round_no === selectedRoundNo &&
+        r.from_round_no < selectedRoundNo
+    )
+    .sort(
+      (a, b) =>
+        (a.sort_order ?? 999) - (b.sort_order ?? 999) ||
+        a.from_round_no - b.from_round_no
+    );
 
   if (activeRules.length === 0) return [];
 
   const rulesMap = rulesByCategoryId(params.competitionRules);
-  const lines: PublicCutLine[] = [];
+  const rawLines: PublicCutLine[] = [];
 
   const categoryScopeIds = params.selectedCategoryId
     ? [params.selectedCategoryId]
@@ -207,6 +372,14 @@ export function computePublicCutLines(params: {
             .filter(Boolean)
         ),
       ];
+
+  const shared = {
+    selectedRoundNo,
+    categories: params.categories,
+    rulesMap,
+    handicapByPlayerId: params.handicapByPlayerId,
+    tieBreakStepsByProfileId: params.tieBreakStepsByProfileId,
+  };
 
   for (const categoryId of categoryScopeIds) {
     const rowsInCat = leaderboard.filter(
@@ -222,62 +395,32 @@ export function computePublicCutLines(params: {
       null;
 
     for (const rule of activeRules) {
-      const scoped = rowsInCat.filter((r) => ruleAppliesToRow(rule, r, params.categories));
-      if (scoped.length === 0) continue;
-
-      const throughRoundNo = rule.from_round_no;
-      const higherIsBetter =
-        rule.ranking_basis === "points_total" ||
-        rule.ranking_basis === "points_round";
-
-      const ranked = scoped
-        .map((row) => ({
-          entryId: row.entry_id,
-          value: rankValueForCut(
-            row,
-            rule,
-            throughRoundNo,
-            rulesMap,
-            params.handicapByPlayerId
-          ),
-        }))
-        .sort((a, b) => sortForCut(a.value, b.value, higherIsBetter));
-
-      const topN = topNFromRule(rule, ranked.filter((r) => r.value != null).length);
-      const madeCut = madeCutEntryIds(ranked, topN, higherIsBetter);
-
-      let afterPosition = 0;
-      for (const row of ranked) {
-        if (!madeCut.has(row.entryId)) break;
-        afterPosition += 1;
-      }
-      if (afterPosition <= 0) continue;
-
-      const label =
-        rule.advancement_type === "top_percent"
-          ? `CORTE · Top ${rule.advancement_value}% (R${throughRoundNo})`
-          : `CORTE · Top ${rule.advancement_value} (R${throughRoundNo})`;
-
-      lines.push({
+      const line = computeLineForRule(
+        rule,
+        rowsInCat,
         categoryId,
-        categoryCode: catCode,
-        afterPosition,
-        label,
-        madeCutEntryIds: madeCut,
-      });
+        catCode,
+        shared
+      );
+      if (line) rawLines.push(line);
     }
   }
 
-  return lines;
+  const merged: PublicCutLine[] = [];
+  const seenCats = new Set<string>();
+  for (const categoryId of categoryScopeIds) {
+    if (seenCats.has(categoryId)) continue;
+    seenCats.add(categoryId);
+    const line = mergeCutLinesForCategory(rawLines, categoryId);
+    if (line) merged.push(line);
+  }
+
+  return merged;
 }
 
 export function primaryCutLineForCategory(
   lines: PublicCutLine[],
   categoryId: string | null
 ): PublicCutLine | null {
-  if (lines.length === 0) return null;
-  if (categoryId) {
-    return lines.find((l) => l.categoryId === categoryId) ?? null;
-  }
-  return lines[0] ?? null;
+  return mergeCutLinesForCategory(lines, categoryId);
 }

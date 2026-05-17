@@ -3,8 +3,13 @@ import {
   resolveDetailForRoundNo,
   type SelectedRoundMeta,
 } from "@/lib/leaderboard/roundCategoryMatch";
-import type { LeaderboardRow, RoundDetail } from "./types";
-import { formatRelativeOrDQ, formatScoreOrDQ } from "./utils";
+import {
+  defaultRuleForCategory,
+  rulesByCategoryId,
+  type CategoryCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
+import { formatRoundCellForRule } from "@/lib/leaderboard/competitionDisplay";
+import type { LeaderboardRow } from "./types";
 
 /** Columnas fijas antes de las de ronda: C, JUG, ★, POS, MV, THR. */
 export const PUBLIC_LEADERBOARD_FIXED_COL_COUNT = 6;
@@ -46,26 +51,16 @@ export function publicLeaderboardTableMinWidthClassForScoreColumns(
   return "min-w-[588px] md:min-w-[752px]";
 }
 
-export function formatPublicRoundColumnValue(
-  detail: RoundDetail | null,
-  isDisqualified: boolean
-): string {
-  if (isDisqualified) return "DQ";
-  if (!detail) return "—";
-  if (detail.is_dq) return "DQ";
-  if (detail.to_par != null) {
-    return formatRelativeOrDQ(detail.to_par, false);
-  }
-  if (detail.gross_score != null) {
-    return formatScoreOrDQ(detail.gross_score, false);
-  }
-  return "—";
-}
-
 export function roundDetailForPublicColumn(
-  row: Pick<LeaderboardRow, "details" | "category_id" | "is_disqualified">,
-  roundNo: number
+  row: LeaderboardRow,
+  roundNo: number,
+  rulesMap: Map<string, CategoryCompetitionRule>,
+  handicapByPlayerId: Map<string, number | null>
 ): string {
+  const rule =
+    rulesMap.get(String(row.category_id ?? "")) ??
+    defaultRuleForCategory(row.category_id);
+
   const scoreRoundIds = collectRoundIdsWithScoreCapture(row.details);
   const detail = resolveDetailForRoundNo(
     row.details,
@@ -73,7 +68,15 @@ export function roundDetailForPublicColumn(
     row.category_id,
     scoreRoundIds
   );
-  return formatPublicRoundColumnValue(detail, row.is_disqualified);
+
+  const hcp = handicapByPlayerId.get(row.player_id) ?? null;
+
+  return formatRoundCellForRule(
+    detail,
+    rule,
+    hcp,
+    row.is_disqualified
+  );
 }
 
 export { scoreColClass, scoreCellClass };

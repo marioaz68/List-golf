@@ -2,6 +2,18 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  formatMainTotalForRow,
+  mainTotalColumnHeader,
+  secondaryTotalColumnHeader,
+} from "@/lib/leaderboard/competitionDisplay";
+import {
+  buildCompetitionRulesMap,
+  buildHandicapMap,
+  detailLabelsWithCompetitionRule,
+  ruleForCategory,
+} from "@/app/torneos/[id]/lib/publicCompetitionContext";
 import ClubLogoThumb from "./ClubLogoThumb";
 import FavoriteStar from "./FavoriteStar";
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
@@ -19,7 +31,6 @@ import {
 } from "@/app/torneos/[id]/lib/publicLeaderboardColumns";
 import {
   buildDetailToggleHref,
-  formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
@@ -37,6 +48,8 @@ type FavoritesViewProps = {
   selectedCategoryId: string;
   requestedDetailId: string;
   cutLine?: PublicCutLine | null;
+  competitionRules?: CategoryCompetitionRule[];
+  handicapsByPlayerId?: Record<string, number | null>;
 };
 
 function categoryBucket(code: string | null | undefined) {
@@ -307,7 +320,22 @@ export default function FavoritesView({
   selectedCategoryId,
   requestedDetailId,
   cutLine = null,
+  competitionRules = [],
+  handicapsByPlayerId = {},
 }: FavoritesViewProps) {
+  const rulesMap = useMemo(
+    () => buildCompetitionRulesMap(competitionRules),
+    [competitionRules]
+  );
+  const handicapMap = useMemo(
+    () => buildHandicapMap(handicapsByPlayerId),
+    [handicapsByPlayerId]
+  );
+  const defaultHeaderRule = useMemo(
+    () => ruleForCategory(rulesMap, selectedCategoryId || null),
+    [rulesMap, selectedCategoryId]
+  );
+
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -411,16 +439,21 @@ export default function FavoritesView({
             </th>
             <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
             <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
-              GR
+              {secondaryTotalColumnHeader(defaultHeaderRule)}
             </th>
             <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
-              TOT
+              {mainTotalColumnHeader(defaultHeaderRule)}
             </th>
           </tr>
         </thead>
 
         <tbody>
           {favoriteRows.map((row, index) => {
+            const rowRule = ruleForCategory(rulesMap, row.category_id);
+            const rowDetailLabels = detailLabelsWithCompetitionRule(
+              detailLabels,
+              rowRule
+            );
             const isOpen = requestedDetailId === row.entry_id;
             const prevRow = index > 0 ? favoriteRows[index - 1] : null;
             const showCutDivider =
@@ -525,6 +558,8 @@ export default function FavoritesView({
                   <PublicLeaderboardRoundScoreCells
                     row={row}
                     selectedRound={selectedRound}
+                    rulesMap={rulesMap}
+                    handicapByPlayerId={handicapMap}
                   />
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
@@ -532,9 +567,7 @@ export default function FavoritesView({
                   </td>
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                    {row.scoring_format === "stableford"
-                      ? formatScoreOrDQ(row.total_to_par, row.is_disqualified)
-                      : formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
+                    {formatMainTotalForRow(row, rowRule)}
                   </td>
                 </tr>
 
@@ -551,8 +584,12 @@ export default function FavoritesView({
                         />
                         <PublicLeaderboardDetailTable
                           row={row}
-                          labels={detailLabels}
+                          labels={rowDetailLabels}
                           selectedRound={selectedRound ?? null}
+                          competitionRule={rowRule}
+                          handicapIndex={
+                            handicapMap.get(row.player_id) ?? null
+                          }
                         />
                       </div>
                     </td>

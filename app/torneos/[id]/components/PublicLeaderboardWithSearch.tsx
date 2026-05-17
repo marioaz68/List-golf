@@ -5,6 +5,7 @@ import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
 import type { SelectedRoundMeta } from "../lib/utils";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import PublicLeaderboardTable from "./PublicLeaderboardTable";
 
 function foldForSearch(value: string) {
@@ -55,6 +56,9 @@ type Props = {
   detailLabels: PublicDetailTableLabels;
   labels: PublicLeaderboardSearchLabels;
   cutLine?: PublicCutLine | null;
+  competitionRules?: CategoryCompetitionRule[];
+  handicapsByPlayerId?: Record<string, number | null>;
+  headerCompetitionRule?: CategoryCompetitionRule | null;
 };
 
 export default function PublicLeaderboardWithSearch({
@@ -70,6 +74,9 @@ export default function PublicLeaderboardWithSearch({
   detailLabels,
   labels,
   cutLine = null,
+  competitionRules = [],
+  handicapsByPlayerId = {},
+  headerCompetitionRule = null,
 }: Props) {
   const [query, setQuery] = useState("");
 
@@ -139,6 +146,9 @@ export default function PublicLeaderboardWithSearch({
         requestedDetailId={requestedDetailId}
         detailLabels={detailLabels}
         cutLine={cutLine}
+        competitionRules={competitionRules}
+        handicapsByPlayerId={handicapsByPlayerId}
+        headerCompetitionRule={headerCompetitionRule}
       />
     </div>
   );

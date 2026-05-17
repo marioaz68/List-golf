@@ -148,7 +148,7 @@ export function cumulativeLeaderboardValue(
     };
   }
 
-  if (basis === "net" && hasNet) {
+  if ((basis === "net" || basis === "both") && hasNet) {
     return {
       sortValue: totalNetToPar,
       displayToPar: totalNetToPar,

@@ -1,5 +1,17 @@
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  formatMainTotalForRow,
+  mainTotalColumnHeader,
+  secondaryTotalColumnHeader,
+} from "@/lib/leaderboard/competitionDisplay";
+import {
+  buildCompetitionRulesMap,
+  buildHandicapMap,
+  detailLabelsWithCompetitionRule,
+  ruleForCategory,
+} from "../lib/publicCompetitionContext";
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import FavoriteStar from "@/components/public/FavoriteStar";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
@@ -12,7 +24,6 @@ import {
 } from "../lib/publicLeaderboardColumns";
 import {
   buildDetailToggleHref,
-  formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   publicLeaderboardNameColumnClass,
@@ -67,6 +78,9 @@ type PublicLeaderboardTableProps = {
   requestedDetailId: string;
   detailLabels: PublicDetailTableLabels;
   cutLine?: PublicCutLine | null;
+  competitionRules?: CategoryCompetitionRule[];
+  handicapsByPlayerId?: Record<string, number | null>;
+  headerCompetitionRule?: CategoryCompetitionRule | null;
 };
 
 export default function PublicLeaderboardTable({
@@ -82,7 +96,26 @@ export default function PublicLeaderboardTable({
   requestedDetailId,
   detailLabels,
   cutLine = null,
+  competitionRules = [],
+  handicapsByPlayerId = {},
+  headerCompetitionRule = null,
 }: PublicLeaderboardTableProps) {
+  const rulesMap = useMemo(
+    () => buildCompetitionRulesMap(competitionRules),
+    [competitionRules]
+  );
+  const handicapMap = useMemo(
+    () => buildHandicapMap(handicapsByPlayerId),
+    [handicapsByPlayerId]
+  );
+  const headerRule =
+    headerCompetitionRule ??
+    ruleForCategory(rulesMap, selectedCategoryId || null);
+  const detailLabelsResolved = useMemo(
+    () => detailLabelsWithCompetitionRule(detailLabels, headerRule),
+    [detailLabels, headerRule]
+  );
+
   const peerRows = peerRowsForNameCompact ?? leaderboard;
   const emptyLabel =
     emptyLeaderboardLabel ??
@@ -135,14 +168,17 @@ export default function PublicLeaderboardTable({
               THR
             </th>
             <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
-            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
-              GR
+            <th
+              className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]"
+              title={secondaryTotalColumnHeader(headerRule)}
+            >
+              {secondaryTotalColumnHeader(headerRule)}
             </th>
             <th
               className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]"
-              title="Total según reglas de competencia de la categoría"
+              title={mainTotalColumnHeader(headerRule)}
             >
-              TOT
+              {mainTotalColumnHeader(headerRule)}
             </th>
           </tr>
         </thead>
@@ -274,6 +310,8 @@ export default function PublicLeaderboardTable({
                     <PublicLeaderboardRoundScoreCells
                       row={row}
                       selectedRound={selectedRound}
+                      rulesMap={rulesMap}
+                      handicapByPlayerId={handicapMap}
                     />
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
@@ -281,12 +319,10 @@ export default function PublicLeaderboardTable({
                     </td>
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                      {row.scoring_format === "stableford"
-                        ? formatScoreOrDQ(row.total_to_par, row.is_disqualified)
-                        : formatRelativeOrDQ(
-                            row.total_to_par,
-                            row.is_disqualified
-                          )}
+                      {formatMainTotalForRow(
+                        row,
+                        ruleForCategory(rulesMap, row.category_id)
+                      )}
                     </td>
                   </tr>
 
@@ -304,7 +340,14 @@ export default function PublicLeaderboardTable({
                           <PublicLeaderboardDetailTable
                             row={row}
                             selectedRound={selectedRound}
-                            labels={detailLabels}
+                            labels={detailLabelsResolved}
+                            competitionRule={ruleForCategory(
+                              rulesMap,
+                              row.category_id
+                            )}
+                            handicapIndex={
+                              handicapMap.get(row.player_id) ?? null
+                            }
                           />
                         </div>
                       </td>
