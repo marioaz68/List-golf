@@ -15,6 +15,7 @@ import {
   updateScorecardState,
 } from "@/lib/scorecards";
 import { alignCaptureToScorecardRound } from "@/lib/scorecards/alignCaptureToScorecardRound";
+import { assertEighteenHolesBeforeLock } from "@/lib/scorecards/countHolesOnPlayerRound";
 import { resolveRoundIdForEntry } from "@/lib/rounds/resolveRoundForEntry";
 import { createAdminClient } from "@/utils/supabase/admin";
 
@@ -128,6 +129,29 @@ export async function signScorecardAction(input: {
     ? lockResult.locked_at ?? new Date().toISOString()
     : lockResult.locked_at;
 
+  const admin = createAdminClient();
+  const { data: scRow } = await admin
+    .from("scorecards")
+    .select("tournament_id, entry_id, round_id")
+    .eq("id", input.scorecard_id)
+    .maybeSingle();
+
+  const { data: entryRow } = scRow?.entry_id
+    ? await admin
+        .from("tournament_entries")
+        .select("player_id")
+        .eq("id", scRow.entry_id)
+        .maybeSingle()
+    : { data: null };
+
+  if (lockedAt && scRow?.round_id && entryRow?.player_id) {
+    await assertEighteenHolesBeforeLock(
+      admin,
+      String(entryRow.player_id),
+      String(scRow.round_id)
+    );
+  }
+
   const updatedScorecard = await updateScorecardState({
     scorecard_id: input.scorecard_id,
     status: lockResult.nextStatus,
@@ -163,21 +187,6 @@ export async function signScorecardAction(input: {
   const savedAuditLog = await saveScorecardAuditLog(auditLog);
 
   if (updatedScorecard.locked_at) {
-    const admin = createAdminClient();
-    const { data: scRow } = await admin
-      .from("scorecards")
-      .select("tournament_id, entry_id, round_id")
-      .eq("id", input.scorecard_id)
-      .maybeSingle();
-
-    const { data: entryRow } = scRow?.entry_id
-      ? await admin
-          .from("tournament_entries")
-          .select("player_id")
-          .eq("id", scRow.entry_id)
-          .maybeSingle()
-      : { data: null };
-
     if (
       scRow?.tournament_id &&
       scRow.entry_id &&
@@ -277,6 +286,28 @@ export async function signScorecardByTokenAction(input: {
   const lockedAt = isFullySigned
     ? lockResult.locked_at ?? new Date().toISOString()
     : lockResult.locked_at;
+
+  const { data: scRowForLock } = await admin
+    .from("scorecards")
+    .select("tournament_id, entry_id, round_id")
+    .eq("id", request.scorecard_id)
+    .maybeSingle();
+
+  const { data: entryRowForLock } = scRowForLock?.entry_id
+    ? await admin
+        .from("tournament_entries")
+        .select("player_id")
+        .eq("id", scRowForLock.entry_id)
+        .maybeSingle()
+    : { data: null };
+
+  if (lockedAt && scRowForLock?.round_id && entryRowForLock?.player_id) {
+    await assertEighteenHolesBeforeLock(
+      admin,
+      String(entryRowForLock.player_id),
+      String(scRowForLock.round_id)
+    );
+  }
 
   const updatedScorecard = await updateScorecardState({
     scorecard_id: request.scorecard_id,

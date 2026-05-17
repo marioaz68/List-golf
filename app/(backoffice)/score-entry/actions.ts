@@ -10,6 +10,7 @@ import {
 import { lockScorecard } from "@/lib/scorecards/lock-scorecard";
 import type { ScorecardStatus } from "@/lib/scorecards/types";
 import { alignCaptureToScorecardRound } from "@/lib/scorecards/alignCaptureToScorecardRound";
+import { countHolesOnPlayerRound } from "@/lib/scorecards/countHolesOnPlayerRound";
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
 import { repairTournamentRoundAlignment } from "@/lib/scorecards/repairTournamentRoundAlignment";
@@ -262,29 +263,6 @@ async function lockScorecardRow(
   }
 }
 
-async function countHoleScoresForPlayerRound(
-  admin: ReturnType<typeof getAdminClient>,
-  roundId: string,
-  playerId: string
-): Promise<number> {
-  const { data: rs, error: rsErr } = await admin
-    .from("round_scores")
-    .select("id")
-    .eq("round_id", roundId)
-    .eq("player_id", playerId)
-    .maybeSingle();
-
-  if (rsErr || !rs?.id) return 0;
-
-  const { count, error: hsErr } = await admin
-    .from("hole_scores")
-    .select("id", { count: "exact", head: true })
-    .eq("round_score_id", rs.id);
-
-  if (hsErr) return 0;
-  return count ?? 0;
-}
-
 /** Entrega en mesa: firmas jugador + testigo y cierre para leaderboard oficial. */
 async function staffCloseRoundScorecard(
   admin: ReturnType<typeof getAdminClient>,
@@ -303,10 +281,10 @@ async function staffCloseRoundScorecard(
     scorecardRoundId: params.roundId,
   });
 
-  const holeCount = await countHoleScoresForPlayerRound(
+  const holeCount = await countHolesOnPlayerRound(
     admin,
-    params.roundId,
-    params.playerId
+    params.playerId,
+    params.roundId
   );
 
   if (holeCount < 18) {
@@ -898,13 +876,14 @@ export async function repairTournamentCapturesAction(
     const errCount =
       result.captures.errors.length +
       result.locks.errors.length +
-      result.ghostScorecards.errors.length;
+      result.ghostScorecards.errors.length +
+      result.invalidLocks.errors.length;
     const repaired = result.captures.repaired + result.locks.repaired;
     return {
       ok: errCount === 0,
       repaired,
       errors: errCount,
-      message: `Reparación terminada: ${repaired} jugadores (${result.captures.repaired} capturas, ${result.locks.repaired} cierres), ${result.ghostScorecards.scorecardsRemoved} tarjetas fantasma eliminadas, desalineados ${result.misalignedBefore}→${result.misalignedAfter}, ${errCount} errores.`,
+      message: `Reparación terminada: ${repaired} jugadores (${result.captures.repaired} capturas, ${result.locks.repaired} cierres), ${result.invalidLocks.unlocked} cierres inválidos abiertos, ${result.ghostScorecards.scorecardsRemoved} tarjetas fantasma eliminadas, desalineados ${result.misalignedBefore}→${result.misalignedAfter}, ${errCount} errores.`,
     };
   } catch (e) {
     return {

@@ -14,6 +14,7 @@ import { fmt } from "@/lib/i18n/fmt";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
 import { roundRowAppliesToEntry } from "@/lib/leaderboard/roundCategoryMatch";
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
+import { countHolesOnPlayerRound } from "@/lib/scorecards/countHolesOnPlayerRound";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
 import { resolveScoreEntryDisplayTarget } from "@/lib/rounds/scoreEntryDisplayRound";
 import {
@@ -771,7 +772,7 @@ export default async function ScoreEntryPage(props: {
           }
         }
 
-        if (entryIdForScorecard && scoringRoundId) {
+        if (entryIdForScorecard && scoringRoundId && player) {
           const { data: scorecardRow, error: scorecardErr } = await supabase
             .from("scorecards")
             .select("locked_at")
@@ -782,8 +783,24 @@ export default async function ScoreEntryPage(props: {
           if (scorecardErr) {
             errorMsg = scorecardErr.message;
           } else {
-            roundClosed =
-              roundClosed || Boolean(scorecardRow?.locked_at);
+            const holesOnRound = await countHolesOnPlayerRound(
+              supabase,
+              player.id,
+              scoringRoundId
+            );
+            const dbLocked = Boolean(scorecardRow?.locked_at);
+            if (dbLocked && holesOnRound < 18) {
+              roundClosed = false;
+              captureRoundNotice = [
+                captureRoundNotice,
+                `La tarjeta figura cerrada en sistema pero solo hay ${holesOnRound}/18 hoyos en esta categoría; puedes capturar o usar reparación de datos.`,
+              ]
+                .filter(Boolean)
+                .join(" ");
+            } else {
+              roundClosed =
+                roundClosed || (dbLocked && holesOnRound >= 18);
+            }
           }
         }
       }

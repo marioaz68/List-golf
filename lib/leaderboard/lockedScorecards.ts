@@ -41,13 +41,16 @@ export function buildLockedScorecardLookups(
   return { exact, byEntryRoundNo };
 }
 
+/**
+ * Cierre solo en la fila `rounds` de la categoría del inscrito (por `round_id`).
+ * No usar `round_no` a secas: en torneos multi-categoría había falsos «cerrado».
+ */
 export function isEntryRoundClosed(
   entryId: string,
   round: { id: string; round_no: number },
   lookups: LockedScorecardLookups
 ): boolean {
-  if (lookups.exact.has(`${entryId}_${round.id}`)) return true;
-  return lookups.byEntryRoundNo.has(`${entryId}_${round.round_no}`);
+  return lookups.exact.has(`${entryId}_${round.id}`);
 }
 
 export function entryHasAnyClosedRound(

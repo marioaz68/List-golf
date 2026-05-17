@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { countHolesOnPlayerRound } from "@/lib/scorecards/countHolesOnPlayerRound";
 import {
   getRoundForCategory,
   type RoundForGate,
@@ -8,42 +9,7 @@ import {
   type LockedScorecardLookups,
 } from "@/lib/leaderboard/lockedScorecards";
 
-function holeNoFromRow(row: {
-  hole_number?: number | null;
-  hole_no?: number | null;
-}) {
-  const raw = row.hole_number ?? row.hole_no;
-  if (raw == null) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 1 && n <= 18 ? n : null;
-}
-
-export async function countHolesOnPlayerRound(
-  supabase: SupabaseClient,
-  playerId: string,
-  roundId: string
-): Promise<number> {
-  const { data: rs } = await supabase
-    .from("round_scores")
-    .select("id")
-    .eq("player_id", playerId)
-    .eq("round_id", roundId)
-    .maybeSingle();
-
-  if (!rs?.id) return 0;
-
-  const { data: holes } = await supabase
-    .from("hole_scores")
-    .select("hole_number, hole_no")
-    .eq("round_score_id", rs.id);
-
-  const distinct = new Set<number>();
-  for (const h of holes ?? []) {
-    const n = holeNoFromRow(h);
-    if (n != null) distinct.add(n);
-  }
-  return distinct.size;
-}
+export { countHolesOnPlayerRound };
 
 export type ScoreEntryCaptureTarget = {
   roundId: string;
@@ -86,11 +52,19 @@ export async function resolveScoreEntryDisplayTarget(
       cat || null
     );
     if (forced) {
-      const closed = isEntryRoundClosed(
+      let closed = isEntryRoundClosed(
         params.entryId,
         forced,
         params.lookups
       );
+      if (closed) {
+        const holes = await countHolesOnPlayerRound(
+          supabase,
+          params.playerId,
+          forced.id
+        );
+        closed = holes >= 18;
+      }
       return {
         roundId: forced.id,
         roundNo: params.forceRoundNo,
@@ -100,10 +74,15 @@ export async function resolveScoreEntryDisplayTarget(
   }
 
   if (params.captureRoundClosed) {
+    const holes = await countHolesOnPlayerRound(
+      supabase,
+      params.playerId,
+      params.captureRoundId
+    );
     return {
       roundId: params.captureRoundId,
       roundNo: params.captureRoundNo,
-      roundClosed: true,
+      roundClosed: holes >= 18,
     };
   }
 
@@ -146,10 +125,16 @@ export async function resolveScoreEntryDisplayTarget(
     };
   }
 
+  const priorHoles = await countHolesOnPlayerRound(
+    supabase,
+    params.playerId,
+    prior.id
+  );
+
   return {
     roundId: prior.id,
     roundNo: prior.round_no,
-    roundClosed: true,
+    roundClosed: priorHoles >= 18,
     pendingOpenRoundNo: params.captureRoundNo,
   };
 }
