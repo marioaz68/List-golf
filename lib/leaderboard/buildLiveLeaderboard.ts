@@ -1,5 +1,6 @@
 import {
   resolveDetailForSelectedRound,
+  roundRowAppliesToEntry,
   type SelectedRoundMeta,
 } from "./roundCategoryMatch";
 
@@ -83,18 +84,67 @@ function pickRoundScoreRowForRound(
     altCands,
     holeScoresByRoundScoreId
   );
-  if (fromCategoryAlt) return fromCategoryAlt;
+  return fromCategoryAlt;
+}
 
-  // Captura en otra fila `rounds` del mismo round_no (p. ej. DA vs AA)
-  const sameNoRoundIds = allRounds
-    .filter((r) => r.round_no === round.round_no && r.id !== round.id)
-    .map((r) => r.id);
+type RoundDetailLike = {
+  round_id: string;
+  round_no: number;
+  category_id?: string | null;
+  gross_score?: number | null;
+  to_par?: number | null;
+  is_dq?: boolean;
+};
 
-  const sameNoCands = playerRoundScores.filter((s) =>
-    sameNoRoundIds.includes(String(s.round_id))
-  );
+/** Acumulado por `round_no` en la categoría del inscrito (sin duplicar otras categorías). */
+function sumCumulativeTotals(
+  details: RoundDetailLike[],
+  entryCategoryId: string | null | undefined,
+  maxRoundNo: number | null
+): { totalGross: number | null; totalToPar: number | null } {
+  const byRoundNo = new Map<number, RoundDetailLike>();
 
-  return pickBestRoundScoreRow(sameNoCands, holeScoresByRoundScoreId);
+  for (const detail of details) {
+    if (detail.is_dq) continue;
+    if (!roundRowAppliesToEntry({ category_id: detail.category_id }, entryCategoryId)) {
+      continue;
+    }
+    if (maxRoundNo != null && detail.round_no > maxRoundNo) continue;
+
+    const existing = byRoundNo.get(detail.round_no);
+    if (!existing) {
+      byRoundNo.set(detail.round_no, detail);
+      continue;
+    }
+
+    const ec = String(entryCategoryId ?? "").trim();
+    const dCat = String(detail.category_id ?? "").trim();
+    const exCat = String(existing.category_id ?? "").trim();
+    if (ec && dCat === ec && exCat !== ec) {
+      byRoundNo.set(detail.round_no, detail);
+    }
+  }
+
+  let totalGross = 0;
+  let totalToPar = 0;
+  let hasGross = false;
+  let hasToPar = false;
+
+  for (const detail of byRoundNo.values()) {
+    if (detail.gross_score != null && !Number.isNaN(Number(detail.gross_score))) {
+      totalGross += Number(detail.gross_score);
+      hasGross = true;
+    }
+    if (detail.to_par != null && !Number.isNaN(Number(detail.to_par))) {
+      totalToPar += Number(detail.to_par);
+      hasToPar = true;
+    }
+  }
+
+  return {
+    totalGross: hasGross ? totalGross : null,
+    totalToPar: hasToPar ? totalToPar : null,
+  };
 }
 
 export function buildLiveLeaderboard({
@@ -130,7 +180,16 @@ export function buildLiveLeaderboard({
       (score: any) => score.player_id === entry.player_id
     );
 
-    const roundsSummary = rounds.map((round: any) => {
+    const entryRounds = rounds.filter((round: any) =>
+      roundRowAppliesToEntry(round, entry.category_id)
+    );
+
+    const maxRoundNo =
+      selectedRound != null && Number.isFinite(Number(selectedRound.round_no))
+        ? Number(selectedRound.round_no)
+        : null;
+
+    const roundsSummary = entryRounds.map((round: any) => {
       const found = pickRoundScoreRowForRound(
         playerRoundScores,
         round,
@@ -150,7 +209,7 @@ export function buildLiveLeaderboard({
       };
     });
 
-    const details = rounds.map((round: any) => {
+    const details = entryRounds.map((round: any) => {
       const score = pickRoundScoreRowForRound(
         playerRoundScores,
         round,
@@ -234,25 +293,9 @@ export function buildLiveLeaderboard({
 
     const nonDqDetails = details.filter((detail: any) => !detail.is_dq);
 
-    const totalGross = nonDqDetails.reduce((acc: number, detail: any) => {
-      return acc + Number(detail.gross_score ?? 0);
-    }, 0);
-
-    const totalGrossOrNull = rowIsDQ
-      ? null
-      : nonDqDetails.some((detail: any) => detail.gross_score != null)
-        ? totalGross
-        : null;
-
-    const totalToPar = nonDqDetails.reduce((acc: number, detail: any) => {
-      return acc + Number(detail.to_par ?? 0);
-    }, 0);
-
-    const totalToParOrNull = rowIsDQ
-      ? null
-      : nonDqDetails.some((detail: any) => detail.to_par != null)
-        ? totalToPar
-        : null;
+    const { totalGross: totalGrossOrNull, totalToPar: totalToParOrNull } = rowIsDQ
+      ? { totalGross: null, totalToPar: null }
+      : sumCumulativeTotals(nonDqDetails, entry.category_id, maxRoundNo);
 
     const selectedMeta: SelectedRoundMeta | null = selectedRound
       ? {

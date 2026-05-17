@@ -305,8 +305,17 @@ export function applyStandings({
         ? previousStandingCategory.pos - selectedStandingCategory.pos
         : null;
 
+    const cumulativeGross =
+      selectedStandingCategory?.gross ?? selectedStanding?.gross ?? row.total_gross;
+    const cumulativeToPar =
+      selectedStandingCategory?.to_par ??
+      selectedStanding?.to_par ??
+      row.total_to_par;
+
     return {
       ...row,
+      total_gross: row.is_disqualified ? null : cumulativeGross,
+      total_to_par: row.is_disqualified ? null : cumulativeToPar,
       standing_by_round: standingByRound,
       standing_by_round_category: standingByRoundCategory,
       selected_round_position: row.is_disqualified
