@@ -26,6 +26,9 @@ export type TournamentSettings = {
     start_time?: string;
     interval_minutes?: number;
   };
+
+  /** ISO timestamps keyed by round number string, e.g. { "1": "2026-05-17T12:00:00.000Z" } */
+  round_closures?: Record<string, string>;
 };
 
 export type Tournament = {
