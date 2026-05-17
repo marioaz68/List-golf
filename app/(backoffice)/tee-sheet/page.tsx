@@ -543,12 +543,18 @@ for (const row of membersRaw) {
         supabase,
         effectiveTournamentId
       );
+      const { data: tournamentRow } = await supabase
+        .from("tournaments")
+        .select("settings")
+        .eq("id", effectiveTournamentId)
+        .maybeSingle();
       const blockedIds = listCategoriesBlockedForRound(
         gateCtx.entries,
         gateCtx.rounds,
         selectedRound.round_no,
         categoryIdsToCheck,
-        gateCtx.lookups
+        gateCtx.lookups,
+        tournamentRow?.settings ?? null
       );
 
       if (blockedIds.length > 0) {

@@ -16,6 +16,8 @@ export type EntryPlayer = {
   last_name: string | null;
   club: string | null;
   club_id: string | null;
+  handicap_index?: number | null;
+  handicap_torneo?: number | null;
   clubs: ClubRef | ClubRef[] | null;
 };
 
@@ -162,4 +164,10 @@ export type LeaderboardRow = {
   standing_by_round: RoundStandingSnapshot[];
   standing_by_round_category: RoundStandingSnapshot[];
   hasScores: boolean;
+  scoring_format?: "stroke_play" | "stableford";
+  leaderboard_basis?: "gross" | "net" | "both" | "stableford";
+  leaderboard_sort_value?: number | null;
+  stableford_total?: number | null;
+  /** Tras aplicar reglas de corte (solo en vistas R2+). */
+  made_cut?: boolean | null;
 };

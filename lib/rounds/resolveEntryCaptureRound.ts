@@ -33,13 +33,15 @@ export async function resolveEntryCaptureRound(
     tournamentId: string;
     rounds: Array<RoundForGate & SessionRoundFields>;
     lookups: LockedScorecardLookups;
+    tournamentSettings?: unknown;
   }
 ): Promise<EntryCaptureRoundResult> {
   const open = resolveOpenCaptureRoundForEntry(
     params.entryId,
     params.entryCategoryId,
     params.rounds,
-    params.lookups
+    params.lookups,
+    params.tournamentSettings
   );
 
   if (!open.ok) return open;

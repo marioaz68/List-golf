@@ -3,6 +3,7 @@ import {
   isEntryRoundClosed,
   type LockedScorecardLookups,
 } from "@/lib/leaderboard/lockedScorecards";
+import { isTournamentRoundOfficiallyClosed } from "@/lib/rounds/tournamentRoundClosure";
 
 export type OpenCaptureRoundResult =
   | {
@@ -15,6 +16,12 @@ export type OpenCaptureRoundResult =
   | {
       ok: false;
       reason: "prior_not_closed";
+      targetRoundNo: number;
+      priorRoundNo: number;
+    }
+  | {
+      ok: false;
+      reason: "prior_not_officially_closed";
       targetRoundNo: number;
       priorRoundNo: number;
     }
@@ -37,7 +44,8 @@ export function resolveOpenCaptureRoundForEntry(
   entryId: string,
   entryCategoryId: string | null,
   rounds: RoundForGate[],
-  lookups: LockedScorecardLookups
+  lookups: LockedScorecardLookups,
+  tournamentSettings?: unknown
 ): OpenCaptureRoundResult {
   const cat = String(entryCategoryId ?? "").trim();
   const roundNos = [...new Set(rounds.map((r) => r.round_no))]
@@ -55,7 +63,8 @@ export function resolveOpenCaptureRoundForEntry(
     if (!round?.id) continue;
 
     if (roundNo > 1) {
-      const priorRound = getRoundForCategory(rounds, roundNo - 1, cat || null);
+      const priorRoundNo = roundNo - 1;
+      const priorRound = getRoundForCategory(rounds, priorRoundNo, cat || null);
       if (
         priorRound?.id &&
         !isEntryRoundClosed(entryId, priorRound, lookups)
@@ -64,7 +73,18 @@ export function resolveOpenCaptureRoundForEntry(
           ok: false,
           reason: "prior_not_closed",
           targetRoundNo: roundNo,
-          priorRoundNo: roundNo - 1,
+          priorRoundNo,
+        };
+      }
+      if (
+        priorRound?.id &&
+        !isTournamentRoundOfficiallyClosed(tournamentSettings, priorRoundNo)
+      ) {
+        return {
+          ok: false,
+          reason: "prior_not_officially_closed",
+          targetRoundNo: roundNo,
+          priorRoundNo,
         };
       }
     }

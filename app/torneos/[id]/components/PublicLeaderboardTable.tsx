@@ -2,18 +2,27 @@ import Link from "next/link";
 import { Fragment } from "react";
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import FavoriteStar from "@/components/public/FavoriteStar";
+import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
+import {
+  publicLeaderboardScoreColumnNos,
+  publicLeaderboardTableColSpan,
+  publicLeaderboardTableMinWidthClassForScoreColumns,
+} from "../lib/publicLeaderboardColumns";
 import {
   buildDetailToggleHref,
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   publicLeaderboardNameColumnClass,
-  publicLeaderboardTableMinWidthClass,
   type SelectedRoundMeta,
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
+import {
+  PublicLeaderboardRoundScoreCells,
+  PublicLeaderboardRoundScoreHeaders,
+} from "./PublicLeaderboardRoundScoreColumns";
 import PublicLeaderboardExpandedPlayerBanner from "./PublicLeaderboardExpandedPlayerBanner";
 import PublicLeaderboardPlayerName from "./PublicLeaderboardPlayerName";
 
@@ -57,6 +66,7 @@ type PublicLeaderboardTableProps = {
   selectedRound: SelectedRoundMeta | null;
   requestedDetailId: string;
   detailLabels: PublicDetailTableLabels;
+  cutLine?: PublicCutLine | null;
 };
 
 export default function PublicLeaderboardTable({
@@ -71,6 +81,7 @@ export default function PublicLeaderboardTable({
   selectedRound,
   requestedDetailId,
   detailLabels,
+  cutLine = null,
 }: PublicLeaderboardTableProps) {
   const peerRows = peerRowsForNameCompact ?? leaderboard;
   const emptyLabel =
@@ -78,11 +89,12 @@ export default function PublicLeaderboardTable({
     "No hay jugadores para mostrar en esta vista.";
   const posW = view === "official" ? "w-[44px]" : "w-[50px]";
   const nameCol = publicLeaderboardNameColumnClass;
+  const tableColSpan = publicLeaderboardTableColSpan(selectedRound);
 
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <table
-        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClass} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClassForScoreColumns(publicLeaderboardScoreColumnNos(selectedRound).length)} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
       >
         <thead>
           <tr className="bg-white/10 text-slate-300">
@@ -122,13 +134,14 @@ export default function PublicLeaderboardTable({
             <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
               THR
             </th>
-            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
-              HOY
-            </th>
+            <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
             <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
               GR
             </th>
-            <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
+            <th
+              className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]"
+              title="Total según reglas de competencia de la categoría"
+            >
               TOT
             </th>
           </tr>
@@ -138,7 +151,7 @@ export default function PublicLeaderboardTable({
           {leaderboard.length === 0 ? (
             <tr>
               <td
-                colSpan={9}
+                colSpan={tableColSpan}
                 className="px-4 py-10 text-center text-sm text-slate-400"
               >
                 {emptyLabel}
@@ -161,10 +174,30 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
+              const prevRow = index > 0 ? leaderboard[index - 1] : null;
+              const showCutDivider =
+                row.made_cut === false &&
+                prevRow?.made_cut === true &&
+                String(prevRow.category_id ?? "") ===
+                  String(row.category_id ?? "");
 
               return (
                 <Fragment key={row.entry_id}>
-                  <tr className="group border-b border-white/10 bg-transparent align-top text-white transition hover:bg-white/[0.03]">
+                  {showCutDivider ? (
+                    <tr className="bg-amber-500/10">
+                      <td
+                        colSpan={tableColSpan}
+                        className="border-b border-amber-400/40 px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-amber-200"
+                      >
+                        {cutLine?.label ?? "CORTE"}
+                      </td>
+                    </tr>
+                  ) : null}
+                  <tr
+                    className={`group border-b border-white/10 bg-transparent align-top text-white transition hover:bg-white/[0.03] ${
+                      row.made_cut === false ? "opacity-55" : ""
+                    }`}
+                  >
                     <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center align-middle sm:w-[34px]">
                       <div className="inline-flex justify-center">
                         <ClubLogoThumb
@@ -238,29 +271,29 @@ export default function PublicLeaderboardTable({
                       {formatThru(row.details, selectedRound, row.category_id)}
                     </td>
 
-                    <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
-                      {formatRelativeOrDQ(
-                        row.selected_round_to_par,
-                        row.is_disqualified
-                      )}
-                    </td>
+                    <PublicLeaderboardRoundScoreCells
+                      row={row}
+                      selectedRound={selectedRound}
+                    />
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
                       {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
                     </td>
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                      {formatRelativeOrDQ(
-                        row.total_to_par,
-                        row.is_disqualified
-                      )}
+                      {row.scoring_format === "stableford"
+                        ? formatScoreOrDQ(row.total_to_par, row.is_disqualified)
+                        : formatRelativeOrDQ(
+                            row.total_to_par,
+                            row.is_disqualified
+                          )}
                     </td>
                   </tr>
 
                   {isOpen ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={tableColSpan}
                         className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                       >
                         <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">

@@ -7,7 +7,11 @@ import {
   requireTournamentAccess,
 } from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
+import ScoreEntryRoundCloseBanner from "./ScoreEntryRoundCloseBanner";
 import RepairCapturesButton from "./RepairCapturesButton";
+import {
+  buildTournamentRoundCloseStatus,
+} from "@/lib/rounds/tournamentRoundClosure";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import { fmt } from "@/lib/i18n/fmt";
@@ -358,8 +362,40 @@ export default async function ScoreEntryPage(props: {
   let pendingCaptureRoundNo: number | null = null;
   let entryCategoryLabel = messages[locale].common.noCategory;
   let registrationOpenMessage = "";
+  let tournamentSettings: unknown = null;
+  const roundCloseStatuses: ReturnType<typeof buildTournamentRoundCloseStatus>[] =
+    [];
 
   if (effectiveTournamentId) {
+    const { data: tournamentRow } = await supabase
+      .from("tournaments")
+      .select("settings")
+      .eq("id", effectiveTournamentId)
+      .maybeSingle();
+    tournamentSettings = tournamentRow?.settings ?? null;
+
+    try {
+      const gateCtxBanner = await loadCategoryRoundGateContext(
+        supabase,
+        effectiveTournamentId
+      );
+      const roundNos = [
+        ...new Set(gateCtxBanner.rounds.map((r) => r.round_no)),
+      ].sort((a, b) => a - b);
+      for (const roundNo of roundNos) {
+        roundCloseStatuses.push(
+          buildTournamentRoundCloseStatus(
+            gateCtxBanner.entries,
+            gateCtxBanner.rounds,
+            roundNo,
+            tournamentSettings,
+            gateCtxBanner.lookups
+          )
+        );
+      }
+    } catch {
+      /* banner opcional */
+    }
     const regStatus = await fetchTournamentRegistrationStatus(
       supabase,
       effectiveTournamentId
@@ -488,10 +524,14 @@ export default async function ScoreEntryPage(props: {
           tournamentId: effectiveTournamentId,
           rounds: roundsForCapture,
           lookups: gateCtx.lookups,
+          tournamentSettings,
         });
 
         if (!capture.ok) {
-          if (capture.reason === "prior_not_closed") {
+          if (capture.reason === "prior_not_officially_closed") {
+            scoringRoundBlocked = true;
+            priorRoundGateMessage = `La R${capture.priorRoundNo} ya está capturada en todas las categorías. El comité debe pulsar «Cerrar Ronda ${capture.priorRoundNo} definitivamente» (arriba) antes de capturar la R${capture.targetRoundNo}.`;
+          } else if (capture.reason === "prior_not_closed") {
             scoringRoundBlocked = true;
             const catLabel =
               matchedEntry.category?.code?.trim() ||
@@ -928,6 +968,17 @@ export default async function ScoreEntryPage(props: {
             {se.searchNotFound.replace("{q}", searchRaw)}
           </div>
         )}
+
+        {effectiveTournamentId &&
+          roundCloseStatuses.map((status) =>
+            status.readyToConfirm || status.officiallyClosed ? (
+              <ScoreEntryRoundCloseBanner
+                key={`round-close-${status.roundNo}`}
+                tournamentId={effectiveTournamentId}
+                status={status}
+              />
+            ) : null
+          )}
 
         {effectiveTournamentId && canRepairCaptures && (
           <RepairCapturesButton tournamentId={effectiveTournamentId} />

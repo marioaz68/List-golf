@@ -10,6 +10,12 @@ import FavoritesView from "@/components/public/FavoritesView";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  computePublicCutLines,
+  primaryCutLineForCategory,
+  type RoundAdvancementRule,
+} from "@/lib/cuts/computeCutLine";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
 import OfficialCategoryClosePanel from "./components/OfficialCategoryClosePanel";
 import { buildCategoryRoundCloseCards } from "./lib/categoryRoundCloseStatus";
@@ -382,11 +388,33 @@ export default async function PublicTournamentPage({
     holeScoresByRoundScoreId.set(row.round_score_id, current);
   }
 
-  const { data: competitionRulesData } = await supabase
-    .from("competition_rules")
-    .select("*")
+  const { data: competitionRulesRows } = await supabase
+    .from("category_competition_rules")
+    .select(
+      "category_id, scoring_format, leaderboard_basis, handicap_percentage, is_active"
+    )
     .eq("tournament_id", typedTournament.id)
-    .maybeSingle();
+    .eq("is_active", true);
+
+  const { data: advancementRulesRows } = await supabase
+    .from("round_advancement_rules")
+    .select(
+      "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, is_active"
+    )
+    .eq("tournament_id", typedTournament.id)
+    .eq("is_active", true);
+
+  const competitionRulesList = (competitionRulesRows ??
+    []) as CategoryCompetitionRule[];
+  const advancementRulesList = (advancementRulesRows ??
+    []) as RoundAdvancementRule[];
+
+  const handicapByPlayerId = new Map<string, number | null>();
+  for (const entry of allEntries) {
+    const hcp =
+      entry.player.handicap_torneo ?? entry.player.handicap_index ?? null;
+    handicapByPlayerId.set(entry.player_id, hcp != null ? Number(hcp) : null);
+  }
 
   const categoryRoundCloseCards = buildCategoryRoundCloseCards(
     allEntries,
@@ -416,10 +444,49 @@ export default async function PublicTournamentPage({
     holesPlayedCount,
   });
 
-  const leaderboard: LeaderboardRow[] = applyCompetitionRules({
+  const selectedRoundNo = selectedRound?.round_no ?? 1;
+
+  const leaderboardScored: LeaderboardRow[] = applyCompetitionRules({
     leaderboard: leaderboardWithStandings,
-    competitionRules: competitionRulesData,
+    competitionRules: competitionRulesList,
+    handicapByPlayerId,
+    maxRoundNo: selectedRoundNo,
   });
+
+  const publicCutLines = computePublicCutLines({
+    leaderboard: leaderboardScored,
+    advancementRules: advancementRulesList,
+    competitionRules: competitionRulesList,
+    categories: categories.map((c) => ({
+      id: c.id,
+      code: c.code,
+    })),
+    selectedRoundNo,
+    selectedCategoryId: selectedCategoryId || null,
+    handicapByPlayerId,
+  });
+
+  const leaderboard: LeaderboardRow[] = leaderboardScored.map((row) => {
+    if (selectedRoundNo <= 1 || row.is_disqualified) {
+      return { ...row, made_cut: null };
+    }
+    const line = primaryCutLineForCategory(
+      publicCutLines.filter(
+        (l) => l.categoryId === String(row.category_id ?? "")
+      ),
+      row.category_id
+    );
+    if (!line) return { ...row, made_cut: null };
+    return {
+      ...row,
+      made_cut: line.madeCutEntryIds.has(row.entry_id),
+    };
+  });
+
+  const activePublicCutLine = primaryCutLineForCategory(
+    publicCutLines,
+    selectedCategoryId || null
+  );
 
   /** Vista oficial: solo filas con tarjeta cerrada en la ronda seleccionada. Live y favoritos usan siempre `leaderboard` completo. */
   const officialLeaderboard: LeaderboardRow[] =
@@ -1111,6 +1178,7 @@ export default async function PublicTournamentPage({
               detailLabels={detailTableLabels}
               selectedCategoryId={selectedCategoryId}
               requestedDetailId={requestedDetailId}
+              cutLine={activePublicCutLine}
             />
           ) : view === "tee-sheet" ? null : (
             <PublicLeaderboardWithSearch
@@ -1136,6 +1204,7 @@ export default async function PublicTournamentPage({
                 leaderboardEmpty: pub.leaderboardEmptyView,
                 countTemplate: pub.playerSearchCount,
               }}
+              cutLine={activePublicCutLine}
             />
           )}
         </div>

@@ -69,13 +69,15 @@ export async function loadCategoryRoundGateContext(
 export function priorRoundGateForEntry(
   ctx: CategoryRoundGateContext,
   targetRoundNo: number,
-  categoryId: string | null
+  categoryId: string | null,
+  tournamentSettings?: unknown
 ) {
   return getPriorRoundGate(
     ctx.entries,
     ctx.rounds,
     targetRoundNo,
     categoryId,
-    ctx.lookups
+    ctx.lookups,
+    tournamentSettings
   );
 }

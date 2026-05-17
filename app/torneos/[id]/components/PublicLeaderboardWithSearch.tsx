@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
 import type { SelectedRoundMeta } from "../lib/utils";
+import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
 import PublicLeaderboardTable from "./PublicLeaderboardTable";
 
 function foldForSearch(value: string) {
@@ -53,6 +54,7 @@ type Props = {
   requestedDetailId: string;
   detailLabels: PublicDetailTableLabels;
   labels: PublicLeaderboardSearchLabels;
+  cutLine?: PublicCutLine | null;
 };
 
 export default function PublicLeaderboardWithSearch({
@@ -67,6 +69,7 @@ export default function PublicLeaderboardWithSearch({
   requestedDetailId,
   detailLabels,
   labels,
+  cutLine = null,
 }: Props) {
   const [query, setQuery] = useState("");
 
@@ -135,6 +138,7 @@ export default function PublicLeaderboardWithSearch({
         selectedRound={selectedRound}
         requestedDetailId={requestedDetailId}
         detailLabels={detailLabels}
+        cutLine={cutLine}
       />
     </div>
   );

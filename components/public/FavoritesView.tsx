@@ -9,15 +9,24 @@ import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLe
 import PublicLeaderboardExpandedPlayerBanner from "@/app/torneos/[id]/components/PublicLeaderboardExpandedPlayerBanner";
 import PublicLeaderboardPlayerName from "@/app/torneos/[id]/components/PublicLeaderboardPlayerName";
 import {
+  PublicLeaderboardRoundScoreCells,
+  PublicLeaderboardRoundScoreHeaders,
+} from "@/app/torneos/[id]/components/PublicLeaderboardRoundScoreColumns";
+import {
+  publicLeaderboardScoreColumnNos,
+  publicLeaderboardTableColSpan,
+  publicLeaderboardTableMinWidthClassForScoreColumns,
+} from "@/app/torneos/[id]/lib/publicLeaderboardColumns";
+import {
   buildDetailToggleHref,
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
   publicLeaderboardNameColumnClass,
-  publicLeaderboardTableMinWidthClass,
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
+import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
 
 type FavoritesViewProps = {
@@ -27,6 +36,7 @@ type FavoritesViewProps = {
   detailLabels: PublicDetailTableLabels;
   selectedCategoryId: string;
   requestedDetailId: string;
+  cutLine?: PublicCutLine | null;
 };
 
 function categoryBucket(code: string | null | undefined) {
@@ -296,6 +306,7 @@ export default function FavoritesView({
   detailLabels,
   selectedCategoryId,
   requestedDetailId,
+  cutLine = null,
 }: FavoritesViewProps) {
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -363,11 +374,12 @@ export default function FavoritesView({
   }
 
   const nameCol = publicLeaderboardNameColumnClass;
+  const tableColSpan = publicLeaderboardTableColSpan(selectedRound);
 
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <table
-        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClass} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClassForScoreColumns(publicLeaderboardScoreColumnNos(selectedRound).length)} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
       >
         <thead>
           <tr className="bg-white/10 text-slate-300">
@@ -397,9 +409,7 @@ export default function FavoritesView({
             <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
               THR
             </th>
-            <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
-              HOY
-            </th>
+            <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
             <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
               GR
             </th>
@@ -410,12 +420,32 @@ export default function FavoritesView({
         </thead>
 
         <tbody>
-          {favoriteRows.map((row) => {
+          {favoriteRows.map((row, index) => {
             const isOpen = requestedDetailId === row.entry_id;
+            const prevRow = index > 0 ? favoriteRows[index - 1] : null;
+            const showCutDivider =
+              row.made_cut === false &&
+              prevRow?.made_cut === true &&
+              String(prevRow.category_id ?? "") ===
+                String(row.category_id ?? "");
 
             return (
               <Fragment key={row.entry_id}>
-                <tr className="group border-b border-white/10 align-top text-white transition hover:bg-white/[0.03]">
+                {showCutDivider ? (
+                  <tr className="bg-amber-500/10">
+                    <td
+                      colSpan={tableColSpan}
+                      className="border-b border-amber-400/40 px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-amber-200"
+                    >
+                      {cutLine?.label ?? "CORTE"}
+                    </td>
+                  </tr>
+                ) : null}
+                <tr
+                  className={`group border-b border-white/10 align-top text-white transition hover:bg-white/[0.03] ${
+                    row.made_cut === false ? "opacity-55" : ""
+                  }`}
+                >
                   <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center align-middle sm:w-[34px]">
                     <div className="inline-flex justify-center">
                       <ClubLogoThumb
@@ -492,26 +522,26 @@ export default function FavoritesView({
                     {formatThru(row.details, selectedRound, row.category_id)}
                   </td>
 
-                  <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
-                    {formatRelativeOrDQ(
-                      row.selected_round_to_par,
-                      row.is_disqualified
-                    )}
-                  </td>
+                  <PublicLeaderboardRoundScoreCells
+                    row={row}
+                    selectedRound={selectedRound}
+                  />
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
                     {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
                   </td>
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                    {formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
+                    {row.scoring_format === "stableford"
+                      ? formatScoreOrDQ(row.total_to_par, row.is_disqualified)
+                      : formatRelativeOrDQ(row.total_to_par, row.is_disqualified)}
                   </td>
                 </tr>
 
                 {isOpen ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={tableColSpan}
                       className="border-b border-white/10 bg-[#08111f]/70 p-0 align-top sm:table-cell"
                     >
                       <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">

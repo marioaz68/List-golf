@@ -2,6 +2,7 @@ import {
   isEntryRoundClosed,
   type LockedScorecardLookups,
 } from "@/lib/leaderboard/lockedScorecards";
+import { isTournamentRoundOfficiallyClosed } from "@/lib/rounds/tournamentRoundClosure";
 
 export type TournamentEntryForGate = {
   id: string;
@@ -68,6 +69,7 @@ export type PriorRoundGateResult = {
   blocked: true;
   priorRoundNo: number;
   categoryId: string | null;
+  needsOfficialClose?: boolean;
 };
 
 /** Si la ronda objetivo es ≥2, exige que la ronda anterior esté cerrada en esa categoría. */
@@ -76,7 +78,8 @@ export function getPriorRoundGate(
   rounds: RoundForGate[],
   targetRoundNo: number,
   categoryId: string | null,
-  lookups: LockedScorecardLookups
+  lookups: LockedScorecardLookups,
+  tournamentSettings?: unknown
 ): PriorRoundGateResult | null {
   if (targetRoundNo <= 1) return null;
 
@@ -89,13 +92,24 @@ export function getPriorRoundGate(
     lookups
   );
 
-  if (closed) return null;
+  if (!closed) {
+    return {
+      blocked: true,
+      priorRoundNo,
+      categoryId,
+    };
+  }
 
-  return {
-    blocked: true,
-    priorRoundNo,
-    categoryId,
-  };
+  if (!isTournamentRoundOfficiallyClosed(tournamentSettings, priorRoundNo)) {
+    return {
+      blocked: true,
+      priorRoundNo,
+      categoryId,
+      needsOfficialClose: true,
+    };
+  }
+
+  return null;
 }
 
 /** Categorías del bloque que aún no pueden usar `targetRoundNo` (R1 no cerrada, etc.). */
@@ -104,7 +118,8 @@ export function listCategoriesBlockedForRound(
   rounds: RoundForGate[],
   targetRoundNo: number,
   categoryIds: string[],
-  lookups: LockedScorecardLookups
+  lookups: LockedScorecardLookups,
+  tournamentSettings?: unknown
 ): string[] {
   if (targetRoundNo <= 1) return [];
 
@@ -115,7 +130,8 @@ export function listCategoriesBlockedForRound(
       rounds,
       targetRoundNo,
       categoryId,
-      lookups
+      lookups,
+      tournamentSettings
     );
     if (gate) blocked.push(categoryId);
   }

@@ -409,3 +409,78 @@ export function resolvePreviousRoundRowForEntry(
   if (list.length === 0) return null;
   return [...list].sort((a, b) => String(a.id).localeCompare(String(b.id)))[0] ?? null;
 }
+
+/**
+ * Detalle de una ronda por número (p. ej. R1 en tabla con ronda 2 seleccionada).
+ * Reutiliza la misma resolución que la ronda activa, anclando metadata de una fila del `round_no`.
+ */
+export function resolveDetailForRoundNo<
+  T extends {
+    round_id: string;
+    round_no: number;
+    round_date: string | null;
+    category_id?: string | null;
+    wave?: string | null;
+    is_dq?: boolean;
+    gross_score?: number | null;
+    to_par?: number | null;
+    holes: Array<{ strokes?: number | null }>;
+  },
+>(
+  details: T[],
+  roundNo: number,
+  entryCategoryId: string | null | undefined,
+  scoreRoundIds?: ReadonlySet<string> | null
+): T | null {
+  if (roundNo < 1) return null;
+
+  const forNo = details.filter((d) => d.round_no === roundNo);
+  if (forNo.length === 0) return null;
+
+  const applies = (d: T) =>
+    roundRowAppliesToEntry({ category_id: d.category_id ?? null }, entryCategoryId);
+
+  const pickRep = (): T => {
+    if (scoreRoundIds && scoreRoundIds.size > 0) {
+      const scored = forNo.filter(
+        (d) => scoreRoundIds.has(d.round_id) && applies(d)
+      );
+      if (scored.length === 1) return scored[0]!;
+      if (scored.length > 1) {
+        const ec = trimId(entryCategoryId);
+        if (ec) {
+          const byCat = scored.find((d) => trimId(d.category_id) === ec);
+          if (byCat) return byCat;
+        }
+        return [...scored].sort((a, b) =>
+          String(a.round_id).localeCompare(String(b.round_id))
+        )[0]!;
+      }
+    }
+    const byEntry = forNo.filter(applies);
+    if (byEntry.length === 1) return byEntry[0]!;
+    if (byEntry.length > 1) {
+      return [...byEntry].sort((a, b) =>
+        String(a.round_id).localeCompare(String(b.round_id))
+      )[0]!;
+    }
+    return [...forNo].sort((a, b) =>
+      String(a.round_id).localeCompare(String(b.round_id))
+    )[0]!;
+  };
+
+  const rep = pickRep();
+  const meta: SelectedRoundMeta = {
+    id: rep.round_id,
+    round_no: rep.round_no,
+    round_date: rep.round_date,
+    category_id: rep.category_id ?? null,
+    wave: rep.wave ?? null,
+  };
+  return resolveDetailForSelectedRound(
+    details,
+    meta,
+    entryCategoryId,
+    scoreRoundIds
+  );
+}

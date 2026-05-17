@@ -1006,12 +1006,18 @@ export async function generateGroupsByCategory(formData: FormData) {
 
     if (categoryIdsToCheck.length > 0) {
       const gateCtx = await loadCategoryRoundGateContext(supabase, tournament_id);
+      const { data: tournamentRow } = await supabase
+        .from("tournaments")
+        .select("settings")
+        .eq("id", tournament_id)
+        .maybeSingle();
       const blockedIds = listCategoriesBlockedForRound(
         gateCtx.entries,
         gateCtx.rounds,
         targetRoundNo,
         categoryIdsToCheck,
-        gateCtx.lookups
+        gateCtx.lookups,
+        tournamentRow?.settings ?? null
       );
 
       if (blockedIds.length > 0) {

@@ -89,6 +89,8 @@ const ENTRY_SELECT = `
     last_name,
     club,
     club_id,
+    handicap_index,
+    handicap_torneo,
     clubs:clubs (
       name,
       short_name

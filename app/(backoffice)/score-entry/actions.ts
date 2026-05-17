@@ -17,6 +17,11 @@ import { repairTournamentRoundAlignment } from "@/lib/scorecards/repairTournamen
 import type { SessionRoundFields } from "@/app/(backoffice)/tee-sheet/sessionBlock";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
 import {
+  buildTournamentRoundCloseStatus,
+  isTournamentRoundReadyToConfirm,
+  mergeRoundClosure,
+} from "@/lib/rounds/tournamentRoundClosure";
+import {
   assertRegistrationClosedForTeeSheet,
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
@@ -889,6 +894,106 @@ export async function repairTournamentCapturesAction(
     return {
       ok: false,
       message: e instanceof Error ? e.message : "Error en reparación masiva",
+    };
+  }
+}
+
+export type ConfirmRoundCloseState = {
+  ok: boolean;
+  message: string;
+};
+
+export async function confirmTournamentRoundClosed(
+  _prev: ConfirmRoundCloseState,
+  formData: FormData
+): Promise<ConfirmRoundCloseState> {
+  try {
+    const tournamentId = String(formData.get("tournament_id") ?? "").trim();
+    const roundNo = Number(formData.get("round_no") ?? "");
+    if (!tournamentId) {
+      return { ok: false, message: "Falta tournament_id." };
+    }
+    if (!Number.isFinite(roundNo) || roundNo < 1) {
+      return { ok: false, message: "Número de ronda inválido." };
+    }
+
+    const access = await checkTournamentAccess({
+      tournamentId,
+      allowedRoles: [
+        "super_admin",
+        "club_admin",
+        "tournament_director",
+      ],
+    });
+    if (!access.ok) {
+      return {
+        ok: false,
+        message: tournamentAccessDeniedMessage(access.reason),
+      };
+    }
+
+    const admin = getAdminClient();
+    const gateCtx = await loadCategoryRoundGateContext(admin, tournamentId);
+
+    if (
+      !isTournamentRoundReadyToConfirm(
+        gateCtx.entries,
+        gateCtx.rounds,
+        roundNo,
+        gateCtx.lookups
+      )
+    ) {
+      return {
+        ok: false,
+        message: `No se puede cerrar la R${roundNo}: aún hay jugadores sin tarjeta cerrada en alguna categoría.`,
+      };
+    }
+
+    const { data: tournament, error: tErr } = await admin
+      .from("tournaments")
+      .select("settings")
+      .eq("id", tournamentId)
+      .maybeSingle();
+
+    if (tErr || !tournament) {
+      return {
+        ok: false,
+        message: tErr?.message ?? "No se encontró el torneo.",
+      };
+    }
+
+    const closedAt = new Date().toISOString();
+    const nextSettings = mergeRoundClosure(tournament.settings, roundNo, closedAt);
+
+    const { error: upErr } = await admin
+      .from("tournaments")
+      .update({ settings: nextSettings })
+      .eq("id", tournamentId);
+
+    if (upErr) {
+      return { ok: false, message: `No se pudo guardar el cierre: ${upErr.message}` };
+    }
+
+    await revalidateScoreEntryAndLeaderboard(tournamentId);
+
+    const status = buildTournamentRoundCloseStatus(
+      gateCtx.entries,
+      gateCtx.rounds,
+      roundNo,
+      nextSettings,
+      gateCtx.lookups
+    );
+
+    return {
+      ok: true,
+      message: status.officiallyClosed
+        ? `Ronda ${roundNo} cerrada oficialmente. Ya se puede capturar y publicar la ronda ${roundNo + 1}.`
+        : `Ronda ${roundNo} confirmada.`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Error al cerrar la ronda.",
     };
   }
 }
