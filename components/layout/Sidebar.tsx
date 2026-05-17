@@ -19,6 +19,7 @@ import {
   BarChart3,
   Map,
   Scissors,
+  Medal,
   ClipboardList,
   ArrowLeftCircle,
   Settings,
@@ -225,6 +226,12 @@ export default function Sidebar() {
         nameKey: "cutRules",
         href: "/cut-rules",
         icon: Scissors,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "competitionRules",
+        href: "/competition-rules",
+        icon: Medal,
         requiresTournament: true,
       },
       {
