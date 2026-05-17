@@ -15,6 +15,7 @@ import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate
 import { roundRowAppliesToEntry } from "@/lib/leaderboard/roundCategoryMatch";
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
+import { resolveScoreEntryDisplayTarget } from "@/lib/rounds/scoreEntryDisplayRound";
 import {
   fetchTournamentRegistrationStatus,
   isRegistrationClosed,
@@ -256,6 +257,11 @@ export default async function ScoreEntryPage(props: {
   const requestedEntryId =
     typeof sp.entry_id === "string" ? sp.entry_id.trim() : "";
   const requestedRoundId = typeof sp.round_id === "string" ? sp.round_id : "";
+  const requestedRoundNoRaw =
+    typeof sp.round_no === "string" ? sp.round_no.trim() : "";
+  const requestedRoundNo = /^\d+$/.test(requestedRoundNoRaw)
+    ? Number(requestedRoundNoRaw)
+    : null;
   const tournamentIdFromQuery =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
 
@@ -348,6 +354,7 @@ export default async function ScoreEntryPage(props: {
   let priorRoundGateMessage = "";
   let scoringRoundBlocked = false;
   let captureRoundNotice = "";
+  let pendingCaptureRoundNo: number | null = null;
   let entryCategoryLabel = messages[locale].common.noCategory;
   let registrationOpenMessage = "";
 
@@ -518,6 +525,30 @@ export default async function ScoreEntryPage(props: {
             captureRoundNotice = when
               ? `Capturando ${when} · inscripción ${catLabel}. Día y turno según salidas y rondas del torneo.`
               : `Capturando R${capture.roundNo} · inscripción ${catLabel}.`;
+          }
+
+          if (player) {
+            const display = await resolveScoreEntryDisplayTarget(supabase, {
+              entryId: matchedEntry.id,
+              playerId: player.id,
+              categoryId: matchedEntry.category_id,
+              rounds: gateCtx.rounds,
+              lookups: gateCtx.lookups,
+              captureRoundId: capture.roundId,
+              captureRoundNo: capture.roundNo,
+              captureRoundClosed: capture.roundClosed === true,
+              forceRoundNo: requestedRoundNo,
+            });
+            scoringRoundId = display.roundId;
+            roundClosed = display.roundClosed;
+            if (display.pendingOpenRoundNo != null) {
+              pendingCaptureRoundNo = display.pendingOpenRoundNo;
+              captureRoundNotice = `R${display.roundNo} cerrada · inscripción ${catLabel}. R${display.pendingOpenRoundNo} aún sin captura. Pulsa ABRIR para corregir R${display.roundNo}.`;
+            } else if (display.roundClosed) {
+              captureRoundNotice = `R${display.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`;
+            } else if (requestedRoundNo != null) {
+              captureRoundNotice = `Capturando R${display.roundNo} · inscripción ${catLabel}.`;
+            }
           }
         }
       } catch (e) {
@@ -885,6 +916,27 @@ export default async function ScoreEntryPage(props: {
         {effectiveTournamentId && canRepairCaptures && (
           <RepairCapturesButton tournamentId={effectiveTournamentId} />
         )}
+
+        {effectiveTournamentId &&
+          player &&
+          pendingCaptureRoundNo != null &&
+          searchRaw && (
+            <p className="mt-3 text-sm text-slate-600">
+              <Link
+                href={`/score-entry?${new URLSearchParams({
+                  tournament_id: effectiveTournamentId,
+                  q: searchRaw,
+                  ...(requestedEntryId
+                    ? { entry_id: requestedEntryId }
+                    : {}),
+                  round_no: String(pendingCaptureRoundNo),
+                }).toString()}`}
+                className="font-semibold text-sky-700 underline-offset-2 hover:underline"
+              >
+                Capturar R{pendingCaptureRoundNo} (ronda siguiente)
+              </Link>
+            </p>
+          )}
 
         {effectiveTournamentId &&
           player &&
