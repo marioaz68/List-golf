@@ -52,37 +52,23 @@ export async function resolveScoreEntryDisplayTarget(
       cat || null
     );
     if (forced) {
-      let closed = isEntryRoundClosed(
-        params.entryId,
-        forced,
-        params.lookups
-      );
-      if (closed) {
-        const holes = await countHolesOnPlayerRound(
-          supabase,
-          params.playerId,
-          forced.id
-        );
-        closed = holes >= 18;
-      }
       return {
         roundId: forced.id,
         roundNo: params.forceRoundNo,
-        roundClosed: closed,
+        roundClosed: isEntryRoundClosed(
+          params.entryId,
+          forced,
+          params.lookups
+        ),
       };
     }
   }
 
   if (params.captureRoundClosed) {
-    const holes = await countHolesOnPlayerRound(
-      supabase,
-      params.playerId,
-      params.captureRoundId
-    );
     return {
       roundId: params.captureRoundId,
       roundNo: params.captureRoundNo,
-      roundClosed: holes >= 18,
+      roundClosed: true,
     };
   }
 
@@ -125,16 +111,14 @@ export async function resolveScoreEntryDisplayTarget(
     };
   }
 
-  const priorHoles = await countHolesOnPlayerRound(
-    supabase,
-    params.playerId,
-    prior.id
-  );
-
   return {
     roundId: prior.id,
     roundNo: prior.round_no,
-    roundClosed: priorHoles >= 18,
+    roundClosed: isEntryRoundClosed(
+      params.entryId,
+      prior,
+      params.lookups
+    ),
     pendingOpenRoundNo: params.captureRoundNo,
   };
 }

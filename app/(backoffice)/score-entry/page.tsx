@@ -793,13 +793,12 @@ export default async function ScoreEntryPage(props: {
               roundClosed = false;
               captureRoundNotice = [
                 captureRoundNotice,
-                `La tarjeta figura cerrada en sistema pero solo hay ${holesOnRound}/18 hoyos en esta categoría; puedes capturar o usar reparación de datos.`,
+                `Cierre registrado pero solo hay ${holesOnRound}/18 hoyos en esta categoría; completa la tarjeta antes de volver a cerrar.`,
               ]
                 .filter(Boolean)
                 .join(" ");
             } else {
-              roundClosed =
-                roundClosed || (dbLocked && holesOnRound >= 18);
+              roundClosed = roundClosed || dbLocked;
             }
           }
         }

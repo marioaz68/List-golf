@@ -4,6 +4,7 @@ import { repairMisalignedCapturesForTournament } from "@/lib/scorecards/repairMi
 import { repairMisalignedLocksForTournament } from "@/lib/scorecards/repairMisalignedLocksForTournament";
 import { pruneMisalignedScorecardsForTournament } from "@/lib/scorecards/pruneMisalignedScorecardsForTournament";
 import { repairInvalidLockedScorecardsForTournament } from "@/lib/scorecards/repairInvalidLockedScorecards";
+import { restoreLocksOnCorrectRound } from "@/lib/scorecards/restoreLocksOnCorrectRound";
 import type { RoundForEntryResolve } from "@/lib/rounds/resolveRoundForEntry";
 
 export type FullAlignmentRepairResult = {
@@ -11,6 +12,7 @@ export type FullAlignmentRepairResult = {
   captures: Awaited<ReturnType<typeof repairMisalignedCapturesForTournament>>;
   locks: Awaited<ReturnType<typeof repairMisalignedLocksForTournament>>;
   invalidLocks: Awaited<ReturnType<typeof repairInvalidLockedScorecardsForTournament>>;
+  restoredLocksR1: Awaited<ReturnType<typeof restoreLocksOnCorrectRound>>;
   ghostScorecards: Awaited<ReturnType<typeof pruneMisalignedScorecardsForTournament>>;
   misalignedAfter: number;
 };
@@ -44,6 +46,11 @@ export async function repairTournamentRoundAlignment(
     admin,
     tournamentId
   );
+  const restoredLocksR1 = await restoreLocksOnCorrectRound(
+    admin,
+    tournamentId,
+    1
+  );
   const locks = await repairMisalignedLocksForTournament(
     admin,
     tournamentId,
@@ -62,6 +69,7 @@ export async function repairTournamentRoundAlignment(
     captures,
     locks,
     invalidLocks,
+    restoredLocksR1,
     ghostScorecards,
     misalignedAfter,
   };
