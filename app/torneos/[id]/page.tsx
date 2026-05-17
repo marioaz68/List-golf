@@ -13,6 +13,10 @@ import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
 import OfficialCategoryClosePanel from "./components/OfficialCategoryClosePanel";
 import { buildCategoryRoundCloseCards } from "./lib/categoryRoundCloseStatus";
+import {
+  resolveDefaultPublicLeaderboardRound,
+  resolvePublicRoundIdForCategory,
+} from "@/lib/rounds/resolveDefaultPublicLeaderboardRound";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
@@ -303,25 +307,66 @@ export default async function PublicTournamentPage({
       .sort((a, b) => a.round_no - b.round_no)
       .at(-1) ?? null;
 
+  const scorecardsData = await fetchLockedScorecardsForTournament(
+    adminSupabase,
+    typedTournament.id
+  );
+  const lockedLookups = buildLockedScorecardLookups(
+    scorecardsData as Array<{
+      entry_id: string;
+      round_id: string;
+      locked_at: string | null;
+    }>,
+    rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
+  );
+
+  const gateEntries = selectedCategoryId ? filteredEntries : allEntries;
+  const defaultRoundFromClose = resolveDefaultPublicLeaderboardRound({
+    entries: gateEntries,
+    allRounds: rounds,
+    roundsInScope: roundsInCategoryScope,
+    selectedCategoryId: selectedCategoryId || null,
+    lockedLookups,
+    latestRoundWithScores: latestRoundWithScoresFiltered,
+  });
+
   const defaultRoundLiveFavorite =
-    roundsTodayList[0] ??
+    roundsTodayList[0] ?? defaultRoundFromClose ?? roundsInCategoryScope[0] ?? null;
+  const defaultRoundOfficial =
+    defaultRoundFromClose ??
     latestRoundWithScoresFiltered ??
     roundsInCategoryScope[0] ??
-    rounds[0] ??
     null;
-  const defaultRoundOfficial =
-    latestRoundWithScoresFiltered ??
+
+  let effectiveRequestedRoundId = requestedRoundId;
+  if (requestedRoundId && selectedCategoryId) {
+    const reqRound = rounds.find((r) => r.id === requestedRoundId);
+    const cat = String(selectedCategoryId).trim();
+    if (
+      reqRound &&
+      String(reqRound.category_id ?? "").trim() &&
+      String(reqRound.category_id ?? "").trim() !== cat
+    ) {
+      effectiveRequestedRoundId =
+        resolvePublicRoundIdForCategory(rounds, reqRound.round_no, cat) ??
+        requestedRoundId;
+    }
+  }
+
+  const selectedRound =
+    rounds.find((round) => round.id === effectiveRequestedRoundId) ??
+    (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
+    (view === "live" || view === "favorites" ? defaultRoundLiveFavorite : null) ??
+    (view === "official" ? defaultRoundOfficial : null) ??
     roundsInCategoryScope[0] ??
     rounds[0] ??
     null;
 
-  const selectedRound =
-    rounds.find((round) => round.id === requestedRoundId) ??
-    (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
-    (view === "live" || view === "favorites" ? defaultRoundLiveFavorite : null) ??
-    (view === "official" ? defaultRoundOfficial : null) ??
-    rounds[0] ??
-    null;
+  const preserveRoundNo = selectedRound?.round_no ?? null;
+  const roundIdForCategoryLink = (categoryId: string | null) =>
+    preserveRoundNo != null
+      ? resolvePublicRoundIdForCategory(rounds, preserveRoundNo, categoryId)
+      : null;
 
   const selectedPublicTeeSheetRoundId =
     view === "tee-sheet" && publicTeeSheetRounds.some((round) => round.id === requestedRoundId)
@@ -342,20 +387,6 @@ export default async function PublicTournamentPage({
     .select("*")
     .eq("tournament_id", typedTournament.id)
     .maybeSingle();
-
-  const scorecardsData = await fetchLockedScorecardsForTournament(
-    adminSupabase,
-    typedTournament.id
-  );
-
-  const lockedLookups = buildLockedScorecardLookups(
-    scorecardsData as Array<{
-      entry_id: string;
-      round_id: string;
-      locked_at: string | null;
-    }>,
-    rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
-  );
 
   const categoryRoundCloseCards = buildCategoryRoundCloseCards(
     allEntries,
@@ -780,7 +811,7 @@ export default async function PublicTournamentPage({
                       roundId:
                         view === "tee-sheet"
                           ? selectedPublicTeeSheetRoundId
-                          : undefined,
+                          : roundIdForCategoryLink(null) ?? undefined,
                       view,
                     })}
                     className={sectionPillClasses(!selectedCategoryId)}
@@ -797,7 +828,7 @@ export default async function PublicTournamentPage({
                         roundId:
                           view === "tee-sheet"
                             ? selectedPublicTeeSheetRoundId
-                            : undefined,
+                            : roundIdForCategoryLink(category.id) ?? undefined,
                         view,
                       })}
                       className={sectionPillClasses(selectedCategoryId === category.id)}
