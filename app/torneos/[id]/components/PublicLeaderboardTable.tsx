@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Fragment, useMemo } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";

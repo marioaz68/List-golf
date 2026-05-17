@@ -394,21 +394,36 @@ export default async function PublicTournamentPage({
     holeScoresByRoundScoreId.set(row.round_score_id, current);
   }
 
-  const { data: competitionRulesRows } = await supabase
-    .from("category_competition_rules")
-    .select(
-      "category_id, scoring_format, leaderboard_basis, handicap_percentage, is_active"
-    )
-    .eq("tournament_id", typedTournament.id)
-    .eq("is_active", true);
+  /** Reglas de torneo: lectura con service role (RLS suele bloquear anon en tablas de configuración). */
+  const { data: competitionRulesRows, error: competitionRulesError } =
+    await adminSupabase
+      .from("category_competition_rules")
+      .select(
+        "category_id, scoring_format, leaderboard_basis, handicap_percentage, is_active"
+      )
+      .eq("tournament_id", typedTournament.id)
+      .eq("is_active", true);
 
-  const { data: advancementRulesRows } = await supabase
-    .from("round_advancement_rules")
-    .select(
-      "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, is_active"
-    )
-    .eq("tournament_id", typedTournament.id)
-    .eq("is_active", true);
+  if (competitionRulesError) {
+    console.error(
+      `[public-tournament] category_competition_rules: ${competitionRulesError.message}`
+    );
+  }
+
+  const { data: advancementRulesRows, error: advancementRulesError } =
+    await adminSupabase
+      .from("round_advancement_rules")
+      .select(
+        "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, sort_order, is_active"
+      )
+      .eq("tournament_id", typedTournament.id)
+      .eq("is_active", true);
+
+  if (advancementRulesError) {
+    console.error(
+      `[public-tournament] round_advancement_rules: ${advancementRulesError.message}`
+    );
+  }
 
   const competitionRulesList = (competitionRulesRows ??
     []) as CategoryCompetitionRule[];
@@ -427,7 +442,7 @@ export default async function PublicTournamentPage({
 
   const tieBreakStepsByProfileId = new Map<string, TieBreakStep[]>();
   if (profileIds.length > 0) {
-    const { data: tieSteps } = await supabase
+    const { data: tieSteps } = await adminSupabase
       .from("tie_break_steps")
       .select(
         "tie_break_profile_id, step_no, method, basis, round_scope, hole_scope, handicap_mode, direction, value_text"
