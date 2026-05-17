@@ -17,6 +17,11 @@ import {
   primaryCutLineForCategory,
   type RoundAdvancementRule,
 } from "@/lib/cuts/computeCutLine";
+import {
+  activeCutLineForUi,
+  annotateCutDividers,
+  sortLeaderboardForCutAlignment,
+} from "@/lib/cuts/publicCutDisplay";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
 import {
   defaultRuleForCategory,
@@ -535,7 +540,7 @@ export default async function PublicTournamentPage({
     tieBreakStepsByProfileId,
   });
 
-  const leaderboard: LeaderboardRow[] = leaderboardScored.map((row) => {
+  const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
     if (selectedRoundNo <= 1 || row.is_disqualified) {
       return { ...row, made_cut: null };
     }
@@ -552,7 +557,25 @@ export default async function PublicTournamentPage({
     };
   });
 
-  const activePublicCutLine = primaryCutLineForCategory(
+  const alignedForCut = sortLeaderboardForCutAlignment({
+    rows: withMadeCut,
+    advancementRules: advancementRulesList,
+    categories: categories.map((c) => ({
+      id: c.id,
+      code: c.code,
+    })),
+    selectedRoundNo,
+    competitionRules: competitionRulesList,
+    handicapByPlayerId,
+  });
+
+  const leaderboard: LeaderboardRow[] = annotateCutDividers(
+    alignedForCut,
+    publicCutLines,
+    selectedCategoryId || null
+  );
+
+  const activePublicCutLine = activeCutLineForUi(
     publicCutLines,
     selectedCategoryId || null
   );

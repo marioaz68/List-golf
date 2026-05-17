@@ -5,6 +5,7 @@ import { Fragment, useMemo } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
   formatMainTotalForRow,
+  formatSecondaryTotalForRow,
   mainTotalColumnHeader,
   secondaryTotalColumnHeader,
 } from "@/lib/leaderboard/competitionDisplay";
@@ -113,6 +114,13 @@ export default function PublicLeaderboardTable({
   const headerRule =
     headerCompetitionRule ??
     ruleForCategory(rulesMap, selectedCategoryId || null);
+  const allCategoriesView = !selectedCategoryId;
+  const colSecondary = allCategoriesView
+    ? "GR"
+    : secondaryTotalColumnHeader(headerRule);
+  const colMain = allCategoriesView
+    ? "SCR"
+    : mainTotalColumnHeader(headerRule);
   const detailLabelsResolved = useMemo(
     () => detailLabelsWithCompetitionRule(detailLabels, headerRule),
     [detailLabels, headerRule]
@@ -172,15 +180,19 @@ export default function PublicLeaderboardTable({
             <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
             <th
               className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]"
-              title={secondaryTotalColumnHeader(headerRule)}
+              title={colSecondary}
             >
-              {secondaryTotalColumnHeader(headerRule)}
+              {colSecondary}
             </th>
             <th
               className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]"
-              title={mainTotalColumnHeader(headerRule)}
+              title={
+                allCategoriesView
+                  ? "Total según reglas de cada categoría (neto, gross o pts.)"
+                  : mainTotalColumnHeader(headerRule)
+              }
             >
-              {mainTotalColumnHeader(headerRule)}
+              {colMain}
             </th>
           </tr>
         </thead>
@@ -212,12 +224,10 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
-              const prevRow = index > 0 ? leaderboard[index - 1] : null;
-              const showCutDivider =
-                row.made_cut === false &&
-                prevRow?.made_cut === true &&
-                String(prevRow.category_id ?? "") ===
-                  String(row.category_id ?? "");
+              const rowRule = ruleForCategory(rulesMap, row.category_id);
+              const showCutDivider = Boolean(row.show_cut_divider);
+              const cutDividerLabel =
+                row.cut_divider_label ?? cutLine?.label ?? "CORTE";
 
               return (
                 <Fragment key={row.entry_id}>
@@ -227,7 +237,7 @@ export default function PublicLeaderboardTable({
                         colSpan={tableColSpan}
                         className="border-b border-amber-400/40 px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-amber-200"
                       >
-                        {cutLine?.label ?? "CORTE"}
+                        {cutDividerLabel}
                       </td>
                     </tr>
                   ) : null}
@@ -317,14 +327,11 @@ export default function PublicLeaderboardTable({
                     />
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
-                      {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
+                      {formatSecondaryTotalForRow(row, rowRule)}
                     </td>
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                      {formatMainTotalForRow(
-                        row,
-                        ruleForCategory(rulesMap, row.category_id)
-                      )}
+                      {formatMainTotalForRow(row, rowRule)}
                     </td>
                   </tr>
 

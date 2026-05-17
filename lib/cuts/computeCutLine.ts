@@ -394,33 +394,43 @@ export function computePublicCutLines(params: {
       params.categories.find((c) => c.id === categoryId)?.code ??
       null;
 
-    for (const rule of activeRules) {
-      const line = computeLineForRule(
-        rule,
-        rowsInCat,
-        categoryId,
-        catCode,
-        shared
-      );
-      if (line) rawLines.push(line);
-    }
+    const sampleRow = rowsInCat[0]!;
+    const matchingRules = activeRules.filter((r) =>
+      ruleAppliesToRow(r, sampleRow, params.categories)
+    );
+    if (matchingRules.length === 0) continue;
+
+    const scopePriority: Record<RoundAdvancementRule["scope_type"], number> = {
+      category: 0,
+      category_code_list: 1,
+      category_group: 2,
+      overall: 3,
+    };
+    const rule = [...matchingRules].sort(
+      (a, b) =>
+        scopePriority[a.scope_type] - scopePriority[b.scope_type] ||
+        (a.sort_order ?? 999) - (b.sort_order ?? 999)
+    )[0]!;
+
+    const line = computeLineForRule(
+      rule,
+      rowsInCat,
+      categoryId,
+      catCode,
+      shared
+    );
+    if (line) rawLines.push(line);
   }
 
-  const merged: PublicCutLine[] = [];
-  const seenCats = new Set<string>();
-  for (const categoryId of categoryScopeIds) {
-    if (seenCats.has(categoryId)) continue;
-    seenCats.add(categoryId);
-    const line = mergeCutLinesForCategory(rawLines, categoryId);
-    if (line) merged.push(line);
-  }
-
-  return merged;
+  return rawLines;
 }
 
 export function primaryCutLineForCategory(
   lines: PublicCutLine[],
   categoryId: string | null
 ): PublicCutLine | null {
+  if (!categoryId) return null;
   return mergeCutLinesForCategory(lines, categoryId);
 }
+
+export { ruleAppliesToRow };

@@ -13,6 +13,20 @@ import { collectRoundIdsWithScoreCapture } from "@/lib/leaderboard/roundCategory
 import { resolveDetailForRoundNo } from "@/lib/leaderboard/roundCategoryMatch";
 import type { RoundAdvancementRule } from "./computeCutLine";
 
+/** Si la categoría juega neto y la regla de corte pide gross, clasificar el corte en neto. */
+function effectiveRankingBasis(
+  rule: RoundAdvancementRule,
+  catRule: CategoryCompetitionRule
+): CutRankingBasis {
+  const basis = rule.ranking_basis as CutRankingBasis;
+  const playsNet =
+    catRule.leaderboard_basis === "net" || catRule.leaderboard_basis === "both";
+  if (!playsNet) return basis;
+  if (basis === "gross_total") return "net_total";
+  if (basis === "gross_round") return "net_round";
+  return basis;
+}
+
 export function rankingRoundRange(
   rule: RoundAdvancementRule,
   selectedRoundNo: number
@@ -72,7 +86,7 @@ export function rankValueForAdvancementRule(
     rule,
     selectedRoundNo
   );
-  const basis = rule.ranking_basis as CutRankingBasis;
+  const basis = effectiveRankingBasis(rule, catRule);
   const detail = roundDetailForRow(row, tieBreakRound);
 
   const isSingleRound =

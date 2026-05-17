@@ -20,15 +20,28 @@ export function mainTotalColumnHeader(rule: CategoryCompetitionRule): string {
   if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
     return "NET";
   }
-  return "GR";
+  return "TOT";
 }
 
 export function secondaryTotalColumnHeader(
   rule: CategoryCompetitionRule
 ): string {
   if (rule.scoring_format === "stableford") return "GR";
-  if (rule.leaderboard_basis === "both") return "GR";
-  return "TOT";
+  if (
+    rule.leaderboard_basis === "net" ||
+    rule.leaderboard_basis === "both"
+  ) {
+    return "GR";
+  }
+  return "GR";
+}
+
+export function formatSecondaryTotalForRow(
+  row: LeaderboardRow,
+  rule: CategoryCompetitionRule
+): string {
+  if (row.is_disqualified) return "DQ";
+  return formatScoreOrDQ(row.total_gross, false);
 }
 
 export function formatRoundCellForRule(
@@ -73,7 +86,7 @@ export function formatMainTotalForRow(
   if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
     return formatRelativeOrDQ(row.total_to_par, false);
   }
-  return formatScoreOrDQ(row.total_gross, row.is_disqualified);
+  return formatRelativeOrDQ(row.total_to_par, row.is_disqualified);
 }
 
 export function detailScoreColumnLabels(rule: CategoryCompetitionRule): {

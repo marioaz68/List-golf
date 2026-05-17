@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
   formatMainTotalForRow,
+  formatSecondaryTotalForRow,
   mainTotalColumnHeader,
   secondaryTotalColumnHeader,
 } from "@/lib/leaderboard/competitionDisplay";
@@ -456,11 +457,9 @@ export default function FavoritesView({
             );
             const isOpen = requestedDetailId === row.entry_id;
             const prevRow = index > 0 ? favoriteRows[index - 1] : null;
-            const showCutDivider =
-              row.made_cut === false &&
-              prevRow?.made_cut === true &&
-              String(prevRow.category_id ?? "") ===
-                String(row.category_id ?? "");
+            const showCutDivider = Boolean(row.show_cut_divider);
+            const cutDividerLabel =
+              row.cut_divider_label ?? cutLine?.label ?? "CORTE";
 
             return (
               <Fragment key={row.entry_id}>
@@ -470,7 +469,7 @@ export default function FavoritesView({
                       colSpan={tableColSpan}
                       className="border-b border-amber-400/40 px-2 py-1 text-center text-[9px] font-bold uppercase tracking-wide text-amber-200"
                     >
-                      {cutLine?.label ?? "CORTE"}
+                      {cutDividerLabel}
                     </td>
                   </tr>
                 ) : null}
@@ -563,7 +562,7 @@ export default function FavoritesView({
                   />
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
-                    {formatScoreOrDQ(row.total_gross, row.is_disqualified)}
+                    {formatSecondaryTotalForRow(row, rowRule)}
                   </td>
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">

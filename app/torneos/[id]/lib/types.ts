@@ -172,4 +172,6 @@ export type LeaderboardRow = {
   stableford_total?: number | null;
   /** Tras aplicar reglas de corte (solo en vistas R2+). */
   made_cut?: boolean | null;
+  show_cut_divider?: boolean;
+  cut_divider_label?: string | null;
 };
