@@ -896,13 +896,15 @@ export async function repairTournamentCapturesAction(
     await revalidateScoreEntryAndLeaderboard(tournamentId);
 
     const errCount =
-      result.captures.errors.length + result.locks.errors.length;
+      result.captures.errors.length +
+      result.locks.errors.length +
+      result.ghostScorecards.errors.length;
     const repaired = result.captures.repaired + result.locks.repaired;
     return {
       ok: errCount === 0,
       repaired,
       errors: errCount,
-      message: `Reparación terminada: ${repaired} jugadores (${result.captures.repaired} capturas, ${result.locks.repaired} cierres), desalineados ${result.misalignedBefore}→${result.misalignedAfter}, ${errCount} errores.`,
+      message: `Reparación terminada: ${repaired} jugadores (${result.captures.repaired} capturas, ${result.locks.repaired} cierres), ${result.ghostScorecards.scorecardsRemoved} tarjetas fantasma eliminadas, desalineados ${result.misalignedBefore}→${result.misalignedAfter}, ${errCount} errores.`,
     };
   } catch (e) {
     return {

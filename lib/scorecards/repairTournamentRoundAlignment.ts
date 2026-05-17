@@ -2,12 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { listMisalignedCapturesForTournament } from "@/lib/scorecards/listMisalignedCaptures";
 import { repairMisalignedCapturesForTournament } from "@/lib/scorecards/repairMisalignedCapturesForTournament";
 import { repairMisalignedLocksForTournament } from "@/lib/scorecards/repairMisalignedLocksForTournament";
+import { pruneMisalignedScorecardsForTournament } from "@/lib/scorecards/pruneMisalignedScorecardsForTournament";
 import type { RoundForEntryResolve } from "@/lib/rounds/resolveRoundForEntry";
 
 export type FullAlignmentRepairResult = {
   misalignedBefore: number;
   captures: Awaited<ReturnType<typeof repairMisalignedCapturesForTournament>>;
   locks: Awaited<ReturnType<typeof repairMisalignedLocksForTournament>>;
+  ghostScorecards: Awaited<ReturnType<typeof pruneMisalignedScorecardsForTournament>>;
   misalignedAfter: number;
 };
 
@@ -32,6 +34,10 @@ export async function repairTournamentRoundAlignment(
     await listMisalignedCapturesForTournament(admin, tournamentId)
   ).length;
 
+  const ghostScorecards = await pruneMisalignedScorecardsForTournament(
+    admin,
+    tournamentId
+  );
   const locks = await repairMisalignedLocksForTournament(
     admin,
     tournamentId,
@@ -49,6 +55,7 @@ export async function repairTournamentRoundAlignment(
     misalignedBefore,
     captures,
     locks,
+    ghostScorecards,
     misalignedAfter,
   };
 }
