@@ -5,7 +5,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { createClient } from "@supabase/supabase-js";
-import { repairMisalignedCapturesForTournament } from "../lib/scorecards/repairMisalignedCapturesForTournament";
+import { repairTournamentRoundAlignment } from "../lib/scorecards/repairTournamentRoundAlignment";
 
 function loadEnvLocal() {
   try {
@@ -48,10 +48,7 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const result = await repairMisalignedCapturesForTournament(
-    admin,
-    tournamentId!
-  );
+  const result = await repairTournamentRoundAlignment(admin, tournamentId!);
   console.log(JSON.stringify(result, null, 2));
 }
 

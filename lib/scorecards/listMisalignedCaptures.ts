@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { resolveRoundIdForEntry, type RoundForEntryResolve } from "@/lib/rounds/resolveRoundForEntry";
+import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
+import type { RoundForEntryResolve } from "@/lib/rounds/resolveRoundForEntry";
 
 export type MisalignedCaptureRow = {
   entry_id: string;
@@ -47,6 +48,11 @@ export async function listMisalignedCapturesForTournament(
   );
 
   const roundList = rounds as RoundForEntryResolve[];
+  const roundsForGate = roundList.map((r) => ({
+    id: r.id,
+    round_no: r.round_no,
+    category_id: r.category_id ?? null,
+  }));
 
   const { data: entries, error: entriesErr } = await admin
     .from("tournament_entries")
@@ -100,15 +106,19 @@ export async function listMisalignedCapturesForTournament(
     const wrongRound = roundById.get(String(rs.round_id));
     if (!wrongRound) continue;
 
-    const expectedRoundId = resolveRoundIdForEntry(
-      roundList,
-      String(rs.round_id),
+    const roundNo = Number(wrongRound.round_no ?? 0);
+    if (roundNo < 1) continue;
+
+    const expectedRound = getRoundForCategory(
+      roundsForGate,
+      roundNo,
       entry.category_id
     );
 
-    if (expectedRoundId === String(rs.round_id)) continue;
+    if (!expectedRound || expectedRound.id === String(rs.round_id)) continue;
 
-    const expectedRound = roundById.get(expectedRoundId);
+    const expectedRoundId = expectedRound.id;
+    const expectedRoundMeta = roundById.get(expectedRoundId);
     const player = entry.player as {
       first_name?: string | null;
       last_name?: string | null;
@@ -129,8 +139,8 @@ export async function listMisalignedCapturesForTournament(
       wrong_round_id: String(rs.round_id),
       wrong_round_category_code: wrongRound.category_code,
       expected_round_id: expectedRoundId,
-      expected_round_category_code: expectedRound?.category_code ?? null,
-      round_no: Number(wrongRound.round_no ?? 0),
+      expected_round_category_code: expectedRoundMeta?.category_code ?? null,
+      round_no: roundNo,
       gross_score: rs.gross_score != null ? Number(rs.gross_score) : null,
       hole_count: holeCounts.get(String(rs.id)) ?? 0,
     });

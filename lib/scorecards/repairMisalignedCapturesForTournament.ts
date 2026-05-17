@@ -49,7 +49,16 @@ export async function repairMisalignedCapturesForTournament(
     details: [],
   };
 
+  const byEntryRound = new Map<string, (typeof misaligned)[number]>();
   for (const row of misaligned) {
+    const key = `${row.entry_id}_${row.round_no}`;
+    const prev = byEntryRound.get(key);
+    if (!prev || row.hole_count > prev.hole_count) {
+      byEntryRound.set(key, row);
+    }
+  }
+
+  for (const row of byEntryRound.values()) {
     try {
       const { data: entryRow } = await admin
         .from("tournament_entries")

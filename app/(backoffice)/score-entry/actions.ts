@@ -12,7 +12,7 @@ import type { ScorecardStatus } from "@/lib/scorecards/types";
 import { alignCaptureToScorecardRound } from "@/lib/scorecards/alignCaptureToScorecardRound";
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
-import { repairMisalignedCapturesForTournament } from "@/lib/scorecards/repairMisalignedCapturesForTournament";
+import { repairTournamentRoundAlignment } from "@/lib/scorecards/repairTournamentRoundAlignment";
 import type { SessionRoundFields } from "@/app/(backoffice)/tee-sheet/sessionBlock";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
 import {
@@ -891,19 +891,18 @@ export async function repairTournamentCapturesAction(
     }
 
     const admin = getAdminClient();
-    const result = await repairMisalignedCapturesForTournament(
-      admin,
-      tournamentId
-    );
+    const result = await repairTournamentRoundAlignment(admin, tournamentId);
 
     await revalidateScoreEntryAndLeaderboard(tournamentId);
 
-    const errCount = result.errors.length;
+    const errCount =
+      result.captures.errors.length + result.locks.errors.length;
+    const repaired = result.captures.repaired + result.locks.repaired;
     return {
       ok: errCount === 0,
-      repaired: result.repaired,
+      repaired,
       errors: errCount,
-      message: `Reparación terminada: ${result.repaired} jugadores realineados, ${result.skipped} sin cambios, ${errCount} errores.`,
+      message: `Reparación terminada: ${repaired} jugadores (${result.captures.repaired} capturas, ${result.locks.repaired} cierres), desalineados ${result.misalignedBefore}→${result.misalignedAfter}, ${errCount} errores.`,
     };
   } catch (e) {
     return {

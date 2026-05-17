@@ -98,6 +98,9 @@ export default function ScoreEntryClient({
     "save" | "save_and_close" | "open_round"
   >("save");
 
+  /** Estado cerrado: servidor + optimista tras «Guardar y cerrar». */
+  const [isRoundClosed, setIsRoundClosed] = useState(roundClosed);
+
   const [saveState, formAction, isPending] = useActionState(
     savePlayerScores,
     initialSaveState
@@ -163,12 +166,26 @@ export default function ScoreEntryClient({
     const firstEmpty = findFirstEmptyIndex(init);
     setActiveIndex(firstEmpty);
 
-    if (!roundClosed) {
+    if (!isRoundClosed) {
       window.setTimeout(() => {
         focusIndex(firstEmpty);
       }, 0);
     }
-  }, [holes, existingScores, player?.id, roundId, roundClosed]);
+  }, [holes, existingScores, player?.id, roundId, isRoundClosed]);
+
+  useEffect(() => {
+    setIsRoundClosed(roundClosed);
+  }, [roundClosed, player?.id, roundId]);
+
+  useEffect(() => {
+    if (!saveState.ok || !saveState.message) return;
+
+    if (saveMode === "save_and_close") {
+      setIsRoundClosed(true);
+    } else if (saveMode === "open_round") {
+      setIsRoundClosed(false);
+    }
+  }, [saveState.ok, saveState.message, saveMode]);
 
   useEffect(() => {
     if (!saveState.ok || !saveState.message) return;
@@ -211,7 +228,7 @@ export default function ScoreEntryClient({
     index: number,
     e: React.ChangeEvent<HTMLInputElement>
   ) {
-    if (roundClosed) return;
+    if (isRoundClosed) return;
 
     const raw = e.target.value;
 
@@ -255,7 +272,7 @@ export default function ScoreEntryClient({
     index: number,
     e: React.KeyboardEvent<HTMLInputElement>
   ) {
-    if (roundClosed) return;
+    if (isRoundClosed) return;
 
     const input = e.currentTarget;
 
@@ -348,16 +365,16 @@ export default function ScoreEntryClient({
           <div className="text-gray-500">
             Celda activa: hoyo {holes[activeIndex]?.hole_number ?? "-"}
           </div>
-          {roundClosed ? (
-            <div className="rounded bg-slate-200 px-2 py-0.5 font-medium text-slate-800">
-              R{selectedRoundNo} Cerrada
+          {isRoundClosed ? (
+            <div className="rounded bg-orange-100 px-2 py-0.5 font-semibold text-orange-900">
+              R{selectedRoundNo} CERRADA
             </div>
           ) : (
             <div className="rounded bg-green-100 px-2 py-0.5 text-green-800">
               Capturando R{selectedRoundNo}
             </div>
           )}
-          {!roundClosed && (
+          {!isRoundClosed && (
             <div className="rounded bg-gray-100 px-2 py-0.5 text-gray-700">
               Guardar: Cmd/Ctrl + S
             </div>
@@ -379,16 +396,17 @@ export default function ScoreEntryClient({
         scores={scores}
         activeIndex={activeIndex}
         inputRefs={inputRefs}
-        readOnly={roundClosed}
+        readOnly={isRoundClosed}
         onFocusIndex={setActiveIndex}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
       />
 
-      {roundClosed && (
-        <p className="text-sm text-slate-600">
-          Tarjeta entregada y cerrada (firmas jugador y testigo). Usa «Abrir
-          ronda» solo si necesitas corregir scores.
+      {isRoundClosed && (
+        <p className="text-sm font-medium text-orange-900">
+          Ronda cerrada. Tarjeta firmada (jugador y testigo). Pulsa{" "}
+          <span className="font-bold">ABRIR</span> solo si necesitas corregir
+          scores.
         </p>
       )}
 
@@ -405,16 +423,14 @@ export default function ScoreEntryClient({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        {roundClosed ? (
+        {isRoundClosed ? (
           <button
             type="submit"
             disabled={isPending}
             onClick={() => setSaveMode("open_round")}
-            className="rounded-lg border border-amber-700 bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+            className="min-w-[120px] rounded-lg border-2 border-orange-700 bg-orange-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow-sm hover:bg-orange-700 disabled:opacity-60"
           >
-            {isPending && saveMode === "open_round"
-              ? "Abriendo..."
-              : "Abrir ronda"}
+            {isPending && saveMode === "open_round" ? "ABRIENDO…" : "ABRIR"}
           </button>
         ) : (
           <>

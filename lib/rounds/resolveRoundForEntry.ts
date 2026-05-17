@@ -5,6 +5,7 @@ import {
   toYyyyMmDd,
   type SessionRoundFields,
 } from "@/app/(backoffice)/tee-sheet/sessionBlock";
+import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 
 export type RoundForEntryResolve = SessionRoundFields & {
   round_no: number;
@@ -72,4 +73,35 @@ export function resolveRoundIdForEntry(
   }
 
   return selected.id;
+}
+
+/**
+ * Ronda de captura/cierre para un inscrito: categoría de inscripción + round_no
+ * de la sesión. Prioridad sobre resolveRoundIdForEntry cuando la sesión UI es de
+ * otra categoría (p. ej. operador en DA, jugador inscrito en C).
+ */
+export function resolveEntryCategoryRoundId(
+  rounds: RoundForEntryResolve[],
+  sessionRoundId: string,
+  entryCategoryId: string | null
+): string {
+  const session =
+    rounds.find((r) => r.id === sessionRoundId) ??
+    rounds.find((r) => String(r.id) === sessionRoundId);
+
+  if (!session) return sessionRoundId;
+
+  const byCategory = getRoundForCategory(
+    rounds.map((r) => ({
+      id: r.id,
+      round_no: r.round_no,
+      category_id: r.category_id ?? null,
+    })),
+    session.round_no,
+    entryCategoryId
+  );
+
+  if (byCategory) return byCategory.id;
+
+  return resolveRoundIdForEntry(rounds, sessionRoundId, entryCategoryId);
 }

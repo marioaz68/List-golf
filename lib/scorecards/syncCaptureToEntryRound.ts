@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { alignCaptureToScorecardRound } from "@/lib/scorecards/alignCaptureToScorecardRound";
 import { pruneMisalignedRoundCaptures } from "@/lib/scorecards/pruneMisalignedRoundCaptures";
 import {
-  resolveRoundIdForEntry,
+  resolveEntryCategoryRoundId,
   type RoundForEntryResolve,
 } from "@/lib/rounds/resolveRoundForEntry";
 
@@ -26,7 +26,7 @@ export async function syncCaptureToEntryRound(
   holesCopied: number;
   prunedRoundScoreIds: string[];
 }> {
-  const targetRoundId = resolveRoundIdForEntry(
+  const targetRoundId = resolveEntryCategoryRoundId(
     params.rounds,
     params.sessionRoundId,
     params.entryCategoryId
