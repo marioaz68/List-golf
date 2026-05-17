@@ -9,11 +9,13 @@ import {
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
-  publicLeaderboardCompactPlayerName,
+  publicLeaderboardNameColumnClass,
+  publicLeaderboardTableMinWidthClass,
   type SelectedRoundMeta,
 } from "../lib/utils";
 import PublicLeaderboardDetailTable from "./PublicLeaderboardDetailTable";
 import PublicLeaderboardExpandedPlayerBanner from "./PublicLeaderboardExpandedPlayerBanner";
+import PublicLeaderboardPlayerName from "./PublicLeaderboardPlayerName";
 
 const stickyNameHead =
   "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#1a2838] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)]";
@@ -75,11 +77,13 @@ export default function PublicLeaderboardTable({
     emptyLeaderboardLabel ??
     "No hay jugadores para mostrar en esta vista.";
   const posW = view === "official" ? "w-[44px]" : "w-[50px]";
-  const nameCol = "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
+  const nameCol = publicLeaderboardNameColumnClass;
 
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="table-fixed w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
+      <table
+        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClass} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+      >
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
@@ -157,10 +161,6 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
-              const shortName = publicLeaderboardCompactPlayerName(
-                row,
-                peerRows
-              );
 
               return (
                 <Fragment key={row.entry_id}>
@@ -180,12 +180,10 @@ export default function PublicLeaderboardTable({
                     >
                       <div className="flex min-w-0 items-center gap-0.5">
                         <div className="min-w-0 flex-1">
-                          <div
-                            title={row.player_name}
-                            className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
-                          >
-                            {shortName}
-                          </div>
+                          <PublicLeaderboardPlayerName
+                            row={row}
+                            peerRows={peerRows}
+                          />
                           <div
                             className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
                             title={row.player_code}

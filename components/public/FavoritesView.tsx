@@ -7,13 +7,15 @@ import FavoriteStar from "./FavoriteStar";
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
 import PublicLeaderboardExpandedPlayerBanner from "@/app/torneos/[id]/components/PublicLeaderboardExpandedPlayerBanner";
+import PublicLeaderboardPlayerName from "@/app/torneos/[id]/components/PublicLeaderboardPlayerName";
 import {
   buildDetailToggleHref,
   formatRelativeOrDQ,
   formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
-  publicLeaderboardCompactPlayerName,
+  publicLeaderboardNameColumnClass,
+  publicLeaderboardTableMinWidthClass,
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
@@ -360,12 +362,13 @@ export default function FavoritesView({
     );
   }
 
-  const nameCol =
-    "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] sm:max-w-none";
+  const nameCol = publicLeaderboardNameColumnClass;
 
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-      <table className="table-fixed w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]">
+      <table
+        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClass} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+      >
         <thead>
           <tr className="bg-white/10 text-slate-300">
             <th
@@ -408,10 +411,6 @@ export default function FavoritesView({
 
         <tbody>
           {favoriteRows.map((row) => {
-            const shortName = publicLeaderboardCompactPlayerName(
-              row,
-              leaderboard
-            );
             const isOpen = requestedDetailId === row.entry_id;
 
             return (
@@ -430,12 +429,10 @@ export default function FavoritesView({
                   <td className={`${stickyNameBodyFav} ${nameCol} px-1 py-1 sm:px-1.5`}>
                     <div className="flex min-w-0 items-center gap-0.5">
                       <div className="min-w-0 flex-1">
-                        <div
-                          title={row.player_name}
-                          className="truncate text-[10px] font-semibold leading-tight text-white sm:text-[11px]"
-                        >
-                          {shortName}
-                        </div>
+                        <PublicLeaderboardPlayerName
+                          row={row}
+                          peerRows={leaderboard}
+                        />
                         <div
                           className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
                           title={row.player_code}

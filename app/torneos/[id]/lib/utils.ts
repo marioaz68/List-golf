@@ -148,6 +148,14 @@ export function publicLeaderboardCompactPlayerName(
   return base;
 }
 
+/** Columna de nombre: estrecha en móvil; más ancha en tablet/desktop para nombre completo. */
+export const publicLeaderboardNameColumnClass =
+  "w-[92px] min-w-[92px] max-w-[120px] sm:w-[112px] sm:min-w-[112px] md:w-auto md:min-w-[148px] md:max-w-[min(240px,32vw)] lg:min-w-[172px] lg:max-w-none";
+
+/** Ancho mínimo de tabla en vistas públicas (leaderboard / vivo / favoritos). */
+export const publicLeaderboardTableMinWidthClass =
+  "min-w-[520px] md:min-w-[680px]";
+
 /** Ronda sin categoría = aplica a todas; si no hay categoría seleccionada, no filtra. */
 export function roundBelongsToCategory(
   round: Pick<RoundRow, "category_id">,
