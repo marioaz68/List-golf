@@ -9,6 +9,8 @@ export type OpenCaptureRoundResult =
       ok: true;
       roundId: string;
       roundNo: number;
+      /** true = todas las rondas lógicas cerradas; mostrar esta (la última) con «ABRIR». */
+      roundClosed?: boolean;
     }
   | {
       ok: false;
@@ -46,6 +48,8 @@ export function resolveOpenCaptureRoundForEntry(
     return { ok: false, reason: "no_round" };
   }
 
+  let lastClosed: { roundId: string; roundNo: number } | null = null;
+
   for (const roundNo of roundNos) {
     const round = getRoundForCategory(rounds, roundNo, cat || null);
     if (!round?.id) continue;
@@ -66,9 +70,20 @@ export function resolveOpenCaptureRoundForEntry(
     }
 
     const closed = isEntryRoundClosed(entryId, round, lookups);
-    if (!closed) {
-      return { ok: true, roundId: round.id, roundNo };
+    if (closed) {
+      lastClosed = { roundId: round.id, roundNo };
+      continue;
     }
+    return { ok: true, roundId: round.id, roundNo, roundClosed: false };
+  }
+
+  if (lastClosed) {
+    return {
+      ok: true,
+      roundId: lastClosed.roundId,
+      roundNo: lastClosed.roundNo,
+      roundClosed: true,
+    };
   }
 
   const last = roundNos[roundNos.length - 1] ?? 1;

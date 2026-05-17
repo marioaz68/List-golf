@@ -504,14 +504,21 @@ export default async function ScoreEntryPage(props: {
           }
         } else {
           scoringRoundId = capture.roundId;
+          roundClosed = capture.roundClosed === true;
           const catLabel =
             matchedEntry.category?.code?.trim() ||
             matchedEntry.category?.name?.trim() ||
             "categoría";
           const when = capture.sessionLabel?.trim();
-          captureRoundNotice = when
-            ? `Capturando ${when} · inscripción ${catLabel}. Día y turno según salidas y rondas del torneo.`
-            : `Capturando R${capture.roundNo} · inscripción ${catLabel}.`;
+          if (capture.roundClosed) {
+            captureRoundNotice = when
+              ? `R${capture.roundNo} cerrada (${when}) · inscripción ${catLabel}. Pulsa ABRIR para corregir.`
+              : `R${capture.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`;
+          } else {
+            captureRoundNotice = when
+              ? `Capturando ${when} · inscripción ${catLabel}. Día y turno según salidas y rondas del torneo.`
+              : `Capturando R${capture.roundNo} · inscripción ${catLabel}.`;
+          }
         }
       } catch (e) {
         errorMsg =
@@ -744,7 +751,8 @@ export default async function ScoreEntryPage(props: {
           if (scorecardErr) {
             errorMsg = scorecardErr.message;
           } else {
-            roundClosed = Boolean(scorecardRow?.locked_at);
+            roundClosed =
+              roundClosed || Boolean(scorecardRow?.locked_at);
           }
         }
       }

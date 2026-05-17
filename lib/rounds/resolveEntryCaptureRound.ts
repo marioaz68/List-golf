@@ -15,6 +15,12 @@ export type EntryCaptureRoundResult = OpenCaptureRoundResult & {
   sessionLabel?: string;
 };
 
+export function isEntryCaptureRoundClosed(
+  result: EntryCaptureRoundResult
+): boolean {
+  return result.ok === true && result.roundClosed === true;
+}
+
 /**
  * Ronda efectiva para capturar: categoría de la inscripción, número de ronda
  * pendiente, día y turno desde `rounds` y —si existe— la salida en tee-sheet.
@@ -94,5 +100,6 @@ export async function resolveEntryCaptureRound(
     roundId,
     roundNo,
     sessionLabel,
+    roundClosed: open.roundClosed,
   };
 }
