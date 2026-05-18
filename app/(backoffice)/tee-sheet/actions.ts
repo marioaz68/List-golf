@@ -1323,7 +1323,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     const plan = planByCategory.get(k);
     const preferredSize = plan?.groupSize ?? group_size;
     const order = plan?.order ?? catIndex + 1;
-    const chunks = buildBalancedChunks(list, preferredSize);
+    const chunks = buildBalancedChunks(orderedList, preferredSize);
 
     plannedCategoryBlocks.push({
       categoryId: k,
