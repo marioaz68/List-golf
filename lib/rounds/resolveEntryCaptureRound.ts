@@ -9,6 +9,7 @@ import {
   type OpenCaptureRoundResult,
 } from "@/lib/rounds/resolveOpenCaptureRoundForEntry";
 import type { LockedScorecardLookups } from "@/lib/leaderboard/lockedScorecards";
+import { resolveEntryCategoryRoundId } from "@/lib/rounds/resolveRoundForEntry";
 
 export type EntryCaptureRoundResult = OpenCaptureRoundResult & {
   /** Etiqueta legible: día, turno AM/PM, categoría (desde rounds / salidas). */
@@ -34,6 +35,8 @@ export async function resolveEntryCaptureRound(
     rounds: Array<RoundForGate & SessionRoundFields>;
     lookups: LockedScorecardLookups;
     tournamentSettings?: unknown;
+    /** Ronda de la sesión en score-entry (día/turno del operador). */
+    sessionRoundId?: string | null;
   }
 ): Promise<EntryCaptureRoundResult> {
   const open = resolveOpenCaptureRoundForEntry(
@@ -65,7 +68,7 @@ export async function resolveEntryCaptureRound(
     const { data: groupRows } = await supabase
       .from("pairing_groups")
       .select("round_id")
-      .in("group_id", groupIds);
+      .in("id", groupIds);
 
     for (const g of groupRows ?? []) {
       const rid = String(g.round_id ?? "").trim();
@@ -74,18 +77,32 @@ export async function resolveEntryCaptureRound(
   }
 
   if (pairingRoundIds.size > 0) {
-    const candidates = params.rounds.filter(
-      (r) =>
-        r.round_no === roundNo &&
-        pairingRoundIds.has(r.id) &&
-        (!entryCat || String(r.category_id ?? "").trim() === entryCat)
-    );
+    const candidates = params.rounds.filter((r) => {
+      if (r.round_no !== roundNo) return false;
+      if (!pairingRoundIds.has(r.id)) return false;
+      if (!entryCat) return true;
+      const rc = String(r.category_id ?? "").trim();
+      return !rc || rc === entryCat;
+    });
     if (candidates.length === 1) {
       roundId = candidates[0]!.id;
     } else if (candidates.length > 1) {
       roundId =
         [...candidates].sort((a, b) => a.id.localeCompare(b.id))[0]?.id ??
         roundId;
+    }
+  }
+
+  const sessionRoundId = String(params.sessionRoundId ?? "").trim();
+  if (sessionRoundId) {
+    const fromSession = resolveEntryCategoryRoundId(
+      params.rounds,
+      sessionRoundId,
+      entryCat || null
+    );
+    const sessionRow = params.rounds.find((r) => r.id === fromSession);
+    if (sessionRow && sessionRow.round_no === roundNo) {
+      roundId = fromSession;
     }
   }
 

@@ -34,6 +34,9 @@ export function getRoundForCategory(
   if (cat) {
     const byCat = matching.find((r) => String(r.category_id ?? "").trim() === cat);
     if (byCat) return byCat;
+
+    const shared = matching.filter((r) => !String(r.category_id ?? "").trim());
+    if (shared.length === 1) return shared[0];
   }
 
   return matching[0] ?? null;

@@ -525,6 +525,7 @@ export default async function ScoreEntryPage(props: {
           rounds: roundsForCapture,
           lookups: gateCtx.lookups,
           tournamentSettings,
+          sessionRoundId: requestedRoundId || null,
         });
 
         if (!capture.ok) {

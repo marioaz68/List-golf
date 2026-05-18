@@ -499,6 +499,21 @@ export async function savePlayerScores(
 
     const gateCtx = await loadCategoryRoundGateContext(admin, tournamentId);
 
+    const { data: tournamentRow, error: tournamentRowErr } = await admin
+      .from("tournaments")
+      .select("settings")
+      .eq("id", tournamentId)
+      .maybeSingle();
+
+    if (tournamentRowErr) {
+      return {
+        ok: false,
+        message: `Error leyendo torneo: ${tournamentRowErr.message}`,
+      };
+    }
+
+    const tournamentSettings = tournamentRow?.settings ?? null;
+
     const { data: fullRounds, error: fullRoundsErr } = await admin
       .from("rounds")
       .select(
@@ -519,6 +534,8 @@ export async function savePlayerScores(
       tournamentId,
       rounds: (fullRounds ?? []) as SessionRoundFields[],
       lookups: gateCtx.lookups,
+      tournamentSettings,
+      sessionRoundId: roundIdHint || null,
     });
 
     if (!captureRound.ok) {
@@ -528,15 +545,27 @@ export async function savePlayerScores(
           message: `No se puede capturar la ronda ${captureRound.targetRoundNo}: el jugador debe tener cerrada la ronda ${captureRound.priorRoundNo} en su categoría.`,
         };
       }
+      if (captureRound.reason === "prior_not_officially_closed") {
+        return {
+          ok: false,
+          message: `La R${captureRound.priorRoundNo} debe cerrarse definitivamente en el comité (banner «Cerrar Ronda ${captureRound.priorRoundNo}» en captura) antes de guardar la R${captureRound.targetRoundNo}.`,
+        };
+      }
       if (captureRound.reason === "all_closed") {
         return {
           ok: false,
           message: `Este jugador ya tiene cerradas todas sus rondas (hasta R${captureRound.lastRoundNo}).`,
         };
       }
+      if (captureRound.reason === "no_round") {
+        return {
+          ok: false,
+          message: "No hay ronda configurada para la categoría de este jugador.",
+        };
+      }
       return {
         ok: false,
-        message: "No hay ronda configurada para la categoría de este jugador.",
+        message: "No se pudo resolver la ronda de captura para este jugador.",
       };
     }
 
