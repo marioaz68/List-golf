@@ -871,6 +871,8 @@ const es = {
     rulesBlockedTitle: "Clasificación no disponible",
     rulesBlockedIntro:
       "Hay problemas en la configuración del torneo. Corrige cada punto en administración antes de publicar resultados.",
+    rulesServiceRoleNotConfigured:
+      "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor (Vercel → Environment Variables). Sin ella no se pueden leer las reglas de competición.",
     rulesCompetitionLoadFailed:
       "No se pudieron cargar las reglas de competición desde la base de datos.",
     rulesCutLoadFailed:
@@ -1887,6 +1889,8 @@ const en: Messages = {
     rulesBlockedTitle: "Leaderboard unavailable",
     rulesBlockedIntro:
       "Tournament configuration must be fixed in admin before results can be shown.",
+    rulesServiceRoleNotConfigured:
+      "SUPABASE_SERVICE_ROLE_KEY is missing on the server (Vercel → Environment Variables). Competition rules cannot be loaded without it.",
     rulesCompetitionLoadFailed:
       "Competition rules could not be loaded from the database.",
     rulesCutLoadFailed:

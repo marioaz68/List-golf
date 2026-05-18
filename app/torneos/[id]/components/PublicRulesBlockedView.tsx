@@ -3,6 +3,7 @@ import type { RulesBlocker } from "@/lib/tournament-rules/collectRulesBlockers";
 export type PublicRulesBlockedLabels = {
   title: string;
   intro: string;
+  serviceRoleNotConfigured: string;
   competitionLoadFailed: string;
   cutLoadFailed: string;
   categoriesMissingRule: string;
@@ -17,10 +18,18 @@ function messageForBlocker(
 ): string {
   const p = item.params ?? {};
   switch (item.code) {
-    case "competition_rules_load_failed":
-      return labels.competitionLoadFailed;
-    case "cut_rules_load_failed":
-      return labels.cutLoadFailed;
+    case "service_role_not_configured":
+      return labels.serviceRoleNotConfigured;
+    case "competition_rules_load_failed": {
+      const base = labels.competitionLoadFailed;
+      const detail = String(p.detail ?? "").trim();
+      return detail ? `${base} (${detail})` : base;
+    }
+    case "cut_rules_load_failed": {
+      const base = labels.cutLoadFailed;
+      const detail = String(p.detail ?? "").trim();
+      return detail ? `${base} (${detail})` : base;
+    }
     case "categories_missing_competition_rule":
       return labels.categoriesMissingRule.replace(
         "{codes}",

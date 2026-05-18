@@ -412,8 +412,17 @@ export default async function PublicTournamentPage({
   }
 
   /** Reglas de torneo: lectura con service role (RLS suele bloquear anon en tablas de configuración). */
-  const { data: competitionRulesRows, error: competitionRulesError } =
-    await adminSupabase
+  const serviceRoleConfigured = Boolean(
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  );
+
+  let competitionRulesRows: CategoryCompetitionRule[] | null = null;
+  let competitionRulesError: { message: string } | null = null;
+  let advancementRulesRows: RoundAdvancementRule[] | null = null;
+  let advancementRulesError: { message: string } | null = null;
+
+  if (serviceRoleConfigured) {
+    const competitionRes = await adminSupabase
       .from("category_competition_rules")
       .select(
         "category_id, scoring_format, leaderboard_basis, handicap_percentage, is_active"
@@ -421,14 +430,16 @@ export default async function PublicTournamentPage({
       .eq("tournament_id", typedTournament.id)
       .eq("is_active", true);
 
-  if (competitionRulesError) {
-    console.error(
-      `[public-tournament] category_competition_rules: ${competitionRulesError.message}`
-    );
-  }
+    competitionRulesRows = competitionRes.data as CategoryCompetitionRule[] | null;
+    competitionRulesError = competitionRes.error;
 
-  const { data: advancementRulesRows, error: advancementRulesError } =
-    await adminSupabase
+    if (competitionRulesError) {
+      console.error(
+        `[public-tournament] category_competition_rules: ${competitionRulesError.message}`
+      );
+    }
+
+    const advancementRes = await adminSupabase
       .from("round_advancement_rules")
       .select(
         "from_round_no, to_round_no, scope_type, scope_value, ranking_basis, ranking_mode, advancement_type, advancement_value, include_ties, gross_exemption_enabled, gross_exemption_top_n, tie_break_profile_id, sort_order, is_active"
@@ -436,10 +447,14 @@ export default async function PublicTournamentPage({
       .eq("tournament_id", typedTournament.id)
       .eq("is_active", true);
 
-  if (advancementRulesError) {
-    console.error(
-      `[public-tournament] round_advancement_rules: ${advancementRulesError.message}`
-    );
+    advancementRulesRows = advancementRes.data as RoundAdvancementRule[] | null;
+    advancementRulesError = advancementRes.error;
+
+    if (advancementRulesError) {
+      console.error(
+        `[public-tournament] round_advancement_rules: ${advancementRulesError.message}`
+      );
+    }
   }
 
   const competitionRulesList = (competitionRulesRows ??
@@ -500,8 +515,11 @@ export default async function PublicTournamentPage({
     categories: categories.map((c) => ({ id: c.id, code: c.code })),
     categoryIdsWithPlayers,
     competitionRules: competitionRulesList,
+    serviceRoleConfigured,
     competitionRulesLoadFailed: Boolean(competitionRulesError),
+    competitionRulesLoadError: competitionRulesError?.message ?? null,
     cutRulesLoadFailed: Boolean(advancementRulesError),
+    cutRulesLoadError: advancementRulesError?.message ?? null,
     strokeIndexHoleCount: strokeIndexByHole.size,
     selectedRoundNo: selectedRoundNoForRules,
   });
@@ -511,6 +529,7 @@ export default async function PublicTournamentPage({
   const rulesBlockedLabels = {
     title: pub.rulesBlockedTitle,
     intro: pub.rulesBlockedIntro,
+    serviceRoleNotConfigured: pub.rulesServiceRoleNotConfigured,
     competitionLoadFailed: pub.rulesCompetitionLoadFailed,
     cutLoadFailed: pub.rulesCutLoadFailed,
     categoriesMissingRule: pub.rulesCategoriesMissingRule,

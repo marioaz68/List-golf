@@ -4,6 +4,7 @@ import {
   rulesByCategoryId,
 } from "@/lib/leaderboard/categoryCompetitionRules";
 export type RulesBlockerCode =
+  | "service_role_not_configured"
   | "competition_rules_load_failed"
   | "cut_rules_load_failed"
   | "categories_missing_competition_rule"
@@ -51,23 +52,39 @@ export function collectRulesBlockers({
   categories,
   categoryIdsWithPlayers,
   competitionRules,
+  serviceRoleConfigured,
   competitionRulesLoadFailed,
+  competitionRulesLoadError,
   cutRulesLoadFailed,
+  cutRulesLoadError,
   strokeIndexHoleCount,
   selectedRoundNo,
 }: {
   categories: CategoryMeta[];
   categoryIdsWithPlayers: Set<string>;
   competitionRules: CategoryCompetitionRule[];
+  serviceRoleConfigured: boolean;
   competitionRulesLoadFailed: boolean;
+  competitionRulesLoadError?: string | null;
   cutRulesLoadFailed: boolean;
+  cutRulesLoadError?: string | null;
   strokeIndexHoleCount: number;
   selectedRoundNo: number;
 }): RulesBlocker[] {
   const blockers: RulesBlocker[] = [];
 
+  if (!serviceRoleConfigured) {
+    blockers.push({ code: "service_role_not_configured" });
+    return blockers;
+  }
+
   if (competitionRulesLoadFailed) {
-    blockers.push({ code: "competition_rules_load_failed" });
+    blockers.push({
+      code: "competition_rules_load_failed",
+      params: competitionRulesLoadError
+        ? { detail: competitionRulesLoadError }
+        : undefined,
+    });
     return blockers;
   }
 
@@ -120,7 +137,10 @@ export function collectRulesBlockers({
   }
 
   if (selectedRoundNo > 1 && cutRulesLoadFailed) {
-    blockers.push({ code: "cut_rules_load_failed" });
+    blockers.push({
+      code: "cut_rules_load_failed",
+      params: cutRulesLoadError ? { detail: cutRulesLoadError } : undefined,
+    });
   }
 
   return blockers;
