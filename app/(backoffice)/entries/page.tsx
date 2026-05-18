@@ -17,7 +17,6 @@ import {
   isMissingTelegramKitColumnsError,
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
-import { MIN_HOLES_TO_LOCK_SCORECARD } from "@/lib/scorecards/countHolesOnPlayerRound";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -403,10 +402,7 @@ function buildRoundSignatures(
     category_id: r.category_id ?? null,
   }));
 
-  let priorRoundComplete = true;
-  const out: RoundSignature[] = [];
-
-  for (const roundNo of [1, 2, 3]) {
+  return [1, 2, 3].map((roundNo) => {
     const round = getRoundForCategory(gateRounds, roundNo, categoryId);
     const scorecard = round
       ? scorecards.find(
@@ -421,26 +417,19 @@ function buildRoundSignatures(
 
     const signedRows = signatures.filter(signatureIsSigned);
 
-    const holeCount =
-      capture.holeCountByEntryRound.get(`${entryId}_${roundNo}`) ?? 0;
+    // Misma regla que leaderboard / cierre oficial: locked en la fila rounds de su categoría.
+    const closed = Boolean(scorecard?.locked_at);
     const hasCapture = capture.captured.has(`${entryId}_${roundNo}`);
-    const lockedOnCorrectRound = Boolean(scorecard?.locked_at);
-    const roundComplete =
-      lockedOnCorrectRound && holeCount >= MIN_HOLES_TO_LOCK_SCORECARD;
 
-    out.push({
+    return {
       round_no: roundNo,
       player_signed: signedRows.some((sig) => signatureRole(sig) === "player"),
       marker_signed: signedRows.some((sig) => signatureRole(sig) === "marker"),
       witness_signed: signedRows.some((sig) => signatureRole(sig) === "witness"),
-      captured: hasCapture,
-      closed: roundComplete && priorRoundComplete,
-    });
-
-    priorRoundComplete = priorRoundComplete && roundComplete;
-  }
-
-  return out;
+      captured: hasCapture && !closed,
+      closed,
+    };
+  });
 }
 
 function HeaderBlock({
