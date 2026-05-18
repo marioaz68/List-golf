@@ -8,6 +8,10 @@ import {
   type StrokeIndexByHole,
 } from "@/lib/leaderboard/competitionScoring";
 import { scoringFormatLabel } from "@/lib/leaderboard/competitionDisplay";
+import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
+import PublicLeaderboardHoleAuditRows, {
+  showHoleAuditForRule,
+} from "./PublicLeaderboardHoleAuditRows";
 import type { LeaderboardRow, RoundDetail } from "../lib/types";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import {
@@ -176,6 +180,10 @@ export default function PublicLeaderboardDetailTable({
       handicap_percentage: 100,
     } as CategoryCompetitionRule);
   const displayDetails = getDisplayDetails({ row, selectedRound });
+  const handicapSummary = formatPlayingHandicapSummary(
+    handicapIndex,
+    rule.handicap_percentage
+  );
 
   const baseRound =
     displayDetails.find((detail) =>
@@ -186,6 +194,12 @@ export default function PublicLeaderboardDetailTable({
     null;
 
   const baseHoles = baseRound?.holes ?? [];
+
+  const auditDetail =
+    displayDetails.length === 1
+      ? displayDetails[0]
+      : displayDetails.find((d) => d.holes.some((h) => h.strokes != null)) ??
+        null;
 
   const inline = labels.detailTotalsPlacement === "inline-after-nines";
   const showEighteenTotalCol =
@@ -215,6 +229,7 @@ export default function PublicLeaderboardDetailTable({
           {row.club_label ? ` · ${row.club_label}` : ""}
           {row.category_code ? ` · ${row.category_code}` : ""}
           {` · ${scoringFormatLabel(rule)}`}
+          {handicapSummary ? ` · ${handicapSummary}` : ""}
           {row.is_disqualified ? ` · DQ` : ""}
         </div>
       </div>
@@ -337,6 +352,25 @@ export default function PublicLeaderboardDetailTable({
               </>
             )}
           </tr>
+
+          {auditDetail && showHoleAuditForRule(rule) ? (
+            <PublicLeaderboardHoleAuditRows
+              detail={auditDetail}
+              rule={rule}
+              handicapIndex={handicapIndex}
+              strokeIndexByHole={strokeIndexByHole}
+              baseHoles={baseHoles}
+              inline={inline}
+              showEighteenTotalCol={showEighteenTotalCol}
+              entryId={row.entry_id}
+              labels={{
+                strokeIndex: labels.auditStrokeIndex,
+                strokesReceived: labels.auditStrokesReceived,
+                netStrokes: labels.auditNetStrokes,
+                stablefordPoints: labels.auditStablefordPoints,
+              }}
+            />
+          ) : null}
 
           {displayDetails.length === 0 ? (
             <tr>

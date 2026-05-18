@@ -2,9 +2,24 @@ export type CategoryCompetitionRule = {
   category_id: string;
   scoring_format: "stroke_play" | "stableford";
   leaderboard_basis: "gross" | "net" | "both" | "stableford";
+  prize_basis?: "gross" | "net" | "both" | "stableford";
   handicap_percentage: number;
+  gross_prize_places?: number;
+  net_prize_places?: number | null;
   is_active: boolean;
 };
+
+export function categoryShowsGrossNetToggle(
+  rule: CategoryCompetitionRule
+): boolean {
+  const r = normalizeCompetitionRule(rule);
+  return (
+    r.leaderboard_basis === "both" ||
+    r.prize_basis === "both" ||
+    (r.prize_basis === "gross" && r.leaderboard_basis === "net") ||
+    (r.prize_basis === "net" && r.leaderboard_basis === "gross")
+  );
+}
 
 export function rulesByCategoryId(
   rules: CategoryCompetitionRule[]

@@ -6,6 +6,9 @@ import type { LeaderboardRow } from "../lib/types";
 import type { SelectedRoundMeta } from "../lib/utils";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import { categoryShowsGrossNetToggle } from "@/lib/leaderboard/categoryCompetitionRules";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import PublicLeaderboardBasisToggle from "./PublicLeaderboardBasisToggle";
 import PublicLeaderboardTable from "./PublicLeaderboardTable";
 
 function foldForSearch(value: string) {
@@ -60,6 +63,12 @@ type Props = {
   handicapsByPlayerId?: Record<string, number | null>;
   strokeIndexByHole?: Record<number, number>;
   headerCompetitionRule?: CategoryCompetitionRule | null;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
+  basisToggleLabels?: {
+    gross: string;
+    net: string;
+    aria: string;
+  };
 };
 
 export default function PublicLeaderboardWithSearch({
@@ -79,6 +88,8 @@ export default function PublicLeaderboardWithSearch({
   handicapsByPlayerId = {},
   strokeIndexByHole = {},
   headerCompetitionRule = null,
+  leaderboardViewOverride = null,
+  basisToggleLabels,
 }: Props) {
   const [query, setQuery] = useState("");
 
@@ -106,8 +117,21 @@ export default function PublicLeaderboardWithSearch({
           .replace("{total}", String(fullLeaderboard.length))
       : null;
 
+  const showBasisToggle =
+    Boolean(headerCompetitionRule) &&
+    Boolean(basisToggleLabels) &&
+    categoryShowsGrossNetToggle(headerCompetitionRule!);
+  const activeBasis: LeaderboardViewOverride =
+    leaderboardViewOverride === "gross" ? "gross" : "net";
+
   return (
     <div className="w-full min-w-0 space-y-3">
+      {showBasisToggle && basisToggleLabels ? (
+        <PublicLeaderboardBasisToggle
+          active={activeBasis}
+          labels={basisToggleLabels}
+        />
+      ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1">
           <label className="sr-only" htmlFor="public-lb-search">
@@ -152,6 +176,7 @@ export default function PublicLeaderboardWithSearch({
         handicapsByPlayerId={handicapsByPlayerId}
         strokeIndexByHole={strokeIndexByHole}
         headerCompetitionRule={headerCompetitionRule}
+        leaderboardViewOverride={leaderboardViewOverride}
       />
     </div>
   );

@@ -19,6 +19,10 @@ export type PublicDetailTableLabels = {
   detailExpandedCategoryLabel: string;
   detailExpandedClubLabel: string;
   detailTotalsPlacement: DetailTotalsPlacement;
+  auditStrokeIndex: string;
+  auditStrokesReceived: string;
+  auditNetStrokes: string;
+  auditStablefordPoints: string;
 };
 
 type Pub = {
@@ -37,6 +41,10 @@ type Pub = {
   detailExpandedCategoryLabel: string;
   detailExpandedClubLabel: string;
   detailTotalsPlacement: DetailTotalsPlacement;
+  detailAuditStrokeIndex: string;
+  detailAuditStrokesReceived: string;
+  detailAuditNetStrokes: string;
+  detailAuditStablefordPoints: string;
 };
 
 export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLabels {
@@ -56,5 +64,9 @@ export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLab
     detailExpandedCategoryLabel: pub.detailExpandedCategoryLabel,
     detailExpandedClubLabel: pub.detailExpandedClubLabel,
     detailTotalsPlacement: pub.detailTotalsPlacement,
+    auditStrokeIndex: pub.detailAuditStrokeIndex,
+    auditStrokesReceived: pub.detailAuditStrokesReceived,
+    auditNetStrokes: pub.detailAuditNetStrokes,
+    auditStablefordPoints: pub.detailAuditStablefordPoints,
   };
 }

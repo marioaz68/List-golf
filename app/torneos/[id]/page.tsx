@@ -24,9 +24,17 @@ import {
 } from "@/lib/cuts/publicCutDisplay";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
 import {
+  categoryShowsGrossNetToggle,
   rulesByCategoryId,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  filterPublicPrizeRulesForCategory,
+  type PublicPrizeRuleRow,
+} from "@/lib/leaderboard/filterPublicPrizeRules";
+import { parseLeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
+import PublicCategoryCompetitionInfo from "./components/PublicCategoryCompetitionInfo";
+import PublicPrizesPanel from "./components/PublicPrizesPanel";
 import PublicRulesBlockedView from "./components/PublicRulesBlockedView";
 import {
   collectRulesBlockers,
@@ -105,6 +113,7 @@ export default async function PublicTournamentPage({
     detail_id?: string;
     embed?: string;
     from?: string;
+    basis?: string;
   }>;
 }) {
   const { id } = await params;
@@ -425,7 +434,7 @@ export default async function PublicTournamentPage({
     const competitionRes = await adminSupabase
       .from("category_competition_rules")
       .select(
-        "category_id, scoring_format, leaderboard_basis, handicap_percentage, is_active"
+        "category_id, scoring_format, leaderboard_basis, prize_basis, handicap_percentage, gross_prize_places, net_prize_places, is_active"
       )
       .eq("tournament_id", typedTournament.id)
       .eq("is_active", true);
@@ -543,6 +552,47 @@ export default async function PublicTournamentPage({
       ? competitionRuleForCategory(competitionRulesMap, selectedCategoryId)
       : null;
 
+  const basisParam = parseLeaderboardViewOverride(
+    typeof sp.basis === "string" ? sp.basis : undefined
+  );
+  const showGrossNetToggle =
+    Boolean(headerCompetitionRule) &&
+    categoryShowsGrossNetToggle(headerCompetitionRule!);
+  const leaderboardViewOverride = showGrossNetToggle
+    ? basisParam ?? "net"
+    : null;
+
+  let publicPrizeRulesForCategory: PublicPrizeRuleRow[] = [];
+  if (
+    serviceRoleConfigured &&
+    selectedCategory &&
+    headerCompetitionRule &&
+    !rulesBlocked
+  ) {
+    const prizeRes = await adminSupabase
+      .from("category_prize_rules")
+      .select(
+        "id, scope_type, scope_value, prize_label, prize_position, ranking_basis, priority, show_on_leaderboard, sort_order, is_active"
+      )
+      .eq("tournament_id", typedTournament.id)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("priority", { ascending: true });
+
+    if (prizeRes.error) {
+      console.error(
+        `[public-tournament] category_prize_rules: ${prizeRes.error.message}`
+      );
+    } else {
+      publicPrizeRulesForCategory = filterPublicPrizeRulesForCategory({
+        rules: (prizeRes.data ?? []) as PublicPrizeRuleRow[],
+        categoryId: selectedCategory.id,
+        categoryCode: selectedCategory.code ?? selectedCategory.name ?? "",
+        categoryGroup: selectedCategory.code?.charAt(0) ?? null,
+      });
+    }
+  }
+
   const categoryRoundCloseCards = buildCategoryRoundCloseCards(
     allEntries,
     selectedRound,
@@ -585,6 +635,7 @@ export default async function PublicTournamentPage({
       handicapByPlayerId,
       maxRoundNo: selectedRoundNo,
       strokeIndexByHole,
+      leaderboardViewOverride,
     });
 
     const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
@@ -594,6 +645,7 @@ export default async function PublicTournamentPage({
       competitionRules: competitionRulesList,
       handicapByPlayerId,
       strokeIndexByHole,
+      leaderboardViewOverride,
     });
 
     publicCutLines = computePublicCutLines({
@@ -1355,7 +1407,42 @@ export default async function PublicTournamentPage({
               strokeIndexByHole={strokeIndexByHoleRecord}
             />
           ) : view === "tee-sheet" || rulesBlocked ? null : (
-            <PublicLeaderboardWithSearch
+            <>
+              {selectedCategory && headerCompetitionRule ? (
+                <div className="mb-4 grid gap-3 lg:grid-cols-2">
+                  <PublicCategoryCompetitionInfo
+                    categoryCode={selectedCategory.code}
+                    rule={headerCompetitionRule}
+                    labels={{
+                      title: pub.categoryCompetitionTitle,
+                      modality: pub.categoryCompetitionModality,
+                      leaderboard: pub.categoryCompetitionLeaderboard,
+                      prizes: pub.categoryCompetitionPrizes,
+                      grossPlaces: pub.categoryCompetitionGrossPlaces,
+                      netPlaces: pub.categoryCompetitionNetPlaces,
+                      stablefordPlaces: pub.categoryCompetitionStablefordPlaces,
+                      grossNetToggleHint: pub.categoryCompetitionGrossNetHint,
+                    }}
+                  />
+                  <PublicPrizesPanel
+                    categoryCode={selectedCategory.code}
+                    competitionRule={headerCompetitionRule}
+                    prizeRules={publicPrizeRulesForCategory}
+                    labels={{
+                      title: pub.prizesPanelTitle,
+                      configuredPlaces: pub.prizesConfiguredPlaces,
+                      grossPlace: pub.prizesGrossPlace,
+                      netPlace: pub.prizesNetPlace,
+                      stablefordPlace: pub.prizesStablefordPlace,
+                      noDetailedRules: pub.prizesNoDetailedRules,
+                      basisGross: pub.prizesBasisGross,
+                      basisNet: pub.prizesBasisNet,
+                      basisStableford: pub.prizesBasisStableford,
+                    }}
+                  />
+                </div>
+              ) : null}
+              <PublicLeaderboardWithSearch
               tournamentId={typedTournament.id}
               embed={isEmbed}
               fromAdmin={fromAdmin}
@@ -1383,7 +1470,18 @@ export default async function PublicTournamentPage({
               handicapsByPlayerId={handicapsByPlayerId}
               strokeIndexByHole={strokeIndexByHoleRecord}
               headerCompetitionRule={headerCompetitionRule}
+              leaderboardViewOverride={leaderboardViewOverride}
+              basisToggleLabels={
+                showGrossNetToggle
+                  ? {
+                      gross: pub.basisToggleGross,
+                      net: pub.basisToggleNet,
+                      aria: pub.basisToggleAria,
+                    }
+                  : undefined
+              }
             />
+            </>
           )}
         </div>
       </section>

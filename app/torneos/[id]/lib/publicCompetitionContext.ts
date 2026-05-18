@@ -2,6 +2,7 @@ import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetit
 import { rulesByCategoryId } from "@/lib/leaderboard/categoryCompetitionRules";
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import { detailScoreColumnLabels } from "@/lib/leaderboard/competitionDisplay";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { PublicDetailTableLabels } from "./publicDetailTableLabels";
 
 export function buildHandicapMap(
@@ -25,9 +26,10 @@ export function ruleForCategory(
 
 export function detailLabelsWithCompetitionRule(
   base: PublicDetailTableLabels,
-  rule: CategoryCompetitionRule
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
 ): PublicDetailTableLabels {
-  const cols = detailScoreColumnLabels(rule);
+  const cols = detailScoreColumnLabels(rule, viewOverride);
   return {
     ...base,
     gross: cols.primary,

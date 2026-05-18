@@ -14,9 +14,11 @@ const sep = (
 export default function PublicLeaderboardExpandedPlayerBanner({
   row,
   labels,
+  handicapSummary,
 }: {
   row: LeaderboardRow;
   labels: PublicDetailTableLabels;
+  handicapSummary?: string | null;
 }) {
   const fullName = row.player_name?.trim() || "—";
   const cat = row.category_code?.trim() || "—";
@@ -47,6 +49,14 @@ export default function PublicLeaderboardExpandedPlayerBanner({
             </span>
             <span className="text-slate-500">:</span>
             <span className="text-slate-100">{club}</span>
+          </span>
+        </>
+      ) : null}
+      {handicapSummary ? (
+        <>
+          {sep}
+          <span className="shrink-0 whitespace-nowrap font-medium text-amber-200/95">
+            {handicapSummary}
           </span>
         </>
       ) : null}

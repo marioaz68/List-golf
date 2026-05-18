@@ -7,6 +7,7 @@ import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetit
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import { formatRoundCellForRule } from "@/lib/leaderboard/competitionDisplay";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { LeaderboardRow } from "./types";
 
 /** Columnas fijas antes de las de ronda: C, JUG, ★, POS, MV, THR. */
@@ -54,7 +55,8 @@ export function roundDetailForPublicColumn(
   roundNo: number,
   rulesMap: Map<string, CategoryCompetitionRule>,
   handicapByPlayerId: Map<string, number | null>,
-  strokeIndexByHole?: StrokeIndexByHole
+  strokeIndexByHole?: StrokeIndexByHole,
+  viewOverride?: LeaderboardViewOverride | null
 ): string {
   const rule = competitionRuleForCategory(rulesMap, row.category_id);
 
@@ -73,7 +75,8 @@ export function roundDetailForPublicColumn(
     rule,
     hcp,
     row.is_disqualified,
-    strokeIndexByHole
+    strokeIndexByHole,
+    viewOverride
   );
 }
 

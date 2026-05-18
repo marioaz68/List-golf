@@ -16,6 +16,7 @@ import {
   cumulativeLeaderboardValue,
   type StrokeIndexByHole,
 } from "./competitionScoring";
+import type { LeaderboardViewOverride } from "./leaderboardViewOverride";
 
 function compareSortValues(
   a: number | null,
@@ -39,6 +40,7 @@ export function applyCompetitionStandings({
   competitionRules,
   handicapByPlayerId,
   strokeIndexByHole,
+  leaderboardViewOverride = null,
 }: {
   leaderboard: LeaderboardRow[];
   rounds: SelectedRoundMeta[];
@@ -46,6 +48,7 @@ export function applyCompetitionStandings({
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
   const sortedRounds = [...rounds].sort((a, b) => a.round_no - b.round_no);
@@ -98,7 +101,8 @@ export function applyCompetitionStandings({
           rule,
           hcp,
           round.round_no,
-          strokeIndexByHole
+          strokeIndexByHole,
+          leaderboardViewOverride
         );
         return { row, sortValue: cum.sortValue };
       });

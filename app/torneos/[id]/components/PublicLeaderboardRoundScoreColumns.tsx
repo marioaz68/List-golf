@@ -7,6 +7,7 @@ import {
 } from "../lib/publicLeaderboardColumns";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { LeaderboardRow } from "../lib/types";
 import type { SelectedRoundMeta } from "../lib/utils";
 
@@ -15,6 +16,7 @@ type Props = {
   rulesMap: Map<string, CategoryCompetitionRule>;
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
 };
 
 export function PublicLeaderboardRoundScoreHeaders({
@@ -48,6 +50,7 @@ export function PublicLeaderboardRoundScoreCells({
   rulesMap,
   handicapByPlayerId,
   strokeIndexByHole,
+  leaderboardViewOverride = null,
 }: Props & { row: LeaderboardRow }) {
   const columnNos = publicLeaderboardScoreColumnNos(selectedRound);
 
@@ -60,7 +63,8 @@ export function PublicLeaderboardRoundScoreCells({
             roundNo,
             rulesMap,
             handicapByPlayerId,
-            strokeIndexByHole
+            strokeIndexByHole,
+            leaderboardViewOverride
           )}
         </td>
       ))}

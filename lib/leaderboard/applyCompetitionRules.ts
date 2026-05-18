@@ -9,6 +9,7 @@ import {
   cumulativeLeaderboardValue,
   type StrokeIndexByHole,
 } from "./competitionScoring";
+import type { LeaderboardViewOverride } from "./leaderboardViewOverride";
 
 export function applyCompetitionRules({
   leaderboard,
@@ -16,12 +17,14 @@ export function applyCompetitionRules({
   handicapByPlayerId,
   maxRoundNo,
   strokeIndexByHole,
+  leaderboardViewOverride = null,
 }: {
   leaderboard: LeaderboardRow[];
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
   maxRoundNo: number | null;
   strokeIndexByHole?: StrokeIndexByHole;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
 
@@ -34,7 +37,8 @@ export function applyCompetitionRules({
       rule,
       hcp,
       maxRoundNo,
-      strokeIndexByHole
+      strokeIndexByHole,
+      leaderboardViewOverride
     );
 
     return {

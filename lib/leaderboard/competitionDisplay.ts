@@ -3,6 +3,10 @@ import {
   type CategoryCompetitionRule,
 } from "./categoryCompetitionRules";
 import { scoreRoundDetail, type StrokeIndexByHole } from "./competitionScoring";
+import {
+  effectiveUsesNetLeaderboard,
+  type LeaderboardViewOverride,
+} from "./leaderboardViewOverride";
 import type { LeaderboardRow, RoundDetail } from "@/app/torneos/[id]/lib/types";
 import { formatRelativeOrDQ, formatScoreOrDQ } from "@/app/torneos/[id]/lib/utils";
 
@@ -10,17 +14,20 @@ export function scoringFormatLabel(
   rule: CategoryCompetitionRule
 ): string {
   if (isStablefordCategory(rule)) return "Stableford";
-  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+  if (effectiveUsesNetLeaderboard(rule, null)) {
     return "Stroke · Neto";
   }
   return "Stroke · Gross";
 }
 
-export function mainTotalColumnHeader(rule: CategoryCompetitionRule): string {
+export function mainTotalColumnHeader(
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
+): string {
   if (isStablefordCategory(rule)) {
     return "PTS";
   }
-  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
     return "NET";
   }
   return "TOT";
@@ -52,7 +59,8 @@ export function formatRoundCellForRule(
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
   isDisqualified: boolean,
-  strokeIndexByHole?: StrokeIndexByHole
+  strokeIndexByHole?: StrokeIndexByHole,
+  viewOverride?: LeaderboardViewOverride | null
 ): string {
   if (isDisqualified) return "DQ";
   if (!detail) return "—";
@@ -69,7 +77,7 @@ export function formatRoundCellForRule(
       : "—";
   }
 
-  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
     if (scored.netToPar != null) {
       return formatRelativeOrDQ(scored.netToPar, false);
     }
@@ -86,19 +94,23 @@ export function formatRoundCellForRule(
 
 export function formatMainTotalForRow(
   row: LeaderboardRow,
-  rule: CategoryCompetitionRule
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
 ): string {
   if (row.is_disqualified) return "DQ";
   if (isStablefordCategory(rule)) {
     return formatScoreOrDQ(row.total_to_par, false);
   }
-  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
     return formatRelativeOrDQ(row.total_to_par, false);
   }
   return formatRelativeOrDQ(row.total_to_par, row.is_disqualified);
 }
 
-export function detailScoreColumnLabels(rule: CategoryCompetitionRule): {
+export function detailScoreColumnLabels(
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
+): {
   primary: string;
   secondary: string;
   modality: string;
@@ -110,7 +122,7 @@ export function detailScoreColumnLabels(rule: CategoryCompetitionRule): {
       modality: "Stableford",
     };
   }
-  if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
     return {
       primary: "NET",
       secondary: "GR",

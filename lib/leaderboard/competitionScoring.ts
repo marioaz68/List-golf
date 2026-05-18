@@ -2,6 +2,10 @@ import type { RoundDetail } from "@/app/torneos/[id]/lib/types";
 import type { CategoryCompetitionRule } from "./categoryCompetitionRules";
 import { isStablefordCategory, normalizeCompetitionRule } from "./categoryCompetitionRules";
 import {
+  effectiveUsesNetLeaderboard,
+  type LeaderboardViewOverride,
+} from "./leaderboardViewOverride";
+import {
   playingHandicap,
   strokeIndexForHole,
   strokesReceivedOnHole,
@@ -108,7 +112,8 @@ export function cumulativeLeaderboardValue(
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
   maxRoundNo: number | null,
-  strokeIndexByHole?: StrokeIndexByHole
+  strokeIndexByHole?: StrokeIndexByHole,
+  leaderboardViewOverride?: LeaderboardViewOverride | null
 ): {
   sortValue: number | null;
   displayToPar: number | null;
@@ -169,8 +174,7 @@ export function cumulativeLeaderboardValue(
     };
   }
 
-  const basis = catRule.leaderboard_basis;
-  if ((basis === "net" || basis === "both") && hasNet) {
+  if (effectiveUsesNetLeaderboard(catRule, leaderboardViewOverride) && hasNet) {
     return {
       sortValue: totalNetToPar,
       displayToPar: totalNetToPar,

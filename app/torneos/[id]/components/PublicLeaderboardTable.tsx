@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useMemo } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import {
   formatMainTotalForRow,
   formatSecondaryTotalForRow,
@@ -85,6 +86,7 @@ type PublicLeaderboardTableProps = {
   handicapsByPlayerId?: Record<string, number | null>;
   strokeIndexByHole?: Record<number, number>;
   headerCompetitionRule?: CategoryCompetitionRule | null;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
 };
 
 export default function PublicLeaderboardTable({
@@ -104,6 +106,7 @@ export default function PublicLeaderboardTable({
   handicapsByPlayerId = {},
   strokeIndexByHole: strokeIndexByHoleRecord = {},
   headerCompetitionRule = null,
+  leaderboardViewOverride = null,
 }: PublicLeaderboardTableProps) {
   const rulesMap = useMemo(
     () => buildCompetitionRulesMap(competitionRules),
@@ -133,10 +136,15 @@ export default function PublicLeaderboardTable({
     : secondaryTotalColumnHeader(headerRule);
   const colMain = allCategoriesView
     ? "SCR"
-    : mainTotalColumnHeader(headerRule);
+    : mainTotalColumnHeader(headerRule, leaderboardViewOverride);
   const detailLabelsResolved = useMemo(
-    () => detailLabelsWithCompetitionRule(detailLabels, headerRule),
-    [detailLabels, headerRule]
+    () =>
+      detailLabelsWithCompetitionRule(
+        detailLabels,
+        headerRule,
+        leaderboardViewOverride
+      ),
+    [detailLabels, headerRule, leaderboardViewOverride]
   );
 
   const peerRows = peerRowsForNameCompact ?? leaderboard;
@@ -337,6 +345,8 @@ export default function PublicLeaderboardTable({
                       selectedRound={selectedRound}
                       rulesMap={rulesMap}
                       handicapByPlayerId={handicapMap}
+                      strokeIndexByHole={strokeIndexMap}
+                      leaderboardViewOverride={leaderboardViewOverride}
                     />
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
@@ -344,7 +354,11 @@ export default function PublicLeaderboardTable({
                     </td>
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                      {formatMainTotalForRow(row, rowRule)}
+                      {formatMainTotalForRow(
+                        row,
+                        rowRule,
+                        leaderboardViewOverride
+                      )}
                     </td>
                   </tr>
 
