@@ -41,6 +41,12 @@ export type TeeSheetEntryOrderInfo = {
   standingDisplay: string | null;
 };
 
+export type TeeSheetEntryOrderResult = {
+  orderMap: Map<string, TeeSheetEntryOrderInfo>;
+  /** Solo true si hay regla activa con `to_round_no === targetRoundNo`. */
+  cutEnforces: boolean;
+};
+
 /** Puntuación acumulada hasta `throughRoundNo` para la columna de salidas. */
 export function formatTeeSheetPairingScore(
   row: LeaderboardRow,
@@ -98,9 +104,11 @@ export async function buildTeeSheetEntryOrderMap(
   admin: SupabaseClient,
   tournamentId: string,
   targetRoundNo: number
-): Promise<Map<string, TeeSheetEntryOrderInfo>> {
+): Promise<TeeSheetEntryOrderResult> {
   const out = new Map<string, TeeSheetEntryOrderInfo>();
-  if (targetRoundNo <= 1) return out;
+  if (targetRoundNo <= 1) {
+    return { orderMap: out, cutEnforces: false };
+  }
 
   const standingsThroughRoundNo = targetRoundNo - 1;
 
@@ -211,7 +219,9 @@ export async function buildTeeSheetEntryOrderMap(
     .map((row) => toValidEntry(row as Parameters<typeof toValidEntry>[0]))
     .filter((e): e is ValidEntry => !!e && isCountableEntry(e.status));
 
-  if (filteredEntries.length === 0) return out;
+  if (filteredEntries.length === 0) {
+    return { orderMap: out, cutEnforces: false };
+  }
 
   const playerIds = filteredEntries.map((e) => e.player_id);
   const roundIds = rounds.map((r) => r.id);
@@ -361,12 +371,12 @@ export async function buildTeeSheetEntryOrderMap(
     });
   }
 
-  return out;
+  return { orderMap: out, cutEnforces };
 }
 
 /**
  * R2+: orden por posición de clasificación.
- * Solo excluye jugadores si hay regla con `to_round_no === targetRoundNo` y `made_cut === false`.
+ * Solo excluye jugadores si `cutEnforces === true` (regla con destino = ronda objetivo).
  */
 export function sortEntriesForTeeSheetRound<T extends { id: string }>(
   entries: T[],
@@ -376,14 +386,14 @@ export function sortEntriesForTeeSheetRound<T extends { id: string }>(
 ): T[] {
   if (targetRoundNo <= 1) return entries;
 
-  const cutEnforces = options?.cutEnforces ?? true;
-  const kept = cutEnforces
-    ? entries.filter((e) => {
-        const info = orderMap.get(e.id);
-        if (!info || info.madeCut === null) return true;
-        return info.madeCut !== false;
-      })
-    : entries;
+  const kept =
+    options?.cutEnforces === true
+      ? entries.filter((e) => {
+          const info = orderMap.get(e.id);
+          if (!info || info.madeCut === null) return true;
+          return info.madeCut !== false;
+        })
+      : entries;
 
   kept.sort((a, b) => {
     const pa = orderMap.get(a.id)?.position;

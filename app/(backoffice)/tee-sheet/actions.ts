@@ -16,6 +16,7 @@ import {
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
 import { roundsInSameSession, type SessionRoundFields } from "./sessionBlock";
+import { repairCutRulesTargetFinalRound } from "@/lib/convocatoria/upgradeTournamentRules";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -1247,13 +1248,17 @@ export async function generateGroupsByCategory(formData: FormData) {
   await deletePairingGroupsForRoundIds(supabase, sessionRoundIds);
 
   let teeSheetEntryOrderMap = new Map<string, TeeSheetEntryOrderInfo>();
+  let pairingCutEnforces = false;
   if (targetRoundNo > 1) {
     const admin = await createAdminClient();
-    teeSheetEntryOrderMap = await buildTeeSheetEntryOrderMap(
+    await repairCutRulesTargetFinalRound(admin, tournament_id);
+    const pairingOrder = await buildTeeSheetEntryOrderMap(
       admin,
       tournament_id,
       targetRoundNo
     );
+    teeSheetEntryOrderMap = pairingOrder.orderMap;
+    pairingCutEnforces = pairingOrder.cutEnforces;
   }
 
   const resolved = entries.map((e) => {
@@ -1342,7 +1347,8 @@ export async function generateGroupsByCategory(formData: FormData) {
     let orderedList = sortEntriesForTeeSheetRound(
       list,
       targetRoundNo,
-      teeSheetEntryOrderMap
+      teeSheetEntryOrderMap,
+      { cutEnforces: pairingCutEnforces }
     );
 
     if (targetRoundNo <= 1) {

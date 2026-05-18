@@ -743,7 +743,7 @@ export default async function PublicTournamentPage({
     try {
       const admin = createAdminClient();
       for (const targetRoundNo of teeSheetTargetRoundNos) {
-        const orderMap = await buildTeeSheetEntryOrderMap(
+        const { orderMap } = await buildTeeSheetEntryOrderMap(
           admin,
           typedTournament.id,
           targetRoundNo

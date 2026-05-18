@@ -8,17 +8,19 @@ type AdvancementRow = {
   ranking_basis: string;
   ranking_mode: string;
   from_round_no: number;
+  to_round_no: number;
   tie_break_profile_id: string | null;
   scope_type: string;
   scope_value: string | null;
 };
 
-function needsCutRulesUpgrade(rules: AdvancementRow[]): boolean {
+function needsCutRulesUpgrade(rules: AdvancementRow[], roundCount: number): boolean {
   if (rules.length === 0) return false;
   return rules.some(
     (r) =>
       r.ranking_mode !== "specified_rounds" ||
       r.from_round_no !== 1 ||
+      r.to_round_no !== roundCount ||
       !r.tie_break_profile_id
   );
 }
@@ -32,7 +34,7 @@ export async function upgradeTournamentCutRulesFromMachote(
   const { data: rules, error } = await supabase
     .from("round_advancement_rules")
     .select(
-      "id, ranking_basis, ranking_mode, from_round_no, tie_break_profile_id, scope_type, scope_value"
+      "id, ranking_basis, ranking_mode, from_round_no, to_round_no, tie_break_profile_id, scope_type, scope_value"
     )
     .eq("tournament_id", tournamentId)
     .eq("is_active", true);
@@ -40,7 +42,7 @@ export async function upgradeTournamentCutRulesFromMachote(
   if (error) throw new Error(`Reglas de corte: ${error.message}`);
 
   const list = (rules ?? []) as AdvancementRow[];
-  if (!needsCutRulesUpgrade(list)) {
+  if (!needsCutRulesUpgrade(list, roundCount)) {
     return { upgraded: false, profiles: 0 };
   }
 
@@ -81,6 +83,7 @@ export async function upgradeTournamentCutRulesFromMachote(
       .update({
         ranking_mode: "specified_rounds",
         from_round_no: 1,
+        to_round_no: roundCount,
         tie_break_profile_id: profileIds[profileKey] ?? null,
       })
       .eq("id", row.id);
@@ -91,4 +94,56 @@ export async function upgradeTournamentCutRulesFromMachote(
   }
 
   return { upgraded: true, profiles: Object.keys(profileIds).length };
+}
+
+/**
+ * CCQ: el corte es tras R1+R2 (→ R3). Reglas con destino R2 cortan solo por R1 en salidas de R2.
+ */
+export async function repairCutRulesTargetFinalRound(
+  supabase: SupabaseClient,
+  tournamentId: string
+): Promise<{ updated: number; finalRound: number }> {
+  const { data: rounds, error: roundsErr } = await supabase
+    .from("rounds")
+    .select("round_no")
+    .eq("tournament_id", tournamentId);
+
+  if (roundsErr) {
+    throw new Error(`Rondas del torneo: ${roundsErr.message}`);
+  }
+
+  const finalRound = Math.max(
+    1,
+    ...(rounds ?? []).map((r) => Number(r.round_no ?? 0)).filter((n) => n > 0)
+  );
+
+  if (finalRound <= 2) {
+    return { updated: 0, finalRound };
+  }
+
+  const { data: rules, error } = await supabase
+    .from("round_advancement_rules")
+    .select("id, to_round_no")
+    .eq("tournament_id", tournamentId)
+    .eq("is_active", true)
+    .lt("to_round_no", finalRound);
+
+  if (error) throw new Error(`Reglas de corte: ${error.message}`);
+
+  const toFix = (rules ?? []).filter(
+    (r) => Number(r.to_round_no) > 0 && Number(r.to_round_no) < finalRound
+  );
+
+  for (const row of toFix) {
+    const { error: upErr } = await supabase
+      .from("round_advancement_rules")
+      .update({ to_round_no: finalRound })
+      .eq("id", row.id);
+
+    if (upErr) {
+      throw new Error(`Actualizar destino de corte: ${upErr.message}`);
+    }
+  }
+
+  return { updated: toFix.length, finalRound };
 }

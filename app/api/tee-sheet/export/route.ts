@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
   if (targetRoundNo > 1) {
     try {
       const admin = createAdminClient();
-      const orderMap = await buildTeeSheetEntryOrderMap(
+      const { orderMap } = await buildTeeSheetEntryOrderMap(
         admin,
         tournamentId,
         targetRoundNo

@@ -26,6 +26,7 @@ import {
   cutEnforcesAtTargetRound,
   type RoundAdvancementRule,
 } from "@/lib/cuts/computeCutLine";
+import { repairCutRulesTargetFinalRound } from "@/lib/convocatoria/upgradeTournamentRules";
 import {
   clearGroups,
   confirmStartingOrder,
@@ -242,11 +243,12 @@ export default async function TeeSheetPage(props: {
   if (targetRoundNo > 1 && effectiveTournamentId) {
     try {
       const admin = createAdminClient();
-      teeSheetOrderMap = await buildTeeSheetEntryOrderMap(
+      const pairingOrder = await buildTeeSheetEntryOrderMap(
         admin,
         effectiveTournamentId,
         targetRoundNo
       );
+      teeSheetOrderMap = pairingOrder.orderMap;
       for (const [entryId, info] of teeSheetOrderMap) {
         if (info.standingDisplay) {
           standingDisplayByEntryId.set(entryId, info.standingDisplay);
@@ -522,7 +524,9 @@ for (const row of membersRaw) {
 
   let cutEnforcesForPairing = false;
   if (targetRoundNo > 1 && effectiveTournamentId) {
-    const { data: advancementRows } = await supabase
+    const admin = createAdminClient();
+    await repairCutRulesTargetFinalRound(admin, effectiveTournamentId);
+    const { data: advancementRows } = await admin
       .from("round_advancement_rules")
       .select("from_round_no, to_round_no, is_active")
       .eq("tournament_id", effectiveTournamentId)
