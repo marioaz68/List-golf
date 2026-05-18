@@ -19,7 +19,6 @@ type PublicTeeSheetViewProps = {
   selectedRoundId: string | null;
   labels: {
     empty: string;
-    allDays: string;
     noGroupsFilter: string;
     publishedStarts: string;
     groupOne: string;
@@ -64,9 +63,13 @@ export default function PublicTeeSheetView({
   const confirmedRounds = rounds.filter((round) =>
     isStartingOrderConfirmed(round.notes)
   );
+  const activeRoundId =
+    selectedRoundId && confirmedRounds.some((r) => r.id === selectedRoundId)
+      ? selectedRoundId
+      : confirmedRounds[0]?.id ?? null;
 
   const filteredGroups = groups
-    .filter((group) => !selectedRoundId || group.round_id === selectedRoundId)
+    .filter((group) => !activeRoundId || group.round_id === activeRoundId)
     .map((group) => ({
       ...group,
       members: selectedCategoryId
@@ -94,33 +97,24 @@ export default function PublicTeeSheetView({
 
   return (
     <div className="space-y-5 overflow-x-hidden">
-      <div className="flex flex-wrap gap-2">
-        <Link
-          href={buildHref({
-            tournamentId,
-            categoryId: selectedCategoryId || null,
-            view: "tee-sheet",
-          })}
-          className={sectionPillClasses(!selectedRoundId)}
-        >
-          {labels.allDays}
-        </Link>
-
-        {confirmedRounds.map((round) => (
-          <Link
-            key={round.id}
-            href={buildHref({
-              tournamentId,
-              categoryId: selectedCategoryId || null,
-              roundId: round.id,
-              view: "tee-sheet",
-            })}
-            className={sectionPillClasses(selectedRoundId === round.id)}
-          >
-            {formatPublicTeeSheetRoundPill(round)}
-          </Link>
-        ))}
-      </div>
+      {confirmedRounds.length > 1 ? (
+        <div className="flex flex-wrap gap-2">
+          {confirmedRounds.map((round) => (
+            <Link
+              key={round.id}
+              href={buildHref({
+                tournamentId,
+                categoryId: selectedCategoryId || null,
+                roundId: round.id,
+                view: "tee-sheet",
+              })}
+              className={sectionPillClasses(activeRoundId === round.id)}
+            >
+              {formatPublicTeeSheetRoundPill(round)}
+            </Link>
+          ))}
+        </div>
+      ) : null}
 
       {filteredGroups.length === 0 ? (
         <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
@@ -129,7 +123,7 @@ export default function PublicTeeSheetView({
       ) : null}
 
       {confirmedRounds
-        .filter((round) => !selectedRoundId || round.id === selectedRoundId)
+        .filter((round) => !activeRoundId || round.id === activeRoundId)
         .map((round) => {
           const roundGroups = (groupsByRound.get(round.id) ?? []).sort(
             (a, b) => a.group_no - b.group_no

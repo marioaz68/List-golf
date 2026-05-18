@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
@@ -206,9 +206,43 @@ export default async function PublicTournamentPage({
     })
   );
 
+  const defaultCategoryId = categories[0]?.id ?? "";
+
+  if (categories.length > 0 && !requestedCategoryId && defaultCategoryId) {
+    redirect(
+      buildHref({
+        tournamentId: typedTournament.id,
+        categoryId: defaultCategoryId,
+        roundId: requestedRoundId || undefined,
+        view: requestedView || undefined,
+        detailId: requestedDetailId || undefined,
+        embed: isEmbed,
+        fromAdmin: isEmbed && fromAdmin ? true : undefined,
+      })
+    );
+  }
+
   const selectedCategoryId = categories.some((c) => c.id === requestedCategoryId)
     ? requestedCategoryId
-    : "";
+    : defaultCategoryId;
+
+  if (
+    categories.length > 0 &&
+    requestedCategoryId &&
+    requestedCategoryId !== selectedCategoryId
+  ) {
+    redirect(
+      buildHref({
+        tournamentId: typedTournament.id,
+        categoryId: selectedCategoryId,
+        roundId: requestedRoundId || undefined,
+        view: requestedView || undefined,
+        detailId: requestedDetailId || undefined,
+        embed: isEmbed,
+        fromAdmin: isEmbed && fromAdmin ? true : undefined,
+      })
+    );
+  }
 
   const selectedCategory = selectedCategoryId
     ? categories.find((c) => c.id === selectedCategoryId) ?? null
@@ -232,7 +266,15 @@ export default async function PublicTournamentPage({
   }
 
   const rounds = (roundsData ?? []) as RoundRow[];
-  const publicTeeSheetRounds = rounds.filter((round) => isStartingOrderConfirmed(round.notes));
+  const roundsInCategoryScope = rounds.filter((r) =>
+    roundBelongsToCategory(r, selectedCategoryId || null)
+  );
+  const publicTeeSheetRoundsAll = rounds.filter((round) =>
+    isStartingOrderConfirmed(round.notes)
+  );
+  const publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) =>
+    roundBelongsToCategory(round, selectedCategoryId || null)
+  );
 
   const todayKey = utcTodayKey();
   const roundsTodayAll = rounds
@@ -289,11 +331,11 @@ export default async function PublicTournamentPage({
   const adminSupabase = await createAdminClient();
 
   const roundScores =
-    filteredEntries.length > 0 && rounds.length > 0
+    filteredEntries.length > 0 && roundsInCategoryScope.length > 0
       ? await fetchRoundScoresForPublicLeaderboard(
           adminSupabase,
           filteredEntries.map((entry) => entry.player_id),
-          rounds.map((r) => r.id)
+          roundsInCategoryScope.map((r) => r.id)
         )
       : [];
 
@@ -339,10 +381,6 @@ export default async function PublicTournamentPage({
     new Set(roundScores.map((score) => score.round_id))
   );
 
-  const roundsInCategoryScope = rounds.filter((r) =>
-    roundBelongsToCategory(r, selectedCategoryId || null)
-  );
-
   const latestRoundWithScoresFiltered =
     [...roundsInCategoryScope]
       .filter((round) => capturedRoundIds.includes(round.id))
@@ -362,7 +400,7 @@ export default async function PublicTournamentPage({
     rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
   );
 
-  const gateEntries = selectedCategoryId ? filteredEntries : allEntries;
+  const gateEntries = filteredEntries;
   const defaultRoundFromClose = resolveDefaultPublicLeaderboardRound({
     entries: gateEntries,
     allRounds: rounds,
@@ -396,12 +434,11 @@ export default async function PublicTournamentPage({
   }
 
   const selectedRound =
-    rounds.find((round) => round.id === effectiveRequestedRoundId) ??
+    roundsInCategoryScope.find((round) => round.id === effectiveRequestedRoundId) ??
     (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
     (view === "live" || view === "favorites" ? defaultRoundLiveFavorite : null) ??
     (view === "official" ? defaultRoundOfficial : null) ??
     roundsInCategoryScope[0] ??
-    rounds[0] ??
     null;
 
   const selectedRoundIsHistoric = Boolean(
@@ -416,12 +453,49 @@ export default async function PublicTournamentPage({
       ? resolvePublicRoundIdForCategory(rounds, preserveRoundNo, categoryId)
       : null;
 
+  const teeSheetRoundIdForCategoryLink = (categoryId: string) => {
+    const categoryTeeRounds = publicTeeSheetRoundsAll.filter((round) =>
+      roundBelongsToCategory(round, categoryId)
+    );
+    if (preserveRoundNo != null) {
+      const sameNo = categoryTeeRounds.find((r) => r.round_no === preserveRoundNo);
+      if (sameNo) return sameNo.id;
+    }
+    return categoryTeeRounds[0]?.id ?? null;
+  };
+
+  const roundIdForNavLink = (categoryId: string) =>
+    view === "tee-sheet"
+      ? teeSheetRoundIdForCategoryLink(categoryId) ?? undefined
+      : roundIdForCategoryLink(categoryId) ?? undefined;
+
   const selectedPublicTeeSheetRoundId =
-    view === "tee-sheet" && publicTeeSheetRounds.some((round) => round.id === requestedRoundId)
-      ? requestedRoundId
-      : view === "tee-sheet"
-        ? null
-        : selectedRound?.id ?? null;
+    view === "tee-sheet"
+      ? publicTeeSheetRounds.some((round) => round.id === effectiveRequestedRoundId)
+        ? effectiveRequestedRoundId
+        : publicTeeSheetRounds[0]?.id ?? null
+      : selectedRound?.id ?? null;
+
+  const canonicalRoundId =
+    view === "tee-sheet" ? selectedPublicTeeSheetRoundId : selectedRound?.id ?? null;
+
+  if (
+    canonicalRoundId &&
+    requestedRoundId &&
+    requestedRoundId !== canonicalRoundId
+  ) {
+    redirect(
+      buildHref({
+        tournamentId: typedTournament.id,
+        categoryId: selectedCategoryId || undefined,
+        roundId: canonicalRoundId,
+        view: requestedView || view,
+        detailId: requestedDetailId || undefined,
+        embed: isEmbed,
+        fromAdmin: isEmbed && fromAdmin ? true : undefined,
+      })
+    );
+  }
 
   const holeScoresByRoundScoreId = new Map<string, HoleScoreRow[]>();
   for (const row of holeScores) {
@@ -894,6 +968,9 @@ export default async function PublicTournamentPage({
     sessionRounds
   );
 
+  const selectedCategoryCode =
+    selectedCategory?.code ?? selectedCategory?.name ?? "";
+
   const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
     .map((group) => {
       const round = roundById.get(group.round_id) ?? null;
@@ -911,6 +988,16 @@ export default async function PublicTournamentPage({
           (a, b) => a.position - b.position
         ),
       };
+    })
+    .filter((group) => {
+      const round = roundById.get(group.round_id);
+      if (!round || !roundBelongsToCategory(round, selectedCategoryId || null)) {
+        return false;
+      }
+      if (!selectedCategoryCode) return true;
+      return group.members.some(
+        (m) => m.category_code === selectedCategoryCode
+      );
     })
     .sort((a, b) => {
       if (a.round_no !== b.round_no) return a.round_no - b.round_no;
@@ -1056,6 +1143,10 @@ export default async function PublicTournamentPage({
                 scroll={false}
                 href={tHref({
                   categoryId: selectedCategoryId || null,
+                  roundId:
+                    selectedPublicTeeSheetRoundId ??
+                    teeSheetRoundIdForCategoryLink(selectedCategoryId) ??
+                    undefined,
                   view: "tee-sheet",
                 })}
                 className={publicTournamentViewPillClasses(
@@ -1141,30 +1232,13 @@ export default async function PublicTournamentPage({
             <div className="mt-6 flex flex-col gap-3">
               {categories.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    scroll={false}
-                    href={tHref({
-                      roundId:
-                        view === "tee-sheet"
-                          ? selectedPublicTeeSheetRoundId
-                          : roundIdForCategoryLink(null) ?? undefined,
-                      view,
-                    })}
-                    className={sectionPillClasses(!selectedCategoryId)}
-                  >
-                    {pub.allCategories}
-                  </Link>
-
                   {categories.map((category) => (
                     <Link
                       key={category.id}
                       scroll={false}
                       href={tHref({
                         categoryId: category.id,
-                        roundId:
-                          view === "tee-sheet"
-                            ? selectedPublicTeeSheetRoundId
-                            : roundIdForCategoryLink(category.id) ?? undefined,
+                        roundId: roundIdForNavLink(category.id),
                         view,
                       })}
                       className={sectionPillClasses(selectedCategoryId === category.id)}
@@ -1405,13 +1479,12 @@ export default async function PublicTournamentPage({
           {view === "tee-sheet" ? (
             <PublicTeeSheetView
               groups={publicPairingGroups}
-              rounds={rounds}
+              rounds={publicTeeSheetRounds}
               tournamentId={typedTournament.id}
               selectedCategoryId={selectedCategory?.code ?? selectedCategory?.name ?? ""}
               selectedRoundId={selectedPublicTeeSheetRoundId}
               labels={{
                 empty: pts.empty,
-                allDays: pts.allDays,
                 noGroupsFilter: pts.noGroupsFilter,
                 publishedStarts: pts.publishedStarts,
                 groupOne: pts.groupOne,
