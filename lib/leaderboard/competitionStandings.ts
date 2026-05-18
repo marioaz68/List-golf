@@ -7,18 +7,15 @@ import {
   roundRowAppliesToEntry,
 } from "./roundCategoryMatch";
 import {
-  defaultRuleForCategory,
+  isStablefordCategory,
   rulesByCategoryId,
   type CategoryCompetitionRule,
 } from "./categoryCompetitionRules";
-import { cumulativeLeaderboardValue } from "./competitionScoring";
-
-function higherIsBetter(rule: CategoryCompetitionRule): boolean {
-  return (
-    rule.scoring_format === "stableford" ||
-    rule.leaderboard_basis === "stableford"
-  );
-}
+import { competitionRuleForCategory } from "./resolveCompetitionRule";
+import {
+  cumulativeLeaderboardValue,
+  type StrokeIndexByHole,
+} from "./competitionScoring";
 
 function compareSortValues(
   a: number | null,
@@ -41,12 +38,14 @@ export function applyCompetitionStandings({
   selectedRound,
   competitionRules,
   handicapByPlayerId,
+  strokeIndexByHole,
 }: {
   leaderboard: LeaderboardRow[];
   rounds: SelectedRoundMeta[];
   selectedRound: SelectedRoundMeta | null;
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
+  strokeIndexByHole?: StrokeIndexByHole;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
   const sortedRounds = [...rounds].sort((a, b) => a.round_no - b.round_no);
@@ -74,10 +73,11 @@ export function applyCompetitionStandings({
     >();
 
     for (const [categoryKey, rowsInCategory] of categoryBuckets) {
-      const rule =
-        rulesMap.get(String(rowsInCategory[0]?.category_id ?? "")) ??
-        defaultRuleForCategory(rowsInCategory[0]?.category_id ?? null);
-      const hiBetter = higherIsBetter(rule);
+      const rule = competitionRuleForCategory(
+        rulesMap,
+        rowsInCategory[0]?.category_id ?? null
+      );
+      const hiBetter = isStablefordCategory(rule);
 
       const scored = rowsInCategory.map((row) => {
         if (row.is_disqualified) {
@@ -97,7 +97,8 @@ export function applyCompetitionStandings({
           detailsInScope,
           rule,
           hcp,
-          round.round_no
+          round.round_no,
+          strokeIndexByHole
         );
         return { row, sortValue: cum.sortValue };
       });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { validateCutScopeValue } from "@/lib/cuts/validateCutScope";
 import { saveCutRulesSnapshot } from "./actions";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import {
@@ -377,6 +378,15 @@ export default function CutRulesEditor({
         (!Number.isFinite(r.gross_exemption_top_n) || r.gross_exemption_top_n < 1)
       ) {
         setMsg(fmt(ce.valGrossExempt, { row: i + 1 }));
+        return false;
+      }
+
+      const scopeErr = validateCutScopeValue(
+        r.scope_type as "category" | "category_group" | "category_code_list" | "overall",
+        r.scope_value
+      );
+      if (scopeErr) {
+        setMsg(`${scopeErr} (fila ${i + 1})`);
         return false;
       }
     }

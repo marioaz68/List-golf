@@ -78,6 +78,7 @@ export type HoleScoreRow = {
 export type TournamentHoleRow = {
   hole_number: number | null;
   par: number | null;
+  handicap_index?: number | null;
 };
 
 export type HoleDetail = {

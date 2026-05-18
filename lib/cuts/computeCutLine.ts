@@ -3,14 +3,16 @@ import {
   rulesByCategoryId,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import {
   compareByTieBreakSteps,
   type TieBreakStep,
 } from "./tieBreak";
 import {
-  higherIsBetterForRankingBasis,
+  higherIsBetterForCutRule,
   rankValueForAdvancementRule,
 } from "./cutRanking";
+import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 
 export type RoundAdvancementRule = {
   from_round_no: number;
@@ -77,9 +79,15 @@ function ruleAppliesToRow(
       );
     case "category_group": {
       const group = String(rule.scope_value ?? "").trim().toUpperCase();
+      if (!group) return false;
       const cat = categories.find((c) => c.id === id);
       const catCode = (cat?.code ?? code).toUpperCase();
-      return catCode.startsWith(group);
+      if (catCode === group) return true;
+      /** Evita que grupo "D" aplique a DE y DC a la vez; solo prefijos de 2+ letras (ej. DA). */
+      if (group.length >= 2 && catCode.startsWith(group)) {
+        return true;
+      }
+      return false;
     }
     case "overall":
       return true;
@@ -108,20 +116,21 @@ function sortCutField(
   tieBreakSteps: TieBreakStep[],
   rulesMap: Map<string, CategoryCompetitionRule>,
   handicapByPlayerId: Map<string, number | null>,
-  categoryId: string
+  categoryId: string,
+  strokeIndexByHole?: StrokeIndexByHole
 ): RankedCutPlayer[] {
-  const catRule =
-    rulesMap.get(categoryId) ?? rulesMap.get(String(categoryId)) ?? null;
+  const catRule = competitionRuleForCategory(rulesMap, categoryId);
 
   return [...players].sort((a, b) => {
     const primary = comparePrimary(a, b, higherIsBetter);
     if (primary !== 0) return primary;
 
-    if (tieBreakSteps.length > 0 && catRule) {
+    if (tieBreakSteps.length > 0) {
       const tb = compareByTieBreakSteps(a.detail, b.detail, tieBreakSteps, {
         catRule,
         handicapIndexA: handicapByPlayerId.get(a.playerId) ?? null,
         handicapIndexB: handicapByPlayerId.get(b.playerId) ?? null,
+        strokeIndexByHole,
       });
       if (tb !== 0) return tb;
     }
@@ -223,6 +232,7 @@ function computeLineForRule(
     rulesMap: Map<string, CategoryCompetitionRule>;
     handicapByPlayerId: Map<string, number | null>;
     tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
+    strokeIndexByHole?: StrokeIndexByHole;
   }
 ): PublicCutLine | null {
   const scoped = rowsInCat.filter((r) =>
@@ -240,7 +250,8 @@ function computeLineForRule(
     };
   }
 
-  const higherIsBetter = higherIsBetterForRankingBasis(rule.ranking_basis);
+  const catRule = competitionRuleForCategory(params.rulesMap, categoryId);
+  const higherIsBetter = higherIsBetterForCutRule(rule, catRule);
   const tieBreakSteps = rule.tie_break_profile_id
     ? params.tieBreakStepsByProfileId.get(rule.tie_break_profile_id) ?? []
     : [];
@@ -251,7 +262,8 @@ function computeLineForRule(
       rule,
       params.selectedRoundNo,
       params.rulesMap,
-      params.handicapByPlayerId
+      params.handicapByPlayerId,
+      params.strokeIndexByHole
     );
     return {
       entryId: row.entry_id,
@@ -268,7 +280,8 @@ function computeLineForRule(
     tieBreakSteps,
     params.rulesMap,
     params.handicapByPlayerId,
-    categoryId
+    categoryId,
+    params.strokeIndexByHole
   );
 
   let madeCut = madeCutFromRanking(
@@ -341,6 +354,7 @@ export function computePublicCutLines(params: {
   selectedCategoryId: string | null;
   handicapByPlayerId: Map<string, number | null>;
   tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
+  strokeIndexByHole?: StrokeIndexByHole;
 }): PublicCutLine[] {
   const { leaderboard, selectedRoundNo } = params;
   if (selectedRoundNo <= 1) return [];
@@ -379,6 +393,7 @@ export function computePublicCutLines(params: {
     rulesMap,
     handicapByPlayerId: params.handicapByPlayerId,
     tieBreakStepsByProfileId: params.tieBreakStepsByProfileId,
+    strokeIndexByHole: params.strokeIndexByHole,
   };
 
   for (const categoryId of categoryScopeIds) {
@@ -400,26 +415,20 @@ export function computePublicCutLines(params: {
     );
     if (matchingRules.length === 0) continue;
 
-    const scopePriority: Record<RoundAdvancementRule["scope_type"], number> = {
-      category: 0,
-      category_code_list: 1,
-      category_group: 2,
-      overall: 3,
-    };
-    const rule = [...matchingRules].sort(
-      (a, b) =>
-        scopePriority[a.scope_type] - scopePriority[b.scope_type] ||
-        (a.sort_order ?? 999) - (b.sort_order ?? 999)
-    )[0]!;
+    const linesForCategory: PublicCutLine[] = [];
+    for (const rule of matchingRules) {
+      const line = computeLineForRule(
+        rule,
+        rowsInCat,
+        categoryId,
+        catCode,
+        shared
+      );
+      if (line) linesForCategory.push(line);
+    }
 
-    const line = computeLineForRule(
-      rule,
-      rowsInCat,
-      categoryId,
-      catCode,
-      shared
-    );
-    if (line) rawLines.push(line);
+    const merged = mergeCutLinesForCategory(linesForCategory, categoryId);
+    if (merged) rawLines.push(merged);
   }
 
   return rawLines;

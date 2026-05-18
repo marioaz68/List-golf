@@ -1,5 +1,6 @@
 "use server";
 
+import { validateCutScopeValue } from "@/lib/cuts/validateCutScope";
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -19,7 +20,7 @@ function optNum(value: unknown) {
   const s = String(value ?? "").trim();
   if (!s) return null;
   const n = Number(s);
-  if (!Number.isFinite(n)) throw new Error(`Número inválido: ${s}`);
+  if (!Number.isFinite(n)) throw new Error(`N?mero inv?lido: ${s}`);
   return n;
 }
 
@@ -31,7 +32,7 @@ function optInt(value: unknown) {
 function parseScopeType(value: unknown) {
   const v = String(value ?? "").trim();
   if (!["category", "category_group", "category_code_list", "overall"].includes(v)) {
-    throw new Error(`scope_type inválido: ${v}`);
+    throw new Error(`scope_type inv?lido: ${v}`);
   }
   return v as "category" | "category_group" | "category_code_list" | "overall";
 }
@@ -48,7 +49,7 @@ function parseRankingBasis(value: unknown) {
       "points_round",
     ].includes(v)
   ) {
-    throw new Error(`ranking_basis inválido: ${v}`);
+    throw new Error(`ranking_basis inv?lido: ${v}`);
   }
 
   return v as
@@ -63,7 +64,7 @@ function parseRankingBasis(value: unknown) {
 function parseRankingMode(value: unknown) {
   const v = String(value ?? "").trim();
   if (!["tournament_to_date", "specified_rounds", "last_round_only"].includes(v)) {
-    throw new Error(`ranking_mode inválido: ${v}`);
+    throw new Error(`ranking_mode inv?lido: ${v}`);
   }
   return v as "tournament_to_date" | "specified_rounds" | "last_round_only";
 }
@@ -71,7 +72,7 @@ function parseRankingMode(value: unknown) {
 function parseAdvancementType(value: unknown) {
   const v = String(value ?? "").trim();
   if (!["top_n", "top_percent", "all"].includes(v)) {
-    throw new Error(`advancement_type inválido: ${v}`);
+    throw new Error(`advancement_type inv?lido: ${v}`);
   }
   return v as "top_n" | "top_percent" | "all";
 }
@@ -118,13 +119,13 @@ export async function saveCutRulesSnapshot(formData: FormData) {
   try {
     rows = JSON.parse(rowsRaw);
   } catch {
-    throw new Error("rows_json inválido");
+    throw new Error("rows_json inv?lido");
   }
 
   try {
     deleteIds = deleteIdsRaw ? JSON.parse(deleteIdsRaw) : [];
   } catch {
-    throw new Error("delete_ids_json inválido");
+    throw new Error("delete_ids_json inv?lido");
   }
 
   if (!Array.isArray(rows)) throw new Error("rows_json debe ser arreglo");
@@ -155,7 +156,7 @@ export async function saveCutRulesSnapshot(formData: FormData) {
     }
 
     if (r.gross_exemption_enabled && r.gross_exemption_top_n < 1) {
-      throw new Error(`Top Gross protegido inválido en fila ${i + 1}`);
+      throw new Error(`Top Gross protegido inv?lido en fila ${i + 1}`);
     }
 
     r.tie_break_profile_id = String(r.tie_break_profile_id ?? "").trim() || null;
@@ -164,11 +165,11 @@ export async function saveCutRulesSnapshot(formData: FormData) {
     r.notes = String(r.notes ?? "").trim() || null;
 
     if (r.from_round_no < 1) {
-      throw new Error(`from_round_no inválido en fila ${i + 1}`);
+      throw new Error(`from_round_no inv?lido en fila ${i + 1}`);
     }
 
     if (r.to_round_no < 1) {
-      throw new Error(`to_round_no inválido en fila ${i + 1}`);
+      throw new Error(`to_round_no inv?lido en fila ${i + 1}`);
     }
 
     if (r.to_round_no < r.from_round_no) {
@@ -179,15 +180,20 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       throw new Error(`Falta scope_value en fila ${i + 1}`);
     }
 
+    const scopeErr = validateCutScopeValue(r.scope_type, r.scope_value);
+    if (scopeErr) {
+      throw new Error(`${scopeErr} (fila ${i + 1})`);
+    }
+
     if (r.advancement_type === "top_n" && r.advancement_value < 1) {
-      throw new Error(`Top N inválido en fila ${i + 1}`);
+      throw new Error(`Top N inv?lido en fila ${i + 1}`);
     }
 
     if (
       r.advancement_type === "top_percent" &&
       (r.advancement_value <= 0 || r.advancement_value > 100)
     ) {
-      throw new Error(`Top % inválido en fila ${i + 1}`);
+      throw new Error(`Top % inv?lido en fila ${i + 1}`);
     }
   }
 

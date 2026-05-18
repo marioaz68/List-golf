@@ -1,35 +1,40 @@
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import {
-  defaultRuleForCategory,
+  isStablefordCategory,
   rulesByCategoryId,
   type CategoryCompetitionRule,
 } from "./categoryCompetitionRules";
-import { cumulativeLeaderboardValue } from "./competitionScoring";
+import { competitionRuleForCategory } from "./resolveCompetitionRule";
+import {
+  cumulativeLeaderboardValue,
+  type StrokeIndexByHole,
+} from "./competitionScoring";
 
 export function applyCompetitionRules({
   leaderboard,
   competitionRules,
   handicapByPlayerId,
   maxRoundNo,
+  strokeIndexByHole,
 }: {
   leaderboard: LeaderboardRow[];
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
   maxRoundNo: number | null;
+  strokeIndexByHole?: StrokeIndexByHole;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
 
   const enriched = leaderboard.map((row) => {
-    const rule =
-      rulesMap.get(String(row.category_id ?? "")) ??
-      defaultRuleForCategory(row.category_id);
+    const rule = competitionRuleForCategory(rulesMap, row.category_id);
 
     const hcp = handicapByPlayerId.get(row.player_id) ?? null;
     const cum = cumulativeLeaderboardValue(
       row.details,
       rule,
       hcp,
-      maxRoundNo
+      maxRoundNo,
+      strokeIndexByHole
     );
 
     return {
@@ -54,9 +59,10 @@ export function applyCompetitionRules({
   const sorted: LeaderboardRow[] = [];
 
   for (const [, rows] of groups) {
-    const rule =
-      rulesMap.get(String(rows[0]?.category_id ?? "")) ??
-      defaultRuleForCategory(rows[0]?.category_id ?? null);
+    const rule = competitionRuleForCategory(
+      rulesMap,
+      rows[0]?.category_id ?? null
+    );
 
     const higherIsBetter =
       rule.scoring_format === "stableford" ||
@@ -72,13 +78,8 @@ export function applyCompetitionRules({
     if (catA !== catB) {
       return catA.localeCompare(catB, "es", { sensitivity: "base" });
     }
-    const rule =
-      rulesMap.get(String(a.category_id ?? "")) ??
-      defaultRuleForCategory(a.category_id);
-    const higherIsBetter =
-      rule.scoring_format === "stableford" ||
-      rule.leaderboard_basis === "stableford";
-    return compareRows(a, b, higherIsBetter);
+    const rule = competitionRuleForCategory(rulesMap, a.category_id);
+    return compareRows(a, b, isStablefordCategory(rule));
   });
 
   return sorted;

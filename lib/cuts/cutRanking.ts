@@ -6,25 +6,40 @@ import {
   type CutRankingBasis,
 } from "@/lib/leaderboard/cumulativeInRoundRange";
 import {
-  defaultRuleForCategory,
+  isStablefordCategory,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
+import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import { collectRoundIdsWithScoreCapture } from "@/lib/leaderboard/roundCategoryMatch";
 import { resolveDetailForRoundNo } from "@/lib/leaderboard/roundCategoryMatch";
 import type { RoundAdvancementRule } from "./computeCutLine";
 
-/** Si la categoría juega neto y la regla de corte pide gross, clasificar el corte en neto. */
-function effectiveRankingBasis(
+/** Alinea base del corte con la modalidad de la categoría (Stableford → puntos). */
+export function effectiveRankingBasis(
   rule: RoundAdvancementRule,
   catRule: CategoryCompetitionRule
 ): CutRankingBasis {
   const basis = rule.ranking_basis as CutRankingBasis;
+
+  if (isStablefordCategory(catRule)) {
+    if (basis === "gross_round" || basis === "net_round") return "points_round";
+    return "points_total";
+  }
+
   const playsNet =
     catRule.leaderboard_basis === "net" || catRule.leaderboard_basis === "both";
   if (!playsNet) return basis;
   if (basis === "gross_total") return "net_total";
   if (basis === "gross_round") return "net_round";
   return basis;
+}
+
+export function higherIsBetterForCutRule(
+  rule: RoundAdvancementRule,
+  catRule: CategoryCompetitionRule
+): boolean {
+  return higherIsBetterForRankingBasis(effectiveRankingBasis(rule, catRule));
 }
 
 export function rankingRoundRange(
@@ -72,15 +87,14 @@ export function rankValueForAdvancementRule(
   rule: RoundAdvancementRule,
   selectedRoundNo: number,
   rulesMap: Map<string, CategoryCompetitionRule>,
-  handicapByPlayerId: Map<string, number | null>
+  handicapByPlayerId: Map<string, number | null>,
+  strokeIndexByHole?: StrokeIndexByHole
 ): {
   primary: number | null;
   gross: number | null;
   detail: RoundDetail | null;
 } {
-  const catRule =
-    rulesMap.get(String(row.category_id ?? "")) ??
-    defaultRuleForCategory(row.category_id);
+  const catRule = competitionRuleForCategory(rulesMap, row.category_id);
   const hcp = handicapByPlayerId.get(row.player_id) ?? null;
   const { minRound, maxRound, tieBreakRound } = rankingRoundRange(
     rule,
@@ -102,7 +116,8 @@ export function rankValueForAdvancementRule(
     catRule,
     hcp,
     rangeMin,
-    rangeMax
+    rangeMax,
+    strokeIndexByHole
   );
 
   if (isSingleRound && !detail) {

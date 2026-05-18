@@ -3,12 +3,10 @@ import {
   resolveDetailForRoundNo,
   type SelectedRoundMeta,
 } from "@/lib/leaderboard/roundCategoryMatch";
-import {
-  defaultRuleForCategory,
-  rulesByCategoryId,
-  type CategoryCompetitionRule,
-} from "@/lib/leaderboard/categoryCompetitionRules";
+import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import { formatRoundCellForRule } from "@/lib/leaderboard/competitionDisplay";
+import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import type { LeaderboardRow } from "./types";
 
 /** Columnas fijas antes de las de ronda: C, JUG, ★, POS, MV, THR. */
@@ -55,11 +53,10 @@ export function roundDetailForPublicColumn(
   row: LeaderboardRow,
   roundNo: number,
   rulesMap: Map<string, CategoryCompetitionRule>,
-  handicapByPlayerId: Map<string, number | null>
+  handicapByPlayerId: Map<string, number | null>,
+  strokeIndexByHole?: StrokeIndexByHole
 ): string {
-  const rule =
-    rulesMap.get(String(row.category_id ?? "")) ??
-    defaultRuleForCategory(row.category_id);
+  const rule = competitionRuleForCategory(rulesMap, row.category_id);
 
   const scoreRoundIds = collectRoundIdsWithScoreCapture(row.details);
   const detail = resolveDetailForRoundNo(
@@ -75,7 +72,8 @@ export function roundDetailForPublicColumn(
     detail,
     rule,
     hcp,
-    row.is_disqualified
+    row.is_disqualified,
+    strokeIndexByHole
   );
 }
 

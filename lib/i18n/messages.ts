@@ -538,6 +538,8 @@ const es = {
       valTopPercent: "Top % debe estar entre 0 y 100 en fila {row}.",
       valGrossExempt:
         "Top Gross protegido debe ser mayor o igual a 1 en fila {row}.",
+      valCutScopeGroup:
+        "El grupo de categorías debe tener al menos 2 letras o ser un código exacto (ej. DE), no una sola letra como «D» (fila {row}).",
       rankingBasisLabels: {
         gross_total: "Gross total",
         net_total: "Neto total",
@@ -866,6 +868,21 @@ const es = {
       "Filtra la vista actual. Si no sabes la categoría, elige «Todas las categorías» arriba y busca aquí.",
     playerSearchNoMatches: "Ningún jugador coincide con tu búsqueda.",
     playerSearchCount: "{shown} de {total}",
+    rulesBlockedTitle: "Clasificación no disponible",
+    rulesBlockedIntro:
+      "Hay problemas en la configuración del torneo. Corrige cada punto en administración antes de publicar resultados.",
+    rulesCompetitionLoadFailed:
+      "No se pudieron cargar las reglas de competición desde la base de datos.",
+    rulesCutLoadFailed:
+      "No se pudieron cargar las reglas de corte (necesarias desde la ronda 2).",
+    rulesCategoriesMissingRule:
+      "Falta regla de competición activa para: {codes}.",
+    rulesCompetitionInvalidConfig:
+      "Reglas de competición inválidas: {details}.",
+    rulesStrokeIndexIncomplete:
+      "Hoyos del campo incompletos: solo {count} de 18 tienen índice de handicap (requerido para neto/Stableford).",
+    rulesBlockedAdminHint:
+      "Administración → Competencia, Reglas de corte y Hoyos del torneo.",
   },
   publicTeeSheet: {
     empty:
@@ -1540,6 +1557,8 @@ const en: Messages = {
       valTopPercent: "Top % must be between 0 and 100 in row {row}.",
       valGrossExempt:
         "Protected gross top must be greater than or equal to 1 in row {row}.",
+      valCutScopeGroup:
+        "Category group must be at least 2 letters or an exact code (e.g. DE), not a single letter like “D” (row {row}).",
       rankingBasisLabels: {
         gross_total: "Gross total",
         net_total: "Net total",
@@ -1865,6 +1884,21 @@ const en: Messages = {
       "Filters the current view. If you do not know the category, pick \"All categories\" above and search here.",
     playerSearchNoMatches: "No player matches your search.",
     playerSearchCount: "{shown} of {total}",
+    rulesBlockedTitle: "Leaderboard unavailable",
+    rulesBlockedIntro:
+      "Tournament configuration must be fixed in admin before results can be shown.",
+    rulesCompetitionLoadFailed:
+      "Competition rules could not be loaded from the database.",
+    rulesCutLoadFailed:
+      "Cut rules could not be loaded (required from round 2 onward).",
+    rulesCategoriesMissingRule:
+      "Missing active competition rule for: {codes}.",
+    rulesCompetitionInvalidConfig:
+      "Invalid competition rules: {details}.",
+    rulesStrokeIndexIncomplete:
+      "Course holes incomplete: only {count} of 18 have stroke index (required for net/Stableford).",
+    rulesBlockedAdminHint:
+      "Admin → Competition, Cut rules, and Tournament holes.",
   },
   publicTeeSheet: {
     empty:

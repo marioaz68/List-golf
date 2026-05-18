@@ -51,6 +51,7 @@ type FavoritesViewProps = {
   cutLine?: PublicCutLine | null;
   competitionRules?: CategoryCompetitionRule[];
   handicapsByPlayerId?: Record<string, number | null>;
+  strokeIndexByHole?: Record<number, number>;
 };
 
 function categoryBucket(code: string | null | undefined) {
@@ -323,6 +324,7 @@ export default function FavoritesView({
   cutLine = null,
   competitionRules = [],
   handicapsByPlayerId = {},
+  strokeIndexByHole: strokeIndexByHoleRecord = {},
 }: FavoritesViewProps) {
   const rulesMap = useMemo(
     () => buildCompetitionRulesMap(competitionRules),
@@ -332,6 +334,17 @@ export default function FavoritesView({
     () => buildHandicapMap(handicapsByPlayerId),
     [handicapsByPlayerId]
   );
+  const strokeIndexMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const [hole, si] of Object.entries(strokeIndexByHoleRecord)) {
+      const holeNo = Number(hole);
+      const index = Number(si);
+      if (holeNo >= 1 && holeNo <= 18 && index >= 1 && index <= 18) {
+        map.set(holeNo, index);
+      }
+    }
+    return map;
+  }, [strokeIndexByHoleRecord]);
   const defaultHeaderRule = useMemo(
     () => ruleForCategory(rulesMap, selectedCategoryId || null),
     [rulesMap, selectedCategoryId]
@@ -559,6 +572,7 @@ export default function FavoritesView({
                     selectedRound={selectedRound}
                     rulesMap={rulesMap}
                     handicapByPlayerId={handicapMap}
+                    strokeIndexByHole={strokeIndexMap}
                   />
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
@@ -589,6 +603,7 @@ export default function FavoritesView({
                           handicapIndex={
                             handicapMap.get(row.player_id) ?? null
                           }
+                          strokeIndexByHole={strokeIndexMap}
                         />
                       </div>
                     </td>

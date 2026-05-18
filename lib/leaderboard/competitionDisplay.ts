@@ -1,12 +1,15 @@
-import type { CategoryCompetitionRule } from "./categoryCompetitionRules";
-import { scoreRoundDetail } from "./competitionScoring";
+import {
+  isStablefordCategory,
+  type CategoryCompetitionRule,
+} from "./categoryCompetitionRules";
+import { scoreRoundDetail, type StrokeIndexByHole } from "./competitionScoring";
 import type { LeaderboardRow, RoundDetail } from "@/app/torneos/[id]/lib/types";
 import { formatRelativeOrDQ, formatScoreOrDQ } from "@/app/torneos/[id]/lib/utils";
 
 export function scoringFormatLabel(
   rule: CategoryCompetitionRule
 ): string {
-  if (rule.scoring_format === "stableford") return "Stableford";
+  if (isStablefordCategory(rule)) return "Stableford";
   if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
     return "Stroke · Neto";
   }
@@ -14,7 +17,7 @@ export function scoringFormatLabel(
 }
 
 export function mainTotalColumnHeader(rule: CategoryCompetitionRule): string {
-  if (rule.scoring_format === "stableford" || rule.leaderboard_basis === "stableford") {
+  if (isStablefordCategory(rule)) {
     return "PTS";
   }
   if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
@@ -48,13 +51,19 @@ export function formatRoundCellForRule(
   detail: RoundDetail | null,
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
-  isDisqualified: boolean
+  isDisqualified: boolean,
+  strokeIndexByHole?: StrokeIndexByHole
 ): string {
   if (isDisqualified) return "DQ";
   if (!detail) return "—";
-  const scored = scoreRoundDetail(detail, rule, handicapIndex);
+  const scored = scoreRoundDetail(
+    detail,
+    rule,
+    handicapIndex,
+    strokeIndexByHole
+  );
 
-  if (rule.scoring_format === "stableford") {
+  if (isStablefordCategory(rule)) {
     return scored.stablefordPoints != null
       ? formatScoreOrDQ(scored.stablefordPoints, false)
       : "—";
@@ -80,7 +89,7 @@ export function formatMainTotalForRow(
   rule: CategoryCompetitionRule
 ): string {
   if (row.is_disqualified) return "DQ";
-  if (rule.scoring_format === "stableford") {
+  if (isStablefordCategory(rule)) {
     return formatScoreOrDQ(row.total_to_par, false);
   }
   if (rule.leaderboard_basis === "net" || rule.leaderboard_basis === "both") {
@@ -94,7 +103,7 @@ export function detailScoreColumnLabels(rule: CategoryCompetitionRule): {
   secondary: string;
   modality: string;
 } {
-  if (rule.scoring_format === "stableford") {
+  if (isStablefordCategory(rule)) {
     return {
       primary: "PTS",
       secondary: "GR",

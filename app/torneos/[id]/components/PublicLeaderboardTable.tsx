@@ -83,6 +83,7 @@ type PublicLeaderboardTableProps = {
   cutLine?: PublicCutLine | null;
   competitionRules?: CategoryCompetitionRule[];
   handicapsByPlayerId?: Record<string, number | null>;
+  strokeIndexByHole?: Record<number, number>;
   headerCompetitionRule?: CategoryCompetitionRule | null;
 };
 
@@ -101,6 +102,7 @@ export default function PublicLeaderboardTable({
   cutLine = null,
   competitionRules = [],
   handicapsByPlayerId = {},
+  strokeIndexByHole: strokeIndexByHoleRecord = {},
   headerCompetitionRule = null,
 }: PublicLeaderboardTableProps) {
   const rulesMap = useMemo(
@@ -111,6 +113,17 @@ export default function PublicLeaderboardTable({
     () => buildHandicapMap(handicapsByPlayerId),
     [handicapsByPlayerId]
   );
+  const strokeIndexMap = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const [hole, si] of Object.entries(strokeIndexByHoleRecord)) {
+      const holeNo = Number(hole);
+      const index = Number(si);
+      if (holeNo >= 1 && holeNo <= 18 && index >= 1 && index <= 18) {
+        map.set(holeNo, index);
+      }
+    }
+    return map;
+  }, [strokeIndexByHoleRecord]);
   const headerRule =
     headerCompetitionRule ??
     ruleForCategory(rulesMap, selectedCategoryId || null);
@@ -357,6 +370,7 @@ export default function PublicLeaderboardTable({
                             handicapIndex={
                               handicapMap.get(row.player_id) ?? null
                             }
+                            strokeIndexByHole={strokeIndexMap}
                           />
                         </div>
                       </td>

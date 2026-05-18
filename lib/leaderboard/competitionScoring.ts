@@ -1,8 +1,17 @@
 import type { RoundDetail } from "@/app/torneos/[id]/lib/types";
 import type { CategoryCompetitionRule } from "./categoryCompetitionRules";
+import { isStablefordCategory, normalizeCompetitionRule } from "./categoryCompetitionRules";
+import {
+  playingHandicap,
+  strokeIndexForHole,
+  strokesReceivedOnHole,
+  type StrokeIndexByHole,
+} from "./handicapStrokes";
 
-function stablefordPoints(strokes: number, par: number): number {
-  const diff = strokes - par;
+export { playingHandicap, type StrokeIndexByHole };
+
+export function stablefordPoints(netStrokes: number, par: number): number {
+  const diff = netStrokes - par;
   if (diff <= -3) return 5;
   if (diff === -2) return 4;
   if (diff === -1) return 3;
@@ -11,28 +20,20 @@ function stablefordPoints(strokes: number, par: number): number {
   return 0;
 }
 
-function playingHandicap(
-  handicapIndex: number | null | undefined,
-  percentage: number
-): number {
-  const hcp = Number(handicapIndex);
-  if (!Number.isFinite(hcp) || hcp <= 0) return 0;
-  const pct = Number(percentage);
-  if (!Number.isFinite(pct) || pct <= 0) return 0;
-  return Math.round((hcp * pct) / 100);
-}
-
-/** Puntos Stableford y gross/to-par de una ronda (hoyos jugados). */
+/** Puntos Stableford (neto con PH) y gross/to-par de una ronda. */
 export function scoreRoundDetail(
   detail: RoundDetail,
   rule: CategoryCompetitionRule,
-  handicapIndex: number | null | undefined
+  handicapIndex: number | null | undefined,
+  strokeIndexByHole?: StrokeIndexByHole
 ): {
   gross: number | null;
   toPar: number | null;
   netToPar: number | null;
   stablefordPoints: number | null;
 } {
+  const catRule = normalizeCompetitionRule(rule);
+
   if (detail.is_dq) {
     return {
       gross: null,
@@ -57,6 +58,11 @@ export function scoreRoundDetail(
   let grossPlayed = 0;
   let points = 0;
   let hasPoints = false;
+  let netStrokesPlayed = 0;
+  let hasNetLine = false;
+
+  const ph = playingHandicap(handicapIndex, catRule.handicap_percentage);
+  const useNetStableford = isStablefordCategory(catRule);
 
   for (const hole of played) {
     const strokes = Number(hole.strokes);
@@ -64,8 +70,14 @@ export function scoreRoundDetail(
     if (Number.isNaN(strokes)) continue;
     grossPlayed += strokes;
     parPlayed += par;
-    if (rule.scoring_format === "stableford") {
-      points += stablefordPoints(strokes, par);
+
+    if (useNetStableford) {
+      const si = strokeIndexForHole(hole.hole_number, strokeIndexByHole);
+      const received = strokesReceivedOnHole(ph, si);
+      const netStrokes = strokes - received;
+      netStrokesPlayed += netStrokes;
+      hasNetLine = true;
+      points += stablefordPoints(netStrokes, par);
       hasPoints = true;
     }
   }
@@ -75,16 +87,18 @@ export function scoreRoundDetail(
   const toPar =
     grossPlayed > 0 && parPlayed > 0 ? grossPlayed - parPlayed : detail.to_par;
 
-  const ph = playingHandicap(handicapIndex, rule.handicap_percentage);
   const netToPar =
-    toPar != null && rule.scoring_format === "stroke_play" ? toPar - ph : null;
+    hasNetLine && parPlayed > 0
+      ? netStrokesPlayed - parPlayed
+      : toPar != null && catRule.scoring_format === "stroke_play"
+        ? toPar - ph
+        : null;
 
   return {
     gross: gross ?? null,
     toPar: toPar ?? null,
     netToPar,
-    stablefordPoints:
-      rule.scoring_format === "stableford" && hasPoints ? points : null,
+    stablefordPoints: useNetStableford && hasPoints ? points : null,
   };
 }
 
@@ -93,13 +107,16 @@ export function cumulativeLeaderboardValue(
   details: RoundDetail[],
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
-  maxRoundNo: number | null
+  maxRoundNo: number | null,
+  strokeIndexByHole?: StrokeIndexByHole
 ): {
   sortValue: number | null;
   displayToPar: number | null;
   displayGross: number | null;
   stablefordTotal: number | null;
 } {
+  const catRule = normalizeCompetitionRule(rule);
+
   let totalGross = 0;
   let totalToPar = 0;
   let totalNetToPar = 0;
@@ -119,7 +136,12 @@ export function cumulativeLeaderboardValue(
   for (const detail of [...byRoundNo.values()].sort(
     (a, b) => a.round_no - b.round_no
   )) {
-    const scored = scoreRoundDetail(detail, rule, handicapIndex);
+    const scored = scoreRoundDetail(
+      detail,
+      catRule,
+      handicapIndex,
+      strokeIndexByHole
+    );
     if (scored.gross != null) {
       totalGross += scored.gross;
       hasGross = true;
@@ -138,8 +160,7 @@ export function cumulativeLeaderboardValue(
     }
   }
 
-  const basis = rule.leaderboard_basis;
-  if (rule.scoring_format === "stableford" || basis === "stableford") {
+  if (isStablefordCategory(catRule)) {
     return {
       sortValue: hasSf ? totalSf : null,
       displayToPar: hasSf ? totalSf : null,
@@ -148,6 +169,7 @@ export function cumulativeLeaderboardValue(
     };
   }
 
+  const basis = catRule.leaderboard_basis;
   if ((basis === "net" || basis === "both") && hasNet) {
     return {
       sortValue: totalNetToPar,

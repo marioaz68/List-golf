@@ -24,10 +24,15 @@ import {
 } from "@/lib/cuts/publicCutDisplay";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
 import {
-  defaultRuleForCategory,
   rulesByCategoryId,
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
+import PublicRulesBlockedView from "./components/PublicRulesBlockedView";
+import {
+  collectRulesBlockers,
+  hasRulesBlockers,
+} from "@/lib/tournament-rules/collectRulesBlockers";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import OfficialCategoryClosePanel from "./components/OfficialCategoryClosePanel";
 import { buildCategoryRoundCloseCards } from "./lib/categoryRoundCloseStatus";
 import {
@@ -290,7 +295,7 @@ export default async function PublicTournamentPage({
   const { data: tournamentHolesData, error: tournamentHolesError } =
     await supabase
       .from("tournament_holes")
-      .select("hole_number, par")
+      .select("hole_number, par, handicap_index")
       .eq("tournament_id", typedTournament.id)
       .order("hole_number", { ascending: true });
 
@@ -303,12 +308,19 @@ export default async function PublicTournamentPage({
   const tournamentHoles = (tournamentHolesData ?? []) as TournamentHoleRow[];
 
   const parByHole = new Map<number, number>();
+  const strokeIndexByHole = new Map<number, number>();
   for (const row of tournamentHoles) {
     const holeNumber = Number(row.hole_number ?? 0);
     const par = Number(row.par ?? 0);
     if (!holeNumber || !par) continue;
     parByHole.set(holeNumber, par);
+    const si = Number(row.handicap_index ?? 0);
+    if (si >= 1 && si <= 18) {
+      strokeIndexByHole.set(holeNumber, si);
+    }
   }
+
+  const strokeIndexByHoleRecord = Object.fromEntries(strokeIndexByHole);
 
   const capturedRoundIds = Array.from(
     new Set(roundScores.map((score) => score.round_id))
@@ -474,12 +486,43 @@ export default async function PublicTournamentPage({
     handicapByPlayerId.set(entry.player_id, hcp != null ? Number(hcp) : null);
   }
 
-  const headerCompetitionRule = selectedCategoryId
-    ? competitionRulesMap.get(selectedCategoryId) ??
-      defaultRuleForCategory(selectedCategoryId)
-    : null;
-
   const handicapsByPlayerId = Object.fromEntries(handicapByPlayerId);
+
+  const categoryIdsWithPlayers = new Set(
+    filteredEntries
+      .map((e) => String(e.category_id ?? "").trim())
+      .filter(Boolean)
+  );
+
+  const selectedRoundNoForRules = selectedRound?.round_no ?? 1;
+
+  const rulesBlockers = collectRulesBlockers({
+    categories: categories.map((c) => ({ id: c.id, code: c.code })),
+    categoryIdsWithPlayers,
+    competitionRules: competitionRulesList,
+    competitionRulesLoadFailed: Boolean(competitionRulesError),
+    cutRulesLoadFailed: Boolean(advancementRulesError),
+    strokeIndexHoleCount: strokeIndexByHole.size,
+    selectedRoundNo: selectedRoundNoForRules,
+  });
+
+  const rulesBlocked = hasRulesBlockers(rulesBlockers);
+
+  const rulesBlockedLabels = {
+    title: pub.rulesBlockedTitle,
+    intro: pub.rulesBlockedIntro,
+    competitionLoadFailed: pub.rulesCompetitionLoadFailed,
+    cutLoadFailed: pub.rulesCutLoadFailed,
+    categoriesMissingRule: pub.rulesCategoriesMissingRule,
+    competitionInvalidConfig: pub.rulesCompetitionInvalidConfig,
+    strokeIndexIncomplete: pub.rulesStrokeIndexIncomplete,
+    adminLinksHint: pub.rulesBlockedAdminHint,
+  };
+
+  const headerCompetitionRule =
+    selectedCategoryId && !rulesBlocked
+      ? competitionRuleForCategory(competitionRulesMap, selectedCategoryId)
+      : null;
 
   const categoryRoundCloseCards = buildCategoryRoundCloseCards(
     allEntries,
@@ -488,105 +531,115 @@ export default async function PublicTournamentPage({
     typedTournament.id
   );
 
-  const leaderboardBase = buildLiveLeaderboard({
-    filteredEntries,
-    rounds,
-    roundScores,
-    holeScoresByRoundScoreId,
-    parByHole,
-    selectedRound,
-    normalizeClubLabel,
-    isDQScore,
-    isDQStatus,
-    subtotal,
-    getPlayerCode,
-  });
-
-  const leaderboardWithStandings = applyStandings({
-    leaderboardBase,
-    rounds,
-    selectedRound,
-    holesPlayedCount,
-  });
-
   const selectedRoundNo = selectedRound?.round_no ?? 1;
 
-  const leaderboardScoredBase: LeaderboardRow[] = applyCompetitionRules({
-    leaderboard: leaderboardWithStandings,
-    competitionRules: competitionRulesList,
-    handicapByPlayerId,
-    maxRoundNo: selectedRoundNo,
-  });
+  let leaderboard: LeaderboardRow[] = [];
+  let publicCutLines: ReturnType<typeof computePublicCutLines> = [];
+  let activePublicCutLine: ReturnType<typeof activeCutLineForUi> = null;
+  let officialLeaderboard: LeaderboardRow[] = [];
 
-  const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
-    leaderboard: leaderboardScoredBase,
-    rounds,
-    selectedRound,
-    competitionRules: competitionRulesList,
-    handicapByPlayerId,
-  });
+  if (!rulesBlocked) {
+    const leaderboardBase = buildLiveLeaderboard({
+      filteredEntries,
+      rounds,
+      roundScores,
+      holeScoresByRoundScoreId,
+      parByHole,
+      selectedRound,
+      normalizeClubLabel,
+      isDQScore,
+      isDQStatus,
+      subtotal,
+      getPlayerCode,
+    });
 
-  const publicCutLines = computePublicCutLines({
-    leaderboard: leaderboardScored,
-    advancementRules: advancementRulesList,
-    competitionRules: competitionRulesList,
-    categories: categories.map((c) => ({
-      id: c.id,
-      code: c.code,
-    })),
-    selectedRoundNo,
-    selectedCategoryId: selectedCategoryId || null,
-    handicapByPlayerId,
-    tieBreakStepsByProfileId,
-  });
+    const leaderboardWithStandings = applyStandings({
+      leaderboardBase,
+      rounds,
+      selectedRound,
+      holesPlayedCount,
+    });
 
-  const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
-    if (selectedRoundNo <= 1 || row.is_disqualified) {
-      return { ...row, made_cut: null };
-    }
-    const line = primaryCutLineForCategory(
-      publicCutLines.filter(
-        (l) => l.categoryId === String(row.category_id ?? "")
-      ),
-      row.category_id
+    const leaderboardScoredBase: LeaderboardRow[] = applyCompetitionRules({
+      leaderboard: leaderboardWithStandings,
+      competitionRules: competitionRulesList,
+      handicapByPlayerId,
+      maxRoundNo: selectedRoundNo,
+      strokeIndexByHole,
+    });
+
+    const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
+      leaderboard: leaderboardScoredBase,
+      rounds,
+      selectedRound,
+      competitionRules: competitionRulesList,
+      handicapByPlayerId,
+      strokeIndexByHole,
+    });
+
+    publicCutLines = computePublicCutLines({
+      leaderboard: leaderboardScored,
+      advancementRules: advancementRulesList,
+      competitionRules: competitionRulesList,
+      categories: categories.map((c) => ({
+        id: c.id,
+        code: c.code,
+      })),
+      selectedRoundNo,
+      selectedCategoryId: selectedCategoryId || null,
+      handicapByPlayerId,
+      tieBreakStepsByProfileId,
+      strokeIndexByHole,
+    });
+
+    const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
+      if (selectedRoundNo <= 1 || row.is_disqualified) {
+        return { ...row, made_cut: null };
+      }
+      const line = primaryCutLineForCategory(
+        publicCutLines.filter(
+          (l) => l.categoryId === String(row.category_id ?? "")
+        ),
+        row.category_id
+      );
+      if (!line) return { ...row, made_cut: null };
+      return {
+        ...row,
+        made_cut: line.madeCutEntryIds.has(row.entry_id),
+      };
+    });
+
+    const alignedForCut = sortLeaderboardForCutAlignment({
+      rows: withMadeCut,
+      advancementRules: advancementRulesList,
+      categories: categories.map((c) => ({
+        id: c.id,
+        code: c.code,
+      })),
+      selectedRoundNo,
+      competitionRules: competitionRulesList,
+      handicapByPlayerId,
+      strokeIndexByHole,
+    });
+
+    leaderboard = annotateCutDividers(
+      alignedForCut,
+      publicCutLines,
+      selectedCategoryId || null
     );
-    if (!line) return { ...row, made_cut: null };
-    return {
-      ...row,
-      made_cut: line.madeCutEntryIds.has(row.entry_id),
-    };
-  });
 
-  const alignedForCut = sortLeaderboardForCutAlignment({
-    rows: withMadeCut,
-    advancementRules: advancementRulesList,
-    categories: categories.map((c) => ({
-      id: c.id,
-      code: c.code,
-    })),
-    selectedRoundNo,
-    competitionRules: competitionRulesList,
-    handicapByPlayerId,
-  });
+    activePublicCutLine = activeCutLineForUi(
+      publicCutLines,
+      selectedCategoryId || null
+    );
 
-  const leaderboard: LeaderboardRow[] = annotateCutDividers(
-    alignedForCut,
-    publicCutLines,
-    selectedCategoryId || null
-  );
-
-  const activePublicCutLine = activeCutLineForUi(
-    publicCutLines,
-    selectedCategoryId || null
-  );
-
-  /** Vista oficial: solo filas con tarjeta cerrada en la ronda seleccionada. Live y favoritos usan siempre `leaderboard` completo. */
-  const officialLeaderboard: LeaderboardRow[] =
-    selectedRound?.id != null
-      ? leaderboard.filter((row) =>
-          isEntryRoundClosed(row.entry_id, selectedRound, lockedLookups)
-        )
-      : leaderboard;
+    officialLeaderboard =
+      selectedRound?.id != null
+        ? leaderboard.filter((row) =>
+            isEntryRoundClosed(row.entry_id, selectedRound, lockedLookups)
+          )
+        : leaderboard;
+  }
 
   const publicRoundIds = publicTeeSheetRounds.map((round) => round.id);
 
@@ -1228,6 +1281,13 @@ export default async function PublicTournamentPage({
 
       <section className="bg-[#08111f]">
         <div className="mx-auto w-full max-w-[1600px] px-3 py-8 sm:px-4 lg:px-6 xl:px-8">
+          {view !== "tee-sheet" && rulesBlocked ? (
+            <PublicRulesBlockedView
+              blockers={rulesBlockers}
+              labels={rulesBlockedLabels}
+            />
+          ) : null}
+
           {view === "tee-sheet" ? (
             <PublicTeeSheetView
               groups={publicPairingGroups}
@@ -1262,7 +1322,7 @@ export default async function PublicTournamentPage({
             />
           ) : null}
 
-          {view === "favorites" ? (
+          {view === "favorites" && !rulesBlocked ? (
             <FavoritesView
               tournamentId={typedTournament.id}
               leaderboard={leaderboard}
@@ -1273,8 +1333,9 @@ export default async function PublicTournamentPage({
               cutLine={activePublicCutLine}
               competitionRules={competitionRulesList}
               handicapsByPlayerId={handicapsByPlayerId}
+              strokeIndexByHole={strokeIndexByHoleRecord}
             />
-          ) : view === "tee-sheet" ? null : (
+          ) : view === "tee-sheet" || rulesBlocked ? null : (
             <PublicLeaderboardWithSearch
               tournamentId={typedTournament.id}
               embed={isEmbed}
@@ -1301,6 +1362,7 @@ export default async function PublicTournamentPage({
               cutLine={activePublicCutLine}
               competitionRules={competitionRulesList}
               handicapsByPlayerId={handicapsByPlayerId}
+              strokeIndexByHole={strokeIndexByHoleRecord}
               headerCompetitionRule={headerCompetitionRule}
             />
           )}

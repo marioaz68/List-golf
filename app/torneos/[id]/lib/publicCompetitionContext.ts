@@ -1,8 +1,6 @@
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
-import {
-  defaultRuleForCategory,
-  rulesByCategoryId,
-} from "@/lib/leaderboard/categoryCompetitionRules";
+import { rulesByCategoryId } from "@/lib/leaderboard/categoryCompetitionRules";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import { detailScoreColumnLabels } from "@/lib/leaderboard/competitionDisplay";
 import type { PublicDetailTableLabels } from "./publicDetailTableLabels";
 
@@ -22,8 +20,7 @@ export function ruleForCategory(
   rulesMap: Map<string, CategoryCompetitionRule>,
   categoryId: string | null | undefined
 ): CategoryCompetitionRule {
-  if (!categoryId) return defaultRuleForCategory(null);
-  return rulesMap.get(categoryId) ?? defaultRuleForCategory(categoryId);
+  return competitionRuleForCategory(rulesMap, categoryId);
 }
 
 export function detailLabelsWithCompetitionRule(

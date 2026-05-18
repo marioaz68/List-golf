@@ -72,6 +72,15 @@ export async function saveCompetitionRulesSnapshot(formData: FormData) {
     throw new Error("rows_json debe ser arreglo");
   }
 
+  const { data: tournamentCategories, error: categoriesError } = await supabase
+    .from("categories")
+    .select("id, code")
+    .eq("tournament_id", tournament_id);
+
+  if (categoriesError) {
+    throw new Error(`Error leyendo categorías: ${categoriesError.message}`);
+  }
+
   const now = new Date().toISOString();
 console.log("🔥 ACTIONS NUEVO EJECUTANDO");
   const normalizedRows = rows.map((row, index) => {
@@ -166,6 +175,21 @@ console.log("🔥 ACTIONS NUEVO EJECUTANDO");
       updated_at: now,
     };
   });
+
+  const activeCategoryIds = new Set(
+    normalizedRows.filter((r) => r.is_active).map((r) => r.category_id)
+  );
+  const missingCategories = (tournamentCategories ?? []).filter(
+    (c) => !activeCategoryIds.has(String(c.id))
+  );
+  if (missingCategories.length > 0) {
+    const labels = missingCategories
+      .map((c) => String(c.code ?? c.id).trim() || String(c.id).slice(0, 8))
+      .join(", ");
+    throw new Error(
+      `Falta regla de competición activa para: ${labels}. Guarda una fila activa por categoría.`
+    );
+  }
 
   // 🔥 BORRAR ANTES (SNAPSHOT)
   const { error: deleteError } = await supabase

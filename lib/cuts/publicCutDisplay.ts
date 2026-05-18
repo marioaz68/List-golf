@@ -1,11 +1,13 @@
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import {
-  defaultRuleForCategory,
+  isStablefordCategory,
   rulesByCategoryId,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
+import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
-  higherIsBetterForRankingBasis,
+  higherIsBetterForCutRule,
   rankValueForAdvancementRule,
 } from "./cutRanking";
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
@@ -64,6 +66,7 @@ export function sortLeaderboardForCutAlignment(params: {
   selectedRoundNo: number;
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
+  strokeIndexByHole?: StrokeIndexByHole;
 }): LeaderboardRow[] {
   if (params.selectedRoundNo <= 1) return params.rows;
 
@@ -106,9 +109,8 @@ export function sortLeaderboardForCutAlignment(params: {
       continue;
     }
 
-    const higherIsBetter = higherIsBetterForRankingBasis(
-      cutRule.ranking_basis
-    );
+    const catRule = competitionRuleForCategory(rulesMap, sample.category_id);
+    const higherIsBetter = higherIsBetterForCutRule(cutRule, catRule);
 
     const ranked = bucket.map((row) => {
       const v = rankValueForAdvancementRule(
@@ -116,7 +118,8 @@ export function sortLeaderboardForCutAlignment(params: {
         cutRule,
         params.selectedRoundNo,
         rulesMap,
-        params.handicapByPlayerId
+        params.handicapByPlayerId,
+        params.strokeIndexByHole
       );
       return { row, sortValue: v.primary };
     });
@@ -126,12 +129,11 @@ export function sortLeaderboardForCutAlignment(params: {
       if (!a.row.is_disqualified && b.row.is_disqualified) return -1;
       const cmp = compareCutRank(a.sortValue, b.sortValue, higherIsBetter);
       if (cmp !== 0) return cmp;
-      const catRule =
-        rulesMap.get(String(a.row.category_id ?? "")) ??
-        defaultRuleForCategory(a.row.category_id);
-      const hiDisplay =
-        catRule.scoring_format === "stableford" ||
-        catRule.leaderboard_basis === "stableford";
+      const rowRule = competitionRuleForCategory(
+        rulesMap,
+        a.row.category_id
+      );
+      const hiDisplay = isStablefordCategory(rowRule);
       const av = a.row.leaderboard_sort_value;
       const bv = b.row.leaderboard_sort_value;
       if (av != null && bv != null && av !== bv) {

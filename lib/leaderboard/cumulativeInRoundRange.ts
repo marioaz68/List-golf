@@ -1,6 +1,6 @@
 import type { RoundDetail } from "@/app/torneos/[id]/lib/types";
 import type { CategoryCompetitionRule } from "./categoryCompetitionRules";
-import { scoreRoundDetail } from "./competitionScoring";
+import { scoreRoundDetail, type StrokeIndexByHole } from "./competitionScoring";
 
 export type CutRankingBasis =
   | "gross_total"
@@ -16,7 +16,8 @@ export function cumulativeInRoundRange(
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
   minRoundNo: number,
-  maxRoundNo: number
+  maxRoundNo: number,
+  strokeIndexByHole?: StrokeIndexByHole
 ): {
   grossTotal: number | null;
   toParTotal: number | null;
@@ -42,7 +43,12 @@ export function cumulativeInRoundRange(
   for (const detail of [...byRoundNo.values()].sort(
     (a, b) => a.round_no - b.round_no
   )) {
-    const scored = scoreRoundDetail(detail, rule, handicapIndex);
+    const scored = scoreRoundDetail(
+      detail,
+      rule,
+      handicapIndex,
+      strokeIndexByHole
+    );
     if (scored.gross != null) {
       totalGross += scored.gross;
       hasGross = true;

@@ -1,6 +1,12 @@
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
-import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
-import { scoreRoundDetail } from "@/lib/leaderboard/competitionScoring";
+import {
+  isStablefordCategory,
+  type CategoryCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  scoreRoundDetail,
+  type StrokeIndexByHole,
+} from "@/lib/leaderboard/competitionScoring";
 import { scoringFormatLabel } from "@/lib/leaderboard/competitionDisplay";
 import type { LeaderboardRow, RoundDetail } from "../lib/types";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
@@ -105,13 +111,19 @@ function GrossToParPosHeads({ labels }: { labels: PublicDetailTableLabels }) {
 function detailTotalsForRule(
   detail: RoundDetail,
   rule: CategoryCompetitionRule,
-  handicapIndex: number | null | undefined
+  handicapIndex: number | null | undefined,
+  strokeIndexByHole?: StrokeIndexByHole
 ) {
-  const scored = scoreRoundDetail(detail, rule, handicapIndex);
+  const scored = scoreRoundDetail(
+    detail,
+    rule,
+    handicapIndex,
+    strokeIndexByHole
+  );
   if (detail.is_dq) {
     return { primary: "DQ" as const, secondary: "DQ" as const };
   }
-  if (rule.scoring_format === "stableford") {
+  if (isStablefordCategory(rule)) {
     return {
       primary:
         scored.stablefordPoints != null
@@ -147,12 +159,14 @@ export default function PublicLeaderboardDetailTable({
   labels,
   competitionRule,
   handicapIndex = null,
+  strokeIndexByHole,
 }: {
   row: LeaderboardRow;
   selectedRound: SelectedRoundMeta | null;
   labels: PublicDetailTableLabels;
   competitionRule?: CategoryCompetitionRule | null;
   handicapIndex?: number | null;
+  strokeIndexByHole?: StrokeIndexByHole;
 }) {
   const rule =
     competitionRule ??
@@ -344,7 +358,12 @@ export default function PublicLeaderboardDetailTable({
 
               const stripeBg =
                 detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
-              const totals = detailTotalsForRule(detail, rule, handicapIndex);
+              const totals = detailTotalsForRule(
+                detail,
+                rule,
+                handicapIndex,
+                strokeIndexByHole
+              );
 
               return (
                 <tr

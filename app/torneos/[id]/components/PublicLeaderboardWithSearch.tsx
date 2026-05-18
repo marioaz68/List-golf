@@ -58,6 +58,7 @@ type Props = {
   cutLine?: PublicCutLine | null;
   competitionRules?: CategoryCompetitionRule[];
   handicapsByPlayerId?: Record<string, number | null>;
+  strokeIndexByHole?: Record<number, number>;
   headerCompetitionRule?: CategoryCompetitionRule | null;
 };
 
@@ -76,6 +77,7 @@ export default function PublicLeaderboardWithSearch({
   cutLine = null,
   competitionRules = [],
   handicapsByPlayerId = {},
+  strokeIndexByHole = {},
   headerCompetitionRule = null,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -148,6 +150,7 @@ export default function PublicLeaderboardWithSearch({
         cutLine={cutLine}
         competitionRules={competitionRules}
         handicapsByPlayerId={handicapsByPlayerId}
+        strokeIndexByHole={strokeIndexByHole}
         headerCompetitionRule={headerCompetitionRule}
       />
     </div>

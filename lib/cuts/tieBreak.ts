@@ -1,6 +1,15 @@
 import type { RoundDetail } from "@/app/torneos/[id]/lib/types";
-import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
-import { scoreRoundDetail } from "@/lib/leaderboard/competitionScoring";
+import {
+  isStablefordCategory,
+  type CategoryCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
+import { stablefordPoints } from "@/lib/leaderboard/competitionScoring";
+import {
+  playingHandicap,
+  strokeIndexForHole,
+  strokesReceivedOnHole,
+  type StrokeIndexByHole,
+} from "@/lib/leaderboard/handicapStrokes";
 
 export type TieBreakStep = {
   tie_break_profile_id?: string;
@@ -17,7 +26,9 @@ export type TieBreakStep = {
 function parseHoleScope(scope: string): number[] {
   const s = String(scope ?? "").trim();
   if (!s) return [];
-  if (s === "18") return [18];
+  if (s === "18") {
+    return Array.from({ length: 18 }, (_, i) => i + 1);
+  }
   const range = s.match(/^(\d+)_(\d+)$/);
   if (range) {
     const a = Number(range[1]);
@@ -31,17 +42,16 @@ function parseHoleScope(scope: string): number[] {
   return [];
 }
 
-function segmentParPlayed(detail: RoundDetail, holeNos: number[]): number {
-  let par = 0;
-  for (const holeNo of holeNos) {
-    const hole = detail.holes.find((h) => h.hole_number === holeNo);
-    if (hole?.strokes == null) continue;
-    par += Number(hole.par ?? 0);
-  }
-  return par;
+function usesPointsBasis(
+  basis: string,
+  catRule?: CategoryCompetitionRule
+): boolean {
+  const b = basis.toLowerCase();
+  if (b === "points" || b === "stableford") return true;
+  return catRule != null && isStablefordCategory(catRule);
 }
 
-/** Suma de golpes o neto en el segmento (solo hoyos jugados). */
+/** Valor del segmento para desempate (gross, neto por hoyo o puntos Stableford). */
 export function segmentStrokeTotal(
   detail: RoundDetail | null | undefined,
   holeScope: string,
@@ -50,49 +60,63 @@ export function segmentStrokeTotal(
     handicapMode?: string;
     catRule?: CategoryCompetitionRule;
     handicapIndex?: number | null;
+    strokeIndexByHole?: StrokeIndexByHole;
   }
 ): number | null {
   if (!detail) return null;
   const holeNos = parseHoleScope(holeScope);
   if (holeNos.length === 0) return null;
 
+  const basis = String(options?.basis ?? "gross").toLowerCase();
+  const catRule = options?.catRule;
+  const ph =
+    catRule != null
+      ? playingHandicap(
+          options?.handicapIndex,
+          catRule.handicap_percentage
+        )
+      : 0;
+
+  if (usesPointsBasis(basis, catRule)) {
+    let points = 0;
+    let any = false;
+    for (const holeNo of holeNos) {
+      const hole = detail.holes.find((h) => h.hole_number === holeNo);
+      if (hole?.strokes == null) continue;
+      const strokes = Number(hole.strokes);
+      const par = Number(hole.par ?? 0);
+      if (Number.isNaN(strokes)) continue;
+      const si = strokeIndexForHole(holeNo, options?.strokeIndexByHole);
+      const received = strokesReceivedOnHole(ph, si);
+      points += stablefordPoints(strokes - received, par);
+      any = true;
+    }
+    return any ? points : null;
+  }
+
   let total = 0;
   let any = false;
   for (const holeNo of holeNos) {
     const hole = detail.holes.find((h) => h.hole_number === holeNo);
     if (hole?.strokes == null) continue;
-    const s = Number(hole.strokes);
-    if (Number.isNaN(s)) continue;
-    total += s;
+    const strokes = Number(hole.strokes);
+    if (Number.isNaN(strokes)) continue;
+
+    if (basis === "net" && catRule) {
+      const mode = String(options?.handicapMode ?? "none").toLowerCase();
+      if (mode !== "none") {
+        const si = strokeIndexForHole(holeNo, options?.strokeIndexByHole);
+        total += strokes - strokesReceivedOnHole(ph, si);
+      } else {
+        total += strokes;
+      }
+    } else {
+      total += strokes;
+    }
     any = true;
   }
-  if (!any) return null;
 
-  const basis = String(options?.basis ?? "gross").toLowerCase();
-  if (basis !== "net" || !options?.catRule) {
-    return total;
-  }
-
-  const scored = scoreRoundDetail(detail, options.catRule, options.handicapIndex);
-  if (scored.netToPar == null || scored.toPar == null) {
-    return total;
-  }
-
-  const segmentPar = segmentParPlayed(detail, holeNos);
-  const fullPar = detail.holes.reduce(
-    (acc, h) => acc + (h.strokes != null ? Number(h.par ?? 0) : 0),
-    0
-  );
-  if (fullPar <= 0) return total;
-
-  const ph = scored.toPar - (scored.netToPar ?? scored.toPar);
-  const mode = String(options.handicapMode ?? "none").toLowerCase();
-  if (mode === "none") {
-    return total;
-  }
-
-  const strokesOff = Math.round((ph * segmentPar) / fullPar);
-  return total - strokesOff;
+  return any ? total : null;
 }
 
 function compareSegment(
@@ -115,6 +139,7 @@ export function compareByTieBreakSteps(
     catRule?: CategoryCompetitionRule;
     handicapIndexA?: number | null;
     handicapIndexB?: number | null;
+    strokeIndexByHole?: StrokeIndexByHole;
   }
 ): number {
   const ordered = [...steps].sort((x, y) => x.step_no - y.step_no);
@@ -123,10 +148,12 @@ export function compareByTieBreakSteps(
     if (step.method !== "segment_compare") continue;
 
     const lower = step.direction === "lower_is_better";
+
     const opts = {
       basis: step.basis,
       handicapMode: step.handicap_mode,
       catRule: context?.catRule,
+      strokeIndexByHole: context?.strokeIndexByHole,
     };
     const sa = segmentStrokeTotal(detailA, step.hole_scope, {
       ...opts,
@@ -136,6 +163,7 @@ export function compareByTieBreakSteps(
       ...opts,
       handicapIndex: context?.handicapIndexB,
     });
+
     const cmp = compareSegment(sa, sb, lower);
     if (cmp !== 0) return cmp;
   }
