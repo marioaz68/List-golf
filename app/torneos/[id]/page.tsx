@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createClient, createAdminClient } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import {
   buildLockedScorecardLookups,
   isEntryRoundClosed,
@@ -48,7 +49,8 @@ import {
   resolvePublicRoundIdForCategory,
 } from "@/lib/rounds/resolveDefaultPublicLeaderboardRound";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
-import { startingHoleLabelForGroup } from "./lib/shotgunStartingLabels";
+import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
+import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
   fetchAllTournamentEntries,
@@ -721,6 +723,37 @@ export default async function PublicTournamentPage({
 
   const publicRoundIds = publicTeeSheetRounds.map((round) => round.id);
 
+  const standingDisplayByEntryRound = new Map<string, string>();
+  const teeSheetTargetRoundNos = [
+    ...new Set(
+      publicTeeSheetRounds
+        .map((round) => Number(round.round_no))
+        .filter((n) => n > 1)
+    ),
+  ].sort((a, b) => a - b);
+
+  if (teeSheetTargetRoundNos.length > 0) {
+    try {
+      const admin = createAdminClient();
+      for (const targetRoundNo of teeSheetTargetRoundNos) {
+        const orderMap = await buildTeeSheetEntryOrderMap(
+          admin,
+          typedTournament.id,
+          targetRoundNo
+        );
+        for (const [entryId, info] of orderMap) {
+          if (!info.standingDisplay) continue;
+          standingDisplayByEntryRound.set(
+            `${entryId}:${targetRoundNo}`,
+            info.standingDisplay
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[public tee-sheet] standing scores:", err);
+    }
+  }
+
   const { data: pairingGroupsData, error: pairingGroupsError } =
     publicRoundIds.length > 0
       ? await supabase
@@ -786,6 +819,9 @@ export default async function PublicTournamentPage({
   }
 
   const roundById = new Map(rounds.map((round) => [round.id, round]));
+  const roundIdByGroupId = new Map(
+    pairingGroupsRaw.map((g) => [g.id, g.round_id])
+  );
   const membersByGroup = new Map<string, PairingMember[]>();
 
   for (const row of (pairingMembersData ?? []) as any[]) {
@@ -810,6 +846,10 @@ export default async function PublicTournamentPage({
         ? player.club_id.trim()
         : null;
 
+    const memberRoundId = roundIdByGroupId.get(row.group_id);
+    const memberRoundNo =
+      roundById.get(memberRoundId ?? "")?.round_no ?? 1;
+
     const member: PairingMember = {
       entry_id: row.entry_id,
       position: Number(row.position ?? 0),
@@ -818,6 +858,12 @@ export default async function PublicTournamentPage({
       club_label: normalizeClubLabel(club),
       category_code: category?.code ?? category?.name ?? null,
       handicap_index: te?.handicap_index ?? null,
+      standing_display:
+        memberRoundNo > 1
+          ? standingDisplayByEntryRound.get(
+              `${row.entry_id}:${memberRoundNo}`
+            ) ?? null
+          : null,
     };
 
     const list = membersByGroup.get(row.group_id) ?? [];
@@ -825,28 +871,21 @@ export default async function PublicTournamentPage({
     membersByGroup.set(row.group_id, list);
   }
 
-  const labelByGroupId = new Map<string, string | null>();
-  const roundIdsWithGroups = Array.from(
-    new Set(pairingGroupsRaw.map((g) => g.round_id))
+  const sessionRounds = rounds.map((round) => ({
+    id: round.id,
+    tournament_id: typedTournament.id,
+    category_id: round.category_id ?? null,
+    round_no: round.round_no,
+    round_date: round.round_date,
+    start_type: round.start_type,
+    start_time: round.start_time,
+    wave: round.wave ?? null,
+  }));
+
+  const labelByGroupId = buildPairingGroupLabelsBySession(
+    pairingGroupsRaw,
+    sessionRounds
   );
-  for (const roundId of roundIdsWithGroups) {
-    const round = roundById.get(roundId) ?? null;
-    const groupsInRound = pairingGroupsRaw
-      .filter((g) => g.round_id === roundId)
-      .sort((a, b) => Number(a.group_no ?? 0) - Number(b.group_no ?? 0));
-    const n = groupsInRound.length;
-    groupsInRound.forEach((g, idx) => {
-      labelByGroupId.set(
-        g.id,
-        startingHoleLabelForGroup({
-          startType: round?.start_type,
-          groupIndexInRound: idx,
-          groupsInRound: n,
-          starting_hole: g.starting_hole ?? null,
-        })
-      );
-    });
-  }
 
   const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
     .map((group) => {
@@ -1373,6 +1412,9 @@ export default async function PublicTournamentPage({
                 startingTee: pts.startingTee,
                 playerOne: pts.playerOne,
                 playersMany: pts.playersMany,
+                scoreHcp: pts.scoreHcp,
+                scoreR1: pts.scoreR1,
+                scoreR1R2: pts.scoreR1R2,
               }}
             />
           ) : view === "official" ? (

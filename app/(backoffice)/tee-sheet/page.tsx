@@ -13,7 +13,7 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadSlate50,
 } from "@/lib/ui/backofficeTableSticky";
-import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
+import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import {
   buildSessionBlocks,
   formatSessionOptionLabel,
@@ -354,31 +354,11 @@ for (const row of membersRaw) {
     return a.group_no - b.group_no;
   });
 
-  const groupsByDbRound = new Map<string, GroupRow[]>();
-  for (const g of sortedGroups) {
-    const list = groupsByDbRound.get(g.round_id) ?? [];
-    list.push(g);
-    groupsByDbRound.set(g.round_id, list);
-  }
-  for (const list of groupsByDbRound.values()) {
-    list.sort((a, b) => a.group_no - b.group_no);
-  }
-
-  const roundMetaById = new Map(blockRounds.map((r) => [r.id, r]));
+  const labelByGroupId = buildPairingGroupLabelsBySession(sortedGroups, blockRounds);
 
   const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
-    const list = groupsByDbRound.get(g.round_id) ?? [];
-    const idxInRound = list.findIndex((x) => x.id === g.id);
-    const meta = roundMetaById.get(g.round_id);
-    const startType = meta?.start_type ?? selectedRound?.start_type ?? null;
-    const salida = startingHoleLabelForGroup({
-      startType,
-      groupIndexInRound: Math.max(0, idxInRound),
-      groupsInRound: list.length,
-      starting_hole: g.starting_hole,
-    });
     const starting_label =
-      salida ??
+      labelByGroupId.get(g.id) ??
       (typeof g.starting_hole === "number" ? `H${g.starting_hole}` : null);
 
     return {

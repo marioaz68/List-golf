@@ -1005,6 +1005,9 @@ const es = {
     startingTee: "Salida",
     playerOne: "jugador",
     playersMany: "jugadores",
+    scoreHcp: "HCP",
+    scoreR1: "R1",
+    scoreR1R2: "R1+R2",
   },
   publicInstall: {
     rowLabel: "Acceso",
@@ -2125,6 +2128,9 @@ const en: Messages = {
     startingTee: "Tee",
     playerOne: "player",
     playersMany: "players",
+    scoreHcp: "HCP",
+    scoreR1: "R1",
+    scoreR1R2: "R1+R2",
   },
   publicInstall: {
     rowLabel: "Shortcut",

@@ -121,6 +121,8 @@ export type PairingMember = {
   club_label: string | null;
   category_code: string | null;
   handicap_index: number | null;
+  /** R2+: total acumulado para salidas (R1 o R1+R2). */
+  standing_display: string | null;
 };
 
 export type PublicPairingGroup = {

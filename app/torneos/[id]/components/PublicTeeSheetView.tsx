@@ -27,8 +27,20 @@ type PublicTeeSheetViewProps = {
     startingTee: string;
     playerOne: string;
     playersMany: string;
+    scoreHcp: string;
+    scoreR1: string;
+    scoreR1R2: string;
   };
 };
+
+function pairingScoreColumnLabel(
+  roundNo: number,
+  labels: PublicTeeSheetViewProps["labels"]
+) {
+  if (roundNo <= 1) return labels.scoreHcp;
+  if (roundNo === 2) return labels.scoreR1;
+  return labels.scoreR1R2;
+}
 
 /** Interpreta etiquetas tipo `H1A`, `H10B` o `H12` (tee time). */
 function parseHoleSalida(label: string | null) {
@@ -125,6 +137,7 @@ export default function PublicTeeSheetView({
           if (roundGroups.length === 0) return null;
 
           const salidasKicker = formatPublicSalidasKicker(round);
+          const scoreColumnLabel = pairingScoreColumnLabel(round.round_no, labels);
 
           return (
             <section key={round.id} className="space-y-3">
@@ -229,9 +242,11 @@ export default function PublicTeeSheetView({
                             </div>
                             <div className="shrink-0 pt-0.5 text-right text-xs font-bold tabular-nums text-emerald-300 sm:pt-0">
                               <span className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden">
-                                HCP
+                                {scoreColumnLabel}
                               </span>
-                              {member.handicap_index ?? "—"}
+                              {round.round_no > 1
+                                ? member.standing_display ?? "—"
+                                : member.handicap_index ?? "—"}
                             </div>
                           </div>
                         ))}
