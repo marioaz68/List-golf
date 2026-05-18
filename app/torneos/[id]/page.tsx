@@ -400,6 +400,12 @@ export default async function PublicTournamentPage({
     rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
   );
 
+  const roundsForLock = rounds.map((r) => ({
+    id: r.id,
+    round_no: r.round_no,
+    category_id: r.category_id ?? null,
+  }));
+
   const gateEntries = filteredEntries;
   const defaultRoundFromClose = resolveDefaultPublicLeaderboardRound({
     entries: gateEntries,
@@ -712,6 +718,8 @@ export default async function PublicTournamentPage({
       rounds,
       selectedRound,
       holesPlayedCount,
+      lockedLookups,
+      roundsForLock,
     });
 
     const leaderboardScoredBase: LeaderboardRow[] = applyCompetitionRules({
@@ -721,6 +729,8 @@ export default async function PublicTournamentPage({
       maxRoundNo: selectedRoundNo,
       strokeIndexByHole,
       leaderboardViewOverride,
+      lockedLookups,
+      roundsForLock,
     });
 
     const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
@@ -731,6 +741,8 @@ export default async function PublicTournamentPage({
       handicapByPlayerId,
       strokeIndexByHole,
       leaderboardViewOverride,
+      lockedLookups,
+      roundsForLock,
     });
 
     cutEnforcesForSelectedRound = cutEnforcesAtTargetRound(
@@ -1524,6 +1536,8 @@ export default async function PublicTournamentPage({
               competitionRules={competitionRulesList}
               handicapsByPlayerId={handicapsByPlayerId}
               strokeIndexByHole={strokeIndexByHoleRecord}
+              rounds={roundsForLock}
+              lockedLookups={lockedLookups}
             />
           ) : view === "tee-sheet" || rulesBlocked ? null : (
             <>
@@ -1590,6 +1604,8 @@ export default async function PublicTournamentPage({
               strokeIndexByHole={strokeIndexByHoleRecord}
               headerCompetitionRule={headerCompetitionRule}
               leaderboardViewOverride={leaderboardViewOverride}
+              rounds={roundsForLock}
+              lockedLookups={lockedLookups}
               basisToggleLabels={
                 showGrossNetToggle
                   ? {

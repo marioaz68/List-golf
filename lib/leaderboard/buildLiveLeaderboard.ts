@@ -52,6 +52,19 @@ function pickBestRoundScoreRow(
  * Si hay más de un `round_scores` para la misma ronda, usar el que tenga más hoyos.
  * Si la captura está en otra fila `rounds` con el mismo `round_no` (por categoría), también la encuentra.
  */
+function filterScoresForLogicalRound(
+  scores: any[],
+  targetRoundNo: number,
+  roundNoById: Map<string, number>
+): any[] {
+  return scores.filter((s) => {
+    const rid = String(s.round_id ?? "").trim();
+    if (!rid) return false;
+    const no = roundNoById.get(rid);
+    return no === targetRoundNo;
+  });
+}
+
 function pickRoundScoreRowForRound(
   playerRoundScores: any[],
   round: { id: string; round_no: number; category_id?: string | null },
@@ -59,15 +72,24 @@ function pickRoundScoreRowForRound(
   holeScoresByRoundScoreId: Map<string, any[]>,
   allRounds: Array<{ id: string; round_no: number; category_id?: string | null }>
 ): any | null {
+  const roundNoById = new Map(
+    allRounds.map((r) => [String(r.id), Number(r.round_no)])
+  );
+  const targetRoundNo = Number(round.round_no);
+
   const direct = pickBestRoundScoreRow(
-    playerRoundScores.filter((s) => s.round_id === round.id),
+    filterScoresForLogicalRound(
+      playerRoundScores.filter((s) => s.round_id === round.id),
+      targetRoundNo,
+      roundNoById
+    ),
     holeScoresByRoundScoreId
   );
   if (direct) return direct;
 
   const cat = String(entryCategoryId ?? "").trim();
   const altRoundIds = allRounds
-    .filter((r) => r.round_no === round.round_no && r.id !== round.id)
+    .filter((r) => r.round_no === targetRoundNo && r.id !== round.id)
     .filter((r) => {
       const rc = String(r.category_id ?? "").trim();
       if (!cat) return true;
@@ -76,8 +98,10 @@ function pickRoundScoreRowForRound(
     })
     .map((r) => r.id);
 
-  const altCands = playerRoundScores.filter((s) =>
-    altRoundIds.includes(String(s.round_id))
+  const altCands = filterScoresForLogicalRound(
+    playerRoundScores.filter((s) => altRoundIds.includes(String(s.round_id))),
+    targetRoundNo,
+    roundNoById
   );
 
   const fromCategoryAlt = pickBestRoundScoreRow(

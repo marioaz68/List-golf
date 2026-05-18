@@ -39,6 +39,10 @@ import {
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
+import type {
+  LockedScorecardLookups,
+  RoundIdMeta,
+} from "@/lib/leaderboard/lockedScorecards";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
 
 type FavoritesViewProps = {
@@ -52,6 +56,8 @@ type FavoritesViewProps = {
   competitionRules?: CategoryCompetitionRule[];
   handicapsByPlayerId?: Record<string, number | null>;
   strokeIndexByHole?: Record<number, number>;
+  rounds: RoundIdMeta[];
+  lockedLookups: LockedScorecardLookups;
 };
 
 function categoryBucket(code: string | null | undefined) {
@@ -325,6 +331,8 @@ export default function FavoritesView({
   competitionRules = [],
   handicapsByPlayerId = {},
   strokeIndexByHole: strokeIndexByHoleRecord = {},
+  rounds,
+  lockedLookups,
 }: FavoritesViewProps) {
   const rulesMap = useMemo(
     () => buildCompetitionRulesMap(competitionRules),
@@ -573,6 +581,9 @@ export default function FavoritesView({
                     rulesMap={rulesMap}
                     handicapByPlayerId={handicapMap}
                     strokeIndexByHole={strokeIndexMap}
+                    view="live"
+                    rounds={rounds}
+                    lockedLookups={lockedLookups}
                   />
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">

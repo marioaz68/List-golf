@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { PublicPairingGroup, RoundRow } from "../lib/types";
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
+import { formatStartingHoleLabelParts } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import {
   buildHref,
   formatPublicSalidasKicker,
@@ -39,17 +40,6 @@ function pairingScoreColumnLabel(
   if (roundNo <= 1) return labels.scoreHcp;
   if (roundNo === 2) return labels.scoreR1;
   return labels.scoreR1R2;
-}
-
-/** Interpreta etiquetas tipo `H1A`, `H10B` o `H12` (tee time). */
-function parseHoleSalida(label: string | null) {
-  if (!label) return { hole: null as string | null, side: null as "A" | "B" | null };
-  const m = /^H(\d+)([AB])?$/i.exec(label.trim());
-  if (!m) return { hole: null, side: null };
-  const hole = m[1];
-  const raw = m[2]?.toUpperCase();
-  const side = raw === "A" || raw === "B" ? raw : null;
-  return { hole, side };
 }
 
 export default function PublicTeeSheetView({
@@ -153,12 +143,10 @@ export default function PublicTeeSheetView({
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {roundGroups.map((group) => {
-                  const labelRaw =
-                    group.starting_hole_label ??
-                    (group.starting_hole != null
-                      ? `H${group.starting_hole}`
-                      : null);
-                  const { hole, side } = parseHoleSalida(labelRaw);
+                  const { holeText, side } = formatStartingHoleLabelParts(
+                    group.starting_hole_label,
+                    group.starting_hole
+                  );
 
                   return (
                     <article
@@ -173,10 +161,10 @@ export default function PublicTeeSheetView({
                           <span className="text-sm font-bold text-white">
                             {formatTime(group.tee_time)}
                           </span>
-                          {hole ? (
+                          {holeText !== "—" ? (
                             <>
-                              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold tabular-nums text-slate-100 sm:text-xs">
-                                H{hole}
+                              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-slate-100 sm:text-xs">
+                                {holeText}
                               </span>
                               {side ? (
                                 <span className="rounded-md border border-amber-300/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100">
@@ -184,13 +172,9 @@ export default function PublicTeeSheetView({
                                 </span>
                               ) : null}
                             </>
-                          ) : labelRaw ? (
-                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold tabular-nums text-slate-100 sm:text-xs">
-                              {labelRaw}
-                            </span>
                           ) : (
                             <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-slate-400">
-                              H—
+                              —
                             </span>
                           )}
                         </div>

@@ -19,6 +19,10 @@ import {
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import FavoriteStar from "@/components/public/FavoriteStar";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
+import type {
+  LockedScorecardLookups,
+  RoundIdMeta,
+} from "@/lib/leaderboard/lockedScorecards";
 import type { PublicDetailTableLabels } from "../lib/publicDetailTableLabels";
 import type { LeaderboardRow } from "../lib/types";
 import {
@@ -87,6 +91,8 @@ type PublicLeaderboardTableProps = {
   strokeIndexByHole?: Record<number, number>;
   headerCompetitionRule?: CategoryCompetitionRule | null;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
+  rounds: RoundIdMeta[];
+  lockedLookups: LockedScorecardLookups;
 };
 
 export default function PublicLeaderboardTable({
@@ -107,6 +113,8 @@ export default function PublicLeaderboardTable({
   strokeIndexByHole: strokeIndexByHoleRecord = {},
   headerCompetitionRule = null,
   leaderboardViewOverride = null,
+  rounds,
+  lockedLookups,
 }: PublicLeaderboardTableProps) {
   const rulesMap = useMemo(
     () => buildCompetitionRulesMap(competitionRules),
@@ -357,6 +365,9 @@ export default function PublicLeaderboardTable({
                       handicapByPlayerId={handicapMap}
                       strokeIndexByHole={strokeIndexMap}
                       leaderboardViewOverride={leaderboardViewOverride}
+                      view={view}
+                      rounds={rounds}
+                      lockedLookups={lockedLookups}
                     />
 
                     <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">

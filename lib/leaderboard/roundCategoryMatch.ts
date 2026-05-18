@@ -477,10 +477,20 @@ export function resolveDetailForRoundNo<
     category_id: rep.category_id ?? null,
     wave: rep.wave ?? null,
   };
+
+  const scoreRoundIdsForNo = scoreRoundIds
+    ? new Set(
+        [...scoreRoundIds].filter((rid) => {
+          const d = details.find((x) => x.round_id === rid);
+          return d?.round_no === roundNo;
+        })
+      )
+    : null;
+
   return resolveDetailForSelectedRound(
     details,
     meta,
     entryCategoryId,
-    scoreRoundIds
+    scoreRoundIdsForNo
   );
 }

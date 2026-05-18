@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   deleteEntry,
   disqualifyEntry,
@@ -158,10 +158,317 @@ function roundBallTitle(
 const BTN_BASE =
   "inline-flex min-h-9 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50 md:min-h-6";
 
-const SLOT_SM = "w-full shrink-0 sm:w-[72px]";
-const SLOT_MD = "w-full shrink-0 sm:w-[84px]";
-const SLOT_EDIT = "w-full shrink-0 sm:w-[110px]";
+const SLOT_SM = "shrink-0 md:w-[72px]";
+const SLOT_MD = "shrink-0 md:w-[84px]";
+const SLOT_EDIT = "shrink-0 md:w-[110px]";
 const ACTIONS_COL = "min-w-0 md:min-w-[648px] md:w-[648px]";
+
+const MOBILE_ACTION_BTN =
+  "inline-flex h-8 shrink-0 items-center justify-center rounded border px-2 text-[10px] font-bold leading-none text-white whitespace-nowrap disabled:opacity-50";
+
+type EntryRowActionsProps = {
+  entry: Entry;
+  tournamentId: string;
+  categories: Category[];
+  te: ReturnType<typeof useAppLocale>["t"]["entries"]["list"];
+  compact?: boolean;
+  onGenerateLinks: (entryId: string) => void;
+};
+
+function EntryRoundBalls({
+  entry,
+  te,
+  compact,
+}: {
+  entry: Entry;
+  te: ReturnType<typeof useAppLocale>["t"]["entries"]["list"];
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={
+        compact
+          ? "flex shrink-0 items-center gap-2"
+          : "flex min-w-[114px] items-center justify-center gap-3"
+      }
+    >
+      {[1, 2, 3].map((roundNo) => {
+        const sig =
+          entry.round_signatures?.find((r) => r.round_no === roundNo) ?? null;
+
+        return (
+          <div
+            key={roundNo}
+            className={
+              compact
+                ? "flex items-center gap-1"
+                : "flex flex-col items-center gap-1"
+            }
+            title={roundBallTitle(sig, roundNo, te)}
+          >
+            <span className="text-[9px] font-semibold text-gray-700">
+              R{roundNo}
+            </span>
+            <span
+              className={`block h-3 w-3 rounded-full ${getBallClass(sig)}`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EntryRowActions({
+  entry,
+  tournamentId,
+  categories,
+  te,
+  compact = false,
+  onGenerateLinks,
+}: EntryRowActionsProps) {
+  const status = (entry.status ?? "").toLowerCase();
+  const isDQ = status === "dq";
+  const isWithdrawn = status === "withdrawn";
+
+  const wrap = (node: ReactNode, slotClass: string) =>
+    compact ? node : <div className={slotClass}>{node}</div>;
+
+  const telegramBtn = (
+    <Link
+      href={`/entries/telegram-kit?tournament_id=${encodeURIComponent(
+        tournamentId
+      )}&player_id=${encodeURIComponent(entry.player_id)}`}
+      title={te.btnTelegramKitTitle}
+      className={
+        compact
+          ? `${MOBILE_ACTION_BTN} border-sky-900 bg-sky-700 hover:bg-sky-800`
+          : "inline-flex h-7 w-full items-center justify-center rounded border border-sky-900 bg-sky-700 text-[11px] font-bold text-white hover:bg-sky-800"
+      }
+    >
+      {kitButtonLabel(te.btnTelegramKit, entry)}
+    </Link>
+  );
+
+  const signaturesBtn = (
+    <button
+      type="button"
+      onClick={() => onGenerateLinks(entry.id)}
+      className={
+        compact
+          ? `${MOBILE_ACTION_BTN} border-blue-800 bg-blue-700`
+          : "h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
+      }
+    >
+      {te.btnSignatures}
+    </button>
+  );
+
+  const deleteForm = (
+    <form
+      action={deleteEntry}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (!window.confirm(te.confirmDelete)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <SubmitButton
+        pendingText={te.deletePending}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} border-red-800 bg-red-700`
+            : "h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait border-red-400 bg-red-400`
+            : "h-7 w-full cursor-wait rounded border border-red-400 bg-red-400 text-[11px] font-bold text-white"
+        }
+      >
+        {te.btnDelete}
+      </SubmitButton>
+    </form>
+  );
+
+  const withdrawRestoreForm = isWithdrawn ? (
+    <form
+      action={restoreEntry}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (!window.confirm(te.confirmRestoreWithdrawn)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <SubmitButton
+        pendingText={te.restorePending}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} border-green-700 bg-green-700`
+            : `${BTN_BASE} w-full border-green-700 bg-green-700`
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait border-green-400 bg-green-400`
+            : `${BTN_BASE} w-full cursor-wait border-green-400 bg-green-400`
+        }
+      >
+        {te.btnRea}
+      </SubmitButton>
+    </form>
+  ) : (
+    <form
+      action={withdrawEntry}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (!window.confirm(te.confirmWithdraw)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <SubmitButton
+        pendingText={te.withdrawPending}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} border-amber-600 bg-amber-600`
+            : `${BTN_BASE} w-full border-amber-600 bg-amber-600`
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait border-amber-400 bg-amber-400`
+            : `${BTN_BASE} w-full cursor-wait border-amber-400 bg-amber-400`
+        }
+      >
+        {te.btnWithdraw}
+      </SubmitButton>
+    </form>
+  );
+
+  const dqRestoreForm = isDQ ? (
+    <form
+      action={restoreEntry}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (!window.confirm(te.confirmRestoreDq)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <SubmitButton
+        pendingText={te.restorePending}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} border-sky-700 bg-sky-700`
+            : `${BTN_BASE} w-full border-sky-700 bg-sky-700`
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait border-sky-400 bg-sky-400`
+            : `${BTN_BASE} w-full cursor-wait border-sky-400 bg-sky-400`
+        }
+      >
+        {te.btnRea}
+      </SubmitButton>
+    </form>
+  ) : (
+    <form
+      action={disqualifyEntry}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (!window.confirm(te.confirmDq)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entry.id} />
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <SubmitButton
+        pendingText={te.dqPending}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} border-red-700 bg-red-700`
+            : `${BTN_BASE} w-full border-red-700 bg-red-700`
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait border-red-400 bg-red-400`
+            : `${BTN_BASE} w-full cursor-wait border-red-400 bg-red-400`
+        }
+      >
+        {te.btnDq}
+      </SubmitButton>
+    </form>
+  );
+
+  const editControl = (
+    <PlayerRowActions
+      tournamentId={tournamentId}
+      entryId={entry.id}
+      currentCategoryId={entry.categories?.id ?? null}
+      categories={categories}
+      player={
+        entry.players
+          ? {
+              id: entry.players.id,
+              first_name: entry.players.first_name,
+              last_name: entry.players.last_name,
+              initials: entry.players.initials ?? null,
+              gender: entry.players.gender ?? null,
+              handicap_index: entry.players.handicap_index ?? null,
+              handicap_torneo:
+                entry.handicap_index ?? entry.players.handicap_torneo ?? null,
+              phone: entry.players.phone ?? null,
+              email: entry.players.email ?? null,
+              club: entry.players.club ?? null,
+              club_id: entry.players.club_id ?? null,
+              ghin_number: entry.players.ghin_number ?? null,
+              shirt_size: entry.players.shirt_size ?? null,
+              shoe_size: entry.players.shoe_size ?? null,
+              birth_year: entry.players.birth_year ?? null,
+              telegram_user_id: entry.players.telegram_user_id ?? null,
+              telegram_chat_id: entry.players.telegram_chat_id ?? null,
+            }
+          : null
+      }
+    />
+  );
+
+  return (
+    <div
+      className={
+        compact
+          ? "flex max-w-[min(52vw,16.5rem)] shrink-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain"
+          : `flex flex-nowrap items-center gap-2 ${ACTIONS_COL}`
+      }
+    >
+      {wrap(telegramBtn, SLOT_MD)}
+      {wrap(signaturesBtn, SLOT_MD)}
+      {wrap(deleteForm, SLOT_MD)}
+      {wrap(withdrawRestoreForm, SLOT_SM)}
+      {wrap(dqRestoreForm, SLOT_SM)}
+      {wrap(
+        compact ? (
+          <div className="shrink-0 [&_button]:h-8 [&_button]:min-w-[3rem]">
+            {editControl}
+          </div>
+        ) : (
+          editControl
+        ),
+        SLOT_EDIT
+      )}
+    </div>
+  );
+}
 
 export default function EntriesListPanel({
   entries,
@@ -264,19 +571,20 @@ ${res.witness_url}`;
   }
 
   return (
-    <section className="space-y-1 rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
+    <section className="space-y-1 overflow-x-hidden rounded border border-gray-300 bg-white p-1.5 text-black shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
         <div className="font-semibold uppercase text-gray-700">
           {te.heading}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <StealthTextInput
             value={search}
             onChange={setSearch}
             placeholder={te.searchPlaceholder}
             style={{
-              minWidth: 180,
+              width: "100%",
+              minWidth: 0,
               height: 36,
               borderRadius: 6,
               border: "1px solid #d1d5db",
@@ -290,7 +598,7 @@ ${res.witness_url}`;
           <select
             value={club}
             onChange={(e) => setClub(e.target.value)}
-            className="h-9 min-w-[8rem] px-2 text-sm md:h-7"
+            className="h-9 w-full px-2 text-sm sm:w-auto sm:min-w-[8rem] md:h-7"
           >
             <option value="">{te.optionClub}</option>
             {clubs.map((c) => (
@@ -301,7 +609,7 @@ ${res.witness_url}`;
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="h-9 min-w-[8rem] px-2 text-sm md:h-7"
+            className="h-9 w-full px-2 text-sm sm:w-auto sm:min-w-[8rem] md:h-7"
           >
             <option value="">{te.optionCat}</option>
             {categoryCodes.map((c) => (
@@ -318,7 +626,67 @@ ${res.witness_url}`;
         </p>
       </div>
 
+      <ul
+        className="divide-y border border-gray-200 md:hidden"
+        style={{
+          maxHeight: backofficeTableStickyScroll.maxHeight,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          background: "#ffffff",
+        }}
+      >
+        {filtered.map((e) => {
+          const fullName =
+            `${e.players?.last_name ?? ""} ${e.players?.first_name ?? ""}`.trim() ||
+            "-";
+          const categoryLabel = e.categories?.code
+            ? `${e.categories.code}${e.categories.name ? ` · ${e.categories.name}` : ""}`
+            : (e.categories?.name ?? "—");
+
+          return (
+            <li key={e.id} className="px-1 py-2">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold leading-snug text-gray-900">
+                    <span className="mr-1.5 tabular-nums text-gray-700">
+                      {e.player_number ?? "—"}
+                    </span>
+                    {fullName}
+                  </p>
+                  <p className="mt-0.5 truncate text-[10px] text-gray-600">
+                    {e.players?.club_label ?? "—"} · {te.thHcp}{" "}
+                    {e.handicap_index ?? "—"} · {categoryLabel}
+                  </p>
+                </div>
+                <EntryRowActions
+                  entry={e}
+                  tournamentId={tournamentId}
+                  categories={categories}
+                  te={te}
+                  compact
+                  onGenerateLinks={handleGenerateLinks}
+                />
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex h-6 items-center rounded border px-2 text-[10px] font-semibold ${badgeClass(
+                    e.status
+                  )}`}
+                >
+                  {badgeLabel(e.status, te)}
+                </span>
+                <EntryRoundBalls entry={e} te={te} compact />
+              </div>
+            </li>
+          );
+        })}
+        {filtered.length === 0 ? (
+          <li className="p-3 text-[11px] text-gray-600">{te.noResults}</li>
+        ) : null}
+      </ul>
+
       <div
+        className="hidden md:block"
         style={{
           ...backofficeTableStickyScroll,
           border: "1px solid rgb(209 213 219)",
@@ -345,10 +713,6 @@ ${res.witness_url}`;
               const fullName =
                 `${e.players?.last_name ?? ""} ${e.players?.first_name ?? ""}`.trim() ||
                 "-";
-
-              const status = (e.status ?? "").toLowerCase();
-              const isDQ = status === "dq";
-              const isWithdrawn = status === "withdrawn";
 
               return (
                 <tr key={e.id} className="border-t align-middle">
@@ -382,236 +746,17 @@ ${res.witness_url}`;
                   </td>
 
                   <td className="px-1 py-1">
-                    <div className="flex min-w-[114px] items-center justify-center gap-3">
-                      {[1, 2, 3].map((roundNo) => {
-                        const sig =
-                          e.round_signatures?.find(
-                            (r) => r.round_no === roundNo
-                          ) ?? null;
-
-                        return (
-                          <div
-                            key={roundNo}
-                            className="flex flex-col items-center gap-1"
-                            title={roundBallTitle(sig, roundNo, te)}
-                          >
-                            <span className="text-[9px] font-semibold text-gray-700">
-                              R{roundNo}
-                            </span>
-                            <span
-                              className={`block h-3 w-3 rounded-full ${getBallClass(
-                                sig
-                              )}`}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <EntryRoundBalls entry={e} te={te} />
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex max-w-[min(100vw,22rem)] flex-wrap items-center gap-2 sm:max-w-none md:min-w-[648px] md:flex-nowrap md:overflow-x-auto md:whitespace-nowrap">
-                      <div className={SLOT_MD}>
-                        <Link
-                          href={`/entries/telegram-kit?tournament_id=${encodeURIComponent(
-                            tournamentId
-                          )}&player_id=${encodeURIComponent(e.player_id)}`}
-                          title={te.btnTelegramKitTitle}
-                          className="inline-flex h-7 w-full items-center justify-center rounded border border-sky-900 bg-sky-700 text-[11px] font-bold text-white hover:bg-sky-800"
-                        >
-                          {kitButtonLabel(te.btnTelegramKit, e)}
-                        </Link>
-                      </div>
-
-                      <div className={SLOT_MD}>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateLinks(e.id)}
-                          className="h-7 w-full rounded border border-blue-800 bg-blue-700 text-[11px] font-bold text-white"
-                        >
-                          {te.btnSignatures}
-                        </button>
-                      </div>
-
-                      <div
-                        className={`${SLOT_MD} sticky left-0 z-20 bg-white pr-1 shadow-[2px_0_0_0_rgba(255,255,255,1)]`}
-                      >
-                        <form
-                          action={deleteEntry}
-                          className="w-full"
-                          onSubmit={(event) => {
-                            if (
-                              !window.confirm(te.confirmDelete)
-                            ) {
-                              event.preventDefault();
-                            }
-                          }}
-                        >
-                          <input type="hidden" name="id" value={e.id} />
-                          <input
-                            type="hidden"
-                            name="tournament_id"
-                            value={tournamentId}
-                          />
-
-                          <SubmitButton
-                            pendingText={te.deletePending}
-                            className="h-7 w-full rounded border border-red-800 bg-red-700 text-[11px] font-bold text-white"
-                            pendingClassName="h-7 w-full cursor-wait rounded border border-red-400 bg-red-400 text-[11px] font-bold text-white"
-                          >
-                            {te.btnDelete}
-                          </SubmitButton>
-                        </form>
-                      </div>
-
-                      <div className={SLOT_SM}>
-                        {isWithdrawn ? (
-                          <form
-                            action={restoreEntry}
-                            className="w-full"
-                            onSubmit={(event) => {
-                              if (!window.confirm(te.confirmRestoreWithdrawn)) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <input type="hidden" name="id" value={e.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={tournamentId}
-                            />
-
-                            <SubmitButton
-                              pendingText={te.restorePending}
-                              className={`${BTN_BASE} w-full border-green-700 bg-green-700`}
-                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-green-400 bg-green-400`}
-                            >
-                              {te.btnRea}
-                            </SubmitButton>
-                          </form>
-                        ) : (
-                          <form
-                            action={withdrawEntry}
-                            className="w-full"
-                            onSubmit={(event) => {
-                              if (!window.confirm(te.confirmWithdraw)) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <input type="hidden" name="id" value={e.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={tournamentId}
-                            />
-
-                            <SubmitButton
-                              pendingText={te.withdrawPending}
-                              className={`${BTN_BASE} w-full border-amber-600 bg-amber-600`}
-                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-amber-400 bg-amber-400`}
-                            >
-                              {te.btnWithdraw}
-                            </SubmitButton>
-                          </form>
-                        )}
-                      </div>
-
-                      <div className={SLOT_SM}>
-                        {isDQ ? (
-                          <form
-                            action={restoreEntry}
-                            className="w-full"
-                            onSubmit={(event) => {
-                              if (!window.confirm(te.confirmRestoreDq)) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <input type="hidden" name="id" value={e.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={tournamentId}
-                            />
-
-                            <SubmitButton
-                              pendingText={te.restorePending}
-                              className={`${BTN_BASE} w-full border-sky-700 bg-sky-700`}
-                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-sky-400 bg-sky-400`}
-                            >
-                              {te.btnRea}
-                            </SubmitButton>
-                          </form>
-                        ) : (
-                          <form
-                            action={disqualifyEntry}
-                            className="w-full"
-                            onSubmit={(event) => {
-                              if (
-                                !window.confirm(te.confirmDq)
-                              ) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <input type="hidden" name="id" value={e.id} />
-                            <input
-                              type="hidden"
-                              name="tournament_id"
-                              value={tournamentId}
-                            />
-
-                            <SubmitButton
-                              pendingText={te.dqPending}
-                              className={`${BTN_BASE} w-full border-red-700 bg-red-700`}
-                              pendingClassName={`${BTN_BASE} w-full cursor-wait border-red-400 bg-red-400`}
-                            >
-                              {te.btnDq}
-                            </SubmitButton>
-                          </form>
-                        )}
-                      </div>
-
-                      <div className={SLOT_EDIT}>
-                        <PlayerRowActions
-                          tournamentId={tournamentId}
-                          entryId={e.id}
-                          currentCategoryId={e.categories?.id ?? null}
-                          categories={categories}
-                          player={
-                            e.players
-                              ? {
-                                  id: e.players.id,
-                                  first_name: e.players.first_name,
-                                  last_name: e.players.last_name,
-                                  initials: e.players.initials ?? null,
-                                  gender: e.players.gender ?? null,
-                                  handicap_index:
-                                    e.players.handicap_index ?? null,
-                                  handicap_torneo:
-                                    e.handicap_index ??
-                                    e.players.handicap_torneo ??
-                                    null,
-                                  phone: e.players.phone ?? null,
-                                  email: e.players.email ?? null,
-                                  club: e.players.club ?? null,
-                                  club_id: e.players.club_id ?? null,
-                                  ghin_number: e.players.ghin_number ?? null,
-                                  shirt_size: e.players.shirt_size ?? null,
-                                  shoe_size: e.players.shoe_size ?? null,
-                                  birth_year: e.players.birth_year ?? null,
-                                  telegram_user_id:
-                                    e.players.telegram_user_id ?? null,
-                                  telegram_chat_id:
-                                    e.players.telegram_chat_id ?? null,
-                                }
-                              : null
-                          }
-                        />
-                      </div>
-                    </div>
+                    <EntryRowActions
+                      entry={e}
+                      tournamentId={tournamentId}
+                      categories={categories}
+                      te={te}
+                      onGenerateLinks={handleGenerateLinks}
+                    />
                   </td>
                 </tr>
               );

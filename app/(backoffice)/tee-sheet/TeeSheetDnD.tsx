@@ -17,6 +17,7 @@ import {
 import { FileSpreadsheet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { moveEntryToGroupPosition, balanceGroupsByCategory } from "./actions";
+import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { formatGroupTeeScheduleLabel } from "./sessionBlock";
 
 type MemberUI = {
@@ -717,7 +718,10 @@ function DroppableGroupCard({
             </div>
 
             <div className="text-[11px] font-semibold text-slate-700">
-              {group.starting_label ?? (group.starting_hole ? `H${group.starting_hole}` : "H-")}
+              {formatStartingHoleLabel(
+                group.starting_label,
+                group.starting_hole
+              )}
             </div>
 
             <div className={["min-w-0 truncate rounded px-1 py-0.5 text-[10px] font-semibold", color.badge].join(" ")} style={color.badgeStyle}>

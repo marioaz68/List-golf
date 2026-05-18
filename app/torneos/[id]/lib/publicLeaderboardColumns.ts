@@ -1,14 +1,12 @@
-import {
-  collectRoundIdsWithScoreCapture,
-  resolveDetailForRoundNo,
-  type SelectedRoundMeta,
-} from "@/lib/leaderboard/roundCategoryMatch";
+import { collectRoundIdsWithScoreCapture } from "@/lib/leaderboard/roundCategoryMatch";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
-import { formatRoundCellForRule } from "@/lib/leaderboard/competitionDisplay";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import type { LockedScorecardLookups, RoundIdMeta } from "@/lib/leaderboard/lockedScorecards";
+import { formatPublicRoundColumnCell } from "@/lib/leaderboard/publicRoundScorePolicy";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { LeaderboardRow } from "./types";
+import type { SelectedRoundMeta } from "./utils";
 
 /** Columnas fijas antes de las de ronda: C, JUG, ★, POS, MV, THR. */
 export const PUBLIC_LEADERBOARD_FIXED_COL_COUNT = 6;
@@ -55,29 +53,36 @@ export function roundDetailForPublicColumn(
   roundNo: number,
   rulesMap: Map<string, CategoryCompetitionRule>,
   handicapByPlayerId: Map<string, number | null>,
-  strokeIndexByHole?: StrokeIndexByHole,
-  viewOverride?: LeaderboardViewOverride | null
+  strokeIndexByHole: StrokeIndexByHole | undefined,
+  viewOverride: LeaderboardViewOverride | null | undefined,
+  options: {
+    view: "live" | "official";
+    selectedRound: SelectedRoundMeta | null | undefined;
+    rounds: RoundIdMeta[];
+    lockedLookups: LockedScorecardLookups;
+  }
 ): string {
   const rule = competitionRuleForCategory(rulesMap, row.category_id);
-
   const scoreRoundIds = collectRoundIdsWithScoreCapture(row.details);
-  const detail = resolveDetailForRoundNo(
-    row.details,
-    roundNo,
-    row.category_id,
-    scoreRoundIds
-  );
-
   const hcp = handicapByPlayerId.get(row.player_id) ?? null;
+  const selectedRoundNo = options.selectedRound?.round_no ?? roundNo;
 
-  return formatRoundCellForRule(
-    detail,
+  return formatPublicRoundColumnCell({
+    details: row.details,
+    roundNo,
+    entryId: row.entry_id,
+    entryCategoryId: row.category_id,
+    scoreRoundIds,
+    rounds: options.rounds,
+    lockedLookups: options.lockedLookups,
+    view: options.view,
+    selectedRoundNo,
     rule,
-    hcp,
-    row.is_disqualified,
+    handicapIndex: hcp,
+    isDisqualified: row.is_disqualified,
     strokeIndexByHole,
-    viewOverride
-  );
+    leaderboardViewOverride: viewOverride,
+  });
 }
 
 export { scoreColClass, scoreCellClass };

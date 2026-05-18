@@ -17,6 +17,8 @@ import {
   type StrokeIndexByHole,
 } from "./competitionScoring";
 import type { LeaderboardViewOverride } from "./leaderboardViewOverride";
+import type { LockedScorecardLookups, RoundIdMeta } from "./lockedScorecards";
+import { isPublicRoundScorecardClosed } from "./publicRoundScorePolicy";
 
 function compareSortValues(
   a: number | null,
@@ -41,6 +43,8 @@ export function applyCompetitionStandings({
   handicapByPlayerId,
   strokeIndexByHole,
   leaderboardViewOverride = null,
+  lockedLookups,
+  roundsForLock,
 }: {
   leaderboard: LeaderboardRow[];
   rounds: SelectedRoundMeta[];
@@ -49,6 +53,8 @@ export function applyCompetitionStandings({
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
+  lockedLookups?: LockedScorecardLookups;
+  roundsForLock?: RoundIdMeta[];
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
   const sortedRounds = [...rounds].sort((a, b) => a.round_no - b.round_no);
@@ -90,10 +96,24 @@ export function applyCompetitionStandings({
         const hcp = handicapByPlayerId.get(row.player_id) ?? null;
         const detailsInScope = row.details.filter((d) => {
           if (!roundIdsUpTo.has(d.round_id)) return false;
-          return roundRowAppliesToEntry(
-            { category_id: d.category_id ?? null },
-            row.category_id
-          );
+          if (
+            !roundRowAppliesToEntry(
+              { category_id: d.category_id ?? null },
+              row.category_id
+            )
+          ) {
+            return false;
+          }
+          if (lockedLookups && roundsForLock) {
+            return isPublicRoundScorecardClosed(
+              row.entry_id,
+              d.round_no,
+              row.category_id,
+              roundsForLock,
+              lockedLookups
+            );
+          }
+          return true;
         });
 
         const cum = cumulativeLeaderboardValue(

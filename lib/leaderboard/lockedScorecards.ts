@@ -8,6 +8,7 @@ export type LockedScorecardRow = {
 export type RoundIdMeta = {
   id: string;
   round_no: number;
+  category_id?: string | null;
 };
 
 export type LockedScorecardLookups = {

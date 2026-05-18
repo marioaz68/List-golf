@@ -414,7 +414,10 @@ function pairingGroupLabel(
   const found = pairingGroups.find((g) => g.id === pairingGroupId);
   if (!found) return "—";
 
-  const hole = found.starting_hole != null ? `H${found.starting_hole}` : "H?";
+  const hole =
+    found.starting_hole != null
+      ? `HOYO ${found.starting_hole}`
+      : "HOYO ?";
   const time = found.tee_time ? formatTime(found.tee_time) : "—";
 
   return `${hole} · ${time}`;

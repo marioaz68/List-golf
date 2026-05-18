@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { createClient } from "@/utils/supabase/server";
+import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import {
   formatGroupTeeScheduleLabel,
@@ -318,7 +319,10 @@ export async function GET(request: NextRequest) {
     const startTypeLabel = String(round.start_type ?? "").trim() || "—";
 
     groups.forEach((g) => {
-      const salida = labelByGroupId.get(g.id) ?? null;
+      const salida = formatStartingHoleLabel(
+        labelByGroupId.get(g.id) ?? null,
+        g.starting_hole
+      );
       const members = (membersByGroup.get(g.id) ?? []).sort((a, b) => a.position - b.position);
 
       if (members.length === 0) {
@@ -333,7 +337,7 @@ export async function GET(request: NextRequest) {
             round.round_date,
             g.tee_time ?? round.start_time
           ),
-          Salida: salida ?? "—",
+          Salida: salida,
           "Categoría grupo": catKey(g.notes),
           Pos: "—",
           Jugador: "—",
@@ -355,7 +359,7 @@ export async function GET(request: NextRequest) {
             round.round_date,
             g.tee_time ?? round.start_time
           ),
-          Salida: salida ?? "—",
+          Salida: salida,
           "Categoría grupo": catKey(g.notes),
           Pos: m.position,
           Jugador: m.name,

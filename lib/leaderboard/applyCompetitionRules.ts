@@ -9,7 +9,9 @@ import {
   cumulativeLeaderboardValue,
   type StrokeIndexByHole,
 } from "./competitionScoring";
+import type { LockedScorecardLookups, RoundIdMeta } from "./lockedScorecards";
 import type { LeaderboardViewOverride } from "./leaderboardViewOverride";
+import { detailsForPublicCumulative } from "./publicRoundScorePolicy";
 
 export function applyCompetitionRules({
   leaderboard,
@@ -18,6 +20,8 @@ export function applyCompetitionRules({
   maxRoundNo,
   strokeIndexByHole,
   leaderboardViewOverride = null,
+  lockedLookups,
+  roundsForLock,
 }: {
   leaderboard: LeaderboardRow[];
   competitionRules: CategoryCompetitionRule[];
@@ -25,6 +29,8 @@ export function applyCompetitionRules({
   maxRoundNo: number | null;
   strokeIndexByHole?: StrokeIndexByHole;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
+  lockedLookups?: LockedScorecardLookups;
+  roundsForLock?: RoundIdMeta[];
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
 
@@ -32,8 +38,18 @@ export function applyCompetitionRules({
     const rule = competitionRuleForCategory(rulesMap, row.category_id);
 
     const hcp = handicapByPlayerId.get(row.player_id) ?? null;
+    const detailsForCum =
+      lockedLookups && roundsForLock
+        ? detailsForPublicCumulative(
+            row.details,
+            row.entry_id,
+            row.category_id,
+            roundsForLock,
+            lockedLookups
+          )
+        : row.details;
     const cum = cumulativeLeaderboardValue(
-      row.details,
+      detailsForCum,
       rule,
       hcp,
       maxRoundNo,

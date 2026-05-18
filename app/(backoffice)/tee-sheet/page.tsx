@@ -13,6 +13,7 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadSlate50,
 } from "@/lib/ui/backofficeTableSticky";
+import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import {
   buildSessionBlocks,
@@ -367,9 +368,10 @@ for (const row of membersRaw) {
   const labelByGroupId = buildPairingGroupLabelsBySession(sortedGroups, rounds);
 
   const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
-    const starting_label =
-      labelByGroupId.get(g.id) ??
-      (typeof g.starting_hole === "number" ? `H${g.starting_hole}` : null);
+    const starting_label = formatStartingHoleLabel(
+      labelByGroupId.get(g.id) ?? null,
+      g.starting_hole
+    );
 
     return {
       ...g,

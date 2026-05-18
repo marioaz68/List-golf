@@ -8,6 +8,10 @@ import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import { categoryShowsGrossNetToggle } from "@/lib/leaderboard/categoryCompetitionRules";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import type {
+  LockedScorecardLookups,
+  RoundIdMeta,
+} from "@/lib/leaderboard/lockedScorecards";
 import PublicLeaderboardBasisToggle from "./PublicLeaderboardBasisToggle";
 import PublicLeaderboardTable from "./PublicLeaderboardTable";
 
@@ -69,6 +73,8 @@ type Props = {
     net: string;
     aria: string;
   };
+  rounds: RoundIdMeta[];
+  lockedLookups: LockedScorecardLookups;
 };
 
 export default function PublicLeaderboardWithSearch({
@@ -90,6 +96,8 @@ export default function PublicLeaderboardWithSearch({
   headerCompetitionRule = null,
   leaderboardViewOverride = null,
   basisToggleLabels,
+  rounds,
+  lockedLookups,
 }: Props) {
   const [query, setQuery] = useState("");
 
@@ -177,6 +185,8 @@ export default function PublicLeaderboardWithSearch({
         strokeIndexByHole={strokeIndexByHole}
         headerCompetitionRule={headerCompetitionRule}
         leaderboardViewOverride={leaderboardViewOverride}
+        rounds={rounds}
+        lockedLookups={lockedLookups}
       />
     </div>
   );

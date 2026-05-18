@@ -4,13 +4,24 @@ import {
   resolvePreviousRoundRowForEntry,
   roundRowAppliesToEntry,
 } from "./roundCategoryMatch";
+import type { LockedScorecardLookups, RoundIdMeta } from "./lockedScorecards";
+import { isPublicRoundScorecardClosed } from "./publicRoundScorePolicy";
 
 export function applyStandings({
   leaderboardBase,
   rounds,
   selectedRound,
   holesPlayedCount,
-}: any) {
+  lockedLookups,
+  roundsForLock,
+}: {
+  leaderboardBase: any[];
+  rounds: any[];
+  selectedRound: any;
+  holesPlayedCount: (details: any[]) => number;
+  lockedLookups?: LockedScorecardLookups;
+  roundsForLock?: RoundIdMeta[];
+}) {
   const standingsByRound = new Map();
   const standingsByRoundCategory = new Map();
 
@@ -33,6 +44,20 @@ export function applyStandings({
           !roundRowAppliesToEntry(
             { category_id: detail.category_id ?? null },
             row.category_id
+          )
+        ) {
+          continue;
+        }
+
+        if (
+          lockedLookups &&
+          roundsForLock &&
+          !isPublicRoundScorecardClosed(
+            row.entry_id,
+            detail.round_no,
+            row.category_id,
+            roundsForLock,
+            lockedLookups
           )
         ) {
           continue;
