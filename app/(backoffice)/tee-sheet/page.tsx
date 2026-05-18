@@ -851,6 +851,11 @@ for (const row of membersRaw) {
             <div className="rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
               Regla aplicada: categorías juntas, sin reiniciar hoyos por categoría, distribución automática 4/5, nunca grupos de 1 o 2. Después puedes ajustar manualmente con Drag & Drop.
             </div>
+            {selectedRound && selectedRound.round_no > 1 ? (
+              <div className="rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
+                {ts.standingsOrderHint}
+              </div>
+            ) : null}
           </div>
         </div>
 

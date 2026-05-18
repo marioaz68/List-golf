@@ -48,6 +48,7 @@ const es = {
       tournamentHoles: "Hoyos torneo",
       cutRules: "Reglas de corte",
       competitionRules: "Liga",
+      convocatoria: "Convocatoria",
       categoryTemplates: "Plantillas cat.",
       users: "Usuarios",
     },
@@ -354,6 +355,8 @@ const es = {
       "No se pueden generar salidas de la ronda {round} hasta cerrar la ronda {prior} en: {categories}.",
     priorRoundGateAction:
       "Cierra la ronda anterior para toda la categoría en la vista oficial o captura de tarjetas.",
+    standingsOrderHint:
+      "Orden y corte según Reglas de competencia y Reglas de corte del torneo (misma lógica que la clasificación pública). Sin regla de corte para esta ronda → juegan todos.",
   },
   rounds: {
     title: "Rondas",
@@ -632,6 +635,82 @@ const es = {
       saveFooterNote:
         "Se guardan todas las categorías del torneo para que el leaderboard y premios lean una sola fuente.",
     },
+  },
+  convocatoria: {
+    title: "Convocatoria",
+    intro:
+      "Arma la convocatoria en el sistema (plantilla 68º Torneo Anual), edita todas las variables, ciérrala y genera los parámetros del torneo. Los módulos manuales siguen disponibles después.",
+    noTournaments: "Crea un torneo primero.",
+    newTournament: "Nuevo torneo",
+    linkPrizes: "Premios",
+    startFromTemplate: "Empezar desde plantilla machote",
+    templateHint:
+      "Incluye categorías Camp–C, D-E, Seniors, Damas, cortes al 50 %, competencia gross/neto/Stableford y premios de podio del 68º Anual CCQ. Todo es editable.",
+    loadTemplateButton: "Recargar plantilla 68º Torneo Anual (CCQ)",
+    autoProvisionNote:
+      "Plantilla 68º Torneo Anual cargada automáticamente. Revisa pestañas y guarda cuando quieras.",
+    autoSyncNote:
+      "Cortes y premios actualizados a la convocatoria 68º. Revisa y guarda el borrador.",
+    rulesUpgradedNote:
+      "Reglas de corte en BD actualizadas: acumulado 36 hoyos (R1+R2) y perfiles de desempate CCQ.",
+    reloadTemplateHint:
+      "Reemplaza el borrador en edición por la plantilla machote (pierdes cambios no guardados en BD).",
+    importOptionalTitle: "Importar Word (opcional)",
+    importOptionalHint:
+      "Solo si tienes un .docx distinto; reemplaza el borrador en edición.",
+    importOptionalButton: "Importar .docx",
+    statusEditing: "En edición",
+    statusClosed: "Cerrada — lista para generar parámetros",
+    statusApplied: "Parámetros ya generados en el torneo",
+    tabMeta: "General",
+    tabReference: "Texto convocatoria",
+    tabCategories: "Categorías",
+    tabCompetition: "Competencia",
+    tabCuts: "Cortes",
+    tabPrizes: "Premios",
+    saveDraft: "Guardar borrador",
+    closeConvocatoria: "Cerrar convocatoria",
+    reopenConvocatoria: "Reabrir para editar",
+    generateParams: "Generar parámetros del torneo",
+    generateBlocked:
+      "Hay inscripciones: no se puede regenerar. Ajusta manualmente en admin.",
+    confirmClose:
+      "Al cerrar ya no podrás editar hasta reabrir. Luego podrás generar parámetros.",
+    confirmGenerate:
+      "Escribe categorías, competencia, cortes, premios y rondas en el torneo.",
+    closedOk:
+      "Convocatoria cerrada. Revisa el borrador y pulsa «Generar parámetros del torneo».",
+    appliedOk:
+      "Parámetros generados. Revisa Hoyos del torneo, Sets de salida y desempates.",
+    readOnlyHint: "Convocatoria cerrada o aplicada — solo lectura",
+    metaTitle: "Título",
+    metaHoles: "Hoyos totales",
+    metaCutHoles: "Corte tras (hoyos)",
+    metaCutPct: "Corte máx. %",
+    metaRounds: "Rondas",
+    metaPracticeDay: "Día de práctica",
+    metaHandicapDate: "Fecha índice de handicap",
+    refSystem: "Sistema de juego",
+    refGentlemen: "Caballeros",
+    refLadies: "Damas",
+    refSeniorsAges: "Edades Seniors",
+    refCutPolicy: "Política de corte",
+    refCutTiebreakGross: "Desempate corte (gross)",
+    refCutTiebreakStableford: "Desempate corte (Stableford)",
+    refCutTiebreakSeniors: "Desempate corte (Seniors)",
+    refTrophyTiebreak: "Desempate trofeos",
+    refTrophies: "Trofeos y premios especiales",
+    refOutOfScope: "Fuera de parámetros automáticos",
+    reviewWarnings: "Avisos",
+    colCode: "Cód.",
+    colName: "Nombre",
+    colHcp: "H.I.",
+    colCut: "Corte",
+    colGroup: "Grupo",
+    colGender: "Género",
+    addCategory: "Añadir categoría",
+    migrationMissing:
+      "Falta la tabla tournament_convocatoria en Supabase. Ejecuta las migraciones 20260518120000 y 20260518130000 antes de usar este módulo.",
   },
   prizeRules: {
     title: "Reglas de Premios",
@@ -1097,6 +1176,7 @@ const en: Messages = {
       tournamentHoles: "Tournament holes",
       cutRules: "Cut rules",
       competitionRules: "League",
+      convocatoria: "Call / rules doc",
       categoryTemplates: "Category templates",
       users: "Users",
     },
@@ -1401,6 +1481,8 @@ const en: Messages = {
       "Cannot generate round {round} tee sheet until round {prior} is closed for: {categories}.",
     priorRoundGateAction:
       "Close the previous round for every active player in that category (official view or score entry).",
+    standingsOrderHint:
+      "Order and cut from Competition + Cut rules (same as public leaderboard). No cut rule for this round → everyone plays.",
   },
   rounds: {
     title: "Rounds",
@@ -1677,6 +1759,76 @@ const en: Messages = {
       saveFooterNote:
         "All categories for the tournament are saved so leaderboard and prizes read a single source.",
     },
+  },
+  convocatoria: {
+    title: "Tournament call (convocatoria)",
+    intro:
+      "Build the call in-app from the 68th Annual template, edit all fields, close it, then generate tournament parameters.",
+    noTournaments: "Create a tournament first.",
+    newTournament: "New tournament",
+    linkPrizes: "Prizes",
+    startFromTemplate: "Start from template",
+    templateHint:
+      "68th Annual CCQ template: categories, 50% cut, competition rules, podium prizes. Fully editable.",
+    loadTemplateButton: "Reload 68th Annual template (CCQ)",
+    autoProvisionNote:
+      "68th Annual CCQ template loaded automatically. Review tabs and save when ready.",
+    autoSyncNote:
+      "Cuts and prizes synced to 68th Annual call. Review and save the draft.",
+    rulesUpgradedNote:
+      "Cut rules in DB updated: 36-hole total (R1+R2) and CCQ tie-break profiles.",
+    reloadTemplateHint:
+      "Replaces the editing draft with the template (discards unsaved DB changes).",
+    importOptionalTitle: "Import Word (optional)",
+    importOptionalHint: "Only if you have a different .docx; replaces draft while editing.",
+    importOptionalButton: "Import .docx",
+    statusEditing: "Editing",
+    statusClosed: "Closed — ready to generate parameters",
+    statusApplied: "Parameters already applied",
+    tabMeta: "General",
+    tabReference: "Call text",
+    tabCategories: "Categories",
+    tabCompetition: "Competition",
+    tabCuts: "Cuts",
+    tabPrizes: "Prizes",
+    saveDraft: "Save draft",
+    closeConvocatoria: "Close call document",
+    reopenConvocatoria: "Reopen for editing",
+    generateParams: "Generate tournament parameters",
+    generateBlocked: "Entries exist: cannot auto-replace.",
+    confirmClose: "Closing locks editing until you reopen.",
+    confirmGenerate: "Writes categories, competition, cuts, prizes, and rounds.",
+    closedOk: "Call closed. Review and click Generate tournament parameters.",
+    appliedOk: "Parameters generated. Review tournament holes and tee sets.",
+    readOnlyHint: "Read-only while closed or applied",
+    metaTitle: "Title",
+    metaHoles: "Total holes",
+    metaCutHoles: "Cut after (holes)",
+    metaCutPct: "Max cut %",
+    metaRounds: "Rounds",
+    metaPracticeDay: "Practice day",
+    metaHandicapDate: "Handicap index date",
+    refSystem: "Playing system",
+    refGentlemen: "Gentlemen",
+    refLadies: "Ladies",
+    refSeniorsAges: "Senior ages",
+    refCutPolicy: "Cut policy",
+    refCutTiebreakGross: "Cut tiebreak (gross)",
+    refCutTiebreakStableford: "Cut tiebreak (Stableford)",
+    refCutTiebreakSeniors: "Cut tiebreak (seniors)",
+    refTrophyTiebreak: "Trophy tiebreak",
+    refTrophies: "Trophies & special prizes",
+    refOutOfScope: "Not auto-generated",
+    reviewWarnings: "Warnings",
+    colCode: "Code",
+    colName: "Name",
+    colHcp: "H.I.",
+    colCut: "Cut",
+    colGroup: "Group",
+    colGender: "Gender",
+    addCategory: "Add category",
+    migrationMissing:
+      "Table tournament_convocatoria is missing. Run migrations 20260518120000 and 20260518130000 in Supabase first.",
   },
   prizeRules: {
     title: "Prize rules",

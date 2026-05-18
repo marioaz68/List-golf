@@ -7,6 +7,10 @@ import { revalidatePath } from "next/cache";
 import { listCategoriesBlockedForRound } from "@/lib/rounds/categoryRoundGate";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
 import {
+  buildTeeSheetEntryOrderMap,
+  sortEntriesForTeeSheetRound,
+} from "@/lib/tee-sheet/leaderboardOrderForPairing";
+import {
   assertRegistrationClosedForTeeSheet,
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
@@ -1199,6 +1203,19 @@ export async function generateGroupsByCategory(formData: FormData) {
     if (delG) throw new Error("Error borrando grupos previos: " + delG.message);
   }
 
+  let teeSheetEntryOrderMap = new Map<
+    string,
+    { position: number | null; madeCut: boolean | null }
+  >();
+  if (targetRoundNo > 1) {
+    const admin = await createAdminClient();
+    teeSheetEntryOrderMap = await buildTeeSheetEntryOrderMap(
+      admin,
+      tournament_id,
+      targetRoundNo
+    );
+  }
+
   const resolved = entries.map((e) => {
     const hi = e.handicap_index == null ? null : Number(e.handicap_index);
 
@@ -1282,20 +1299,28 @@ export async function generateGroupsByCategory(formData: FormData) {
     const list = byCat.get(k);
     if (!list || list.length === 0) continue;
 
-    list.sort((a, b) => {
-      const ahi = a._hi == null ? 9999 : Number(a._hi);
-      const bhi = b._hi == null ? 9999 : Number(b._hi);
-      if (ahi !== bhi) return ahi - bhi;
+    let orderedList = sortEntriesForTeeSheetRound(
+      list,
+      targetRoundNo,
+      teeSheetEntryOrderMap
+    );
 
-      const al = String(a.players?.last_name ?? "").localeCompare(
-        String(b.players?.last_name ?? "")
-      );
-      if (al !== 0) return al;
+    if (targetRoundNo <= 1) {
+      orderedList = [...orderedList].sort((a, b) => {
+        const ahi = a._hi == null ? 9999 : Number(a._hi);
+        const bhi = b._hi == null ? 9999 : Number(b._hi);
+        if (ahi !== bhi) return ahi - bhi;
 
-      return String(a.players?.first_name ?? "").localeCompare(
-        String(b.players?.first_name ?? "")
-      );
-    });
+        const al = String(a.players?.last_name ?? "").localeCompare(
+          String(b.players?.last_name ?? "")
+        );
+        if (al !== 0) return al;
+
+        return String(a.players?.first_name ?? "").localeCompare(
+          String(b.players?.first_name ?? "")
+        );
+      });
+    }
 
     const plan = planByCategory.get(k);
     const preferredSize = plan?.groupSize ?? group_size;

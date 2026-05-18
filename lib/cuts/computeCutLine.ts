@@ -343,6 +343,29 @@ export function mergeCutLinesForCategory(
 }
 
 /**
+ * Reglas de avance que aplican al generar salidas / ver clasificación de la ronda `targetRoundNo`.
+ * Ej.: `to_round_no: 3` → corte tras R2 para entrar a la final; sin regla con `to_round_no: 2` → R2 sin corte.
+ */
+export function getAdvancementRulesForTargetRound(
+  advancementRules: RoundAdvancementRule[],
+  targetRoundNo: number
+): RoundAdvancementRule[] {
+  if (targetRoundNo <= 1) return [];
+  return advancementRules
+    .filter(
+      (r) =>
+        r.is_active &&
+        r.to_round_no === targetRoundNo &&
+        r.from_round_no < targetRoundNo
+    )
+    .sort(
+      (a, b) =>
+        (a.sort_order ?? 999) - (b.sort_order ?? 999) ||
+        a.from_round_no - b.from_round_no
+    );
+}
+
+/**
  * Cortes activos al entrar a `selectedRoundNo` (p. ej. corte tras R1 al ver R2).
  */
 export function computePublicCutLines(params: {
@@ -359,18 +382,10 @@ export function computePublicCutLines(params: {
   const { leaderboard, selectedRoundNo } = params;
   if (selectedRoundNo <= 1) return [];
 
-  const activeRules = params.advancementRules
-    .filter(
-      (r) =>
-        r.is_active &&
-        r.to_round_no === selectedRoundNo &&
-        r.from_round_no < selectedRoundNo
-    )
-    .sort(
-      (a, b) =>
-        (a.sort_order ?? 999) - (b.sort_order ?? 999) ||
-        a.from_round_no - b.from_round_no
-    );
+  const activeRules = getAdvancementRulesForTargetRound(
+    params.advancementRules,
+    selectedRoundNo
+  );
 
   if (activeRules.length === 0) return [];
 
