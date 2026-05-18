@@ -73,6 +73,7 @@ import {
   buildHref,
   formatDate,
   formatDateWithWeekday,
+  formatPublicRoundNavPill,
   getPlayerCode,
   holesPlayedCount,
   isDQScore,
@@ -399,6 +400,12 @@ export default async function PublicTournamentPage({
     roundsInCategoryScope[0] ??
     rounds[0] ??
     null;
+
+  const selectedRoundIsHistoric = Boolean(
+    selectedRound?.round_date &&
+      roundDateUtcKey(selectedRound.round_date) &&
+      roundDateUtcKey(selectedRound.round_date)! < todayKey
+  );
 
   const preserveRoundNo = selectedRound?.round_no ?? null;
   const roundIdForCategoryLink = (categoryId: string | null) =>
@@ -1073,7 +1080,7 @@ export default async function PublicTournamentPage({
 
                 {selectedRound ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                    {pub.roundChip} {selectedRound.round_no}
+                    {formatPublicRoundNavPill(selectedRound, locale)}
                   </span>
                 ) : null}
               </div>
@@ -1134,21 +1141,15 @@ export default async function PublicTournamentPage({
                         </p>
                         <p className="mt-1 text-sm text-slate-200">
                           {selectedRound ? (
-                            <>
-                              <span className="font-bold text-white">
-                                R{selectedRound.round_no}
-                              </span>
+                            <span className="font-bold text-white">
+                              {formatPublicRoundNavPill(selectedRound, locale)}
                               {selectedRound.round_date ? (
-                                <span className="text-slate-300">
+                                <span className="font-normal text-slate-400">
                                   {" "}
-                                  ·{" "}
-                                  {formatDateWithWeekday(
-                                    selectedRound.round_date,
-                                    locale,
-                                  )}
+                                  · {formatDate(selectedRound.round_date)}
                                 </span>
                               ) : null}
-                            </>
+                            </span>
                           ) : (
                             <span className="text-slate-400">
                               {pub.noRoundSelected}
@@ -1176,7 +1177,7 @@ export default async function PublicTournamentPage({
                                   selectedRound?.id === round.id
                                 )}
                               >
-                                R{round.round_no}
+                                {formatPublicRoundNavPill(round, locale)}
                               </Link>
                             ))}
                           </div>
@@ -1187,7 +1188,10 @@ export default async function PublicTournamentPage({
                     {roundsByPastDate.length > 0 ||
                     roundsByFutureDate.length > 0 ||
                     roundsWithoutCalendar.length > 0 ? (
-                      <details className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                      <details
+                        open={selectedRoundIsHistoric}
+                        className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                      >
                         <summary className="cursor-pointer select-none text-sm font-semibold text-cyan-200 hover:text-cyan-100">
                           {pub.historicRoundsToggle}
                         </summary>
@@ -1224,7 +1228,7 @@ export default async function PublicTournamentPage({
                                             selectedRound?.id === round.id
                                           )}
                                         >
-                                          R{round.round_no}
+                                          {formatPublicRoundNavPill(round, locale)}
                                         </Link>
                                       ))}
                                     </div>
@@ -1266,7 +1270,7 @@ export default async function PublicTournamentPage({
                                             selectedRound?.id === round.id
                                           )}
                                         >
-                                          R{round.round_no}
+                                          {formatPublicRoundNavPill(round, locale)}
                                         </Link>
                                       ))}
                                     </div>
@@ -1296,7 +1300,7 @@ export default async function PublicTournamentPage({
                                       selectedRound?.id === round.id
                                     )}
                                   >
-                                    R{round.round_no}
+                                    {formatPublicRoundNavPill(round, locale)}
                                   </Link>
                                 ))}
                               </div>
@@ -1306,7 +1310,10 @@ export default async function PublicTournamentPage({
                       </details>
                     ) : roundsInCategoryScope.length >
                       roundsTodayList.length ? (
-                      <details className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                      <details
+                        open={selectedRoundIsHistoric}
+                        className="rounded-xl border border-white/10 bg-black/20 px-3 py-2"
+                      >
                         <summary className="cursor-pointer select-none text-sm font-semibold text-cyan-200 hover:text-cyan-100">
                           {pub.historicRoundsToggle}
                         </summary>
@@ -1325,17 +1332,7 @@ export default async function PublicTournamentPage({
                                   selectedRound?.id === round.id
                                 )}
                               >
-                                R{round.round_no}
-                                {round.round_date ? (
-                                  <span className="text-[10px] text-white/50">
-                                    {" "}
-                                    ·{" "}
-                                    {formatDateWithWeekday(
-                                      round.round_date,
-                                      locale,
-                                    )}
-                                  </span>
-                                ) : null}
+                                {formatPublicRoundNavPill(round, locale)}
                               </Link>
                             ))}
                           </div>

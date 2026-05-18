@@ -360,11 +360,15 @@ export function selectLeaderboardDetailsForPlayer(
   return out;
 }
 
-/** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */
-export function formatWeekdayEsMxUtc(date: string | null) {
+/** Día de la semana en minúsculas (UTC), misma base que `formatDate`. */
+export function formatWeekdayForLocale(
+  date: string | null,
+  locale: "es" | "en"
+) {
   if (!date) return "";
+  const loc = locale === "en" ? "en-US" : "es-MX";
   try {
-    return new Intl.DateTimeFormat("es-MX", {
+    return new Intl.DateTimeFormat(loc, {
       weekday: "long",
       timeZone: "UTC",
     })
@@ -375,47 +379,91 @@ export function formatWeekdayEsMxUtc(date: string | null) {
   }
 }
 
+/** Día de la semana en minúsculas (es-MX, UTC), misma base que `formatDate`. */
+export function formatWeekdayEsMxUtc(date: string | null) {
+  return formatWeekdayForLocale(date, "es");
+}
+
 export function formatWaveToken(wave: string | null | undefined) {
   const w = String(wave ?? "").trim().toUpperCase();
   return w === "AM" || w === "PM" ? w : "";
 }
 
+/** Turno legible: «por la mañana» / «por la tarde» (o AM/PM en inglés). */
+export function formatWaveLabel(
+  wave: string | null | undefined,
+  locale: "es" | "en"
+) {
+  const w = formatWaveToken(wave);
+  if (!w) return "";
+  if (locale === "en") {
+    return w === "AM" ? "morning" : "afternoon";
+  }
+  return w === "AM" ? "por la mañana" : "por la tarde";
+}
+
+/** Chip compacto en navegación pública: `R2 · jueves · por la tarde`. */
+export function formatPublicRoundNavPill(
+  round: {
+    round_no: number;
+    round_date: string | null;
+    wave?: string | null;
+  },
+  locale: "es" | "en"
+) {
+  const bits = [`R${round.round_no}`];
+  const wd = formatWeekdayForLocale(round.round_date, locale);
+  const waveLbl = formatWaveLabel(round.wave, locale);
+  if (wd) bits.push(wd);
+  if (waveLbl) bits.push(waveLbl);
+  return bits.join(" · ");
+}
+
 /** Texto tipo `miércoles · AM` para encabezados de salidas públicas. */
-export function formatPublicSalidasKicker(round: {
-  round_date: string | null;
-  wave?: string | null;
-}) {
-  const wd = formatWeekdayEsMxUtc(round.round_date);
-  const wave = formatWaveToken(round.wave);
+export function formatPublicSalidasKicker(
+  round: {
+    round_date: string | null;
+    wave?: string | null;
+  },
+  locale: "es" | "en" = "es"
+) {
+  const wd = formatWeekdayForLocale(round.round_date, locale);
+  const wave = formatWaveLabel(round.wave, locale);
   if (wd && wave) return `${wd} · ${wave}`;
   if (wd) return wd;
   if (wave) return wave;
   return "";
 }
 
-/** Chip / enlace: `R1 · 15 oct 2025 · miércoles · AM`. */
-export function formatPublicTeeSheetRoundPill(round: {
-  round_no: number;
-  round_date: string | null;
-  wave?: string | null;
-}) {
+/** Chip / enlace: `R1 · 15 oct 2025 · miércoles · por la mañana`. */
+export function formatPublicTeeSheetRoundPill(
+  round: {
+    round_no: number;
+    round_date: string | null;
+    wave?: string | null;
+  },
+  locale: "es" | "en" = "es"
+) {
   const bits = [`R${round.round_no}`, formatDate(round.round_date)];
-  const wd = formatWeekdayEsMxUtc(round.round_date);
-  const wave = formatWaveToken(round.wave);
+  const wd = formatWeekdayForLocale(round.round_date, locale);
+  const wave = formatWaveLabel(round.wave, locale);
   if (wd) bits.push(wd);
   if (wave) bits.push(wave);
   return bits.join(" · ");
 }
 
-/** Título de bloque: `Ronda 1 · 15 oct 2025 · miércoles · AM`. */
-export function formatPublicTeeSheetSectionTitle(round: {
-  round_no: number;
-  round_date: string | null;
-  wave?: string | null;
-}) {
+/** Título de bloque: `Ronda 1 · 15 oct 2025 · miércoles · por la mañana`. */
+export function formatPublicTeeSheetSectionTitle(
+  round: {
+    round_no: number;
+    round_date: string | null;
+    wave?: string | null;
+  },
+  locale: "es" | "en" = "es"
+) {
   const bits = [`Ronda ${round.round_no}`, formatDate(round.round_date)];
-  const wd = formatWeekdayEsMxUtc(round.round_date);
-  const wave = formatWaveToken(round.wave);
+  const wd = formatWeekdayForLocale(round.round_date, locale);
+  const wave = formatWaveLabel(round.wave, locale);
   if (wd) bits.push(wd);
   if (wave) bits.push(wave);
   return bits.join(" · ");
