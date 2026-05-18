@@ -903,6 +903,17 @@ export type ConfirmRoundCloseState = {
   message: string;
 };
 
+function formatTournamentSettingsDbError(message: string): string {
+  if (/column\s+["']?settings["']?\s+.*does not exist/i.test(message)) {
+    return (
+      "Falta la columna tournaments.settings en Supabase. " +
+      "Aplica la migración supabase/migrations/20260517130000_tournaments_settings.sql " +
+      "(SQL Editor o supabase db push) e intenta de nuevo."
+    );
+  }
+  return message;
+}
+
 export async function confirmTournamentRoundClosed(
   _prev: ConfirmRoundCloseState,
   formData: FormData
@@ -958,7 +969,9 @@ export async function confirmTournamentRoundClosed(
     if (tErr || !tournament) {
       return {
         ok: false,
-        message: tErr?.message ?? "No se encontró el torneo.",
+        message: formatTournamentSettingsDbError(
+          tErr?.message ?? "No se encontró el torneo."
+        ),
       };
     }
 
@@ -971,7 +984,12 @@ export async function confirmTournamentRoundClosed(
       .eq("id", tournamentId);
 
     if (upErr) {
-      return { ok: false, message: `No se pudo guardar el cierre: ${upErr.message}` };
+      return {
+        ok: false,
+        message: formatTournamentSettingsDbError(
+          `No se pudo guardar el cierre: ${upErr.message}`
+        ),
+      };
     }
 
     await revalidateScoreEntryAndLeaderboard(tournamentId);
