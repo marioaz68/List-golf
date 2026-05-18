@@ -772,23 +772,6 @@ export default async function ScoreEntryPage(props: {
               })
               .sort((a, b) => a.round_no - b.round_no);
 
-            const scoringMeta =
-              roundListAll.find((r) => r.id === scoringRoundId) ?? null;
-            const hasExisting = Object.keys(existingScores).length > 0;
-            if (
-              hasExisting &&
-              scoringMeta &&
-              !capturedRounds.some((r) => r.round_id === scoringRoundId)
-            ) {
-              capturedRounds.push({
-                round_id: scoringRoundId,
-                round_no: scoringMeta.round_no,
-                round_date: scoringMeta.round_date,
-                scores: { ...existingScores },
-              });
-              capturedRounds.sort((a, b) => a.round_no - b.round_no);
-            }
-
             if (
               Object.keys(existingScores).length === 0 &&
               misalignedCapturedRounds.length > 0

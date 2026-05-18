@@ -149,15 +149,19 @@ export function CapturedRoundsScorecard({
   backHoles: Hole[];
   selectedRoundNo: number;
 }) {
-  if (capturedRounds.length === 0) {
+  const priorRounds = capturedRounds.filter(
+    (r) => r.round_no !== selectedRoundNo
+  );
+
+  if (priorRounds.length === 0) {
     return null;
   }
 
   return (
     <div className="space-y-2">
       <CapturedRoundsTable
-        title="Rondas capturadas"
-        rounds={capturedRounds}
+        title="Rondas anteriores"
+        rounds={priorRounds}
         frontHoles={frontHoles}
         backHoles={backHoles}
         selectedRoundNo={selectedRoundNo}
