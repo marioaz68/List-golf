@@ -376,7 +376,7 @@ export default async function TournamentStaffPage({
         </div>
 
         <div style={sectionBody}>
-          <form method="get" style={filterRow}>
+          <form method="get" style={filterRow} className="staff-filter-row">
             <select
               name="tournament_id"
               defaultValue={effectiveTournamentId}
@@ -410,7 +410,7 @@ export default async function TournamentStaffPage({
             </div>
 
             <div style={sectionBody}>
-              <form action={assignTournamentRoleAction} style={assignGrid}>
+              <form action={assignTournamentRoleAction} style={assignGrid} className="staff-assign-grid">
                 <input
                   type="hidden"
                   name="tournament_id"

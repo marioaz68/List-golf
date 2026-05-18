@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import AppHeader from "@/components/AppHeader";
+import ConditionalAppHeader from "@/components/layout/ConditionalAppHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,7 +43,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <div className="min-h-screen bg-[#08111f]">
-          <AppHeader />
+          <ConditionalAppHeader />
           <main>{children}</main>
         </div>
       </body>

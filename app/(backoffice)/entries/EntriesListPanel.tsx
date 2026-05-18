@@ -156,12 +156,12 @@ function roundBallTitle(
 
 
 const BTN_BASE =
-  "inline-flex h-6 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50";
+  "inline-flex min-h-9 items-center justify-center rounded border px-2 text-[10px] font-medium text-white disabled:opacity-50 md:min-h-6";
 
-const SLOT_SM = "w-[72px] shrink-0";
-const SLOT_MD = "w-[84px] shrink-0";
-const SLOT_EDIT = "w-[110px] shrink-0";
-const ACTIONS_COL = "min-w-[648px] w-[648px]";
+const SLOT_SM = "w-full shrink-0 sm:w-[72px]";
+const SLOT_MD = "w-full shrink-0 sm:w-[84px]";
+const SLOT_EDIT = "w-full shrink-0 sm:w-[110px]";
+const ACTIONS_COL = "min-w-0 md:min-w-[648px] md:w-[648px]";
 
 export default function EntriesListPanel({
   entries,
@@ -290,7 +290,7 @@ ${res.witness_url}`;
           <select
             value={club}
             onChange={(e) => setClub(e.target.value)}
-            className="h-7 px-2"
+            className="h-9 min-w-[8rem] px-2 text-sm md:h-7"
           >
             <option value="">{te.optionClub}</option>
             {clubs.map((c) => (
@@ -301,7 +301,7 @@ ${res.witness_url}`;
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="h-7 px-2"
+            className="h-9 min-w-[8rem] px-2 text-sm md:h-7"
           >
             <option value="">{te.optionCat}</option>
             {categoryCodes.map((c) => (
@@ -410,7 +410,7 @@ ${res.witness_url}`;
                   </td>
 
                   <td className={`${ACTIONS_COL} px-1 py-1`}>
-                    <div className="flex min-w-[648px] items-center gap-2 overflow-x-auto whitespace-nowrap">
+                    <div className="flex max-w-[min(100vw,22rem)] flex-wrap items-center gap-2 sm:max-w-none md:min-w-[648px] md:flex-nowrap md:overflow-x-auto md:whitespace-nowrap">
                       <div className={SLOT_MD}>
                         <Link
                           href={`/entries/telegram-kit?tournament_id=${encodeURIComponent(

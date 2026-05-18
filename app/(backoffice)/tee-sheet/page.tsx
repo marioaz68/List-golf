@@ -577,7 +577,7 @@ for (const row of membersRaw) {
 
   if (!effectiveTournamentId) {
     return (
-      <div className="min-h-screen p-6 space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between text-white">
           <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         </div>
@@ -591,7 +591,7 @@ for (const row of membersRaw) {
 
   if (!effectiveRoundId) {
     return (
-      <div className="min-h-screen p-6 space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between text-white">
           <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         </div>
@@ -624,7 +624,7 @@ for (const row of membersRaw) {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 text-white">
         <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
         <div className="rounded-md bg-black/20 px-3 py-1 text-sm font-medium">

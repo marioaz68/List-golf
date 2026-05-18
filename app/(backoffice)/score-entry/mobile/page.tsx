@@ -477,7 +477,7 @@ function HoleDots({
               type="button"
               onClick={() => onSelectHole(hole)}
               className={[
-                "relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold",
+                "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold sm:h-8 sm:w-8 md:h-6 md:w-6 md:text-[10px]",
                 isActive
                   ? "bg-black text-white"
                   : "bg-slate-200 text-slate-700",

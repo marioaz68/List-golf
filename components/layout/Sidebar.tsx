@@ -7,7 +7,9 @@ import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { useBackofficeNav } from "@/components/layout/BackofficeNavContext";
-import type { AppMessages } from "@/lib/i18n/messages";
+import { canAccessModule } from "@/lib/auth/permissions";
+import { NAV_ITEM_MODULE, type NavKey } from "@/lib/auth/navModules";
+import { useBackofficeRoles } from "@/components/layout/BackofficeRolesContext";
 import {
   LayoutDashboard,
   Trophy,
@@ -37,8 +39,6 @@ import {
 
 type SidebarMode = "operation" | "setup";
 
-type NavKey = keyof AppMessages["sidebar"]["nav"];
-
 type MenuItem = {
   nameKey: NavKey;
   href: string;
@@ -59,6 +59,7 @@ export default function Sidebar() {
   const { t } = useAppLocale();
   const pathname = usePathname();
   const { open, setOpen } = useBackofficeNav();
+  const roles = useBackofficeRoles();
 
   const [mode, setMode] = useState<SidebarMode>("operation");
   const [tournamentId, setTournamentId] = useState<string | null>(null);
@@ -242,6 +243,12 @@ export default function Sidebar() {
         requiresTournament: true,
       },
       {
+        nameKey: "prizeRules",
+        href: "/prize-rules",
+        icon: Medal,
+        requiresTournament: true,
+      },
+      {
         nameKey: "categoryTemplates",
         href: "/category-templates",
         icon: Layers3,
@@ -300,19 +307,21 @@ export default function Sidebar() {
 
   const operationVisible = useMemo(
     () =>
-      tournamentOperationNav.filter(
-        (item) => !item.requiresTournament || !!tournamentId
-      ),
-    [tournamentOperationNav, tournamentId]
+      tournamentOperationNav.filter((item) => {
+        if (item.requiresTournament && !tournamentId) return false;
+        return canAccessModule(roles, NAV_ITEM_MODULE[item.nameKey]);
+      }),
+    [tournamentOperationNav, tournamentId, roles]
   );
 
   const visibleMenu = useMemo(() => {
     if (mode === "operation") return operationVisible;
-    const setupOnlyVisible = setupExclusiveNav.filter(
-      (item) => !item.requiresTournament || !!tournamentId
-    );
+    const setupOnlyVisible = setupExclusiveNav.filter((item) => {
+      if (item.requiresTournament && !tournamentId) return false;
+      return canAccessModule(roles, NAV_ITEM_MODULE[item.nameKey]);
+    });
     return [...operationVisible, ...setupOnlyVisible];
-  }, [mode, operationVisible, setupExclusiveNav, tournamentId]);
+  }, [mode, operationVisible, setupExclusiveNav, tournamentId, roles]);
 
   const operationVisibleCount = operationVisible.length;
 

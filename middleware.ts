@@ -3,18 +3,20 @@ import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { getUserRoles } from "@/lib/auth/getUserRoles";
-import { getModuleFromPath, canAccessModule } from "@/lib/auth/permissions";
+import {
+  canAccessAnyBackofficeModule,
+  canAccessModule,
+  getModuleFromPath,
+  isBackofficePath,
+} from "@/lib/auth/permissions";
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const module = getModuleFromPath(pathname);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
 
-  if (!module) {
-    return NextResponse.next();
-  }
-
-  let supabaseResponse = NextResponse.next({
-    request,
+  let response = NextResponse.next({
+    request: { headers: requestHeaders },
   });
 
   const supabase = createServerClient(
@@ -29,18 +31,24 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
-          supabaseResponse = NextResponse.next({
-            request,
+          response = NextResponse.next({
+            request: { headers: requestHeaders },
           });
           cookiesToSet.forEach(({ name, value, options }) => {
-            supabaseResponse.cookies.set(name, value, options);
+            response.cookies.set(name, value, options);
           });
         },
       },
     }
   );
 
-  // Refresca la sesión y escribe cookies en la respuesta (evita logout tras server actions).
+  const module = getModuleFromPath(pathname);
+  const needsAuth = isBackofficePath(pathname);
+
+  if (!needsAuth && !module) {
+    return response;
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -51,22 +59,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
+  if (!module) {
+    return response;
+  }
+
   const roles = await getUserRoles(supabase, user.id);
 
   if (!canAccessModule(roles, module)) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const fallback = canAccessAnyBackofficeModule(roles)
+      ? "/tournaments"
+      : "/login";
+    return NextResponse.redirect(new URL(fallback, request.url));
   }
 
-  return supabaseResponse;
+  return response;
 }
 
 export const config = {
   matcher: [
-    "/users/:path*",
-    "/tournaments/:path*",
-    "/entries/:path*",
-    "/rounds/:path*",
-    "/score-entry/:path*",
-    "/leaderboard/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

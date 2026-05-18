@@ -9,7 +9,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{m.title}</h1>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
         <div className="rounded-xl bg-white/5 p-6">
           <div className="text-sm text-white/60">{m.kpiActive}</div>
 

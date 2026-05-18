@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import BrowserBehaviorFix from "@/components/ui/BrowserBehaviorFix";
 import { AppLocaleProvider, useAppLocale } from "@/components/i18n/AppLocaleProvider";
@@ -46,13 +47,29 @@ export default function BackofficeLayoutClient({
   locale: Locale;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname() ?? "";
+  const isMobileCapture = pathname.startsWith("/score-entry/mobile");
+
+  if (isMobileCapture) {
+    return (
+      <>
+        <BrowserBehaviorFix />
+        <AppLocaleProvider locale={locale}>
+          <main className="min-h-dvh overflow-auto bg-[#0F1720] text-white">
+            {children}
+          </main>
+        </AppLocaleProvider>
+      </>
+    );
+  }
+
   return (
     <>
       <BrowserBehaviorFix />
       <AppLocaleProvider locale={locale}>
         <BackofficeNavProvider>
           <div
-            className="flex min-h-screen overflow-hidden bg-[#0F1720] text-white"
+            className="flex min-h-dvh overflow-hidden bg-[#0F1720] text-white"
             lang={locale}
           >
             <MobileBackdrop />
@@ -66,7 +83,7 @@ export default function BackofficeLayoutClient({
                 </div>
               </header>
 
-              <main className="min-h-0 flex-1 overflow-auto overscroll-x-none p-4 md:p-6">
+              <main className="min-h-0 flex-1 overflow-auto overscroll-x-none p-3 sm:p-4 md:p-6">
                 {children}
               </main>
             </div>
