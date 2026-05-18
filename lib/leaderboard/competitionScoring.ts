@@ -34,6 +34,7 @@ export function scoreRoundDetail(
   gross: number | null;
   toPar: number | null;
   netToPar: number | null;
+  netStrokes: number | null;
   stablefordPoints: number | null;
 } {
   const catRule = normalizeCompetitionRule(rule);
@@ -43,6 +44,7 @@ export function scoreRoundDetail(
       gross: null,
       toPar: null,
       netToPar: null,
+      netStrokes: null,
       stablefordPoints: null,
     };
   }
@@ -53,6 +55,7 @@ export function scoreRoundDetail(
       gross: null,
       toPar: null,
       netToPar: null,
+      netStrokes: null,
       stablefordPoints: null,
     };
   }
@@ -67,6 +70,10 @@ export function scoreRoundDetail(
 
   const ph = playingHandicap(handicapIndex, catRule.handicap_percentage);
   const useNetStableford = isStablefordCategory(catRule);
+  const useNetStrokes =
+    useNetStableford ||
+    (catRule.scoring_format === "stroke_play" &&
+      effectiveUsesNetLeaderboard(catRule, null));
 
   for (const hole of played) {
     const strokes = Number(hole.strokes);
@@ -75,14 +82,16 @@ export function scoreRoundDetail(
     grossPlayed += strokes;
     parPlayed += par;
 
-    if (useNetStableford) {
+    if (useNetStrokes) {
       const si = strokeIndexForHole(hole.hole_number, strokeIndexByHole);
       const received = strokesReceivedOnHole(ph, si);
       const netStrokes = strokes - received;
       netStrokesPlayed += netStrokes;
       hasNetLine = true;
-      points += stablefordPoints(netStrokes, par);
-      hasPoints = true;
+      if (useNetStableford) {
+        points += stablefordPoints(netStrokes, par);
+        hasPoints = true;
+      }
     }
   }
 
@@ -91,17 +100,27 @@ export function scoreRoundDetail(
   const toPar =
     grossPlayed > 0 && parPlayed > 0 ? grossPlayed - parPlayed : detail.to_par;
 
+  const netStrokes =
+    hasNetLine
+      ? netStrokesPlayed
+      : gross != null && useNetStrokes && !useNetStableford && ph > 0
+        ? gross - ph
+        : null;
+
   const netToPar =
     hasNetLine && parPlayed > 0
       ? netStrokesPlayed - parPlayed
-      : toPar != null && catRule.scoring_format === "stroke_play"
-        ? toPar - ph
-        : null;
+      : netStrokes != null && parPlayed > 0
+        ? netStrokes - parPlayed
+        : toPar != null && useNetStrokes && !useNetStableford
+          ? toPar - ph
+          : null;
 
   return {
     gross: gross ?? null,
     toPar: toPar ?? null,
     netToPar,
+    netStrokes,
     stablefordPoints: useNetStableford && hasPoints ? points : null,
   };
 }
@@ -124,10 +143,12 @@ export function cumulativeLeaderboardValue(
 
   let totalGross = 0;
   let totalToPar = 0;
+  let totalNetStrokes = 0;
   let totalNetToPar = 0;
   let totalSf = 0;
   let hasGross = false;
   let hasToPar = false;
+  let hasNetStrokes = false;
   let hasNet = false;
   let hasSf = false;
 
@@ -155,6 +176,10 @@ export function cumulativeLeaderboardValue(
       totalToPar += scored.toPar;
       hasToPar = true;
     }
+    if (scored.netStrokes != null) {
+      totalNetStrokes += scored.netStrokes;
+      hasNetStrokes = true;
+    }
     if (scored.netToPar != null) {
       totalNetToPar += scored.netToPar;
       hasNet = true;
@@ -174,11 +199,24 @@ export function cumulativeLeaderboardValue(
     };
   }
 
-  if (effectiveUsesNetLeaderboard(catRule, leaderboardViewOverride) && hasNet) {
+  if (effectiveUsesNetLeaderboard(catRule, leaderboardViewOverride)) {
     return {
-      sortValue: totalNetToPar,
-      displayToPar: totalNetToPar,
+      sortValue: hasNetStrokes
+        ? totalNetStrokes
+        : hasNet
+          ? totalNetToPar
+          : null,
+      displayToPar: hasNet ? totalNetToPar : null,
       displayGross: hasGross ? totalGross : null,
+      stablefordTotal: null,
+    };
+  }
+
+  if (hasGross) {
+    return {
+      sortValue: totalGross,
+      displayToPar: hasToPar ? totalToPar : null,
+      displayGross: totalGross,
       stablefordTotal: null,
     };
   }
@@ -187,15 +225,15 @@ export function cumulativeLeaderboardValue(
     return {
       sortValue: totalToPar,
       displayToPar: totalToPar,
-      displayGross: hasGross ? totalGross : null,
+      displayGross: null,
       stablefordTotal: null,
     };
   }
 
   return {
-    sortValue: hasGross ? totalGross : null,
+    sortValue: null,
     displayToPar: null,
-    displayGross: hasGross ? totalGross : null,
+    displayGross: null,
     stablefordTotal: null,
   };
 }

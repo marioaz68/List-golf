@@ -22,6 +22,7 @@ import {
   isStablefordCategory,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
   computePublicCutLines,
@@ -60,18 +61,26 @@ export function formatTeeSheetPairingScore(
     return "—";
   }
 
-  let gross = 0;
+  if (row.leaderboard_sort_value != null && rule) {
+    return formatScoreOrDQ(row.leaderboard_sort_value, false);
+  }
+
+  const useNet = rule ? effectiveUsesNetLeaderboard(rule, null) : false;
+
+  let total = 0;
   let count = 0;
   for (const r of row.rounds) {
     if (r.round_no > throughRoundNo) continue;
     if (r.is_dq) return "DQ";
-    if (r.gross_score != null && Number.isFinite(r.gross_score)) {
-      gross += Number(r.gross_score);
+    if (!useNet && r.gross_score != null && Number.isFinite(r.gross_score)) {
+      total += Number(r.gross_score);
       count += 1;
     }
   }
-  if (count > 0) return formatScoreOrDQ(gross, false);
-  if (row.total_gross != null) return formatScoreOrDQ(row.total_gross, false);
+  if (count > 0) return formatScoreOrDQ(total, false);
+  if (!useNet && row.total_gross != null) {
+    return formatScoreOrDQ(row.total_gross, false);
+  }
   return "—";
 }
 
