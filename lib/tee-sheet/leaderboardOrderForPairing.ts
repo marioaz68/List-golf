@@ -18,7 +18,10 @@ import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import { applyCompetitionStandings } from "@/lib/leaderboard/competitionStandings";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
-import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  isStablefordCategory,
+  type CategoryCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
   computePublicCutLines,
@@ -27,11 +30,50 @@ import {
   type RoundAdvancementRule,
 } from "@/lib/cuts/computeCutLine";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
+import { formatScoreOrDQ } from "@/app/torneos/[id]/lib/utils";
 
 export type TeeSheetEntryOrderInfo = {
   position: number | null;
   madeCut: boolean | null;
+  /** Total a mostrar en salidas R2+ (R1 o R1+R2 según ronda objetivo). */
+  standingDisplay: string | null;
 };
+
+/** Puntuación acumulada hasta `throughRoundNo` para la columna de salidas. */
+export function formatTeeSheetPairingScore(
+  row: LeaderboardRow,
+  rule: CategoryCompetitionRule | undefined,
+  throughRoundNo: number
+): string {
+  if (row.is_disqualified) return "DQ";
+
+  if (rule && isStablefordCategory(rule)) {
+    if (row.stableford_total != null) {
+      return formatScoreOrDQ(row.stableford_total, false);
+    }
+    if (row.leaderboard_sort_value != null) {
+      return formatScoreOrDQ(row.leaderboard_sort_value, false);
+    }
+    if (row.total_to_par != null) {
+      return formatScoreOrDQ(row.total_to_par, false);
+    }
+    return "—";
+  }
+
+  let gross = 0;
+  let count = 0;
+  for (const r of row.rounds) {
+    if (r.round_no > throughRoundNo) continue;
+    if (r.is_dq) return "DQ";
+    if (r.gross_score != null && Number.isFinite(r.gross_score)) {
+      gross += Number(r.gross_score);
+      count += 1;
+    }
+  }
+  if (count > 0) return formatScoreOrDQ(gross, false);
+  if (row.total_gross != null) return formatScoreOrDQ(row.total_gross, false);
+  return "—";
+}
 
 function isCountableEntry(status: string | null | undefined) {
   const s = (status ?? "").toLowerCase();
@@ -291,10 +333,20 @@ export async function buildTeeSheetEntryOrderMap(
     });
   }
 
+  const ruleByCategoryId = new Map(
+    competitionRules.map((r) => [String(r.category_id), r])
+  );
+
   for (const row of rowsForOrder) {
+    const rule = ruleByCategoryId.get(String(row.category_id ?? ""));
     out.set(row.entry_id, {
       position: row.selected_round_position_category,
       madeCut: row.made_cut ?? null,
+      standingDisplay: formatTeeSheetPairingScore(
+        row,
+        rule,
+        standingsThroughRoundNo
+      ),
     });
   }
 

@@ -358,6 +358,9 @@ const es = {
       "Cierra la ronda anterior para toda la categoría en la vista oficial o captura de tarjetas.",
     standingsOrderHint:
       "Orden y corte según Reglas de competencia y Reglas de corte del torneo (misma lógica que la clasificación pública). Sin regla de corte para esta ronda → juegan todos.",
+    pairingScoreHcp: "HCP",
+    pairingScoreR1: "R1",
+    pairingScoreR1R2: "R1+R2",
   },
   rounds: {
     title: "Rondas",
@@ -1485,6 +1488,9 @@ const en: Messages = {
       "Close the previous round for every active player in that category (official view or score entry).",
     standingsOrderHint:
       "Order and cut from Competition + Cut rules (same as public leaderboard). No cut rule for this round → everyone plays.",
+    pairingScoreHcp: "HCP",
+    pairingScoreR1: "R1",
+    pairingScoreR1R2: "R1+R2",
   },
   rounds: {
     title: "Rounds",

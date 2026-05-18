@@ -9,6 +9,7 @@ import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate
 import {
   buildTeeSheetEntryOrderMap,
   sortEntriesForTeeSheetRound,
+  type TeeSheetEntryOrderInfo,
 } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import {
   assertRegistrationClosedForTeeSheet,
@@ -1203,10 +1204,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     if (delG) throw new Error("Error borrando grupos previos: " + delG.message);
   }
 
-  let teeSheetEntryOrderMap = new Map<
-    string,
-    { position: number | null; madeCut: boolean | null }
-  >();
+  let teeSheetEntryOrderMap = new Map<string, TeeSheetEntryOrderInfo>();
   if (targetRoundNo > 1) {
     const admin = await createAdminClient();
     teeSheetEntryOrderMap = await buildTeeSheetEntryOrderMap(

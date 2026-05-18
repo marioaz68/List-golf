@@ -99,7 +99,7 @@ export function toYyyyMmDd(raw: string | null | undefined): string | null {
   return m ? m[1] : null;
 }
 
-function formatDateDdMmYyyy(value: string | null | undefined) {
+export function formatDateDdMmYyyy(value: string | null | undefined) {
   const ymd = toYyyyMmDd(value);
   if (!ymd) return "";
   const parts = ymd.split("-");
@@ -134,6 +134,19 @@ function weekdayLowerSpanish(isoDate: string | null | undefined) {
     ];
     return names[dt.getDay()] ?? "";
   }
+}
+
+/** Fecha + hora en tarjetas de grupo (p. ej. 15/09/2025 07:30). */
+export function formatGroupTeeScheduleLabel(
+  roundDate: string | null | undefined,
+  teeTime: string | null | undefined
+) {
+  const datePart = formatDateDdMmYyyy(roundDate);
+  const timePart = teeTime ? normalizeTime(teeTime) : "";
+  if (datePart && timePart) return `${datePart} ${timePart}`;
+  if (timePart) return timePart;
+  if (datePart) return datePart;
+  return "--:--";
 }
 
 export function formatSessionOptionLabel(rep: SessionRoundFields) {

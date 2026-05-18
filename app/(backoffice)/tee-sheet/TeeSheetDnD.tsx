@@ -17,6 +17,7 @@ import {
 import { FileSpreadsheet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { moveEntryToGroupPosition, balanceGroupsByCategory } from "./actions";
+import { formatGroupTeeScheduleLabel } from "./sessionBlock";
 
 type MemberUI = {
   entry_id: string;
@@ -25,6 +26,7 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  standing_display: string | null;
   club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
@@ -41,6 +43,7 @@ type GroupUI = {
   starting_label?: string | null;
   notes: string | null;
   members: MemberUI[];
+  session_round_date?: string | null;
 };
 
 type Props = {
@@ -51,6 +54,8 @@ type Props = {
   groups: GroupUI[];
   initialCategory?: string;
   startingOrderConfirmed?: boolean;
+  showPairingScore?: boolean;
+  pairingScoreColumnLabel?: string;
 };
 
 function norm(s: string) {
@@ -254,6 +259,8 @@ export default function TeeSheetDnD({
   groups,
   initialCategory = "ALL",
   startingOrderConfirmed = false,
+  showPairingScore = false,
+  pairingScoreColumnLabel = "HCP",
 }: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -625,6 +632,7 @@ export default function TeeSheetDnD({
                 mem={mem}
                 maxGroupSize={maxGroupSize}
                 qn={qn}
+                showPairingScore={showPairingScore}
                 highlight={highlightGroupId === g.id}
                 categoryColor={categoryColorByLabel.get(catKey(g.notes)) ?? getCategoryColorClasses(catKey(g.notes))}
                 setRef={(el) => groupElById.current.set(g.id, el)}
@@ -642,8 +650,10 @@ export default function TeeSheetDnD({
                 <div className="min-w-0 flex-1 truncate font-medium">
                   {nameOf(activeDrag)}
                 </div>
-                <div className="w-8 shrink-0 text-right text-[10px] text-gray-600">
-                  {activeDrag.handicap_index ?? "-"}
+                <div className="w-10 shrink-0 text-right text-[10px] text-gray-600">
+                  {showPairingScore
+                    ? activeDrag.standing_display ?? "-"
+                    : activeDrag.handicap_index ?? "-"}
                 </div>
               </div>
             </div>
@@ -659,6 +669,7 @@ function DroppableGroupCard({
   mem,
   maxGroupSize,
   qn,
+  showPairingScore,
   highlight,
   categoryColor,
   setRef,
@@ -667,6 +678,7 @@ function DroppableGroupCard({
   mem: MemberUI[];
   maxGroupSize: number;
   qn: string;
+  showPairingScore: boolean;
   highlight: boolean;
   categoryColor: CategoryColorClasses;
   setRef: (el: HTMLDivElement | null) => void;
@@ -701,7 +713,7 @@ function DroppableGroupCard({
             </div>
 
             <div className="text-[11px] font-semibold text-slate-900">
-              {group.tee_time ? group.tee_time : "--:--"}
+              {formatGroupTeeScheduleLabel(group.session_round_date, group.tee_time)}
             </div>
 
             <div className="text-[11px] font-semibold text-slate-700">
@@ -724,7 +736,13 @@ function DroppableGroupCard({
           {mem.map((m, idx) => (
             <React.Fragment key={m.entry_id}>
               <DropSlot groupId={group.id} pos={idx + 1} />
-              <PlayerRow member={m} qn={qn} colorClassName={color.player} colorStyle={color.playerStyle} />
+              <PlayerRow
+                member={m}
+                qn={qn}
+                showPairingScore={showPairingScore}
+                colorClassName={color.player}
+                colorStyle={color.playerStyle}
+              />
             </React.Fragment>
           ))}
 
@@ -768,11 +786,13 @@ function DropSlot({
 function PlayerRow({
   member,
   qn,
+  showPairingScore,
   colorClassName,
   colorStyle,
 }: {
   member: MemberUI;
   qn: string;
+  showPairingScore: boolean;
   colorClassName: string;
   colorStyle: React.CSSProperties;
 }) {
@@ -816,8 +836,10 @@ function PlayerRow({
           {fullName}
         </div>
 
-        <div className="w-8 shrink-0 text-right font-bold text-green-700">
-          {member.handicap_index ?? "-"}
+        <div className="w-10 shrink-0 text-right font-bold text-green-700">
+          {showPairingScore
+            ? member.standing_display ?? "-"
+            : member.handicap_index ?? "-"}
         </div>
       </div>
     </div>

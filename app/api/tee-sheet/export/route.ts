@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { createClient } from "@/utils/supabase/server";
 import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
-import { roundsInSameSession } from "@/app/(backoffice)/tee-sheet/sessionBlock";
+import {
+  formatGroupTeeScheduleLabel,
+  roundsInSameSession,
+} from "@/app/(backoffice)/tee-sheet/sessionBlock";
+import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +57,7 @@ function playerName(first: string | null, last: string | null) {
   return `${a} ${b}`.trim() || "—";
 }
 
-const EXPORT_COLUMNS = [
+const BASE_EXPORT_COLUMNS = [
   "Torneo",
   "Ronda",
   "Fecha ronda",
@@ -65,8 +70,13 @@ const EXPORT_COLUMNS = [
   "Pos",
   "Jugador",
   "Club",
-  "HCP",
 ] as const;
+
+function scoreColumnLabel(roundNo: number) {
+  if (roundNo === 2) return "R1";
+  if (roundNo >= 3) return "R1+R2";
+  return "HCP";
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -130,6 +140,29 @@ export async function GET(request: NextRequest) {
   }
 
   const round = rRow as RoundRow;
+  const targetRoundNo = Number(round.round_no ?? 1);
+  const scoreCol = scoreColumnLabel(targetRoundNo);
+  const exportColumns = [...BASE_EXPORT_COLUMNS, scoreCol] as const;
+
+  let standingDisplayByEntryId = new Map<string, string>();
+  if (targetRoundNo > 1) {
+    try {
+      const admin = createAdminClient();
+      const orderMap = await buildTeeSheetEntryOrderMap(
+        admin,
+        tournamentId,
+        targetRoundNo
+      );
+      for (const [entryId, info] of orderMap) {
+        if (info.standingDisplay) {
+          standingDisplayByEntryId.set(entryId, info.standingDisplay);
+        }
+      }
+    } catch (err) {
+      console.error("[tee-sheet/export] standing scores:", err);
+    }
+  }
+
   if (round.tournament_id !== tournamentId) {
     return NextResponse.json(
       { error: "La ronda no pertenece a este torneo" },
@@ -192,7 +225,7 @@ export async function GET(request: NextRequest) {
       position: number;
       name: string;
       club: string;
-      handicap: string;
+      score: string;
     }>
   >();
 
@@ -203,6 +236,7 @@ export async function GET(request: NextRequest) {
         `
         group_id,
         position,
+        entry_id,
         tournament_entries (
           handicap_index,
           players (
@@ -236,12 +270,23 @@ export async function GET(request: NextRequest) {
         : player?.clubs ?? null;
       const clubLabel =
         (club?.short_name ?? "").trim() || (club?.name ?? "").trim() || "—";
+      const entryId = String(row.entry_id ?? "").trim();
       const hi = te?.handicap_index;
+      const standing =
+        entryId && standingDisplayByEntryId.has(entryId)
+          ? standingDisplayByEntryId.get(entryId)!
+          : null;
+      const scoreValue =
+        targetRoundNo > 1
+          ? standing ?? "—"
+          : hi == null || hi === ""
+            ? "—"
+            : String(hi);
       const entry = {
         position: Number(row.position ?? 0),
         name: playerName(player?.first_name ?? null, player?.last_name ?? null),
         club: clubLabel,
-        handicap: hi == null || hi === "" ? "—" : String(hi),
+        score: scoreValue,
       };
       const list = membersByGroup.get(gid) ?? [];
       list.push(entry);
@@ -276,13 +321,16 @@ export async function GET(request: NextRequest) {
           "Tipo salida": startTypeLabel,
           "Categoría ronda": roundCat || "—",
           Grupo: g.group_no,
-          "Hora tee": (g.tee_time ?? round.start_time ?? "—").toString().slice(0, 5),
+          "Hora tee": formatGroupTeeScheduleLabel(
+            round.round_date,
+            g.tee_time ?? round.start_time
+          ),
           Salida: salida ?? "—",
           "Categoría grupo": catKey(g.notes),
           Pos: "—",
           Jugador: "—",
           Club: "—",
-          HCP: "—",
+          [scoreCol]: "—",
         });
         return;
       }
@@ -295,13 +343,16 @@ export async function GET(request: NextRequest) {
           "Tipo salida": startTypeLabel,
           "Categoría ronda": roundCat || "—",
           Grupo: g.group_no,
-          "Hora tee": (g.tee_time ?? round.start_time ?? "—").toString().slice(0, 5),
+          "Hora tee": formatGroupTeeScheduleLabel(
+            round.round_date,
+            g.tee_time ?? round.start_time
+          ),
           Salida: salida ?? "—",
           "Categoría grupo": catKey(g.notes),
           Pos: m.position,
           Jugador: m.name,
           Club: m.club,
-          HCP: m.handicap,
+          [scoreCol]: m.score,
         });
       }
     });
@@ -333,7 +384,7 @@ export async function GET(request: NextRequest) {
     views: [{ state: "frozen", ySplit: 1 }],
   });
 
-  sheet.addRow([...EXPORT_COLUMNS]);
+  sheet.addRow([...exportColumns]);
   const headerRow = sheet.getRow(1);
   headerRow.font = { bold: true };
   headerRow.fill = {
@@ -343,10 +394,10 @@ export async function GET(request: NextRequest) {
   };
 
   for (const r of rows) {
-    sheet.addRow(EXPORT_COLUMNS.map((key) => r[key] ?? ""));
+    sheet.addRow(exportColumns.map((key) => r[key] ?? ""));
   }
 
-  EXPORT_COLUMNS.forEach((key, colIdx) => {
+  exportColumns.forEach((key, colIdx) => {
     const samples = rows.map((row) => String(row[key] ?? ""));
     const width = Math.min(
       48,

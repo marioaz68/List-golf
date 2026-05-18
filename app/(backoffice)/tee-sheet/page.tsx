@@ -20,6 +20,8 @@ import {
   representativeRoundId,
   roundsInSameSession,
 } from "./sessionBlock";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import {
   clearGroups,
   confirmStartingOrder,
@@ -75,6 +77,7 @@ type MemberUI = {
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
+  standing_display: string | null;
   club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
@@ -83,7 +86,11 @@ type MemberUI = {
   club_primary_color: string | null;
 };
 
-type GroupUI = GroupRow & { members: MemberUI[]; starting_label: string | null };
+type GroupUI = GroupRow & {
+  members: MemberUI[];
+  starting_label: string | null;
+  session_round_date: string | null;
+};
 
 function catKey(notes: string | null) {
   const v = (notes ?? "").trim();
@@ -219,6 +226,28 @@ export default async function TeeSheetPage(props: {
   const selectedRound = rounds.find((r) => r.id === effectiveRoundId) ?? null;
   const blockRounds = effectiveRoundId ? roundsInSameSession(rounds, effectiveRoundId) : [];
   const blockRoundIds = blockRounds.map((r) => r.id);
+  const targetRoundNo = Number(selectedRound?.round_no ?? 1);
+  const sessionRoundDate =
+    selectedRound?.round_date ?? blockRounds[0]?.round_date ?? null;
+
+  let standingDisplayByEntryId = new Map<string, string>();
+  if (targetRoundNo > 1 && effectiveTournamentId) {
+    try {
+      const admin = createAdminClient();
+      const orderMap = await buildTeeSheetEntryOrderMap(
+        admin,
+        effectiveTournamentId,
+        targetRoundNo
+      );
+      for (const [entryId, info] of orderMap) {
+        if (info.standingDisplay) {
+          standingDisplayByEntryId.set(entryId, info.standingDisplay);
+        }
+      }
+    } catch (err) {
+      console.error("[tee-sheet] standing scores for pairing:", err);
+    }
+  }
 
   const { data: gData, error: gErr } =
     effectiveRoundId && blockRoundIds.length > 0
@@ -302,6 +331,7 @@ for (const row of membersRaw) {
     first_name: player?.first_name ?? null,
     last_name: player?.last_name ?? null,
     handicap_index: te?.handicap_index ?? null,
+    standing_display: standingDisplayByEntryId.get(row.entry_id as string) ?? null,
     club_id: playerClubId,
     club_name: club?.name ?? null,
     club_short_name: club?.short_name ?? null,
@@ -354,6 +384,7 @@ for (const row of membersRaw) {
     return {
       ...g,
       starting_label,
+      session_round_date: sessionRoundDate,
       members: membersByGroup.get(g.id) ?? [],
     };
   });
@@ -955,6 +986,14 @@ for (const row of membersRaw) {
         groups={groupsForUI}
         initialCategory={effectiveCat}
         startingOrderConfirmed={startingOrderConfirmed}
+        showPairingScore={targetRoundNo > 1}
+        pairingScoreColumnLabel={
+          targetRoundNo === 2
+            ? ts.pairingScoreR1
+            : targetRoundNo >= 3
+              ? ts.pairingScoreR1R2
+              : ts.pairingScoreHcp
+        }
       />
     </div>
   );
