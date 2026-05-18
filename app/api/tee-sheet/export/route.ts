@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { createClient } from "@/utils/supabase/server";
-import { startingHoleLabelForGroup } from "@/app/torneos/[id]/lib/shotgunStartingLabels";
+import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import {
   formatGroupTeeScheduleLabel,
   roundsInSameSession,
@@ -294,23 +294,31 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const labelByGroupId = buildPairingGroupLabelsBySession(
+    allGroups,
+    allForSession.map((r) => ({
+      id: r.id,
+      tournament_id: r.tournament_id,
+      category_id: r.category_id ?? null,
+      round_no: Number(r.round_no ?? 0),
+      round_date: r.round_date,
+      start_type: r.start_type,
+      start_time: r.start_time,
+      wave: r.wave ?? null,
+    }))
+  );
+
   const rows: Record<string, string | number>[] = [];
 
   for (const round of rounds) {
     const groups = (groupsByRound.get(round.id) ?? []).sort(
       (a, b) => Number(a.group_no) - Number(b.group_no)
     );
-    const n = groups.length;
     const roundCat = roundCategoryLabel(round);
     const startTypeLabel = String(round.start_type ?? "").trim() || "—";
 
-    groups.forEach((g, idx) => {
-      const salida = startingHoleLabelForGroup({
-        startType: round.start_type,
-        groupIndexInRound: idx,
-        groupsInRound: n,
-        starting_hole: g.starting_hole,
-      });
+    groups.forEach((g) => {
+      const salida = labelByGroupId.get(g.id) ?? null;
       const members = (membersByGroup.get(g.id) ?? []).sort((a, b) => a.position - b.position);
 
       if (members.length === 0) {

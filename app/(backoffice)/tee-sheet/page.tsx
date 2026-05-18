@@ -354,7 +354,7 @@ for (const row of membersRaw) {
     return a.group_no - b.group_no;
   });
 
-  const labelByGroupId = buildPairingGroupLabelsBySession(sortedGroups, blockRounds);
+  const labelByGroupId = buildPairingGroupLabelsBySession(sortedGroups, rounds);
 
   const groupsForUI: GroupUI[] = sortedGroups.map((g) => {
     const starting_label =
