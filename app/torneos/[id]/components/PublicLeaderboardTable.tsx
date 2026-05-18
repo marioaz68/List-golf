@@ -127,23 +127,31 @@ export default function PublicLeaderboardTable({
     }
     return map;
   }, [strokeIndexByHoleRecord]);
+  const allCategoriesView = !selectedCategoryId;
   const headerRule =
     headerCompetitionRule ??
-    ruleForCategory(rulesMap, selectedCategoryId || null);
-  const allCategoriesView = !selectedCategoryId;
+    (selectedCategoryId
+      ? ruleForCategory(rulesMap, selectedCategoryId)
+      : null);
   const colSecondary = allCategoriesView
     ? "GR"
-    : secondaryTotalColumnHeader(headerRule);
+    : headerRule
+      ? secondaryTotalColumnHeader(headerRule)
+      : "GR";
   const colMain = allCategoriesView
     ? "SCR"
-    : mainTotalColumnHeader(headerRule, leaderboardViewOverride);
+    : headerRule
+      ? mainTotalColumnHeader(headerRule, leaderboardViewOverride)
+      : "SCR";
   const detailLabelsResolved = useMemo(
     () =>
-      detailLabelsWithCompetitionRule(
-        detailLabels,
-        headerRule,
-        leaderboardViewOverride
-      ),
+      headerRule
+        ? detailLabelsWithCompetitionRule(
+            detailLabels,
+            headerRule,
+            leaderboardViewOverride
+          )
+        : detailLabels,
     [detailLabels, headerRule, leaderboardViewOverride]
   );
 
@@ -210,7 +218,9 @@ export default function PublicLeaderboardTable({
               title={
                 allCategoriesView
                   ? "Total según reglas de cada categoría (neto, gross o pts.)"
-                  : mainTotalColumnHeader(headerRule)
+                  : headerRule
+                    ? mainTotalColumnHeader(headerRule, leaderboardViewOverride)
+                    : colMain
               }
             >
               {colMain}
