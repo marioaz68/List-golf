@@ -16,6 +16,8 @@ import {
   ENTRY_SELECT_WITHOUT_KIT,
   isMissingTelegramKitColumnsError,
 } from "@/lib/entries/telegramKitColumns";
+import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
+import { MIN_HOLES_TO_LOCK_SCORECARD } from "@/lib/scorecards/countHolesOnPlayerRound";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -298,25 +300,23 @@ function signatureIsSigned(sig: ScorecardSignatureRaw): boolean {
   return true;
 }
 
-function roundRowForEntry(
-  rounds: RoundRow[],
-  roundNo: number,
-  categoryId: string | null
-): RoundRow | null {
-  const matching = rounds.filter((r) => r.round_no === roundNo);
-  if (matching.length === 0) return null;
-
-  const cat = String(categoryId ?? "").trim();
-  if (cat) {
-    const byCat = matching.find((r) => String(r.category_id ?? "").trim() === cat);
-    if (byCat) return byCat;
-  }
-
-  return matching[0] ?? null;
+function holeNoFromRow(row: {
+  hole_number?: number | null;
+  hole_no?: number | null;
+}) {
+  const raw = row.hole_number ?? row.hole_no;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 1 && n <= 18 ? n : null;
 }
 
-/** Captura solo en la ronda de la categoría del inscrito (no otra fila R1 del torneo). */
-function buildCapturedByEntryRound(
+type RoundCaptureState = {
+  captured: Set<string>;
+  holeCountByEntryRound: Map<string, number>;
+};
+
+/** Captura en la ronda de la categoría del inscrito (conteo de hoyos por ronda lógica). */
+function buildRoundCaptureState(
   entries: Array<{ id: string; player_id: string; category_id: string | null }>,
   rounds: RoundRow[],
   roundScores: Array<{
@@ -325,14 +325,20 @@ function buildCapturedByEntryRound(
     round_id: string | null;
     gross_score: number | null;
   }>,
-  holeScores: Array<{ round_score_id: string }>
-): Set<string> {
-  const holeCountByRoundScore = new Map<string, number>();
+  holeScores: Array<{
+    round_score_id: string;
+    hole_number?: number | null;
+    hole_no?: number | null;
+  }>
+): RoundCaptureState {
+  const distinctHolesByRoundScore = new Map<string, Set<number>>();
   for (const row of holeScores) {
-    holeCountByRoundScore.set(
-      row.round_score_id,
-      (holeCountByRoundScore.get(row.round_score_id) ?? 0) + 1
-    );
+    const holeNo = holeNoFromRow(row);
+    if (holeNo == null) continue;
+    const set =
+      distinctHolesByRoundScore.get(row.round_score_id) ?? new Set<number>();
+    set.add(holeNo);
+    distinctHolesByRoundScore.set(row.round_score_id, set);
   }
 
   const scoresByPlayerRound = new Map<
@@ -350,26 +356,38 @@ function buildCapturedByEntryRound(
   }
 
   const captured = new Set<string>();
+  const holeCountByEntryRound = new Map<string, number>();
+
   for (const entry of entries) {
     const playerId = String(entry.player_id ?? "").trim();
     if (!playerId) continue;
 
     for (const roundNo of [1, 2, 3]) {
-      const round = roundRowForEntry(rounds, roundNo, entry.category_id);
+      const round = getRoundForCategory(
+        rounds.map((r) => ({
+          id: r.id,
+          round_no: Number(r.round_no ?? 0),
+          category_id: r.category_id ?? null,
+        })),
+        roundNo,
+        entry.category_id
+      );
       if (!round?.id) continue;
 
       const rs = scoresByPlayerRound.get(`${playerId}_${round.id}`);
       if (!rs) continue;
 
-      const hasHoles = (holeCountByRoundScore.get(rs.id) ?? 0) > 0;
+      const holeCount = distinctHolesByRoundScore.get(rs.id)?.size ?? 0;
+      holeCountByEntryRound.set(`${entry.id}_${roundNo}`, holeCount);
+
       const hasGross = rs.gross_score != null;
-      if (hasHoles || hasGross) {
+      if (holeCount > 0 || hasGross) {
         captured.add(`${entry.id}_${roundNo}`);
       }
     }
   }
 
-  return captured;
+  return { captured, holeCountByEntryRound };
 }
 
 function buildRoundSignatures(
@@ -377,13 +395,23 @@ function buildRoundSignatures(
   categoryId: string | null,
   rounds: RoundRow[],
   scorecards: ScorecardRow[],
-  capturedByEntryRound: Set<string>
+  capture: RoundCaptureState
 ): RoundSignature[] {
-  return [1, 2, 3].map((roundNo) => {
-    const round = roundRowForEntry(rounds, roundNo, categoryId);
+  const gateRounds = rounds.map((r) => ({
+    id: r.id,
+    round_no: Number(r.round_no ?? 0),
+    category_id: r.category_id ?? null,
+  }));
+
+  let priorRoundComplete = true;
+  const out: RoundSignature[] = [];
+
+  for (const roundNo of [1, 2, 3]) {
+    const round = getRoundForCategory(gateRounds, roundNo, categoryId);
     const scorecard = round
       ? scorecards.find(
-          (sc) => sc.entry_id === entryId && sc.round_id === round.id
+          (sc) =>
+            sc.entry_id === entryId && String(sc.round_id) === String(round.id)
         )
       : null;
 
@@ -393,15 +421,26 @@ function buildRoundSignatures(
 
     const signedRows = signatures.filter(signatureIsSigned);
 
-    return {
+    const holeCount =
+      capture.holeCountByEntryRound.get(`${entryId}_${roundNo}`) ?? 0;
+    const hasCapture = capture.captured.has(`${entryId}_${roundNo}`);
+    const lockedOnCorrectRound = Boolean(scorecard?.locked_at);
+    const roundComplete =
+      lockedOnCorrectRound && holeCount >= MIN_HOLES_TO_LOCK_SCORECARD;
+
+    out.push({
       round_no: roundNo,
       player_signed: signedRows.some((sig) => signatureRole(sig) === "player"),
       marker_signed: signedRows.some((sig) => signatureRole(sig) === "marker"),
       witness_signed: signedRows.some((sig) => signatureRole(sig) === "witness"),
-      captured: capturedByEntryRound.has(`${entryId}_${roundNo}`),
-      closed: Boolean(scorecard?.locked_at),
-    };
-  });
+      captured: hasCapture,
+      closed: roundComplete && priorRoundComplete,
+    });
+
+    priorRoundComplete = priorRoundComplete && roundComplete;
+  }
+
+  return out;
 }
 
 function HeaderBlock({
@@ -568,7 +607,10 @@ export default async function EntriesPage({
       .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0));
 
     let scorecards: ScorecardRow[] = [];
-    let capturedByEntryRound = new Set<string>();
+    let roundCapture: RoundCaptureState = {
+      captured: new Set(),
+      holeCountByEntryRound: new Map(),
+    };
 
     const roundIds = rounds.map((r) => r.id);
     const playerIds = entryRows.map((e) => e.player_id).filter(Boolean);
@@ -604,7 +646,7 @@ export default async function EntriesPage({
       if (roundScoreIds.length > 0) {
         const holeScoresRes = await supabase
           .from("hole_scores")
-          .select("round_score_id")
+          .select("round_score_id, hole_number, hole_no")
           .in("round_score_id", roundScoreIds);
 
         if (holeScoresRes.error) {
@@ -615,10 +657,12 @@ export default async function EntriesPage({
 
         holeScores = (holeScoresRes.data ?? []) as Array<{
           round_score_id: string;
+          hole_number?: number | null;
+          hole_no?: number | null;
         }>;
       }
 
-      capturedByEntryRound = buildCapturedByEntryRound(
+      roundCapture = buildRoundCaptureState(
         entryRows.map((e) => ({
           id: e.id,
           player_id: e.player_id,
@@ -647,7 +691,7 @@ export default async function EntriesPage({
           category?.id ?? null,
           rounds,
           scorecards,
-          capturedByEntryRound
+          roundCapture
         ),
         players: player
           ? {
