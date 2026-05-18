@@ -357,10 +357,16 @@ const es = {
     priorRoundGateAction:
       "Cierra la ronda anterior para toda la categoría en la vista oficial o captura de tarjetas.",
     standingsOrderHint:
-      "Orden y corte según Reglas de competencia y Reglas de corte del torneo (misma lógica que la clasificación pública). Sin regla de corte para esta ronda → juegan todos.",
+      "Orden según clasificación. El corte real solo aplica si en Reglas de corte hay una regla con destino R{round} (columna «A ronda»). Sin esa regla salen todos los inscritos.",
     pairingScoreHcp: "HCP",
     pairingScoreR1: "R1",
     pairingScoreR1R2: "R1+R2",
+    cutEnforcesForRound:
+      "R{round}: hay corte real al generar salidas (regla con destino R{round}). Solo pasan quienes figuren por encima de la línea en clasificación.",
+    cutDoesNotEnforceForRound:
+      "R{round}: sin corte real en salidas (no hay regla con destino R{round}). Salen todos los inscritos activos del bloque.",
+    shotgunNoDoubleTees:
+      "Con {groups} grupos en este bloque solo hay salidas A por hoyo. Las salidas B (1B, 2B…) empiezan en el grupo 19.",
   },
   rounds: {
     title: "Rondas",
@@ -1490,10 +1496,16 @@ const en: Messages = {
     priorRoundGateAction:
       "Close the previous round for every active player in that category (official view or score entry).",
     standingsOrderHint:
-      "Order and cut from Competition + Cut rules (same as public leaderboard). No cut rule for this round → everyone plays.",
+      "Order from standings. A real cut applies only if Cut rules include a rule targeting R{round} («To round»). Otherwise everyone in the block tees off.",
     pairingScoreHcp: "HCP",
     pairingScoreR1: "R1",
     pairingScoreR1R2: "R1+R2",
+    cutEnforcesForRound:
+      "R{round}: real cut when generating groups (rule targets R{round}). Only players above the cut line in standings are included.",
+    cutDoesNotEnforceForRound:
+      "R{round}: no real cut for tee groups (no rule targets R{round}). All active entries in the block are included.",
+    shotgunNoDoubleTees:
+      "With {groups} groups in this block there are only A tees per hole. B tees (1B, 2B…) start at group 19.",
   },
   rounds: {
     title: "Rounds",

@@ -15,6 +15,7 @@ import {
   assertRegistrationClosedForTeeSheet,
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
+import { roundsInSameSession, type SessionRoundFields } from "./sessionBlock";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -203,6 +204,81 @@ function stripStartingOrderConfirmedMarker(notes: string | null | undefined) {
     .replace(STARTING_ORDER_CONFIRMED_MARKER, "")
     .replace(/\n\s*\n\s*\n/g, "\n\n")
     .trim() || null;
+}
+
+async function loadTournamentSessionRounds(
+  supabase: any,
+  tournament_id: string,
+  round_id: string
+): Promise<SessionRoundFields[]> {
+  const { data, error } = await supabase
+    .from("rounds")
+    .select(
+      "id, tournament_id, category_id, round_no, round_date, start_type, start_time, interval_minutes, wave"
+    )
+    .eq("tournament_id", tournament_id);
+
+  if (error) {
+    throw new Error("Error leyendo rondas del torneo: " + error.message);
+  }
+
+  return roundsInSameSession((data ?? []) as SessionRoundFields[], round_id);
+}
+
+function resolveRoundIdForCategoryInSession(
+  categoryId: string,
+  sessionRounds: SessionRoundFields[],
+  fallbackRoundId: string
+): string {
+  if (categoryId === "NO_CAT") {
+    const shared = sessionRounds.find((sr) => !String(sr.category_id ?? "").trim());
+    return shared?.id ?? fallbackRoundId;
+  }
+
+  const exact = sessionRounds.find(
+    (sr) => String(sr.category_id ?? "").trim() === categoryId
+  );
+  if (exact) return exact.id;
+
+  const shared = sessionRounds.find((sr) => !String(sr.category_id ?? "").trim());
+  return shared?.id ?? fallbackRoundId;
+}
+
+async function ensureSessionStartingOrderIsEditable(
+  supabase: any,
+  sessionRounds: SessionRoundFields[]
+) {
+  for (const sr of sessionRounds) {
+    await ensureStartingOrderIsEditable(supabase, sr.id);
+  }
+}
+
+async function deletePairingGroupsForRoundIds(supabase: any, roundIds: string[]) {
+  if (roundIds.length === 0) return;
+
+  const { data: oldGroups, error: gErr } = await supabase
+    .from("pairing_groups")
+    .select("id")
+    .in("round_id", roundIds);
+
+  if (gErr) throw new Error("Error leyendo grupos previos: " + gErr.message);
+
+  const oldGroupIds = (oldGroups ?? []).map((x: { id: string }) => x.id);
+  if (oldGroupIds.length === 0) return;
+
+  const { error: delM } = await supabase
+    .from("pairing_group_members")
+    .delete()
+    .in("group_id", oldGroupIds);
+
+  if (delM) throw new Error("Error borrando miembros previos: " + delM.message);
+
+  const { error: delG } = await supabase
+    .from("pairing_groups")
+    .delete()
+    .in("round_id", roundIds);
+
+  if (delG) throw new Error("Error borrando grupos previos: " + delG.message);
 }
 
 async function ensureStartingOrderIsEditable(supabase: any, round_id: string) {
@@ -409,34 +485,17 @@ export async function clearGroups(formData: FormData) {
 
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
-  await ensureStartingOrderIsEditable(supabase, round_id);
+  const sessionRounds = await loadTournamentSessionRounds(
+    supabase,
+    tournament_id,
+    round_id
+  );
+  await ensureSessionStartingOrderIsEditable(supabase, sessionRounds);
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
 
-  const { data: oldGroups, error: gErr } = await supabase
-    .from("pairing_groups")
-    .select("id")
-    .eq("round_id", round_id);
-
-  if (gErr) throw new Error("Error leyendo grupos: " + gErr.message);
-
-  const ids = (oldGroups ?? []).map((x: any) => x.id);
-
-  if (ids.length > 0) {
-    const { error: delM } = await supabase
-      .from("pairing_group_members")
-      .delete()
-      .in("group_id", ids);
-
-    if (delM) throw new Error("Error borrando miembros: " + delM.message);
-
-    const { error: delG } = await supabase
-      .from("pairing_groups")
-      .delete()
-      .eq("round_id", round_id);
-
-    if (delG) throw new Error("Error borrando grupos: " + delG.message);
-  }
+  const sessionRoundIds = sessionRounds.map((sr) => sr.id);
+  await deletePairingGroupsForRoundIds(supabase, sessionRoundIds);
 
   revalidatePath("/tee-sheet");
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
@@ -971,7 +1030,13 @@ export async function generateGroupsByCategory(formData: FormData) {
   const cat = optStr(formData, "cat");
   const planRows = normalizePlanRows(formData);
 
-  await ensureStartingOrderIsEditable(supabase, round_id);
+  const sessionRounds = await loadTournamentSessionRounds(
+    supabase,
+    tournament_id,
+    round_id
+  );
+  await ensureSessionStartingOrderIsEditable(supabase, sessionRounds);
+  const sessionRoundIds = sessionRounds.map((sr) => sr.id);
 
   const registrationStatus = await fetchTournamentRegistrationStatus(
     supabase,
@@ -1179,30 +1244,7 @@ export async function generateGroupsByCategory(formData: FormData) {
     );
   }
 
-  const { data: oldGroups, error: gErr } = await supabase
-    .from("pairing_groups")
-    .select("id")
-    .eq("round_id", round_id);
-
-  if (gErr) throw new Error("Error leyendo grupos previos: " + gErr.message);
-
-  const oldGroupIds = (oldGroups ?? []).map((x: any) => x.id);
-
-  if (oldGroupIds.length > 0) {
-    const { error: delM } = await supabase
-      .from("pairing_group_members")
-      .delete()
-      .in("group_id", oldGroupIds);
-
-    if (delM) throw new Error("Error borrando miembros previos: " + delM.message);
-
-    const { error: delG } = await supabase
-      .from("pairing_groups")
-      .delete()
-      .eq("round_id", round_id);
-
-    if (delG) throw new Error("Error borrando grupos previos: " + delG.message);
-  }
+  await deletePairingGroupsForRoundIds(supabase, sessionRoundIds);
 
   let teeSheetEntryOrderMap = new Map<string, TeeSheetEntryOrderInfo>();
   if (targetRoundNo > 1) {
@@ -1372,10 +1414,16 @@ export async function generateGroupsByCategory(formData: FormData) {
       notes = [meta.code, meta.name].filter(Boolean).join(" — ") || "SIN CATEGORÍA";
     }
 
+    const targetRoundId = resolveRoundIdForCategoryInSession(
+      catId,
+      sessionRounds,
+      round_id
+    );
+
     const { data: pg, error: insG } = await supabase
       .from("pairing_groups")
       .insert({
-        round_id,
+        round_id: targetRoundId,
         group_no: groupNo,
         tee_time,
         starting_hole,

@@ -12,6 +12,8 @@ import {
 } from "./cutRanking";
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
 import {
+  getAdvancementRulesForTargetRound,
+  getInformationalAdvancementRulesForDisplay,
   primaryCutLineForCategory,
   ruleAppliesToRow,
 } from "./computeCutLine";
@@ -68,14 +70,17 @@ export function sortLeaderboardForCutAlignment(params: {
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
 }): LeaderboardRow[] {
-  if (params.selectedRoundNo <= 1) return params.rows;
-
-  const activeRules = params.advancementRules.filter(
-    (r) =>
-      r.is_active &&
-      r.to_round_no === params.selectedRoundNo &&
-      r.from_round_no < params.selectedRoundNo
+  const enforcing = getAdvancementRulesForTargetRound(
+    params.advancementRules,
+    params.selectedRoundNo
   );
+  const activeRules =
+    enforcing.length > 0
+      ? enforcing
+      : getInformationalAdvancementRulesForDisplay(
+          params.advancementRules,
+          params.selectedRoundNo
+        );
   if (activeRules.length === 0) return params.rows;
 
   const rulesMap = rulesByCategoryId(params.competitionRules);
@@ -181,7 +186,9 @@ export function annotateCutDividers(
     for (let i = 0; i < catRows.length; i++) {
       const row = catRows[i]!;
       const prev = i > 0 ? catRows[i - 1] : null;
-      if (row.made_cut === false && prev?.made_cut === true) {
+      const inCut = line.madeCutEntryIds.has(row.entry_id);
+      const prevInCut = prev ? line.madeCutEntryIds.has(prev.entry_id) : false;
+      if (!inCut && prevInCut) {
         dividerBefore.set(row.entry_id, label);
         break;
       }

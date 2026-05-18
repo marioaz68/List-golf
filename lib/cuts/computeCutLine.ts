@@ -201,7 +201,8 @@ function applyGrossExemption(
 function cutLabelForRule(
   rule: RoundAdvancementRule,
   selectedRoundNo: number,
-  tieBreakSteps: TieBreakStep[]
+  tieBreakSteps: TieBreakStep[],
+  informational?: boolean
 ): string {
   const tieNote =
     tieBreakSteps.length > 0
@@ -209,16 +210,17 @@ function cutLabelForRule(
       : rule.include_ties
         ? " · empates"
         : "";
+  const prefix = informational ? "CORTE (referencia) · " : "CORTE · ";
 
   if (rule.advancement_type === "all") {
-    return `CORTE · Pasan todos (→ R${rule.to_round_no})`;
+    return `${prefix}Pasan todos (→ R${rule.to_round_no})`;
   }
 
   if (rule.advancement_type === "top_percent") {
-    return `CORTE · Top ${rule.advancement_value}% (→ R${rule.to_round_no})${tieNote}`;
+    return `${prefix}Top ${rule.advancement_value}% (→ R${rule.to_round_no})${tieNote}`;
   }
 
-  return `CORTE · Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
+  return `${prefix}Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
 }
 
 function computeLineForRule(
@@ -233,6 +235,7 @@ function computeLineForRule(
     handicapByPlayerId: Map<string, number | null>;
     tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
     strokeIndexByHole?: StrokeIndexByHole;
+    informational?: boolean;
   }
 ): PublicCutLine | null {
   const scoped = rowsInCat.filter((r) =>
@@ -245,7 +248,12 @@ function computeLineForRule(
       categoryId,
       categoryCode: catCode,
       afterPosition: scoped.length,
-      label: cutLabelForRule(rule, params.selectedRoundNo, []),
+      label: cutLabelForRule(
+        rule,
+        params.selectedRoundNo,
+        [],
+        params.informational
+      ),
       madeCutEntryIds: new Set(scoped.map((r) => r.entry_id)),
     };
   }
@@ -303,7 +311,12 @@ function computeLineForRule(
     categoryId,
     categoryCode: catCode,
     afterPosition,
-    label: cutLabelForRule(rule, params.selectedRoundNo, tieBreakSteps),
+    label: cutLabelForRule(
+      rule,
+      params.selectedRoundNo,
+      tieBreakSteps,
+      params.informational
+    ),
     madeCutEntryIds: madeCut,
   };
 }
@@ -343,8 +356,9 @@ export function mergeCutLinesForCategory(
 }
 
 /**
- * Reglas de avance que aplican al generar salidas / ver clasificación de la ronda `targetRoundNo`.
- * Ej.: `to_round_no: 3` → corte tras R2 para entrar a la final; sin regla con `to_round_no: 2` → R2 sin corte.
+ * Corte real: elimina jugadores al generar salidas de `targetRoundNo` o al ver esa ronda.
+ * Solo reglas con `to_round_no === targetRoundNo` (p. ej. `to_round_no: 3` → corte tras R2 para R3;
+ * sin regla con `to_round_no: 2` → en R2 salen todos).
  */
 export function getAdvancementRulesForTargetRound(
   advancementRules: RoundAdvancementRule[],
@@ -365,10 +379,38 @@ export function getAdvancementRulesForTargetRound(
     );
 }
 
+/** ¿Hay corte real al armar salidas de esta ronda? */
+export function cutEnforcesAtTargetRound(
+  advancementRules: RoundAdvancementRule[],
+  targetRoundNo: number
+): boolean {
+  return getAdvancementRulesForTargetRound(advancementRules, targetRoundNo).length > 0;
+}
+
 /**
- * Cortes activos al entrar a `selectedRoundNo` (p. ej. corte tras R1 al ver R2).
+ * Línea de corte solo informativa (referencia): regla con destino futuro (`to_round_no` > ronda vista).
+ * Ej. en R1 con regla → R3: muestra referencia tras R1 sin eliminar jugadores de R2.
  */
-export function computePublicCutLines(params: {
+export function getInformationalAdvancementRulesForDisplay(
+  advancementRules: RoundAdvancementRule[],
+  selectedRoundNo: number
+): RoundAdvancementRule[] {
+  if (selectedRoundNo < 1) return [];
+  return advancementRules
+    .filter(
+      (r) =>
+        r.is_active &&
+        r.to_round_no > selectedRoundNo &&
+        r.from_round_no <= selectedRoundNo
+    )
+    .sort(
+      (a, b) =>
+        (a.sort_order ?? 999) - (b.sort_order ?? 999) ||
+        a.from_round_no - b.from_round_no
+    );
+}
+
+type ComputeCutLinesParams = {
   leaderboard: LeaderboardRow[];
   advancementRules: RoundAdvancementRule[];
   competitionRules: CategoryCompetitionRule[];
@@ -378,15 +420,13 @@ export function computePublicCutLines(params: {
   handicapByPlayerId: Map<string, number | null>;
   tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
   strokeIndexByHole?: StrokeIndexByHole;
-}): PublicCutLine[] {
-  const { leaderboard, selectedRoundNo } = params;
-  if (selectedRoundNo <= 1) return [];
+  informational?: boolean;
+};
 
-  const activeRules = getAdvancementRulesForTargetRound(
-    params.advancementRules,
-    selectedRoundNo
-  );
-
+function computeCutLinesForRules(
+  params: ComputeCutLinesParams,
+  activeRules: RoundAdvancementRule[]
+): PublicCutLine[] {
   if (activeRules.length === 0) return [];
 
   const rulesMap = rulesByCategoryId(params.competitionRules);
@@ -396,23 +436,24 @@ export function computePublicCutLines(params: {
     ? [params.selectedCategoryId]
     : [
         ...new Set(
-          leaderboard
+          params.leaderboard
             .map((r) => String(r.category_id ?? "").trim())
             .filter(Boolean)
         ),
       ];
 
   const shared = {
-    selectedRoundNo,
+    selectedRoundNo: params.selectedRoundNo,
     categories: params.categories,
     rulesMap,
     handicapByPlayerId: params.handicapByPlayerId,
     tieBreakStepsByProfileId: params.tieBreakStepsByProfileId,
     strokeIndexByHole: params.strokeIndexByHole,
+    informational: params.informational,
   };
 
   for (const categoryId of categoryScopeIds) {
-    const rowsInCat = leaderboard.filter(
+    const rowsInCat = params.leaderboard.filter(
       (r) =>
         !r.is_disqualified &&
         String(r.category_id ?? "") === categoryId
@@ -447,6 +488,43 @@ export function computePublicCutLines(params: {
   }
 
   return rawLines;
+}
+
+/** Cortes reales al entrar a `selectedRoundNo` (eliminan jugadores en salidas de esa ronda). */
+export function computePublicCutLines(
+  params: Omit<ComputeCutLinesParams, "informational">
+): PublicCutLine[] {
+  const enforcing = getAdvancementRulesForTargetRound(
+    params.advancementRules,
+    params.selectedRoundNo
+  );
+  return computeCutLinesForRules(
+    { ...params, informational: false },
+    enforcing
+  );
+}
+
+/** Líneas de corte de referencia (no eliminan jugadores en la ronda actual). */
+export function computeInformationalCutLines(
+  params: Omit<ComputeCutLinesParams, "informational">
+): PublicCutLine[] {
+  const informational = getInformationalAdvancementRulesForDisplay(
+    params.advancementRules,
+    params.selectedRoundNo
+  );
+  return computeCutLinesForRules(
+    { ...params, informational: true },
+    informational
+  );
+}
+
+/** Cortes para mostrar en clasificación: reales + referencia si aplica. */
+export function computeDisplayCutLines(
+  params: Omit<ComputeCutLinesParams, "informational">
+): PublicCutLine[] {
+  const enforcing = computePublicCutLines(params);
+  if (enforcing.length > 0) return enforcing;
+  return computeInformationalCutLines(params);
 }
 
 export function primaryCutLineForCategory(

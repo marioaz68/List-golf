@@ -26,6 +26,7 @@ import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOv
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
   computePublicCutLines,
+  cutEnforcesAtTargetRound,
   getAdvancementRulesForTargetRound,
   primaryCutLineForCategory,
   type RoundAdvancementRule,
@@ -304,6 +305,7 @@ export async function buildTeeSheetEntryOrderMap(
     leaderboardViewOverride: null,
   });
 
+  const cutEnforces = cutEnforcesAtTargetRound(advancementRules, targetRoundNo);
   const cutRulesForRound = getAdvancementRulesForTargetRound(
     advancementRules,
     targetRoundNo
@@ -311,7 +313,7 @@ export async function buildTeeSheetEntryOrderMap(
 
   let rowsForOrder: LeaderboardRow[] = leaderboardScored;
 
-  if (cutRulesForRound.length > 0) {
+  if (cutEnforces && cutRulesForRound.length > 0) {
     const publicCutLines = computePublicCutLines({
       leaderboard: leaderboardScored,
       advancementRules,
@@ -362,19 +364,26 @@ export async function buildTeeSheetEntryOrderMap(
   return out;
 }
 
-/** R2+: orden por posición; excluye solo si `made_cut === false` (reglas de corte en BD). */
+/**
+ * R2+: orden por posición de clasificación.
+ * Solo excluye jugadores si hay regla con `to_round_no === targetRoundNo` y `made_cut === false`.
+ */
 export function sortEntriesForTeeSheetRound<T extends { id: string }>(
   entries: T[],
   targetRoundNo: number,
-  orderMap: Map<string, TeeSheetEntryOrderInfo>
+  orderMap: Map<string, TeeSheetEntryOrderInfo>,
+  options?: { cutEnforces?: boolean }
 ): T[] {
   if (targetRoundNo <= 1) return entries;
 
-  const kept = entries.filter((e) => {
-    const info = orderMap.get(e.id);
-    if (!info || info.madeCut === null) return true;
-    return info.madeCut !== false;
-  });
+  const cutEnforces = options?.cutEnforces ?? true;
+  const kept = cutEnforces
+    ? entries.filter((e) => {
+        const info = orderMap.get(e.id);
+        if (!info || info.madeCut === null) return true;
+        return info.madeCut !== false;
+      })
+    : entries;
 
   kept.sort((a, b) => {
     const pa = orderMap.get(a.id)?.position;

@@ -23,6 +23,10 @@ import {
 import { createAdminClient } from "@/utils/supabase/admin";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import {
+  cutEnforcesAtTargetRound,
+  type RoundAdvancementRule,
+} from "@/lib/cuts/computeCutLine";
+import {
   clearGroups,
   confirmStartingOrder,
   generateGroupsByCategory,
@@ -230,16 +234,20 @@ export default async function TeeSheetPage(props: {
   const sessionRoundDate =
     selectedRound?.round_date ?? blockRounds[0]?.round_date ?? null;
 
+  let teeSheetOrderMap = new Map<
+    string,
+    import("@/lib/tee-sheet/leaderboardOrderForPairing").TeeSheetEntryOrderInfo
+  >();
   let standingDisplayByEntryId = new Map<string, string>();
   if (targetRoundNo > 1 && effectiveTournamentId) {
     try {
       const admin = createAdminClient();
-      const orderMap = await buildTeeSheetEntryOrderMap(
+      teeSheetOrderMap = await buildTeeSheetEntryOrderMap(
         admin,
         effectiveTournamentId,
         targetRoundNo
       );
-      for (const [entryId, info] of orderMap) {
+      for (const [entryId, info] of teeSheetOrderMap) {
         if (info.standingDisplay) {
           standingDisplayByEntryId.set(entryId, info.standingDisplay);
         }
@@ -512,6 +520,24 @@ for (const row of membersRaw) {
   const shotgunDoubleCapacity = 36;
   const shotgunExtendedCapacity = 44;
 
+  let cutEnforcesForPairing = false;
+  if (targetRoundNo > 1 && effectiveTournamentId) {
+    const { data: advancementRows } = await supabase
+      .from("round_advancement_rules")
+      .select("from_round_no, to_round_no, is_active")
+      .eq("tournament_id", effectiveTournamentId)
+      .eq("is_active", true);
+    cutEnforcesForPairing = cutEnforcesAtTargetRound(
+      (advancementRows ?? []) as RoundAdvancementRule[],
+      targetRoundNo
+    );
+  }
+
+  const isShotgunBlock =
+    String(selectedRound?.start_type ?? "").toLowerCase() === "shotgun";
+  const showShotgunNoDoubleTees =
+    isShotgunBlock && planTotalGroups4 > 0 && planTotalGroups4 <= shotgunSimpleCapacity;
+
   const planRecommendation = (() => {
     if (!selectedRound) return "Selecciona una ronda/bloque para analizar.";
     if (planTotalPlayers === 0) return "No hay jugadores activos/confirmados para este bloque.";
@@ -748,6 +774,31 @@ for (const row of membersRaw) {
           </div>
         ) : null}
 
+        {targetRoundNo > 1 ? (
+          <div
+            className={`mb-3 rounded border px-3 py-2 text-sm ${
+              cutEnforcesForPairing
+                ? "border-amber-300 bg-amber-50 text-amber-950"
+                : "border-sky-300 bg-sky-50 text-sky-950"
+            }`}
+          >
+            <p>
+              {cutEnforcesForPairing
+                ? fmt(ts.cutEnforcesForRound, { round: targetRoundNo })
+                : fmt(ts.cutDoesNotEnforceForRound, { round: targetRoundNo })}
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              {fmt(ts.standingsOrderHint, { round: targetRoundNo })}
+            </p>
+          </div>
+        ) : null}
+
+        {showShotgunNoDoubleTees ? (
+          <div className="mb-3 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+            {fmt(ts.shotgunNoDoubleTees, { groups: planTotalGroups4 })}
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Planeación editable del bloque</h2>
@@ -758,7 +809,7 @@ for (const row of membersRaw) {
 
           <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
             Jugadores: <span className="font-semibold">{planTotalPlayers}</span> · G4:{" "}
-            <span className="font-semibold">{planTotalGroups4}</span> · G5: {" "}
+            <span className="font-semibold">{planTotalGroups4}</span> · G5:{" "}
             <span className="font-semibold">{planTotalGroups5}</span>
           </div>
         </div>

@@ -14,7 +14,8 @@ import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import { applyCompetitionStandings } from "@/lib/leaderboard/competitionStandings";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
-  computePublicCutLines,
+  computeDisplayCutLines,
+  cutEnforcesAtTargetRound,
   primaryCutLineForCategory,
   type RoundAdvancementRule,
 } from "@/lib/cuts/computeCutLine";
@@ -612,7 +613,8 @@ export default async function PublicTournamentPage({
   const selectedRoundNo = selectedRound?.round_no ?? 1;
 
   let leaderboard: LeaderboardRow[] = [];
-  let publicCutLines: ReturnType<typeof computePublicCutLines> = [];
+  let publicCutLines: ReturnType<typeof computeDisplayCutLines> = [];
+  let cutEnforcesForSelectedRound = false;
   let activePublicCutLine: ReturnType<typeof activeCutLineForUi> = null;
   let officialLeaderboard: LeaderboardRow[] = [];
 
@@ -657,7 +659,12 @@ export default async function PublicTournamentPage({
       leaderboardViewOverride,
     });
 
-    publicCutLines = computePublicCutLines({
+    cutEnforcesForSelectedRound = cutEnforcesAtTargetRound(
+      advancementRulesList,
+      selectedRoundNo
+    );
+
+    publicCutLines = computeDisplayCutLines({
       leaderboard: leaderboardScored,
       advancementRules: advancementRulesList,
       competitionRules: competitionRulesList,
@@ -673,7 +680,7 @@ export default async function PublicTournamentPage({
     });
 
     const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
-      if (selectedRoundNo <= 1 || row.is_disqualified) {
+      if (!cutEnforcesForSelectedRound || row.is_disqualified) {
         return { ...row, made_cut: null };
       }
       const line = primaryCutLineForCategory(
