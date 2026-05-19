@@ -24,3 +24,19 @@ export function effectiveUsesNetLeaderboard(
   const basis = rule.leaderboard_basis;
   return basis === "net" || basis === "both";
 }
+
+/**
+ * Detalle expandido hoyo por hoyo: una fila Par y R1…Rn (sin handicap ni neto).
+ * Aplica a categorías gross, both (por defecto) y cuando el toggle está en Gross.
+ */
+export function usesGrossHoleByHoleDetail(
+  rule: CategoryCompetitionRule,
+  override?: LeaderboardViewOverride | null
+): boolean {
+  if (isStablefordCategory(rule)) return false;
+  if (override === "net") return false;
+  if (override === "gross") return true;
+  if (rule.leaderboard_basis === "gross") return true;
+  if (rule.leaderboard_basis === "net") return false;
+  return true;
+}

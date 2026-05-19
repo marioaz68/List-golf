@@ -44,6 +44,9 @@ import type {
   RoundIdMeta,
 } from "@/lib/leaderboard/lockedScorecards";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import { usesGrossHoleByHoleDetail } from "@/lib/leaderboard/leaderboardViewOverride";
+import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
 
 type FavoritesViewProps = {
   tournamentId: string;
@@ -56,6 +59,7 @@ type FavoritesViewProps = {
   competitionRules?: CategoryCompetitionRule[];
   handicapsByPlayerId?: Record<string, number | null>;
   strokeIndexByHole?: Record<number, number>;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
   rounds: RoundIdMeta[];
   lockedLookups: LockedScorecardLookups;
 };
@@ -331,6 +335,7 @@ export default function FavoritesView({
   competitionRules = [],
   handicapsByPlayerId = {},
   strokeIndexByHole: strokeIndexByHoleRecord = {},
+  leaderboardViewOverride = null,
   rounds,
   lockedLookups,
 }: FavoritesViewProps) {
@@ -474,7 +479,8 @@ export default function FavoritesView({
             const rowRule = ruleForCategory(rulesMap, row.category_id);
             const rowDetailLabels = detailLabelsWithCompetitionRule(
               detailLabels,
-              rowRule
+              rowRule,
+              leaderboardViewOverride
             );
             const isOpen = requestedDetailId === row.entry_id;
             const prevRow = index > 0 ? favoriteRows[index - 1] : null;
@@ -540,6 +546,7 @@ export default function FavoritesView({
                           categoryId: selectedCategoryId || null,
                           roundId: selectedRound?.id ?? null,
                           view: "favorites",
+                          basis: leaderboardViewOverride ?? undefined,
                           currentDetailId: requestedDetailId || null,
                           nextDetailId: row.entry_id,
                         })}
@@ -581,6 +588,7 @@ export default function FavoritesView({
                     rulesMap={rulesMap}
                     handicapByPlayerId={handicapMap}
                     strokeIndexByHole={strokeIndexMap}
+                    leaderboardViewOverride={leaderboardViewOverride}
                     view="live"
                     rounds={rounds}
                     lockedLookups={lockedLookups}
@@ -604,7 +612,18 @@ export default function FavoritesView({
                       <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
                         <PublicLeaderboardExpandedPlayerBanner
                           row={row}
-                          labels={detailLabels}
+                          labels={rowDetailLabels}
+                          handicapSummary={
+                            usesGrossHoleByHoleDetail(
+                              rowRule,
+                              leaderboardViewOverride
+                            )
+                              ? null
+                              : formatPlayingHandicapSummary(
+                                  handicapMap.get(row.player_id) ?? null,
+                                  rowRule.handicap_percentage
+                                )
+                          }
                         />
                         <PublicLeaderboardDetailTable
                           row={row}
@@ -615,6 +634,7 @@ export default function FavoritesView({
                             handicapMap.get(row.player_id) ?? null
                           }
                           strokeIndexByHole={strokeIndexMap}
+                          leaderboardViewOverride={leaderboardViewOverride}
                         />
                       </div>
                     </td>

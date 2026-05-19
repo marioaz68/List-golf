@@ -6,6 +6,7 @@ import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetit
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import {
   effectiveUsesNetLeaderboard,
+  usesGrossHoleByHoleDetail,
 } from "@/lib/leaderboard/leaderboardViewOverride";
 import {
   formatMainTotalForRow,
@@ -267,8 +268,13 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
-              const rowRule = ruleForCategory(rulesMap, row.category_id);
-              const showCutDivider = Boolean(row.show_cut_divider);
+            const rowRule = ruleForCategory(rulesMap, row.category_id);
+            const rowDetailLabels = detailLabelsWithCompetitionRule(
+              detailLabels,
+              rowRule,
+              leaderboardViewOverride
+            );
+            const showCutDivider = Boolean(row.show_cut_divider);
               const cutDividerLabel =
                 row.cut_divider_label ?? cutLine?.label ?? "CORTE";
 
@@ -397,23 +403,23 @@ export default function PublicLeaderboardTable({
                         <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
                           <PublicLeaderboardExpandedPlayerBanner
                             row={row}
-                            labels={detailLabelsResolved}
+                            labels={rowDetailLabels}
                             handicapSummary={
-                              effectiveUsesNetLeaderboard(
+                              usesGrossHoleByHoleDetail(
                                 rowRule,
                                 leaderboardViewOverride
                               )
-                                ? formatPlayingHandicapSummary(
+                                ? null
+                                : formatPlayingHandicapSummary(
                                     handicapMap.get(row.player_id) ?? null,
                                     rowRule.handicap_percentage
                                   )
-                                : null
                             }
                           />
                           <PublicLeaderboardDetailTable
                             row={row}
                             selectedRound={selectedRound}
-                            labels={detailLabelsResolved}
+                            labels={rowDetailLabels}
                             competitionRule={ruleForCategory(
                               rulesMap,
                               row.category_id

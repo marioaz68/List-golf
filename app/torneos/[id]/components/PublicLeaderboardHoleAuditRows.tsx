@@ -3,7 +3,7 @@ import {
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
-  effectiveUsesNetLeaderboard,
+  usesGrossHoleByHoleDetail,
   type LeaderboardViewOverride,
 } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
@@ -57,10 +57,11 @@ export function showHoleAuditForRule(
   rule: CategoryCompetitionRule,
   viewOverride?: LeaderboardViewOverride | null
 ): boolean {
-  if (viewOverride === "gross") return false;
+  if (usesGrossHoleByHoleDetail(rule, viewOverride)) return false;
   return (
     isStablefordCategory(rule) ||
-    effectiveUsesNetLeaderboard(rule, viewOverride)
+    rule.leaderboard_basis === "net" ||
+    rule.leaderboard_basis === "both"
   );
 }
 
@@ -186,7 +187,7 @@ export default function PublicLeaderboardHoleAuditRows({
     handicapIndex,
     strokeIndexByHole
   );
-  const useNet = effectiveUsesNetLeaderboard(rule, viewOverride);
+  const useNet = !usesGrossHoleByHoleDetail(rule, viewOverride);
   const useSf = isStablefordCategory(rule);
 
   const sum = (slice: PerHoleCompetitionCell[], fn: (c: PerHoleCompetitionCell) => number) => {

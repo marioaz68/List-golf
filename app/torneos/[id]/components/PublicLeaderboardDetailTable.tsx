@@ -12,8 +12,8 @@ import {
 } from "@/lib/leaderboard/competitionScoring";
 import { scoringFormatLabel } from "@/lib/leaderboard/competitionDisplay";
 import {
-  effectiveUsesNetLeaderboard,
   parseLeaderboardViewOverride,
+  usesGrossHoleByHoleDetail,
   type LeaderboardViewOverride,
 } from "@/lib/leaderboard/leaderboardViewOverride";
 import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
@@ -62,30 +62,83 @@ function bestDetailForRoundNo(
   })[0]!;
 }
 
+function getCumulativeRoundDetails(
+  allWithScores: RoundDetail[],
+  maxRoundNo: number
+): RoundDetail[] {
+  const cumulative: RoundDetail[] = [];
+  for (let roundNo = 1; roundNo <= maxRoundNo; roundNo += 1) {
+    const detail = bestDetailForRoundNo(allWithScores, roundNo);
+    if (detail && hasHoleOrGross(detail)) {
+      cumulative.push(detail);
+    }
+  }
+  return cumulative;
+}
+
+/** En vista neto: gross por hoyo de rondas anteriores + R1 si la ronda activa es R1. */
+function getPriorGrossRoundRowsForNetView(
+  allWithScores: RoundDetail[],
+  maxRoundNo: number
+): RoundDetail[] {
+  if (maxRoundNo < 1) return [];
+  if (maxRoundNo === 1) {
+    const r1 = bestDetailForRoundNo(allWithScores, 1);
+    return r1 && hasHoleOrGross(r1) ? [r1] : [];
+  }
+  const rows: RoundDetail[] = [];
+  for (let roundNo = 1; roundNo < maxRoundNo; roundNo += 1) {
+    const detail = bestDetailForRoundNo(allWithScores, roundNo);
+    if (detail && hasHoleOrGross(detail)) {
+      rows.push(detail);
+    }
+  }
+  return rows;
+}
+
+function resolveAuditDetailForNetView(
+  row: LeaderboardRow,
+  selectedRound: SelectedRoundMeta | null,
+  allWithScores: RoundDetail[]
+): RoundDetail | null {
+  if (selectedRound?.id) {
+    const selectedDetail = resolveDetailForSelectedRound(
+      row.details,
+      selectedRound,
+      row.category_id,
+      collectRoundIdsWithScoreCapture(row.details)
+    );
+    if (selectedDetail) return selectedDetail;
+  }
+  const maxRoundNo = selectedRound?.round_no ?? 0;
+  if (maxRoundNo >= 1) {
+    return bestDetailForRoundNo(allWithScores, maxRoundNo);
+  }
+  return (
+    allWithScores.find((d) => d.holes.some((h) => h.strokes != null)) ?? null
+  );
+}
+
 function getDisplayDetails({
   row,
   selectedRound,
-  usesNetView,
+  usesGrossDetail,
+  allWithScores,
 }: {
   row: LeaderboardRow;
   selectedRound: SelectedRoundMeta | null;
-  usesNetView: boolean;
+  usesGrossDetail: boolean;
+  allWithScores: RoundDetail[];
 }) {
-  const allWithScores = selectLeaderboardDetailsForPlayer(row).filter(
-    hasHoleOrGross
-  );
-
   const maxRoundNo = selectedRound?.round_no ?? null;
 
-  if (!usesNetView && maxRoundNo != null && maxRoundNo >= 1) {
-    const cumulative: RoundDetail[] = [];
-    for (let roundNo = 1; roundNo <= maxRoundNo; roundNo += 1) {
-      const detail = bestDetailForRoundNo(allWithScores, roundNo);
-      if (detail && hasHoleOrGross(detail)) {
-        cumulative.push(detail);
-      }
-    }
+  if (usesGrossDetail && maxRoundNo != null && maxRoundNo >= 1) {
+    const cumulative = getCumulativeRoundDetails(allWithScores, maxRoundNo);
     if (cumulative.length > 0) return cumulative;
+  }
+
+  if (!usesGrossDetail) {
+    return [];
   }
 
   if (selectedRound?.id) {
@@ -182,7 +235,7 @@ function detailTotalsForRule(
   rule: CategoryCompetitionRule,
   handicapIndex: number | null | undefined,
   strokeIndexByHole: StrokeIndexByHole | undefined,
-  usesNetView: boolean
+  usesGrossDetail: boolean
 ) {
   const scored = scoreRoundDetail(
     detail,
@@ -203,7 +256,7 @@ function detailTotalsForRule(
         scored.gross != null ? formatScore(scored.gross) : "—",
     };
   }
-  if (usesNetView) {
+  if (!usesGrossDetail) {
     return {
       primary:
         scored.netToPar != null
@@ -253,20 +306,35 @@ export default function PublicLeaderboardDetailTable({
       leaderboard_basis: row.leaderboard_basis ?? "gross",
       handicap_percentage: 100,
     } as CategoryCompetitionRule);
-  const usesNetView = effectiveUsesNetLeaderboard(rule, viewOverride);
-  const showPositionCol = usesNetView || isStablefordCategory(rule);
+  const usesGrossDetail = usesGrossHoleByHoleDetail(rule, viewOverride);
+  const showPositionCol = !usesGrossDetail || isStablefordCategory(rule);
   const summaryColCount = showPositionCol ? 3 : 2;
+  const allWithScores = selectLeaderboardDetailsForPlayer(row).filter(
+    hasHoleOrGross
+  );
+  const maxRoundNo = selectedRound?.round_no ?? 0;
+
   const displayDetails = getDisplayDetails({
     row,
     selectedRound,
-    usesNetView,
+    usesGrossDetail,
+    allWithScores,
   });
-  const handicapSummary = usesNetView
-    ? formatPlayingHandicapSummary(handicapIndex, rule.handicap_percentage)
-    : null;
+
+  const grossRowsBelowPar =
+    !usesGrossDetail && maxRoundNo >= 1
+      ? getPriorGrossRoundRowsForNetView(allWithScores, maxRoundNo)
+      : [];
+
+  const handicapSummary = usesGrossDetail
+    ? null
+    : formatPlayingHandicapSummary(handicapIndex, rule.handicap_percentage);
 
   const baseRound =
     displayDetails.find((detail) =>
+      detail.holes.some((hole) => hole.par != null)
+    ) ??
+    grossRowsBelowPar.find((detail) =>
       detail.holes.some((hole) => hole.par != null)
     ) ??
     row.details.find((detail) => detail.holes.some((hole) => hole.par != null)) ??
@@ -275,11 +343,12 @@ export default function PublicLeaderboardDetailTable({
 
   const baseHoles = baseRound?.holes ?? [];
 
-  const auditDetail =
-    displayDetails.length === 1
+  const auditDetail = usesGrossDetail
+    ? displayDetails.length === 1
       ? displayDetails[0]
       : displayDetails.find((d) => d.holes.some((h) => h.strokes != null)) ??
-        null;
+        null
+    : resolveAuditDetailForNetView(row, selectedRound, allWithScores);
 
   const inline = labels.detailTotalsPlacement === "inline-after-nines";
   const showEighteenTotalCol =
@@ -304,7 +373,7 @@ export default function PublicLeaderboardDetailTable({
 
   return (
     <div className="mt-1.5 inline-block w-max min-w-0 max-w-full rounded-xl border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      {usesNetView ? (
+      {!usesGrossDetail ? (
         <div className="flex min-w-0 items-center gap-1.5 border-b border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] font-semibold text-slate-300 sm:text-[10px]">
           <ClubLogoThumb
             clubId={row.club_id}
@@ -443,6 +512,139 @@ export default function PublicLeaderboardDetailTable({
             )}
           </tr>
 
+          {grossRowsBelowPar.map((detail, detailIndex) => {
+            const standing =
+              row.standing_by_round_category.find(
+                (s) => s.round_id === detail.round_id
+              ) ??
+              row.standing_by_round.find((s) => s.round_id === detail.round_id) ??
+              null;
+            const stripeBg =
+              detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+            const totals = detailTotalsForRule(
+              detail,
+              rule,
+              handicapIndex,
+              strokeIndexByHole,
+              true
+            );
+
+            return (
+              <tr
+                key={`gross-below-par-${row.entry_id}-${detail.round_id}`}
+                className={
+                  detailIndex % 2 === 0
+                    ? "bg-white/[0.03] text-white"
+                    : "bg-[#0b1728] text-white"
+                }
+              >
+                <td className={stickyRound(stripeBg)}>R{detail.round_no}</td>
+                {inline ? (
+                  <>
+                    {detail.holes.slice(0, 9).map((hole) => {
+                      const marker = scoreMarker(hole.strokes, hole.par, {
+                        compact: true,
+                      });
+                      return (
+                        <td
+                          key={`gross-bp-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                          className={`${holeDataTd} ${stripeBg}`}
+                        >
+                          <span className={marker.wrapper}>
+                            {marker.outer ? (
+                              <span aria-hidden className={marker.outer} />
+                            ) : null}
+                            {marker.inner ? (
+                              <span aria-hidden className={marker.inner} />
+                            ) : null}
+                            <span className={marker.textClass}>
+                              {formatScore(hole.strokes)}
+                            </span>
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td className={`${totalTd} ${stripeBg}`}>
+                      {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
+                    </td>
+                    {detail.holes.slice(9, 18).map((hole) => {
+                      const marker = scoreMarker(hole.strokes, hole.par, {
+                        compact: true,
+                      });
+                      return (
+                        <td
+                          key={`gross-bp-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                          className={`${holeDataTd} ${stripeBg}`}
+                        >
+                          <span className={marker.wrapper}>
+                            {marker.outer ? (
+                              <span aria-hidden className={marker.outer} />
+                            ) : null}
+                            {marker.inner ? (
+                              <span aria-hidden className={marker.inner} />
+                            ) : null}
+                            <span className={marker.textClass}>
+                              {formatScore(hole.strokes)}
+                            </span>
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td className={`${totalTd} ${stripeBg}`}>
+                      {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    {detail.holes.map((hole) => {
+                      const marker = scoreMarker(hole.strokes, hole.par, {
+                        compact: true,
+                      });
+                      return (
+                        <td
+                          key={`gross-bp-${row.entry_id}-${detail.round_id}-${hole.hole_number}`}
+                          className={`${holeDataTd} ${stripeBg}`}
+                        >
+                          <span className={marker.wrapper}>
+                            {marker.outer ? (
+                              <span aria-hidden className={marker.outer} />
+                            ) : null}
+                            {marker.inner ? (
+                              <span aria-hidden className={marker.inner} />
+                            ) : null}
+                            <span className={marker.textClass}>
+                              {formatScore(hole.strokes)}
+                            </span>
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td className={`${totalTd} ${stripeBg}`}>
+                      {detail.is_dq ? "DQ" : formatScore(detail.out_score)}
+                    </td>
+                    <td className={`${totalTd} ${stripeBg}`}>
+                      {detail.is_dq ? "DQ" : formatScore(detail.in_score)}
+                    </td>
+                    {showEighteenTotalCol ? (
+                      <td className={`${totalTd} ${stripeBg}`}>
+                        {detail.is_dq
+                          ? "DQ"
+                          : formatScore(detail.total_score)}
+                      </td>
+                    ) : null}
+                  </>
+                )}
+                <td className={`${totalTd} ${stripeBg}`}>{totals.primary}</td>
+                <td className={`${totalTd} ${stripeBg}`}>{totals.secondary}</td>
+                {showPositionCol ? (
+                  <td className={`${totalTd} ${stripeBg}`}>
+                    {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
+
           {auditDetail &&
           showHoleAuditForRule(rule, viewOverride) ? (
             <PublicLeaderboardHoleAuditRows
@@ -465,7 +667,9 @@ export default function PublicLeaderboardDetailTable({
             />
           ) : null}
 
-          {displayDetails.length === 0 ? (
+          {displayDetails.length === 0 &&
+          grossRowsBelowPar.length === 0 &&
+          !auditDetail ? (
             <tr>
               <td
                 colSpan={emptyColSpan}
@@ -474,7 +678,7 @@ export default function PublicLeaderboardDetailTable({
                 {labels.noCapture}
               </td>
             </tr>
-          ) : (
+          ) : displayDetails.length === 0 ? null : (
             displayDetails.map((detail, detailIndex) => {
               const standing =
                 row.standing_by_round_category.find(
@@ -490,7 +694,7 @@ export default function PublicLeaderboardDetailTable({
                 rule,
                 handicapIndex,
                 strokeIndexByHole,
-                usesNetView
+                usesGrossDetail
               );
 
               return (

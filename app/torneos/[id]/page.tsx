@@ -673,7 +673,7 @@ export default async function PublicTournamentPage({
     Boolean(headerCompetitionRule) &&
     categoryShowsGrossNetToggle(headerCompetitionRule!);
   const leaderboardViewOverride = showGrossNetToggle
-    ? basisFromUrl ?? "net"
+    ? basisFromUrl ?? "gross"
     : null;
 
   let publicPrizeRulesForCategory: PublicPrizeRuleRow[] = [];
@@ -1576,6 +1576,7 @@ export default async function PublicTournamentPage({
               competitionRules={competitionRulesList}
               handicapsByPlayerId={handicapsByPlayerId}
               strokeIndexByHole={strokeIndexByHoleRecord}
+              leaderboardViewOverride={leaderboardViewOverride}
               rounds={roundsForLock}
               lockedLookups={lockedLookups}
             />
