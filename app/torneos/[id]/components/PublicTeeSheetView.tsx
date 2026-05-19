@@ -9,7 +9,6 @@ import {
   formatPublicTeeSheetRoundPill,
   formatPublicTeeSheetSectionTitle,
   formatTime,
-  isStartingOrderConfirmed,
   sectionPillClasses,
 } from "../lib/utils";
 
@@ -53,9 +52,8 @@ export default function PublicTeeSheetView({
   selectedRoundId,
   labels,
 }: PublicTeeSheetViewProps) {
-  const confirmedRounds = rounds.filter((round) =>
-    isStartingOrderConfirmed(round.notes)
-  );
+  // El servidor ya envía solo jornadas publicadas para esta categoría.
+  const confirmedRounds = rounds;
   const activeRoundId =
     selectedRoundId && confirmedRounds.some((r) => r.id === selectedRoundId)
       ? selectedRoundId
@@ -67,19 +65,33 @@ export default function PublicTeeSheetView({
       pairingGroupMatchesCategory(
         group.notes,
         group.members,
-        selectedCategoryCode
+        selectedCategoryCode,
+        undefined,
+        selectedCategoryUuid
       )
     )
     .map((group) => {
       const matchByGroupNotes =
         !!selectedCategoryCode &&
-        pairingGroupMatchesCategory(group.notes, [], selectedCategoryCode);
+        pairingGroupMatchesCategory(
+          group.notes,
+          [],
+          selectedCategoryCode,
+          undefined,
+          selectedCategoryUuid
+        );
       return {
         ...group,
         members:
           selectedCategoryCode && !matchByGroupNotes
             ? group.members.filter((member) =>
-                pairingGroupMatchesCategory(null, [member], selectedCategoryCode)
+                pairingGroupMatchesCategory(
+                  null,
+                  [member],
+                  selectedCategoryCode,
+                  undefined,
+                  selectedCategoryUuid
+                )
               )
             : group.members,
       };

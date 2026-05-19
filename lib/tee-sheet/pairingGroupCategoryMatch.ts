@@ -23,7 +23,6 @@ function normalizeCategoryToken(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-/** Código al inicio de notas tipo `DB — Damas B`. */
 function categoryCodeFromGroupNotes(notes: string | null | undefined) {
   const raw = String(notes ?? "").trim();
   if (!raw) return "";
@@ -31,23 +30,42 @@ function categoryCodeFromGroupNotes(notes: string | null | undefined) {
   return normalizeCategoryToken(head);
 }
 
+function expectedGroupNotesLabel(
+  categoryCode: string | null | undefined,
+  categoryName: string | null | undefined
+) {
+  const parts = [categoryCode, categoryName].map((p) => String(p ?? "").trim()).filter(Boolean);
+  return parts.length > 0 ? parts.join(" — ") : "";
+}
+
 /**
- * Misma lógica que el filtro por categoría en /tee-sheet: prioriza `pairing_groups.notes`.
+ * Igual criterio que /tee-sheet: `pairing_groups.notes`, etiqueta compuesta, código o `category_id` del inscrito.
  */
 export function pairingGroupMatchesCategory(
   groupNotes: string | null | undefined,
-  members: Array<{ category_code: string | null }>,
+  members: Array<{ category_code: string | null; category_id?: string | null }>,
   categoryCode: string | null | undefined,
-  categoryName?: string | null
+  categoryName?: string | null,
+  categoryId?: string | null | undefined
 ): boolean {
+  const cid = String(categoryId ?? "").trim();
+  if (cid && members.some((m) => String(m.category_id ?? "").trim() === cid)) {
+    return true;
+  }
+
   const code = normalizeCategoryToken(categoryCode);
   const name = normalizeCategoryToken(categoryName);
-  if (!code && !name) return true;
+  if (!code && !name && !cid) return true;
 
   const label = pairingGroupCategoryLabel(groupNotes);
   const labelNorm = normalizeCategoryToken(label);
   const labelCode = categoryCodeFromGroupNotes(groupNotes);
+  const expectedLabel = expectedGroupNotesLabel(categoryCode ?? null, categoryName ?? null);
+  const expectedNorm = normalizeCategoryToken(expectedLabel);
 
+  if (expectedNorm && (labelNorm === expectedNorm || label === expectedLabel)) {
+    return true;
+  }
   if (code && (labelCode === code || labelNorm === code || labelNorm.startsWith(`${code} `))) {
     return true;
   }
@@ -61,7 +79,6 @@ export function pairingGroupMatchesCategory(
   });
 }
 
-/** Publicado si cualquier ronda del bloque día/turno tiene orden confirmado. */
 export function isSessionStartingOrderPublished(
   sessionRounds: SessionRoundFields[],
   roundId: string,

@@ -52,15 +52,15 @@ import {
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
+import { type SessionRoundFields } from "@/app/(backoffice)/tee-sheet/sessionBlock";
+import { pairingGroupMatchesCategory } from "@/lib/tee-sheet/pairingGroupCategoryMatch";
 import {
-  categoryRoundIdInSession,
-  roundsInSameSession,
-  type SessionRoundFields,
-} from "@/app/(backoffice)/tee-sheet/sessionBlock";
-import {
-  isSessionStartingOrderPublished,
-  pairingGroupMatchesCategory,
-} from "@/lib/tee-sheet/pairingGroupCategoryMatch";
+  categoryRoundIdForPairingDisplay,
+  competitiveDayKey,
+  expandRoundIdsForPairingFetch,
+  publishedCompetitiveDayKeys,
+  roundIdsForPublishedCompetitiveDays,
+} from "@/lib/tee-sheet/publicTeeSheetScope";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
   fetchAllTournamentEntries,
@@ -290,12 +290,20 @@ export default async function PublicTournamentPage({
   const roundsInCategoryScope = rounds.filter((r) =>
     roundBelongsToCategory(r, selectedCategoryId || null)
   );
+  const publishedDayKeys = publishedCompetitiveDayKeys(rounds, roundNotesById);
   const publicTeeSheetRoundsAll = rounds.filter((round) =>
-    isSessionStartingOrderPublished(sessionRounds, round.id, roundNotesById)
+    publishedDayKeys.has(competitiveDayKey(round))
   );
-  const publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) =>
+  let publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) =>
     roundBelongsToCategory(round, selectedCategoryId || null)
   );
+  if (
+    publicTeeSheetRounds.length === 0 &&
+    selectedCategoryId &&
+    publicTeeSheetRoundsAll.length > 0
+  ) {
+    publicTeeSheetRounds = publicTeeSheetRoundsAll;
+  }
 
   const todayKey = utcTodayKey();
   const roundsTodayAll = rounds
@@ -481,9 +489,12 @@ export default async function PublicTournamentPage({
       : null;
 
   const teeSheetRoundIdForCategoryLink = (categoryId: string) => {
-    const categoryTeeRounds = publicTeeSheetRoundsAll.filter((round) =>
+    let categoryTeeRounds = publicTeeSheetRoundsAll.filter((round) =>
       roundBelongsToCategory(round, categoryId)
     );
+    if (categoryTeeRounds.length === 0) {
+      categoryTeeRounds = publicTeeSheetRoundsAll;
+    }
     if (preserveRoundNo != null) {
       const sameNo = categoryTeeRounds.find((r) => r.round_no === preserveRoundNo);
       if (sameNo) return sameNo.id;
@@ -835,13 +846,15 @@ export default async function PublicTournamentPage({
         : leaderboard;
   }
 
-  const publicRoundIds = [
-    ...new Set(
-      publicTeeSheetRounds.flatMap((round) =>
-        roundsInSameSession(sessionRounds, round.id).map((r) => r.id)
-      ),
-    ),
-  ];
+  const seedRoundIdsForPairing =
+    publicTeeSheetRounds.length > 0
+      ? publicTeeSheetRounds.map((round) => round.id)
+      : roundIdsForPublishedCompetitiveDays(sessionRounds, publishedDayKeys);
+
+  const publicRoundIds = expandRoundIdsForPairingFetch(
+    sessionRounds,
+    seedRoundIdsForPairing
+  );
 
   const standingDisplayByEntryRound = new Map<string, string>();
   const teeSheetTargetRoundNos = [
@@ -977,6 +990,7 @@ export default async function PublicTournamentPage({
       club_id: playerClubId,
       club_label: normalizeClubLabel(club),
       category_code: category?.code ?? category?.name ?? null,
+      category_id: category?.id ?? te?.category_id ?? null,
       handicap_index: te?.handicap_index ?? null,
       standing_display:
         memberRoundNo > 1
@@ -1002,7 +1016,7 @@ export default async function PublicTournamentPage({
   const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
     .map((group) => {
       const round = roundById.get(group.round_id) ?? null;
-      const displayRoundId = categoryRoundIdInSession(
+      const displayRoundId = categoryRoundIdForPairingDisplay(
         sessionRounds,
         group.round_id,
         selectedCategoryId || null
@@ -1022,22 +1036,29 @@ export default async function PublicTournamentPage({
         ),
       };
     })
-    .filter((group) => {
-      const round = roundById.get(group.round_id);
-      if (!round || !roundBelongsToCategory(round, selectedCategoryId || null)) {
-        return false;
-      }
-      return pairingGroupMatchesCategory(
+    .filter((group) =>
+      pairingGroupMatchesCategory(
         group.notes,
         group.members,
         selectedCategoryCode || selectedCategory?.code,
-        selectedCategory?.name
-      );
-    })
+        selectedCategory?.name,
+        selectedCategoryId || null
+      )
+    )
     .sort((a, b) => {
       if (a.round_no !== b.round_no) return a.round_no - b.round_no;
       return a.group_no - b.group_no;
     });
+
+  const teeSheetRoundNosWithGroups = new Set(
+    publicPairingGroups.map((group) => group.round_no).filter((n) => n > 0)
+  );
+
+  publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) => {
+    if (!publishedDayKeys.has(competitiveDayKey(round))) return false;
+    if (roundBelongsToCategory(round, selectedCategoryId || null)) return true;
+    return teeSheetRoundNosWithGroups.has(round.round_no);
+  });
 
   const pageTitle =
     view === "official"
@@ -1520,7 +1541,13 @@ export default async function PublicTournamentPage({
               selectedCategoryCode={
                 selectedCategory?.code ?? selectedCategory?.name ?? ""
               }
-              selectedRoundId={selectedPublicTeeSheetRoundId}
+              selectedRoundId={
+                publicTeeSheetRounds.some(
+                  (round) => round.id === selectedPublicTeeSheetRoundId
+                )
+                  ? selectedPublicTeeSheetRoundId
+                  : publicTeeSheetRounds[0]?.id ?? null
+              }
               labels={{
                 empty: pts.empty,
                 noGroupsFilter: pts.noGroupsFilter,

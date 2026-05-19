@@ -119,6 +119,7 @@ export type PairingMember = {
   player_name: string;
   club_id: string | null;
   club_label: string | null;
+  category_id: string | null;
   category_code: string | null;
   handicap_index: number | null;
   /** R2+: total acumulado para salidas (R1 o R1+R2). */
