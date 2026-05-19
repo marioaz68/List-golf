@@ -15,6 +15,7 @@ import {
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
 import {
   getAdvancementRulesForTargetRound,
+  getInformationalAdvancementRulesForDisplay,
   pickPrimaryAdvancementRule,
   primaryCutLineForCategory,
 } from "./computeCutLine";
@@ -35,12 +36,85 @@ function compareCutRank(
   return higherIsBetter ? b - a : a - b;
 }
 
+function advancementRulesForCutDisplay(
+  advancementRules: RoundAdvancementRule[],
+  selectedRoundNo: number
+): RoundAdvancementRule[] {
+  const enforcing = getAdvancementRulesForTargetRound(
+    advancementRules,
+    selectedRoundNo
+  );
+  if (enforcing.length > 0) return enforcing;
+  return getInformationalAdvancementRulesForDisplay(
+    advancementRules,
+    selectedRoundNo
+  );
+}
+
+function sortBucketByCutMetric(
+  bucket: LeaderboardRow[],
+  cutRule: RoundAdvancementRule,
+  params: {
+    selectedRoundNo: number;
+    rulesMap: Map<string, CategoryCompetitionRule>;
+    handicapByPlayerId: Map<string, number | null>;
+    strokeIndexByHole?: StrokeIndexByHole;
+    leaderboardViewOverride?: LeaderboardViewOverride | null;
+    alignWithLeaderboardDisplay?: boolean;
+  }
+): LeaderboardRow[] {
+  const sample = bucket[0];
+  if (!sample) return bucket;
+
+  const catRule = competitionRuleForCategory(params.rulesMap, sample.category_id);
+  const higherIsBetterCut = higherIsBetterForCutRule(
+    cutRule,
+    catRule,
+    params.leaderboardViewOverride
+  );
+  const rowRule = competitionRuleForCategory(params.rulesMap, sample.category_id);
+  const hiDisplay = isStablefordCategory(rowRule);
+
+  const ranked = bucket.map((row) => {
+    const v = rankValueForAdvancementRule(
+      row,
+      cutRule,
+      params.selectedRoundNo,
+      params.rulesMap,
+      params.handicapByPlayerId,
+      params.strokeIndexByHole,
+      params.leaderboardViewOverride,
+      { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
+    );
+    return { row, cutSortValue: v.primary };
+  });
+
+  ranked.sort((a, b) => {
+    if (a.row.is_disqualified && !b.row.is_disqualified) return 1;
+    if (!a.row.is_disqualified && b.row.is_disqualified) return -1;
+
+    const cmp = compareCutRank(a.cutSortValue, b.cutSortValue, higherIsBetterCut);
+    if (cmp !== 0) return cmp;
+
+    const displayCmp = compareLeaderboardRows(a.row, b.row, hiDisplay);
+    if (displayCmp !== 0) return displayCmp;
+
+    return String(a.row.player_name ?? "").localeCompare(
+      String(b.row.player_name ?? ""),
+      "es"
+    );
+  });
+
+  return ranked.map((r) => r.row);
+}
+
 /**
- * Ordena cada categoría según la misma métrica del corte (neto/gross/puntos),
- * para que la línea de corte quede en el lugar correcto.
+ * Ordena: primero quienes pasan el corte (por métrica de corte), luego el resto (por to-par en tabla).
+ * Así la línea queda exactamente tras el cupo (p. ej. 35 de 70), no tras el orden solo de la tabla.
  */
-export function sortLeaderboardForCutAlignment(params: {
+export function orderLeaderboardForCutDisplay(params: {
   rows: LeaderboardRow[];
+  cutLines: PublicCutLine[];
   advancementRules: RoundAdvancementRule[];
   categories: CategoryMeta[];
   selectedRoundNo: number;
@@ -50,14 +124,12 @@ export function sortLeaderboardForCutAlignment(params: {
   leaderboardViewOverride?: LeaderboardViewOverride | null;
   alignWithLeaderboardDisplay?: boolean;
 }): LeaderboardRow[] {
-  const enforcing = getAdvancementRulesForTargetRound(
+  if (params.cutLines.length === 0) return params.rows;
+
+  const activeRules = advancementRulesForCutDisplay(
     params.advancementRules,
     params.selectedRoundNo
   );
-  if (enforcing.length === 0) {
-    return params.rows;
-  }
-
   const rulesMap = rulesByCategoryId(params.competitionRules);
   const groups = new Map<string, LeaderboardRow[]>();
   const categoryOrder: string[] = [];
@@ -75,67 +147,63 @@ export function sortLeaderboardForCutAlignment(params: {
 
   for (const catKey of categoryOrder) {
     const bucket = groups.get(catKey) ?? [];
-    const sample = bucket[0];
-    if (!sample) continue;
-
-    const cutRule = pickPrimaryAdvancementRule(
-      enforcing,
-      sample,
-      params.categories
+    const line = primaryCutLineForCategory(
+      params.cutLines.filter((l) => l.categoryId === catKey),
+      catKey
     );
-
-    if (!cutRule) {
+    if (!line) {
       sorted.push(...bucket);
       continue;
     }
 
-    const catRule = competitionRuleForCategory(rulesMap, sample.category_id);
-    const higherIsBetterCut = higherIsBetterForCutRule(
-      cutRule,
-      catRule,
-      params.leaderboardViewOverride
-    );
-    const rowRule = competitionRuleForCategory(rulesMap, sample.category_id);
-    const hiDisplay = isStablefordCategory(rowRule);
+    const sample = bucket[0];
+    const cutRule =
+      sample && activeRules.length > 0
+        ? pickPrimaryAdvancementRule(activeRules, sample, params.categories)
+        : null;
 
-    const ranked = bucket.map((row) => {
-      const v = rankValueForAdvancementRule(
-        row,
-        cutRule,
-        params.selectedRoundNo,
-        rulesMap,
-        params.handicapByPlayerId,
-        params.strokeIndexByHole,
-        params.leaderboardViewOverride,
-        { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
-      );
-      return { row, cutSortValue: v.primary };
-    });
+    const pass: LeaderboardRow[] = [];
+    const fail: LeaderboardRow[] = [];
+    for (const row of bucket) {
+      if (line.madeCutEntryIds.has(row.entry_id)) pass.push(row);
+      else fail.push(row);
+    }
 
-    ranked.sort((a, b) => {
-      if (a.row.is_disqualified && !b.row.is_disqualified) return 1;
-      if (!a.row.is_disqualified && b.row.is_disqualified) return -1;
+    const sortParams = {
+      selectedRoundNo: params.selectedRoundNo,
+      rulesMap,
+      handicapByPlayerId: params.handicapByPlayerId,
+      strokeIndexByHole: params.strokeIndexByHole,
+      leaderboardViewOverride: params.leaderboardViewOverride,
+      alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay,
+    };
 
-      const displayCmp = compareLeaderboardRows(a.row, b.row, hiDisplay);
-      if (displayCmp !== 0) return displayCmp;
+    const passSorted = cutRule
+      ? sortBucketByCutMetric(pass, cutRule, sortParams)
+      : pass;
+    const failSorted = cutRule
+      ? sortBucketByCutMetric(fail, cutRule, sortParams)
+      : fail;
 
-      const cmp = compareCutRank(
-        a.cutSortValue,
-        b.cutSortValue,
-        higherIsBetterCut
-      );
-      if (cmp !== 0) return cmp;
-
-      return String(a.row.player_name ?? "").localeCompare(
-        String(b.row.player_name ?? ""),
-        "es"
-      );
-    });
-
-    sorted.push(...ranked.map((r) => r.row));
+    sorted.push(...passSorted, ...failSorted);
   }
 
   return sorted;
+}
+
+/** @deprecated Use orderLeaderboardForCutDisplay */
+export function sortLeaderboardForCutAlignment(params: {
+  rows: LeaderboardRow[];
+  advancementRules: RoundAdvancementRule[];
+  categories: CategoryMeta[];
+  selectedRoundNo: number;
+  competitionRules: CategoryCompetitionRule[];
+  handicapByPlayerId: Map<string, number | null>;
+  strokeIndexByHole?: StrokeIndexByHole;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
+  alignWithLeaderboardDisplay?: boolean;
+}): LeaderboardRow[] {
+  return params.rows;
 }
 
 /** Una sola línea de corte por categoría (antes de la primera fila que no pasó). */

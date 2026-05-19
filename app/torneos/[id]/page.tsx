@@ -23,7 +23,7 @@ import {
 import {
   activeCutLineForUi,
   annotateCutDividers,
-  sortLeaderboardForCutAlignment,
+  orderLeaderboardForCutDisplay,
 } from "@/lib/cuts/publicCutDisplay";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
 import {
@@ -826,8 +826,10 @@ export default async function PublicTournamentPage({
       alignWithLeaderboardDisplay: includeIncompleteRounds,
     });
 
+    const showCutOnLeaderboard = publicCutLines.length > 0;
+
     const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
-      if (!cutEnforcesForSelectedRound || row.is_disqualified) {
+      if (!showCutOnLeaderboard || row.is_disqualified) {
         return { ...row, made_cut: null };
       }
       const line = primaryCutLineForCategory(
@@ -843,9 +845,10 @@ export default async function PublicTournamentPage({
       };
     });
 
-    const alignedForCut = cutEnforcesForSelectedRound
-      ? sortLeaderboardForCutAlignment({
+    const orderedForCut = showCutOnLeaderboard
+      ? orderLeaderboardForCutDisplay({
           rows: withMadeCut,
+          cutLines: publicCutLines,
           advancementRules: advancementRulesList,
           categories: categories.map((c) => ({
             id: c.id,
@@ -861,7 +864,7 @@ export default async function PublicTournamentPage({
       : withMadeCut;
 
     leaderboard = annotateCutDividers(
-      alignedForCut,
+      orderedForCut,
       publicCutLines,
       isFavoritesView ? null : selectedCategoryId || null
     );
