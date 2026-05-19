@@ -92,6 +92,19 @@ export function roundsInSameSession<T extends SessionRoundFields>(
   return rounds.filter((x) => sessionBlockKey(x) === k).sort(compareRoundsInSession);
 }
 
+/** Fila `rounds` de la categoría en el mismo bloque día/turno (p. ej. salidas shotgun). */
+export function categoryRoundIdInSession<T extends SessionRoundFields>(
+  rounds: T[],
+  fromRoundId: string,
+  categoryId: string | null | undefined
+): string {
+  const cat = String(categoryId ?? "").trim();
+  if (!cat) return fromRoundId;
+  const session = roundsInSameSession(rounds, fromRoundId);
+  const match = session.find((r) => String(r.category_id ?? "").trim() === cat);
+  return match?.id ?? fromRoundId;
+}
+
 /** Extrae `YYYY-MM-DD` desde ISO (`2025-10-15T00:00:00Z`) o cadena corta. */
 export function toYyyyMmDd(raw: string | null | undefined): string | null {
   if (!raw) return null;

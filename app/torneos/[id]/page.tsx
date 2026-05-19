@@ -52,6 +52,11 @@ import {
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
+import {
+  categoryRoundIdInSession,
+  roundsInSameSession,
+  type SessionRoundFields,
+} from "@/app/(backoffice)/tee-sheet/sessionBlock";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
   fetchAllTournamentEntries,
@@ -814,7 +819,24 @@ export default async function PublicTournamentPage({
         : leaderboard;
   }
 
-  const publicRoundIds = publicTeeSheetRounds.map((round) => round.id);
+  const sessionRounds: SessionRoundFields[] = rounds.map((round) => ({
+    id: round.id,
+    tournament_id: typedTournament.id,
+    category_id: round.category_id ?? null,
+    round_no: round.round_no,
+    round_date: round.round_date,
+    start_type: round.start_type,
+    start_time: round.start_time,
+    wave: round.wave ?? null,
+  }));
+
+  const publicRoundIds = [
+    ...new Set(
+      publicTeeSheetRounds.flatMap((round) =>
+        roundsInSameSession(sessionRounds, round.id).map((r) => r.id)
+      ),
+    ),
+  ];
 
   const standingDisplayByEntryRound = new Map<string, string>();
   const teeSheetTargetRoundNos = [
@@ -964,17 +986,6 @@ export default async function PublicTournamentPage({
     membersByGroup.set(row.group_id, list);
   }
 
-  const sessionRounds = rounds.map((round) => ({
-    id: round.id,
-    tournament_id: typedTournament.id,
-    category_id: round.category_id ?? null,
-    round_no: round.round_no,
-    round_date: round.round_date,
-    start_type: round.start_type,
-    start_time: round.start_time,
-    wave: round.wave ?? null,
-  }));
-
   const labelByGroupId = buildPairingGroupLabelsBySession(
     pairingGroupsRaw,
     sessionRounds
@@ -986,9 +997,14 @@ export default async function PublicTournamentPage({
   const publicPairingGroups: PublicPairingGroup[] = pairingGroupsRaw
     .map((group) => {
       const round = roundById.get(group.round_id) ?? null;
+      const displayRoundId = categoryRoundIdInSession(
+        sessionRounds,
+        group.round_id,
+        selectedCategoryId || null
+      );
       return {
         id: group.id,
-        round_id: group.round_id,
+        round_id: displayRoundId,
         round_no: round?.round_no ?? 0,
         round_date: round?.round_date ?? null,
         group_no: Number(group.group_no ?? 0),
@@ -1493,7 +1509,10 @@ export default async function PublicTournamentPage({
               groups={publicPairingGroups}
               rounds={publicTeeSheetRounds}
               tournamentId={typedTournament.id}
-              selectedCategoryId={selectedCategory?.code ?? selectedCategory?.name ?? ""}
+              selectedCategoryUuid={selectedCategoryId ?? ""}
+              selectedCategoryCode={
+                selectedCategory?.code ?? selectedCategory?.name ?? ""
+              }
               selectedRoundId={selectedPublicTeeSheetRoundId}
               labels={{
                 empty: pts.empty,

@@ -12,11 +12,16 @@ import {
   sectionPillClasses,
 } from "../lib/utils";
 
+function normalizeCategoryToken(value: string | null | undefined) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
 type PublicTeeSheetViewProps = {
   groups: PublicPairingGroup[];
   rounds: RoundRow[];
   tournamentId: string;
-  selectedCategoryId: string;
+  selectedCategoryUuid: string;
+  selectedCategoryCode: string;
   selectedRoundId: string | null;
   labels: {
     empty: string;
@@ -46,7 +51,8 @@ export default function PublicTeeSheetView({
   groups,
   rounds,
   tournamentId,
-  selectedCategoryId,
+  selectedCategoryUuid,
+  selectedCategoryCode,
   selectedRoundId,
   labels,
 }: PublicTeeSheetViewProps) {
@@ -62,13 +68,15 @@ export default function PublicTeeSheetView({
     .filter((group) => !activeRoundId || group.round_id === activeRoundId)
     .map((group) => ({
       ...group,
-      members: selectedCategoryId
+      members: selectedCategoryCode
         ? group.members.filter(
-            (member) => member.category_code === selectedCategoryId
+            (member) =>
+              normalizeCategoryToken(member.category_code) ===
+              normalizeCategoryToken(selectedCategoryCode)
           )
         : group.members,
     }))
-    .filter((group) => group.members.length > 0 || !selectedCategoryId);
+    .filter((group) => group.members.length > 0 || !selectedCategoryCode);
 
   const groupsByRound = new Map<string, PublicPairingGroup[]>();
   for (const group of filteredGroups) {
@@ -94,7 +102,7 @@ export default function PublicTeeSheetView({
               key={round.id}
               href={buildHref({
                 tournamentId,
-                categoryId: selectedCategoryId || null,
+                categoryId: selectedCategoryUuid || null,
                 roundId: round.id,
                 view: "tee-sheet",
               })}
