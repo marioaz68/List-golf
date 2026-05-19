@@ -52,6 +52,8 @@ import {
   resolvePublicRoundIdForCategory,
 } from "@/lib/rounds/resolveDefaultPublicLeaderboardRound";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
+import PublicConvocatoriaView from "./components/PublicConvocatoriaView";
+import { fetchPublicConvocatoria } from "./lib/fetchPublicConvocatoria";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
 import { type SessionRoundFields } from "@/app/(backoffice)/tee-sheet/sessionBlock";
@@ -152,9 +154,11 @@ export default async function PublicTournamentPage({
       ? "official"
       : requestedView === "favorites"
         ? "favorites"
-        : requestedView === "tee-sheet" || requestedView === "salidas"
-          ? "tee-sheet"
-          : "live";
+        : requestedView === "convocatoria"
+          ? "convocatoria"
+          : requestedView === "tee-sheet" || requestedView === "salidas"
+            ? "tee-sheet"
+            : "live";
 
   const supabase = await createClient();
 
@@ -166,6 +170,7 @@ export default async function PublicTournamentPage({
 
   const locale = await getLocale();
   const pub = messages[locale].publicTournament;
+  const cv = messages[locale].convocatoria;
   const detailTableLabels = detailLabelsFromPublicTournament(pub);
   const pts = messages[locale].publicTeeSheet;
   const common = messages[locale].common;
@@ -195,6 +200,39 @@ export default async function PublicTournamentPage({
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tournament-posters/${typedTournament.poster_path}`
     : null;
 
+  const publicConvocatoria = await fetchPublicConvocatoria(typedTournament.id, {
+    generalHeading: pub.convocatoriaGeneralHeading,
+    metaPracticeDay: cv.metaPracticeDay,
+    metaHandicapDate: cv.metaHandicapDate,
+    metaRounds: cv.metaRounds,
+    metaHoles: cv.metaHoles,
+    metaCutHoles: cv.metaCutHoles,
+    metaCutPct: cv.metaCutPct,
+    categoriesHeading: pub.convocatoriaCategoriesHeading,
+    system: cv.refSystem,
+    gentlemen: cv.refGentlemen,
+    ladies: cv.refLadies,
+    seniors_ages: cv.refSeniorsAges,
+    cut_policy: cv.refCutPolicy,
+    cut_tiebreak_gross: cv.refCutTiebreakGross,
+    cut_tiebreak_stableford: cv.refCutTiebreakStableford,
+    cut_tiebreak_seniors: cv.refCutTiebreakSeniors,
+    trophy_tiebreak: cv.refTrophyTiebreak,
+    trophies: cv.refTrophies,
+    out_of_scope: cv.refOutOfScope,
+  });
+
+  if (view === "convocatoria" && !publicConvocatoria.visible) {
+    redirect(
+      buildHref({
+        tournamentId: typedTournament.id,
+        view: "live",
+        embed: isEmbed,
+        fromAdmin: isEmbed && fromAdmin ? true : undefined,
+      })
+    );
+  }
+
   const entriesData = await fetchAllTournamentEntries(
     supabase,
     typedTournament.id
@@ -220,12 +258,14 @@ export default async function PublicTournamentPage({
 
   const defaultCategoryId = categories[0]?.id ?? "";
   const isFavoritesView = view === "favorites";
+  const isConvocatoriaView = view === "convocatoria";
 
   if (
     categories.length > 0 &&
     !requestedCategoryId &&
     defaultCategoryId &&
-    !isFavoritesView
+    !isFavoritesView &&
+    !isConvocatoriaView
   ) {
     redirect(
       buildHref({
@@ -1103,7 +1143,9 @@ export default async function PublicTournamentPage({
         ? pub.pageTitleFavorites
         : view === "tee-sheet"
           ? pub.pageTitleTeeSheet
-          : pub.pageTitleLive;
+          : view === "convocatoria"
+            ? pub.pageTitleConvocatoria
+            : pub.pageTitleLive;
 
   const pageDescription =
     view === "official"
@@ -1112,7 +1154,9 @@ export default async function PublicTournamentPage({
         ? pub.pageDescFavorites
         : view === "tee-sheet"
           ? pub.pageDescTeeSheet
-          : pub.pageDescLive;
+          : view === "convocatoria"
+            ? pub.pageDescConvocatoria
+            : pub.pageDescLive;
 
   const tHref = (opts: {
     categoryId?: string | null;
@@ -1255,6 +1299,18 @@ export default async function PublicTournamentPage({
               >
                 {pub.favorites}
               </Link>
+
+              {publicConvocatoria.visible ? (
+                <Link
+                  scroll={false}
+                  href={tHref({ view: "convocatoria" })}
+                  className={publicTournamentViewPillClasses(
+                    view === "convocatoria"
+                  )}
+                >
+                  {pub.convocatoria}
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -1296,14 +1352,14 @@ export default async function PublicTournamentPage({
                   {pageTitle}
                 </span>
 
-                {selectedCategory && !isFavoritesView ? (
+                {selectedCategory && !isFavoritesView && !isConvocatoriaView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {pub.categoryChip}{" "}
                     {selectedCategory.code ?? selectedCategory.name ?? "—"}
                   </span>
                 ) : null}
 
-                {selectedRound && !isFavoritesView ? (
+                {selectedRound && !isFavoritesView && !isConvocatoriaView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {formatPublicRoundNavPill(selectedRound, locale)}
                   </span>
@@ -1316,7 +1372,8 @@ export default async function PublicTournamentPage({
             </div>
           </div>
 
-          {(categories.length > 0 || rounds.length > 0) && (
+          {(categories.length > 0 || rounds.length > 0) &&
+          !isConvocatoriaView && (
             <div className="mt-6 flex flex-col gap-3">
               {categories.length > 0 && !isFavoritesView ? (
                 <div className="flex flex-wrap gap-2">
@@ -1558,14 +1615,24 @@ export default async function PublicTournamentPage({
 
       <section className="bg-[#08111f]">
         <div className="mx-auto w-full max-w-[1600px] px-3 py-8 sm:px-4 lg:px-6 xl:px-8">
-          {view !== "tee-sheet" && rulesBlocked ? (
+          {view !== "tee-sheet" &&
+          view !== "convocatoria" &&
+          rulesBlocked ? (
             <PublicRulesBlockedView
               blockers={rulesBlockers}
               labels={rulesBlockedLabels}
             />
           ) : null}
 
-          {view === "tee-sheet" ? (
+          {view === "convocatoria" ? (
+            <PublicConvocatoriaView
+              sections={publicConvocatoria.sections}
+              labels={{
+                empty: pub.convocatoriaEmpty,
+                readOnlyNote: pub.convocatoriaReadOnlyNote,
+              }}
+            />
+          ) : view === "tee-sheet" ? (
             <PublicTeeSheetView
               groups={publicPairingGroups}
               rounds={publicTeeSheetRounds}
@@ -1626,7 +1693,9 @@ export default async function PublicTournamentPage({
               rounds={roundsForLock}
               lockedLookups={lockedLookups}
             />
-          ) : view === "tee-sheet" || rulesBlocked ? null : (
+          ) : view === "tee-sheet" ||
+            view === "convocatoria" ||
+            rulesBlocked ? null : (
             <>
               {selectedCategory && headerCompetitionRule ? (
                 <div className="mb-4 grid gap-3 lg:grid-cols-2">

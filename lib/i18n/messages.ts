@@ -920,6 +920,7 @@ const es = {
     leaderboard: "Clasificación",
     teeSheet: "Salidas/Grupos",
     favorites: "Favoritos",
+    convocatoria: "Convocatoria",
     eSignature: "✍️ Firma electrónica",
     posterAlt: "Poster torneo",
     allCategories: "Todas las categorías",
@@ -932,6 +933,15 @@ const es = {
     pageTitleOfficial: "Resultados oficiales",
     pageTitleFavorites: "Mis favoritos",
     pageTitleTeeSheet: "Salidas/Grupos",
+    pageTitleConvocatoria: "Convocatoria",
+    pageDescConvocatoria:
+      "Reglas y condiciones del torneo publicadas por el comité. Documento de solo lectura.",
+    convocatoriaEmpty:
+      "La convocatoria aún no está publicada para este torneo.",
+    convocatoriaReadOnlyNote:
+      "Documento informativo. No se puede editar desde esta página.",
+    convocatoriaGeneralHeading: "Datos generales",
+    convocatoriaCategoriesHeading: "Categorías",
     pageDescOfficial:
       "Resultados verificados por la administración del torneo.",
     pageDescFavorites:
@@ -2091,6 +2101,7 @@ const en: Messages = {
     leaderboard: "Leaderboard",
     teeSheet: "Starters / Groups",
     favorites: "Favorites",
+    convocatoria: "Tournament call",
     eSignature: "✍️ E-signature",
     posterAlt: "Tournament poster",
     allCategories: "All categories",
@@ -2103,6 +2114,14 @@ const en: Messages = {
     pageTitleOfficial: "Official results",
     pageTitleFavorites: "My favorites",
     pageTitleTeeSheet: "Starters / Groups",
+    pageTitleConvocatoria: "Tournament call",
+    pageDescConvocatoria:
+      "Tournament rules and conditions published by the committee. Read-only document.",
+    convocatoriaEmpty: "The tournament call is not published yet.",
+    convocatoriaReadOnlyNote:
+      "Informational document. It cannot be edited from this page.",
+    convocatoriaGeneralHeading: "General information",
+    convocatoriaCategoriesHeading: "Categories",
     pageDescOfficial: "Results verified by tournament administration.",
     pageDescFavorites: "Quick follow-up for players marked as favorites.",
     favoritesAllCategoriesHint:
