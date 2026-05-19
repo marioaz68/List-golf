@@ -1,28 +1,14 @@
 import Link from "next/link";
 import Image from "next/image";
-import { UserNavIconLink } from "@/components/public/UserNavIconLink";
-import { messages } from "@/lib/i18n/messages";
+import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { getLocale } from "@/lib/i18n/server";
-import { createClient } from "@/utils/supabase/server";
 
 export default async function AppHeader() {
   const locale = await getLocale();
-  const nav = messages[locale].nav;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const displayName = user?.email ?? "Usuario";
-  const initial = displayName.charAt(0).toUpperCase();
-
-  const pillBase =
-    "inline-flex min-h-10 min-w-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10 sm:rounded-[18px] sm:px-5 sm:text-base";
 
   return (
     <header className="border-b border-white/10 bg-[#08111f]/80 backdrop-blur">
-      <div className="mx-auto flex max-w-[1700px] flex-wrap items-center justify-between gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
+      <div className="mx-auto flex max-w-[1700px] items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-4">
         <Link href="/" className="flex min-w-0 shrink-0 items-center">
           <Image
             src="/logo-main.png"
@@ -34,43 +20,7 @@ export default async function AppHeader() {
           />
         </Link>
 
-        <div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
-          {!user && (
-            <UserNavIconLink
-              href="/login"
-              className={pillBase}
-              label={nav.enter}
-            />
-          )}
-
-          {user && (
-            <>
-              <Link href="/tournaments" className={pillBase}>
-                Torneos
-              </Link>
-
-              <Link href="/users" className={pillBase}>
-                Usuarios
-              </Link>
-
-              <div className="inline-flex min-h-10 max-w-full min-w-0 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-2 py-1.5 text-white sm:gap-3 sm:rounded-[18px] sm:px-4 sm:py-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-[#08111f]">
-                  {initial}
-                </div>
-
-                <span className="min-w-0 max-w-[min(12rem,45vw)] truncate text-sm font-semibold sm:max-w-[14rem] sm:text-base">
-                  {displayName}
-                </span>
-              </div>
-
-              <form action="/auth/signout" method="post" className="shrink-0">
-                <button type="submit" className={pillBase}>
-                  Salir
-                </button>
-              </form>
-            </>
-          )}
-        </div>
+        <PublicTopBarCorner locale={locale} />
       </div>
     </header>
   );

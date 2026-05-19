@@ -1,12 +1,10 @@
 import Link from "next/link";
-import { UserNavIconLink } from "@/components/public/UserNavIconLink";
-import { messages } from "@/lib/i18n/messages";
+import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { getLocale } from "@/lib/i18n/server";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function PublicNavbar() {
   const locale = await getLocale();
-  const nav = messages[locale].nav;
   const supabase = await createClient();
 
   const {
@@ -28,14 +26,7 @@ export default async function PublicNavbar() {
         </Link>
 
         <div className="flex items-center gap-3">
-          {!user ? (
-            <UserNavIconLink
-              href="/login"
-              className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400 text-[#08111f] transition hover:opacity-90"
-              label={nav.enter}
-              iconClassName="h-6 w-6"
-            />
-          ) : null}
+          <PublicTopBarCorner locale={locale} />
 
           {user ? (
             <>
@@ -46,7 +37,7 @@ export default async function PublicNavbar() {
                 Usuarios
               </Link>
 
-              <div className="hidden md:flex h-12 items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 text-white">
+              <div className="hidden h-12 items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 text-white md:flex">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400 text-base font-bold text-[#08111f]">
                   {initial}
                 </div>

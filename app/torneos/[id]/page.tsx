@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { UserNavIconLink } from "@/components/public/UserNavIconLink";
+import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -95,7 +95,6 @@ import {
   isStartingOrderConfirmed,
   nameOfPlayer,
   normalizeClubLabel,
-  publicTournamentEmeraldHeroNavClasses,
   publicTournamentOutboundNavClasses,
   publicTournamentPrimaryNavGridClass,
   publicTournamentSecondaryNavGridClass,
@@ -110,7 +109,6 @@ import {
 } from "./lib/utils";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
-import { PublicLanguageToggle } from "@/components/i18n/PublicLanguageToggle";
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 
 export const dynamic = "force-dynamic";
@@ -167,7 +165,6 @@ export default async function PublicTournamentPage({
   const isLoggedIn = !!user;
 
   const locale = await getLocale();
-  const nav = messages[locale].nav;
   const pub = messages[locale].publicTournament;
   const detailTableLabels = detailLabelsFromPublicTournament(pub);
   const pts = messages[locale].publicTeeSheet;
@@ -1176,12 +1173,12 @@ export default async function PublicTournamentPage({
                   <PublicInstallShortcut locale={locale} />
                 </div>
                 <div className="flex shrink-0 justify-end">
-                  <PublicLanguageToggle locale={locale} />
+                  <PublicTopBarCorner locale={locale} />
                 </div>
               </div>
             ) : (
               <div className="flex justify-end border-b border-white/10 pb-2">
-                <PublicLanguageToggle locale={locale} />
+                <PublicTopBarCorner locale={locale} />
               </div>
             )}
 
@@ -1200,20 +1197,6 @@ export default async function PublicTournamentPage({
               >
                 {pub.seeTournaments}
               </Link>
-
-              {isLoggedIn ? (
-                <UserNavIconLink
-                  href="/tournaments"
-                  className={publicTournamentEmeraldHeroNavClasses()}
-                  label={pub.adminList}
-                />
-              ) : (
-                <UserNavIconLink
-                  href="/login"
-                  className={publicTournamentOutboundNavClasses()}
-                  label={nav.enter}
-                />
-              )}
             </div>
             ) : null}
 

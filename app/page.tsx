@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
-import { PublicLanguageToggle } from "@/components/i18n/PublicLanguageToggle";
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 
 type SearchParams = Promise<{
@@ -381,13 +380,8 @@ export default async function HomePage({
   return (
     <main className="min-h-screen bg-[#08111f] text-white">
       <section className="border-b border-white/10 bg-[#08111f]">
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:px-5">
-          <div className="flex min-w-0 shrink-0 justify-start">
-            <PublicInstallShortcut locale={locale} />
-          </div>
-          <div className="flex shrink-0 justify-end">
-            <PublicLanguageToggle locale={locale} />
-          </div>
+        <div className="flex w-full items-center border-b border-white/10 px-4 py-2.5 sm:px-5">
+          <PublicInstallShortcut locale={locale} />
         </div>
 
         <div className="mx-auto max-w-[1700px] px-4 py-4 sm:px-5">
