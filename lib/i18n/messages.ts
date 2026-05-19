@@ -473,6 +473,19 @@ const es = {
       "No se puede capturar la ronda {round}: la ronda {prior} debe estar cerrada para todos los jugadores activos de la categoría {category}.",
     registrationOpenGate:
       "Inscripciones abiertas. Cierra inscripciones antes de capturar tarjetas en torneo.",
+    labelTournament: "Torneo",
+    selectTournament: "Selecciona un torneo",
+    selectTournamentHint:
+      "Elige el torneo antes de buscar al jugador. Así la captura y las rondas coinciden con el evento correcto.",
+    roundSwitcherKicker: "Ronda a capturar o corregir",
+    roundCurrent: "En pantalla",
+    roundClosed: "Cerrada · pulsa ABRIR abajo",
+    roundOpen: "Con captura",
+    roundEmpty: "Sin captura",
+    misalignedCapture:
+      "Hay scores guardados en otra fila de ronda de este torneo. Elige la ronda correcta arriba o usa «Reparar capturas» (directores).",
+    playerFoundHint:
+      "Para corregir R1 con R2 ya iniciada: elige «R1» arriba, luego «ABRIR», corrige y guarda.",
   },
   scorecards: {
     title: "Tarjeta de puntuación (prueba con Supabase)",
@@ -1613,6 +1626,19 @@ const en: Messages = {
       "Round {round} score entry is blocked: round {prior} must be closed for all active players in category {category}.",
     registrationOpenGate:
       "Registration is still open. Close registration before capturing scorecards.",
+    labelTournament: "Tournament",
+    selectTournament: "Select a tournament",
+    selectTournamentHint:
+      "Choose the tournament before searching for a player so rounds and scores match the right event.",
+    roundSwitcherKicker: "Round to enter or correct",
+    roundCurrent: "On screen",
+    roundClosed: "Closed · tap OPEN below",
+    roundOpen: "Has scores",
+    roundEmpty: "No scores yet",
+    misalignedCapture:
+      "Scores exist on a different round row for this tournament. Pick the correct round above or use «Repair captures» (directors).",
+    playerFoundHint:
+      "To fix R1 while R2 is in progress: select «R1» above, then «OPEN», edit, and save.",
   },
   scorecards: {
     title: "Live scorecard (Supabase test)",

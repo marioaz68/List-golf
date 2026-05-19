@@ -16,7 +16,15 @@ import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import { fmt } from "@/lib/i18n/fmt";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
+import {
+  isEntryRoundClosed,
+  type LockedScorecardLookups,
+} from "@/lib/leaderboard/lockedScorecards";
 import { roundRowAppliesToEntry } from "@/lib/leaderboard/roundCategoryMatch";
+import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
+import ScoreEntryRoundSwitcher, {
+  type ScoreEntryRoundLink,
+} from "./ScoreEntryRoundSwitcher";
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
 import { countHolesOnPlayerRound } from "@/lib/scorecards/countHolesOnPlayerRound";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
@@ -315,13 +323,31 @@ export default async function ScoreEntryPage(props: {
   const roundsMissingDate =
     roundListAll.length > 0 && roundList.length === 0;
 
+  const tournamentIdsInSystem = [
+    ...new Set(
+      roundListAll.map((r) => r.tournament_id).filter((id): id is string => !!id)
+    ),
+  ];
+
+  let tournamentOptions: Array<{ id: string; name: string | null }> = [];
+  if (tournamentIdsInSystem.length > 0) {
+    const { data: tournamentRows } = await supabase
+      .from("tournaments")
+      .select("id, name, start_date")
+      .in("id", tournamentIdsInSystem)
+      .order("start_date", { ascending: false });
+    tournamentOptions = (tournamentRows ?? []) as Array<{
+      id: string;
+      name: string | null;
+    }>;
+  }
+
   const effectiveTournamentId =
     tournamentIdFromQuery ||
     (requestedRoundId
       ? roundListAll.find((r) => r.id === requestedRoundId)?.tournament_id ?? ""
       : "") ||
-    roundListAll[0]?.tournament_id ||
-    "";
+    (tournamentIdsInSystem.length === 1 ? tournamentIdsInSystem[0]! : "");
 
   let canRepairCaptures = false;
 
@@ -363,6 +389,9 @@ export default async function ScoreEntryPage(props: {
   let entryCategoryLabel = messages[locale].common.noCategory;
   let registrationOpenMessage = "";
   let tournamentSettings: unknown = null;
+  let gateLookupsForEntry: LockedScorecardLookups | null = null;
+  let matchedEntryForLinks: ValidEntryRow | null = null;
+  let scoreEntryRoundLinks: ScoreEntryRoundLink[] = [];
   const roundCloseStatuses: ReturnType<typeof buildTournamentRoundCloseStatus>[] =
     [];
 
@@ -491,6 +520,7 @@ export default async function ScoreEntryPage(props: {
       }
 
       if (matchedEntry) {
+        matchedEntryForLinks = matchedEntry;
         entryIdForScorecard = matchedEntry.id;
         entryCategoryLabel =
           matchedEntry.category?.code?.trim() ||
@@ -514,6 +544,7 @@ export default async function ScoreEntryPage(props: {
           supabase,
           effectiveTournamentId
         );
+        gateLookupsForEntry = gateCtx.lookups;
         const roundsForCapture = roundListAll.filter(
           (r) => r.tournament_id === effectiveTournamentId
         ) as SessionRoundFields[];
@@ -830,6 +861,66 @@ export default async function ScoreEntryPage(props: {
     }
   }
 
+  if (
+    matchedEntryForLinks &&
+    player &&
+    effectiveTournamentId &&
+    searchRaw &&
+    gateLookupsForEntry
+  ) {
+    const roundNos = [
+      ...new Set(
+        roundListAll
+          .filter((r) => r.tournament_id === effectiveTournamentId)
+          .filter((r) =>
+            roundRowAppliesToEntry(
+              { category_id: r.category_id ?? null },
+              matchedEntryForLinks.category_id
+            )
+          )
+          .map((r) => r.round_no)
+      ),
+    ].sort((a, b) => a - b);
+
+    const currentRoundNo =
+      roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+      requestedRoundNo ??
+      roundNos[0] ??
+      1;
+
+    scoreEntryRoundLinks = roundNos.map((roundNo) => {
+      const round = getRoundForCategory(
+        roundListAll,
+        roundNo,
+        matchedEntryForLinks.category_id
+      );
+      const qs = new URLSearchParams();
+      qs.set("tournament_id", effectiveTournamentId);
+      qs.set("q", searchRaw);
+      qs.set("entry_id", matchedEntryForLinks.id);
+      qs.set("round_no", String(roundNo));
+
+      const captured = capturedRounds.find((c) => c.round_no === roundNo);
+      const hasCapture = Boolean(
+        captured && Object.keys(captured.scores).length > 0
+      );
+
+      return {
+        roundNo,
+        href: `/score-entry?${qs.toString()}`,
+        isCurrent: roundNo === currentRoundNo,
+        isClosed: round
+          ? isEntryRoundClosed(
+              matchedEntryForLinks.id,
+              round,
+              gateLookupsForEntry
+            )
+          : false,
+        hasCapture,
+      };
+    });
+  }
+
   return (
     <div className="p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
@@ -848,12 +939,38 @@ export default async function ScoreEntryPage(props: {
           </div>
         )}
 
-        <form className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <input
-            type="hidden"
-            name="tournament_id"
-            value={effectiveTournamentId}
-          />
+        <form
+          method="get"
+          className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+        >
+          <div className="grid gap-4">
+            {tournamentOptions.length > 0 ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  {se.labelTournament}
+                </label>
+                <select
+                  name="tournament_id"
+                  defaultValue={effectiveTournamentId}
+                  required
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base text-black"
+                >
+                  {tournamentOptions.length > 1 ? (
+                    <option value="">{se.selectTournament}</option>
+                  ) : null}
+                  {tournamentOptions.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name?.trim() || t.id.slice(0, 8)}
+                    </option>
+                  ))}
+                </select>
+                {tournamentOptions.length > 1 && !effectiveTournamentId ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {se.selectTournamentHint}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
           <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
             <div>
@@ -886,6 +1003,7 @@ export default async function ScoreEntryPage(props: {
             >
               Buscar
             </button>
+          </div>
           </div>
         </form>
 
@@ -967,6 +1085,32 @@ export default async function ScoreEntryPage(props: {
         {effectiveTournamentId && canRepairCaptures && (
           <RepairCapturesButton tournamentId={effectiveTournamentId} />
         )}
+
+        {effectiveTournamentId &&
+          player &&
+          misalignedCapturedRounds.length > 0 && (
+            <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              {se.misalignedCapture}
+            </div>
+          )}
+
+        {effectiveTournamentId && player && scoreEntryRoundLinks.length > 0 ? (
+          <>
+            <ScoreEntryRoundSwitcher
+              items={scoreEntryRoundLinks}
+              labels={{
+                kicker: se.roundSwitcherKicker,
+                current: se.roundCurrent,
+                closed: se.roundClosed,
+                open: se.roundOpen,
+                noCapture: se.roundEmpty,
+              }}
+            />
+            {scoreEntryRoundLinks.length > 1 ? (
+              <p className="mt-2 text-sm text-slate-300">{se.playerFoundHint}</p>
+            ) : null}
+          </>
+        ) : null}
 
         {effectiveTournamentId &&
           player &&
