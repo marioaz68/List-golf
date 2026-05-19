@@ -1179,6 +1179,55 @@ export default async function TournamentSetupPage({
             <section style={cardStyle}>
               <div style={{ display: "grid", gap: 10 }}>
                 <div>
+                  <h2 style={sectionTitle}>{ts.sectionLeagueConvocatoria}</h2>
+                  <p style={sectionSubtle}>
+                    {ts.sectionLeagueConvocatoriaDesc}
+                  </p>
+                </div>
+
+                <div style={actionLinks}>
+                  <Link
+                    href={`/convocatoria?tournament_id=${selectedTournament.id}`}
+                    style={{
+                      ...buttonSecondary,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {ts.linkConvocatoria}
+                  </Link>
+
+                  <Link
+                    href={`/competition-rules?tournament_id=${selectedTournament.id}`}
+                    style={{
+                      ...buttonSecondary,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {ts.linkCompetitionRules}
+                  </Link>
+
+                  <Link
+                    href={`/prize-rules?tournament_id=${selectedTournament.id}`}
+                    style={{
+                      ...buttonSecondary,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {ts.linkPrizeRules}
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            <section style={cardStyle}>
+              <div style={{ display: "grid", gap: 10 }}>
+                <div>
                   <h2 style={sectionTitle}>{ts.sectionRoundsType}</h2>
                   <p style={sectionSubtle}>
                     {ts.sectionRoundsTypeDesc}

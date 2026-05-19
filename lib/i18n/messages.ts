@@ -895,6 +895,12 @@ const es = {
       "Bloque listo para seleccionar salidas y reglas por torneo.",
     openStarters: "Abrir salidas",
     teeRules: "Reglas de salidas",
+    sectionLeagueConvocatoria: "Liga y convocatoria",
+    sectionLeagueConvocatoriaDesc:
+      "Arma la convocatoria (plantilla, cortes, premios y reglas) o revisa la liga y premios por categoría.",
+    linkConvocatoria: "Convocatoria",
+    linkCompetitionRules: "Liga",
+    linkPrizeRules: "Premios",
     sectionRoundsType: "Tipo de torneo y rondas",
     sectionRoundsTypeDesc:
       "Desde aquí puedes continuar con parámetros operativos, rondas y reglas complementarias.",
@@ -2060,6 +2066,12 @@ const en: Messages = {
     sectionStartersDesc: "Jump to starters and rules for this tournament.",
     openStarters: "Open starters",
     teeRules: "Tee assignment rules",
+    sectionLeagueConvocatoria: "League and call document",
+    sectionLeagueConvocatoriaDesc:
+      "Build the tournament call (template, cuts, prizes, rules) or edit league and prize settings per category.",
+    linkConvocatoria: "Tournament call",
+    linkCompetitionRules: "League",
+    linkPrizeRules: "Prizes",
     sectionRoundsType: "Tournament type and rounds",
     sectionRoundsTypeDesc:
       "Continue with operational parameters, rounds, and complementary rules.",
