@@ -291,19 +291,10 @@ export default async function PublicTournamentPage({
     roundBelongsToCategory(r, selectedCategoryId || null)
   );
   const publishedDayKeys = publishedCompetitiveDayKeys(rounds, roundNotesById);
-  const publicTeeSheetRoundsAll = rounds.filter((round) =>
-    publishedDayKeys.has(competitiveDayKey(round))
-  );
-  let publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) =>
-    roundBelongsToCategory(round, selectedCategoryId || null)
-  );
-  if (
-    publicTeeSheetRounds.length === 0 &&
-    selectedCategoryId &&
-    publicTeeSheetRoundsAll.length > 0
-  ) {
-    publicTeeSheetRounds = publicTeeSheetRoundsAll;
-  }
+  const publicTeeSheetRounds = rounds.filter((round) => {
+    if (!roundBelongsToCategory(round, selectedCategoryId || null)) return false;
+    return publishedDayKeys.has(competitiveDayKey(round));
+  });
 
   const todayKey = utcTodayKey();
   const roundsTodayAll = rounds
@@ -489,12 +480,10 @@ export default async function PublicTournamentPage({
       : null;
 
   const teeSheetRoundIdForCategoryLink = (categoryId: string) => {
-    let categoryTeeRounds = publicTeeSheetRoundsAll.filter((round) =>
-      roundBelongsToCategory(round, categoryId)
-    );
-    if (categoryTeeRounds.length === 0) {
-      categoryTeeRounds = publicTeeSheetRoundsAll;
-    }
+    const categoryTeeRounds = rounds.filter((round) => {
+      if (!roundBelongsToCategory(round, categoryId)) return false;
+      return publishedDayKeys.has(competitiveDayKey(round));
+    });
     if (preserveRoundNo != null) {
       const sameNo = categoryTeeRounds.find((r) => r.round_no === preserveRoundNo);
       if (sameNo) return sameNo.id;
@@ -846,14 +835,18 @@ export default async function PublicTournamentPage({
         : leaderboard;
   }
 
-  const seedRoundIdsForPairing =
+  const seedRoundIds =
     publicTeeSheetRounds.length > 0
       ? publicTeeSheetRounds.map((round) => round.id)
-      : roundIdsForPublishedCompetitiveDays(sessionRounds, publishedDayKeys);
+      : roundsInCategoryScope
+          .filter((round) => publishedDayKeys.has(competitiveDayKey(round)))
+          .map((round) => round.id);
 
   const publicRoundIds = expandRoundIdsForPairingFetch(
     sessionRounds,
-    seedRoundIdsForPairing
+    seedRoundIds.length > 0
+      ? seedRoundIds
+      : roundIdsForPublishedCompetitiveDays(sessionRounds, publishedDayKeys)
   );
 
   const standingDisplayByEntryRound = new Map<string, string>();
@@ -1049,16 +1042,6 @@ export default async function PublicTournamentPage({
       if (a.round_no !== b.round_no) return a.round_no - b.round_no;
       return a.group_no - b.group_no;
     });
-
-  const teeSheetRoundNosWithGroups = new Set(
-    publicPairingGroups.map((group) => group.round_no).filter((n) => n > 0)
-  );
-
-  publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) => {
-    if (!publishedDayKeys.has(competitiveDayKey(round))) return false;
-    if (roundBelongsToCategory(round, selectedCategoryId || null)) return true;
-    return teeSheetRoundNosWithGroups.has(round.round_no);
-  });
 
   const pageTitle =
     view === "official"
