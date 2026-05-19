@@ -13,6 +13,7 @@ import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
 import { applyCompetitionStandings } from "@/lib/leaderboard/competitionStandings";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
+import { buildInscribedCountByCategory } from "@/lib/cuts/cutAdvancementPolicy";
 import {
   computeDisplayCutLines,
   cutEnforcesAtTargetRound,
@@ -800,6 +801,13 @@ export default async function PublicTournamentPage({
       selectedRoundNo
     );
 
+    const inscribedCountByCategoryId = buildInscribedCountByCategory(
+      allEntries.map((e) => ({
+        category_id: e.category_id,
+        status: e.status,
+      }))
+    );
+
     publicCutLines = computeDisplayCutLines({
       leaderboard: leaderboardScored,
       advancementRules: advancementRulesList,
@@ -813,6 +821,7 @@ export default async function PublicTournamentPage({
       handicapByPlayerId,
       tieBreakStepsByProfileId,
       strokeIndexByHole,
+      inscribedCountByCategoryId,
     });
 
     const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {

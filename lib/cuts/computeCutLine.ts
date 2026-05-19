@@ -60,6 +60,31 @@ type RankedCutPlayer = {
   detail: ReturnType<typeof rankValueForAdvancementRule>["detail"];
 };
 
+const SCOPE_PRIORITY: Record<RoundAdvancementRule["scope_type"], number> = {
+  category: 0,
+  category_code_list: 1,
+  category_group: 2,
+  overall: 3,
+};
+
+/** Una sola regla de corte por categoría (la más específica). */
+export function pickPrimaryAdvancementRule(
+  activeRules: RoundAdvancementRule[],
+  row: Pick<LeaderboardRow, "category_id" | "category_code">,
+  categories: CategoryMeta[]
+): RoundAdvancementRule | null {
+  const matching = activeRules.filter((r) =>
+    ruleAppliesToRow(r, row as LeaderboardRow, categories)
+  );
+  if (matching.length === 0) return null;
+
+  return [...matching].sort(
+    (a, b) =>
+      SCOPE_PRIORITY[a.scope_type] - SCOPE_PRIORITY[b.scope_type] ||
+      (a.sort_order ?? 999) - (b.sort_order ?? 999)
+  )[0]!;
+}
+
 function splitCodes(value: string) {
   return String(value ?? "")
     .split(",")
@@ -216,6 +241,7 @@ function computeLineForRule(
     tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
     strokeIndexByHole?: StrokeIndexByHole;
     informational?: boolean;
+    fieldSize: number;
   }
 ): PublicCutLine | null {
   const scoped = rowsInCat.filter((r) =>
@@ -396,6 +422,8 @@ type ComputeCutLinesParams = {
   tieBreakStepsByProfileId: Map<string, TieBreakStep[]>;
   strokeIndexByHole?: StrokeIndexByHole;
   informational?: boolean;
+  /** Inscritos por categoría; si falta, se usa el tamaño del campo en tabla. */
+  inscribedCountByCategoryId?: Map<string, number>;
 };
 
 function computeCutLinesForRules(
@@ -441,25 +469,21 @@ function computeCutLinesForRules(
       null;
 
     const sampleRow = rowsInCat[0]!;
-    const matchingRules = activeRules.filter((r) =>
-      ruleAppliesToRow(r, sampleRow, params.categories)
+    const primaryRule = pickPrimaryAdvancementRule(
+      activeRules,
+      sampleRow,
+      params.categories
     );
-    if (matchingRules.length === 0) continue;
+    if (!primaryRule) continue;
 
-    const linesForCategory: PublicCutLine[] = [];
-    for (const rule of matchingRules) {
-      const line = computeLineForRule(
-        rule,
-        rowsInCat,
-        categoryId,
-        catCode,
-        shared
-      );
-      if (line) linesForCategory.push(line);
-    }
+    const fieldSize =
+      params.inscribedCountByCategoryId?.get(categoryId) ?? rowsInCat.length;
 
-    const merged = mergeCutLinesForCategory(linesForCategory, categoryId);
-    if (merged) rawLines.push(merged);
+    const line = computeLineForRule(primaryRule, rowsInCat, categoryId, catCode, {
+      ...shared,
+      fieldSize,
+    });
+    if (line) rawLines.push(line);
   }
 
   return rawLines;

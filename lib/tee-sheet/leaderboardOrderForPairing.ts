@@ -24,6 +24,7 @@ import {
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import { buildInscribedCountByCategory } from "@/lib/cuts/cutAdvancementPolicy";
 import {
   computePublicCutLines,
   cutEnforcesAtTargetRound,
@@ -324,6 +325,9 @@ export async function buildTeeSheetEntryOrderMap(
   let rowsForOrder: LeaderboardRow[] = leaderboardScored;
 
   if (cutEnforces && cutRulesForRound.length > 0) {
+    const inscribedCountByCategoryId =
+      buildInscribedCountByCategory(filteredEntries);
+
     const publicCutLines = computePublicCutLines({
       leaderboard: leaderboardScored,
       advancementRules,
@@ -334,6 +338,7 @@ export async function buildTeeSheetEntryOrderMap(
       handicapByPlayerId,
       tieBreakStepsByProfileId,
       strokeIndexByHole,
+      inscribedCountByCategoryId,
     });
 
     rowsForOrder = leaderboardScored.map((row) => {

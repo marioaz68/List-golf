@@ -1,4 +1,5 @@
 import type { RoundAdvancementRule } from "./computeCutLine";
+import { isCountableEntryStatus } from "@/lib/rounds/categoryRoundGate";
 
 export type RankedForCut = {
   entryId: string;
@@ -35,4 +36,18 @@ export function entryIdsMakingCut(
 
   const topN = Math.min(cutSlots, sortedEligible.length);
   return new Set(sortedEligible.slice(0, topN).map((r) => r.entryId));
+}
+
+/** Inscritos por categoría (activos/confirmados), base del % de corte. */
+export function buildInscribedCountByCategory(
+  entries: Array<{ category_id: string | null; status?: string | null }>
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    if (!isCountableEntryStatus(entry.status)) continue;
+    const categoryId = String(entry.category_id ?? "").trim();
+    if (!categoryId) continue;
+    counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1);
+  }
+  return counts;
 }

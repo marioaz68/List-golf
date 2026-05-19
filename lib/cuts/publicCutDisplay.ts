@@ -15,36 +15,13 @@ import {
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
 import {
   getAdvancementRulesForTargetRound,
+  pickPrimaryAdvancementRule,
   primaryCutLineForCategory,
-  ruleAppliesToRow,
 } from "./computeCutLine";
 
+export { pickPrimaryAdvancementRule };
+
 type CategoryMeta = { id: string; code: string | null };
-
-const SCOPE_PRIORITY: Record<RoundAdvancementRule["scope_type"], number> = {
-  category: 0,
-  category_code_list: 1,
-  category_group: 2,
-  overall: 3,
-};
-
-/** Una sola regla de corte por categoría (la más específica). */
-export function pickPrimaryAdvancementRule(
-  activeRules: RoundAdvancementRule[],
-  row: Pick<LeaderboardRow, "category_id" | "category_code">,
-  categories: CategoryMeta[]
-): RoundAdvancementRule | null {
-  const matching = activeRules.filter((r) =>
-    ruleAppliesToRow(r, row as LeaderboardRow, categories)
-  );
-  if (matching.length === 0) return null;
-
-  return [...matching].sort(
-    (a, b) =>
-      SCOPE_PRIORITY[a.scope_type] - SCOPE_PRIORITY[b.scope_type] ||
-      (a.sort_order ?? 999) - (b.sort_order ?? 999)
-  )[0]!;
-}
 
 function compareCutRank(
   a: number | null,
