@@ -926,7 +926,7 @@ const es = {
     pageDescFavorites:
       "Seguimiento rápido de los jugadores marcados como favoritos.",
     favoritesAllCategoriesHint:
-      "Todas las categorías: aquí ves a tus favoritos sin importar su categoría de inscripción.",
+      "Todos los jugadores que marques con ★, de cualquier categoría. POS, thru y totales según su ronda actual.",
     pageDescTeeSheet:
       "Lista pública de salidas por día, visible solo cuando el comité confirma el orden definitivo.",
     pageDescLive:
@@ -2084,7 +2084,7 @@ const en: Messages = {
     pageDescOfficial: "Results verified by tournament administration.",
     pageDescFavorites: "Quick follow-up for players marked as favorites.",
     favoritesAllCategoriesHint:
-      "All categories: your favorites appear here regardless of enrollment category.",
+      "Every player you mark with ★, from any category. POS, thru, and totals follow each player’s current round.",
     pageDescTeeSheet:
       "Public tee sheet by day, visible only after the committee confirms the final order.",
     pageDescLive:

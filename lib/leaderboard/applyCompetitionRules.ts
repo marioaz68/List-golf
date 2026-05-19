@@ -22,6 +22,7 @@ export function applyCompetitionRules({
   leaderboardViewOverride = null,
   lockedLookups,
   roundsForLock,
+  includeIncompleteRounds = false,
 }: {
   leaderboard: LeaderboardRow[];
   competitionRules: CategoryCompetitionRule[];
@@ -31,6 +32,8 @@ export function applyCompetitionRules({
   leaderboardViewOverride?: LeaderboardViewOverride | null;
   lockedLookups?: LockedScorecardLookups;
   roundsForLock?: RoundIdMeta[];
+  /** Live: totales y orden con captura parcial (R1 + avance de R2, etc.). */
+  includeIncompleteRounds?: boolean;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
 
@@ -39,7 +42,7 @@ export function applyCompetitionRules({
 
     const hcp = handicapByPlayerId.get(row.player_id) ?? null;
     const detailsForCum =
-      lockedLookups && roundsForLock
+      !includeIncompleteRounds && lockedLookups && roundsForLock
         ? detailsForPublicCumulative(
             row.details,
             row.entry_id,

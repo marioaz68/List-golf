@@ -7,6 +7,40 @@ import {
 import type { LockedScorecardLookups, RoundIdMeta } from "./lockedScorecards";
 import { isPublicRoundScorecardClosed } from "./publicRoundScorePolicy";
 
+function detailCountsForStandings(
+  detail: any,
+  row: any,
+  roundIdsUpToCurrent: Set<string>,
+  lockedLookups: LockedScorecardLookups | undefined,
+  roundsForLock: RoundIdMeta[] | undefined,
+  includeIncompleteRounds: boolean
+): boolean {
+  if (!roundIdsUpToCurrent.has(detail.round_id)) return false;
+
+  if (
+    !roundRowAppliesToEntry(
+      { category_id: detail.category_id ?? null },
+      row.category_id
+    )
+  ) {
+    return false;
+  }
+
+  if (includeIncompleteRounds) return true;
+
+  if (lockedLookups && roundsForLock) {
+    return isPublicRoundScorecardClosed(
+      row.entry_id,
+      detail.round_no,
+      row.category_id,
+      roundsForLock,
+      lockedLookups
+    );
+  }
+
+  return true;
+}
+
 export function applyStandings({
   leaderboardBase,
   rounds,
@@ -14,6 +48,7 @@ export function applyStandings({
   holesPlayedCount,
   lockedLookups,
   roundsForLock,
+  includeIncompleteRounds = false,
 }: {
   leaderboardBase: any[];
   rounds: any[];
@@ -21,14 +56,21 @@ export function applyStandings({
   holesPlayedCount: (details: any[]) => number;
   lockedLookups?: LockedScorecardLookups;
   roundsForLock?: RoundIdMeta[];
+  /** Live: incluir hoyos capturados aunque la tarjeta no esté cerrada. */
+  includeIncompleteRounds?: boolean;
 }) {
   const standingsByRound = new Map();
   const standingsByRoundCategory = new Map();
 
-  for (let i = 0; i < rounds.length; i += 1) {
-    const roundsUpToCurrent = rounds.slice(0, i + 1);
-    const roundIdsUpToCurrent = roundsUpToCurrent.map((r: any) => r.id);
-    const round = rounds[i];
+  const sortedRoundNos = [...new Set(rounds.map((r: any) => Number(r.round_no)))].sort(
+    (a, b) => a - b
+  );
+
+  for (const roundNo of sortedRoundNos) {
+    const roundIdsUpToCurrent = new Set(
+      rounds.filter((r: any) => Number(r.round_no) <= roundNo).map((r: any) => r.id)
+    );
+    const roundsAtThisNo = rounds.filter((r: any) => Number(r.round_no) === roundNo);
 
     const currentRows = leaderboardBase.map((row: any) => {
       let gross = 0;
@@ -38,26 +80,14 @@ export function applyStandings({
       let dqFound = false;
 
       for (const detail of row.details) {
-        if (!roundIdsUpToCurrent.includes(detail.round_id)) continue;
-
         if (
-          !roundRowAppliesToEntry(
-            { category_id: detail.category_id ?? null },
-            row.category_id
-          )
-        ) {
-          continue;
-        }
-
-        if (
-          lockedLookups &&
-          roundsForLock &&
-          !isPublicRoundScorecardClosed(
-            row.entry_id,
-            detail.round_no,
-            row.category_id,
+          !detailCountsForStandings(
+            detail,
+            row,
+            roundIdsUpToCurrent,
+            lockedLookups,
             roundsForLock,
-            lockedLookups
+            includeIncompleteRounds
           )
         ) {
           continue;
@@ -149,43 +179,48 @@ export function applyStandings({
 
     const rankedGeneral = sortStandingRows(currentRows);
 
-    const generalMap = new Map();
-    let currentPosGeneral = 0;
-    let prevKeyGeneral = "";
+    const buildPlayerStandingMap = (
+      ranked: any[],
+      roundMeta: { id: string; round_no: number }
+    ) => {
+      const map = new Map();
+      let currentPos = 0;
+      let prevKey = "";
 
-    rankedGeneral.forEach((item: any, idx: number) => {
-      if (item.is_dq) {
-        generalMap.set(item.player_id, {
-          round_id: round.id,
-          round_no: round.round_no,
-          pos: null,
-          to_par: null,
-          gross: null,
+      ranked.forEach((item: any, idx: number) => {
+        if (item.is_dq) {
+          map.set(item.player_id, {
+            round_id: roundMeta.id,
+            round_no: roundMeta.round_no,
+            pos: null,
+            to_par: null,
+            gross: null,
+            played_rounds: item.played_rounds,
+          });
+          return;
+        }
+
+        const key = `${item.to_par ?? "x"}|${item.holes_played}|${
+          item.gross ?? "x"
+        }|${item.played_rounds}`;
+
+        if (idx === 0 || key !== prevKey) {
+          currentPos = idx + 1;
+          prevKey = key;
+        }
+
+        map.set(item.player_id, {
+          round_id: roundMeta.id,
+          round_no: roundMeta.round_no,
+          pos: currentPos,
+          to_par: item.to_par,
+          gross: item.gross,
           played_rounds: item.played_rounds,
         });
-        return;
-      }
-
-      const key = `${item.to_par ?? "x"}|${item.holes_played}|${
-        item.gross ?? "x"
-      }|${item.played_rounds}`;
-
-      if (idx === 0 || key !== prevKeyGeneral) {
-        currentPosGeneral = idx + 1;
-        prevKeyGeneral = key;
-      }
-
-      generalMap.set(item.player_id, {
-        round_id: round.id,
-        round_no: round.round_no,
-        pos: currentPosGeneral,
-        to_par: item.to_par,
-        gross: item.gross,
-        played_rounds: item.played_rounds,
       });
-    });
 
-    standingsByRound.set(round.id, generalMap);
+      return map;
+    };
 
     const categoryMap = new Map();
     const groupedByCategory = new Map();
@@ -199,47 +234,35 @@ export function applyStandings({
 
     for (const [categoryKey, rowsInCategory] of groupedByCategory.entries()) {
       const rankedCategory = sortStandingRows(rowsInCategory);
-      const categoryStandingMap = new Map();
-
-      let currentPosCategory = 0;
-      let prevKeyCategory = "";
-
-      rankedCategory.forEach((item: any, idx: number) => {
-        if (item.is_dq) {
-          categoryStandingMap.set(item.player_id, {
-            round_id: round.id,
-            round_no: round.round_no,
-            pos: null,
-            to_par: null,
-            gross: null,
-            played_rounds: item.played_rounds,
-          });
-          return;
-        }
-
-        const key = `${item.to_par ?? "x"}|${item.holes_played}|${
-          item.gross ?? "x"
-        }|${item.played_rounds}`;
-
-        if (idx === 0 || key !== prevKeyCategory) {
-          currentPosCategory = idx + 1;
-          prevKeyCategory = key;
-        }
-
-        categoryStandingMap.set(item.player_id, {
-          round_id: round.id,
-          round_no: round.round_no,
-          pos: currentPosCategory,
-          to_par: item.to_par,
-          gross: item.gross,
-          played_rounds: item.played_rounds,
-        });
-      });
-
-      categoryMap.set(categoryKey, categoryStandingMap);
+      categoryMap.set(
+        categoryKey,
+        buildPlayerStandingMap(rankedCategory, {
+          id: roundsAtThisNo[0]?.id ?? "",
+          round_no: roundNo,
+        })
+      );
     }
 
-    standingsByRoundCategory.set(round.id, categoryMap);
+    for (const round of roundsAtThisNo) {
+      standingsByRound.set(
+        round.id,
+        buildPlayerStandingMap(rankedGeneral, round)
+      );
+
+      const roundCategoryMap = new Map();
+      for (const [categoryKey, sourceMap] of categoryMap.entries()) {
+        const perRound = new Map();
+        for (const [playerId, snap] of sourceMap.entries()) {
+          perRound.set(playerId, {
+            ...snap,
+            round_id: round.id,
+            round_no: round.round_no,
+          });
+        }
+        roundCategoryMap.set(categoryKey, perRound);
+      }
+      standingsByRoundCategory.set(round.id, roundCategoryMap);
+    }
   }
 
   const leaderboardWithStandings = leaderboardBase.map((row: any) => {

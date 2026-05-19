@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
-  formatMainTotalForRow,
-  formatSecondaryTotalForRow,
+  isStablefordCategory,
+  type CategoryCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
+import {
   mainTotalColumnHeader,
   secondaryTotalColumnHeader,
 } from "@/lib/leaderboard/competitionDisplay";
@@ -21,32 +22,31 @@ import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
 import PublicLeaderboardExpandedPlayerBanner from "@/app/torneos/[id]/components/PublicLeaderboardExpandedPlayerBanner";
 import PublicLeaderboardPlayerName from "@/app/torneos/[id]/components/PublicLeaderboardPlayerName";
-import {
-  PublicLeaderboardRoundScoreCells,
-  PublicLeaderboardRoundScoreHeaders,
-} from "@/app/torneos/[id]/components/PublicLeaderboardRoundScoreColumns";
-import {
-  publicLeaderboardScoreColumnNos,
-  publicLeaderboardTableColSpan,
-  publicLeaderboardTableMinWidthClassForScoreColumns,
-} from "@/app/torneos/[id]/lib/publicLeaderboardColumns";
+import { PUBLIC_LEADERBOARD_FIXED_COL_COUNT } from "@/app/torneos/[id]/lib/publicLeaderboardColumns";
 import {
   buildDetailToggleHref,
-  formatScoreOrDQ,
   formatThru,
   holesCapturedForSelectedRound,
   publicLeaderboardNameColumnClass,
   type SelectedRoundMeta,
 } from "@/app/torneos/[id]/lib/utils";
 import type { PublicCutLine } from "@/lib/cuts/computeCutLine";
-import type {
-  LockedScorecardLookups,
-  RoundIdMeta,
-} from "@/lib/leaderboard/lockedScorecards";
+import type { LockedScorecardLookups } from "@/lib/leaderboard/lockedScorecards";
+import type { RoundLike } from "@/lib/leaderboard/roundCategoryMatch";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
-import { usesGrossHoleByHoleDetail } from "@/lib/leaderboard/leaderboardViewOverride";
 import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
+import {
+  favoritePlayerMove,
+  favoritePlayerStanding,
+  resolveFavoritePlayerDisplayRound,
+} from "@/lib/leaderboard/favoritePlayerDisplayRound";
+import {
+  effectiveUsesNetLeaderboard,
+  usesGrossHoleByHoleDetail,
+} from "@/lib/leaderboard/leaderboardViewOverride";
+import { formatRelativeOrDQ, formatScoreOrDQ } from "@/app/torneos/[id]/lib/utils";
+import type { RoundStandingSnapshot } from "@/app/torneos/[id]/lib/types";
 
 type FavoritesViewProps = {
   tournamentId: string;
@@ -60,7 +60,7 @@ type FavoritesViewProps = {
   handicapsByPlayerId?: Record<string, number | null>;
   strokeIndexByHole?: Record<number, number>;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
-  rounds: RoundIdMeta[];
+  rounds: RoundLike[];
   lockedLookups: LockedScorecardLookups;
 };
 
@@ -123,10 +123,36 @@ function extractCategoryHandicapSeed(code: string | null | undefined) {
   return Number.POSITIVE_INFINITY;
 }
 
+function formatFavoriteMainTotal(
+  row: LeaderboardRow,
+  standing: RoundStandingSnapshot | null,
+  rule: CategoryCompetitionRule,
+  viewOverride: LeaderboardViewOverride | null | undefined
+) {
+  if (row.is_disqualified) return "DQ";
+  if (isStablefordCategory(rule)) {
+    return formatScoreOrDQ(row.stableford_total ?? standing?.to_par ?? null, false);
+  }
+  const toPar = standing?.to_par ?? row.total_to_par;
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
+    return formatRelativeOrDQ(toPar, false);
+  }
+  return formatRelativeOrDQ(toPar, row.is_disqualified);
+}
+
+function formatFavoriteSecondaryTotal(
+  row: LeaderboardRow,
+  standing: RoundStandingSnapshot | null,
+  rule: CategoryCompetitionRule
+) {
+  if (row.is_disqualified) return "DQ";
+  return formatScoreOrDQ(standing?.gross ?? row.total_gross, false);
+}
+
 function compareFavoriteRows(
   a: LeaderboardRow,
   b: LeaderboardRow,
-  selectedRound: SelectedRoundMeta | null
+  rounds: RoundLike[]
 ) {
   const bucketA = categoryBucket(a.category_code);
   const bucketB = categoryBucket(b.category_code);
@@ -149,28 +175,31 @@ function compareFavoriteRows(
 
   if (byCategoryLabel !== 0) return byCategoryLabel;
 
-  const posA = a.selected_round_position_category ?? Number.POSITIVE_INFINITY;
-  const posB = b.selected_round_position_category ?? Number.POSITIVE_INFINITY;
+  const roundA = resolveFavoritePlayerDisplayRound(a, rounds);
+  const roundB = resolveFavoritePlayerDisplayRound(b, rounds);
+  const stA = favoritePlayerStanding(a, roundA?.id);
+  const stB = favoritePlayerStanding(b, roundB?.id);
+
+  const posA = stA?.pos ?? Number.POSITIVE_INFINITY;
+  const posB = stB?.pos ?? Number.POSITIVE_INFINITY;
   if (posA !== posB) return posA - posB;
 
-  if (
-    a.total_to_par != null &&
-    b.total_to_par != null &&
-    a.total_to_par !== b.total_to_par
-  ) {
-    return a.total_to_par - b.total_to_par;
+  const toParA = stA?.to_par ?? a.total_to_par;
+  const toParB = stB?.to_par ?? b.total_to_par;
+  if (toParA != null && toParB != null && toParA !== toParB) {
+    return toParA - toParB;
   }
-  if (a.total_to_par != null && b.total_to_par == null) return -1;
-  if (a.total_to_par == null && b.total_to_par != null) return 1;
+  if (toParA != null && toParB == null) return -1;
+  if (toParA == null && toParB != null) return 1;
 
   const thruA = holesCapturedForSelectedRound(
     a.details,
-    selectedRound,
+    roundA,
     a.category_id
   );
   const thruB = holesCapturedForSelectedRound(
     b.details,
-    selectedRound,
+    roundB,
     b.category_id
   );
   if (thruA !== thruB) return thruB - thruA;
@@ -324,6 +353,9 @@ const stickyNameHeadFav =
 const stickyNameBodyFav =
   "sticky left-0 z-[18] border-b border-r border-white/10 bg-[#0c1728] shadow-[6px_0_14px_-4px_rgba(0,0,0,0.5)] group-hover:bg-[#101c2c]";
 
+/** Sin columnas R1/R2/R3: fijas + totales. */
+const FAVORITES_TABLE_COL_SPAN = PUBLIC_LEADERBOARD_FIXED_COL_COUNT + 2;
+
 export default function FavoritesView({
   tournamentId,
   leaderboard,
@@ -381,14 +413,14 @@ export default function FavoritesView({
 
     window.addEventListener("storage", onStorage);
     window.addEventListener(
-      "favorites-changed",
+      "listgolf-favorites-changed",
       onFavoritesChanged as EventListener
     );
 
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(
-        "favorites-changed",
+        "listgolf-favorites-changed",
         onFavoritesChanged as EventListener
       );
     };
@@ -409,8 +441,8 @@ export default function FavoritesView({
 
         return candidates.some((candidate) => favoriteSet.has(candidate));
       })
-      .sort((a, b) => compareFavoriteRows(a, b, selectedRound ?? null));
-  }, [favoriteIds, leaderboard, hydrated, selectedRound]);
+      .sort((a, b) => compareFavoriteRows(a, b, rounds));
+  }, [favoriteIds, leaderboard, hydrated, rounds]);
 
   if (!hydrated) {
     return (
@@ -429,12 +461,12 @@ export default function FavoritesView({
   }
 
   const nameCol = publicLeaderboardNameColumnClass;
-  const tableColSpan = publicLeaderboardTableColSpan(selectedRound);
+  const tableColSpan = FAVORITES_TABLE_COL_SPAN;
 
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-[28px] border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <table
-        className={`table-fixed w-full ${publicLeaderboardTableMinWidthClassForScoreColumns(publicLeaderboardScoreColumnNos(selectedRound).length)} border-separate border-spacing-0 text-[10px] text-white sm:text-[11px]`}
+        className="table-fixed w-full min-w-[520px] border-separate border-spacing-0 text-[10px] text-white sm:min-w-[680px] sm:text-[11px]"
       >
         <thead>
           <tr className="bg-white/10 text-slate-300">
@@ -464,7 +496,6 @@ export default function FavoritesView({
             <th className="w-[32px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[34px]">
               THR
             </th>
-            <PublicLeaderboardRoundScoreHeaders selectedRound={selectedRound} />
             <th className="w-[34px] border-b border-white/10 px-0.5 py-1.5 text-center text-[9px] font-semibold sm:w-[36px]">
               {secondaryTotalColumnHeader(defaultHeaderRule)}
             </th>
@@ -477,14 +508,18 @@ export default function FavoritesView({
         <tbody>
           {favoriteRows.map((row, index) => {
             const rowRule = ruleForCategory(rulesMap, row.category_id);
+            const playerRound = resolveFavoritePlayerDisplayRound(row, rounds);
+            const playerStanding = favoritePlayerStanding(
+              row,
+              playerRound?.id
+            );
             const rowDetailLabels = detailLabelsWithCompetitionRule(
               detailLabels,
               rowRule,
               leaderboardViewOverride
             );
             const isOpen = requestedDetailId === row.entry_id;
-            const prevRow = index > 0 ? favoriteRows[index - 1] : null;
-            const showCutDivider = Boolean(row.show_cut_divider);
+            const showCutDivider = false;
             const cutDividerLabel =
               row.cut_divider_label ?? cutLine?.label ?? "CORTE";
 
@@ -544,7 +579,6 @@ export default function FavoritesView({
                         href={buildDetailToggleHref({
                           tournamentId,
                           categoryId: row.category_id || null,
-                          roundId: selectedRound?.id ?? null,
                           view: "favorites",
                           basis: leaderboardViewOverride ?? undefined,
                           currentDetailId: requestedDetailId || null,
@@ -567,39 +601,30 @@ export default function FavoritesView({
                   </td>
 
                   <td className="w-[50px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-cyan-300 sm:w-[52px] sm:text-[12px]">
-                    {row.selected_round_position_category ??
-                      row.selected_round_position ??
-                      "—"}
+                    {playerStanding?.pos ?? "—"}
                   </td>
 
                   <td className="w-[26px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[28px]">
                     {renderMove(
-                      row.move_vs_previous_category ?? row.move_vs_previous
+                      favoritePlayerMove(row, playerRound, rounds)
                     )}
                   </td>
 
                   <td className="w-[32px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[34px]">
-                    {formatThru(row.details, selectedRound, row.category_id)}
+                    {formatThru(row.details, playerRound, row.category_id)}
                   </td>
 
-                  <PublicLeaderboardRoundScoreCells
-                    row={row}
-                    selectedRound={selectedRound}
-                    rulesMap={rulesMap}
-                    handicapByPlayerId={handicapMap}
-                    strokeIndexByHole={strokeIndexMap}
-                    leaderboardViewOverride={leaderboardViewOverride}
-                    view="live"
-                    rounds={rounds}
-                    lockedLookups={lockedLookups}
-                  />
-
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center font-semibold text-slate-200 sm:w-[36px]">
-                    {formatSecondaryTotalForRow(row, rowRule)}
+                    {formatFavoriteSecondaryTotal(row, playerStanding, rowRule)}
                   </td>
 
                   <td className="w-[34px] border-b border-white/10 px-0.5 py-1 text-center text-[11px] font-bold text-white sm:text-[12px]">
-                    {formatMainTotalForRow(row, rowRule)}
+                    {formatFavoriteMainTotal(
+                      row,
+                      playerStanding,
+                      rowRule,
+                      leaderboardViewOverride
+                    )}
                   </td>
                 </tr>
 
@@ -628,7 +653,7 @@ export default function FavoritesView({
                         <PublicLeaderboardDetailTable
                           row={row}
                           labels={rowDetailLabels}
-                          selectedRound={selectedRound ?? null}
+                          selectedRound={playerRound}
                           competitionRule={rowRule}
                           handicapIndex={
                             handicapMap.get(row.player_id) ?? null

@@ -45,6 +45,7 @@ export function applyCompetitionStandings({
   leaderboardViewOverride = null,
   lockedLookups,
   roundsForLock,
+  includeIncompleteRounds = false,
 }: {
   leaderboard: LeaderboardRow[];
   rounds: SelectedRoundMeta[];
@@ -55,6 +56,8 @@ export function applyCompetitionStandings({
   leaderboardViewOverride?: LeaderboardViewOverride | null;
   lockedLookups?: LockedScorecardLookups;
   roundsForLock?: RoundIdMeta[];
+  /** Live: incluir captura parcial de la ronda en curso. */
+  includeIncompleteRounds?: boolean;
 }): LeaderboardRow[] {
   const rulesMap = rulesByCategoryId(competitionRules);
   const sortedRounds = [...rounds].sort((a, b) => a.round_no - b.round_no);
@@ -104,6 +107,7 @@ export function applyCompetitionStandings({
           ) {
             return false;
           }
+          if (includeIncompleteRounds) return true;
           if (lockedLookups && roundsForLock) {
             return isPublicRoundScorecardClosed(
               row.entry_id,

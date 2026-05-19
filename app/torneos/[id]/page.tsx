@@ -443,6 +443,8 @@ export default async function PublicTournamentPage({
     id: r.id,
     round_no: r.round_no,
     category_id: r.category_id ?? null,
+    round_date: r.round_date ?? null,
+    wave: r.wave ?? null,
   }));
 
   const gateEntries = entriesForLeaderboard;
@@ -649,7 +651,7 @@ export default async function PublicTournamentPage({
   const handicapsByPlayerId = Object.fromEntries(handicapByPlayerId);
 
   const categoryIdsWithPlayers = new Set(
-    filteredEntries
+    (isFavoritesView ? allEntries : filteredEntries)
       .map((e) => String(e.category_id ?? "").trim())
       .filter(Boolean)
   );
@@ -743,7 +745,7 @@ export default async function PublicTournamentPage({
 
   if (!rulesBlocked) {
     const leaderboardBase = buildLiveLeaderboard({
-      filteredEntries,
+      filteredEntries: entriesForLeaderboard,
       rounds,
       roundScores,
       holeScoresByRoundScoreId,
@@ -756,6 +758,8 @@ export default async function PublicTournamentPage({
       getPlayerCode,
     });
 
+    const includeIncompleteRounds = view === "live" || view === "favorites";
+
     const leaderboardWithStandings = applyStandings({
       leaderboardBase,
       rounds,
@@ -763,6 +767,7 @@ export default async function PublicTournamentPage({
       holesPlayedCount,
       lockedLookups,
       roundsForLock,
+      includeIncompleteRounds,
     });
 
     const leaderboardScoredBase: LeaderboardRow[] = applyCompetitionRules({
@@ -774,6 +779,7 @@ export default async function PublicTournamentPage({
       leaderboardViewOverride,
       lockedLookups,
       roundsForLock,
+      includeIncompleteRounds,
     });
 
     const leaderboardScored: LeaderboardRow[] = applyCompetitionStandings({
@@ -786,6 +792,7 @@ export default async function PublicTournamentPage({
       leaderboardViewOverride,
       lockedLookups,
       roundsForLock,
+      includeIncompleteRounds,
     });
 
     cutEnforcesForSelectedRound = cutEnforcesAtTargetRound(
@@ -1224,7 +1231,6 @@ export default async function PublicTournamentPage({
               <Link
                 scroll={false}
                 href={tHref({
-                  roundId: selectedRound?.id ?? null,
                   view: "favorites",
                 })}
                 className={publicTournamentViewPillClasses(
@@ -1264,22 +1270,24 @@ export default async function PublicTournamentPage({
                 </span>
 
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                  {filteredEntries.length}{" "}
-                  {filteredEntries.length === 1 ? pub.playerOne : pub.playersMany}
+                  {(isFavoritesView ? allEntries : filteredEntries).length}{" "}
+                  {(isFavoritesView ? allEntries : filteredEntries).length === 1
+                    ? pub.playerOne
+                    : pub.playersMany}
                 </span>
 
                 <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
                   {pageTitle}
                 </span>
 
-                {selectedCategory ? (
+                {selectedCategory && !isFavoritesView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {pub.categoryChip}{" "}
                     {selectedCategory.code ?? selectedCategory.name ?? "—"}
                   </span>
                 ) : null}
 
-                {selectedRound ? (
+                {selectedRound && !isFavoritesView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {formatPublicRoundNavPill(selectedRound, locale)}
                   </span>
@@ -1317,10 +1325,10 @@ export default async function PublicTournamentPage({
                 </p>
               ) : null}
 
-              {view !== "tee-sheet" && rounds.length > 0 ? (
-                view === "live" ||
-                view === "favorites" ||
-                view === "official" ? (
+              {view !== "tee-sheet" &&
+              rounds.length > 0 &&
+              !isFavoritesView ? (
+                view === "live" || view === "official" ? (
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/15 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                       <div className="min-w-0">
