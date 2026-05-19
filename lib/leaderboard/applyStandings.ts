@@ -166,14 +166,6 @@ export function applyStandings({
           return b.holes_played - a.holes_played;
         }
 
-        if (a.gross != null && b.gross != null) {
-          if (a.gross !== b.gross) return a.gross - b.gross;
-        } else if (a.gross != null) {
-          return -1;
-        } else if (b.gross != null) {
-          return 1;
-        }
-
         return 0;
       });
 
@@ -404,16 +396,6 @@ export function applyStandings({
 
     if (aHoles !== bHoles) {
       return bHoles - aHoles;
-    }
-
-    if (a.total_gross != null && b.total_gross != null) {
-      if (a.total_gross !== b.total_gross) {
-        return a.total_gross - b.total_gross;
-      }
-    } else if (a.total_gross != null) {
-      return -1;
-    } else if (b.total_gross != null) {
-      return 1;
     }
 
     return String(a.player_name ?? "").localeCompare(

@@ -201,12 +201,24 @@ export function cumulativeLeaderboardValue(
 
   if (effectiveUsesNetLeaderboard(catRule, leaderboardViewOverride)) {
     return {
-      sortValue: hasNetStrokes
-        ? totalNetStrokes
-        : hasNet
-          ? totalNetToPar
-          : null,
-      displayToPar: hasNet ? totalNetToPar : null,
+      sortValue: hasNet
+        ? totalNetToPar
+        : hasToPar
+          ? totalToPar
+          : hasNetStrokes
+            ? totalNetStrokes
+            : null,
+      displayToPar: hasNet ? totalNetToPar : hasToPar ? totalToPar : null,
+      displayGross: hasGross ? totalGross : null,
+      stablefordTotal: null,
+    };
+  }
+
+  // Gross: clasificar por to-par acumulado (± vs par), no por golpes brutos totales.
+  if (hasToPar) {
+    return {
+      sortValue: totalToPar,
+      displayToPar: totalToPar,
       displayGross: hasGross ? totalGross : null,
       stablefordTotal: null,
     };
@@ -214,18 +226,9 @@ export function cumulativeLeaderboardValue(
 
   if (hasGross) {
     return {
-      sortValue: totalGross,
-      displayToPar: hasToPar ? totalToPar : null,
+      sortValue: null,
+      displayToPar: null,
       displayGross: totalGross,
-      stablefordTotal: null,
-    };
-  }
-
-  if (hasToPar) {
-    return {
-      sortValue: totalToPar,
-      displayToPar: totalToPar,
-      displayGross: null,
       stablefordTotal: null,
     };
   }
