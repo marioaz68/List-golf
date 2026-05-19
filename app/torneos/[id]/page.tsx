@@ -143,6 +143,9 @@ export default async function PublicTournamentPage({
     typeof sp.view === "string" ? sp.view.trim().toLowerCase() : "";
   const requestedDetailId =
     typeof sp.detail_id === "string" ? sp.detail_id.trim() : "";
+  const basisFromUrl = parseLeaderboardViewOverride(
+    typeof sp.basis === "string" ? sp.basis : undefined
+  );
 
   const view =
     requestedView === "official"
@@ -225,6 +228,7 @@ export default async function PublicTournamentPage({
         roundId: requestedRoundId || undefined,
         view: requestedView || undefined,
         detailId: requestedDetailId || undefined,
+        basis: basisFromUrl ?? undefined,
         embed: isEmbed,
         fromAdmin: isEmbed && fromAdmin ? true : undefined,
       })
@@ -247,6 +251,7 @@ export default async function PublicTournamentPage({
         roundId: requestedRoundId || undefined,
         view: requestedView || undefined,
         detailId: requestedDetailId || undefined,
+        basis: basisFromUrl ?? undefined,
         embed: isEmbed,
         fromAdmin: isEmbed && fromAdmin ? true : undefined,
       })
@@ -518,6 +523,7 @@ export default async function PublicTournamentPage({
         roundId: canonicalRoundId,
         view: requestedView || view,
         detailId: requestedDetailId || undefined,
+        basis: basisFromUrl ?? undefined,
         embed: isEmbed,
         fromAdmin: isEmbed && fromAdmin ? true : undefined,
       })
@@ -663,14 +669,11 @@ export default async function PublicTournamentPage({
       ? competitionRuleForCategory(competitionRulesMap, selectedCategoryId)
       : null;
 
-  const basisParam = parseLeaderboardViewOverride(
-    typeof sp.basis === "string" ? sp.basis : undefined
-  );
   const showGrossNetToggle =
     Boolean(headerCompetitionRule) &&
     categoryShowsGrossNetToggle(headerCompetitionRule!);
   const leaderboardViewOverride = showGrossNetToggle
-    ? basisParam ?? "net"
+    ? basisFromUrl ?? "net"
     : null;
 
   let publicPrizeRulesForCategory: PublicPrizeRuleRow[] = [];
@@ -1071,6 +1074,7 @@ export default async function PublicTournamentPage({
       tournamentId: typedTournament.id,
       embed: isEmbed,
       fromAdmin: isEmbed && fromAdmin,
+      basis: leaderboardViewOverride ?? undefined,
       ...opts,
     });
 

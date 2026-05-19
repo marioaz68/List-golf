@@ -510,6 +510,8 @@ export function buildHref(params: {
   roundId?: string | null;
   view?: string | null;
   detailId?: string | null;
+  /** Clasificación gross/neto en categorías con toggle (`basis=gross|net`). */
+  basis?: "gross" | "net" | null;
   /** Mantiene la vista embebida en administración (`/leaderboard`). */
   embed?: boolean;
   /** Vuelta al módulo Leaderboard del backoffice (móvil). */
@@ -523,6 +525,9 @@ export function buildHref(params: {
   if (params.categoryId) sp.set("category_id", params.categoryId);
   if (params.roundId) sp.set("round_id", params.roundId);
   if (params.detailId) sp.set("detail_id", params.detailId);
+  if (params.basis === "gross" || params.basis === "net") {
+    sp.set("basis", params.basis);
+  }
 
   const qs = sp.toString();
 
@@ -536,6 +541,7 @@ export function buildDetailToggleHref(params: {
   categoryId?: string | null;
   roundId?: string | null;
   view?: string | null;
+  basis?: "gross" | "net" | null;
   currentDetailId?: string | null;
   nextDetailId?: string | null;
   embed?: boolean;
@@ -546,6 +552,7 @@ export function buildDetailToggleHref(params: {
     categoryId: params.categoryId ?? null,
     roundId: params.roundId ?? null,
     view: params.view ?? null,
+    basis: params.basis ?? null,
     embed: params.embed,
     fromAdmin: params.fromAdmin,
     detailId:

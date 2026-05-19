@@ -11,10 +11,11 @@ import type { LeaderboardRow, RoundDetail } from "@/app/torneos/[id]/lib/types";
 import { formatRelativeOrDQ, formatScoreOrDQ } from "@/app/torneos/[id]/lib/utils";
 
 export function scoringFormatLabel(
-  rule: CategoryCompetitionRule
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
 ): string {
   if (isStablefordCategory(rule)) return "Stableford";
-  if (effectiveUsesNetLeaderboard(rule, null)) {
+  if (effectiveUsesNetLeaderboard(rule, viewOverride)) {
     return "Stroke · Neto";
   }
   return "Stroke · Gross";

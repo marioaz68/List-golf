@@ -5,11 +5,15 @@ import { Fragment, useMemo } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import {
+  effectiveUsesNetLeaderboard,
+} from "@/lib/leaderboard/leaderboardViewOverride";
+import {
   formatMainTotalForRow,
   formatSecondaryTotalForRow,
   mainTotalColumnHeader,
   secondaryTotalColumnHeader,
 } from "@/lib/leaderboard/competitionDisplay";
+import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
 import {
   buildCompetitionRulesMap,
   buildHandicapMap,
@@ -325,6 +329,7 @@ export default function PublicLeaderboardTable({
                             categoryId: selectedCategoryId || null,
                             roundId: selectedRound?.id ?? null,
                             view,
+                            basis: leaderboardViewOverride ?? undefined,
                             currentDetailId: requestedDetailId || null,
                             nextDetailId: row.entry_id,
                           })}
@@ -392,7 +397,18 @@ export default function PublicLeaderboardTable({
                         <div className="box-border w-full min-w-0 max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain px-1 pb-2 pt-1.5 [-webkit-overflow-scrolling:touch] sm:px-2">
                           <PublicLeaderboardExpandedPlayerBanner
                             row={row}
-                            labels={detailLabels}
+                            labels={detailLabelsResolved}
+                            handicapSummary={
+                              effectiveUsesNetLeaderboard(
+                                rowRule,
+                                leaderboardViewOverride
+                              )
+                                ? formatPlayingHandicapSummary(
+                                    handicapMap.get(row.player_id) ?? null,
+                                    rowRule.handicap_percentage
+                                  )
+                                : null
+                            }
                           />
                           <PublicLeaderboardDetailTable
                             row={row}
@@ -406,6 +422,7 @@ export default function PublicLeaderboardTable({
                               handicapMap.get(row.player_id) ?? null
                             }
                             strokeIndexByHole={strokeIndexMap}
+                            leaderboardViewOverride={leaderboardViewOverride}
                           />
                         </div>
                       </td>

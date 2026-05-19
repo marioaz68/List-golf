@@ -28,7 +28,10 @@ import ScoreEntryRoundSwitcher, {
 import { syncCaptureToEntryRound } from "@/lib/scorecards/syncCaptureToEntryRound";
 import { countHolesOnPlayerRound } from "@/lib/scorecards/countHolesOnPlayerRound";
 import { resolveEntryCaptureRound } from "@/lib/rounds/resolveEntryCaptureRound";
-import { resolveScoreEntryDisplayTarget } from "@/lib/rounds/scoreEntryDisplayRound";
+import {
+  resolveForcedScoreEntryRound,
+  resolveScoreEntryDisplayTarget,
+} from "@/lib/rounds/scoreEntryDisplayRound";
 import {
   fetchTournamentRegistrationStatus,
   isRegistrationClosed,
@@ -549,6 +552,11 @@ export default async function ScoreEntryPage(props: {
           (r) => r.tournament_id === effectiveTournamentId
         ) as SessionRoundFields[];
 
+        const viewingExplicitRound =
+          requestedRoundNo != null &&
+          Number.isFinite(requestedRoundNo) &&
+          requestedRoundNo >= 1;
+
         const capture = await resolveEntryCaptureRound(supabase, {
           entryId: matchedEntry.id,
           entryCategoryId: matchedEntry.category_id,
@@ -559,16 +567,38 @@ export default async function ScoreEntryPage(props: {
           sessionRoundId: requestedRoundId || null,
         });
 
-        if (!capture.ok) {
+        const catLabel =
+          matchedEntry.category?.code?.trim() ||
+          matchedEntry.category?.name?.trim() ||
+          "categoría";
+
+        if (viewingExplicitRound && player) {
+          scoringRoundBlocked = false;
+          const forced = await resolveForcedScoreEntryRound(supabase, {
+            entryId: matchedEntry.id,
+            playerId: player.id,
+            categoryId: matchedEntry.category_id,
+            rounds: gateCtx.rounds,
+            lookups: gateCtx.lookups,
+            forceRoundNo: requestedRoundNo,
+            tournamentRoundIds: roundsForCapture.map((r) => r.id),
+          });
+          if (forced) {
+            scoringRoundId = forced.roundId;
+            roundClosed = forced.roundClosed;
+            captureRoundNotice = forced.roundClosed
+              ? `R${forced.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`
+              : `Capturando R${forced.roundNo} · inscripción ${catLabel}.`;
+          } else {
+            scoringRoundBlocked = true;
+            priorRoundGateMessage = `No hay ronda R${requestedRoundNo} para la categoría de este jugador.`;
+          }
+        } else if (!capture.ok) {
           if (capture.reason === "prior_not_officially_closed") {
             scoringRoundBlocked = true;
             priorRoundGateMessage = `La R${capture.priorRoundNo} ya está capturada en todas las categorías. El comité debe pulsar «Cerrar Ronda ${capture.priorRoundNo} definitivamente» (arriba) antes de capturar la R${capture.targetRoundNo}.`;
           } else if (capture.reason === "prior_not_closed") {
             scoringRoundBlocked = true;
-            const catLabel =
-              matchedEntry.category?.code?.trim() ||
-              matchedEntry.category?.name?.trim() ||
-              messages[locale].common.noCategory;
             priorRoundGateMessage = fmt(se.priorRoundGate, {
               round: capture.targetRoundNo,
               prior: capture.priorRoundNo,
@@ -585,10 +615,6 @@ export default async function ScoreEntryPage(props: {
         } else {
           scoringRoundId = capture.roundId;
           roundClosed = capture.roundClosed === true;
-          const catLabel =
-            matchedEntry.category?.code?.trim() ||
-            matchedEntry.category?.name?.trim() ||
-            "categoría";
           const when = capture.sessionLabel?.trim();
           if (capture.roundClosed) {
             captureRoundNotice = when
@@ -610,7 +636,7 @@ export default async function ScoreEntryPage(props: {
               captureRoundId: capture.roundId,
               captureRoundNo: capture.roundNo,
               captureRoundClosed: capture.roundClosed === true,
-              forceRoundNo: requestedRoundNo,
+              forceRoundNo: null,
             });
             scoringRoundId = display.roundId;
             roundClosed = display.roundClosed;
@@ -619,8 +645,6 @@ export default async function ScoreEntryPage(props: {
               captureRoundNotice = `R${display.roundNo} cerrada · inscripción ${catLabel}. R${display.pendingOpenRoundNo} aún sin captura. Pulsa ABRIR para corregir R${display.roundNo}.`;
             } else if (display.roundClosed) {
               captureRoundNotice = `R${display.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`;
-            } else if (requestedRoundNo != null) {
-              captureRoundNotice = `Capturando R${display.roundNo} · inscripción ${catLabel}.`;
             }
           }
         }
@@ -704,9 +728,30 @@ export default async function ScoreEntryPage(props: {
           round_id: string;
         }[];
 
-        const selectedRoundScore = roundScores.find(
+        const viewRoundNo =
+          requestedRoundNo ??
+          roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+          1;
+
+        let selectedRoundScore = roundScores.find(
           (x) => x.round_id === scoringRoundId
         );
+
+        if (!selectedRoundScore && viewRoundNo >= 1) {
+          const roundIdsForViewNo = roundListAll
+            .filter(
+              (r) =>
+                r.tournament_id === effectiveTournamentId &&
+                r.round_no === viewRoundNo
+            )
+            .map((r) => r.id);
+          selectedRoundScore = roundScores.find((x) =>
+            roundIdsForViewNo.includes(x.round_id)
+          );
+          if (selectedRoundScore) {
+            scoringRoundId = selectedRoundScore.round_id;
+          }
+        }
 
         if (selectedRoundScore?.id) {
           const { data: holeScoreData, error: holeScoreErr } = await supabase
@@ -803,16 +848,19 @@ export default async function ScoreEntryPage(props: {
               })
               .sort((a, b) => a.round_no - b.round_no);
 
+            if (Object.keys(existingScores).length === 0) {
+              const aligned = capturedRounds.find((r) => r.round_no === viewRoundNo);
+              if (aligned?.scores && Object.keys(aligned.scores).length > 0) {
+                Object.assign(existingScores, aligned.scores);
+              }
+            }
+
             if (
               Object.keys(existingScores).length === 0 &&
               misalignedCapturedRounds.length > 0
             ) {
-              const scoringNo =
-                roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
-                roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
-                1;
               const hint =
-                misalignedCapturedRounds.find((r) => r.round_no === scoringNo) ??
+                misalignedCapturedRounds.find((r) => r.round_no === viewRoundNo) ??
                 misalignedCapturedRounds[0];
               if (hint?.scores && Object.keys(hint.scores).length > 0) {
                 Object.assign(existingScores, hint.scores);

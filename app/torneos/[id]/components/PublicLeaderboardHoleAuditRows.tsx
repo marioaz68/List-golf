@@ -2,6 +2,10 @@ import {
   isStablefordCategory,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  effectiveUsesNetLeaderboard,
+  type LeaderboardViewOverride,
+} from "@/lib/leaderboard/leaderboardViewOverride";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
   perHoleCompetitionBreakdown,
@@ -43,15 +47,20 @@ type Props = {
   baseHoles: RoundDetail["holes"];
   inline: boolean;
   showEighteenTotalCol: boolean;
+  summaryColCount: number;
+  viewOverride?: LeaderboardViewOverride | null;
   entryId: string;
   labels: AuditLabels;
 };
 
-export function showHoleAuditForRule(rule: CategoryCompetitionRule): boolean {
+export function showHoleAuditForRule(
+  rule: CategoryCompetitionRule,
+  viewOverride?: LeaderboardViewOverride | null
+): boolean {
+  if (viewOverride === "gross") return false;
   return (
     isStablefordCategory(rule) ||
-    rule.leaderboard_basis === "net" ||
-    rule.leaderboard_basis === "both"
+    effectiveUsesNetLeaderboard(rule, viewOverride)
   );
 }
 
@@ -60,6 +69,7 @@ function AuditRow({
   entryId,
   inline,
   showEighteenTotalCol,
+  summaryColCount,
   baseHoles,
   cells,
   pick,
@@ -69,11 +79,17 @@ function AuditRow({
   entryId: string;
   inline: boolean;
   showEighteenTotalCol: boolean;
+  summaryColCount: number;
   baseHoles: RoundDetail["holes"];
   cells: PerHoleCompetitionCell[];
   pick: (c: PerHoleCompetitionCell | null) => number | null;
   sumPick: (slice: PerHoleCompetitionCell[]) => number | null;
 }) {
+  const summaryPlaceholders = Array.from({ length: summaryColCount }, (_, i) => (
+    <td key={`${label}-${entryId}-sum-${i}`} className={auditTotalTd}>
+      —
+    </td>
+  ));
   const slice18 = Array.from({ length: 18 }, (_, i) =>
     cellAt(cells, i + 1)
   ).filter(Boolean) as PerHoleCompetitionCell[];
@@ -113,9 +129,7 @@ function AuditRow({
               )
             )}
           </td>
-          <td className={auditTotalTd}>—</td>
-          <td className={auditTotalTd}>—</td>
-          <td className={auditTotalTd}>—</td>
+          {summaryPlaceholders}
         </>
       ) : (
         <>
@@ -146,9 +160,7 @@ function AuditRow({
               {formatAuditValue(sumPick(slice18))}
             </td>
           ) : null}
-          <td className={auditTotalTd}>—</td>
-          <td className={auditTotalTd}>—</td>
-          <td className={auditTotalTd}>—</td>
+          {summaryPlaceholders}
         </>
       )}
     </tr>
@@ -163,6 +175,8 @@ export default function PublicLeaderboardHoleAuditRows({
   baseHoles,
   inline,
   showEighteenTotalCol,
+  summaryColCount,
+  viewOverride = null,
   entryId,
   labels,
 }: Props) {
@@ -172,10 +186,7 @@ export default function PublicLeaderboardHoleAuditRows({
     handicapIndex,
     strokeIndexByHole
   );
-  const useNet =
-    isStablefordCategory(rule) ||
-    rule.leaderboard_basis === "net" ||
-    rule.leaderboard_basis === "both";
+  const useNet = effectiveUsesNetLeaderboard(rule, viewOverride);
   const useSf = isStablefordCategory(rule);
 
   const sum = (slice: PerHoleCompetitionCell[], fn: (c: PerHoleCompetitionCell) => number) => {
@@ -199,6 +210,7 @@ export default function PublicLeaderboardHoleAuditRows({
         entryId={entryId}
         inline={inline}
         showEighteenTotalCol={showEighteenTotalCol}
+        summaryColCount={summaryColCount}
         baseHoles={baseHoles}
         cells={cells}
         pick={(c) => c?.strokeIndex ?? null}
@@ -210,6 +222,7 @@ export default function PublicLeaderboardHoleAuditRows({
           entryId={entryId}
           inline={inline}
           showEighteenTotalCol={showEighteenTotalCol}
+          summaryColCount={summaryColCount}
           baseHoles={baseHoles}
           cells={cells}
           pick={(c) => c?.strokesReceived ?? null}
@@ -222,6 +235,7 @@ export default function PublicLeaderboardHoleAuditRows({
           entryId={entryId}
           inline={inline}
           showEighteenTotalCol={showEighteenTotalCol}
+          summaryColCount={summaryColCount}
           baseHoles={baseHoles}
           cells={cells}
           pick={(c) => c?.netStrokes ?? null}
@@ -234,6 +248,7 @@ export default function PublicLeaderboardHoleAuditRows({
           entryId={entryId}
           inline={inline}
           showEighteenTotalCol={showEighteenTotalCol}
+          summaryColCount={summaryColCount}
           baseHoles={baseHoles}
           cells={cells}
           pick={(c) => c?.stablefordPoints ?? null}

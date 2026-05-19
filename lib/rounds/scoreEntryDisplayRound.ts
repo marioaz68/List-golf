@@ -11,6 +11,69 @@ import {
 
 export { countHolesOnPlayerRound };
 
+/**
+ * Ronda concreta elegida por el operador (?round_no=N): categoría de inscripción
+ * y, si hace falta, la fila `rounds` donde ya hay captura (p. ej. mal alineada).
+ */
+export async function resolveForcedScoreEntryRound(
+  supabase: SupabaseClient,
+  params: {
+    entryId: string;
+    playerId: string;
+    categoryId: string | null;
+    rounds: RoundForGate[];
+    lookups: LockedScorecardLookups;
+    forceRoundNo: number;
+    tournamentRoundIds: string[];
+  }
+): Promise<ScoreEntryCaptureTarget | null> {
+  const cat = String(params.categoryId ?? "").trim();
+  const roundIdsForNo = params.rounds
+    .filter((r) => r.round_no === params.forceRoundNo)
+    .map((r) => r.id);
+
+  let round = getRoundForCategory(
+    params.rounds,
+    params.forceRoundNo,
+    cat || null
+  );
+
+  const scoreScope =
+    roundIdsForNo.length > 0 ? roundIdsForNo : params.tournamentRoundIds;
+  if (scoreScope.length > 0) {
+    const { data: scoreRows } = await supabase
+      .from("round_scores")
+      .select("round_id")
+      .eq("player_id", params.playerId)
+      .in("round_id", scoreScope);
+
+    const scoredIds = (scoreRows ?? [])
+      .map((r) => String(r.round_id ?? "").trim())
+      .filter(Boolean);
+
+    if (scoredIds.length > 0) {
+      const preferred =
+        scoredIds.find((id) => {
+          const meta = params.rounds.find((r) => r.id === id);
+          if (!meta) return false;
+          if (!cat) return true;
+          const metaCat = String(meta.category_id ?? "").trim();
+          return metaCat === cat || !metaCat;
+        }) ?? scoredIds[0];
+      const fromScore = params.rounds.find((r) => r.id === preferred);
+      if (fromScore) round = fromScore;
+    }
+  }
+
+  if (!round?.id) return null;
+
+  return {
+    roundId: round.id,
+    roundNo: params.forceRoundNo,
+    roundClosed: isEntryRoundClosed(params.entryId, round, params.lookups),
+  };
+}
+
 export type ScoreEntryCaptureTarget = {
   roundId: string;
   roundNo: number;
