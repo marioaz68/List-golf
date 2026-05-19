@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { PublicPairingGroup, RoundRow } from "../lib/types";
 import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import { formatStartingHoleLabelParts } from "@/lib/tee-sheet/formatStartingHoleLabel";
+import { pairingGroupMatchesCategory } from "@/lib/tee-sheet/pairingGroupCategoryMatch";
 import {
   buildHref,
   formatPublicSalidasKicker,
@@ -11,10 +12,6 @@ import {
   isStartingOrderConfirmed,
   sectionPillClasses,
 } from "../lib/utils";
-
-function normalizeCategoryToken(value: string | null | undefined) {
-  return String(value ?? "").trim().toUpperCase();
-}
 
 type PublicTeeSheetViewProps = {
   groups: PublicPairingGroup[];
@@ -66,16 +63,27 @@ export default function PublicTeeSheetView({
 
   const filteredGroups = groups
     .filter((group) => !activeRoundId || group.round_id === activeRoundId)
-    .map((group) => ({
-      ...group,
-      members: selectedCategoryCode
-        ? group.members.filter(
-            (member) =>
-              normalizeCategoryToken(member.category_code) ===
-              normalizeCategoryToken(selectedCategoryCode)
-          )
-        : group.members,
-    }))
+    .filter((group) =>
+      pairingGroupMatchesCategory(
+        group.notes,
+        group.members,
+        selectedCategoryCode
+      )
+    )
+    .map((group) => {
+      const matchByGroupNotes =
+        !!selectedCategoryCode &&
+        pairingGroupMatchesCategory(group.notes, [], selectedCategoryCode);
+      return {
+        ...group,
+        members:
+          selectedCategoryCode && !matchByGroupNotes
+            ? group.members.filter((member) =>
+                pairingGroupMatchesCategory(null, [member], selectedCategoryCode)
+              )
+            : group.members,
+      };
+    })
     .filter((group) => group.members.length > 0 || !selectedCategoryCode);
 
   const groupsByRound = new Map<string, PublicPairingGroup[]>();

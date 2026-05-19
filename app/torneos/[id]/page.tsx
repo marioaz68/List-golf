@@ -57,6 +57,10 @@ import {
   roundsInSameSession,
   type SessionRoundFields,
 } from "@/app/(backoffice)/tee-sheet/sessionBlock";
+import {
+  isSessionStartingOrderPublished,
+  pairingGroupMatchesCategory,
+} from "@/lib/tee-sheet/pairingGroupCategoryMatch";
 import { detailLabelsFromPublicTournament } from "./lib/publicDetailTableLabels";
 import {
   fetchAllTournamentEntries,
@@ -271,11 +275,23 @@ export default async function PublicTournamentPage({
   }
 
   const rounds = (roundsData ?? []) as RoundRow[];
+  const roundNotesById = new Map(rounds.map((r) => [r.id, r.notes]));
+  const sessionRounds: SessionRoundFields[] = rounds.map((round) => ({
+    id: round.id,
+    tournament_id: typedTournament.id,
+    category_id: round.category_id ?? null,
+    round_no: round.round_no,
+    round_date: round.round_date,
+    start_type: round.start_type,
+    start_time: round.start_time,
+    wave: round.wave ?? null,
+  }));
+
   const roundsInCategoryScope = rounds.filter((r) =>
     roundBelongsToCategory(r, selectedCategoryId || null)
   );
   const publicTeeSheetRoundsAll = rounds.filter((round) =>
-    isStartingOrderConfirmed(round.notes)
+    isSessionStartingOrderPublished(sessionRounds, round.id, roundNotesById)
   );
   const publicTeeSheetRounds = publicTeeSheetRoundsAll.filter((round) =>
     roundBelongsToCategory(round, selectedCategoryId || null)
@@ -819,17 +835,6 @@ export default async function PublicTournamentPage({
         : leaderboard;
   }
 
-  const sessionRounds: SessionRoundFields[] = rounds.map((round) => ({
-    id: round.id,
-    tournament_id: typedTournament.id,
-    category_id: round.category_id ?? null,
-    round_no: round.round_no,
-    round_date: round.round_date,
-    start_type: round.start_type,
-    start_time: round.start_time,
-    wave: round.wave ?? null,
-  }));
-
   const publicRoundIds = [
     ...new Set(
       publicTeeSheetRounds.flatMap((round) =>
@@ -1022,9 +1027,11 @@ export default async function PublicTournamentPage({
       if (!round || !roundBelongsToCategory(round, selectedCategoryId || null)) {
         return false;
       }
-      if (!selectedCategoryCode) return true;
-      return group.members.some(
-        (m) => m.category_code === selectedCategoryCode
+      return pairingGroupMatchesCategory(
+        group.notes,
+        group.members,
+        selectedCategoryCode || selectedCategory?.code,
+        selectedCategory?.name
       );
     })
     .sort((a, b) => {
