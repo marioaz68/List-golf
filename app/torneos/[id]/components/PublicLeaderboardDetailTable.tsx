@@ -7,6 +7,7 @@ import {
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import {
+  playingHandicap,
   scoreRoundDetail,
   type StrokeIndexByHole,
 } from "@/lib/leaderboard/competitionScoring";
@@ -266,6 +267,41 @@ function SummaryPlaceholders({ count }: { count: number }) {
       ))}
     </>
   );
+}
+
+/** Columna NET en detalle: total bruto de la ronda menos PH del torneo. */
+function netTotalColumnForDetail(
+  detail: RoundDetail,
+  rule: CategoryCompetitionRule,
+  handicapIndex: number | null | undefined,
+  strokeIndexByHole: StrokeIndexByHole | undefined
+): { primary: string; secondary: string } {
+  if (detail.is_dq) {
+    return { primary: "DQ", secondary: "DQ" };
+  }
+  const scored = scoreRoundDetail(
+    detail,
+    rule,
+    handicapIndex,
+    strokeIndexByHole
+  );
+  const gross =
+    detail.total_score ??
+    scored.gross ??
+    detail.gross_score ??
+    null;
+  if (gross == null || !Number.isFinite(Number(gross))) {
+    return {
+      primary:
+        scored.netStrokes != null ? formatScore(scored.netStrokes) : "—",
+      secondary: "—",
+    };
+  }
+  const ph = playingHandicap(handicapIndex, rule.handicap_percentage);
+  return {
+    primary: formatScore(Number(gross) - ph),
+    secondary: formatScore(gross),
+  };
 }
 
 function detailTotalsForRule(
@@ -579,15 +615,13 @@ export default function PublicLeaderboardDetailTable({
               strokeIndexByHole,
               true
             );
-            const netTotals = detailTotalsForRule(
-              detail,
-              rule,
-              handicapIndex,
-              strokeIndexByHole,
-              false
-            );
             const roundSummaryTotals = isNetDetailLayout
-              ? netTotals
+              ? netTotalColumnForDetail(
+                  detail,
+                  rule,
+                  handicapIndex,
+                  strokeIndexByHole
+                )
               : grossTotals;
 
             return (
