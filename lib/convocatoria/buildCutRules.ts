@@ -21,7 +21,7 @@ export function buildCutRulesCcQ(meta: ConvocatoriaDraft["meta"]): DraftCutRule[
       gross_exemption_top_n: 4,
       tie_break_profile_key: "gross_cut",
       notes:
-        "Acumulado R1+R2 (36 hoyos). Desempate corte: 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9.",
+        "Acumulado R1+R2 (36 hoyos). Top 50% redondeo a la baja sobre inscritos; empates en el score de corte pasan. Desempate ordena: 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9.",
     },
     {
       category_codes: ["DE"],
@@ -37,7 +37,8 @@ export function buildCutRulesCcQ(meta: ConvocatoriaDraft["meta"]): DraftCutRule[
       gross_exemption_enabled: false,
       gross_exemption_top_n: 0,
       tie_break_profile_key: "stableford_cut",
-      notes: "Acumulado R1+R2 por puntos Stableford.",
+      notes:
+        "Acumulado R1+R2 por puntos Stableford. Top 50% redondeo a la baja; empates en el score de corte pasan.",
     },
     {
       category_codes: ["SEN", "SS"],
@@ -54,7 +55,7 @@ export function buildCutRulesCcQ(meta: ConvocatoriaDraft["meta"]): DraftCutRule[
       gross_exemption_top_n: 4,
       tie_break_profile_key: "seniors_cut",
       notes:
-        "Corte neto 36 hoyos. Top 4 gross fuera del corte neto. Desempate gross 10-18 con PH 80%.",
+        "Corte neto 36 hoyos. Top 50% redondeo a la baja; empates en score de corte pasan. Top 4 gross fuera del corte neto. Desempate gross 10-18 con PH 80%.",
     },
   ];
 }

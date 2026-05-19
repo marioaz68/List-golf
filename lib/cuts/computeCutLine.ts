@@ -143,10 +143,15 @@ function sortCutField(
   });
 }
 
+/**
+ * Plazas que pasan por porcentaje (convocatoria CCQ: 50% redondeo a la baja).
+ * Ej. 41→20, 53→26, 70→35, 27→13.
+ */
 function topNFromRule(rule: RoundAdvancementRule, fieldSize: number): number {
   if (rule.advancement_type === "top_percent") {
     const pct = Math.max(0, Math.min(100, Number(rule.advancement_value)));
-    return Math.max(1, Math.ceil((fieldSize * pct) / 100));
+    const raw = (fieldSize * pct) / 100;
+    return Math.max(1, Math.floor(raw));
   }
   return Math.max(1, Math.trunc(Number(rule.advancement_value)));
 }
@@ -161,13 +166,14 @@ function madeCutFromRanking(
   const eligible = ranked.filter((r) => r.primaryValue != null);
   if (eligible.length === 0 || fieldSize === 0) return new Set();
 
-  /** Top % sobre el campo inscrito (41 → 50% = 21), no solo quienes ya tienen tarjeta cerrada. */
+  /** Top % sobre el campo inscrito (no solo quienes ya tienen score). */
   const topN = Math.min(topNFromRule(rule, fieldSize), eligible.length);
 
-  if (tieBreakSteps.length > 0 || !rule.include_ties) {
+  if (!rule.include_ties) {
     return new Set(eligible.slice(0, topN).map((r) => r.entryId));
   }
 
+  /** Empates en el score de corte pasan; el perfil de desempate solo ordena la lista. */
   const cutValue = eligible[topN - 1]!.primaryValue!;
   const ids = new Set<string>();
   for (const row of eligible) {
@@ -219,7 +225,7 @@ function cutLabelForRule(
   }
 
   if (rule.advancement_type === "top_percent") {
-    return `${prefix}Top ${rule.advancement_value}% (→ R${rule.to_round_no})${tieNote}`;
+    return `${prefix}Top ${rule.advancement_value}% red. abajo (→ R${rule.to_round_no})${tieNote}`;
   }
 
   return `${prefix}Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
