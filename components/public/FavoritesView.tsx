@@ -543,7 +543,7 @@ export default function FavoritesView({
                         scroll={false}
                         href={buildDetailToggleHref({
                           tournamentId,
-                          categoryId: selectedCategoryId || null,
+                          categoryId: row.category_id || null,
                           roundId: selectedRound?.id ?? null,
                           view: "favorites",
                           basis: leaderboardViewOverride ?? undefined,

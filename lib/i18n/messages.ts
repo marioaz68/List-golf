@@ -925,6 +925,8 @@ const es = {
       "Resultados verificados por la administración del torneo.",
     pageDescFavorites:
       "Seguimiento rápido de los jugadores marcados como favoritos.",
+    favoritesAllCategoriesHint:
+      "Todas las categorías: aquí ves a tus favoritos sin importar su categoría de inscripción.",
     pageDescTeeSheet:
       "Lista pública de salidas por día, visible solo cuando el comité confirma el orden definitivo.",
     pageDescLive:
@@ -2081,6 +2083,8 @@ const en: Messages = {
     pageTitleTeeSheet: "Starters / Groups",
     pageDescOfficial: "Results verified by tournament administration.",
     pageDescFavorites: "Quick follow-up for players marked as favorites.",
+    favoritesAllCategoriesHint:
+      "All categories: your favorites appear here regardless of enrollment category.",
     pageDescTeeSheet:
       "Public tee sheet by day, visible only after the committee confirms the final order.",
     pageDescLive:

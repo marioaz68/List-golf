@@ -76,18 +76,14 @@ function getCumulativeRoundDetails(
   return cumulative;
 }
 
-/** En vista neto: gross por hoyo de rondas anteriores + R1 si la ronda activa es R1. */
+/** En vista neto: gross por hoyo R1…R activa bajo Par; después auditoría neto de la ronda activa. */
 function getPriorGrossRoundRowsForNetView(
   allWithScores: RoundDetail[],
   maxRoundNo: number
 ): RoundDetail[] {
   if (maxRoundNo < 1) return [];
-  if (maxRoundNo === 1) {
-    const r1 = bestDetailForRoundNo(allWithScores, 1);
-    return r1 && hasHoleOrGross(r1) ? [r1] : [];
-  }
   const rows: RoundDetail[] = [];
-  for (let roundNo = 1; roundNo < maxRoundNo; roundNo += 1) {
+  for (let roundNo = 1; roundNo <= maxRoundNo; roundNo += 1) {
     const detail = bestDetailForRoundNo(allWithScores, roundNo);
     if (detail && hasHoleOrGross(detail)) {
       rows.push(detail);

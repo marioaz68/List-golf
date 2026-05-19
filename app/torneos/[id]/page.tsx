@@ -219,8 +219,14 @@ export default async function PublicTournamentPage({
   );
 
   const defaultCategoryId = categories[0]?.id ?? "";
+  const isFavoritesView = view === "favorites";
 
-  if (categories.length > 0 && !requestedCategoryId && defaultCategoryId) {
+  if (
+    categories.length > 0 &&
+    !requestedCategoryId &&
+    defaultCategoryId &&
+    !isFavoritesView
+  ) {
     redirect(
       buildHref({
         tournamentId: typedTournament.id,
@@ -265,6 +271,7 @@ export default async function PublicTournamentPage({
   const filteredEntries = selectedCategoryId
     ? allEntries.filter((entry) => entry.category_id === selectedCategoryId)
     : allEntries;
+  const entriesForLeaderboard = isFavoritesView ? allEntries : filteredEntries;
 
   const { data: roundsData, error: roundsError } = await supabase
     .from("rounds")
@@ -295,6 +302,9 @@ export default async function PublicTournamentPage({
   const roundsInCategoryScope = rounds.filter((r) =>
     roundBelongsToCategory(r, selectedCategoryId || null)
   );
+  const roundsScopeForLeaderboard = isFavoritesView
+    ? rounds
+    : roundsInCategoryScope;
   const publishedDayKeys = publishedCompetitiveDayKeys(rounds, roundNotesById);
   const publicTeeSheetRounds = rounds.filter((round) => {
     if (!roundBelongsToCategory(round, selectedCategoryId || null)) return false;
@@ -306,14 +316,22 @@ export default async function PublicTournamentPage({
     .filter((r) => roundDateUtcKey(r.round_date) === todayKey)
     .sort(sortRoundsChrono);
 
-  const roundsTodayList = roundsTodayAll.filter((r) =>
-    roundBelongsToCategory(r, selectedCategoryId || null)
-  );
+  const roundsTodayList = isFavoritesView
+    ? roundsTodayAll
+    : roundsTodayAll.filter((r) =>
+        roundBelongsToCategory(r, selectedCategoryId || null)
+      );
+
+  const roundsInNavScope = (roundRows: RoundRow[]) =>
+    isFavoritesView
+      ? roundRows
+      : roundRows.filter((r) =>
+          roundBelongsToCategory(r, selectedCategoryId || null)
+        );
 
   const pastDateKeysSorted = [
     ...new Set(
-      rounds
-        .filter((r) => roundBelongsToCategory(r, selectedCategoryId || null))
+      roundsInNavScope(rounds)
         .map((r) => roundDateUtcKey(r.round_date))
         .filter((k): k is string => !!k && k < todayKey)
     ),
@@ -322,22 +340,19 @@ export default async function PublicTournamentPage({
   const roundsByPastDate = pastDateKeysSorted
     .map((dateKey) => ({
       dateKey,
-      rounds: rounds
+      rounds: roundsInNavScope(rounds)
         .filter((r) => roundDateUtcKey(r.round_date) === dateKey)
-        .filter((r) => roundBelongsToCategory(r, selectedCategoryId || null))
         .sort(sortRoundsChrono),
     }))
     .filter((g) => g.rounds.length > 0);
 
-  const roundsWithoutCalendar = rounds
-    .filter((r) => !roundDateUtcKey(r.round_date))
-    .filter((r) => roundBelongsToCategory(r, selectedCategoryId || null))
-    .sort(sortRoundsChrono);
+  const roundsWithoutCalendar = roundsInNavScope(
+    rounds.filter((r) => !roundDateUtcKey(r.round_date))
+  ).sort(sortRoundsChrono);
 
   const futureDateKeysSorted = [
     ...new Set(
-      rounds
-        .filter((r) => roundBelongsToCategory(r, selectedCategoryId || null))
+      roundsInNavScope(rounds)
         .map((r) => roundDateUtcKey(r.round_date))
         .filter((k): k is string => !!k && k > todayKey)
     ),
@@ -346,9 +361,8 @@ export default async function PublicTournamentPage({
   const roundsByFutureDate = futureDateKeysSorted
     .map((dateKey) => ({
       dateKey,
-      rounds: rounds
+      rounds: roundsInNavScope(rounds)
         .filter((r) => roundDateUtcKey(r.round_date) === dateKey)
-        .filter((r) => roundBelongsToCategory(r, selectedCategoryId || null))
         .sort(sortRoundsChrono),
     }))
     .filter((g) => g.rounds.length > 0);
@@ -356,11 +370,11 @@ export default async function PublicTournamentPage({
   const adminSupabase = await createAdminClient();
 
   const roundScores =
-    filteredEntries.length > 0 && roundsInCategoryScope.length > 0
+    entriesForLeaderboard.length > 0 && roundsScopeForLeaderboard.length > 0
       ? await fetchRoundScoresForPublicLeaderboard(
           adminSupabase,
-          filteredEntries.map((entry) => entry.player_id),
-          roundsInCategoryScope.map((r) => r.id)
+          entriesForLeaderboard.map((entry) => entry.player_id),
+          roundsScopeForLeaderboard.map((r) => r.id)
         )
       : [];
 
@@ -407,7 +421,7 @@ export default async function PublicTournamentPage({
   );
 
   const latestRoundWithScoresFiltered =
-    [...roundsInCategoryScope]
+    [...roundsScopeForLeaderboard]
       .filter((round) => capturedRoundIds.includes(round.id))
       .sort((a, b) => a.round_no - b.round_no)
       .at(-1) ?? null;
@@ -431,18 +445,21 @@ export default async function PublicTournamentPage({
     category_id: r.category_id ?? null,
   }));
 
-  const gateEntries = filteredEntries;
+  const gateEntries = entriesForLeaderboard;
   const defaultRoundFromClose = resolveDefaultPublicLeaderboardRound({
     entries: gateEntries,
     allRounds: rounds,
-    roundsInScope: roundsInCategoryScope,
-    selectedCategoryId: selectedCategoryId || null,
+    roundsInScope: roundsScopeForLeaderboard,
+    selectedCategoryId: isFavoritesView ? null : selectedCategoryId || null,
     lockedLookups,
     latestRoundWithScores: latestRoundWithScoresFiltered,
   });
 
   const defaultRoundLiveFavorite =
-    roundsTodayList[0] ?? defaultRoundFromClose ?? roundsInCategoryScope[0] ?? null;
+    roundsTodayList[0] ??
+    defaultRoundFromClose ??
+    roundsScopeForLeaderboard[0] ??
+    null;
   const defaultRoundOfficial =
     defaultRoundFromClose ??
     latestRoundWithScoresFiltered ??
@@ -450,7 +467,7 @@ export default async function PublicTournamentPage({
     null;
 
   let effectiveRequestedRoundId = requestedRoundId;
-  if (requestedRoundId && selectedCategoryId) {
+  if (requestedRoundId && selectedCategoryId && !isFavoritesView) {
     const reqRound = rounds.find((r) => r.id === requestedRoundId);
     const cat = String(selectedCategoryId).trim();
     if (
@@ -465,11 +482,13 @@ export default async function PublicTournamentPage({
   }
 
   const selectedRound =
-    roundsInCategoryScope.find((round) => round.id === effectiveRequestedRoundId) ??
+    roundsScopeForLeaderboard.find(
+      (round) => round.id === effectiveRequestedRoundId
+    ) ??
     (view === "tee-sheet" ? publicTeeSheetRounds[0] ?? null : null) ??
     (view === "live" || view === "favorites" ? defaultRoundLiveFavorite : null) ??
     (view === "official" ? defaultRoundOfficial : null) ??
-    roundsInCategoryScope[0] ??
+    roundsScopeForLeaderboard[0] ??
     null;
 
   const selectedRoundIsHistoric = Boolean(
@@ -783,7 +802,7 @@ export default async function PublicTournamentPage({
         code: c.code,
       })),
       selectedRoundNo,
-      selectedCategoryId: selectedCategoryId || null,
+      selectedCategoryId: isFavoritesView ? null : selectedCategoryId || null,
       handicapByPlayerId,
       tieBreakStepsByProfileId,
       strokeIndexByHole,
@@ -822,13 +841,12 @@ export default async function PublicTournamentPage({
     leaderboard = annotateCutDividers(
       alignedForCut,
       publicCutLines,
-      selectedCategoryId || null
+      isFavoritesView ? null : selectedCategoryId || null
     );
 
-    activePublicCutLine = activeCutLineForUi(
-      publicCutLines,
-      selectedCategoryId || null
-    );
+    activePublicCutLine = isFavoritesView
+      ? null
+      : activeCutLineForUi(publicCutLines, selectedCategoryId || null);
 
     officialLeaderboard =
       selectedRound?.id != null
@@ -1078,6 +1096,10 @@ export default async function PublicTournamentPage({
       ...opts,
     });
 
+  const categoryIdForRoundNav = isFavoritesView
+    ? null
+    : selectedCategoryId || null;
+
   const adminLeaderboardHref = (() => {
     const qs = new URLSearchParams();
     qs.set("tournament_id", typedTournament.id);
@@ -1202,7 +1224,6 @@ export default async function PublicTournamentPage({
               <Link
                 scroll={false}
                 href={tHref({
-                  categoryId: selectedCategoryId || null,
                   roundId: selectedRound?.id ?? null,
                   view: "favorites",
                 })}
@@ -1273,7 +1294,7 @@ export default async function PublicTournamentPage({
 
           {(categories.length > 0 || rounds.length > 0) && (
             <div className="mt-6 flex flex-col gap-3">
-              {categories.length > 0 ? (
+              {categories.length > 0 && !isFavoritesView ? (
                 <div className="flex flex-wrap gap-2">
                   {categories.map((category) => (
                     <Link
@@ -1290,6 +1311,10 @@ export default async function PublicTournamentPage({
                     </Link>
                   ))}
                 </div>
+              ) : isFavoritesView ? (
+                <p className="text-sm text-slate-400">
+                  {pub.favoritesAllCategoriesHint}
+                </p>
               ) : null}
 
               {view !== "tee-sheet" && rounds.length > 0 ? (
@@ -1332,7 +1357,7 @@ export default async function PublicTournamentPage({
                                 key={round.id}
                                 scroll={false}
                                 href={tHref({
-                                  categoryId: selectedCategoryId || null,
+                                  categoryId: categoryIdForRoundNav,
                                   roundId: round.id,
                                   view,
                                 })}
@@ -1382,8 +1407,7 @@ export default async function PublicTournamentPage({
                                           key={round.id}
                                           scroll={false}
                                           href={tHref({
-                                            categoryId:
-                                              selectedCategoryId || null,
+                                            categoryId: categoryIdForRoundNav,
                                             roundId: round.id,
                                             view,
                                           })}
@@ -1424,8 +1448,7 @@ export default async function PublicTournamentPage({
                                           key={round.id}
                                           scroll={false}
                                           href={tHref({
-                                            categoryId:
-                                              selectedCategoryId || null,
+                                            categoryId: categoryIdForRoundNav,
                                             roundId: round.id,
                                             view,
                                           })}
@@ -1454,8 +1477,7 @@ export default async function PublicTournamentPage({
                                     key={round.id}
                                     scroll={false}
                                     href={tHref({
-                                      categoryId:
-                                        selectedCategoryId || null,
+                                      categoryId: categoryIdForRoundNav,
                                       roundId: round.id,
                                       view,
                                     })}
@@ -1471,7 +1493,7 @@ export default async function PublicTournamentPage({
                           ) : null}
                         </div>
                       </details>
-                    ) : roundsInCategoryScope.length >
+                    ) : roundsScopeForLeaderboard.length >
                       roundsTodayList.length ? (
                       <details
                         open={selectedRoundIsHistoric}
@@ -1482,12 +1504,12 @@ export default async function PublicTournamentPage({
                         </summary>
                         <div className="mt-3 border-t border-white/10 pt-3">
                           <div className="flex flex-wrap gap-2">
-                            {roundsInCategoryScope.map((round) => (
+                            {roundsScopeForLeaderboard.map((round) => (
                               <Link
                                 key={round.id}
                                 scroll={false}
                                 href={tHref({
-                                  categoryId: selectedCategoryId || null,
+                                  categoryId: categoryIdForRoundNav,
                                   roundId: round.id,
                                   view,
                                 })}
