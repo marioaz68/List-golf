@@ -62,11 +62,12 @@ export function rankingRoundRange(
     return { minRound: r, maxRound: r, tieBreakRound: r };
   }
 
-  /** Rango De/A: acumula desde `from_round_no` hasta la ronda previa al avance (`to_round_no - 1`). */
+  /** Acumulado hasta la ronda previa al avance (p. ej. corte tras R1+R2 → `to_round_no` 3 usa hoyos 1–2). */
   const minRound = Math.max(1, rule.from_round_no);
+  const cutThroughRound = Math.max(minRound, rule.to_round_no - 1);
   const endInclusive = Math.max(
     minRound,
-    Math.min(rule.to_round_no - 1, selectedRoundNo - 1, selectedRoundNo)
+    Math.min(cutThroughRound, selectedRoundNo)
   );
   return {
     minRound,

@@ -157,10 +157,12 @@ function madeCutFromRanking(
   higherIsBetter: boolean,
   tieBreakSteps: TieBreakStep[]
 ): Set<string> {
+  const fieldSize = ranked.length;
   const eligible = ranked.filter((r) => r.primaryValue != null);
-  if (eligible.length === 0) return new Set();
+  if (eligible.length === 0 || fieldSize === 0) return new Set();
 
-  const topN = Math.min(topNFromRule(rule, eligible.length), eligible.length);
+  /** Top % sobre el campo inscrito (41 → 50% = 21), no solo quienes ya tienen tarjeta cerrada. */
+  const topN = Math.min(topNFromRule(rule, fieldSize), eligible.length);
 
   if (tieBreakSteps.length > 0 || !rule.include_ties) {
     return new Set(eligible.slice(0, topN).map((r) => r.entryId));
