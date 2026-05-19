@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UserNavIconLink } from "@/components/public/UserNavIconLink";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -166,6 +167,7 @@ export default async function PublicTournamentPage({
   const isLoggedIn = !!user;
 
   const locale = await getLocale();
+  const nav = messages[locale].nav;
   const pub = messages[locale].publicTournament;
   const detailTableLabels = detailLabelsFromPublicTournament(pub);
   const pts = messages[locale].publicTeeSheet;
@@ -1200,13 +1202,18 @@ export default async function PublicTournamentPage({
               </Link>
 
               {isLoggedIn ? (
-                <Link
+                <UserNavIconLink
                   href="/tournaments"
                   className={publicTournamentEmeraldHeroNavClasses()}
-                >
-                  {pub.adminList}
-                </Link>
-              ) : null}
+                  label={pub.adminList}
+                />
+              ) : (
+                <UserNavIconLink
+                  href="/login"
+                  className={publicTournamentOutboundNavClasses()}
+                  label={nav.enter}
+                />
+              )}
             </div>
             ) : null}
 

@@ -10,6 +10,9 @@ const es = {
     ariaEnActive: "Idioma actual: inglés",
     ariaEnInactive: "Cambiar la interfaz a inglés",
   },
+  nav: {
+    enter: "Entrar",
+  },
   sidebar: {
     activeTournament: "Torneo activo",
     loading: "Cargando...",
@@ -1182,6 +1185,9 @@ const en: Messages = {
     ariaEsInactive: "Switch interface to Spanish",
     ariaEnActive: "Current language: English",
     ariaEnInactive: "Switch interface to English",
+  },
+  nav: {
+    enter: "Sign in",
   },
   sidebar: {
     activeTournament: "Active tournament",

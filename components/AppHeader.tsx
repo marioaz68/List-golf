@@ -1,8 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
+import { UserNavIconLink } from "@/components/public/UserNavIconLink";
+import { messages } from "@/lib/i18n/messages";
+import { getLocale } from "@/lib/i18n/server";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function AppHeader() {
+  const locale = await getLocale();
+  const nav = messages[locale].nav;
   const supabase = await createClient();
 
   const {
@@ -31,9 +36,11 @@ export default async function AppHeader() {
 
         <div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
           {!user && (
-            <Link href="/login" className={pillBase}>
-              Entrar
-            </Link>
+            <UserNavIconLink
+              href="/login"
+              className={pillBase}
+              label={nav.enter}
+            />
           )}
 
           {user && (

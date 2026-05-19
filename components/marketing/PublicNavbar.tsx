@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { UserNavIconLink } from "@/components/public/UserNavIconLink";
+import { messages } from "@/lib/i18n/messages";
+import { getLocale } from "@/lib/i18n/server";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function PublicNavbar() {
+  const locale = await getLocale();
+  const nav = messages[locale].nav;
   const supabase = await createClient();
 
   const {
@@ -23,12 +28,14 @@ export default async function PublicNavbar() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="inline-flex h-12 items-center justify-center rounded-2xl bg-cyan-400 px-6 text-base font-semibold text-[#08111f] transition hover:opacity-90"
-          >
-            Entrar
-          </Link>
+          {!user ? (
+            <UserNavIconLink
+              href="/login"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400 text-[#08111f] transition hover:opacity-90"
+              label={nav.enter}
+              iconClassName="h-6 w-6"
+            />
+          ) : null}
 
           {user ? (
             <>
