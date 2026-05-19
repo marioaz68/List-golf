@@ -11,6 +11,7 @@ import { compareLeaderboardRows } from "@/lib/leaderboard/sortLeaderboardRows";
 import {
   higherIsBetterForCutRule,
   rankValueForAdvancementRule,
+  type CutRankingOptions,
 } from "./cutRanking";
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
 import {
@@ -60,7 +61,7 @@ function sortBucketByCutMetric(
     handicapByPlayerId: Map<string, number | null>;
     strokeIndexByHole?: StrokeIndexByHole;
     leaderboardViewOverride?: LeaderboardViewOverride | null;
-    alignWithLeaderboardDisplay?: boolean;
+    cutRankingOptions?: CutRankingOptions;
   }
 ): LeaderboardRow[] {
   const sample = bucket[0];
@@ -84,7 +85,7 @@ function sortBucketByCutMetric(
       params.handicapByPlayerId,
       params.strokeIndexByHole,
       params.leaderboardViewOverride,
-      { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
+      params.cutRankingOptions
     );
     return { row, cutSortValue: v.primary };
   });
@@ -122,7 +123,7 @@ export function orderLeaderboardForCutDisplay(params: {
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
-  alignWithLeaderboardDisplay?: boolean;
+  cutRankingOptions?: CutRankingOptions;
 }): LeaderboardRow[] {
   if (params.cutLines.length === 0) return params.rows;
 
@@ -175,7 +176,7 @@ export function orderLeaderboardForCutDisplay(params: {
       handicapByPlayerId: params.handicapByPlayerId,
       strokeIndexByHole: params.strokeIndexByHole,
       leaderboardViewOverride: params.leaderboardViewOverride,
-      alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay,
+      cutRankingOptions: params.cutRankingOptions,
     };
 
     const passSorted = cutRule

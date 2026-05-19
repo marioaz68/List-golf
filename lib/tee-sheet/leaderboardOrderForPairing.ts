@@ -25,6 +25,8 @@ import {
 import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOverride";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import { buildInscribedCountByCategory } from "@/lib/cuts/cutAdvancementPolicy";
+import { fetchLockedScorecardsForTournament } from "@/lib/leaderboard/fetchLockedScorecards";
+import { buildLockedScorecardLookups } from "@/lib/leaderboard/lockedScorecards";
 import {
   computePublicCutLines,
   cutEnforcesAtTargetRound,
@@ -296,11 +298,32 @@ export async function buildTeeSheetEntryOrderMap(
     getPlayerCode,
   });
 
+  const scorecardsData = await fetchLockedScorecardsForTournament(
+    admin,
+    tournamentId
+  );
+  const lockedLookups = buildLockedScorecardLookups(
+    scorecardsData as Array<{
+      entry_id: string;
+      round_id: string;
+      locked_at: string | null;
+    }>,
+    rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
+  );
+  const roundsForLock = rounds.map((r) => ({
+    id: r.id,
+    round_no: r.round_no,
+    category_id: r.category_id ?? null,
+  }));
+
   const leaderboardWithStandings = applyStandings({
     leaderboardBase,
     rounds,
     selectedRound,
     holesPlayedCount,
+    lockedLookups,
+    roundsForLock,
+    includeIncompleteRounds: false,
   });
 
   const leaderboardScored = applyCompetitionStandings({
@@ -311,6 +334,9 @@ export async function buildTeeSheetEntryOrderMap(
       maxRoundNo: standingsThroughRoundNo,
       strokeIndexByHole,
       leaderboardViewOverride: null,
+      lockedLookups,
+      roundsForLock,
+      includeIncompleteRounds: false,
     }),
     rounds,
     selectedRound,
@@ -318,6 +344,9 @@ export async function buildTeeSheetEntryOrderMap(
     handicapByPlayerId,
     strokeIndexByHole,
     leaderboardViewOverride: null,
+    lockedLookups,
+    roundsForLock,
+    includeIncompleteRounds: false,
   });
 
   const cutEnforces = cutEnforcesAtTargetRound(advancementRules, targetRoundNo);
@@ -343,6 +372,9 @@ export async function buildTeeSheetEntryOrderMap(
       tieBreakStepsByProfileId,
       strokeIndexByHole,
       inscribedCountByCategoryId,
+      useClosedRoundClassification: true,
+      lockedLookups,
+      roundsForLock,
     });
 
     rowsForOrder = leaderboardScored.map((row) => {

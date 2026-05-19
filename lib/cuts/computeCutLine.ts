@@ -14,11 +14,13 @@ import {
   entryIdsMakingCut,
 } from "./cutAdvancementPolicy";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import type { LockedScorecardLookups, RoundIdMeta } from "@/lib/leaderboard/lockedScorecards";
+import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import {
   higherIsBetterForCutRule,
   rankValueForAdvancementRule,
+  type CutRankingOptions,
 } from "./cutRanking";
-import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 
 export type RoundAdvancementRule = {
   from_round_no: number;
@@ -217,12 +219,14 @@ function cutLabelForRule(
   tieBreakSteps: TieBreakStep[],
   informational?: boolean,
   fieldSize?: number,
-  cutSlots?: number
+  cutSlots?: number,
+  closedClassification?: boolean
 ): string {
   const tieNote =
     tieBreakSteps.length > 0
       ? " · desempate en límite"
       : " · cupo exacto";
+  const closedNote = closedClassification ? " · clasif. cerrada" : "";
   const prefix = informational ? "CORTE (referencia) · " : "CORTE · ";
 
   if (rule.advancement_type === "all") {
@@ -235,7 +239,7 @@ function cutLabelForRule(
       : "";
 
   if (rule.advancement_type === "top_percent") {
-    return `${prefix}Top ${rule.advancement_value}% red. abajo (→ R${rule.to_round_no})${quotaNote}${tieNote}`;
+    return `${prefix}Top ${rule.advancement_value}% red. abajo (→ R${rule.to_round_no})${quotaNote}${closedNote}${tieNote}`;
   }
 
   return `${prefix}Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
@@ -256,7 +260,7 @@ function computeLineForRule(
     informational?: boolean;
     fieldSize: number;
     leaderboardViewOverride?: LeaderboardViewOverride | null;
-    alignWithLeaderboardDisplay?: boolean;
+    cutRankingOptions?: CutRankingOptions;
   }
 ): PublicCutLine | null {
   const scoped = rowsInCat.filter((r) =>
@@ -296,7 +300,7 @@ function computeLineForRule(
       params.handicapByPlayerId,
       params.strokeIndexByHole,
       params.leaderboardViewOverride,
-      { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
+      params.cutRankingOptions
     );
     return {
       entryId: row.entry_id,
@@ -344,7 +348,8 @@ function computeLineForRule(
       tieBreakSteps,
       params.informational,
       params.fieldSize,
-      cutSlots
+      cutSlots,
+      params.cutRankingOptions?.useClosedRoundClassification
     ),
     madeCutEntryIds: madeCut,
   };
@@ -455,8 +460,10 @@ type ComputeCutLinesParams = {
   /** Inscritos por categoría; si falta, se usa el tamaño del campo en tabla. */
   inscribedCountByCategoryId?: Map<string, number>;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
-  /** En vivo: misma puntuación acumulada que la tabla pública. */
-  alignWithLeaderboardDisplay?: boolean;
+  lockedLookups?: LockedScorecardLookups;
+  roundsForLock?: RoundIdMeta[];
+  /** Clasificación oficial (solo tarjetas cerradas) para ordenar el corte. */
+  useClosedRoundClassification?: boolean;
 };
 
 function computeCutLinesForRules(
@@ -474,6 +481,12 @@ function computeCutLinesForRules(
     params.leaderboard
   );
 
+  const cutRankingOptions: CutRankingOptions = {
+    useClosedRoundClassification: params.useClosedRoundClassification,
+    lockedLookups: params.lockedLookups,
+    roundsForLock: params.roundsForLock,
+  };
+
   const shared = {
     selectedRoundNo: params.selectedRoundNo,
     categories: params.categories,
@@ -483,7 +496,7 @@ function computeCutLinesForRules(
     strokeIndexByHole: params.strokeIndexByHole,
     informational: params.informational,
     leaderboardViewOverride: params.leaderboardViewOverride,
-    alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay,
+    cutRankingOptions,
   };
 
   for (const categoryId of categoryScopeIds) {

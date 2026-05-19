@@ -18,6 +18,8 @@ import {
   fetchHoleScoresForRoundScores,
   fetchRoundScoresForPublicLeaderboard,
 } from "../app/torneos/[id]/lib/data";
+import { fetchLockedScorecardsForTournament } from "../lib/leaderboard/fetchLockedScorecards";
+import { buildLockedScorecardLookups } from "../lib/leaderboard/lockedScorecards";
 import {
   getPlayerCode,
   holesPlayedCount,
@@ -76,14 +78,33 @@ async function main() {
     .select("id, code, name")
     .eq("tournament_id", tournamentId);
 
-  const { data: rounds } = await admin
+  const { data: roundsData } = await admin
     .from("rounds")
     .select("id, round_no, round_date, category_id, start_type, start_time, wave")
     .eq("tournament_id", tournamentId)
     .order("round_no");
+  const rounds = roundsData ?? [];
 
   const selectedRound =
-    rounds?.find((r) => Number(r.round_no) === selectedRoundNo) ?? rounds?.[0];
+    rounds.find((r) => Number(r.round_no) === selectedRoundNo) ?? rounds[0];
+
+  const scorecardsData = await fetchLockedScorecardsForTournament(
+    admin,
+    tournamentId
+  );
+  const lockedLookups = buildLockedScorecardLookups(
+    scorecardsData as Array<{
+      entry_id: string;
+      round_id: string;
+      locked_at: string | null;
+    }>,
+    rounds.map((r) => ({ id: r.id, round_no: r.round_no }))
+  );
+  const roundsForLock = rounds.map((r) => ({
+    id: r.id,
+    round_no: r.round_no,
+    category_id: r.category_id ?? null,
+  }));
 
   const { data: compRules } = await admin
     .from("category_competition_rules")
@@ -102,7 +123,7 @@ async function main() {
     .eq("is_active", true);
 
   const playerIds = allEntries.map((e) => e.player_id);
-  const roundIds = (rounds ?? []).map((r) => r.id);
+  const roundIds = rounds.map((r) => r.id);
   const roundScores = await fetchRoundScoresForPublicLeaderboard(
     admin,
     playerIds,
@@ -154,7 +175,7 @@ async function main() {
 
   const base = buildLiveLeaderboard({
     filteredEntries,
-    rounds: rounds ?? [],
+    rounds,
     roundScores,
     holeScoresByRoundScoreId,
     parByHole,
@@ -169,7 +190,7 @@ async function main() {
   const includeIncompleteRounds = true;
   const withStandings = applyStandings({
     leaderboardBase: base,
-    rounds: rounds ?? [],
+    rounds,
     selectedRound: selectedRound!,
     holesPlayedCount,
     includeIncompleteRounds,
@@ -183,7 +204,7 @@ async function main() {
       strokeIndexByHole,
       includeIncompleteRounds,
     }),
-    rounds: rounds ?? [],
+    rounds,
     selectedRound: selectedRound!,
     competitionRules: compRules ?? [],
     handicapByPlayerId,
@@ -206,7 +227,9 @@ async function main() {
     tieBreakStepsByProfileId: new Map(),
     strokeIndexByHole,
     inscribedCountByCategoryId: inscribed,
-    alignWithLeaderboardDisplay: includeIncompleteRounds,
+      useClosedRoundClassification: true,
+      lockedLookups,
+      roundsForLock,
   });
 
   const line = cutLines[0];
@@ -233,7 +256,7 @@ async function main() {
         handicapByPlayerId,
         strokeIndexByHole,
         null,
-        { alignWithLeaderboardDisplay: false }
+        { useClosedRoundClassification: false }
       );
       const vd = rankValueForAdvancementRule(
         row,
@@ -243,7 +266,7 @@ async function main() {
         handicapByPlayerId,
         strokeIndexByHole,
         null,
-        { alignWithLeaderboardDisplay: true }
+        { useClosedRoundClassification: true, lockedLookups, roundsForLock }
       );
       if (v.primary != null) withPrimary++;
       if (vd.primary != null) withDisplayAlign++;

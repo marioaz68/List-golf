@@ -13,9 +13,41 @@ import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetition
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOverride";
+import { detailsForPublicCumulative } from "@/lib/leaderboard/publicRoundScorePolicy";
+import type {
+  LockedScorecardLookups,
+  RoundIdMeta,
+} from "@/lib/leaderboard/lockedScorecards";
 import { collectRoundIdsWithScoreCapture } from "@/lib/leaderboard/roundCategoryMatch";
 import { resolveDetailForRoundNo } from "@/lib/leaderboard/roundCategoryMatch";
 import type { RoundAdvancementRule } from "./computeCutLine";
+
+export type CutRankingOptions = {
+  /** Solo tarjetas cerradas (clasificación oficial R1+R2), no captura en vivo parcial. */
+  useClosedRoundClassification?: boolean;
+  lockedLookups?: LockedScorecardLookups;
+  roundsForLock?: RoundIdMeta[];
+};
+
+function detailsForCutRanking(
+  row: LeaderboardRow,
+  options?: CutRankingOptions
+): RoundDetail[] {
+  if (
+    options?.useClosedRoundClassification &&
+    options.lockedLookups &&
+    options.roundsForLock?.length
+  ) {
+    return detailsForPublicCumulative(
+      row.details,
+      row.entry_id,
+      row.category_id,
+      options.roundsForLock,
+      options.lockedLookups
+    );
+  }
+  return row.details;
+}
 
 /** Alinea base del corte con la modalidad de la categoría (Stableford → puntos). */
 export function effectiveRankingBasis(
@@ -50,7 +82,8 @@ export function higherIsBetterForCutRule(
 
 export function rankingRoundRange(
   rule: RoundAdvancementRule,
-  selectedRoundNo: number
+  selectedRoundNo: number,
+  options?: CutRankingOptions
 ): { minRound: number; maxRound: number; tieBreakRound: number } {
   if (rule.ranking_mode === "tournament_to_date") {
     const maxRound = Math.max(1, selectedRoundNo);
@@ -65,46 +98,22 @@ export function rankingRoundRange(
   /** Acumulado hasta la ronda previa al avance (p. ej. corte tras R1+R2 → `to_round_no` 3 usa hoyos 1–2). */
   const minRound = Math.max(1, rule.from_round_no);
   const cutThroughRound = Math.max(minRound, rule.to_round_no - 1);
-  const endInclusive = Math.max(
+  let endInclusive = Math.max(
     minRound,
     Math.min(cutThroughRound, selectedRoundNo)
   );
+  if (
+    options?.useClosedRoundClassification &&
+    rule.ranking_mode === "specified_rounds" &&
+    selectedRoundNo >= cutThroughRound
+  ) {
+    endInclusive = cutThroughRound;
+  }
   return {
     minRound,
     maxRound: endInclusive,
     tieBreakRound: endInclusive,
   };
-}
-
-function roundDetailForRow(
-  row: LeaderboardRow,
-  roundNo: number
-): RoundDetail | null {
-  const scoreRoundIds = collectRoundIdsWithScoreCapture(row.details);
-  return resolveDetailForRoundNo(
-    row.details,
-    roundNo,
-    row.category_id,
-    scoreRoundIds
-  );
-}
-
-/** Misma métrica que la tabla en vivo (applyCompetitionRules + includeIncompleteRounds). */
-function primaryFromLeaderboardDisplay(
-  row: LeaderboardRow,
-  basis: CutRankingBasis,
-  catRule: CategoryCompetitionRule
-): number | null {
-  if (isStablefordCategory(catRule) || basis === "points_total" || basis === "points_round") {
-    const v = row.stableford_total ?? row.leaderboard_sort_value;
-    return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
-  }
-  if (basis === "net_total" || basis === "net_round") {
-    const v = row.leaderboard_sort_value ?? row.total_to_par;
-    return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
-  }
-  const v = row.leaderboard_sort_value ?? row.total_to_par ?? row.total_gross;
-  return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
 }
 
 export function rankValueForAdvancementRule(
@@ -115,7 +124,7 @@ export function rankValueForAdvancementRule(
   handicapByPlayerId: Map<string, number | null>,
   strokeIndexByHole?: StrokeIndexByHole,
   leaderboardViewOverride?: LeaderboardViewOverride | null,
-  options?: { alignWithLeaderboardDisplay?: boolean }
+  options?: CutRankingOptions
 ): {
   primary: number | null;
   gross: number | null;
@@ -125,21 +134,18 @@ export function rankValueForAdvancementRule(
   const hcp = handicapByPlayerId.get(row.player_id) ?? null;
   const { minRound, maxRound, tieBreakRound } = rankingRoundRange(
     rule,
-    selectedRoundNo
+    selectedRoundNo,
+    options
   );
   const basis = effectiveRankingBasis(rule, catRule, leaderboardViewOverride);
-  const detail = roundDetailForRow(row, tieBreakRound);
-
-  if (options?.alignWithLeaderboardDisplay) {
-    const displayPrimary = primaryFromLeaderboardDisplay(row, basis, catRule);
-    if (displayPrimary != null) {
-      return {
-        primary: displayPrimary,
-        gross: row.total_gross ?? null,
-        detail,
-      };
-    }
-  }
+  const details = detailsForCutRanking(row, options);
+  const scoreRoundIds = collectRoundIdsWithScoreCapture(details);
+  const detail = resolveDetailForRoundNo(
+    details,
+    tieBreakRound,
+    row.category_id,
+    scoreRoundIds
+  );
 
   const isSingleRound =
     basis === "gross_round" ||
@@ -150,7 +156,7 @@ export function rankValueForAdvancementRule(
   const rangeMax = isSingleRound ? tieBreakRound : maxRound;
 
   const totals = cumulativeInRoundRange(
-    row.details,
+    details,
     catRule,
     hcp,
     rangeMin,

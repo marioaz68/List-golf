@@ -808,6 +808,12 @@ export default async function PublicTournamentPage({
       }))
     );
 
+    const cutRankingOptions = {
+      useClosedRoundClassification: true,
+      lockedLookups,
+      roundsForLock,
+    };
+
     publicCutLines = computeDisplayCutLines({
       leaderboard: leaderboardScored,
       advancementRules: advancementRulesList,
@@ -823,7 +829,9 @@ export default async function PublicTournamentPage({
       strokeIndexByHole,
       inscribedCountByCategoryId,
       leaderboardViewOverride,
-      alignWithLeaderboardDisplay: includeIncompleteRounds,
+      useClosedRoundClassification: true,
+      lockedLookups,
+      roundsForLock,
     });
 
     const showCutOnLeaderboard = publicCutLines.length > 0;
@@ -859,7 +867,7 @@ export default async function PublicTournamentPage({
           handicapByPlayerId,
           strokeIndexByHole,
           leaderboardViewOverride,
-          alignWithLeaderboardDisplay: includeIncompleteRounds,
+          cutRankingOptions,
         })
       : withMadeCut;
 
