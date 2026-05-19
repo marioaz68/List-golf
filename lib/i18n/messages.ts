@@ -463,6 +463,21 @@ const es = {
     title: "Captura de tarjetas",
     subtitle:
       "Busca al jugador por número de inscripción o nombre. El sistema asigna categoría, día, turno y ronda según inscripción, salidas y rondas.",
+    subtitleCapture:
+      "Captura rápida de la ronda abierta. Busca por número de inscripción o nombre.",
+    subtitleModify:
+      "Corrección de rondas cerradas o anteriores. Elige la ronda, ABRIR, edita y cierra de nuevo.",
+    tabCapture: "Captura",
+    tabModify: "Modificar scores",
+    tabNavAria: "Modo de captura de tarjetas",
+    searchHintCapture:
+      "Solo la ronda abierta del jugador. Para corregir una ronda cerrada usa la pestaña Modificar scores.",
+    searchHintModify:
+      "Elige la ronda arriba. En rondas cerradas: ABRIR → corregir → Cerrar de nuevo.",
+    captureClosedBanner:
+      "La ronda en pantalla ya está cerrada. La captura diaria solo admite la ronda abierta.",
+    captureClosedLink: "Ir a Modificar scores →",
+    captureNextRoundLink: "Capturar R{round} (ronda siguiente)",
     labelSession: "Día y turno",
     roundsNeedDate:
       "Hay rondas sin fecha. Asigna fecha a cada ronda en la configuración del torneo para usar captura.",
@@ -1616,6 +1631,21 @@ const en: Messages = {
     title: "Score entry",
     subtitle:
       "Quick entry by registration number or name of a player enrolled in the tournament.",
+    subtitleCapture:
+      "Fast entry for the player's open round. Search by registration number or name.",
+    subtitleModify:
+      "Fix closed or prior rounds. Pick the round, OPEN, edit, and close again.",
+    tabCapture: "Capture",
+    tabModify: "Edit scores",
+    tabNavAria: "Score entry mode",
+    searchHintCapture:
+      "Open round only. To fix a closed round use the Edit scores tab.",
+    searchHintModify:
+      "Pick the round above. For closed rounds: OPEN → edit → Close again.",
+    captureClosedBanner:
+      "This round is already closed. Daily capture only works on the open round.",
+    captureClosedLink: "Go to Edit scores →",
+    captureNextRoundLink: "Capture R{round} (next round)",
     labelSession: "Day & wave",
     roundsNeedDate:
       "Some rounds have no date. Assign a date to each round in tournament setup to use score entry.",

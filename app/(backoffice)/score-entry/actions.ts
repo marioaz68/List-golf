@@ -26,9 +26,12 @@ import {
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
 
+export type SaveScoresSaveMode = "save" | "save_and_close" | "open_round";
+
 export type SaveScoresState = {
   ok: boolean;
   message: string;
+  saveMode?: SaveScoresSaveMode;
 };
 
 export type RepairCapturesState = {
@@ -427,7 +430,13 @@ export async function savePlayerScores(
     const playerId = String(formData.get("player_id") ?? "").trim();
     const tournamentDayId = String(formData.get("tournament_day_id") ?? "").trim();
     let tournamentId = String(formData.get("tournament_id") ?? "").trim();
-    const saveMode = String(formData.get("save_mode") ?? "save").trim();
+    const saveModeRaw = String(formData.get("save_mode") ?? "save").trim();
+    const saveMode: SaveScoresSaveMode =
+      saveModeRaw === "save_and_close"
+        ? "save_and_close"
+        : saveModeRaw === "open_round"
+          ? "open_round"
+          : "save";
     const closeRound = saveMode === "save_and_close";
     const reopenRoundMode = saveMode === "open_round";
 
@@ -443,6 +452,29 @@ export async function savePlayerScores(
 
     if (!tournamentId) {
       return { ok: false, message: "Falta tournament_id" };
+    }
+
+    const { data: fullRoundsEarly, error: fullRoundsEarlyErr } = await admin
+      .from("rounds")
+      .select(
+        "id, tournament_id, category_id, round_no, round_date, start_type, start_time, wave"
+      )
+      .eq("tournament_id", tournamentId);
+
+    if (fullRoundsEarlyErr) {
+      return {
+        ok: false,
+        message: `Error leyendo rondas: ${fullRoundsEarlyErr.message}`,
+      };
+    }
+
+    const tournamentRoundsEarly = (fullRoundsEarly ?? []) as SessionRoundFields[];
+
+    function roundFromFormHint(): { roundId: string; roundNo: number } | null {
+      if (!roundIdHint) return null;
+      const row = tournamentRoundsEarly.find((r) => r.id === roundIdHint);
+      if (!row?.id) return null;
+      return { roundId: row.id, roundNo: row.round_no };
     }
 
     const access = await checkTournamentAccess({
@@ -514,25 +546,45 @@ export async function savePlayerScores(
 
     const tournamentSettings = tournamentRow?.settings ?? null;
 
-    const { data: fullRounds, error: fullRoundsErr } = await admin
-      .from("rounds")
-      .select(
-        "id, tournament_id, category_id, round_no, round_date, start_type, start_time, wave"
-      )
-      .eq("tournament_id", tournamentId);
-
-    if (fullRoundsErr) {
-      return {
-        ok: false,
-        message: `Error leyendo rondas: ${fullRoundsErr.message}`,
-      };
+    if (reopenRoundMode) {
+      const hinted = roundFromFormHint();
+      if (!hinted) {
+        return {
+          ok: false,
+          message:
+            "No se pudo identificar la ronda a abrir. Vuelve a buscar al jugador.",
+        };
+      }
+      try {
+        const openInfo = await staffOpenRoundScorecard(admin, {
+          tournamentId,
+          roundId: hinted.roundId,
+          entryId,
+          roundNo: hinted.roundNo,
+        });
+        await revalidateScoreEntryAndLeaderboard(tournamentId);
+        const label = hinted.roundNo > 0 ? `R${hinted.roundNo}` : "La ronda";
+        return {
+          ok: true,
+          saveMode: "open_round",
+          message: openInfo.wasOpen
+            ? `${label} ya estaba abierta.`
+            : `${label} abierta. Corrige los scores y pulsa «Cerrar de nuevo».`,
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          message:
+            e instanceof Error ? e.message : "No se pudo abrir la ronda.",
+        };
+      }
     }
 
     const captureRound = await resolveEntryCaptureRound(admin, {
       entryId,
       entryCategoryId: entryRow?.category_id ?? null,
       tournamentId,
-      rounds: (fullRounds ?? []) as SessionRoundFields[],
+      rounds: tournamentRoundsEarly,
       lookups: gateCtx.lookups,
       tournamentSettings,
       sessionRoundId: roundIdHint || null,
@@ -571,45 +623,13 @@ export async function savePlayerScores(
 
     let roundId = captureRound.roundId;
     let roundNo = captureRound.roundNo;
-
-    const { data: tournamentRoundsForAlign, error: trAlignErr } = await admin
-      .from("rounds")
-      .select(
-        "id, tournament_id, round_no, round_date, category_id, start_type, start_time, wave"
-      )
-      .eq("tournament_id", tournamentId);
-
-    if (trAlignErr) {
-      return {
-        ok: false,
-        message: `Error leyendo rondas del torneo: ${trAlignErr.message}`,
-      };
+    const hintedRound = roundFromFormHint();
+    if (hintedRound) {
+      roundId = hintedRound.roundId;
+      roundNo = hintedRound.roundNo;
     }
 
-    if (reopenRoundMode) {
-      try {
-        const openInfo = await staffOpenRoundScorecard(admin, {
-          tournamentId,
-          roundId,
-          entryId,
-          roundNo,
-        });
-        await revalidateScoreEntryAndLeaderboard(tournamentId);
-        const label = roundNo > 0 ? `R${roundNo}` : "La ronda";
-        return {
-          ok: true,
-          message: openInfo.wasOpen
-            ? `${label} ya estaba abierta.`
-            : `${label} abierta. Puedes corregir scores y volver a cerrar.`,
-        };
-      } catch (e) {
-        return {
-          ok: false,
-          message:
-            e instanceof Error ? e.message : "No se pudo abrir la ronda.",
-        };
-      }
-    }
+    const tournamentRoundsForAlign = tournamentRoundsEarly;
 
     const scorecard = await getScorecardForEntryAndRound(
       admin,
@@ -748,6 +768,7 @@ export async function savePlayerScores(
 
       return {
         ok: true,
+        saveMode,
         message: canOverride
           ? "Administrador: se limpiaron los scores de una tarjeta cerrada."
           : "Se limpiaron los scores de esta ronda para el jugador.",
@@ -843,6 +864,7 @@ export async function savePlayerScores(
         const label = roundNo > 0 ? `R${roundNo}` : "Ronda";
         return {
           ok: true,
+          saveMode,
           message: lockInfo.alreadyLocked
             ? `Scores guardados (${grossScores.length} hoyos). Total: ${grossTotal}. ${label} ya estaba cerrada.`
             : `Scores guardados. ${label} cerrada (firmas jugador y testigo). Total: ${grossTotal}. Ya en leaderboard oficial.`,
@@ -862,6 +884,7 @@ export async function savePlayerScores(
 
     return {
       ok: true,
+      saveMode,
       message: canOverride
         ? `Administrador: se actualizó una tarjeta cerrada (${grossScores.length} hoyos). Total: ${grossTotal}.`
         : `Scores guardados correctamente (${grossScores.length} hoyos). Total: ${grossTotal}.`,

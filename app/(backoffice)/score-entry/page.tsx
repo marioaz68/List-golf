@@ -7,7 +7,12 @@ import {
   requireTournamentAccess,
 } from "@/lib/auth/requireTournamentAccess";
 import ScoreEntryClient from "./ScoreEntryClient";
+import ScoreEntryModeTabs from "./ScoreEntryModeTabs";
 import ScoreEntryRoundCloseBanner from "./ScoreEntryRoundCloseBanner";
+import {
+  buildScoreEntryHref,
+  parseScoreEntryMode,
+} from "@/lib/score-entry/scoreEntryUrl";
 import RepairCapturesButton from "./RepairCapturesButton";
 import {
   buildTournamentRoundCloseStatus,
@@ -280,6 +285,10 @@ export default async function ScoreEntryPage(props: {
     : null;
   const tournamentIdFromQuery =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
+  const scoreEntryMode = parseScoreEntryMode(
+    typeof sp.mode === "string" ? sp.mode : undefined
+  );
+  const isModifyMode = scoreEntryMode === "modify";
 
   const roundsQuery = supabase
     .from("rounds")
@@ -395,6 +404,7 @@ export default async function ScoreEntryPage(props: {
   let gateLookupsForEntry: LockedScorecardLookups | null = null;
   let matchedEntryForLinks: ValidEntryRow | null = null;
   let scoreEntryRoundLinks: ScoreEntryRoundLink[] = [];
+  let captureClosedNeedsModify = false;
   const roundCloseStatuses: ReturnType<typeof buildTournamentRoundCloseStatus>[] =
     [];
 
@@ -553,6 +563,7 @@ export default async function ScoreEntryPage(props: {
         ) as SessionRoundFields[];
 
         const viewingExplicitRound =
+          isModifyMode &&
           requestedRoundNo != null &&
           Number.isFinite(requestedRoundNo) &&
           requestedRoundNo >= 1;
@@ -588,7 +599,7 @@ export default async function ScoreEntryPage(props: {
             roundClosed = forced.roundClosed;
             captureRoundNotice = forced.roundClosed
               ? `R${forced.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`
-              : `Capturando R${forced.roundNo} · inscripción ${catLabel}.`;
+              : `Modificando R${forced.roundNo} · inscripción ${catLabel}.`;
           } else {
             scoringRoundBlocked = true;
             priorRoundGateMessage = `No hay ronda R${requestedRoundNo} para la categoría de este jugador.`;
@@ -616,17 +627,22 @@ export default async function ScoreEntryPage(props: {
           scoringRoundId = capture.roundId;
           roundClosed = capture.roundClosed === true;
           const when = capture.sessionLabel?.trim();
-          if (capture.roundClosed) {
+          if (capture.roundClosed && isModifyMode) {
             captureRoundNotice = when
               ? `R${capture.roundNo} cerrada (${when}) · inscripción ${catLabel}. Pulsa ABRIR para corregir.`
               : `R${capture.roundNo} cerrada · inscripción ${catLabel}. Pulsa ABRIR para corregir.`;
+          } else if (capture.roundClosed && !isModifyMode) {
+            captureClosedNeedsModify = true;
+            captureRoundNotice = when
+              ? `R${capture.roundNo} cerrada (${when}) · inscripción ${catLabel}.`
+              : `R${capture.roundNo} cerrada · inscripción ${catLabel}.`;
           } else {
             captureRoundNotice = when
               ? `Capturando ${when} · inscripción ${catLabel}. Día y turno según salidas y rondas del torneo.`
               : `Capturando R${capture.roundNo} · inscripción ${catLabel}.`;
           }
 
-          if (player) {
+          if (player && isModifyMode) {
             const display = await resolveScoreEntryDisplayTarget(supabase, {
               entryId: matchedEntry.id,
               playerId: player.id,
@@ -936,17 +952,13 @@ export default async function ScoreEntryPage(props: {
       roundNos[0] ??
       1;
 
+    if (isModifyMode) {
     scoreEntryRoundLinks = roundNos.map((roundNo) => {
       const round = getRoundForCategory(
         roundListAll,
         roundNo,
         matchedEntryForLinks.category_id
       );
-      const qs = new URLSearchParams();
-      qs.set("tournament_id", effectiveTournamentId);
-      qs.set("q", searchRaw);
-      qs.set("entry_id", matchedEntryForLinks.id);
-      qs.set("round_no", String(roundNo));
 
       const captured = capturedRounds.find((c) => c.round_no === roundNo);
       const hasCapture = Boolean(
@@ -955,7 +967,13 @@ export default async function ScoreEntryPage(props: {
 
       return {
         roundNo,
-        href: `/score-entry?${qs.toString()}`,
+        href: buildScoreEntryHref({
+          mode: "modify",
+          tournamentId: effectiveTournamentId,
+          q: searchRaw,
+          entryId: matchedEntryForLinks.id,
+          roundNo,
+        }),
         isCurrent: roundNo === currentRoundNo,
         isClosed: round
           ? isEntryRoundClosed(
@@ -967,13 +985,63 @@ export default async function ScoreEntryPage(props: {
         hasCapture,
       };
     });
+    }
   }
+
+  const tabCaptureHref = buildScoreEntryHref({
+    mode: "capture",
+    tournamentId: effectiveTournamentId || null,
+    q: searchRaw || null,
+    entryId: requestedEntryId || null,
+  });
+  const tabModifyHref = buildScoreEntryHref({
+    mode: "modify",
+    tournamentId: effectiveTournamentId || null,
+    q: searchRaw || null,
+    entryId: requestedEntryId || matchedEntryForLinks?.id || null,
+    roundNo:
+      requestedRoundNo ??
+      (scoringRoundId
+        ? roundListAll.find((r) => r.id === scoringRoundId)?.round_no
+        : null),
+  });
+  const modifyTabHrefForClosed =
+    player && effectiveTournamentId && searchRaw
+      ? buildScoreEntryHref({
+          mode: "modify",
+          tournamentId: effectiveTournamentId,
+          q: searchRaw,
+          entryId: requestedEntryId || entryIdForScorecard || null,
+          roundNo:
+            requestedRoundNo ??
+            roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+            null,
+        })
+      : tabModifyHref;
+
+  const showScoreEntryForm =
+    Boolean(player && holes.length > 0 && scoringRoundId && !scoringRoundBlocked) &&
+    (isModifyMode || !captureClosedNeedsModify) &&
+    (isModifyMode || !roundClosed);
 
   return (
     <div className="p-4 md:p-6">
       <div className="mx-auto max-w-7xl">
         <h1 className="text-2xl font-bold text-white">{se.title}</h1>
-        <p className="mt-1 text-sm text-white/70">{se.subtitle}</p>
+        <p className="mt-1 text-sm text-white/70">
+          {isModifyMode ? se.subtitleModify : se.subtitleCapture}
+        </p>
+
+        <ScoreEntryModeTabs
+          active={scoreEntryMode}
+          captureHref={tabCaptureHref}
+          modifyHref={tabModifyHref}
+          labels={{
+            capture: se.tabCapture,
+            modify: se.tabModify,
+            aria: se.tabNavAria,
+          }}
+        />
 
         {registrationOpenMessage && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
@@ -991,6 +1059,9 @@ export default async function ScoreEntryPage(props: {
           method="get"
           className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
         >
+          {isModifyMode ? (
+            <input type="hidden" name="mode" value="modify" />
+          ) : null}
           <div className="grid gap-4">
             {tournamentOptions.length > 0 ? (
               <div>
@@ -1039,8 +1110,7 @@ export default async function ScoreEntryPage(props: {
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base text-black placeholder:text-gray-400 disabled:opacity-50"
               />
               <p className="mt-1 text-xs text-gray-500">
-                Categoría, día, turno y ronda pendiente salen de inscripción,
-                salidas y rondas. Solo captura hoyos.
+                {isModifyMode ? se.searchHintModify : se.searchHintCapture}
               </p>
             </div>
 
@@ -1083,11 +1153,13 @@ export default async function ScoreEntryPage(props: {
                     .trim();
                   const cat = (e.category?.code ?? e.category?.name ?? "")
                     .trim();
-                  const qs = new URLSearchParams();
-                  qs.set("tournament_id", effectiveTournamentId);
-                  qs.set("q", searchRaw);
-                  qs.set("entry_id", e.id);
-                  const href = `/score-entry?${qs.toString()}`;
+                  const href = buildScoreEntryHref({
+                    mode: scoreEntryMode,
+                    tournamentId: effectiveTournamentId,
+                    q: searchRaw,
+                    entryId: e.id,
+                    roundNo: isModifyMode ? requestedRoundNo : null,
+                  });
                   return (
                     <li key={e.id}>
                       <Link
@@ -1142,7 +1214,29 @@ export default async function ScoreEntryPage(props: {
             </div>
           )}
 
-        {effectiveTournamentId && player && scoreEntryRoundLinks.length > 0 ? (
+        {effectiveTournamentId &&
+          player &&
+          !isModifyMode &&
+          searchRaw &&
+          !showScoreEntryForm &&
+          scoringRoundId &&
+          !scoringRoundBlocked && (
+            <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-950">
+              <p>
+                {captureRoundNotice
+                  ? `${captureRoundNotice} ${se.captureClosedBanner}`
+                  : se.captureClosedBanner}
+              </p>
+              <Link
+                href={modifyTabHrefForClosed}
+                className="mt-2 inline-block font-semibold text-orange-900 underline-offset-2 hover:underline"
+              >
+                {se.captureClosedLink}
+              </Link>
+            </div>
+          )}
+
+        {effectiveTournamentId && player && isModifyMode && scoreEntryRoundLinks.length > 0 ? (
           <>
             <ScoreEntryRoundSwitcher
               items={scoreEntryRoundLinks}
@@ -1162,31 +1256,29 @@ export default async function ScoreEntryPage(props: {
 
         {effectiveTournamentId &&
           player &&
+          isModifyMode &&
           pendingCaptureRoundNo != null &&
           searchRaw && (
             <p className="mt-3 text-sm text-slate-600">
               <Link
-                href={`/score-entry?${new URLSearchParams({
-                  tournament_id: effectiveTournamentId,
+                href={buildScoreEntryHref({
+                  mode: "capture",
+                  tournamentId: effectiveTournamentId,
                   q: searchRaw,
-                  ...(requestedEntryId
-                    ? { entry_id: requestedEntryId }
-                    : {}),
-                  round_no: String(pendingCaptureRoundNo),
-                }).toString()}`}
+                  entryId: requestedEntryId || entryIdForScorecard || null,
+                })}
                 className="font-semibold text-sky-700 underline-offset-2 hover:underline"
               >
-                Capturar R{pendingCaptureRoundNo} (ronda siguiente)
+                {fmt(se.captureNextRoundLink, {
+                  round: pendingCaptureRoundNo,
+                })}
               </Link>
             </p>
           )}
 
-        {effectiveTournamentId &&
-          player &&
-          holes.length > 0 &&
-          !scoringRoundBlocked &&
-          scoringRoundId && (
+        {effectiveTournamentId && showScoreEntryForm && (
           <ScoreEntryClient
+            mode={scoreEntryMode}
             roundId={scoringRoundId}
             tournamentId={effectiveTournamentId}
             tournamentDayId={null}

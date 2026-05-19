@@ -2,7 +2,12 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { savePlayerScores, type SaveScoresState } from "./actions";
+import {
+  savePlayerScores,
+  type SaveScoresSaveMode,
+  type SaveScoresState,
+} from "./actions";
+import type { ScoreEntryMode } from "@/lib/score-entry/scoreEntryUrl";
 import {
   CapturedRoundsScorecard,
   EditableScorecard,
@@ -38,6 +43,7 @@ const initialSaveState: SaveScoresState = {
 };
 
 export default function ScoreEntryClient({
+  mode = "capture",
   roundId,
   tournamentId,
   tournamentDayId,
@@ -50,6 +56,7 @@ export default function ScoreEntryClient({
   roundClosed = false,
   captureRoundNotice,
 }: {
+  mode?: ScoreEntryMode;
   roundId: string;
   tournamentId: string;
   tournamentDayId?: string | null;
@@ -94,9 +101,10 @@ export default function ScoreEntryClient({
   });
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [saveMode, setSaveMode] = useState<
-    "save" | "save_and_close" | "open_round"
-  >("save");
+  const [pendingSaveMode, setPendingSaveMode] =
+    useState<SaveScoresSaveMode>("save");
+
+  const isModifyMode = mode === "modify";
 
   /** Estado cerrado: servidor + optimista tras «Guardar y cerrar». */
   const [isRoundClosed, setIsRoundClosed] = useState(roundClosed);
@@ -177,22 +185,24 @@ export default function ScoreEntryClient({
     setIsRoundClosed(roundClosed);
   }, [roundClosed, player?.id, roundId]);
 
+  const effectiveSaveMode = saveState.saveMode ?? pendingSaveMode;
+
   useEffect(() => {
     if (!saveState.ok || !saveState.message) return;
 
-    if (saveMode === "save_and_close") {
+    if (effectiveSaveMode === "save_and_close") {
       setIsRoundClosed(true);
-    } else if (saveMode === "open_round") {
+    } else if (effectiveSaveMode === "open_round") {
       setIsRoundClosed(false);
     }
-  }, [saveState.ok, saveState.message, saveMode]);
+  }, [saveState.ok, saveState.message, effectiveSaveMode]);
 
   useEffect(() => {
     if (!saveState.ok || !saveState.message) return;
 
     if (typeof window === "undefined") return;
 
-    if (saveMode === "open_round") {
+    if (effectiveSaveMode === "open_round") {
       router.refresh();
       return;
     }
@@ -204,10 +214,9 @@ export default function ScoreEntryClient({
     const path = window.location.pathname;
     const url = query ? `${path}?${query}` : path;
 
-    // Solo refresh: evita navegación extra que, con sesión recién refrescada, podía mandar a /login.
     router.refresh();
 
-    if (saveMode === "save_and_close") {
+    if (effectiveSaveMode === "save_and_close") {
       const t = window.setTimeout(() => {
         document.getElementById("score-entry-player-search")?.focus();
       }, 120);
@@ -221,7 +230,7 @@ export default function ScoreEntryClient({
     }, 120);
 
     return () => window.clearTimeout(t);
-  }, [saveState.ok, saveState.message, saveMode, router]);
+  }, [saveState.ok, saveState.message, effectiveSaveMode, router]);
 
   function handleChange(
     holeNumber: number,
@@ -332,8 +341,6 @@ export default function ScoreEntryClient({
       <input type="hidden" name="tournament_id" value={tournamentId} />
       <input type="hidden" name="player_id" value={player.id} />
       <input type="hidden" name="tournament_day_id" value={tournamentDayId ?? ""} />
-      <input type="hidden" name="save_mode" value={saveMode} />
-
       {holes.map((h) => (
         <input
           key={`hidden-${h.hole_number}`}
@@ -402,11 +409,11 @@ export default function ScoreEntryClient({
         onKeyDown={handleKeyDown}
       />
 
-      {isRoundClosed && (
+      {isModifyMode && isRoundClosed && (
         <p className="text-sm font-medium text-orange-900">
           Ronda cerrada. Tarjeta firmada (jugador y testigo). Pulsa{" "}
-          <span className="font-bold">ABRIR</span> solo si necesitas corregir
-          scores.
+          <span className="font-bold">ABRIR</span> para corregir scores; luego{" "}
+          <span className="font-bold">Cerrar de nuevo</span>.
         </p>
       )}
 
@@ -423,31 +430,41 @@ export default function ScoreEntryClient({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        {isRoundClosed ? (
+        {isModifyMode && isRoundClosed ? (
           <button
             type="submit"
+            name="save_mode"
+            value="open_round"
             disabled={isPending}
-            onClick={() => setSaveMode("open_round")}
+            onClick={() => setPendingSaveMode("open_round")}
             className="min-w-[120px] rounded-lg border-2 border-orange-700 bg-orange-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white shadow-sm hover:bg-orange-700 disabled:opacity-60"
           >
-            {isPending && saveMode === "open_round" ? "ABRIENDO…" : "ABRIR"}
+            {isPending && pendingSaveMode === "open_round"
+              ? "ABRIENDO…"
+              : "ABRIR"}
           </button>
         ) : (
           <>
             <button
               type="submit"
+              name="save_mode"
+              value="save"
               disabled={isPending}
-              onClick={() => setSaveMode("save")}
+              onClick={() => setPendingSaveMode("save")}
               className="rounded-lg border border-green-800 bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:opacity-60"
             >
-              {isPending && saveMode === "save"
+              {isPending && pendingSaveMode === "save"
                 ? "Guardando..."
-                : "Guardar scores"}
+                : isModifyMode
+                  ? "Guardar cambios"
+                  : "Guardar scores"}
             </button>
             <button
               type="submit"
+              name="save_mode"
+              value="save_and_close"
               disabled={isPending || !canCloseRound}
-              onClick={() => setSaveMode("save_and_close")}
+              onClick={() => setPendingSaveMode("save_and_close")}
               className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
               title={
                 canCloseRound
@@ -455,13 +472,16 @@ export default function ScoreEntryClient({
                   : `Capture los 18 hoyos antes de cerrar (${filledHoleCount}/18)`
               }
             >
-              {isPending && saveMode === "save_and_close"
+              {isPending && pendingSaveMode === "save_and_close"
                 ? "Guardando..."
-                : "Guardar y cerrar ronda"}
+                : isModifyMode
+                  ? "Cerrar de nuevo"
+                  : "Guardar y cerrar ronda"}
             </button>
             <span className="text-xs text-gray-500">
-              «Guardar scores» para borrador; «Cerrar ronda» solo con los 18
-              hoyos capturados (tarjeta firmada jugador + testigo).
+              {isModifyMode
+                ? "«Guardar cambios» deja la ronda abierta; «Cerrar de nuevo» solo con los 18 hoyos."
+                : "«Guardar scores» para borrador; «Cerrar ronda» solo con los 18 hoyos capturados (tarjeta firmada jugador + testigo)."}
             </span>
           </>
         )}
