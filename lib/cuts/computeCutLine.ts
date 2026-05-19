@@ -9,9 +9,11 @@ import {
   type TieBreakStep,
 } from "./tieBreak";
 import {
+  categoryIdsForCutComputation,
   cutSlotsFromRule,
   entryIdsMakingCut,
 } from "./cutAdvancementPolicy";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
 import {
   higherIsBetterForCutRule,
   rankValueForAdvancementRule,
@@ -46,6 +48,10 @@ export type PublicCutLine = {
   categoryId: string | null;
   categoryCode: string | null;
   afterPosition: number;
+  /** Plazas que pasan (p. ej. floor(70×50%) = 35). */
+  cutSlots: number;
+  /** Inscritos usados para calcular el cupo. */
+  fieldSize: number;
   label: string;
   madeCutEntryIds: Set<string>;
 };
@@ -175,11 +181,11 @@ function sortCutField(
 
 function madeCutFromRanking(
   sorted: RankedCutPlayer[],
-  rule: RoundAdvancementRule
+  rule: RoundAdvancementRule,
+  fieldSize: number
 ): Set<string> {
-  const fieldSize = sorted.length;
   const eligible = sorted.filter((r) => r.primaryValue != null);
-  if (eligible.length === 0 || fieldSize === 0) return new Set();
+  if (eligible.length === 0 || fieldSize <= 0) return new Set();
 
   const cutSlots = cutSlotsFromRule(rule, fieldSize);
   return entryIdsMakingCut(eligible, cutSlots);
@@ -209,7 +215,9 @@ function cutLabelForRule(
   rule: RoundAdvancementRule,
   selectedRoundNo: number,
   tieBreakSteps: TieBreakStep[],
-  informational?: boolean
+  informational?: boolean,
+  fieldSize?: number,
+  cutSlots?: number
 ): string {
   const tieNote =
     tieBreakSteps.length > 0
@@ -221,8 +229,13 @@ function cutLabelForRule(
     return `${prefix}Pasan todos (→ R${rule.to_round_no})`;
   }
 
+  const quotaNote =
+    fieldSize != null && cutSlots != null && rule.advancement_type === "top_percent"
+      ? ` · ${cutSlots} de ${fieldSize} inscritos`
+      : "";
+
   if (rule.advancement_type === "top_percent") {
-    return `${prefix}Top ${rule.advancement_value}% red. abajo (→ R${rule.to_round_no})${tieNote}`;
+    return `${prefix}Top ${rule.advancement_value}% red. abajo (→ R${rule.to_round_no})${quotaNote}${tieNote}`;
   }
 
   return `${prefix}Top ${rule.advancement_value} (→ R${rule.to_round_no})${tieNote}`;
@@ -242,6 +255,8 @@ function computeLineForRule(
     strokeIndexByHole?: StrokeIndexByHole;
     informational?: boolean;
     fieldSize: number;
+    leaderboardViewOverride?: LeaderboardViewOverride | null;
+    alignWithLeaderboardDisplay?: boolean;
   }
 ): PublicCutLine | null {
   const scoped = rowsInCat.filter((r) =>
@@ -254,6 +269,8 @@ function computeLineForRule(
       categoryId,
       categoryCode: catCode,
       afterPosition: scoped.length,
+      cutSlots: params.fieldSize,
+      fieldSize: params.fieldSize,
       label: cutLabelForRule(
         rule,
         params.selectedRoundNo,
@@ -277,7 +294,9 @@ function computeLineForRule(
       params.selectedRoundNo,
       params.rulesMap,
       params.handicapByPlayerId,
-      params.strokeIndexByHole
+      params.strokeIndexByHole,
+      params.leaderboardViewOverride,
+      { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
     );
     return {
       entryId: row.entry_id,
@@ -298,7 +317,9 @@ function computeLineForRule(
     params.strokeIndexByHole
   );
 
-  let madeCut = madeCutFromRanking(sorted, rule);
+  const cutSlots = cutSlotsFromRule(rule, params.fieldSize);
+
+  let madeCut = madeCutFromRanking(sorted, rule, params.fieldSize);
   madeCut = applyGrossExemption(madeCut, sorted, rule);
 
   let afterPosition = 0;
@@ -306,17 +327,24 @@ function computeLineForRule(
     if (!madeCut.has(row.entryId)) break;
     afterPosition += 1;
   }
-  if (afterPosition <= 0) return null;
+  if (afterPosition <= 0 && madeCut.size === 0) return null;
+  if (afterPosition <= 0) {
+    afterPosition = Math.min(cutSlots, madeCut.size);
+  }
 
   return {
     categoryId,
     categoryCode: catCode,
     afterPosition,
+    cutSlots,
+    fieldSize: params.fieldSize,
     label: cutLabelForRule(
       rule,
       params.selectedRoundNo,
       tieBreakSteps,
-      params.informational
+      params.informational,
+      params.fieldSize,
+      cutSlots
     ),
     madeCutEntryIds: madeCut,
   };
@@ -351,6 +379,8 @@ export function mergeCutLinesForCategory(
     categoryId: primary.categoryId,
     categoryCode: primary.categoryCode,
     afterPosition,
+    cutSlots: Math.min(...catLines.map((l) => l.cutSlots)),
+    fieldSize: primary.fieldSize,
     label: catLines.map((l) => l.label).join(" · "),
     madeCutEntryIds: merged ?? new Set(),
   };
@@ -424,6 +454,9 @@ type ComputeCutLinesParams = {
   informational?: boolean;
   /** Inscritos por categoría; si falta, se usa el tamaño del campo en tabla. */
   inscribedCountByCategoryId?: Map<string, number>;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
+  /** En vivo: misma puntuación acumulada que la tabla pública. */
+  alignWithLeaderboardDisplay?: boolean;
 };
 
 function computeCutLinesForRules(
@@ -435,15 +468,11 @@ function computeCutLinesForRules(
   const rulesMap = rulesByCategoryId(params.competitionRules);
   const rawLines: PublicCutLine[] = [];
 
-  const categoryScopeIds = params.selectedCategoryId
-    ? [params.selectedCategoryId]
-    : [
-        ...new Set(
-          params.leaderboard
-            .map((r) => String(r.category_id ?? "").trim())
-            .filter(Boolean)
-        ),
-      ];
+  const categoryScopeIds = categoryIdsForCutComputation(
+    params.selectedCategoryId,
+    params.inscribedCountByCategoryId,
+    params.leaderboard
+  );
 
   const shared = {
     selectedRoundNo: params.selectedRoundNo,
@@ -453,6 +482,8 @@ function computeCutLinesForRules(
     tieBreakStepsByProfileId: params.tieBreakStepsByProfileId,
     strokeIndexByHole: params.strokeIndexByHole,
     informational: params.informational,
+    leaderboardViewOverride: params.leaderboardViewOverride,
+    alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay,
   };
 
   for (const categoryId of categoryScopeIds) {
@@ -476,8 +507,10 @@ function computeCutLinesForRules(
     );
     if (!primaryRule) continue;
 
-    const fieldSize =
-      params.inscribedCountByCategoryId?.get(categoryId) ?? rowsInCat.length;
+    const fieldSize = Math.max(
+      params.inscribedCountByCategoryId?.get(categoryId) ?? 0,
+      rowsInCat.length
+    );
 
     const line = computeLineForRule(primaryRule, rowsInCat, categoryId, catCode, {
       ...shared,

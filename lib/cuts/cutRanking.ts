@@ -89,6 +89,24 @@ function roundDetailForRow(
   );
 }
 
+/** Misma métrica que la tabla en vivo (applyCompetitionRules + includeIncompleteRounds). */
+function primaryFromLeaderboardDisplay(
+  row: LeaderboardRow,
+  basis: CutRankingBasis,
+  catRule: CategoryCompetitionRule
+): number | null {
+  if (isStablefordCategory(catRule) || basis === "points_total" || basis === "points_round") {
+    const v = row.stableford_total ?? row.leaderboard_sort_value;
+    return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+  }
+  if (basis === "net_total" || basis === "net_round") {
+    const v = row.leaderboard_sort_value ?? row.total_to_par;
+    return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+  }
+  const v = row.leaderboard_sort_value ?? row.total_to_par ?? row.total_gross;
+  return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+}
+
 export function rankValueForAdvancementRule(
   row: LeaderboardRow,
   rule: RoundAdvancementRule,
@@ -96,7 +114,8 @@ export function rankValueForAdvancementRule(
   rulesMap: Map<string, CategoryCompetitionRule>,
   handicapByPlayerId: Map<string, number | null>,
   strokeIndexByHole?: StrokeIndexByHole,
-  leaderboardViewOverride?: LeaderboardViewOverride | null
+  leaderboardViewOverride?: LeaderboardViewOverride | null,
+  options?: { alignWithLeaderboardDisplay?: boolean }
 ): {
   primary: number | null;
   gross: number | null;
@@ -110,6 +129,17 @@ export function rankValueForAdvancementRule(
   );
   const basis = effectiveRankingBasis(rule, catRule, leaderboardViewOverride);
   const detail = roundDetailForRow(row, tieBreakRound);
+
+  if (options?.alignWithLeaderboardDisplay) {
+    const displayPrimary = primaryFromLeaderboardDisplay(row, basis, catRule);
+    if (displayPrimary != null) {
+      return {
+        primary: displayPrimary,
+        gross: row.total_gross ?? null,
+        detail,
+      };
+    }
+  }
 
   const isSingleRound =
     basis === "gross_round" ||

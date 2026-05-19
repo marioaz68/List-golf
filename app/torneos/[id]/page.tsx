@@ -822,6 +822,8 @@ export default async function PublicTournamentPage({
       tieBreakStepsByProfileId,
       strokeIndexByHole,
       inscribedCountByCategoryId,
+      leaderboardViewOverride,
+      alignWithLeaderboardDisplay: includeIncompleteRounds,
     });
 
     const withMadeCut: LeaderboardRow[] = leaderboardScored.map((row) => {
@@ -854,6 +856,7 @@ export default async function PublicTournamentPage({
           handicapByPlayerId,
           strokeIndexByHole,
           leaderboardViewOverride,
+          alignWithLeaderboardDisplay: includeIncompleteRounds,
         })
       : withMadeCut;
 

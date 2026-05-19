@@ -216,9 +216,13 @@ export async function buildTeeSheetEntryOrderMap(
   const entriesRaw = await fetchAllTournamentEntries(admin, tournamentId);
   type ValidEntry = NonNullable<ReturnType<typeof toValidEntry>>;
 
-  const filteredEntries = entriesRaw
+  const allValidEntries = entriesRaw
     .map((row) => toValidEntry(row as Parameters<typeof toValidEntry>[0]))
-    .filter((e): e is ValidEntry => !!e && isCountableEntry(e.status));
+    .filter((e): e is ValidEntry => !!e);
+
+  const filteredEntries = allValidEntries.filter((e) =>
+    isCountableEntry(e.status)
+  );
 
   if (filteredEntries.length === 0) {
     return { orderMap: out, cutEnforces: false };
@@ -326,7 +330,7 @@ export async function buildTeeSheetEntryOrderMap(
 
   if (cutEnforces && cutRulesForRound.length > 0) {
     const inscribedCountByCategoryId =
-      buildInscribedCountByCategory(filteredEntries);
+      buildInscribedCountByCategory(allValidEntries);
 
     const publicCutLines = computePublicCutLines({
       leaderboard: leaderboardScored,

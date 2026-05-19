@@ -48,6 +48,7 @@ export function sortLeaderboardForCutAlignment(params: {
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
   leaderboardViewOverride?: LeaderboardViewOverride | null;
+  alignWithLeaderboardDisplay?: boolean;
 }): LeaderboardRow[] {
   const enforcing = getAdvancementRulesForTargetRound(
     params.advancementRules,
@@ -105,7 +106,8 @@ export function sortLeaderboardForCutAlignment(params: {
         rulesMap,
         params.handicapByPlayerId,
         params.strokeIndexByHole,
-        params.leaderboardViewOverride
+        params.leaderboardViewOverride,
+        { alignWithLeaderboardDisplay: params.alignWithLeaderboardDisplay }
       );
       return { row, cutSortValue: v.primary };
     });
