@@ -19,6 +19,7 @@ import {
 import type { LeaderboardViewOverride } from "./leaderboardViewOverride";
 import type { LockedScorecardLookups, RoundIdMeta } from "./lockedScorecards";
 import { isPublicRoundScorecardClosed } from "./publicRoundScorePolicy";
+import { sortLeaderboardByCompetitionOrder } from "./sortLeaderboardRows";
 
 function compareSortValues(
   a: number | null,
@@ -171,7 +172,7 @@ export function applyCompetitionStandings({
     standingsByRoundCategory.set(round.id, roundCategoryMap);
   }
 
-  return leaderboard.map((row) => {
+  const updated = leaderboard.map((row) => {
     const categoryKey = row.category_id ?? "__no_category__";
     const captureRoundIds = collectRoundIdsWithScoreCapture(row.details);
 
@@ -239,4 +240,6 @@ export function applyCompetitionStandings({
         : moveVsPreviousCategory,
     };
   });
+
+  return sortLeaderboardByCompetitionOrder(updated, competitionRules);
 }

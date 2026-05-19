@@ -832,18 +832,21 @@ export default async function PublicTournamentPage({
       };
     });
 
-    const alignedForCut = sortLeaderboardForCutAlignment({
-      rows: withMadeCut,
-      advancementRules: advancementRulesList,
-      categories: categories.map((c) => ({
-        id: c.id,
-        code: c.code,
-      })),
-      selectedRoundNo,
-      competitionRules: competitionRulesList,
-      handicapByPlayerId,
-      strokeIndexByHole,
-    });
+    const alignedForCut = cutEnforcesForSelectedRound
+      ? sortLeaderboardForCutAlignment({
+          rows: withMadeCut,
+          advancementRules: advancementRulesList,
+          categories: categories.map((c) => ({
+            id: c.id,
+            code: c.code,
+          })),
+          selectedRoundNo,
+          competitionRules: competitionRulesList,
+          handicapByPlayerId,
+          strokeIndexByHole,
+          leaderboardViewOverride,
+        })
+      : withMadeCut;
 
     leaderboard = annotateCutDividers(
       alignedForCut,

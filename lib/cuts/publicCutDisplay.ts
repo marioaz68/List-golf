@@ -6,6 +6,8 @@ import {
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import { compareLeaderboardRows } from "@/lib/leaderboard/sortLeaderboardRows";
 import {
   higherIsBetterForCutRule,
   rankValueForAdvancementRule,
@@ -13,7 +15,6 @@ import {
 import type { PublicCutLine, RoundAdvancementRule } from "./computeCutLine";
 import {
   getAdvancementRulesForTargetRound,
-  getInformationalAdvancementRulesForDisplay,
   primaryCutLineForCategory,
   ruleAppliesToRow,
 } from "./computeCutLine";
@@ -69,19 +70,15 @@ export function sortLeaderboardForCutAlignment(params: {
   competitionRules: CategoryCompetitionRule[];
   handicapByPlayerId: Map<string, number | null>;
   strokeIndexByHole?: StrokeIndexByHole;
+  leaderboardViewOverride?: LeaderboardViewOverride | null;
 }): LeaderboardRow[] {
   const enforcing = getAdvancementRulesForTargetRound(
     params.advancementRules,
     params.selectedRoundNo
   );
-  const activeRules =
-    enforcing.length > 0
-      ? enforcing
-      : getInformationalAdvancementRulesForDisplay(
-          params.advancementRules,
-          params.selectedRoundNo
-        );
-  if (activeRules.length === 0) return params.rows;
+  if (enforcing.length === 0) {
+    return params.rows;
+  }
 
   const rulesMap = rulesByCategoryId(params.competitionRules);
   const groups = new Map<string, LeaderboardRow[]>();
@@ -104,7 +101,7 @@ export function sortLeaderboardForCutAlignment(params: {
     if (!sample) continue;
 
     const cutRule = pickPrimaryAdvancementRule(
-      activeRules,
+      enforcing,
       sample,
       params.categories
     );
@@ -115,7 +112,13 @@ export function sortLeaderboardForCutAlignment(params: {
     }
 
     const catRule = competitionRuleForCategory(rulesMap, sample.category_id);
-    const higherIsBetter = higherIsBetterForCutRule(cutRule, catRule);
+    const higherIsBetterCut = higherIsBetterForCutRule(
+      cutRule,
+      catRule,
+      params.leaderboardViewOverride
+    );
+    const rowRule = competitionRuleForCategory(rulesMap, sample.category_id);
+    const hiDisplay = isStablefordCategory(rowRule);
 
     const ranked = bucket.map((row) => {
       const v = rankValueForAdvancementRule(
@@ -124,26 +127,26 @@ export function sortLeaderboardForCutAlignment(params: {
         params.selectedRoundNo,
         rulesMap,
         params.handicapByPlayerId,
-        params.strokeIndexByHole
+        params.strokeIndexByHole,
+        params.leaderboardViewOverride
       );
-      return { row, sortValue: v.primary };
+      return { row, cutSortValue: v.primary };
     });
 
     ranked.sort((a, b) => {
       if (a.row.is_disqualified && !b.row.is_disqualified) return 1;
       if (!a.row.is_disqualified && b.row.is_disqualified) return -1;
-      const cmp = compareCutRank(a.sortValue, b.sortValue, higherIsBetter);
-      if (cmp !== 0) return cmp;
-      const rowRule = competitionRuleForCategory(
-        rulesMap,
-        a.row.category_id
+
+      const displayCmp = compareLeaderboardRows(a.row, b.row, hiDisplay);
+      if (displayCmp !== 0) return displayCmp;
+
+      const cmp = compareCutRank(
+        a.cutSortValue,
+        b.cutSortValue,
+        higherIsBetterCut
       );
-      const hiDisplay = isStablefordCategory(rowRule);
-      const av = a.row.leaderboard_sort_value;
-      const bv = b.row.leaderboard_sort_value;
-      if (av != null && bv != null && av !== bv) {
-        return hiDisplay ? bv - av : av - bv;
-      }
+      if (cmp !== 0) return cmp;
+
       return String(a.row.player_name ?? "").localeCompare(
         String(b.row.player_name ?? ""),
         "es"

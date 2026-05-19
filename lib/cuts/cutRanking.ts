@@ -11,6 +11,8 @@ import {
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import { effectiveUsesNetLeaderboard } from "@/lib/leaderboard/leaderboardViewOverride";
 import { collectRoundIdsWithScoreCapture } from "@/lib/leaderboard/roundCategoryMatch";
 import { resolveDetailForRoundNo } from "@/lib/leaderboard/roundCategoryMatch";
 import type { RoundAdvancementRule } from "./computeCutLine";
@@ -18,7 +20,8 @@ import type { RoundAdvancementRule } from "./computeCutLine";
 /** Alinea base del corte con la modalidad de la categoría (Stableford → puntos). */
 export function effectiveRankingBasis(
   rule: RoundAdvancementRule,
-  catRule: CategoryCompetitionRule
+  catRule: CategoryCompetitionRule,
+  leaderboardViewOverride?: LeaderboardViewOverride | null
 ): CutRankingBasis {
   const basis = rule.ranking_basis as CutRankingBasis;
 
@@ -27,9 +30,9 @@ export function effectiveRankingBasis(
     return "points_total";
   }
 
-  const playsNet =
-    catRule.leaderboard_basis === "net" || catRule.leaderboard_basis === "both";
-  if (!playsNet) return basis;
+  if (!effectiveUsesNetLeaderboard(catRule, leaderboardViewOverride)) {
+    return basis;
+  }
   if (basis === "gross_total") return "net_total";
   if (basis === "gross_round") return "net_round";
   return basis;
@@ -37,9 +40,12 @@ export function effectiveRankingBasis(
 
 export function higherIsBetterForCutRule(
   rule: RoundAdvancementRule,
-  catRule: CategoryCompetitionRule
+  catRule: CategoryCompetitionRule,
+  leaderboardViewOverride?: LeaderboardViewOverride | null
 ): boolean {
-  return higherIsBetterForRankingBasis(effectiveRankingBasis(rule, catRule));
+  return higherIsBetterForRankingBasis(
+    effectiveRankingBasis(rule, catRule, leaderboardViewOverride)
+  );
 }
 
 export function rankingRoundRange(
@@ -88,7 +94,8 @@ export function rankValueForAdvancementRule(
   selectedRoundNo: number,
   rulesMap: Map<string, CategoryCompetitionRule>,
   handicapByPlayerId: Map<string, number | null>,
-  strokeIndexByHole?: StrokeIndexByHole
+  strokeIndexByHole?: StrokeIndexByHole,
+  leaderboardViewOverride?: LeaderboardViewOverride | null
 ): {
   primary: number | null;
   gross: number | null;
@@ -100,7 +107,7 @@ export function rankValueForAdvancementRule(
     rule,
     selectedRoundNo
   );
-  const basis = effectiveRankingBasis(rule, catRule);
+  const basis = effectiveRankingBasis(rule, catRule, leaderboardViewOverride);
   const detail = roundDetailForRow(row, tieBreakRound);
 
   const isSingleRound =

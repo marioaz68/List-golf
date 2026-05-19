@@ -13,16 +13,13 @@ export function parseLeaderboardViewOverride(
   return null;
 }
 
-/** Clasificación principal neto vs gross (no aplica a Stableford). */
+/** Clasificación principal neto vs gross (misma lógica que la vista de detalle). */
 export function effectiveUsesNetLeaderboard(
   rule: CategoryCompetitionRule,
   override: LeaderboardViewOverride | null | undefined
 ): boolean {
   if (isStablefordCategory(rule)) return false;
-  if (override === "net") return true;
-  if (override === "gross") return false;
-  const basis = rule.leaderboard_basis;
-  return basis === "net" || basis === "both";
+  return !usesGrossHoleByHoleDetail(rule, override);
 }
 
 /**
