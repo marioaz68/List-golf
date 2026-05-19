@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildCutRulesCcQ } from "./buildCutRules";
+import type { DraftCutRule } from "./types";
 import { tieBreakProfileKeyForCutRule } from "./ccqTieBreakProfiles";
 import { seedCcqTieBreakProfiles } from "./seedTieBreakProfiles";
 
@@ -12,17 +13,52 @@ type AdvancementRow = {
   tie_break_profile_id: string | null;
   scope_type: string;
   scope_value: string | null;
+  include_ties: boolean;
+  gross_exemption_enabled: boolean;
+  gross_exemption_top_n: number | null;
 };
 
-function needsCutRulesUpgrade(rules: AdvancementRow[], roundCount: number): boolean {
+function findMachoteCutMatch(
+  row: AdvancementRow,
+  machoteCuts: DraftCutRule[]
+): DraftCutRule | undefined {
+  if (row.scope_type === "category") {
+    return machoteCuts.find(
+      (m) =>
+        m.scope_type === "category" &&
+        m.scope_value.toUpperCase() ===
+          String(row.scope_value ?? "").toUpperCase()
+    );
+  }
+  if (row.scope_type === "category_code_list") {
+    return machoteCuts.find((m) => m.scope_type === "category_code_list");
+  }
+  return undefined;
+}
+
+function needsCutRulesUpgrade(
+  rules: AdvancementRow[],
+  roundCount: number,
+  machoteCuts: DraftCutRule[]
+): boolean {
   if (rules.length === 0) return false;
-  return rules.some(
-    (r) =>
+  return rules.some((r) => {
+    if (
       r.ranking_mode !== "specified_rounds" ||
       r.from_round_no !== 1 ||
       r.to_round_no !== roundCount ||
       !r.tie_break_profile_id
-  );
+    ) {
+      return true;
+    }
+    const machote = findMachoteCutMatch(r, machoteCuts);
+    if (!machote) return false;
+    return (
+      r.include_ties !== machote.include_ties ||
+      r.gross_exemption_enabled !== machote.gross_exemption_enabled ||
+      Number(r.gross_exemption_top_n ?? 0) !== machote.gross_exemption_top_n
+    );
+  });
 }
 
 /** Parchea reglas de corte en BD (torneo ya configurado): 36 hoyos R1+R2 y desempates CCQ. */
@@ -34,7 +70,7 @@ export async function upgradeTournamentCutRulesFromMachote(
   const { data: rules, error } = await supabase
     .from("round_advancement_rules")
     .select(
-      "id, ranking_basis, ranking_mode, from_round_no, to_round_no, tie_break_profile_id, scope_type, scope_value"
+      "id, ranking_basis, ranking_mode, from_round_no, to_round_no, tie_break_profile_id, scope_type, scope_value, include_ties, gross_exemption_enabled, gross_exemption_top_n"
     )
     .eq("tournament_id", tournamentId)
     .eq("is_active", true);
@@ -42,11 +78,6 @@ export async function upgradeTournamentCutRulesFromMachote(
   if (error) throw new Error(`Reglas de corte: ${error.message}`);
 
   const list = (rules ?? []) as AdvancementRow[];
-  if (!needsCutRulesUpgrade(list, roundCount)) {
-    return { upgraded: false, profiles: 0 };
-  }
-
-  const profileIds = await seedCcqTieBreakProfiles(supabase, tournamentId);
   const machoteCuts = buildCutRulesCcQ({
     title: null,
     total_holes: 54,
@@ -57,20 +88,14 @@ export async function upgradeTournamentCutRulesFromMachote(
     handicap_index_date: null,
   });
 
+  if (!needsCutRulesUpgrade(list, roundCount, machoteCuts)) {
+    return { upgraded: false, profiles: 0 };
+  }
+
+  const profileIds = await seedCcqTieBreakProfiles(supabase, tournamentId);
+
   for (const row of list) {
-    const machoteMatch = machoteCuts.find((m) => {
-      if (row.scope_type === "category") {
-        return (
-          m.scope_type === "category" &&
-          m.scope_value.toUpperCase() ===
-            String(row.scope_value ?? "").toUpperCase()
-        );
-      }
-      if (row.scope_type === "category_code_list") {
-        return m.scope_type === "category_code_list";
-      }
-      return false;
-    });
+    const machoteMatch = findMachoteCutMatch(row, machoteCuts);
 
     const basis = row.ranking_basis;
     const profileKey = tieBreakProfileKeyForCutRule({
@@ -85,6 +110,11 @@ export async function upgradeTournamentCutRulesFromMachote(
         from_round_no: 1,
         to_round_no: roundCount,
         tie_break_profile_id: profileIds[profileKey] ?? null,
+        include_ties: machoteMatch?.include_ties ?? false,
+        gross_exemption_enabled:
+          machoteMatch?.gross_exemption_enabled ?? false,
+        gross_exemption_top_n: machoteMatch?.gross_exemption_top_n ?? 0,
+        notes: machoteMatch?.notes ?? null,
       })
       .eq("id", row.id);
 

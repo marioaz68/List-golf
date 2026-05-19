@@ -259,7 +259,7 @@ export default function CutRulesEditor({
         ranking_mode: "specified_rounds",
         advancement_type: "top_n",
         advancement_value: 24,
-        include_ties: true,
+        include_ties: false,
         gross_exemption_enabled: false,
         gross_exemption_top_n: 0,
         tie_break_profile_id: null,
@@ -312,7 +312,7 @@ export default function CutRulesEditor({
     scope_value: String(r.scope_value ?? "").trim(),
     advancement_type: r.advancement_type,
     advancement_value: r.advancement_type === "all" ? 0 : Number(r.advancement_value),
-    include_ties: !!r.include_ties,
+    include_ties: false,
     gross_exemption_enabled: !!r.gross_exemption_enabled,
     gross_exemption_top_n: r.gross_exemption_enabled ? Number(r.gross_exemption_top_n || 0) : 0,
     tie_break_profile_id: r.tie_break_profile_id ? String(r.tie_break_profile_id) : null,
@@ -378,6 +378,11 @@ export default function CutRulesEditor({
         (!Number.isFinite(r.gross_exemption_top_n) || r.gross_exemption_top_n < 1)
       ) {
         setMsg(fmt(ce.valGrossExempt, { row: i + 1 }));
+        return false;
+      }
+
+      if (r.advancement_type !== "all" && !r.tie_break_profile_id) {
+        setMsg(fmt(ce.valNeedTieBreak, { row: i + 1 }));
         return false;
       }
 
@@ -653,15 +658,6 @@ export default function CutRulesEditor({
                             className={shortFieldClass}
                           />
                         )}
-                      </td>
-
-                      <td className="border border-gray-300 px-1.5 py-[3px] text-center">
-                        <input
-                          type="checkbox"
-                          checked={!!r.include_ties}
-                          onChange={(e) => updateRow(r.id, "include_ties", e.target.checked)}
-                          className={checkboxClass}
-                        />
                       </td>
 
                       <td className="border border-gray-300 px-1.5 py-[3px] min-w-[145px]">

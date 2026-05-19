@@ -294,7 +294,7 @@ export function ccqTorneoAnualMachote(
     seniors_ages:
       "Seniors: 58–64 años cumplidos al 15 de octubre. Super Seniors: 65 años o más cumplidos al 15 de octubre.",
     cut_policy:
-      "El corte depende del número de inscritos por categoría. Máximo 50% redondeado a la baja (ej. 41→20); empates en el score de corte pasan.",
+      "Corte: 50% redondeado a la baja sobre inscritos = cupo exacto (70→35). Empates en el límite se resuelven con desempate (no pasan todos los empatados).",
     cut_tiebreak_gross:
       "Camp., AA, A, B, C: mejor score hoyos 10–18 del 2º día; luego 13–18, 16–18, 18, 1–9, 4–9, 7–9, 9.",
     cut_tiebreak_stableford:

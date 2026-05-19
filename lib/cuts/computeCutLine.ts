@@ -9,6 +9,10 @@ import {
   type TieBreakStep,
 } from "./tieBreak";
 import {
+  cutSlotsFromRule,
+  entryIdsMakingCut,
+} from "./cutAdvancementPolicy";
+import {
   higherIsBetterForCutRule,
   rankValueForAdvancementRule,
 } from "./cutRanking";
@@ -29,6 +33,7 @@ export type RoundAdvancementRule = {
   ranking_mode: "tournament_to_date" | "specified_rounds" | "last_round_only";
   advancement_type: "top_n" | "top_percent" | "all";
   advancement_value: number;
+  /** Legacy en BD; el motor siempre aplica cupo exacto + desempate por perfil. */
   include_ties: boolean;
   gross_exemption_enabled?: boolean;
   gross_exemption_top_n?: number;
@@ -143,47 +148,16 @@ function sortCutField(
   });
 }
 
-/**
- * Plazas que pasan por porcentaje (convocatoria CCQ: 50% redondeo a la baja).
- * Ej. 41→20, 53→26, 70→35, 27→13.
- */
-function topNFromRule(rule: RoundAdvancementRule, fieldSize: number): number {
-  if (rule.advancement_type === "top_percent") {
-    const pct = Math.max(0, Math.min(100, Number(rule.advancement_value)));
-    const raw = (fieldSize * pct) / 100;
-    return Math.max(1, Math.floor(raw));
-  }
-  return Math.max(1, Math.trunc(Number(rule.advancement_value)));
-}
-
 function madeCutFromRanking(
-  ranked: RankedCutPlayer[],
-  rule: RoundAdvancementRule,
-  higherIsBetter: boolean,
-  tieBreakSteps: TieBreakStep[]
+  sorted: RankedCutPlayer[],
+  rule: RoundAdvancementRule
 ): Set<string> {
-  const fieldSize = ranked.length;
-  const eligible = ranked.filter((r) => r.primaryValue != null);
+  const fieldSize = sorted.length;
+  const eligible = sorted.filter((r) => r.primaryValue != null);
   if (eligible.length === 0 || fieldSize === 0) return new Set();
 
-  /** Top % sobre el campo inscrito (no solo quienes ya tienen score). */
-  const topN = Math.min(topNFromRule(rule, fieldSize), eligible.length);
-
-  if (!rule.include_ties) {
-    return new Set(eligible.slice(0, topN).map((r) => r.entryId));
-  }
-
-  /** Empates en el score de corte pasan; el perfil de desempate solo ordena la lista. */
-  const cutValue = eligible[topN - 1]!.primaryValue!;
-  const ids = new Set<string>();
-  for (const row of eligible) {
-    if (row.primaryValue == null) continue;
-    const makes = higherIsBetter
-      ? row.primaryValue >= cutValue
-      : row.primaryValue <= cutValue;
-    if (makes) ids.add(row.entryId);
-  }
-  return ids;
+  const cutSlots = cutSlotsFromRule(rule, fieldSize);
+  return entryIdsMakingCut(eligible, cutSlots);
 }
 
 function applyGrossExemption(
@@ -214,10 +188,8 @@ function cutLabelForRule(
 ): string {
   const tieNote =
     tieBreakSteps.length > 0
-      ? " · desempate"
-      : rule.include_ties
-        ? " · empates"
-        : "";
+      ? " · desempate en límite"
+      : " · cupo exacto";
   const prefix = informational ? "CORTE (referencia) · " : "CORTE · ";
 
   if (rule.advancement_type === "all") {
@@ -300,12 +272,7 @@ function computeLineForRule(
     params.strokeIndexByHole
   );
 
-  let madeCut = madeCutFromRanking(
-    sorted,
-    rule,
-    higherIsBetter,
-    tieBreakSteps
-  );
+  let madeCut = madeCutFromRanking(sorted, rule);
   madeCut = applyGrossExemption(madeCut, sorted, rule);
 
   let afterPosition = 0;

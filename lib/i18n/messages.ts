@@ -537,7 +537,7 @@ const es = {
         "Debes tener rondas y categorías creadas en este torneo para configurar cortes.",
       newRule: "Nueva regla",
       helperLine:
-        "Los cortes se configuran por categoría. Selecciona una o varias categorías por regla.",
+        "Cortes por categoría: cupo exacto (% redondeado a la baja sobre inscritos). En el límite del corte aplica el perfil de desempate (nunca pasan todos los empatados).",
       thOrder: "Orden",
       thCategories: "Categorías",
       thFrom: "De",
@@ -579,6 +579,8 @@ const es = {
       valTopPercent: "Top % debe estar entre 0 y 100 en fila {row}.",
       valGrossExempt:
         "Top Gross protegido debe ser mayor o igual a 1 en fila {row}.",
+      valNeedTieBreak:
+        "Selecciona perfil de desempate en fila {row} (obligatorio para cupo exacto).",
       valCutScopeGroup:
         "El grupo de categorías debe tener al menos 2 letras o ser un código exacto (ej. DE), no una sola letra como «D» (fila {row}).",
       rankingBasisLabels: {
@@ -1706,7 +1708,7 @@ const en: Messages = {
         "Create rounds and categories in this tournament before configuring cuts.",
       newRule: "New rule",
       helperLine:
-        "Cuts are set per category. Select one or more categories for each rule.",
+        "Cuts per category: exact field size (percent rounded down on entries). At the cut line the tie-break profile applies (never all tied players).",
       thOrder: "Order",
       thCategories: "Categories",
       thFrom: "From",
@@ -1747,6 +1749,8 @@ const en: Messages = {
       valTopPercent: "Top % must be between 0 and 100 in row {row}.",
       valGrossExempt:
         "Protected gross top must be greater than or equal to 1 in row {row}.",
+      valNeedTieBreak:
+        "Select a tie-break profile in row {row} (required for exact cut size).",
       valCutScopeGroup:
         "Category group must be at least 2 letters or an exact code (e.g. DE), not a single letter like “D” (row {row}).",
       rankingBasisLabels: {

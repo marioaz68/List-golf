@@ -167,7 +167,7 @@ export async function applyConvocatoriaDraft({
       ranking_mode: r.ranking_mode,
       advancement_type: r.advancement_type,
       advancement_value: r.advancement_value,
-      include_ties: r.include_ties,
+      include_ties: false,
       gross_exemption_enabled: r.gross_exemption_enabled,
       gross_exemption_top_n: r.gross_exemption_top_n,
       tie_break_profile_id: profileId,

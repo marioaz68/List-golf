@@ -147,7 +147,7 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       r.advancement_value = 0;
     }
 
-    r.include_ties = parseBool(r.include_ties);
+    r.include_ties = false;
     r.gross_exemption_enabled = parseBool(r.gross_exemption_enabled);
     r.gross_exemption_top_n = optInt(r.gross_exemption_top_n) ?? 0;
 
@@ -194,6 +194,12 @@ export async function saveCutRulesSnapshot(formData: FormData) {
       (r.advancement_value <= 0 || r.advancement_value > 100)
     ) {
       throw new Error(`Top % inv?lido en fila ${i + 1}`);
+    }
+
+    if (r.advancement_type !== "all" && !r.tie_break_profile_id) {
+      throw new Error(
+        `Falta perfil de desempate de corte en fila ${i + 1} (obligatorio para cupo exacto)`
+      );
     }
   }
 
