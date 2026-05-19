@@ -193,10 +193,19 @@ function ThNineCol({
 function SummaryHeads({
   labels,
   showPositionCol,
+  netOnly,
 }: {
   labels: PublicDetailTableLabels;
   showPositionCol: boolean;
+  netOnly?: boolean;
 }) {
+  if (netOnly) {
+    return (
+      <th className="w-[28px] min-w-[26px] border-b border-white/10 px-0 py-0.5 text-center text-[7px] font-semibold leading-tight text-cyan-100/90 sm:w-[30px] sm:text-[8px]">
+        {labels.gross}
+      </th>
+    );
+  }
   return (
     <>
       <th className="w-[24px] min-w-[22px] border-b border-white/10 px-0 py-0.5 text-center text-[7px] font-semibold leading-tight text-cyan-100/90 sm:w-[26px] sm:text-[8px]">
@@ -209,6 +218,39 @@ function SummaryHeads({
         <th className="w-[20px] min-w-[18px] border-b border-white/10 px-0 py-0.5 text-center text-[7px] font-semibold leading-tight text-cyan-100/90 sm:w-[22px] sm:text-[8px]">
           {labels.pos}
         </th>
+      ) : null}
+    </>
+  );
+}
+
+function SummaryCells({
+  totals,
+  showPositionCol,
+  netOnly,
+  standingPos,
+  isDq,
+  stripeBg,
+}: {
+  totals: { primary: string; secondary: string };
+  showPositionCol: boolean;
+  netOnly?: boolean;
+  standingPos: number | null;
+  isDq: boolean;
+  stripeBg: string;
+}) {
+  if (netOnly) {
+    return (
+      <td className={`${totalTd} ${stripeBg}`}>{totals.primary}</td>
+    );
+  }
+  return (
+    <>
+      <td className={`${totalTd} ${stripeBg}`}>{totals.primary}</td>
+      <td className={`${totalTd} ${stripeBg}`}>{totals.secondary}</td>
+      {showPositionCol ? (
+        <td className={`${totalTd} ${stripeBg}`}>
+          {isDq ? "DQ" : standingPos ?? "—"}
+        </td>
       ) : null}
     </>
   );
@@ -303,8 +345,15 @@ export default function PublicLeaderboardDetailTable({
       handicap_percentage: 100,
     } as CategoryCompetitionRule);
   const usesGrossDetail = usesGrossHoleByHoleDetail(rule, viewOverride);
-  const showPositionCol = !usesGrossDetail || isStablefordCategory(rule);
-  const summaryColCount = showPositionCol ? 3 : 2;
+  const isNetDetailLayout =
+    !usesGrossDetail && !isStablefordCategory(rule);
+  const showPositionCol =
+    !isNetDetailLayout && (!usesGrossDetail || isStablefordCategory(rule));
+  const summaryColCount = isNetDetailLayout
+    ? 1
+    : showPositionCol
+      ? 3
+      : 2;
   const allWithScores = selectLeaderboardDetailsForPlayer(row).filter(
     hasHoleOrGross
   );
@@ -346,9 +395,13 @@ export default function PublicLeaderboardDetailTable({
         null
     : resolveAuditDetailForNetView(row, selectedRound, allWithScores);
 
-  const inline = labels.detailTotalsPlacement === "inline-after-nines";
-  const showEighteenTotalCol =
-    !inline && Boolean(labels.totalTitle?.trim());
+  /** Neto: 18 hoyos + subtotales + TOT + columna NET; filas R1…Rn con score bruto. */
+  const inline = isNetDetailLayout
+    ? false
+    : labels.detailTotalsPlacement === "inline-after-nines";
+  const showEighteenTotalCol = isNetDetailLayout
+    ? true
+    : !inline && Boolean(labels.totalTitle?.trim());
   const emptyColSpan = inline
     ? 21 + summaryColCount
     : 21 + (showEighteenTotalCol ? 1 : 0) + summaryColCount;
@@ -417,6 +470,7 @@ export default function PublicLeaderboardDetailTable({
                 <SummaryHeads
                   labels={labels}
                   showPositionCol={showPositionCol}
+                  netOnly={isNetDetailLayout}
                 />
               </>
             ) : (
@@ -437,6 +491,7 @@ export default function PublicLeaderboardDetailTable({
                 <SummaryHeads
                   labels={labels}
                   showPositionCol={showPositionCol}
+                  netOnly={isNetDetailLayout}
                 />
               </>
             )}
@@ -517,13 +572,23 @@ export default function PublicLeaderboardDetailTable({
               null;
             const stripeBg =
               detailIndex % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
-            const totals = detailTotalsForRule(
+            const grossTotals = detailTotalsForRule(
               detail,
               rule,
               handicapIndex,
               strokeIndexByHole,
               true
             );
+            const netTotals = detailTotalsForRule(
+              detail,
+              rule,
+              handicapIndex,
+              strokeIndexByHole,
+              false
+            );
+            const roundSummaryTotals = isNetDetailLayout
+              ? netTotals
+              : grossTotals;
 
             return (
               <tr
@@ -630,18 +695,20 @@ export default function PublicLeaderboardDetailTable({
                     ) : null}
                   </>
                 )}
-                <td className={`${totalTd} ${stripeBg}`}>{totals.primary}</td>
-                <td className={`${totalTd} ${stripeBg}`}>{totals.secondary}</td>
-                {showPositionCol ? (
-                  <td className={`${totalTd} ${stripeBg}`}>
-                    {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
-                  </td>
-                ) : null}
+                <SummaryCells
+                  totals={roundSummaryTotals}
+                  showPositionCol={showPositionCol}
+                  netOnly={isNetDetailLayout}
+                  standingPos={standing?.pos ?? null}
+                  isDq={detail.is_dq}
+                  stripeBg={stripeBg}
+                />
               </tr>
             );
           })}
 
           {auditDetail &&
+          !isNetDetailLayout &&
           showHoleAuditForRule(rule, viewOverride) ? (
             <PublicLeaderboardHoleAuditRows
               detail={auditDetail}
@@ -799,17 +866,14 @@ export default function PublicLeaderboardDetailTable({
                     </>
                   )}
 
-                  <td className={`${totalTd} ${stripeBg}`}>
-                    {totals.primary}
-                  </td>
-                  <td className={`${totalTd} ${stripeBg}`}>
-                    {totals.secondary}
-                  </td>
-                  {showPositionCol ? (
-                    <td className={`${totalTd} ${stripeBg}`}>
-                      {detail.is_dq ? "DQ" : standing?.pos ?? "—"}
-                    </td>
-                  ) : null}
+                  <SummaryCells
+                    totals={totals}
+                    showPositionCol={showPositionCol}
+                    netOnly={isNetDetailLayout}
+                    standingPos={standing?.pos ?? null}
+                    isDq={detail.is_dq}
+                    stripeBg={stripeBg}
+                  />
                 </tr>
               );
             })
