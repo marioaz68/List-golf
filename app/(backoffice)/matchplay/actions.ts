@@ -85,7 +85,7 @@ export async function createMatchPlayTeam(formData: FormData) {
 
   const player_a_entry_id = reqStr(formData, "player_a_entry_id");
   const player_b_entry_id = optStr(formData, "player_b_entry_id");
-  const category_id = optStr(formData, "category_id");
+  let category_id = optStr(formData, "category_id");
   const team_name = optStr(formData, "team_name");
   const seed = optNum(formData, "seed");
 
@@ -101,11 +101,38 @@ export async function createMatchPlayTeam(formData: FormData) {
     ? data.entries.find((e) => e.id === player_b_entry_id)
     : null;
 
+  if (!category_id && data.categories.length === 1) {
+    category_id = data.categories[0].id;
+  }
+
+  const { data: categoryRow } = category_id
+    ? await admin
+        .from("categories")
+        .select("code, name, handicap_min, handicap_max")
+        .eq("id", category_id)
+        .eq("tournament_id", tournament_id)
+        .maybeSingle()
+    : { data: null };
+
   const validation = validateTeamFormation({
     match_type,
     player_a,
     player_b,
     rules: data.rules,
+    category: categoryRow
+      ? {
+          code: categoryRow.code ?? null,
+          name: categoryRow.name ?? null,
+          handicap_min:
+            categoryRow.handicap_min != null
+              ? Number(categoryRow.handicap_min)
+              : null,
+          handicap_max:
+            categoryRow.handicap_max != null
+              ? Number(categoryRow.handicap_max)
+              : null,
+        }
+      : null,
     existingTeamCount: data.teams.length,
   });
 

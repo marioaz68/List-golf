@@ -45,7 +45,13 @@ type Props = {
   tournamentId: string;
   matchType: "individual" | "pairs";
   rules: MatchPlayRulesSnapshot | null;
-  categories: Array<{ id: string; code: string | null; name: string | null }>;
+  categories: Array<{
+    id: string;
+    code: string | null;
+    name: string | null;
+    handicap_min?: number | null;
+    handicap_max?: number | null;
+  }>;
   entries: MatchPlayEntryRow[];
   teams: MatchPlayTeamRow[];
   assignedEntryIds: string[];
@@ -275,11 +281,18 @@ export default function MatchPlayTeamsPanel({
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
                 >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.code} — {c.name}
-                    </option>
-                  ))}
+                  {categories.map((c) => {
+                    const range =
+                      c.handicap_min != null && c.handicap_max != null
+                        ? ` (HI suma ${c.handicap_min}–${c.handicap_max})`
+                        : "";
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.name}
+                        {range}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
             ) : null}
@@ -379,7 +392,13 @@ function TeamRow({
 }: {
   team: MatchPlayTeamRow;
   tournamentId: string;
-  categories: Array<{ id: string; code: string | null; name: string | null }>;
+  categories: Array<{
+    id: string;
+    code: string | null;
+    name: string | null;
+    handicap_min?: number | null;
+    handicap_max?: number | null;
+  }>;
   matchType: "individual" | "pairs";
   showAuction: boolean;
 }) {

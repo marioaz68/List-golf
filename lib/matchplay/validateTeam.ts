@@ -6,6 +6,13 @@ export type TeamValidationInput = {
   player_a: MatchPlayEntryRow;
   player_b?: MatchPlayEntryRow | null;
   rules: MatchPlayRulesSnapshot | null;
+  /** Categoría asignada al equipo (su handicap_min/max acota la suma HI de la pareja). */
+  category?: {
+    code: string | null;
+    name: string | null;
+    handicap_min: number | null;
+    handicap_max: number | null;
+  } | null;
   existingTeamCount: number;
   excludeTeamId?: string;
 };
@@ -95,18 +102,27 @@ export function validateTeamFormation(
     }
   }
 
-  const min = rules?.combined_hi_min;
-  const max = rules?.combined_hi_max;
-  if (min !== null && min !== undefined && combined < min) {
+  const categoryMin = input.category?.handicap_min ?? null;
+  const categoryMax = input.category?.handicap_max ?? null;
+  const hasCategoryRange =
+    (categoryMin != null && categoryMin > 0) ||
+    (categoryMax != null && categoryMax > 0);
+  const min = hasCategoryRange ? categoryMin : rules?.combined_hi_min ?? null;
+  const max = hasCategoryRange ? categoryMax : rules?.combined_hi_max ?? null;
+  const rangeSource = hasCategoryRange
+    ? input.category?.code || input.category?.name || "categoría"
+    : "torneo";
+
+  if (min != null && combined < min) {
     return {
       ok: false,
-      message: `Suma HI ${combined} menor al mínimo (${min}).`,
+      message: `Suma HI ${combined} menor al mínimo ${min} (${rangeSource}).`,
     };
   }
-  if (max !== null && max !== undefined && combined > max) {
+  if (max != null && combined > max) {
     return {
       ok: false,
-      message: `Suma HI ${combined} mayor al máximo (${max}).`,
+      message: `Suma HI ${combined} mayor al máximo ${max} (${rangeSource}).`,
     };
   }
 

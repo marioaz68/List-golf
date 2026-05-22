@@ -133,7 +133,7 @@ export async function loadMatchPlayTeamsData(
 
   const { data: categories } = await supabase
     .from("categories")
-    .select("id, code, name")
+    .select("id, code, name, handicap_min, handicap_max")
     .eq("tournament_id", tournamentId)
     .eq("is_active", true)
     .order("sort_order", { ascending: true });
@@ -191,7 +191,13 @@ export async function loadMatchPlayTeamsData(
 
   return {
     rules,
-    categories: categories ?? [],
+    categories: (categories ?? []).map((c) => ({
+      id: c.id,
+      code: c.code ?? null,
+      name: c.name ?? null,
+      handicap_min: c.handicap_min != null ? Number(c.handicap_min) : null,
+      handicap_max: c.handicap_max != null ? Number(c.handicap_max) : null,
+    })),
     entries,
     teams,
     assignedEntryIds,

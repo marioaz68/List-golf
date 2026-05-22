@@ -47,7 +47,13 @@ export type MatchPlayRulesSnapshot = {
 
 export type MatchPlayTeamsPageData = {
   rules: MatchPlayRulesSnapshot | null;
-  categories: Array<{ id: string; code: string | null; name: string | null }>;
+  categories: Array<{
+    id: string;
+    code: string | null;
+    name: string | null;
+    handicap_min: number | null;
+    handicap_max: number | null;
+  }>;
   entries: MatchPlayEntryRow[];
   teams: MatchPlayTeamRow[];
   assignedEntryIds: Set<string>;

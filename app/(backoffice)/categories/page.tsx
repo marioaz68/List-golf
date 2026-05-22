@@ -8,6 +8,8 @@ import {
   backofficeTableStickyScroll,
   twStickyThDarkGlass,
 } from "@/lib/ui/backofficeTableSticky";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import type { TournamentSettings } from "@/types/tournament";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -171,7 +173,7 @@ export default async function CategoriesPage(props: {
 
   const { data: tournaments, error: tournamentsError } = await supabase
     .from("tournaments")
-    .select("id,name")
+    .select("id,name,settings")
     .order("created_at", { ascending: false });
 
   if (tournamentsError) {
@@ -258,6 +260,14 @@ export default async function CategoriesPage(props: {
 
   const selectedTemplate =
     templates.find((t) => t.id === effectiveTemplateId) ?? null;
+
+  const selectedTournament = tournaments.find(
+    (t) => t.id === effectiveTournamentId
+  );
+  const tournamentIsMatchPlay = isMatchPlayFormat(
+    ((selectedTournament as { settings?: TournamentSettings | null } | undefined)
+      ?.settings ?? null) as TournamentSettings | null
+  );
 
   let previewItems: PreviewItem[] = [];
   if (selectedTemplate?.id) {
@@ -487,6 +497,19 @@ export default async function CategoriesPage(props: {
           </div>
         </div>
       )}
+
+      {tournamentIsMatchPlay ? (
+        <div className="rounded-lg border border-cyan-400/40 bg-cyan-50 p-3 text-cyan-900">
+          <div className="text-[11px] leading-snug">
+            <strong>Match play por parejas:</strong> los campos <em>Min</em> y{" "}
+            <em>Max</em> de cada categoría representan la{" "}
+            <strong>suma HI de los 2 jugadores</strong>. Por ejemplo, una sola
+            categoría puede ir de <strong>14</strong> a <strong>67</strong>.
+            Puedes borrar categorías que no necesites con el botón rojo de cada
+            fila.
+          </div>
+        </div>
+      ) : null}
 
       <HeaderBlock
         title="CATEGORÍAS DEL TORNEO"
