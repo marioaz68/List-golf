@@ -362,13 +362,31 @@ export async function saveCategoriesSnapshot(formData: FormData) {
   }
 
   if (deleteIds.length > 0) {
+    // Desligar referencias de tablas que no tienen ON DELETE CASCADE / SET NULL.
+    await supabase
+      .from("tournament_entries")
+      .update({ category_id: null })
+      .eq("tournament_id", tournament_id)
+      .in("category_id", deleteIds);
+
+    await supabase
+      .from("rounds")
+      .update({ category_id: null })
+      .eq("tournament_id", tournament_id)
+      .in("category_id", deleteIds);
+
     const { error: delErr } = await supabase
       .from("categories")
       .delete()
       .eq("tournament_id", tournament_id)
       .in("id", deleteIds);
 
-    if (delErr) throw new Error(delErr.message);
+    if (delErr) {
+      throw new Error(
+        `No pude borrar la categoría: ${delErr.message}. ` +
+          "Asegúrate de que no quede ninguna ronda o inscripción asignada a ella."
+      );
+    }
   }
 
   const existing = rows.filter((r) => r.id && !String(r.id).startsWith("tmp_"));
@@ -420,6 +438,29 @@ export async function saveCategoriesSnapshot(formData: FormData) {
 
   await normalizeCategorySortOrder(tournament_id);
 
+  // Si quedó solo 1 categoría activa, reasignar a esa las inscripciones/rondas sin categoría.
+  const { data: remaining } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("tournament_id", tournament_id)
+    .eq("is_active", true);
+
+  if (remaining && remaining.length === 1) {
+    const onlyId = remaining[0].id;
+
+    await supabase
+      .from("tournament_entries")
+      .update({ category_id: onlyId })
+      .eq("tournament_id", tournament_id)
+      .is("category_id", null);
+
+    await supabase
+      .from("rounds")
+      .update({ category_id: onlyId })
+      .eq("tournament_id", tournament_id)
+      .is("category_id", null);
+  }
+
   revalidateCategoryPaths();
   redirect(`/categories?tournament_id=${tournament_id}&tab=editor`);
 }
@@ -429,6 +470,20 @@ export async function deleteCategory(formData: FormData) {
 
   const id = reqStr(formData, "id");
   const tournament_id = String(formData.get("tournament_id") ?? "").trim();
+
+  if (tournament_id) {
+    await supabase
+      .from("tournament_entries")
+      .update({ category_id: null })
+      .eq("tournament_id", tournament_id)
+      .eq("category_id", id);
+
+    await supabase
+      .from("rounds")
+      .update({ category_id: null })
+      .eq("tournament_id", tournament_id)
+      .eq("category_id", id);
+  }
 
   const { error } = await supabase.from("categories").delete().eq("id", id);
 
