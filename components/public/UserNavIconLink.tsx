@@ -38,7 +38,9 @@ export function UserNavIconLink({
         aria-hidden
       />
       {visible ? (
-        <span className="truncate text-xs font-medium sm:text-sm">{visible}</span>
+        <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold sm:text-sm">
+          {visible}
+        </span>
       ) : null}
     </Link>
   );
