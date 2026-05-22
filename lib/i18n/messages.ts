@@ -349,6 +349,10 @@ const es = {
       bulkFeedbackAdded: "Agregados:",
       bulkFeedbackSkipped: "Ya inscritos:",
       noTournamentSelected: "No hay torneo seleccionado.",
+      loadErrorTitle: "No se pudo cargar inscritos",
+      loadErrorBody:
+        "Ocurrió un error al leer inscripciones, tarjetas o puntajes. Puedes cambiar de torneo o reintentar.",
+      loadErrorTechnical: "Detalle técnico",
     },
   },
   teeSheet: {
@@ -1550,6 +1554,10 @@ const en: Messages = {
       bulkFeedbackAdded: "Added:",
       bulkFeedbackSkipped: "Already entered:",
       noTournamentSelected: "No tournament selected.",
+      loadErrorTitle: "Could not load entries",
+      loadErrorBody:
+        "An error occurred while loading entries, scorecards, or scores. Try another tournament or reload.",
+      loadErrorTechnical: "Technical detail",
     },
   },
   teeSheet: {

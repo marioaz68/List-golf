@@ -17,6 +17,7 @@ import {
   isMissingTelegramKitColumnsError,
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
+import { queryInChunks } from "@/lib/supabase/queryInChunks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -473,6 +474,7 @@ export default async function EntriesPage({
   const bulkSelected = parseCount(params.bulk_selected);
 
   const supabase = await createClient();
+  let pageLoadError: string | null = null;
 
   const [tournamentsRes, playersRes, categoriesRes] = await Promise.all([
     supabase.from("tournaments").select("id, name, status, registration_status, registration_closed_at").order("name"),
@@ -499,15 +501,11 @@ export default async function EntriesPage({
   ]);
 
   if (tournamentsRes.error) {
-    throw new Error(`Error leyendo tournaments: ${tournamentsRes.error.message}`);
-  }
-
-  if (playersRes.error) {
-    throw new Error(`Error leyendo players: ${playersRes.error.message}`);
-  }
-
-  if (categoriesRes.error) {
-    throw new Error(`Error leyendo categories: ${categoriesRes.error.message}`);
+    pageLoadError = `Error leyendo tournaments: ${tournamentsRes.error.message}`;
+  } else if (playersRes.error) {
+    pageLoadError = `Error leyendo players: ${playersRes.error.message}`;
+  } else if (categoriesRes.error) {
+    pageLoadError = `Error leyendo categories: ${categoriesRes.error.message}`;
   }
 
   const tournaments = (tournamentsRes.data ?? []) as Tournament[];
@@ -544,7 +542,8 @@ export default async function EntriesPage({
 
   let entries: EntryRow[] = [];
 
-  if (selectedTournamentId) {
+  if (selectedTournamentId && !pageLoadError) {
+    try {
     const entriesResKit = await supabase
       .from("tournament_entries")
       .select(ENTRY_SELECT_WITH_KIT)
@@ -610,45 +609,43 @@ export default async function EntriesPage({
     }
 
     if (roundIds.length > 0 && playerIds.length > 0) {
-      const roundScoresRes = await supabase
-        .from("round_scores")
-        .select("id, player_id, round_id, gross_score")
-        .in("round_id", roundIds)
-        .in("player_id", playerIds);
-
-      if (roundScoresRes.error) {
-        throw new Error(
-          `Error leyendo round_scores: ${roundScoresRes.error.message}`
+      const { data: roundScores, error: roundScoresError } =
+        await queryInChunks(
+          playerIds,
+          80,
+          async (playerChunk) =>
+            supabase
+              .from("round_scores")
+              .select("id, player_id, round_id, gross_score")
+              .in("round_id", roundIds)
+              .in("player_id", playerChunk)
         );
+
+      if (roundScoresError) {
+        throw new Error(`Error leyendo round_scores: ${roundScoresError}`);
       }
 
-      const roundScores = (roundScoresRes.data ?? []) as Array<{
-        id: string;
-        player_id: string | null;
-        round_id: string | null;
-        gross_score: number | null;
-      }>;
-
       const roundScoreIds = roundScores.map((rs) => rs.id);
-      let holeScores: Array<{ round_score_id: string }> = [];
+      let holeScores: Array<{
+        round_score_id: string;
+        hole_number?: number | null;
+        hole_no?: number | null;
+      }> = [];
 
       if (roundScoreIds.length > 0) {
-        const holeScoresRes = await supabase
-          .from("hole_scores")
-          .select("round_score_id, hole_number, hole_no")
-          .in("round_score_id", roundScoreIds);
-
-        if (holeScoresRes.error) {
-          throw new Error(
-            `Error leyendo hole_scores: ${holeScoresRes.error.message}`
+        const { data: holeScoresData, error: holeScoresError } =
+          await queryInChunks(roundScoreIds, 150, async (chunk) =>
+            supabase
+              .from("hole_scores")
+              .select("round_score_id, hole_number, hole_no")
+              .in("round_score_id", chunk)
           );
+
+        if (holeScoresError) {
+          throw new Error(`Error leyendo hole_scores: ${holeScoresError}`);
         }
 
-        holeScores = (holeScoresRes.data ?? []) as Array<{
-          round_score_id: string;
-          hole_number?: number | null;
-          hole_no?: number | null;
-        }>;
+        holeScores = holeScoresData;
       }
 
       roundCapture = buildRoundCaptureState(
@@ -714,6 +711,11 @@ export default async function EntriesPage({
           : null,
       };
     });
+    } catch (err) {
+      pageLoadError =
+        err instanceof Error ? err.message : "Error al cargar inscritos";
+      console.error("[entries]", err);
+    }
   }
 
   return (
@@ -768,7 +770,22 @@ export default async function EntriesPage({
         </form>
       </section>
 
-      {selectedTournamentId ? (
+      {pageLoadError ? (
+        <section className="rounded border border-red-300 bg-red-50 p-3 text-[12px] text-red-900 shadow-sm">
+          <p className="font-semibold">{ep.loadErrorTitle}</p>
+          <p className="mt-1">{ep.loadErrorBody}</p>
+          <details className="mt-3">
+            <summary className="cursor-pointer font-medium text-red-800">
+              {ep.loadErrorTechnical}
+            </summary>
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-[11px] text-red-700">
+              {pageLoadError}
+            </pre>
+          </details>
+        </section>
+      ) : null}
+
+      {selectedTournamentId && !pageLoadError ? (
         <>
           <section
             className={`rounded border p-2 shadow-sm ${

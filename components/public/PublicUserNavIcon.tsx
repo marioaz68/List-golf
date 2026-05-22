@@ -18,13 +18,16 @@ export async function PublicUserNavIcon() {
 
   const href = user ? "/tournaments" : "/login";
   const label = user ? pub.adminList : nav.enter;
+  const displayName = user?.email?.split("@")[0]?.trim() || null;
 
   return (
     <UserNavIconLink
       href={href}
       label={label}
-      className={userNavIconOnlyClass}
-      iconClassName="h-6 w-6"
+      className={`${userNavIconOnlyClass} max-w-[11rem] gap-1.5 px-1 sm:max-w-[14rem]`}
+      iconClassName="h-6 w-6 shrink-0"
+      showLabel
+      labelText={user ? displayName ?? "Admin" : nav.enter}
     />
   );
 }

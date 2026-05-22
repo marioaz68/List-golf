@@ -6,6 +6,9 @@ type UserNavIconLinkProps = {
   className?: string;
   label: string;
   iconClassName?: string;
+  /** Texto visible junto al icono (p. ej. email o «Entrar»). */
+  showLabel?: boolean;
+  labelText?: string;
 };
 
 /** Enlace de navegación con icono de usuario (login, administración, etc.). */
@@ -14,7 +17,11 @@ export function UserNavIconLink({
   className,
   label,
   iconClassName = "h-5 w-5",
+  showLabel = false,
+  labelText,
 }: UserNavIconLinkProps) {
+  const visible = showLabel ? (labelText ?? label) : null;
+
   return (
     <Link
       href={href}
@@ -27,6 +34,9 @@ export function UserNavIconLink({
         strokeWidth={2.25}
         aria-hidden
       />
+      {visible ? (
+        <span className="truncate text-xs font-medium sm:text-sm">{visible}</span>
+      ) : null}
     </Link>
   );
 }
