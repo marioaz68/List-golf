@@ -18,6 +18,10 @@ export type PublicDetailTableLabels = {
   /** Encabezado al expandir detalle (nombre completo vs nombre abreviado en tabla). */
   detailExpandedCategoryLabel: string;
   detailExpandedClubLabel: string;
+  detailCloseButton: string;
+  detailCloseAria: string;
+  detailToggleOpenAria: string;
+  detailToggleCloseAria: string;
   detailTotalsPlacement: DetailTotalsPlacement;
   auditStrokeIndex: string;
   auditStrokesReceived: string;
@@ -40,6 +44,10 @@ type Pub = {
   detailNoCapture: string;
   detailExpandedCategoryLabel: string;
   detailExpandedClubLabel: string;
+  detailCloseButton: string;
+  detailCloseAria: string;
+  detailToggleOpenAria: string;
+  detailToggleCloseAria: string;
   detailTotalsPlacement: DetailTotalsPlacement;
   detailAuditStrokeIndex: string;
   detailAuditStrokesReceived: string;
@@ -63,6 +71,10 @@ export function detailLabelsFromPublicTournament(pub: Pub): PublicDetailTableLab
     noCapture: pub.detailNoCapture,
     detailExpandedCategoryLabel: pub.detailExpandedCategoryLabel,
     detailExpandedClubLabel: pub.detailExpandedClubLabel,
+    detailCloseButton: pub.detailCloseButton,
+    detailCloseAria: pub.detailCloseAria,
+    detailToggleOpenAria: pub.detailToggleOpenAria,
+    detailToggleCloseAria: pub.detailToggleCloseAria,
     detailTotalsPlacement: pub.detailTotalsPlacement,
     auditStrokeIndex: pub.detailAuditStrokeIndex,
     auditStrokesReceived: pub.detailAuditStrokesReceived,

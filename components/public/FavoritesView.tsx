@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   isStablefordCategory,
@@ -21,6 +20,7 @@ import FavoriteStar from "./FavoriteStar";
 import type { LeaderboardRow } from "@/app/torneos/[id]/lib/types";
 import PublicLeaderboardDetailTable from "@/app/torneos/[id]/components/PublicLeaderboardDetailTable";
 import PublicLeaderboardExpandedPlayerBanner from "@/app/torneos/[id]/components/PublicLeaderboardExpandedPlayerBanner";
+import PublicLeaderboardPlayerDetailTrigger from "@/app/torneos/[id]/components/PublicLeaderboardPlayerDetailTrigger";
 import PublicLeaderboardPlayerName from "@/app/torneos/[id]/components/PublicLeaderboardPlayerName";
 import { PUBLIC_LEADERBOARD_FIXED_COL_COUNT } from "@/app/torneos/[id]/lib/publicLeaderboardColumns";
 import {
@@ -519,6 +519,14 @@ export default function FavoritesView({
               leaderboardViewOverride
             );
             const isOpen = requestedDetailId === row.entry_id;
+            const detailToggleHref = buildDetailToggleHref({
+              tournamentId,
+              categoryId: row.category_id || null,
+              view: "favorites",
+              basis: leaderboardViewOverride ?? undefined,
+              currentDetailId: requestedDetailId || null,
+              nextDetailId: row.entry_id,
+            });
             const showCutDivider = false;
             const cutDividerLabel =
               row.cut_divider_label ?? cutLine?.label ?? "CORTE";
@@ -551,45 +559,36 @@ export default function FavoritesView({
                   </td>
 
                   <td className={`${stickyNameBodyFav} ${nameCol} px-1 py-1 sm:px-1.5`}>
-                    <div className="flex min-w-0 items-center gap-0.5">
-                      <div className="min-w-0 flex-1">
-                        <PublicLeaderboardPlayerName
-                          row={row}
-                          peerRows={leaderboard}
-                        />
-                        <div
-                          className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
-                          title={row.player_code}
-                        >
-                          {row.player_code}
-                        </div>
-                        {row.category_code ? (
-                          <div className="mt-0.5 truncate text-[8px] text-slate-400 sm:text-[9px]">
-                            {row.category_code}
-                          </div>
-                        ) : null}
-                        {row.is_disqualified ? (
-                          <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
-                            DQ
-                          </span>
-                        ) : null}
-                      </div>
-                      <Link
-                        scroll={false}
-                        href={buildDetailToggleHref({
-                          tournamentId,
-                          categoryId: row.category_id || null,
-                          view: "favorites",
-                          basis: leaderboardViewOverride ?? undefined,
-                          currentDetailId: requestedDetailId || null,
-                          nextDetailId: row.entry_id,
-                        })}
-                        className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
-                        aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
+                    <PublicLeaderboardPlayerDetailTrigger
+                      href={detailToggleHref}
+                      isOpen={isOpen}
+                      ariaLabel={
+                        isOpen
+                          ? rowDetailLabels.detailToggleCloseAria
+                          : rowDetailLabels.detailToggleOpenAria
+                      }
+                    >
+                      <PublicLeaderboardPlayerName
+                        row={row}
+                        peerRows={leaderboard}
+                      />
+                      <div
+                        className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
+                        title={row.player_code}
                       >
-                        {isOpen ? "▴" : "▾"}
-                      </Link>
-                    </div>
+                        {row.player_code}
+                      </div>
+                      {row.category_code ? (
+                        <div className="mt-0.5 truncate text-[8px] text-slate-400 sm:text-[9px]">
+                          {row.category_code}
+                        </div>
+                      ) : null}
+                      {row.is_disqualified ? (
+                        <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
+                          DQ
+                        </span>
+                      ) : null}
+                    </PublicLeaderboardPlayerDetailTrigger>
                   </td>
 
                   <td className="w-[30px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[32px]">
@@ -638,6 +637,7 @@ export default function FavoritesView({
                         <PublicLeaderboardExpandedPlayerBanner
                           row={row}
                           labels={rowDetailLabels}
+                          closeHref={detailToggleHref}
                           handicapSummary={
                             usesGrossHoleByHoleDetail(
                               rowRule,

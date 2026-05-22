@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Fragment, useMemo } from "react";
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
@@ -48,6 +47,7 @@ import {
   PublicLeaderboardRoundScoreHeaders,
 } from "./PublicLeaderboardRoundScoreColumns";
 import PublicLeaderboardExpandedPlayerBanner from "./PublicLeaderboardExpandedPlayerBanner";
+import PublicLeaderboardPlayerDetailTrigger from "./PublicLeaderboardPlayerDetailTrigger";
 import PublicLeaderboardPlayerName from "./PublicLeaderboardPlayerName";
 
 const stickyNameHead =
@@ -268,6 +268,17 @@ export default function PublicLeaderboardTable({
                   : row.move_vs_previous_category;
 
               const isOpen = requestedDetailId === row.entry_id;
+              const detailToggleHref = buildDetailToggleHref({
+                tournamentId,
+                embed: embed || undefined,
+                fromAdmin: fromAdmin || undefined,
+                categoryId: selectedCategoryId || null,
+                roundId: selectedRound?.id ?? null,
+                view,
+                basis: leaderboardViewOverride ?? undefined,
+                currentDetailId: requestedDetailId || null,
+                nextDetailId: row.entry_id,
+              });
             const rowRule = ruleForCategory(rulesMap, row.category_id);
             const rowDetailLabels = detailLabelsWithCompetitionRule(
               detailLabels,
@@ -308,43 +319,31 @@ export default function PublicLeaderboardTable({
                     <td
                       className={`${stickyNameBody} ${nameCol} px-1 py-1 sm:px-1.5`}
                     >
-                      <div className="flex min-w-0 items-center gap-0.5">
-                        <div className="min-w-0 flex-1">
-                          <PublicLeaderboardPlayerName
-                            row={row}
-                            peerRows={peerRows}
-                          />
-                          <div
-                            className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
-                            title={row.player_code}
-                          >
-                            {row.player_code}
-                          </div>
-                          {row.is_disqualified ? (
-                            <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
-                              DQ
-                            </span>
-                          ) : null}
-                        </div>
-                        <Link
-                          scroll={false}
-                          href={buildDetailToggleHref({
-                            tournamentId,
-                            embed: embed || undefined,
-                            fromAdmin: fromAdmin || undefined,
-                            categoryId: selectedCategoryId || null,
-                            roundId: selectedRound?.id ?? null,
-                            view,
-                            basis: leaderboardViewOverride ?? undefined,
-                            currentDetailId: requestedDetailId || null,
-                            nextDetailId: row.entry_id,
-                          })}
-                          className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center rounded border border-cyan-400/30 bg-cyan-400/10 text-[8px] font-semibold text-cyan-300 sm:h-5 sm:w-4 sm:text-[9px]"
-                          aria-label={isOpen ? "Ocultar detalle" : "Ver detalle"}
+                      <PublicLeaderboardPlayerDetailTrigger
+                        href={detailToggleHref}
+                        isOpen={isOpen}
+                        ariaLabel={
+                          isOpen
+                            ? rowDetailLabels.detailToggleCloseAria
+                            : rowDetailLabels.detailToggleOpenAria
+                        }
+                      >
+                        <PublicLeaderboardPlayerName
+                          row={row}
+                          peerRows={peerRows}
+                        />
+                        <div
+                          className="truncate font-mono text-[8px] leading-tight text-slate-500 sm:text-[9px]"
+                          title={row.player_code}
                         >
-                          {isOpen ? "▴" : "▾"}
-                        </Link>
-                      </div>
+                          {row.player_code}
+                        </div>
+                        {row.is_disqualified ? (
+                          <span className="mt-0.5 inline-flex rounded border border-red-400/40 bg-red-500/10 px-0.5 text-[8px] font-bold text-red-300">
+                            DQ
+                          </span>
+                        ) : null}
+                      </PublicLeaderboardPlayerDetailTrigger>
                     </td>
 
                     <td className="w-[30px] border-b border-white/10 px-0.5 py-1 text-center sm:w-[32px]">
@@ -404,6 +403,7 @@ export default function PublicLeaderboardTable({
                           <PublicLeaderboardExpandedPlayerBanner
                             row={row}
                             labels={rowDetailLabels}
+                            closeHref={detailToggleHref}
                             handicapSummary={
                               usesGrossHoleByHoleDetail(
                                 rowRule,
