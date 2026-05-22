@@ -1037,6 +1037,13 @@ const es = {
     prizesBasisGross: "Gross",
     prizesBasisNet: "Neto",
     prizesBasisStableford: "Stableford",
+    loadErrorTitle: "No se pudo cargar el torneo",
+    loadErrorBody:
+      "Ocurrió un error al leer datos del torneo. Intenta de nuevo en unos segundos.",
+    loadErrorTechnical: "Detalle técnico",
+    leaderboardBuildErrorTitle: "Error al armar la clasificación",
+    leaderboardBuildErrorBody:
+      "Los datos del torneo se leyeron, pero falló el cálculo de posiciones. Revisa la configuración en administración.",
     rulesBlockedTitle: "Clasificación no disponible",
     rulesBlockedIntro:
       "Hay problemas en la configuración del torneo. Corrige cada punto en administración antes de publicar resultados.",
@@ -2220,6 +2227,13 @@ const en: Messages = {
     prizesBasisGross: "Gross",
     prizesBasisNet: "Net",
     prizesBasisStableford: "Stableford",
+    loadErrorTitle: "Could not load tournament",
+    loadErrorBody:
+      "An error occurred while loading tournament data. Please try again shortly.",
+    loadErrorTechnical: "Technical detail",
+    leaderboardBuildErrorTitle: "Leaderboard calculation failed",
+    leaderboardBuildErrorBody:
+      "Tournament data loaded, but ranking could not be built. Check admin configuration.",
     rulesBlockedTitle: "Leaderboard unavailable",
     rulesBlockedIntro:
       "Tournament configuration must be fixed in admin before results can be shown.",

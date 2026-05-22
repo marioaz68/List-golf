@@ -63,6 +63,7 @@ export function roundDetailForPublicColumn(
   }
 ): string {
   const rule = competitionRuleForCategory(rulesMap, row.category_id);
+  if (!rule) return "—";
   const scoreRoundIds = collectRoundIdsWithScoreCapture(row.details);
   const hcp = handicapByPlayerId.get(row.player_id) ?? null;
   const selectedRoundNo = options.selectedRound?.round_no ?? roundNo;

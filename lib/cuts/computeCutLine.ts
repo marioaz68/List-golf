@@ -158,6 +158,7 @@ function sortCutField(
   strokeIndexByHole?: StrokeIndexByHole
 ): RankedCutPlayer[] {
   const catRule = competitionRuleForCategory(rulesMap, categoryId);
+  if (!catRule) return [...players];
 
   return [...players].sort((a, b) => {
     const primary = comparePrimary(a, b, higherIsBetter);
@@ -286,6 +287,7 @@ function computeLineForRule(
   }
 
   const catRule = competitionRuleForCategory(params.rulesMap, categoryId);
+  if (!catRule) return null;
   const higherIsBetter = higherIsBetterForCutRule(rule, catRule);
   const tieBreakSteps = rule.tie_break_profile_id
     ? params.tieBreakStepsByProfileId.get(rule.tie_break_profile_id) ?? []

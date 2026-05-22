@@ -58,9 +58,10 @@ export function sortLeaderboardByCompetitionOrder(
       rulesMap,
       bucket[0]?.category_id ?? null
     );
-    const higherIsBetter =
-      rule.scoring_format === "stableford" ||
-      rule.leaderboard_basis === "stableford";
+    const higherIsBetter = rule
+      ? rule.scoring_format === "stableford" ||
+        rule.leaderboard_basis === "stableford"
+      : false;
     bucket.sort((a, b) => compareLeaderboardRows(a, b, higherIsBetter));
     sorted.push(...bucket);
   }
@@ -72,7 +73,11 @@ export function sortLeaderboardByCompetitionOrder(
       return catA.localeCompare(catB, "es", { sensitivity: "base" });
     }
     const rule = competitionRuleForCategory(rulesMap, a.category_id);
-    return compareLeaderboardRows(a, b, isStablefordCategory(rule));
+    return compareLeaderboardRows(
+      a,
+      b,
+      rule ? isStablefordCategory(rule) : false
+    );
   });
 
   return sorted;

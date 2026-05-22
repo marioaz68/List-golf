@@ -90,6 +90,9 @@ export function applyCompetitionStandings({
         rulesMap,
         rowsInCategory[0]?.category_id ?? null
       );
+      if (!rule) {
+        continue;
+      }
       const hiBetter = isStablefordCategory(rule);
 
       const scored = rowsInCategory.map((row) => {

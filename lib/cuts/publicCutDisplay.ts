@@ -68,13 +68,14 @@ function sortBucketByCutMetric(
   if (!sample) return bucket;
 
   const catRule = competitionRuleForCategory(params.rulesMap, sample.category_id);
+  if (!catRule) return bucket;
   const higherIsBetterCut = higherIsBetterForCutRule(
     cutRule,
     catRule,
     params.leaderboardViewOverride
   );
   const rowRule = competitionRuleForCategory(params.rulesMap, sample.category_id);
-  const hiDisplay = isStablefordCategory(rowRule);
+  const hiDisplay = rowRule ? isStablefordCategory(rowRule) : false;
 
   const ranked = bucket.map((row) => {
     const v = rankValueForAdvancementRule(

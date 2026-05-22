@@ -53,6 +53,7 @@ import {
 } from "@/lib/rounds/resolveDefaultPublicLeaderboardRound";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import PublicConvocatoriaView from "./components/PublicConvocatoriaView";
+import PublicTournamentLoadError from "./components/PublicTournamentLoadError";
 import { fetchPublicConvocatoria } from "./lib/fetchPublicConvocatoria";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
@@ -78,6 +79,7 @@ import type {
   TournamentEntryJoinRow,
   ValidTournamentEntry,
   RoundRow,
+  RoundScoreRow,
   HoleScoreRow,
   TournamentHoleRow,
   PairingMember,
@@ -233,10 +235,24 @@ export default async function PublicTournamentPage({
     );
   }
 
-  const entriesData = await fetchAllTournamentEntries(
-    supabase,
-    typedTournament.id
-  );
+  let entriesData: unknown[] = [];
+  try {
+    entriesData = await fetchAllTournamentEntries(
+      supabase,
+      typedTournament.id
+    );
+  } catch (err) {
+    const detail =
+      err instanceof Error ? err.message : "Error leyendo inscripciones";
+    return (
+      <PublicTournamentLoadError
+        title={pub.loadErrorTitle}
+        body={pub.loadErrorBody}
+        detailMessage={detail}
+        technicalLabel={pub.loadErrorTechnical}
+      />
+    );
+  }
 
   const allEntries = (entriesData as TournamentEntryJoinRow[])
     .map(toValidEntry)
@@ -323,7 +339,14 @@ export default async function PublicTournamentPage({
     .order("round_date", { ascending: true });
 
   if (roundsError) {
-    throw new Error(`Error leyendo rounds: ${roundsError.message}`);
+    return (
+      <PublicTournamentLoadError
+        title={pub.loadErrorTitle}
+        body={pub.loadErrorBody}
+        detailMessage={roundsError.message}
+        technicalLabel={pub.loadErrorTechnical}
+      />
+    );
   }
 
   const rounds = (roundsData ?? []) as RoundRow[];
@@ -412,24 +435,29 @@ export default async function PublicTournamentPage({
   );
   const adminSupabase = serviceRoleConfigured ? tryCreateAdminClient() : null;
 
-  const roundScores =
+  let roundScores: RoundScoreRow[] = [];
+  let holeScores: HoleScoreRow[] = [];
+  if (
     adminSupabase &&
     entriesForLeaderboard.length > 0 &&
     roundsScopeForLeaderboard.length > 0
-      ? await fetchRoundScoresForPublicLeaderboard(
-          adminSupabase,
-          entriesForLeaderboard.map((entry) => entry.player_id),
-          roundsScopeForLeaderboard.map((r) => r.id)
-        )
-      : [];
-
-  const holeScores =
-    adminSupabase && roundScores.length > 0
-      ? await fetchHoleScoresForRoundScores(
+  ) {
+    try {
+      roundScores = await fetchRoundScoresForPublicLeaderboard(
+        adminSupabase,
+        entriesForLeaderboard.map((entry) => entry.player_id),
+        roundsScopeForLeaderboard.map((r) => r.id)
+      );
+      if (roundScores.length > 0) {
+        holeScores = await fetchHoleScoresForRoundScores(
           adminSupabase,
           roundScores.map((row) => row.id)
-        )
-      : [];
+        );
+      }
+    } catch (err) {
+      console.error("[public tournament] round/hole scores:", err);
+    }
+  }
 
   const { data: tournamentHolesData, error: tournamentHolesError } =
     await supabase
@@ -439,8 +467,13 @@ export default async function PublicTournamentPage({
       .order("hole_number", { ascending: true });
 
   if (tournamentHolesError) {
-    throw new Error(
-      `Error leyendo tournament_holes: ${tournamentHolesError.message}`
+    return (
+      <PublicTournamentLoadError
+        title={pub.loadErrorTitle}
+        body={pub.loadErrorBody}
+        detailMessage={tournamentHolesError.message}
+        technicalLabel={pub.loadErrorTechnical}
+      />
     );
   }
 
@@ -786,8 +819,10 @@ export default async function PublicTournamentPage({
   let cutEnforcesForSelectedRound = false;
   let activePublicCutLine: ReturnType<typeof activeCutLineForUi> = null;
   let officialLeaderboard: LeaderboardRow[] = [];
+  let leaderboardBuildError: string | null = null;
 
   if (!rulesBlocked) {
+    try {
     const leaderboardBase = buildLiveLeaderboard({
       filteredEntries: entriesForLeaderboard,
       rounds,
@@ -930,6 +965,11 @@ export default async function PublicTournamentPage({
             isEntryRoundClosed(row.entry_id, selectedRound, lockedLookups)
           )
         : leaderboard;
+    } catch (err) {
+      leaderboardBuildError =
+        err instanceof Error ? err.message : "Error al calcular clasificación";
+      console.error("[public tournament] leaderboard:", err);
+    }
   }
 
   const seedRoundIds =
@@ -990,7 +1030,9 @@ export default async function PublicTournamentPage({
       : { data: [], error: null };
 
   if (pairingGroupsError) {
-    throw new Error(`Error leyendo grupos públicos: ${pairingGroupsError.message}`);
+    console.error(
+      `[public tournament] pairing_groups: ${pairingGroupsError.message}`
+    );
   }
 
   const pairingGroupsRaw = (pairingGroupsData ?? []) as Array<{
@@ -1040,7 +1082,9 @@ export default async function PublicTournamentPage({
       : { data: [], error: null };
 
   if (pairingMembersError) {
-    throw new Error(`Error leyendo miembros públicos: ${pairingMembersError.message}`);
+    console.error(
+      `[public tournament] pairing_members: ${pairingMembersError.message}`
+    );
   }
 
   const roundById = new Map(rounds.map((round) => [round.id, round]));
@@ -1630,6 +1674,18 @@ export default async function PublicTournamentPage({
             />
           ) : null}
 
+          {view !== "tee-sheet" &&
+          view !== "convocatoria" &&
+          !rulesBlocked &&
+          leaderboardBuildError ? (
+            <PublicTournamentLoadError
+              title={pub.leaderboardBuildErrorTitle}
+              body={pub.leaderboardBuildErrorBody}
+              detailMessage={leaderboardBuildError}
+              technicalLabel={pub.loadErrorTechnical}
+            />
+          ) : null}
+
           {view === "convocatoria" ? (
             <PublicConvocatoriaView
               sections={publicConvocatoria.sections}
@@ -1683,7 +1739,7 @@ export default async function PublicTournamentPage({
             />
           ) : null}
 
-          {view === "favorites" && !rulesBlocked ? (
+          {view === "favorites" && !rulesBlocked && !leaderboardBuildError ? (
             <FavoritesView
               tournamentId={typedTournament.id}
               leaderboard={leaderboard}
@@ -1701,7 +1757,8 @@ export default async function PublicTournamentPage({
             />
           ) : view === "tee-sheet" ||
             view === "convocatoria" ||
-            rulesBlocked ? null : (
+            rulesBlocked ||
+            leaderboardBuildError ? null : (
             <>
               {selectedCategory && headerCompetitionRule ? (
                 <div className="mb-4 grid gap-3 lg:grid-cols-2">

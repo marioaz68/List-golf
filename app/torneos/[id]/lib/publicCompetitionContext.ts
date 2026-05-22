@@ -1,5 +1,8 @@
 import type { CategoryCompetitionRule } from "@/lib/leaderboard/categoryCompetitionRules";
-import { rulesByCategoryId } from "@/lib/leaderboard/categoryCompetitionRules";
+import {
+  rulesByCategoryId,
+  normalizeCompetitionRule,
+} from "@/lib/leaderboard/categoryCompetitionRules";
 import { competitionRuleForCategory } from "@/lib/leaderboard/resolveCompetitionRule";
 import { detailScoreColumnLabels } from "@/lib/leaderboard/competitionDisplay";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
@@ -17,11 +20,24 @@ export function buildCompetitionRulesMap(
   return rulesByCategoryId(rules);
 }
 
+const UI_FALLBACK_RULE = normalizeCompetitionRule({
+  category_id: "__fallback__",
+  scoring_format: "stroke_play",
+  leaderboard_basis: "gross",
+  prize_basis: "gross",
+  handicap_percentage: 0,
+  gross_prize_places: 3,
+  net_prize_places: null,
+  is_active: true,
+});
+
 export function ruleForCategory(
   rulesMap: Map<string, CategoryCompetitionRule>,
   categoryId: string | null | undefined
 ): CategoryCompetitionRule {
-  return competitionRuleForCategory(rulesMap, categoryId);
+  return (
+    competitionRuleForCategory(rulesMap, categoryId) ?? UI_FALLBACK_RULE
+  );
 }
 
 export function detailLabelsWithCompetitionRule(

@@ -39,6 +39,7 @@ export function applyCompetitionRules({
 
   const enriched = leaderboard.map((row) => {
     const rule = competitionRuleForCategory(rulesMap, row.category_id);
+    if (!rule) return row;
 
     const hcp = handicapByPlayerId.get(row.player_id) ?? null;
     const detailsForCum =

@@ -131,6 +131,9 @@ export function rankValueForAdvancementRule(
   detail: RoundDetail | null;
 } {
   const catRule = competitionRuleForCategory(rulesMap, row.category_id);
+  if (!catRule) {
+    return { primary: null, gross: null, detail: null };
+  }
   const hcp = handicapByPlayerId.get(row.player_id) ?? null;
   const { minRound, maxRound, tieBreakRound } = rankingRoundRange(
     rule,
