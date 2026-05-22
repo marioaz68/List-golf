@@ -50,6 +50,17 @@ export const USGA_ALLOWANCES: UsgaAllowanceRow[] = [
     custom_pct: 90,
   },
   {
+    format_key: "low_high",
+    format_label: "Bola Baja + Bola Alta (2 pts/hoyo)",
+    match_play_pct: 90,
+    stroke_play_pct: 80,
+    application: "fourball_each_vs_corresponding",
+    notes:
+      "Cada hoyo otorga 2 puntos: 1 a la bola baja neta y 1 a la bola alta neta del equipo. El % de hándicap es ajustable (USGA recomienda 90% match play / 80% stroke; clubes mexicanos usan 80%).",
+    allowance_value: "custom",
+    custom_pct: 80,
+  },
+  {
     format_key: "foursomes",
     format_label: "Foursomes (golpe alterno)",
     match_play_pct: 50,
@@ -100,6 +111,7 @@ const FORMAT_TO_USGA_KEY: Record<
   UsgaAllowanceRow["format_key"]
 > = {
   fourball: "fourball",
+  low_high: "low_high",
   foursomes: "foursomes",
   greensome: "greensome",
   chapman: "chapman",
@@ -157,6 +169,7 @@ export function combinedTeamHandicap(params: {
       return applyUsgaAllowance(low, 35) + applyUsgaAllowance(high, 15);
     }
     case "fourball":
+    case "low_high":
     default: {
       const sumApplied =
         applyUsgaAllowance(hi_a, allowance_pct) +

@@ -244,11 +244,19 @@ export default function MatchPlayConvocatoriaEditor({
                 className={inputClass}
                 disabled={readOnly}
                 value={mp.pair_format}
-                onChange={(e) =>
-                  setMatchplay({
-                    pair_format: e.target.value as MatchPlayPairFormat,
-                  })
-                }
+                onChange={(e) => {
+                  const next = e.target.value as MatchPlayPairFormat;
+                  if (next === "low_high") {
+                    setMatchplay({
+                      pair_format: next,
+                      handicap_allowance: "custom",
+                      handicap_allowance_custom_pct:
+                        mp.handicap_allowance_custom_pct ?? 80,
+                    });
+                  } else {
+                    setMatchplay({ pair_format: next });
+                  }
+                }}
               >
                 {Object.entries(MATCHPLAY_PAIR_FORMAT_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>

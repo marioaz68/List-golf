@@ -1,6 +1,7 @@
 /** Formato de juego dentro de cada match (pareja vs pareja). */
 export type MatchPlayPairFormat =
   | "fourball"
+  | "low_high"
   | "foursomes"
   | "greensome"
   | "chapman"
@@ -128,7 +129,8 @@ export const MATCHPLAY_MATCH_TYPE_LABELS: Record<MatchPlayMatchType, string> = {
 };
 
 export const MATCHPLAY_PAIR_FORMAT_LABELS: Record<MatchPlayPairFormat, string> = {
-  fourball: "Four-Ball / Mejor bola",
+  fourball: "Four-Ball / Mejor bola (1 pt/hoyo)",
+  low_high: "Bola Baja + Bola Alta (2 pts/hoyo)",
   foursomes: "Foursomes / Golpe alterno",
   greensome: "Greensome / Pinehurst",
   chapman: "Chapman",
