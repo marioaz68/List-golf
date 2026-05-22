@@ -5,8 +5,13 @@ import { supabase } from "@/lib/supabaseClient";
 import PosterFilePicker from "@/components/ui/PosterFilePicker";
 import {
   createTournamentFormAction,
-  createTournamentInitialState,
+  type CreateTournamentFormState,
 } from "../actions";
+
+const createTournamentInitialState: CreateTournamentFormState = {
+  ok: false,
+  message: "",
+};
 
 type TournamentOption = {
   id: string;

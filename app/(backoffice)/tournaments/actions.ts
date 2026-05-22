@@ -367,8 +367,6 @@ export async function createTournamentFormAction(
   return createTournamentInitialState;
 }
 
-export { createTournamentInitialState };
-
 export async function updateTournamentAction(formData: FormData) {
   const supabase = await createClient();
 
