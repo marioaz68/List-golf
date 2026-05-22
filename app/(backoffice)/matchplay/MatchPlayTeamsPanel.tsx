@@ -142,14 +142,34 @@ export default function MatchPlayTeamsPanel({
         />
       </div>
 
-      {rules?.combined_hi_min != null || rules?.combined_hi_max != null ? (
-        <p className="text-[11px] text-cyan-200/90">
-          Validación HI combinado:{" "}
-          {rules.combined_hi_min ?? "—"} a {rules.combined_hi_max ?? "—"}
-          {rules.pair_composition === "mixed_one_each"
-            ? " · pareja mixta (1M + 1F)"
-            : ""}
-        </p>
+      {rules?.combined_hi_min != null ||
+      rules?.combined_hi_max != null ||
+      rules?.male_individual_hi_max != null ||
+      rules?.female_individual_hi_max != null ? (
+        <div className="space-y-0.5 text-[11px] text-cyan-200/90">
+          {rules?.combined_hi_min != null || rules?.combined_hi_max != null ? (
+            <p>
+              Suma HI pareja: {rules.combined_hi_min ?? "—"} a{" "}
+              {rules.combined_hi_max ?? "—"}
+              {rules.pair_composition === "mixed_one_each"
+                ? " · mixta (1M + 1F)"
+                : ""}
+            </p>
+          ) : null}
+          {rules?.male_individual_hi_max != null ||
+          rules?.female_individual_hi_max != null ? (
+            <p>
+              Tope individual:{" "}
+              {rules.male_individual_hi_max != null
+                ? `M ≤ ${rules.male_individual_hi_max}`
+                : "M sin tope"}
+              {" · "}
+              {rules.female_individual_hi_max != null
+                ? `F ≤ ${rules.female_individual_hi_max}`
+                : "F sin tope"}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {matchType === "individual" && unassigned.length > 0 ? (

@@ -103,6 +103,10 @@ export type MatchPlayConvocatoriaConfig = {
   combined_hi_min?: number | null;
   /** Suma máxima de HI de la pareja. */
   combined_hi_max?: number | null;
+  /** Tope individual de HI para jugadores hombres. null = sin tope. */
+  male_individual_hi_max?: number | null;
+  /** Tope individual de HI para jugadoras mujeres. null = sin tope. */
+  female_individual_hi_max?: number | null;
   /** Si se requiere una ronda clasificatoria para reducir a `bracket_main_pairs`. */
   play_in_enabled?: boolean;
   /** Parejas que entran al cuadro principal (ej. 16). */

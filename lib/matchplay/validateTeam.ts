@@ -48,16 +48,38 @@ export function validateTeamFormation(
   const gA = player_a.player.gender;
   const gB = player_b.player.gender;
 
+  const maleCap = rules?.male_individual_hi_max ?? null;
+  const femaleCap = rules?.female_individual_hi_max ?? null;
+
+  const checkIndividual = (
+    playerLabel: string,
+    gender: "M" | "F" | "X" | null,
+    hi: number
+  ): TeamValidationResult | null => {
+    if (gender === "M" && maleCap != null && hi > maleCap) {
+      return {
+        ok: false,
+        message: `${playerLabel}: HI ${hi} excede el tope para caballeros (${maleCap}).`,
+      };
+    }
+    if (gender === "F" && femaleCap != null && hi > femaleCap) {
+      return {
+        ok: false,
+        message: `${playerLabel}: HI ${hi} excede el tope para damas (${femaleCap}).`,
+      };
+    }
+    return null;
+  };
+
+  const failA = checkIndividual("Jugador A", gA, hiA);
+  if (failA) return failA;
+  const failB = checkIndividual("Jugador B", gB, hiB);
+  if (failB) return failB;
+
   if (composition === "mixed_one_each") {
     const hasM = gA === "M" || gB === "M";
     const hasF = gA === "F" || gB === "F";
-    if (!hasM || !hasF) {
-      return {
-        ok: false,
-        message: "La pareja debe ser mixta: 1 caballero y 1 dama.",
-      };
-    }
-    if (gA === gB) {
+    if (!hasM || !hasF || gA === gB) {
       return {
         ok: false,
         message: "La pareja debe ser mixta: 1 caballero y 1 dama.",

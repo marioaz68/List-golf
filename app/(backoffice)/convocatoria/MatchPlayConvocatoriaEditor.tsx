@@ -224,6 +224,8 @@ export default function MatchPlayConvocatoriaEditor({
                         pair_composition: undefined,
                         combined_hi_min: null,
                         combined_hi_max: null,
+                        male_individual_hi_max: null,
+                        female_individual_hi_max: null,
                         handicap_allowance: "full_relative",
                       }
                     : { match_type: next }
@@ -485,6 +487,44 @@ export default function MatchPlayConvocatoriaEditor({
                   value={mp.combined_hi_max ?? 0}
                   onChange={(e) =>
                     setMatchplay({ combined_hi_max: Number(e.target.value) })
+                  }
+                />
+              </label>
+              <label className="text-[11px] text-slate-300">
+                Tope individual caballeros (M)
+                <input
+                  type="number"
+                  step="0.1"
+                  className={inputClass}
+                  disabled={readOnly}
+                  placeholder="sin tope"
+                  value={mp.male_individual_hi_max ?? ""}
+                  onChange={(e) =>
+                    setMatchplay({
+                      male_individual_hi_max:
+                        e.target.value === ""
+                          ? null
+                          : Number(e.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label className="text-[11px] text-slate-300">
+                Tope individual damas (F)
+                <input
+                  type="number"
+                  step="0.1"
+                  className={inputClass}
+                  disabled={readOnly}
+                  placeholder="sin tope"
+                  value={mp.female_individual_hi_max ?? ""}
+                  onChange={(e) =>
+                    setMatchplay({
+                      female_individual_hi_max:
+                        e.target.value === ""
+                          ? null
+                          : Number(e.target.value),
+                    })
                   }
                 />
               </label>

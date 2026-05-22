@@ -40,6 +40,8 @@ export type MatchPlayRulesSnapshot = {
   pair_composition: string | null;
   combined_hi_min: number | null;
   combined_hi_max: number | null;
+  male_individual_hi_max: number | null;
+  female_individual_hi_max: number | null;
   max_teams: number | null;
 };
 

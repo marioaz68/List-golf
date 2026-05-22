@@ -181,6 +181,8 @@ export async function applyMatchPlayDraft({
     pair_composition: mp.pair_composition ?? "open",
     combined_hi_min: mp.combined_hi_min ?? null,
     combined_hi_max: mp.combined_hi_max ?? null,
+    male_individual_hi_max: mp.male_individual_hi_max ?? null,
+    female_individual_hi_max: mp.female_individual_hi_max ?? null,
     handicap_allowance: mp.handicap_allowance,
     handicap_allowance_pct: mp.handicap_allowance_custom_pct ?? null,
     match_tiebreaker: mp.match_tiebreaker,

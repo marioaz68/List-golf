@@ -80,7 +80,7 @@ export default async function MatchPlayPage(props: {
   const { data: rulesRow, error: rulesError } = await supabase
     .from("tournament_matchplay_rules")
     .select(
-      "match_type, pair_format, bracket_type, bracket_round_count, holes_per_match, pair_composition, combined_hi_min, combined_hi_max, handicap_allowance, handicap_allowance_pct, match_tiebreaker, auction_enabled, auction_pot_percent, auction_min_bid, auction_max_bid, auction_currency, bracket_main_pairs, play_in_enabled, max_pairs_per_category, config_json"
+      "match_type, pair_format, bracket_type, bracket_round_count, holes_per_match, pair_composition, combined_hi_min, combined_hi_max, male_individual_hi_max, female_individual_hi_max, handicap_allowance, handicap_allowance_pct, match_tiebreaker, auction_enabled, auction_pot_percent, auction_min_bid, auction_max_bid, auction_currency, bracket_main_pairs, play_in_enabled, max_pairs_per_category, config_json"
     )
     .eq("tournament_id", effectiveId)
     .maybeSingle();
@@ -222,13 +222,28 @@ export default async function MatchPlayPage(props: {
             {rulesRow.holes_per_match} hoyos/match
           </p>
           {rulesRow.match_type !== "individual" ? (
-            <p>
-              <strong>Pareja:</strong> {rulesRow.pair_composition}
-              {rulesRow.combined_hi_min !== null &&
-              rulesRow.combined_hi_max !== null
-                ? ` · HI combinado ${rulesRow.combined_hi_min}–${rulesRow.combined_hi_max}`
-                : ""}
-            </p>
+            <>
+              <p>
+                <strong>Pareja:</strong> {rulesRow.pair_composition}
+                {rulesRow.combined_hi_min !== null &&
+                rulesRow.combined_hi_max !== null
+                  ? ` · HI combinado ${rulesRow.combined_hi_min}–${rulesRow.combined_hi_max}`
+                  : ""}
+              </p>
+              {rulesRow.male_individual_hi_max != null ||
+              rulesRow.female_individual_hi_max != null ? (
+                <p>
+                  <strong>Topes individuales:</strong>{" "}
+                  {rulesRow.male_individual_hi_max != null
+                    ? `Caballeros ≤ ${rulesRow.male_individual_hi_max}`
+                    : "Caballeros sin tope"}
+                  {" · "}
+                  {rulesRow.female_individual_hi_max != null
+                    ? `Damas ≤ ${rulesRow.female_individual_hi_max}`
+                    : "Damas sin tope"}
+                </p>
+              ) : null}
+            </>
           ) : null}
           <p>
             <strong>Cuadro:</strong>{" "}

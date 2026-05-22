@@ -83,7 +83,7 @@ export async function loadMatchPlayTeamsData(
   const { data: rulesRaw, error: rulesError } = await supabase
     .from("tournament_matchplay_rules")
     .select(
-      "match_type, pair_composition, combined_hi_min, combined_hi_max, bracket_main_pairs, max_pairs_per_category"
+      "match_type, pair_composition, combined_hi_min, combined_hi_max, male_individual_hi_max, female_individual_hi_max, bracket_main_pairs, max_pairs_per_category"
     )
     .eq("tournament_id", tournamentId)
     .maybeSingle();
@@ -117,6 +117,14 @@ export async function loadMatchPlayTeamsData(
         combined_hi_max:
           rulesRaw.combined_hi_max !== null
             ? Number(rulesRaw.combined_hi_max)
+            : null,
+        male_individual_hi_max:
+          rulesRaw.male_individual_hi_max != null
+            ? Number(rulesRaw.male_individual_hi_max)
+            : null,
+        female_individual_hi_max:
+          rulesRaw.female_individual_hi_max != null
+            ? Number(rulesRaw.female_individual_hi_max)
             : null,
         max_teams:
           rulesRaw.bracket_main_pairs ?? rulesRaw.max_pairs_per_category ?? null,
