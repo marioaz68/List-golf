@@ -10,6 +10,16 @@ type ActionResult =
   | { ok: true; message: string; poster_path?: string }
   | { ok: false; message: string };
 
+export type CreateTournamentFormState = {
+  ok: boolean;
+  message: string;
+};
+
+const createTournamentInitialState: CreateTournamentFormState = {
+  ok: false,
+  message: "",
+};
+
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
   if (!v) throw new Error(`Falta ${key}`);
@@ -331,6 +341,33 @@ export async function createTournamentAndMaybeCopyCategories(
   }
   redirect("/tournaments");
 }
+
+/** Wrapper para useActionState: muestra errores en pantalla y deja pasar redirect. */
+export async function createTournamentFormAction(
+  _prevState: CreateTournamentFormState,
+  formData: FormData
+): Promise<CreateTournamentFormState> {
+  try {
+    await createTournamentAndMaybeCopyCategories(formData);
+  } catch (error) {
+    const digest =
+      typeof error === "object" &&
+      error !== null &&
+      "digest" in error &&
+      typeof (error as { digest?: string }).digest === "string"
+        ? (error as { digest: string }).digest
+        : "";
+    if (digest.startsWith("NEXT_REDIRECT")) {
+      throw error;
+    }
+    const message =
+      error instanceof Error ? error.message : "Error al crear el torneo.";
+    return { ok: false, message };
+  }
+  return createTournamentInitialState;
+}
+
+export { createTournamentInitialState };
 
 export async function updateTournamentAction(formData: FormData) {
   const supabase = await createClient();

@@ -5,6 +5,8 @@ import { processPosterImage, setFileOnInput } from "@/lib/images/processPoster";
 
 type Props = {
   name?: string;
+  /** Si se define, el archivo va al estado del padre (Safari) y no al input oculto. */
+  onFileReady?: (file: File) => void;
   onReady?: (info: { fileName: string; sizeKb: number }) => void;
   onError?: (message: string) => void;
   onClear?: () => void;
@@ -16,6 +18,7 @@ type Props = {
  */
 export default function PosterFilePicker({
   name = "poster",
+  onFileReady,
   onReady,
   onError,
   onClear,
@@ -60,14 +63,18 @@ export default function PosterFilePicker({
 
         try {
           const processed = await processPosterImage(file);
-          const ok = setFileOnInput(hiddenRef.current, processed);
-          if (!ok) {
-            const msg =
-              "No se pudo asignar el archivo al formulario. Prueba otro navegador.";
-            setStatus("error");
-            setMessage(msg);
-            onError?.(msg);
-            return;
+          onFileReady?.(processed);
+
+          if (!onFileReady) {
+            const ok = setFileOnInput(hiddenRef.current, processed);
+            if (!ok) {
+              const msg =
+                "No se pudo asignar el archivo al formulario. Prueba otro navegador.";
+              setStatus("error");
+              setMessage(msg);
+              onError?.(msg);
+              return;
+            }
           }
 
           const url = URL.createObjectURL(processed);
@@ -97,14 +104,16 @@ export default function PosterFilePicker({
 
   return (
     <div>
-      <input
-        ref={hiddenRef}
-        type="file"
-        name={name}
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden
-      />
+      {!onFileReady ? (
+        <input
+          ref={hiddenRef}
+          type="file"
+          name={name}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+        />
+      ) : null}
       <button
         type="button"
         onClick={openPicker}

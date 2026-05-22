@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useActionState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import PosterFilePicker from "@/components/ui/PosterFilePicker";
-import { createTournamentAndMaybeCopyCategories } from "../actions";
+import {
+  createTournamentFormAction,
+  createTournamentInitialState,
+} from "../actions";
 
 type TournamentOption = {
   id: string;
@@ -78,6 +81,50 @@ export default function NewTournamentPage() {
     "pairs"
   );
   const [bracketSize, setBracketSize] = useState<string>("16");
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [clientError, setClientError] = useState<string | null>(null);
+
+  const [formState, formAction, isPending] = useActionState(
+    createTournamentFormAction,
+    createTournamentInitialState
+  );
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setClientError(null);
+
+    if (!name.trim()) {
+      setClientError("Escribe el nombre del torneo.");
+      return;
+    }
+    if (!clubId) {
+      setClientError("Selecciona un club.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.set("name", name.trim());
+    fd.set("short_name", shortName.trim());
+    fd.set("status", status);
+    fd.set("club_id", clubId);
+    fd.set("course_id", courseId);
+    fd.set("start_date", startDate);
+    fd.set("format_type", formatType);
+    fd.set("copy_from_tournament_id", copyFromTournamentId);
+
+    if (formatType === "matchplay") {
+      fd.set("match_play_type", matchPlayType);
+      fd.set("bracket_size", bracketSize);
+      fd.set("bracket_round_count", bracketRoundCount);
+      fd.set("holes_per_match", holesPerMatch);
+    }
+
+    if (posterFile) {
+      fd.set("poster", posterFile);
+    }
+
+    formAction(fd);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +194,7 @@ export default function NewTournamentPage() {
       <h1 className="text-2xl font-bold text-white">Nuevo torneo</h1>
 
       <form
-        action={createTournamentAndMaybeCopyCategories}
+        onSubmit={handleSubmit}
         style={{
           border: "1px solid rgba(255,255,255,0.18)",
           padding: 16,
@@ -387,8 +434,23 @@ export default function NewTournamentPage() {
             <div style={{ color: "#111827", fontWeight: 600, marginBottom: 4 }}>
               Póster del torneo
             </div>
-            <PosterFilePicker name="poster" />
+            <PosterFilePicker onFileReady={setPosterFile} />
           </div>
+
+          {clientError || formState.message ? (
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#b91c1c",
+                fontSize: 13,
+              }}
+            >
+              {clientError || formState.message}
+            </div>
+          ) : null}
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Copiar categorías desde otro torneo
@@ -422,8 +484,16 @@ export default function NewTournamentPage() {
               flexWrap: "wrap",
             }}
           >
-            <button type="submit" style={buttonStyle}>
-              Crear torneo
+            <button
+              type="submit"
+              style={{
+                ...buttonStyle,
+                opacity: isPending ? 0.7 : 1,
+                cursor: isPending ? "wait" : "pointer",
+              }}
+              disabled={isPending}
+            >
+              {isPending ? "Creando torneo…" : "Crear torneo"}
             </button>
 
             <a href="/categories" style={buttonStyle}>
