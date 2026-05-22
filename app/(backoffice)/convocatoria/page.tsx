@@ -20,6 +20,7 @@ import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import type { TournamentSettings } from "@/types/tournament";
 import ConvocatoriaEditor from "./ConvocatoriaEditor";
 import MatchPlayConvocatoriaEditor from "./MatchPlayConvocatoriaEditor";
+import FormFilePicker from "@/components/ui/FormFilePicker";
 import {
   loadCcqMixtoMatchPlayTemplate,
   loadConvocatoriaTemplate,
@@ -408,14 +409,11 @@ export default async function ConvocatoriaPage(props: {
         ) : null}
         <form action={uploadConvocatoriaDocx} className="mt-3 space-y-2">
           <input type="hidden" name="tournament_id" value={effectiveId} />
-          <p className="text-[10px] text-slate-500">
-            {cv.importOptionalHint} Acepta Word (.docx), PDF y Excel (.xlsx,
-            .xls).
-          </p>
-          <input
-            type="file"
+          <FormFilePicker
             name="convocatoria_file"
-            className="block w-full max-w-md text-[11px] text-slate-200 file:mr-2 file:rounded file:border-0 file:bg-slate-600 file:px-2 file:py-1 file:text-white"
+            accept="*/*"
+            label="Elegir archivo (Word, PDF o Excel)"
+            hint={`${cv.importOptionalHint} En Finder verás todos los archivos; luego validamos .docx, .pdf, .xlsx o .xls.`}
           />
           <button type="submit" style={buttonStyle}>
             {cv.importOptionalButton}

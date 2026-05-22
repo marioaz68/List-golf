@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { processPosterImage } from "@/lib/images/processPoster";
 import { uploadTournamentPosterFromList } from "./actions";
@@ -14,64 +14,67 @@ export default function PosterUploadInline({
   tournamentId,
   hasPoster,
 }: PosterUploadInlineProps) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [fileName, setFileName] = useState("");
 
   function openPicker() {
     if (isPending) return;
-    inputRef.current?.click();
-  }
 
-  function resetInput(inputEl: HTMLInputElement | null) {
-    if (inputEl) inputEl.value = "";
-    setFileName("");
-  }
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "*/*";
+    picker.style.display = "none";
+    document.body.appendChild(picker);
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const inputEl = e.currentTarget;
-    const file = inputEl.files?.[0] ?? null;
+    picker.addEventListener(
+      "change",
+      () => {
+        const file = picker.files?.[0] ?? null;
+        document.body.removeChild(picker);
 
-    if (!file) {
-      resetInput(inputEl);
-      return;
-    }
+        if (!file) return;
 
-    const looksLikeImage =
-      file.type.startsWith("image/") ||
-      /\.(jpe?g|png|webp|gif|avif|heic|heif|bmp|tiff?)$/i.test(file.name);
-    if (!looksLikeImage) {
-      alert(`"${file.name}" no es una imagen. Sube JPG, PNG, WEBP, HEIC, etc.`);
-      resetInput(inputEl);
-      return;
-    }
-
-    setFileName(file.name);
-
-    startTransition(async () => {
-      try {
-        const processedFile = await processPosterImage(file);
-
-        const formData = new FormData();
-        formData.set("tournament_id", tournamentId);
-        formData.set("poster", processedFile);
-
-        const result = await uploadTournamentPosterFromList(formData);
-
-        if (!result.ok) {
-          alert(result.message || "No se pudo subir el póster.");
+        const looksLikeImage =
+          file.type.startsWith("image/") ||
+          /\.(jpe?g|png|webp|gif|avif|heic|heif|bmp|tiff?)$/i.test(file.name);
+        if (!looksLikeImage) {
+          alert(
+            `"${file.name}" no es una imagen. Elige JPG, PNG, WEBP o HEIC.`
+          );
           return;
         }
 
-        alert("Póster optimizado y subido correctamente 🚀");
-        router.refresh();
-      } catch {
-        alert("Error procesando imagen");
-      } finally {
-        resetInput(inputEl);
-      }
-    });
+        setFileName(file.name);
+
+        startTransition(async () => {
+          try {
+            const processedFile = await processPosterImage(file);
+
+            const formData = new FormData();
+            formData.set("tournament_id", tournamentId);
+            formData.set("poster", processedFile);
+
+            const result = await uploadTournamentPosterFromList(formData);
+
+            if (!result.ok) {
+              alert(result.message || "No se pudo subir el póster.");
+              return;
+            }
+
+            alert("Póster optimizado y subido correctamente 🚀");
+            router.refresh();
+          } catch {
+            alert("Error procesando imagen");
+          } finally {
+            setFileName("");
+          }
+        });
+      },
+      { once: true }
+    );
+
+    picker.click();
   }
 
   return (
@@ -83,13 +86,6 @@ export default function PosterUploadInline({
         whiteSpace: "nowrap",
       }}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        style={{ display: "none" }}
-        onChange={onFileChange}
-      />
-
       <button
         type="button"
         onClick={openPicker}
