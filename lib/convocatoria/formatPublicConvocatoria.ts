@@ -54,6 +54,16 @@ function isPortadaRepeat(line: string): boolean {
   return /^(6[78]VO\.\s*TORNEO ANUAL\.?\s*-\s*CONVOCATORIA)$/i.test(line.trim());
 }
 
+function looksLikeFlattenedTable(body: string): boolean {
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 6) return false;
+  const shortLines = lines.filter((l) => l.length <= 20).length;
+  return shortLines / lines.length >= 0.7;
+}
+
 /** Divide el texto extraído del Word en secciones legibles para la página pública. */
 export function parseExtractedConvocatoriaSections(
   text: string,
@@ -88,7 +98,15 @@ export function parseExtractedConvocatoriaSections(
   }
   flush();
 
-  return sections;
+  // Filtra tablas aplastadas (CATEGORÍAS, DAMAS, CABALLEROS, STABLEFORD,
+  // DÍAS DE JUEGO Y HORARIOS DE SALIDA, PREMIOS AL MEJOR O'YES…) que se
+  // ven como una lista vertical de palabras sueltas, sin sentido para la pública.
+  // El detalle correcto vive en Programa de Eventos y en las pestañas Inscritos/Reglas.
+  return sections.filter((s) => {
+    if (s.heading === fallbackTitle && !s.body) return false;
+    if (!s.body) return true;
+    return !looksLikeFlattenedTable(s.body);
+  });
 }
 
 export function buildPublicConvocatoriaSections(
