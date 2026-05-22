@@ -23,7 +23,6 @@ export default function PosterUploadInline({
 
     const picker = document.createElement("input");
     picker.type = "file";
-    picker.accept = "*/*";
     picker.style.display = "none";
     document.body.appendChild(picker);
 

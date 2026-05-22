@@ -30,7 +30,7 @@ export default function PosterFilePicker({
   async function openPicker() {
     const picker = document.createElement("input");
     picker.type = "file";
-    picker.accept = "*/*";
+    // Sin accept: Finder muestra TODOS los archivos sin filtro
     picker.style.display = "none";
     document.body.appendChild(picker);
 

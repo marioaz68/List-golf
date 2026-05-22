@@ -6,7 +6,7 @@ type Props = {
   name: string;
   label: string;
   hint?: string;
-  /** Con accept en todos los archivos evita filtro solo Excel en macOS Chrome. */
+  /** Si vacío o "*", se omite accept para que Finder muestre todos los archivos. */
   accept?: string;
   className?: string;
   buttonClassName?: string;
@@ -30,7 +30,9 @@ export default function FormFilePicker({
   function openPicker() {
     const picker = document.createElement("input");
     picker.type = "file";
-    picker.accept = accept;
+    if (accept && accept !== "*/*" && accept !== "*") {
+      picker.accept = accept;
+    }
     picker.style.display = "none";
     document.body.appendChild(picker);
 
