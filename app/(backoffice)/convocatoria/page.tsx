@@ -415,7 +415,7 @@ export default async function ConvocatoriaPage(props: {
           <input
             type="file"
             name="convocatoria_file"
-            accept=".docx,.pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            accept=".docx,.pdf,.xlsx,.xls"
             className="block w-full max-w-md text-[11px] text-slate-200 file:mr-2 file:rounded file:border-0 file:bg-slate-600 file:px-2 file:py-1 file:text-white"
           />
           <button type="submit" style={buttonStyle}>

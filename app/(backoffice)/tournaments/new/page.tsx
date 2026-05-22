@@ -449,7 +449,7 @@ export default function NewTournamentPage() {
               ref={posterInputRef}
               type="file"
               name="poster"
-              accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif"
+              accept="image/*"
               onChange={handlePosterChange}
               style={fieldStyle}
             />
