@@ -294,6 +294,7 @@ export default async function MatchPlayPage(props: {
             rules={teamsData.rules}
             bracket={bracketView}
             seedingMethod={seedingMethod}
+            pairFormat={pairFormat}
             flashStatus={sp.bracket_status ?? sp.team_status}
             flashMessage={sp.bracket_message ?? sp.team_message}
           />

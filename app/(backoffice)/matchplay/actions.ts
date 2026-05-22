@@ -759,3 +759,208 @@ export async function deleteMatchPlayBracket(formData: FormData) {
     bracket_message: "Cuadro eliminado. Puedes regenerarlo.",
   });
 }
+
+type LowHighHoleInput = {
+  hole_no: number;
+  top_player_a_strokes: number | null;
+  top_player_b_strokes: number | null;
+  bottom_player_a_strokes: number | null;
+  bottom_player_b_strokes: number | null;
+};
+
+function redirectMatchScore(
+  tournament_id: string,
+  match_id: string,
+  params: Record<string, string> = {}
+): never {
+  const q = new URLSearchParams({
+    tournament_id,
+    match_id,
+    ...params,
+  });
+  redirect(`/matchplay/score?${q.toString()}`);
+}
+
+export async function saveLowHighMatchScores(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const match_id = reqStr(formData, "match_id");
+  await ensureAccess(tournament_id);
+
+  const finalize = String(formData.get("finalize") ?? "") === "1";
+  let holesInput: LowHighHoleInput[] = [];
+
+  try {
+    const raw = String(formData.get("holes_json") ?? "[]");
+    const parsed = JSON.parse(raw) as LowHighHoleInput[];
+    if (!Array.isArray(parsed)) throw new Error("JSON inválido");
+    holesInput = parsed;
+  } catch {
+    redirectMatchScore(tournament_id, match_id, {
+      score_status: "error",
+      score_message: "Datos de hoyos inválidos.",
+    });
+  }
+
+  const { loadMatchForScoring } = await import(
+    "@/lib/matchplay/loadMatchForScoring"
+  );
+  const {
+    scoreLowHighHole,
+    aggregateLowHighTotals,
+    decideLowHighWinner,
+    formatLowHighMatchStatus,
+  } = await import("@/lib/matchplay/scoring/lowHigh");
+
+  const match = await loadMatchForScoring(match_id);
+  if (!match || match.tournament_id !== tournament_id) {
+    redirectMatchScore(tournament_id, match_id, {
+      score_status: "error",
+      score_message: "Partido no encontrado o no es Bola Baja + Alta.",
+    });
+  }
+
+  const admin = createAdminClient();
+  const hiTuple: [number, number, number, number] = [
+    match.top_players[0].hi,
+    match.top_players[1].hi,
+    match.bottom_players[0].hi,
+    match.bottom_players[1].hi,
+  ];
+
+  let topRunning = 0;
+  let bottomRunning = 0;
+  const scoredHoles: Array<{ top_points: number; bottom_points: number }> = [];
+
+  for (let i = 1; i <= match.holes_in_match; i++) {
+    const input = holesInput.find((h) => h.hole_no === i);
+    const row = match.holes[i - 1];
+    const gross = {
+      top_a: input?.top_player_a_strokes ?? row.top_player_a_strokes,
+      top_b: input?.top_player_b_strokes ?? row.top_player_b_strokes,
+      bottom_a: input?.bottom_player_a_strokes ?? row.bottom_player_a_strokes,
+      bottom_b: input?.bottom_player_b_strokes ?? row.bottom_player_b_strokes,
+    };
+
+    if (
+      gross.top_a == null ||
+      gross.top_b == null ||
+      gross.bottom_a == null ||
+      gross.bottom_b == null
+    ) {
+      await admin
+        .from("matchplay_hole_results")
+        .delete()
+        .eq("match_id", match_id)
+        .eq("hole_no", i);
+      continue;
+    }
+
+    const result = scoreLowHighHole({
+      hole_no: i,
+      gross,
+      hi: hiTuple,
+      allowance_pct: match.allowance_pct,
+      strokeIndexByHole: match.stroke_index_by_hole,
+      top_total_before: topRunning,
+      bottom_total_before: bottomRunning,
+      holes_in_match: match.holes_in_match,
+    });
+
+    if (!result) continue;
+
+    topRunning += result.top_points;
+    bottomRunning += result.bottom_points;
+    scoredHoles.push({
+      top_points: result.top_points,
+      bottom_points: result.bottom_points,
+    });
+
+    const { error: upsertErr } = await admin.from("matchplay_hole_results").upsert(
+      {
+        match_id,
+        hole_no: i,
+        scoring_format: "low_high",
+        top_player_a_strokes: gross.top_a,
+        top_player_b_strokes: gross.top_b,
+        bottom_player_a_strokes: gross.bottom_a,
+        bottom_player_b_strokes: gross.bottom_b,
+        top_points: result.top_points,
+        bottom_points: result.bottom_points,
+        top_strokes: null,
+        bottom_strokes: null,
+        hole_winner:
+          result.top_points > result.bottom_points
+            ? "top"
+            : result.bottom_points > result.top_points
+              ? "bottom"
+              : "halved",
+        match_status_after: result.match_status_after,
+        detail_json: { breakdown: result.breakdown },
+      },
+      { onConflict: "match_id,hole_no" }
+    );
+
+    if (upsertErr) {
+      redirectMatchScore(tournament_id, match_id, {
+        score_status: "error",
+        score_message: upsertErr.message,
+      });
+    }
+  }
+
+  const totals = aggregateLowHighTotals(scoredHoles);
+  const statusText = formatLowHighMatchStatus(
+    totals.top,
+    totals.bottom,
+    scoredHoles.length,
+    match.holes_in_match
+  );
+
+  const matchUpdate: Record<string, unknown> = {
+    status: scoredHoles.length > 0 ? "in_progress" : "scheduled",
+    result_text: scoredHoles.length > 0 ? statusText : null,
+    holes_played: scoredHoles.length,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (finalize && scoredHoles.length > 0) {
+    const side = decideLowHighWinner(totals.top, totals.bottom);
+    if (side === "top" && match.top_pair_id) {
+      matchUpdate.winner_pair_id = match.top_pair_id;
+      matchUpdate.status = "completed";
+      matchUpdate.result_text = `${statusText} — gana ${match.top_label}`;
+    } else if (side === "bottom" && match.bottom_pair_id) {
+      matchUpdate.winner_pair_id = match.bottom_pair_id;
+      matchUpdate.status = "completed";
+      matchUpdate.result_text = `${statusText} — gana ${match.bottom_label}`;
+    } else if (side === "halved") {
+      matchUpdate.winner_pair_id = null;
+      matchUpdate.status = "completed";
+      matchUpdate.result_text = `${statusText} — empate`;
+    } else {
+      matchUpdate.status = "in_progress";
+      matchUpdate.result_text = `${statusText} — sin ganador aún`;
+    }
+  }
+
+  const { error: matchErr } = await admin
+    .from("matchplay_matches")
+    .update(matchUpdate)
+    .eq("id", match_id);
+
+  if (matchErr) {
+    redirectMatchScore(tournament_id, match_id, {
+      score_status: "error",
+      score_message: matchErr.message,
+    });
+  }
+
+  revalidatePath("/matchplay");
+  revalidatePath("/matchplay/score");
+  redirectMatchScore(tournament_id, match_id, {
+    score_status: "ok",
+    score_message: finalize
+      ? "Partido guardado y cerrado."
+      : `Guardado: ${statusText}`,
+  });
+}

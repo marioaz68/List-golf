@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { roundLabel } from "@/lib/matchplay/bracketUtils";
+import type { MatchPlayPairFormat } from "@/lib/matchplay/types";
 import type { BracketView } from "@/lib/matchplay/loadBracketView";
 import { MATCHPLAY_SEEDING_LABELS } from "@/lib/matchplay/types";
 import type { MatchPlayRulesSnapshot } from "@/lib/matchplay/teamTypes";
@@ -43,6 +45,7 @@ type Props = {
   rules: MatchPlayRulesSnapshot | null;
   bracket: BracketView | null;
   seedingMethod: string;
+  pairFormat?: MatchPlayPairFormat;
   flashStatus?: string | null;
   flashMessage?: string | null;
 };
@@ -53,6 +56,7 @@ export default function MatchPlayBracketPanel({
   rules,
   bracket,
   seedingMethod,
+  pairFormat = "fourball",
   flashStatus,
   flashMessage,
 }: Props) {
@@ -167,7 +171,12 @@ export default function MatchPlayBracketPanel({
                   </div>
                   <div className="space-y-2">
                     {matches.map((m) => (
-                      <MatchCard key={m.id} match={m} />
+                      <MatchCard
+                        key={m.id}
+                        match={m}
+                        tournamentId={tournamentId}
+                        pairFormat={pairFormat}
+                      />
                     ))}
                   </div>
                 </div>
@@ -188,6 +197,8 @@ export default function MatchPlayBracketPanel({
 
 function MatchCard({
   match,
+  tournamentId,
+  pairFormat,
 }: {
   match: {
     id: string;
@@ -198,8 +209,15 @@ function MatchCard({
     result_text: string | null;
     winner_label: string | null;
   };
+  tournamentId: string;
+  pairFormat: MatchPlayPairFormat;
 }) {
   const isBye = match.status === "bye";
+  const scoreHref =
+    pairFormat === "low_high" && !isBye
+      ? `/matchplay/score?tournament_id=${tournamentId}&match_id=${match.id}`
+      : null;
+
   return (
     <div
       className={`rounded border px-1.5 py-1 text-[10px] ${
@@ -232,6 +250,14 @@ function MatchCard({
         <div className="mt-1 text-center text-[9px] text-amber-400/90">
           {match.result_text}
         </div>
+      ) : null}
+      {scoreHref ? (
+        <Link
+          href={scoreHref}
+          className="mt-1 block text-center text-[9px] font-semibold text-cyan-400 hover:text-cyan-300"
+        >
+          Capturar pts →
+        </Link>
       ) : null}
     </div>
   );
