@@ -7,6 +7,14 @@ import { createClient } from "@/utils/supabase/server";
 export const userNavIconOnlyClass =
   "inline-flex h-10 w-10 shrink-0 items-center justify-center text-slate-200 transition hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400";
 
+/** Primer nombre (sin apellidos) a partir de un texto. */
+function firstNameOnly(value: string | null | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return null;
+  const firstToken = trimmed.split(/\s+/)[0] ?? "";
+  return firstToken.trim() || null;
+}
+
 export async function PublicUserNavIcon() {
   const locale = await getLocale();
   const nav = messages[locale].nav;
@@ -18,7 +26,29 @@ export async function PublicUserNavIcon() {
 
   const href = user ? "/tournaments" : "/login";
   const label = user ? pub.adminList : nav.enter;
-  const displayName = user?.email?.split("@")[0]?.trim() || null;
+
+  let displayName: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("first_name")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    displayName =
+      firstNameOnly(profile?.first_name) ??
+      firstNameOnly(
+        typeof user.user_metadata?.first_name === "string"
+          ? user.user_metadata.first_name
+          : null
+      ) ??
+      firstNameOnly(
+        typeof user.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : null
+      ) ??
+      firstNameOnly(user.email?.split("@")[0] ?? null);
+  }
 
   return (
     <UserNavIconLink

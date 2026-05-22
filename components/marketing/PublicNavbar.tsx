@@ -12,7 +12,19 @@ export default async function PublicNavbar() {
   } = await supabase.auth.getUser();
 
   const email = user?.email ?? "";
-  const initial = email ? email.charAt(0).toUpperCase() : "U";
+  let firstName: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("first_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    const raw = (profile?.first_name ?? "").trim();
+    firstName = raw.split(/\s+/)[0] || null;
+  }
+  const displayName =
+    firstName ?? (email ? email.split("@")[0] ?? email : "Admin");
+  const initial = (firstName?.charAt(0) || email.charAt(0) || "U").toUpperCase();
 
   return (
     <header className="border-b border-white/10 bg-[#08111f]">
@@ -37,12 +49,15 @@ export default async function PublicNavbar() {
                 Usuarios
               </Link>
 
-              <div className="hidden h-12 items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 text-white md:flex">
+              <div
+                className="hidden h-12 items-center gap-4 rounded-full border border-white/10 bg-white/5 px-5 text-white md:flex"
+                title={email}
+              >
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400 text-base font-bold text-[#08111f]">
                   {initial}
                 </div>
                 <span className="whitespace-nowrap text-base font-medium">
-                  {email}
+                  {displayName}
                 </span>
               </div>
 
