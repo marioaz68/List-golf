@@ -5,6 +5,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import type { ConvocatoriaDraft } from "@/lib/convocatoria/types";
 import {
+  isMatchPlayConvocatoriaDraft,
   normalizeConvocatoriaDraft,
   normalizeWorkflowStatus,
 } from "@/lib/convocatoria/draftUtils";
@@ -14,8 +15,16 @@ import {
   buildMachoteDraftForTournament,
   draftNeedsMachoteSync,
 } from "@/lib/convocatoria/syncWithMachote";
+import { matchPlayMachote } from "@/lib/convocatoria/templates/matchPlayMachote";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import type { TournamentSettings } from "@/types/tournament";
 import ConvocatoriaEditor from "./ConvocatoriaEditor";
-import { loadConvocatoriaTemplate, uploadConvocatoriaDocx } from "./actions";
+import MatchPlayConvocatoriaEditor from "./MatchPlayConvocatoriaEditor";
+import {
+  loadCcqMixtoMatchPlayTemplate,
+  loadConvocatoriaTemplate,
+  uploadConvocatoriaDocx,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +34,7 @@ type SP = {
   saved?: string;
   closed?: string;
   template?: string;
+  matchplay?: string;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -111,15 +121,34 @@ export default async function ConvocatoriaPage(props: {
   const tournamentName =
     tournamentList.find((t) => t.id === effectiveId)?.name ?? null;
 
+  const { data: tournamentRow } = await supabase
+    .from("tournaments")
+    .select("settings")
+    .eq("id", effectiveId)
+    .maybeSingle();
+
+  const tournamentSettings = (tournamentRow?.settings ?? {}) as TournamentSettings & {
+    matchplay?: { match_type?: "individual" | "pairs"; bracket_main_pairs?: number | null };
+  };
+  const tournamentIsMatchPlay = isMatchPlayFormat(tournamentSettings);
+  const hintedMatchType =
+    tournamentSettings.matchplay?.match_type === "individual"
+      ? "individual"
+      : "pairs";
+  const hintedBracketMain =
+    tournamentSettings.matchplay?.bracket_main_pairs ?? null;
+
   let rulesUpgraded = false;
-  try {
-    const upgrade = await upgradeTournamentCutRulesFromMachote(
-      supabase,
-      effectiveId
-    );
-    rulesUpgraded = upgrade.upgraded;
-  } catch (upgradeErr) {
-    console.error("[convocatoria] upgrade cut rules:", upgradeErr);
+  if (!tournamentIsMatchPlay) {
+    try {
+      const upgrade = await upgradeTournamentCutRulesFromMachote(
+        supabase,
+        effectiveId
+      );
+      rulesUpgraded = upgrade.upgraded;
+    } catch (upgradeErr) {
+      console.error("[convocatoria] upgrade cut rules:", upgradeErr);
+    }
   }
 
   const rawDraft = (convRow?.draft_json ?? null) as ConvocatoriaDraft | null;
@@ -131,16 +160,27 @@ export default async function ConvocatoriaPage(props: {
   let autoSynced = false;
 
   if (!hasDraft) {
-    draft = buildMachoteDraftForTournament(
-      typeof tournamentName === "string" ? tournamentName : null
-    );
+    draft = tournamentIsMatchPlay
+      ? matchPlayMachote({
+          title: typeof tournamentName === "string" ? tournamentName : null,
+          matchplay: {
+            match_type: hintedMatchType,
+            bracket_main_pairs: hintedBracketMain,
+            max_pairs_per_category: hintedBracketMain,
+          },
+        })
+      : buildMachoteDraftForTournament(
+          typeof tournamentName === "string" ? tournamentName : null
+        );
     const now = new Date().toISOString();
     const { error: provisionError } = await supabase
       .from("tournament_convocatoria")
       .upsert(
         {
           tournament_id: effectiveId,
-          file_name: "Plantilla: 68º Torneo Anual CCQ",
+          file_name: tournamentIsMatchPlay
+            ? "Plantilla: Match Play por parejas"
+            : "Plantilla: 68º Torneo Anual CCQ",
           draft_json: draft,
           warnings: draft.warnings,
           status: "editing",
@@ -155,6 +195,8 @@ export default async function ConvocatoriaPage(props: {
     autoProvisioned = true;
   } else if (
     draft &&
+    !tournamentIsMatchPlay &&
+    !isMatchPlayConvocatoriaDraft(draft) &&
     workflowStatus === "editing" &&
     draftNeedsMachoteSync(draft)
   ) {
@@ -227,7 +269,7 @@ export default async function ConvocatoriaPage(props: {
     <div className="space-y-3 p-2 md:p-3">
       <h1 className="text-lg font-bold leading-none text-white">{cv.title}</h1>
       <p className="max-w-3xl text-[12px] leading-snug text-slate-300">
-        {cv.intro}
+        {tournamentIsMatchPlay ? cv.introMatchPlay : cv.intro}
       </p>
 
       <div className="flex flex-wrap gap-1.5">
@@ -240,15 +282,23 @@ export default async function ConvocatoriaPage(props: {
         >
           {nav.categories}
         </Link>
-        <Link
-          href={`/competition-rules?tournament_id=${effectiveId}`}
-          style={buttonStyle}
-        >
-          {nav.competitionRules}
-        </Link>
-        <Link href={`/cut-rules?tournament_id=${effectiveId}`} style={buttonStyle}>
-          {nav.cutRules}
-        </Link>
+        {tournamentIsMatchPlay ? (
+          <Link href={`/matchplay?tournament_id=${effectiveId}`} style={buttonStyle}>
+            {cv.linkMatchPlay}
+          </Link>
+        ) : (
+          <>
+            <Link
+              href={`/competition-rules?tournament_id=${effectiveId}`}
+              style={buttonStyle}
+            >
+              {nav.competitionRules}
+            </Link>
+            <Link href={`/cut-rules?tournament_id=${effectiveId}`} style={buttonStyle}>
+              {nav.cutRules}
+            </Link>
+          </>
+        )}
         <Link href={`/prize-rules?tournament_id=${effectiveId}`} style={buttonStyle}>
           {cv.linkPrizes}
         </Link>
@@ -278,7 +328,7 @@ export default async function ConvocatoriaPage(props: {
 
       {sp.applied === "1" ? (
         <div className="rounded-lg border border-green-400/50 bg-green-950/40 px-3 py-2 text-[12px] text-green-100">
-          {cv.appliedOk}
+          {sp.matchplay === "1" ? cv.appliedOkMatchPlay : cv.appliedOk}
         </div>
       ) : null}
       {sp.closed === "1" ? (
@@ -289,7 +339,7 @@ export default async function ConvocatoriaPage(props: {
 
       {autoProvisioned ? (
         <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-[12px] text-cyan-100">
-          {cv.autoProvisionNote}
+          {tournamentIsMatchPlay ? cv.autoProvisionNoteMatchPlay : cv.autoProvisionNote}
         </div>
       ) : null}
       {autoSynced ? (
@@ -304,14 +354,30 @@ export default async function ConvocatoriaPage(props: {
       ) : null}
 
       {hasDraft && draft ? (
-        <ConvocatoriaEditor
-          tournamentId={effectiveId}
-          initialDraft={draft}
-          workflowStatus={workflowStatus}
-          templateName={convRow?.file_name ?? null}
-          hasEntries={hasEntries}
-          labels={editorLabels}
-        />
+        tournamentIsMatchPlay || isMatchPlayConvocatoriaDraft(draft) ? (
+          <MatchPlayConvocatoriaEditor
+            tournamentId={effectiveId}
+            initialDraft={draft}
+            workflowStatus={workflowStatus}
+            templateName={convRow?.file_name ?? null}
+            hasEntries={hasEntries}
+            labels={{
+              ...editorLabels,
+              tabRules: cv.tabMatchPlayRules,
+              matchPlayBadge: cv.matchPlayBadge,
+              confirmGenerate: cv.confirmGenerateMatchPlay,
+            }}
+          />
+        ) : (
+          <ConvocatoriaEditor
+            tournamentId={effectiveId}
+            initialDraft={draft}
+            workflowStatus={workflowStatus}
+            templateName={convRow?.file_name ?? null}
+            hasEntries={hasEntries}
+            labels={editorLabels}
+          />
+        )
       ) : null}
 
       <details className="rounded-lg border border-white/10 bg-[#0f172a] p-3">
@@ -325,6 +391,21 @@ export default async function ConvocatoriaPage(props: {
             {cv.loadTemplateButton}
           </button>
         </form>
+        {tournamentIsMatchPlay || isMatchPlayConvocatoriaDraft(draft) ? (
+          <form
+            action={loadCcqMixtoMatchPlayTemplate}
+            className="mt-3 space-y-2"
+          >
+            <input type="hidden" name="tournament_id" value={effectiveId} />
+            <p className="text-[10px] text-slate-500">
+              Plantilla específica del Torneo Match Play de Parejas Mixto CCQ
+              2026 (categoría única, calcuta, consolaciones, premios 43/20/12/10/8/7%).
+            </p>
+            <button type="submit" style={buttonStyle}>
+              Cargar plantilla CCQ Mixto Match Play
+            </button>
+          </form>
+        ) : null}
         <form action={uploadConvocatoriaDocx} className="mt-3 space-y-2">
           <input type="hidden" name="tournament_id" value={effectiveId} />
           <p className="text-[10px] text-slate-500">{cv.importOptionalHint}</p>

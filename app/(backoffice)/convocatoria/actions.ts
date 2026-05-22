@@ -2,12 +2,19 @@
 
 import { applyConvocatoriaDraft } from "@/lib/convocatoria/applyDraft";
 import {
+  isMatchPlayConvocatoriaDraft,
   normalizeWorkflowStatus,
   parseDraftJson,
 } from "@/lib/convocatoria/draftUtils";
 import { extractDocxText } from "@/lib/convocatoria/extractDocxText";
+import { parseConvocatoriaMatchPlayText } from "@/lib/convocatoria/parseConvocatoriaMatchPlay";
 import { parseConvocatoriaText } from "@/lib/convocatoria/parseConvocatoria";
+import { matchPlayMachote } from "@/lib/convocatoria/templates/matchPlayMachote";
+import { ccqMatchPlayMixto } from "@/lib/convocatoria/templates/ccqMatchPlayMixto";
 import { ccqTorneoAnualMachote } from "@/lib/convocatoria/templates/ccqTorneoAnualMachote";
+import { applyMatchPlayDraft } from "@/lib/matchplay/applyMatchPlayDraft";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import type { TournamentSettings } from "@/types/tournament";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -53,28 +60,90 @@ async function upsertConvocatoriaRow({
   }
 }
 
-/** Carga la plantilla machote 68º Torneo Anual CCQ (editable). */
+async function tournamentUsesMatchPlay(supabase: ReturnType<typeof createAdminClient>, tournament_id: string) {
+  const { data } = await supabase
+    .from("tournaments")
+    .select("settings")
+    .eq("id", tournament_id)
+    .maybeSingle();
+  return isMatchPlayFormat((data?.settings ?? {}) as TournamentSettings);
+}
+
+/** Carga la plantilla machote (stroke 68º o match play según formato del torneo). */
 export async function loadConvocatoriaTemplate(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const supabase = createAdminClient();
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("name")
+    .select("name, settings")
     .eq("id", tournament_id)
     .maybeSingle();
 
-  const draft = ccqTorneoAnualMachote({
-    title: tournament?.name
-      ? `${tournament.name} — Torneo Anual`
-      : "Torneo Anual",
+  const matchPlay = isMatchPlayFormat(
+    (tournament?.settings ?? {}) as TournamentSettings
+  );
+
+  const draft = matchPlay
+    ? matchPlayMachote({
+        title: tournament?.name ?? "Torneo Match Play",
+      })
+    : ccqTorneoAnualMachote({
+        title: tournament?.name
+          ? `${tournament.name} — Torneo Anual`
+          : "Torneo Anual",
+      });
+
+  await upsertConvocatoriaRow({
+    tournament_id,
+    draft,
+    status: "editing",
+    file_name: matchPlay
+      ? "Plantilla: Match Play por parejas"
+      : "Plantilla: 68º Torneo Anual CCQ",
+  });
+
+  revalidatePath("/convocatoria");
+  redirect(`/convocatoria?tournament_id=${tournament_id}&template=1`);
+}
+
+/** Carga plantilla CCQ Match Play Parejas Mixto 2026. */
+export async function loadCcqMixtoMatchPlayTemplate(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const supabase = createAdminClient();
+
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("name, settings")
+    .eq("id", tournament_id)
+    .maybeSingle();
+
+  const settings = (tournament?.settings ?? {}) as TournamentSettings;
+  if (!isMatchPlayFormat(settings)) {
+    const next: TournamentSettings = {
+      ...settings,
+      format: {
+        ...settings.format,
+        format_type: "matchplay",
+        round_count: 4,
+        holes: 18,
+      },
+    };
+    await supabase
+      .from("tournaments")
+      .update({ settings: next })
+      .eq("id", tournament_id);
+  }
+
+  const draft = ccqMatchPlayMixto({
+    title: tournament?.name ?? "Match Play Parejas Mixto",
   });
 
   await upsertConvocatoriaRow({
     tournament_id,
     draft,
     status: "editing",
-    file_name: "Plantilla: 68º Torneo Anual CCQ",
+    file_name: "Plantilla: CCQ Match Play Parejas Mixto 2026",
   });
 
   revalidatePath("/convocatoria");
@@ -176,7 +245,10 @@ export async function uploadConvocatoriaDocx(formData: FormData) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const extracted_text = await extractDocxText(buffer);
-  const draft = parseConvocatoriaText(extracted_text);
+  const matchPlay = await tournamentUsesMatchPlay(supabase, tournament_id);
+  const draft = matchPlay
+    ? parseConvocatoriaMatchPlayText(extracted_text)
+    : parseConvocatoriaText(extracted_text);
 
   await upsertConvocatoriaRow({
     tournament_id,
@@ -208,11 +280,21 @@ export async function applyConvocatoriaToTournament(formData: FormData) {
     );
   }
 
-  const result = await applyConvocatoriaDraft({
-    tournamentId: tournament_id,
-    draft,
-    replaceExisting: true,
-  });
+  const useMatchPlay =
+    isMatchPlayConvocatoriaDraft(draft) ||
+    (await tournamentUsesMatchPlay(supabase, tournament_id));
+
+  const result = useMatchPlay
+    ? await applyMatchPlayDraft({
+        tournamentId: tournament_id,
+        draft,
+        replaceExisting: true,
+      })
+    : await applyConvocatoriaDraft({
+        tournamentId: tournament_id,
+        draft,
+        replaceExisting: true,
+      });
 
   await upsertConvocatoriaRow({
     tournament_id,
@@ -222,12 +304,16 @@ export async function applyConvocatoriaToTournament(formData: FormData) {
 
   revalidatePath("/convocatoria");
   revalidatePath("/categories");
-  revalidatePath("/competition-rules");
-  revalidatePath("/cut-rules");
   revalidatePath("/prize-rules");
   revalidatePath("/rounds");
+  if (!useMatchPlay) {
+    revalidatePath("/competition-rules");
+    revalidatePath("/cut-rules");
+  } else {
+    revalidatePath("/matchplay");
+  }
 
   redirect(
-    `/convocatoria?tournament_id=${tournament_id}&applied=1&cats=${result.categories}&rounds=${result.rounds_created}`
+    `/convocatoria?tournament_id=${tournament_id}&applied=1&cats=${result.categories}&rounds=${result.rounds_created}${useMatchPlay ? "&matchplay=1" : ""}`
   );
 }

@@ -68,6 +68,15 @@ export default function NewTournamentPage() {
   const [courseId, setCourseId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [copyFromTournamentId, setCopyFromTournamentId] = useState("");
+  const [formatType, setFormatType] = useState<
+    "stroke" | "stableford" | "matchplay"
+  >("stroke");
+  const [bracketRoundCount, setBracketRoundCount] = useState("4");
+  const [holesPerMatch, setHolesPerMatch] = useState<"9" | "18">("18");
+  const [matchPlayType, setMatchPlayType] = useState<"individual" | "pairs">(
+    "pairs"
+  );
+  const [bracketSize, setBracketSize] = useState<string>("16");
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +179,115 @@ export default function NewTournamentPage() {
               style={fieldStyle}
             />
           </label>
+
+          <label style={{ color: "#111827", fontWeight: 600 }}>
+            Formato del torneo
+            <select
+              name="format_type"
+              value={formatType}
+              onChange={(e) =>
+                setFormatType(
+                  e.target.value as "stroke" | "stableford" | "matchplay"
+                )
+              }
+              style={fieldStyle}
+            >
+              <option value="stroke">Stroke play (por golpes)</option>
+              <option value="stableford">Stableford (puntos)</option>
+              <option value="matchplay">Match play por parejas</option>
+            </select>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                fontWeight: 400,
+                color: "#6b7280",
+              }}
+            >
+              {formatType === "matchplay"
+                ? "Cuadro de eliminación por parejas. Tras crear, configura la convocatoria match play."
+                : "Torneo por rondas y clasificación (1, 2, 3+ rondas según convocatoria)."}
+            </div>
+          </label>
+
+          {formatType === "matchplay" ? (
+            <>
+              <label style={{ color: "#111827", fontWeight: 600 }}>
+                Tipo de match play
+                <select
+                  name="match_play_type"
+                  value={matchPlayType}
+                  onChange={(e) =>
+                    setMatchPlayType(e.target.value as "individual" | "pairs")
+                  }
+                  style={fieldStyle}
+                >
+                  <option value="pairs">Por parejas (2 jugadores)</option>
+                  <option value="individual">Individual (1 jugador)</option>
+                </select>
+              </label>
+              <label style={{ color: "#111827", fontWeight: 600 }}>
+                Tamaño del cuadro
+                <select
+                  name="bracket_size"
+                  value={bracketSize}
+                  onChange={(e) => {
+                    setBracketSize(e.target.value);
+                    if (e.target.value !== "variable") {
+                      const rounds = Math.ceil(
+                        Math.log2(Number(e.target.value))
+                      );
+                      setBracketRoundCount(String(rounds));
+                    }
+                  }}
+                  style={fieldStyle}
+                >
+                  <option value="variable">Variable (con BYEs)</option>
+                  <option value="4">4 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
+                  <option value="8">8 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
+                  <option value="16">16 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
+                  <option value="32">32 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
+                  <option value="64">64 {matchPlayType === "individual" ? "jugadores" : "parejas"} (máximo)</option>
+                </select>
+              </label>
+              <label style={{ color: "#111827", fontWeight: 600 }}>
+                Rondas del cuadro
+                <input
+                  type="number"
+                  name="bracket_round_count"
+                  min={1}
+                  max={8}
+                  value={bracketRoundCount}
+                  onChange={(e) => setBracketRoundCount(e.target.value)}
+                  style={fieldStyle}
+                />
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: "#6b7280",
+                  }}
+                >
+                  4 = 16, 5 = 32, 6 = 64 participantes. Ajustable después.
+                </div>
+              </label>
+              <label style={{ color: "#111827", fontWeight: 600 }}>
+                Hoyos por match
+                <select
+                  name="holes_per_match"
+                  value={holesPerMatch}
+                  onChange={(e) =>
+                    setHolesPerMatch(e.target.value as "9" | "18")
+                  }
+                  style={fieldStyle}
+                >
+                  <option value="18">18 hoyos</option>
+                  <option value="9">9 hoyos</option>
+                </select>
+              </label>
+            </>
+          ) : null}
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Estatus
@@ -291,7 +409,7 @@ export default function NewTournamentPage() {
               value={copyFromTournamentId}
               onChange={(e) => setCopyFromTournamentId(e.target.value)}
               style={fieldStyle}
-              disabled={loadingTournaments}
+              disabled={loadingTournaments || formatType === "matchplay"}
             >
               <option value="">
                 {loadingTournaments

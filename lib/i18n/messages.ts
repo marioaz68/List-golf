@@ -729,6 +729,17 @@ const es = {
       "Convocatoria cerrada. Revisa el borrador y pulsa «Generar parámetros del torneo».",
     appliedOk:
       "Parámetros generados. Revisa Hoyos del torneo, Sets de salida y desempates.",
+    appliedOkMatchPlay:
+      "Parámetros match play generados. Revisa categorías, rondas del cuadro y luego inscribe parejas.",
+    introMatchPlay:
+      "Arma la convocatoria match play por parejas: formato, cuadro, categorías y desempates. Cierra y genera parámetros sin afectar torneos stroke/stableford.",
+    autoProvisionNoteMatchPlay:
+      "Plantilla match play cargada automáticamente. Revisa reglas y categorías.",
+    linkMatchPlay: "Match play",
+    tabMatchPlayRules: "Reglas match play",
+    matchPlayBadge: "Match Play",
+    confirmGenerateMatchPlay:
+      "Crea categorías, premios, rondas del cuadro y reglas match play en el torneo.",
     readOnlyHint: "Convocatoria cerrada o aplicada — solo lectura",
     metaTitle: "Título",
     metaHoles: "Hoyos totales",
@@ -1926,6 +1937,17 @@ const en: Messages = {
     confirmGenerate: "Writes categories, competition, cuts, prizes, and rounds.",
     closedOk: "Call closed. Review and click Generate tournament parameters.",
     appliedOk: "Parameters generated. Review tournament holes and tee sets.",
+    appliedOkMatchPlay:
+      "Match play parameters generated. Review categories and pair entries next.",
+    introMatchPlay:
+      "Build the match-play pairs call: format, bracket, categories, and tiebreakers.",
+    autoProvisionNoteMatchPlay:
+      "Match play template loaded automatically. Review rules and categories.",
+    linkMatchPlay: "Match play",
+    tabMatchPlayRules: "Match play rules",
+    matchPlayBadge: "Match Play",
+    confirmGenerateMatchPlay:
+      "Creates categories, prizes, bracket rounds, and match play rules.",
     readOnlyHint: "Read-only while closed or applied",
     metaTitle: "Title",
     metaHoles: "Total holes",

@@ -1,8 +1,14 @@
+import {
+  isMatchPlayConvocatoriaDraft,
+  normalizeMatchPlayConvocatoriaDraft,
+} from "@/lib/matchplay/normalizeMatchPlayDraft";
 import { ccqTorneoAnualMachote } from "./templates/ccqTorneoAnualMachote";
 import type {
   ConvocatoriaDraft,
   DraftCompetitionRule,
 } from "./types";
+
+export { isMatchPlayConvocatoriaDraft };
 
 export type ConvocatoriaWorkflowStatus = "editing" | "closed" | "applied";
 
@@ -65,6 +71,9 @@ export function ensureCompetitionForCategories(
 export function normalizeConvocatoriaDraft(
   draft: ConvocatoriaDraft | null | undefined
 ): ConvocatoriaDraft {
+  if (isMatchPlayConvocatoriaDraft(draft)) {
+    return normalizeMatchPlayConvocatoriaDraft(draft);
+  }
   const defaults = ccqTorneoAnualMachote();
   const base =
     draft && typeof draft === "object" ? draft : ({} as ConvocatoriaDraft);

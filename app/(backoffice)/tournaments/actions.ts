@@ -162,7 +162,54 @@ export async function createTournamentAndMaybeCopyCategories(
   const course_id = optStr(formData, "course_id");
   const start_date = optStr(formData, "start_date");
   const copy_from_tournament_id = optStr(formData, "copy_from_tournament_id");
+  const format_type = optStr(formData, "format_type") ?? "stroke";
   const posterFile = getPosterFile(formData);
+
+  const round_count_raw = optStr(formData, "bracket_round_count");
+  const bracket_round_count = round_count_raw
+    ? Math.min(8, Math.max(1, Number(round_count_raw)))
+    : 4;
+  const holes_per_match =
+    optStr(formData, "holes_per_match") === "9" ? 9 : 18;
+  const match_play_type =
+    optStr(formData, "match_play_type") === "individual"
+      ? "individual"
+      : "pairs";
+  const bracket_size_raw = optStr(formData, "bracket_size");
+  const bracket_main_size =
+    bracket_size_raw && bracket_size_raw !== "variable"
+      ? Math.min(64, Math.max(2, Number(bracket_size_raw)))
+      : null;
+
+  const settings =
+    format_type === "matchplay"
+      ? {
+          format: {
+            format_type: "matchplay" as const,
+            round_count: bracket_round_count,
+            holes: holes_per_match,
+            scoring_mode: "gross" as const,
+          },
+          matchplay: {
+            match_type: match_play_type,
+            bracket_main_pairs: bracket_main_size,
+          },
+        }
+      : format_type === "stableford"
+        ? {
+            format: {
+              format_type: "stableford" as const,
+              round_count: 1,
+              holes: 18 as const,
+            },
+          }
+        : {
+            format: {
+              format_type: "stroke" as const,
+              round_count: 1,
+              holes: 18 as const,
+            },
+          };
 
   const club = await getActiveClubById(club_id);
 
@@ -199,6 +246,7 @@ export async function createTournamentAndMaybeCopyCategories(
       course_id: resolved_course_id,
       course_name,
       start_date,
+      settings,
     })
     .select("id")
     .single();
@@ -277,6 +325,10 @@ export async function createTournamentAndMaybeCopyCategories(
   revalidatePath("/tournaments");
   revalidatePath("/");
   revalidatePath(`/torneos/${tournament.id}`);
+
+  if (format_type === "matchplay") {
+    redirect(`/convocatoria?tournament_id=${tournament.id}`);
+  }
   redirect("/tournaments");
 }
 

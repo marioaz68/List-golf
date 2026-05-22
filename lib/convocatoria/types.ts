@@ -1,3 +1,7 @@
+import type { MatchPlayConvocatoriaConfig } from "@/lib/matchplay/types";
+
+export type TournamentMode = "stroke" | "matchplay";
+
 export type DraftCategory = {
   code: string;
   name: string;
@@ -74,6 +78,8 @@ export type ConvocatoriaReference = {
 
 export type ConvocatoriaDraft = {
   version: 1;
+  /** stroke = torneo por golpes/puntos (default). matchplay = cuadro por parejas. */
+  tournament_mode?: TournamentMode;
   source: "docx" | "manual" | "template";
   meta: {
     title: string | null;
@@ -85,6 +91,8 @@ export type ConvocatoriaDraft = {
     handicap_index_date: string | null;
   };
   reference?: ConvocatoriaReference;
+  /** Solo cuando tournament_mode === "matchplay". */
+  matchplay?: MatchPlayConvocatoriaConfig;
   categories: DraftCategory[];
   competition_rules: DraftCompetitionRule[];
   cut_rules: DraftCutRule[];
