@@ -1,4 +1,5 @@
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
+import { createClient as createServerClient } from "@/utils/supabase/server";
 import {
   buildPublicConvocatoriaSections,
   isConvocatoriaPublicVisible,
@@ -13,37 +14,80 @@ export type PublicConvocatoriaPayload = {
   sections: PublicConvocatoriaSection[];
 };
 
+/**
+ * Lee la convocatoria pública del torneo.
+ *
+ * Primero intenta con el cliente server normal (cookies de sesión / anon).
+ * Si falla por RLS u otra razón, prueba con el cliente admin como respaldo.
+ * Así no depende de SUPABASE_SERVICE_ROLE_KEY estar configurada.
+ */
 export async function fetchPublicConvocatoria(
   tournamentId: string,
   refLabels: PublicConvocatoriaRefLabels
 ): Promise<PublicConvocatoriaPayload> {
   const empty: PublicConvocatoriaPayload = { visible: false, sections: [] };
 
-  try {
-    const supabase = tryCreateAdminClient();
-    if (!supabase) return empty;
+  type Row = {
+    draft_json: ConvocatoriaDraft | null;
+    extracted_text: string | null;
+    status: string | null;
+  };
 
-    const { data, error } = await supabase
+  async function readRow(): Promise<Row | null> {
+    try {
+      const supabase = await createServerClient();
+      const { data, error } = await supabase
+        .from("tournament_convocatoria")
+        .select("draft_json, extracted_text, status")
+        .eq("tournament_id", tournamentId)
+        .maybeSingle();
+      if (!error && data) return data as Row;
+      if (error) {
+        console.warn(
+          "[public convocatoria] fallback admin tras error de cliente público:",
+          error.message
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[public convocatoria] cliente público falló, intentando admin:",
+        err
+      );
+    }
+
+    const admin = tryCreateAdminClient();
+    if (!admin) return null;
+    const { data, error } = await admin
       .from("tournament_convocatoria")
       .select("draft_json, extracted_text, status")
       .eq("tournament_id", tournamentId)
       .maybeSingle();
+    if (error) {
+      console.error(
+        "[public convocatoria] admin client error:",
+        error.message
+      );
+      return null;
+    }
+    return (data as Row) ?? null;
+  }
 
-    if (error || !data) return empty;
+  try {
+    const row = await readRow();
+    if (!row) return empty;
 
-    if (!isConvocatoriaPublicVisible(data.status)) return empty;
+    if (!isConvocatoriaPublicVisible(row.status)) return empty;
 
-    const draft = normalizeConvocatoriaDraft(
-      data.draft_json as ConvocatoriaDraft | null
-    );
+    const draft = normalizeConvocatoriaDraft(row.draft_json);
     const sections = buildPublicConvocatoriaSections(draft, refLabels, {
-      extractedText: data.extracted_text,
+      extractedText: row.extracted_text,
     });
 
     if (sections.length === 0) return empty;
 
     return { visible: true, sections };
-  } catch {
+  } catch (err) {
+    console.error("[public convocatoria] fallo inesperado:", err);
     return empty;
   }
 }

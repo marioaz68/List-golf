@@ -38,15 +38,77 @@ export function isConvocatoriaPublicVisible(
   return normalized === "closed" || normalized === "applied";
 }
 
+/** Detecta encabezados de la convocatoria (líneas cortas en mayúsculas). */
+function isLikelyHeading(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length < 3 || trimmed.length > 80) return false;
+  if (/^\d+(\.|°|:)?$/.test(trimmed)) return false;
+  const letters = trimmed.replace(/[^A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g, "");
+  if (letters.length < 3) return false;
+  const upper = letters.replace(/[áéíóúñü]/g, (c) => c.toUpperCase());
+  return upper === upper.toUpperCase() && upper === letters.toUpperCase();
+}
+
+/** Repite líneas de portada como "68VO. TORNEO ANUAL. - CONVOCATORIA" que se omiten. */
+function isPortadaRepeat(line: string): boolean {
+  return /^(6[78]VO\.\s*TORNEO ANUAL\.?\s*-\s*CONVOCATORIA)$/i.test(line.trim());
+}
+
+/** Divide el texto extraído del Word en secciones legibles para la página pública. */
+export function parseExtractedConvocatoriaSections(
+  text: string,
+  fallbackTitle: string
+): PublicConvocatoriaSection[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !isPortadaRepeat(l));
+
+  if (lines.length === 0) return [];
+
+  const sections: PublicConvocatoriaSection[] = [];
+  let currentHeading = fallbackTitle;
+  let currentBody: string[] = [];
+
+  const flush = () => {
+    const body = currentBody.join("\n").trim();
+    if (body || sections.length === 0) {
+      sections.push({ heading: currentHeading, body });
+    }
+    currentBody = [];
+  };
+
+  for (const line of lines) {
+    if (isLikelyHeading(line)) {
+      flush();
+      currentHeading = line;
+      continue;
+    }
+    currentBody.push(line);
+  }
+  flush();
+
+  return sections;
+}
+
 export function buildPublicConvocatoriaSections(
   draft: ConvocatoriaDraft,
   labels: PublicConvocatoriaRefLabels,
   options?: { extractedText?: string | null }
 ): PublicConvocatoriaSection[] {
   const d = normalizeConvocatoriaDraft(draft);
+  const title = d.meta.title?.trim() || "Convocatoria";
+
+  // Si tenemos el texto del Word, mostrarlo idéntico (organizado en secciones).
+  const extracted = options?.extractedText?.trim();
+  if (extracted) {
+    const fromDoc = parseExtractedConvocatoriaSections(extracted, title);
+    if (fromDoc.length > 0) return fromDoc;
+  }
+
+  // Si no hay Word: caer en el resumen procesado del draft.
   const sections: PublicConvocatoriaSection[] = [];
 
-  const title = d.meta.title?.trim();
   if (title) {
     sections.push({ heading: title, body: "" });
   }
@@ -102,11 +164,6 @@ export function buildPublicConvocatoriaSections(
       heading: labels.categoriesHeading,
       body: lines.join("\n"),
     });
-  }
-
-  const extracted = options?.extractedText?.trim();
-  if (sections.length === 0 && extracted) {
-    return [{ heading: title || "Convocatoria", body: extracted }];
   }
 
   return sections;
