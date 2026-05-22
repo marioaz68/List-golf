@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  processPosterImage,
+  setFileOnInput,
+} from "@/lib/images/processPoster";
 import { createTournamentAndMaybeCopyCategories } from "../actions";
 
 type TournamentOption = {
@@ -77,6 +81,12 @@ export default function NewTournamentPage() {
     "pairs"
   );
   const [bracketSize, setBracketSize] = useState<string>("16");
+  const posterInputRef = useRef<HTMLInputElement | null>(null);
+  const [posterStatus, setPosterStatus] = useState<
+    "idle" | "processing" | "ready" | "error"
+  >("idle");
+  const [posterMessage, setPosterMessage] = useState<string>("");
+  const [posterPreview, setPosterPreview] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,6 +150,57 @@ export default function NewTournamentPage() {
     if (!clubId) return courses;
     return courses.filter((course) => course.club_id === clubId);
   }, [courses, clubId]);
+
+  async function handlePosterChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const input = e.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) {
+      setPosterStatus("idle");
+      setPosterMessage("");
+      setPosterPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+
+    setPosterStatus("processing");
+    setPosterMessage(`Procesando ${file.name}…`);
+
+    try {
+      const processed = await processPosterImage(file);
+
+      const ok = setFileOnInput(input, processed);
+      if (!ok) {
+        setPosterStatus("error");
+        setPosterMessage(
+          "Tu navegador no permite reemplazar el archivo en el input. Sube otra imagen."
+        );
+        return;
+      }
+
+      const url = URL.createObjectURL(processed);
+      setPosterPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return url;
+      });
+      setPosterStatus("ready");
+      const kb = Math.round(processed.size / 1024);
+      setPosterMessage(
+        `Póster optimizado a 1200×1600 (${kb} KB). Listo para subir.`
+      );
+    } catch (err) {
+      console.error("[poster] process:", err);
+      setPosterStatus("error");
+      setPosterMessage(
+        err instanceof Error
+          ? err.message
+          : "No se pudo procesar la imagen."
+      );
+    }
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -385,9 +446,11 @@ export default function NewTournamentPage() {
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Póster del torneo
             <input
+              ref={posterInputRef}
               type="file"
               name="poster"
               accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif"
+              onChange={handlePosterChange}
               style={fieldStyle}
             />
             <div
@@ -398,9 +461,41 @@ export default function NewTournamentPage() {
                 color: "#6b7280",
               }}
             >
-              Acepta JPG, PNG, WEBP, GIF, AVIF, HEIC. Vertical, ligera y de
-              buena calidad.
+              Acepta JPG, PNG, WEBP, GIF, AVIF, HEIC. Se ajusta sola a 1200×1600
+              (vertical) y se comprime a JPG.
             </div>
+            {posterStatus !== "idle" ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color:
+                    posterStatus === "error"
+                      ? "#b91c1c"
+                      : posterStatus === "ready"
+                        ? "#047857"
+                        : "#374151",
+                }}
+              >
+                {posterMessage}
+              </div>
+            ) : null}
+            {posterPreview ? (
+              <div style={{ marginTop: 8 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={posterPreview}
+                  alt="Vista previa del póster optimizado"
+                  style={{
+                    width: 120,
+                    height: 160,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid #d1d5db",
+                  }}
+                />
+              </div>
+            ) : null}
           </label>
 
           <label style={{ color: "#111827", fontWeight: 600 }}>

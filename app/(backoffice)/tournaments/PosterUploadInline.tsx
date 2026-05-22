@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { processPosterImage } from "@/lib/images/processPoster";
 import { uploadTournamentPosterFromList } from "./actions";
 
 type PosterUploadInlineProps = {
@@ -28,58 +29,6 @@ export default function PosterUploadInline({
     setFileName("");
   }
 
-  // 🔥 PROCESADOR DE IMAGEN (CLAVE)
-  async function processImage(file: File): Promise<File> {
-    const img = document.createElement("img");
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d")!;
-
-    // leer archivo
-    const dataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
-
-    // cargar imagen
-    await new Promise<void>((resolve) => {
-      img.onload = () => resolve();
-      img.src = dataUrl;
-    });
-
-    const targetWidth = 1200;
-    const targetHeight = 1600;
-
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-
-    // 🔥 CROP INTELIGENTE
-    const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
-
-    const newWidth = img.width * scale;
-    const newHeight = img.height * scale;
-
-    const dx = (targetWidth - newWidth) / 2;
-    const dy = (targetHeight - newHeight) / 2;
-
-    ctx.drawImage(img, dx, dy, newWidth, newHeight);
-
-    // 🔥 COMPRESIÓN
-    const blob: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((result) => {
-        if (!result) {
-          reject(new Error("No se pudo generar el blob del poster"));
-          return;
-        }
-        resolve(result);
-      }, "image/jpeg", 0.82);
-    });
-
-    return new File([blob], "poster.jpg", {
-      type: "image/jpeg",
-    });
-  }
-
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const inputEl = e.currentTarget;
     const file = inputEl.files?.[0] ?? null;
@@ -93,8 +42,7 @@ export default function PosterUploadInline({
 
     startTransition(async () => {
       try {
-        // 🔥 PROCESAR IMAGEN
-        const processedFile = await processImage(file);
+        const processedFile = await processPosterImage(file);
 
         const formData = new FormData();
         formData.set("tournament_id", tournamentId);
@@ -109,7 +57,7 @@ export default function PosterUploadInline({
 
         alert("Póster optimizado y subido correctamente 🚀");
         router.refresh();
-      } catch (error) {
+      } catch {
         alert("Error procesando imagen");
       } finally {
         resetInput(inputEl);
