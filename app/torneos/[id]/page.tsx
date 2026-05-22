@@ -53,7 +53,11 @@ import {
 } from "@/lib/rounds/resolveDefaultPublicLeaderboardRound";
 import PublicTeeSheetView from "./components/PublicTeeSheetView";
 import PublicConvocatoriaView from "./components/PublicConvocatoriaView";
+import PublicMatchPlayBracket from "./components/PublicMatchPlayBracket";
 import PublicTournamentLoadError from "./components/PublicTournamentLoadError";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import { loadPublicBracket } from "@/lib/matchplay/loadPublicBracket";
+import type { TournamentSettings } from "@/types/tournament";
 import { fetchPublicConvocatoria } from "./lib/fetchPublicConvocatoria";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import { buildPairingGroupLabelsBySession } from "@/lib/tee-sheet/pairingGroupLabels";
@@ -158,9 +162,11 @@ export default async function PublicTournamentPage({
         ? "favorites"
         : requestedView === "convocatoria"
           ? "convocatoria"
-          : requestedView === "tee-sheet" || requestedView === "salidas"
-            ? "tee-sheet"
-            : "live";
+          : requestedView === "bracket" || requestedView === "cuadro"
+            ? "bracket"
+            : requestedView === "tee-sheet" || requestedView === "salidas"
+              ? "tee-sheet"
+              : "live";
 
   const supabase = await createClient();
 
@@ -181,12 +187,12 @@ export default async function PublicTournamentPage({
   const tournamentResponse = isLoggedIn
     ? await supabase
         .from("tournaments")
-        .select("id,name,start_date,is_public,poster_path")
+        .select("id,name,start_date,is_public,poster_path,settings")
         .eq("id", id)
         .maybeSingle()
     : await supabase
         .from("tournaments")
-        .select("id,name,start_date,is_public,poster_path")
+        .select("id,name,start_date,is_public,poster_path,settings")
         .eq("id", id)
         .eq("is_public", true)
         .maybeSingle();
@@ -197,7 +203,21 @@ export default async function PublicTournamentPage({
     notFound();
   }
 
-  const typedTournament = tournament as Tournament & { poster_path?: string | null };
+  const typedTournament = tournament as Tournament & {
+    poster_path?: string | null;
+    settings?: TournamentSettings | null;
+  };
+
+  const isMatchPlayTournament = isMatchPlayFormat(
+    typedTournament.settings ?? null
+  );
+
+  if (view === "bracket" && !isMatchPlayTournament) {
+    const qs = new URLSearchParams({ view: "live" });
+    if (isEmbed) qs.set("embed", "1");
+    if (isEmbed && fromAdmin) qs.set("from", "admin");
+    redirect(`/torneos/${id}?${qs.toString()}`);
+  }
   const posterUrl = typedTournament.poster_path
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tournament-posters/${typedTournament.poster_path}`
     : null;
@@ -275,13 +295,15 @@ export default async function PublicTournamentPage({
   const defaultCategoryId = categories[0]?.id ?? "";
   const isFavoritesView = view === "favorites";
   const isConvocatoriaView = view === "convocatoria";
+  const isBracketView = view === "bracket";
 
   if (
     categories.length > 0 &&
     !requestedCategoryId &&
     defaultCategoryId &&
     !isFavoritesView &&
-    !isConvocatoriaView
+    !isConvocatoriaView &&
+    !isBracketView
   ) {
     redirect(
       buildHref({
@@ -434,6 +456,17 @@ export default async function PublicTournamentPage({
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
   );
   const adminSupabase = serviceRoleConfigured ? tryCreateAdminClient() : null;
+
+  let publicMatchPlayBracket: Awaited<
+    ReturnType<typeof loadPublicBracket>
+  > = null;
+  if (isMatchPlayTournament && serviceRoleConfigured) {
+    try {
+      publicMatchPlayBracket = await loadPublicBracket(typedTournament.id);
+    } catch (err) {
+      console.error("[public bracket] load:", err);
+    }
+  }
 
   let roundScores: RoundScoreRow[] = [];
   let holeScores: HoleScoreRow[] = [];
@@ -1195,7 +1228,9 @@ export default async function PublicTournamentPage({
           ? pub.pageTitleTeeSheet
           : view === "convocatoria"
             ? pub.pageTitleConvocatoria
-            : pub.pageTitleLive;
+            : view === "bracket"
+              ? pub.pageTitleBracket
+              : pub.pageTitleLive;
 
   const pageDescription =
     view === "official"
@@ -1206,7 +1241,9 @@ export default async function PublicTournamentPage({
           ? pub.pageDescTeeSheet
           : view === "convocatoria"
             ? pub.pageDescConvocatoria
-            : pub.pageDescLive;
+            : view === "bracket"
+              ? pub.pageDescBracket
+              : pub.pageDescLive;
 
   const tHref = (opts: {
     categoryId?: string | null;
@@ -1361,6 +1398,18 @@ export default async function PublicTournamentPage({
                   {pub.convocatoria}
                 </Link>
               ) : null}
+
+              {isMatchPlayTournament && publicMatchPlayBracket ? (
+                <Link
+                  scroll={false}
+                  href={tHref({ view: "bracket" })}
+                  className={publicTournamentViewPillClasses(
+                    view === "bracket"
+                  )}
+                >
+                  {pub.bracket}
+                </Link>
+              ) : null}
             </div>
           </div>
 
@@ -1402,14 +1451,20 @@ export default async function PublicTournamentPage({
                   {pageTitle}
                 </span>
 
-                {selectedCategory && !isFavoritesView && !isConvocatoriaView ? (
+                {selectedCategory &&
+                !isFavoritesView &&
+                !isConvocatoriaView &&
+                !isBracketView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {pub.categoryChip}{" "}
                     {selectedCategory.code ?? selectedCategory.name ?? "—"}
                   </span>
                 ) : null}
 
-                {selectedRound && !isFavoritesView && !isConvocatoriaView ? (
+                {selectedRound &&
+                !isFavoritesView &&
+                !isConvocatoriaView &&
+                !isBracketView ? (
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
                     {formatPublicRoundNavPill(selectedRound, locale)}
                   </span>
@@ -1423,7 +1478,8 @@ export default async function PublicTournamentPage({
           </div>
 
           {(categories.length > 0 || rounds.length > 0) &&
-          !isConvocatoriaView && (
+          !isConvocatoriaView &&
+          !isBracketView && (
             <div className="mt-6 flex flex-col gap-3">
               {categories.length > 0 && !isFavoritesView ? (
                 <div className="flex flex-wrap gap-2">
@@ -1667,6 +1723,7 @@ export default async function PublicTournamentPage({
         <div className="mx-auto w-full max-w-[1600px] px-3 py-8 sm:px-4 lg:px-6 xl:px-8">
           {view !== "tee-sheet" &&
           view !== "convocatoria" &&
+          view !== "bracket" &&
           rulesBlocked ? (
             <PublicRulesBlockedView
               blockers={rulesBlockers}
@@ -1676,6 +1733,7 @@ export default async function PublicTournamentPage({
 
           {view !== "tee-sheet" &&
           view !== "convocatoria" &&
+          view !== "bracket" &&
           !rulesBlocked &&
           leaderboardBuildError ? (
             <PublicTournamentLoadError
@@ -1694,6 +1752,29 @@ export default async function PublicTournamentPage({
                 readOnlyNote: pub.convocatoriaReadOnlyNote,
               }}
             />
+          ) : view === "bracket" ? (
+            publicMatchPlayBracket ? (
+              <PublicMatchPlayBracket
+                bracket={publicMatchPlayBracket}
+                labels={{
+                  empty: pub.bracketEmpty,
+                  format: pub.bracketFormat,
+                  allowance: pub.bracketAllowance,
+                  vs: pub.bracketVs,
+                  holeDetail: pub.bracketHoleDetail,
+                  lowBall: pub.bracketLowBall,
+                  highBall: pub.bracketHighBall,
+                  points: pub.bracketPoints,
+                  liveMarker: pub.bracketLive,
+                  completed: pub.bracketCompleted,
+                  bye: pub.bracketBye,
+                }}
+              />
+            ) : (
+              <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-300">
+                {pub.bracketEmpty}
+              </div>
+            )
           ) : view === "tee-sheet" ? (
             <PublicTeeSheetView
               groups={publicPairingGroups}
@@ -1757,6 +1838,7 @@ export default async function PublicTournamentPage({
             />
           ) : view === "tee-sheet" ||
             view === "convocatoria" ||
+            view === "bracket" ||
             rulesBlocked ||
             leaderboardBuildError ? null : (
             <>

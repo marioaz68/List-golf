@@ -955,12 +955,30 @@ export async function saveLowHighMatchScores(formData: FormData) {
     });
   }
 
+  let advanceNote = "";
+  const winnerId =
+    typeof matchUpdate.winner_pair_id === "string"
+      ? matchUpdate.winner_pair_id
+      : null;
+
+  if (finalize && winnerId && matchUpdate.status === "completed") {
+    const { advanceWinnerInBracket } = await import(
+      "@/lib/matchplay/advanceWinner"
+    );
+    const adv = await advanceWinnerInBracket(admin, {
+      match_id,
+      winner_pair_id: winnerId,
+    });
+    advanceNote = adv.advanced ? ` ${adv.message}` : "";
+  }
+
   revalidatePath("/matchplay");
   revalidatePath("/matchplay/score");
+  revalidatePath(`/torneos/${tournament_id}`);
   redirectMatchScore(tournament_id, match_id, {
     score_status: "ok",
     score_message: finalize
-      ? "Partido guardado y cerrado."
+      ? `Partido guardado y cerrado.${advanceNote}`
       : `Guardado: ${statusText}`,
   });
 }

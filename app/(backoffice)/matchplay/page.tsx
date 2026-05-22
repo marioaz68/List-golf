@@ -304,8 +304,13 @@ export default async function MatchPlayPage(props: {
       <div className="rounded-lg border border-white/10 bg-[#0f172a] p-3 text-[12px] text-slate-400">
         <p className="font-semibold text-slate-200">Siguiente fase</p>
         <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>Captura hoyo a hoyo y cierre automático del match</li>
-          <li>Vista pública del bracket en vivo</li>
+          <li>
+            Captura en «Capturar pts»; al cerrar el partido el ganador avanza solo
+            al siguiente cruce
+          </li>
+          <li>
+            Público: pestaña «Cuadro» en el torneo (tras publicar el bracket)
+          </li>
         </ul>
       </div>
     </div>
