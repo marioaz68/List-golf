@@ -387,7 +387,7 @@ export default function NewTournamentPage() {
             <input
               type="file"
               name="poster"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.avif,.heic,.heif"
               style={fieldStyle}
             />
             <div
@@ -398,7 +398,8 @@ export default function NewTournamentPage() {
                 color: "#6b7280",
               }}
             >
-              Imagen recomendada: vertical, ligera y de buena calidad.
+              Acepta JPG, PNG, WEBP, GIF, AVIF, HEIC. Vertical, ligera y de
+              buena calidad.
             </div>
           </label>
 

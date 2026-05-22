@@ -408,11 +408,14 @@ export default async function ConvocatoriaPage(props: {
         ) : null}
         <form action={uploadConvocatoriaDocx} className="mt-3 space-y-2">
           <input type="hidden" name="tournament_id" value={effectiveId} />
-          <p className="text-[10px] text-slate-500">{cv.importOptionalHint}</p>
+          <p className="text-[10px] text-slate-500">
+            {cv.importOptionalHint} Acepta Word (.docx), PDF y Excel (.xlsx,
+            .xls).
+          </p>
           <input
             type="file"
             name="convocatoria_file"
-            accept=".docx"
+            accept=".docx,.pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="block w-full max-w-md text-[11px] text-slate-200 file:mr-2 file:rounded file:border-0 file:bg-slate-600 file:px-2 file:py-1 file:text-white"
           />
           <button type="submit" style={buttonStyle}>

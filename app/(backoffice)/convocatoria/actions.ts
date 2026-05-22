@@ -6,7 +6,7 @@ import {
   normalizeWorkflowStatus,
   parseDraftJson,
 } from "@/lib/convocatoria/draftUtils";
-import { extractDocxText } from "@/lib/convocatoria/extractDocxText";
+import { extractConvocatoriaText } from "@/lib/convocatoria/extractFileText";
 import { parseConvocatoriaMatchPlayText } from "@/lib/convocatoria/parseConvocatoriaMatchPlay";
 import { parseConvocatoriaText } from "@/lib/convocatoria/parseConvocatoria";
 import { matchPlayMachote } from "@/lib/convocatoria/templates/matchPlayMachote";
@@ -220,16 +220,13 @@ export async function reopenConvocatoria(formData: FormData) {
   redirect(`/convocatoria?tournament_id=${tournament_id}&reopened=1`);
 }
 
-/** Importación opcional desde Word (reemplaza borrador en edición). */
+/** Importación opcional desde Word/PDF/Excel (reemplaza borrador en edición). */
 export async function uploadConvocatoriaDocx(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const file = formData.get("convocatoria_file");
 
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("Selecciona un archivo .docx");
-  }
-  if (!file.name.toLowerCase().endsWith(".docx")) {
-    throw new Error("Solo se admite formato .docx");
+    throw new Error("Selecciona un archivo .docx, .pdf o .xlsx");
   }
 
   const supabase = createAdminClient();
@@ -240,11 +237,23 @@ export async function uploadConvocatoriaDocx(formData: FormData) {
     .maybeSingle();
 
   if (normalizeWorkflowStatus(row?.status) === "closed") {
-    throw new Error("Cierra o reabre la convocatoria antes de importar otro Word.");
+    throw new Error(
+      "Cierra o reabre la convocatoria antes de importar otro archivo."
+    );
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const extracted_text = await extractDocxText(buffer);
+  let extracted_text: string;
+  try {
+    const result = await extractConvocatoriaText(file);
+    extracted_text = result.text;
+  } catch (err) {
+    throw new Error(
+      err instanceof Error
+        ? err.message
+        : "No se pudo leer el archivo de convocatoria."
+    );
+  }
+
   const matchPlay = await tournamentUsesMatchPlay(supabase, tournament_id);
   const draft = matchPlay
     ? parseConvocatoriaMatchPlayText(extracted_text)
