@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
+import { firstNameOnly, resolveUserDisplayName } from "@/lib/auth/resolveUserDisplayName";
 import { getLocale } from "@/lib/i18n/server";
 import { createClient } from "@/utils/supabase/server";
 
@@ -12,19 +13,14 @@ export default async function PublicNavbar() {
   } = await supabase.auth.getUser();
 
   const email = user?.email ?? "";
-  let firstName: string | null = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("first_name")
-      .eq("id", user.id)
-      .maybeSingle();
-    const raw = (profile?.first_name ?? "").trim();
-    firstName = raw.split(/\s+/)[0] || null;
-  }
-  const displayName =
-    firstName ?? (email ? email.split("@")[0] ?? email : "Admin");
-  const initial = (firstName?.charAt(0) || email.charAt(0) || "U").toUpperCase();
+  const displayName = user
+    ? (await resolveUserDisplayName(supabase, user)).displayName
+    : "Admin";
+  const initial = (
+    firstNameOnly(displayName)?.charAt(0) ||
+    email.charAt(0) ||
+    "U"
+  ).toUpperCase();
 
   return (
     <header className="border-b border-white/10 bg-[#08111f]">

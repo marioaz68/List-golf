@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import BackofficeLayoutClient from "@/components/layout/BackofficeLayoutClient";
+import BackofficeUserCorner from "@/components/layout/BackofficeUserCorner";
 import { BackofficeRolesProvider } from "@/components/layout/BackofficeRolesContext";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessAnyBackofficeModule } from "@/lib/auth/permissions";
@@ -30,7 +31,12 @@ export default async function BackofficeLayout({
 
   return (
     <BackofficeRolesProvider roles={roles}>
-      <BackofficeLayoutClient locale={locale}>{children}</BackofficeLayoutClient>
+      <BackofficeLayoutClient
+        locale={locale}
+        userCorner={<BackofficeUserCorner />}
+      >
+        {children}
+      </BackofficeLayoutClient>
     </BackofficeRolesProvider>
   );
 }

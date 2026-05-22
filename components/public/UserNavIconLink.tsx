@@ -6,7 +6,9 @@ type UserNavIconLinkProps = {
   className?: string;
   label: string;
   iconClassName?: string;
-  /** Texto visible junto al icono (p. ej. email o «Entrar»). */
+  /** Tooltip (p. ej. email completo). */
+  title?: string;
+  /** Texto visible junto al icono (p. ej. nombre o «Entrar»). */
   showLabel?: boolean;
   labelText?: string;
 };
@@ -17,6 +19,7 @@ export function UserNavIconLink({
   className,
   label,
   iconClassName = "h-5 w-5",
+  title,
   showLabel = false,
   labelText,
 }: UserNavIconLinkProps) {
@@ -27,7 +30,7 @@ export function UserNavIconLink({
       href={href}
       className={className}
       aria-label={label}
-      title={label}
+      title={title ?? label}
     >
       <User
         className={`${iconClassName} shrink-0`}

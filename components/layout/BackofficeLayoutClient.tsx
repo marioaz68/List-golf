@@ -42,9 +42,11 @@ function MobileMenuButton() {
 
 export default function BackofficeLayoutClient({
   locale,
+  userCorner,
   children,
 }: {
   locale: Locale;
+  userCorner?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
@@ -55,9 +57,14 @@ export default function BackofficeLayoutClient({
       <>
         <BrowserBehaviorFix />
         <AppLocaleProvider locale={locale}>
-          <main className="min-h-dvh overflow-auto bg-[#0F1720] text-white">
-            {children}
-          </main>
+          <div className="flex min-h-dvh flex-col bg-[#0F1720] text-white">
+            {userCorner ? (
+              <header className="flex shrink-0 items-center justify-end gap-2 border-b border-white/10 bg-[#141c26] px-3 py-2">
+                {userCorner}
+              </header>
+            ) : null}
+            <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+          </div>
         </AppLocaleProvider>
       </>
     );
@@ -78,7 +85,8 @@ export default function BackofficeLayoutClient({
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <header className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-[#141c26] px-3 py-2 sm:px-4">
                 <MobileMenuButton />
-                <div className="flex min-w-0 flex-1 justify-end">
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
+                  {userCorner}
                   <LanguageToggle />
                 </div>
               </header>
