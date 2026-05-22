@@ -38,6 +38,15 @@ export default function PosterUploadInline({
       return;
     }
 
+    const looksLikeImage =
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|gif|avif|heic|heif|bmp|tiff?)$/i.test(file.name);
+    if (!looksLikeImage) {
+      alert(`"${file.name}" no es una imagen. Sube JPG, PNG, WEBP, HEIC, etc.`);
+      resetInput(inputEl);
+      return;
+    }
+
     setFileName(file.name);
 
     startTransition(async () => {
@@ -77,7 +86,6 @@ export default function PosterUploadInline({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
         style={{ display: "none" }}
         onChange={onFileChange}
       />

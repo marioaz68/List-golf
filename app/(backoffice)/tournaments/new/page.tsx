@@ -166,6 +166,22 @@ export default function NewTournamentPage() {
       return;
     }
 
+    const looksLikeImage =
+      file.type.startsWith("image/") ||
+      /\.(jpe?g|png|webp|gif|avif|heic|heif|bmp|tiff?)$/i.test(file.name);
+    if (!looksLikeImage) {
+      input.value = "";
+      setPosterStatus("error");
+      setPosterMessage(
+        `"${file.name}" no es una imagen. Sube JPG, PNG, WEBP, HEIC, etc.`
+      );
+      setPosterPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+
     setPosterStatus("processing");
     setPosterMessage(`Procesando ${file.name}…`);
 
@@ -449,7 +465,6 @@ export default function NewTournamentPage() {
               ref={posterInputRef}
               type="file"
               name="poster"
-              accept="image/*"
               onChange={handlePosterChange}
               style={fieldStyle}
             />
