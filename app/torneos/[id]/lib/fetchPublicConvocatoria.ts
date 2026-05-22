@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/utils/supabase/admin";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   buildPublicConvocatoriaSections,
   isConvocatoriaPublicVisible,
@@ -20,7 +20,9 @@ export async function fetchPublicConvocatoria(
   const empty: PublicConvocatoriaPayload = { visible: false, sections: [] };
 
   try {
-    const supabase = createAdminClient();
+    const supabase = tryCreateAdminClient();
+    if (!supabase) return empty;
+
     const { data, error } = await supabase
       .from("tournament_convocatoria")
       .select("draft_json, extracted_text, status")
@@ -32,7 +34,7 @@ export async function fetchPublicConvocatoria(
     if (!isConvocatoriaPublicVisible(data.status)) return empty;
 
     const draft = normalizeConvocatoriaDraft(
-      data.draft_json as ConvocatoriaDraft
+      data.draft_json as ConvocatoriaDraft | null
     );
     const sections = buildPublicConvocatoriaSections(draft, refLabels, {
       extractedText: data.extracted_text,

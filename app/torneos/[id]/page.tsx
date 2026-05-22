@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   buildLockedScorecardLookups,
   isEntryRoundClosed,
@@ -407,10 +407,15 @@ export default async function PublicTournamentPage({
     }))
     .filter((g) => g.rounds.length > 0);
 
-  const adminSupabase = await createAdminClient();
+  const serviceRoleConfigured = Boolean(
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  );
+  const adminSupabase = serviceRoleConfigured ? tryCreateAdminClient() : null;
 
   const roundScores =
-    entriesForLeaderboard.length > 0 && roundsScopeForLeaderboard.length > 0
+    adminSupabase &&
+    entriesForLeaderboard.length > 0 &&
+    roundsScopeForLeaderboard.length > 0
       ? await fetchRoundScoresForPublicLeaderboard(
           adminSupabase,
           entriesForLeaderboard.map((entry) => entry.player_id),
@@ -419,7 +424,7 @@ export default async function PublicTournamentPage({
       : [];
 
   const holeScores =
-    roundScores.length > 0
+    adminSupabase && roundScores.length > 0
       ? await fetchHoleScoresForRoundScores(
           adminSupabase,
           roundScores.map((row) => row.id)
@@ -466,10 +471,12 @@ export default async function PublicTournamentPage({
       .sort((a, b) => a.round_no - b.round_no)
       .at(-1) ?? null;
 
-  const scorecardsData = await fetchLockedScorecardsForTournament(
-    adminSupabase,
-    typedTournament.id
-  );
+  const scorecardsData = adminSupabase
+    ? await fetchLockedScorecardsForTournament(
+        adminSupabase,
+        typedTournament.id
+      )
+    : [];
   const lockedLookups = buildLockedScorecardLookups(
     scorecardsData as Array<{
       entry_id: string;
@@ -599,16 +606,12 @@ export default async function PublicTournamentPage({
   }
 
   /** Reglas de torneo: lectura con service role (RLS suele bloquear anon en tablas de configuración). */
-  const serviceRoleConfigured = Boolean(
-    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
-  );
-
   let competitionRulesRows: CategoryCompetitionRule[] | null = null;
   let competitionRulesError: { message: string } | null = null;
   let advancementRulesRows: RoundAdvancementRule[] | null = null;
   let advancementRulesError: { message: string } | null = null;
 
-  if (serviceRoleConfigured) {
+  if (serviceRoleConfigured && adminSupabase) {
     const competitionRes = await adminSupabase
       .from("category_competition_rules")
       .select(
@@ -660,7 +663,7 @@ export default async function PublicTournamentPage({
   ];
 
   const tieBreakStepsByProfileId = new Map<string, TieBreakStep[]>();
-  if (profileIds.length > 0) {
+  if (profileIds.length > 0 && adminSupabase) {
     const { data: tieSteps } = await adminSupabase
       .from("tie_break_steps")
       .select(
@@ -740,6 +743,7 @@ export default async function PublicTournamentPage({
   let publicPrizeRulesForCategory: PublicPrizeRuleRow[] = [];
   if (
     serviceRoleConfigured &&
+    adminSupabase &&
     selectedCategory &&
     headerCompetitionRule &&
     !rulesBlocked
@@ -953,19 +957,21 @@ export default async function PublicTournamentPage({
 
   if (teeSheetTargetRoundNos.length > 0) {
     try {
-      const admin = createAdminClient();
-      for (const targetRoundNo of teeSheetTargetRoundNos) {
-        const { orderMap } = await buildTeeSheetEntryOrderMap(
-          admin,
-          typedTournament.id,
-          targetRoundNo
-        );
-        for (const [entryId, info] of orderMap) {
-          if (!info.standingDisplay) continue;
-          standingDisplayByEntryRound.set(
-            `${entryId}:${targetRoundNo}`,
-            info.standingDisplay
+      const admin = tryCreateAdminClient();
+      if (admin) {
+        for (const targetRoundNo of teeSheetTargetRoundNos) {
+          const { orderMap } = await buildTeeSheetEntryOrderMap(
+            admin,
+            typedTournament.id,
+            targetRoundNo
           );
+          for (const [entryId, info] of orderMap) {
+            if (!info.standingDisplay) continue;
+            standingDisplayByEntryRound.set(
+              `${entryId}:${targetRoundNo}`,
+              info.standingDisplay
+            );
+          }
         }
       }
     } catch (err) {

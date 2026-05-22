@@ -63,13 +63,19 @@ export function ensureCompetitionForCategories(
 
 /** Rellena meta/reference nuevos en borradores guardados antes de la alineación 68º. */
 export function normalizeConvocatoriaDraft(
-  draft: ConvocatoriaDraft
+  draft: ConvocatoriaDraft | null | undefined
 ): ConvocatoriaDraft {
   const defaults = ccqTorneoAnualMachote();
+  const base =
+    draft && typeof draft === "object" ? draft : ({} as ConvocatoriaDraft);
   return {
-    ...draft,
-    meta: { ...defaults.meta, ...draft.meta },
-    reference: draft.reference ?? defaults.reference,
+    ...defaults,
+    ...base,
+    meta: { ...defaults.meta, ...base.meta },
+    reference: base.reference ?? defaults.reference,
+    categories: Array.isArray(base.categories)
+      ? base.categories
+      : defaults.categories,
   };
 }
 
