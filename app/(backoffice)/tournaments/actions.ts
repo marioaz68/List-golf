@@ -245,6 +245,29 @@ export async function createTournamentAndMaybeCopyCategories(
     course_name = course.name ?? null;
   }
 
+  // No permitir nombres duplicados en el mismo club (ignorando archivados).
+  const { data: duplicates, error: dupError } = await admin
+    .from("tournaments")
+    .select("id, name, start_date")
+    .eq("club_id", club_id)
+    .or("is_archived.is.null,is_archived.eq.false")
+    .ilike("name", name);
+
+  if (dupError) {
+    throw new Error(`Error verificando duplicados: ${dupError.message}`);
+  }
+
+  if (duplicates && duplicates.length > 0) {
+    const existing = duplicates[0];
+    throw new Error(
+      `Ya existe un torneo con el nombre "${existing.name}" en este club` +
+        (existing.start_date
+          ? ` (creado el ${existing.start_date}).`
+          : ".") +
+        " Elige otro nombre o archiva el torneo existente."
+    );
+  }
+
   const { data: tournament, error: tournamentError } = await admin
     .from("tournaments")
     .insert({
@@ -400,6 +423,31 @@ export async function updateTournamentAction(formData: FormData) {
 
     resolved_course_id = course.id;
     course_name = course.name ?? null;
+  }
+
+  // Bloquear renombrar a un nombre que ya usa OTRO torneo del mismo club.
+  const adminForCheck = createAdminClient();
+  const { data: duplicates, error: dupError } = await adminForCheck
+    .from("tournaments")
+    .select("id, name, start_date")
+    .eq("club_id", club_id)
+    .neq("id", tournament_id)
+    .or("is_archived.is.null,is_archived.eq.false")
+    .ilike("name", name);
+
+  if (dupError) {
+    throw new Error(`Error verificando duplicados: ${dupError.message}`);
+  }
+
+  if (duplicates && duplicates.length > 0) {
+    const existing = duplicates[0];
+    throw new Error(
+      `Ya existe otro torneo con el nombre "${existing.name}" en este club` +
+        (existing.start_date
+          ? ` (creado el ${existing.start_date}).`
+          : ".") +
+        " Elige otro nombre o archiva el torneo existente."
+    );
   }
 
   let previousPosterPath: string | null = null;
