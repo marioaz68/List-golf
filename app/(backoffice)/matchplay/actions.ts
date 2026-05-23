@@ -310,6 +310,113 @@ export async function updateMatchPlayTeam(formData: FormData) {
   redirectMatchPlay(tournament_id, { team_status: "ok", team_message: okMsg });
 }
 
+export async function recapMatchPlayTeams(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  await ensureAccess(tournament_id);
+
+  const admin = createAdminClient();
+
+  const { data: teams, error: teamsErr } = await admin
+    .from("matchplay_pair_teams")
+    .select(
+      "id, player_a_entry_id, player_b_entry_id, category_id, " +
+        "entry_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey(id, category_id, handicap_index), " +
+        "entry_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey(id, category_id, handicap_index)"
+    )
+    .eq("tournament_id", tournament_id)
+    .eq("is_active", true);
+
+  if (teamsErr) throw new Error(teamsErr.message);
+
+  const { data: catsRows } = await admin
+    .from("categories")
+    .select("id, code, name, handicap_min, handicap_max")
+    .eq("tournament_id", tournament_id);
+
+  const catsById = new Map<string, any>(
+    (catsRows ?? []).map((c) => [c.id, c])
+  );
+
+  const allMessages: string[] = [];
+  let adjustedTeams = 0;
+  let syncedEntries = 0;
+
+  type EntryShape = {
+    id?: string;
+    category_id?: string | null;
+    handicap_index?: number | string | null;
+  };
+  type TeamShape = {
+    id: string;
+    player_a_entry_id: string | null;
+    player_b_entry_id: string | null;
+    category_id: string | null;
+    entry_a?: EntryShape | EntryShape[] | null;
+    entry_b?: EntryShape | EntryShape[] | null;
+  };
+
+  for (const team of (teams ?? []) as unknown as TeamShape[]) {
+    const entryA: EntryShape | undefined = Array.isArray(team.entry_a)
+      ? team.entry_a[0]
+      : team.entry_a ?? undefined;
+    const entryB: EntryShape | undefined = Array.isArray(team.entry_b)
+      ? team.entry_b[0]
+      : team.entry_b ?? undefined;
+    if (!entryA?.id || !entryB?.id || !team.category_id) continue;
+
+    const cat = catsById.get(team.category_id);
+    if (!cat) continue;
+
+    if (
+      entryA.category_id !== team.category_id ||
+      entryB.category_id !== team.category_id
+    ) {
+      await syncPairEntriesCategory(admin, {
+        entryIds: [entryA.id, entryB.id],
+        categoryId: team.category_id,
+      });
+      syncedEntries += 1;
+    }
+
+    const cap = await capMatchPlayPairHandicaps(admin, {
+      entryAId: entryA.id,
+      entryBId: entryB.id,
+      hiA: Number(entryA.handicap_index ?? 0),
+      hiB: Number(entryB.handicap_index ?? 0),
+      category: {
+        code: cat.code,
+        name: cat.name,
+        handicap_min: cat.handicap_min != null ? Number(cat.handicap_min) : null,
+        handicap_max: cat.handicap_max != null ? Number(cat.handicap_max) : null,
+      },
+    });
+
+    if (cap.messages.length > 0) {
+      adjustedTeams += 1;
+      allMessages.push(...cap.messages);
+    }
+
+    await admin
+      .from("matchplay_pair_teams")
+      .update({
+        combined_hi: cap.combined_hi,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", team.id);
+  }
+
+  revalidatePath("/matchplay");
+  revalidatePath("/entries");
+
+  const okMsg =
+    adjustedTeams === 0 && syncedEntries === 0
+      ? "Topes verificados: ninguna pareja excede el máximo de su categoría."
+      : `Topes ajustados en ${adjustedTeams} pareja(s). ${
+          syncedEntries > 0 ? `Categoría sincronizada en ${syncedEntries} equipo(s).` : ""
+        } ${allMessages.slice(0, 3).join(" ")}`;
+  redirectMatchPlay(tournament_id, { team_status: "ok", team_message: okMsg });
+}
+
 export async function deleteMatchPlayTeam(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const team_id = reqStr(formData, "team_id");

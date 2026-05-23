@@ -6,6 +6,7 @@ import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import {
   createMatchPlayTeam,
   deleteMatchPlayTeam,
+  recapMatchPlayTeams,
   syncIndividualTeamsFromEntries,
   updateMatchPlayTeam,
   updateTeamAuctionBid,
@@ -119,9 +120,23 @@ export default function MatchPlayTeamsPanel({
             desde esos inscritos.
           </p>
         </div>
-        <a href={`/entries?tournament_id=${tournamentId}`} style={buttonStyle}>
-          + Inscribir jugadores
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          {matchType === "pairs" && teams.length > 0 ? (
+            <form action={recapMatchPlayTeams}>
+              <input type="hidden" name="tournament_id" value={tournamentId} />
+              <button
+                type="submit"
+                style={buttonStyle}
+                title="Recalcula la suma HI de cada pareja y, si excede el tope de la categoría, baja el HI del jugador más alto."
+              >
+                Ajustar HI a topes
+              </button>
+            </form>
+          ) : null}
+          <a href={`/entries?tournament_id=${tournamentId}`} style={buttonStyle}>
+            + Inscribir jugadores
+          </a>
+        </div>
       </div>
 
       {flashMessage ? (
