@@ -8,6 +8,7 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
+import PartnerPicker, { type PartnerCandidate } from "./PartnerPicker";
 
 type Player = {
   id: string;
@@ -59,27 +60,26 @@ export default function SinglePlayerEntryPanel({
     [playersOnTeams]
   );
 
-  const partnerCandidatesById = useMemo(() => {
-    if (!matchPlayPairs) return new Map<string, Player[]>();
-
-    const pool = (allPlayers ?? players).filter(
-      (p) => !teamedSet.has(p.id) && p.handicap_index !== null
-    );
+  const partnerPool: PartnerCandidate[] = useMemo(() => {
+    if (!matchPlayPairs) return [];
+    const pool = (allPlayers ?? players)
+      .filter((p) => !teamedSet.has(p.id) && p.handicap_index !== null)
+      .map<PartnerCandidate>((p) => ({
+        id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        gender: p.gender ?? null,
+        handicap_index: p.handicap_index,
+        club_label: p.club_label,
+        enrolled: enrolledSet.has(p.id),
+      }));
     pool.sort((a, b) => {
       const an = `${a.last_name ?? ""} ${a.first_name ?? ""}`.trim().toLowerCase();
       const bn = `${b.last_name ?? ""} ${b.first_name ?? ""}`.trim().toLowerCase();
       return an.localeCompare(bn);
     });
-
-    const map = new Map<string, Player[]>();
-    for (const p of players) {
-      map.set(
-        p.id,
-        pool.filter((cand) => cand.id !== p.id)
-      );
-    }
-    return map;
-  }, [matchPlayPairs, allPlayers, players, teamedSet]);
+    return pool;
+  }, [matchPlayPairs, allPlayers, players, teamedSet, enrolledSet]);
 
   const currentYear = new Date().getFullYear();
 
@@ -246,34 +246,20 @@ export default function SinglePlayerEntryPanel({
 
                   {matchPlayPairs ? (
                     <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
-                      <select
+                      <PartnerPicker
+                        candidates={partnerPool.filter(
+                          (c) => c.id !== p.id
+                        )}
                         value={selectedPartner[p.id] ?? ""}
-                        onChange={(e) =>
+                        onSelect={(id) =>
                           setSelectedPartner((prev) => ({
                             ...prev,
-                            [p.id]: e.target.value,
+                            [p.id]: id,
                           }))
                         }
                         disabled={isSubmittingThisPlayer}
-                        className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black disabled:cursor-wait disabled:bg-gray-100"
-                      >
-                        <option value="">(sin pareja)</option>
-                        {(partnerCandidatesById.get(p.id) ?? []).map((cand) => {
-                          const enrolledTag = enrolledSet.has(cand.id)
-                            ? " ✓"
-                            : " (nuevo)";
-                          const genderTag = cand.gender
-                            ? ` ${cand.gender}`
-                            : "";
-                          return (
-                            <option key={cand.id} value={cand.id}>
-                              {`${cand.last_name ?? ""} ${cand.first_name ?? ""}`.trim()}
-                              {genderTag}
-                              {enrolledTag}
-                            </option>
-                          );
-                        })}
-                      </select>
+                        placeholder="Buscar pareja por nombre..."
+                      />
                     </td>
                   ) : null}
 

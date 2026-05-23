@@ -470,14 +470,24 @@ function EntryRowActions({
   );
 }
 
+type PartnerInfo = {
+  entry_id: string;
+  player_id: string | null;
+  full_name: string;
+};
+
 export default function EntriesListPanel({
   entries,
   tournamentId,
   categories,
+  matchPlayPairs = false,
+  partnerByEntryId = {},
 }: {
   entries: Entry[];
   tournamentId: string;
   categories: Category[];
+  matchPlayPairs?: boolean;
+  partnerByEntryId?: Record<string, PartnerInfo>;
 }) {
   const { t, locale } = useAppLocale();
   const te = t.entries.list;
@@ -657,6 +667,14 @@ ${res.witness_url}`;
                     {e.players?.club_label ?? "—"} · {te.thHcp}{" "}
                     {e.handicap_index ?? "—"} · {categoryLabel}
                   </p>
+                  {matchPlayPairs ? (
+                    <p className="mt-0.5 truncate text-[10px] text-emerald-700">
+                      Pareja:{" "}
+                      <span className="font-semibold">
+                        {partnerByEntryId[e.id]?.full_name ?? "sin pareja"}
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <EntryRowActions
                   entry={e}
@@ -700,6 +718,9 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">{te.thClub}</th>
               <th className="px-1 py-1 text-left">{te.thHcp}</th>
               <th className="px-1 py-1 text-left">{te.thCat}</th>
+              {matchPlayPairs ? (
+                <th className="px-1 py-1 text-left">Pareja</th>
+              ) : null}
               <th className="px-1 py-1 text-left">{te.thStatus}</th>
               <th className="px-1 py-1 text-left">{te.thSignatures}</th>
               <th className={`${ACTIONS_COL} px-1 py-1 text-left`}>
@@ -735,6 +756,22 @@ ${res.witness_url}`;
                     </span>
                   </td>
 
+                  {matchPlayPairs ? (
+                    <td className="px-1 py-1">
+                      {partnerByEntryId[e.id] ? (
+                        <span className="inline-flex h-6 max-w-[200px] items-center rounded border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-medium text-emerald-900">
+                          <span className="truncate">
+                            {partnerByEntryId[e.id].full_name}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] italic text-gray-500">
+                          sin pareja
+                        </span>
+                      )}
+                    </td>
+                  ) : null}
+
                   <td className="px-1 py-1">
                     <span
                       className={`inline-flex h-6 items-center rounded border px-2 text-[10px] font-semibold ${badgeClass(
@@ -764,7 +801,7 @@ ${res.witness_url}`;
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-2 text-gray-600">
+                <td colSpan={matchPlayPairs ? 9 : 8} className="p-2 text-gray-600">
                   {te.noResults}
                 </td>
               </tr>

@@ -527,6 +527,10 @@ export default async function EntriesPage({
 
   let matchPlayPairsEnabled = false;
   const playersOnTeams = new Set<string>();
+  const partnerByEntryId = new Map<
+    string,
+    { entry_id: string; player_id: string | null; full_name: string }
+  >();
 
   if (tournamentIsMatchPlay && selectedTournamentId) {
     const { data: mpRules } = await supabase
@@ -540,20 +544,55 @@ export default async function EntriesPage({
       const { data: teamsRaw } = await supabase
         .from("matchplay_pair_teams")
         .select(
-          "player_a_entry_id, player_b_entry_id, tournament_entries_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey(player_id), tournament_entries_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey(player_id)"
+          "id, player_a_entry_id, player_b_entry_id, " +
+            "entry_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey(id, player_id, players(first_name, last_name)), " +
+            "entry_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey(id, player_id, players(first_name, last_name))"
         )
         .eq("tournament_id", selectedTournamentId)
         .eq("is_active", true);
 
+      type EntryShape = {
+        id?: string | null;
+        player_id?: string | null;
+        players?:
+          | { first_name?: string | null; last_name?: string | null }
+          | Array<{ first_name?: string | null; last_name?: string | null }>
+          | null;
+      } | null;
+
+      function entryName(entry: EntryShape): string {
+        const p = entry?.players;
+        const obj = Array.isArray(p) ? p[0] : p;
+        return `${obj?.last_name ?? ""} ${obj?.first_name ?? ""}`.trim() || "—";
+      }
+
       type TeamRowShape = {
-        tournament_entries_a?: { player_id?: string | null } | null;
-        tournament_entries_b?: { player_id?: string | null } | null;
+        entry_a?: EntryShape;
+        entry_b?: EntryShape;
       };
       for (const row of (teamsRaw ?? []) as TeamRowShape[]) {
-        const a = row.tournament_entries_a?.player_id;
-        const b = row.tournament_entries_b?.player_id;
-        if (a) playersOnTeams.add(a);
-        if (b) playersOnTeams.add(b);
+        const a = Array.isArray(row.entry_a)
+          ? (row.entry_a[0] as EntryShape)
+          : (row.entry_a as EntryShape);
+        const b = Array.isArray(row.entry_b)
+          ? (row.entry_b[0] as EntryShape)
+          : (row.entry_b as EntryShape);
+        if (a?.player_id) playersOnTeams.add(a.player_id);
+        if (b?.player_id) playersOnTeams.add(b.player_id);
+        if (a?.id && b) {
+          partnerByEntryId.set(a.id, {
+            entry_id: b?.id ?? "",
+            player_id: b?.player_id ?? null,
+            full_name: entryName(b),
+          });
+        }
+        if (b?.id && a) {
+          partnerByEntryId.set(b.id, {
+            entry_id: a?.id ?? "",
+            player_id: a?.player_id ?? null,
+            full_name: entryName(a),
+          });
+        }
       }
     }
   }
@@ -993,6 +1032,8 @@ export default async function EntriesPage({
               entries={entries}
               tournamentId={selectedTournamentId}
               categories={categories}
+              matchPlayPairs={matchPlayPairsEnabled}
+              partnerByEntryId={Object.fromEntries(partnerByEntryId)}
             />
           ) : null}
 
