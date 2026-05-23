@@ -28,7 +28,7 @@ function segmentSteps(
     step_no: i + 1,
     method: "segment_compare",
     basis,
-    round_scope: "last_in_range",
+    round_scope: "last_round_played",
     hole_scope,
     handicap_mode,
     direction,
@@ -71,7 +71,12 @@ export const CCQ_TIE_BREAK_PROFILES: Array<{
 export const CCQ_TIE_BREAK_STEPS = [
   ...segmentSteps("gross_cut", "gross", "lower_is_better", "none"),
   ...segmentSteps("stableford_cut", "points", "higher_is_better", "none"),
-  ...segmentSteps("seniors_cut", "gross", "lower_is_better", "course"),
+  ...segmentSteps(
+    "seniors_cut",
+    "gross",
+    "lower_is_better",
+    "course_handicap_80_percent_proportional"
+  ),
   ...segmentSteps("trophy_gross", "gross", "lower_is_better", "none"),
 ];
 

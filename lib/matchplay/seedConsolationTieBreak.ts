@@ -86,9 +86,9 @@ export async function seedConsolationStrokeTieBreakProfiles(
           step_no: stepNo++,
           method: "segment_compare",
           basis: "net",
-          round_scope: "last_in_range",
+          round_scope: "last_round_played",
           hole_scope: holeScope,
-          handicap_mode: "course",
+          handicap_mode: "course_handicap_80_percent_proportional",
           direction: "lower_is_better",
           value_text: null,
         });
@@ -99,12 +99,12 @@ export async function seedConsolationStrokeTieBreakProfiles(
         steps.push({
           tie_break_profile_id: profile.id,
           step_no: stepNo++,
-          method: "segment_compare",
-          basis: "net",
-          round_scope: "last_in_range",
-          hole_scope: "1_18",
-          handicap_mode: "course",
-          direction: "lower_is_better",
+          method: "lower_handicap_index",
+          basis: null,
+          round_scope: null,
+          hole_scope: null,
+          handicap_mode: null,
+          direction: null,
           value_text:
             key === "lowest_hi"
               ? "lowest_combined_hi"
@@ -117,12 +117,12 @@ export async function seedConsolationStrokeTieBreakProfiles(
         steps.push({
           tie_break_profile_id: profile.id,
           step_no: stepNo++,
-          method: "segment_compare",
-          basis: "gross",
-          round_scope: "last_in_range",
-          hole_scope: "18",
-          handicap_mode: "none",
-          direction: "lower_is_better",
+          method: "random_draw",
+          basis: null,
+          round_scope: null,
+          hole_scope: null,
+          handicap_mode: null,
+          direction: null,
           value_text: "drawing_lots",
         });
       }
