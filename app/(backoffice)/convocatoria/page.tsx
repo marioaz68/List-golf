@@ -36,6 +36,7 @@ type SP = {
   closed?: string;
   template?: string;
   matchplay?: string;
+  apply_error?: string;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -60,6 +61,40 @@ const primaryStyle: React.CSSProperties = {
 };
 
 export default async function ConvocatoriaPage(props: {
+  searchParams?: SP | Promise<SP>;
+}) {
+  try {
+    return await ConvocatoriaPageInner(props);
+  } catch (err) {
+    const digest =
+      err && typeof err === "object" && "digest" in err
+        ? String((err as { digest?: string }).digest)
+        : "";
+    if (digest.startsWith("NEXT_REDIRECT")) throw err;
+
+    const locale = await getLocale();
+    const cv = messages[locale].convocatoria;
+    const message =
+      err instanceof Error ? err.message : "Error inesperado en convocatoria.";
+
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <h1 className="text-lg font-bold text-white">{cv.title}</h1>
+        <div className="rounded-lg border border-red-400/50 bg-red-950/40 px-3 py-2 text-[12px] text-red-100">
+          {message}
+        </div>
+        {digest ? (
+          <p className="font-mono text-[11px] text-slate-500">Digest: {digest}</p>
+        ) : null}
+        <a href="/convocatoria" className="text-sm text-cyan-300 underline">
+          Volver a convocatoria
+        </a>
+      </div>
+    );
+  }
+}
+
+async function ConvocatoriaPageInner(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const locale = await getLocale();
@@ -360,6 +395,11 @@ export default async function ConvocatoriaPage(props: {
       {sp.closed === "1" ? (
         <div className="rounded-lg border border-amber-400/50 bg-amber-950/40 px-3 py-2 text-[12px] text-amber-100">
           {cv.closedOk}
+        </div>
+      ) : null}
+      {sp.apply_error ? (
+        <div className="rounded-lg border border-red-400/50 bg-red-950/40 px-3 py-2 text-[12px] text-red-100">
+          {decodeURIComponent(sp.apply_error)}
         </div>
       ) : null}
 

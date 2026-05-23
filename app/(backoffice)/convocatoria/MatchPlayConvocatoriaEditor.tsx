@@ -1869,7 +1869,7 @@ function TiebreakersPanel({
           Resumen para mostrar en convocatoria pública
         </summary>
         <pre className="mt-2 whitespace-pre-wrap text-[10px] text-slate-400">
-{`Cuadro principal: ${MATCH_PLAY_TIEBREAKER_LABELS[mp.match_tiebreaker]}.
+{`Cuadro principal: ${MATCH_PLAY_TIEBREAKER_LABELS[mp.match_tiebreaker] ?? mp.match_tiebreaker}.
 
 ${consolations
   .filter((c) => c.enabled)
@@ -1877,14 +1877,14 @@ ${consolations
     const label = c.prize_label ?? "Consolación";
     if (c.consolation_format === "match_play") {
       const tb = c.match_play_tiebreaker ?? "sudden_death";
-      return `• ${label} (match play): ${MATCH_PLAY_TIEBREAKER_LABELS[tb]}.`;
+      return `• ${label} (match play): ${MATCH_PLAY_TIEBREAKER_LABELS[tb] ?? tb}.`;
     }
     const keys =
       c.stroke_aggregate_tiebreakers?.length
         ? c.stroke_aggregate_tiebreakers
         : DEFAULT_STROKE_AGGREGATE_TIEBREAKERS;
     return `• ${label} (stroke, neto 80% HI): ${keys
-      .map((k) => STROKE_AGGREGATE_TIEBREAKER_LABELS[k])
+      .map((k) => STROKE_AGGREGATE_TIEBREAKER_LABELS[k] ?? k)
       .join(" → ")}.`;
   })
   .join("\n")}`}

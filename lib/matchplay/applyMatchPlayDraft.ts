@@ -79,9 +79,32 @@ export async function applyMatchPlayDraft({
       .select("id")
       .eq("tournament_id", tournamentId);
 
-    if ((existingCats ?? []).length > 0) {
-      const ids = existingCats!.map((c) => c.id);
-      await supabase.from("categories").delete().in("id", ids);
+    const deleteIds = (existingCats ?? []).map((c) => c.id);
+    if (deleteIds.length > 0) {
+      await supabase
+        .from("tournament_entries")
+        .update({ category_id: null })
+        .eq("tournament_id", tournamentId)
+        .in("category_id", deleteIds);
+
+      await supabase
+        .from("rounds")
+        .update({ category_id: null })
+        .eq("tournament_id", tournamentId)
+        .in("category_id", deleteIds);
+
+      const { error: delCatErr } = await supabase
+        .from("categories")
+        .delete()
+        .eq("tournament_id", tournamentId)
+        .in("id", deleteIds);
+
+      if (delCatErr) {
+        throw new Error(
+          `No se pudieron reemplazar las categorías: ${delCatErr.message}. ` +
+            "Quita inscripciones o rondas que aún apunten a una categoría antigua."
+        );
+      }
     }
   }
 
@@ -185,17 +208,18 @@ export async function applyMatchPlayDraft({
   // Sembrar una regla de competencia mínima por categoría — el motor de UI
   // requiere al menos una fila para que el módulo /competition-rules muestre
   // contenido. En match play el "scoring" real está en tournament_matchplay_rules.
+  // Valores permitidos por CHECK en BD: gross | net | both | stableford (no existe "match_play").
   const competitionRows = (insertedCats ?? []).map((c) => ({
     tournament_id: tournamentId,
     category_id: c.id,
-    scoring_format: "match_play" as const,
-    leaderboard_basis: "match_play" as const,
-    prize_basis: "match_play" as const,
+    scoring_format: "stroke_play" as const,
+    leaderboard_basis: "net" as const,
+    prize_basis: "net" as const,
     handicap_percentage: mp.handicap_allowance_custom_pct ?? null,
     gross_prize_places: 1,
     net_prize_places: null,
     notes:
-      "Reglas match play (ver convocatoria match play). Configurado automáticamente desde la convocatoria.",
+      "Match play (cuadro y consolaciones). Clasificación real en tournament_matchplay_rules. Generado desde convocatoria.",
     is_active: true,
   }));
 

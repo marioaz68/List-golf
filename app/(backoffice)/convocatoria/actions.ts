@@ -293,17 +293,32 @@ export async function applyConvocatoriaToTournament(formData: FormData) {
     isMatchPlayConvocatoriaDraft(draft) ||
     (await tournamentUsesMatchPlay(supabase, tournament_id));
 
-  const result = useMatchPlay
-    ? await applyMatchPlayDraft({
-        tournamentId: tournament_id,
-        draft,
-        replaceExisting: true,
-      })
-    : await applyConvocatoriaDraft({
-        tournamentId: tournament_id,
-        draft,
-        replaceExisting: true,
-      });
+  let result: { categories: number; rounds_created: number };
+  try {
+    result = useMatchPlay
+      ? await applyMatchPlayDraft({
+          tournamentId: tournament_id,
+          draft,
+          replaceExisting: true,
+        })
+      : await applyConvocatoriaDraft({
+          tournamentId: tournament_id,
+          draft,
+          replaceExisting: true,
+        });
+  } catch (err) {
+    const digest =
+      err && typeof err === "object" && "digest" in err
+        ? String((err as { digest?: string }).digest)
+        : "";
+    if (digest.startsWith("NEXT_REDIRECT")) throw err;
+
+    const msg =
+      err instanceof Error ? err.message : "Error al aplicar convocatoria.";
+    redirect(
+      `/convocatoria?tournament_id=${tournament_id}&apply_error=${encodeURIComponent(msg)}`
+    );
+  }
 
   await upsertConvocatoriaRow({
     tournament_id,
