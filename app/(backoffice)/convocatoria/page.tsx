@@ -67,7 +67,23 @@ export default async function ConvocatoriaPage(props: {
   const common = messages[locale].common;
   const nav = messages[locale].sidebar.nav;
 
-  const supabase = createAdminClient();
+  let supabase: ReturnType<typeof createAdminClient>;
+  try {
+    supabase = createAdminClient();
+  } catch (envErr) {
+    const detail =
+      envErr instanceof Error
+        ? envErr.message
+        : "No se pudo conectar con Supabase.";
+    return (
+      <div className="space-y-2 p-2 md:p-3">
+        <h1 className="text-lg font-bold text-white">{cv.title}</h1>
+        <div className="rounded-lg border border-red-400/50 bg-red-950/40 px-3 py-2 text-[12px] text-red-100">
+          {detail}
+        </div>
+      </div>
+    );
+  }
   const sp = props.searchParams ? await props.searchParams : {};
   const tournamentId =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
@@ -190,7 +206,15 @@ export default async function ConvocatoriaPage(props: {
         { onConflict: "tournament_id" }
       );
     if (provisionError) {
-      throw new Error(provisionError.message);
+      return (
+        <div className="space-y-2 p-2 md:p-3">
+          <h1 className="text-lg font-bold text-white">{cv.title}</h1>
+          <div className="rounded-lg border border-red-400/50 bg-red-950/40 px-3 py-2 text-[12px] text-red-100">
+            No pudimos crear la convocatoria automáticamente:{" "}
+            {provisionError.message}
+          </div>
+        </div>
+      );
     }
     hasDraft = true;
     autoProvisioned = true;
@@ -214,10 +238,11 @@ export default async function ConvocatoriaPage(props: {
       })
       .eq("tournament_id", effectiveId);
     if (syncError) {
-      throw new Error(syncError.message);
+      console.error("[convocatoria] sync error:", syncError.message);
+    } else {
+      draft = aligned;
+      autoSynced = true;
     }
-    draft = aligned;
-    autoSynced = true;
   }
 
   const editorLabels = {
