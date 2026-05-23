@@ -336,10 +336,7 @@ export async function createTournamentAndMaybeCopyCategories(
   revalidatePath("/");
   revalidatePath(`/torneos/${tournament.id}`);
 
-  if (format_type === "matchplay") {
-    redirect(`/convocatoria?tournament_id=${tournament.id}`);
-  }
-  redirect("/tournaments");
+  redirect(`/convocatoria?tournament_id=${tournament.id}`);
 }
 
 /** Wrapper para useActionState: muestra errores en pantalla y deja pasar redirect. */

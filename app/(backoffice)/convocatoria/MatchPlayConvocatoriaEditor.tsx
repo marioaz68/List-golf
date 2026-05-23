@@ -655,7 +655,15 @@ export default function MatchPlayConvocatoriaEditor({
           categories={draft.categories}
           readOnly={readOnly}
           labels={labels}
-          onChange={(categories) => setDraft((p) => ({ ...p, categories }))}
+          onChange={(categories) =>
+            setDraft((p) => {
+              const validCodes = new Set(categories.map((c) => c.code));
+              const prize_rules = (p.prize_rules ?? []).filter((pr) =>
+                validCodes.has(pr.category_code)
+              );
+              return { ...p, categories, prize_rules };
+            })
+          }
         />
       ) : null}
 
@@ -747,11 +755,12 @@ function CategoryTable({
             <th className="p-1">HI min</th>
             <th className="p-1">HI max</th>
             <th className="p-1">{labels.colGender}</th>
+            {!readOnly ? <th className="p-1" /> : null}
           </tr>
         </thead>
         <tbody>
           {categories.map((c, i) => (
-            <tr key={c.code} className="border-b border-white/5">
+            <tr key={`${c.code}-${i}`} className="border-b border-white/5">
               <td className="p-1">
                 <input
                   className={inputClass}
@@ -821,6 +830,35 @@ function CategoryTable({
                   <option value="X">X</option>
                 </select>
               </td>
+              {!readOnly ? (
+                <td className="p-1 text-right">
+                  <button
+                    type="button"
+                    title={`Borrar ${c.code}`}
+                    aria-label={`Borrar categoría ${c.code}`}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          `¿Borrar la categoría "${c.code} — ${c.name}"?`
+                        )
+                      )
+                        return;
+                      const next = categories.filter((_, idx) => idx !== i);
+                      onChange(next);
+                    }}
+                    style={{
+                      ...buttonStyle,
+                      background: "linear-gradient(#b91c1c, #7f1d1d)",
+                      border: "1px solid #7f1d1d",
+                      padding: "0 8px",
+                      minHeight: "24px",
+                      fontSize: "10px",
+                    }}
+                  >
+                    Borrar
+                  </button>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>
