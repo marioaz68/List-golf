@@ -67,6 +67,19 @@ export type MatchPlayPrizeShare = {
   source: "match_play" | "consolation_match_play" | "stroke_play_aggregate";
 };
 
+/**
+ * Trofeos físicos del torneo. Independiente del reparto de bolsa.
+ * En match play por parejas, usar `count_per_team: 2` para entregar uno a cada jugador.
+ */
+export type MatchPlayTrophy = {
+  /** 1 = Campeón, 2 = Subcampeón, etc. Usado solo como referencia visual. */
+  position: number;
+  label: string;
+  /** Cuántos trofeos físicos se entregan por equipo en esa posición. */
+  count_per_team: number;
+  source: "match_play" | "consolation_match_play" | "stroke_play_aggregate";
+};
+
 export type MatchPlayAuctionConfig = {
   enabled: boolean;
   /** % de la suma subastada que se reparte como bolsa de premios. */
@@ -117,6 +130,8 @@ export type MatchPlayConvocatoriaConfig = {
   consolations?: MatchPlayConsolationRule[];
   /** Distribución de bolsa por posición. */
   prize_shares?: MatchPlayPrizeShare[];
+  /** Trofeos físicos por posición (independiente del reparto de bolsa). */
+  trophies?: MatchPlayTrophy[];
   /** Texto largo de reglas adicionales (mostradas en convocatoria pública). */
   rules_text?: string | null;
 };

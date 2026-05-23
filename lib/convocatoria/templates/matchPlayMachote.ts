@@ -16,6 +16,14 @@ const DEFAULT_MATCHPLAY: MatchPlayConvocatoriaConfig = {
   prize_places: 1,
   reference_notes:
     "Torneo match play. Elige individual o parejas y edita reglas antes de cerrar.",
+  trophies: [
+    {
+      position: 1,
+      label: "Trofeo Campeón",
+      count_per_team: 2,
+      source: "match_play",
+    },
+  ],
 };
 
 /** Plantilla base para torneos match play (independiente del 68º Anual). */

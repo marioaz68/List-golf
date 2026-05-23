@@ -24,6 +24,7 @@ import {
   type MatchPlayPrizeShare,
   type MatchPlaySeedingMethod,
   type MatchPlayTiebreaker,
+  type MatchPlayTrophy,
 } from "@/lib/matchplay/types";
 import {
   applyConvocatoriaToTournament,
@@ -668,12 +669,41 @@ export default function MatchPlayConvocatoriaEditor({
       ) : null}
 
       {tab === "prizes" ? (
-        <PrizeTable
-          prizes={draft.prize_rules}
-          categories={draft.categories}
-          readOnly={readOnly}
-          onChange={(prize_rules) => setDraft((p) => ({ ...p, prize_rules }))}
-        />
+        <div className="space-y-4">
+          <div>
+            <h3 className="mb-1 text-[12px] font-semibold text-cyan-200">
+              Trofeos del torneo
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              Trofeos físicos por posición. En parejas usa
+              <strong> &laquo;trofeos por equipo: 2&raquo; </strong>
+              para entregar uno a cada jugador. Si una posición no entrega trofeo,
+              simplemente déjala fuera.
+            </p>
+            <TrophyTable
+              trophies={mp.trophies ?? []}
+              readOnly={readOnly}
+              onChange={(trophies) => setMatchplay({ trophies })}
+            />
+          </div>
+
+          <div className="border-t border-white/10 pt-3">
+            <h3 className="mb-1 text-[12px] font-semibold text-amber-200">
+              Premios por categoría (legacy)
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              En match play los premios económicos vienen del reparto de bolsa
+              (pestaña <em>Reparto bolsa</em>). Esta sección es opcional, útil
+              solo si necesitas etiquetas adicionales por categoría.
+            </p>
+            <PrizeTable
+              prizes={draft.prize_rules}
+              categories={draft.categories}
+              readOnly={readOnly}
+              onChange={(prize_rules) => setDraft((p) => ({ ...p, prize_rules }))}
+            />
+          </div>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
@@ -1271,6 +1301,140 @@ function PrizeTable({
           />
         </div>
       ))}
+    </div>
+  );
+}
+
+function TrophyTable({
+  trophies,
+  readOnly,
+  onChange,
+}: {
+  trophies: MatchPlayTrophy[];
+  readOnly: boolean;
+  onChange: (t: MatchPlayTrophy[]) => void;
+}) {
+  return (
+    <div className="mt-2 space-y-2">
+      {trophies.length === 0 ? (
+        <p className="text-[11px] text-slate-500">
+          Sin trofeos definidos. Agrega al menos uno para el campeón.
+        </p>
+      ) : null}
+      {trophies.map((t, i) => (
+        <div key={i} className="grid items-end gap-2 sm:grid-cols-12">
+          <label className="text-[11px] text-slate-300 sm:col-span-2">
+            Posición
+            <input
+              type="number"
+              min={1}
+              className={inputClass}
+              disabled={readOnly}
+              value={t.position}
+              onChange={(e) => {
+                const next = [...trophies];
+                next[i] = { ...t, position: Number(e.target.value) };
+                onChange(next);
+              }}
+            />
+          </label>
+          <label className="text-[11px] text-slate-300 sm:col-span-5">
+            Etiqueta
+            <input
+              className={inputClass}
+              disabled={readOnly}
+              value={t.label}
+              onChange={(e) => {
+                const next = [...trophies];
+                next[i] = { ...t, label: e.target.value };
+                onChange(next);
+              }}
+            />
+          </label>
+          <label className="text-[11px] text-slate-300 sm:col-span-2">
+            Trofeos por equipo
+            <input
+              type="number"
+              min={1}
+              className={inputClass}
+              disabled={readOnly}
+              value={t.count_per_team}
+              onChange={(e) => {
+                const next = [...trophies];
+                next[i] = {
+                  ...t,
+                  count_per_team: Math.max(1, Number(e.target.value)),
+                };
+                onChange(next);
+              }}
+            />
+          </label>
+          <label className="text-[11px] text-slate-300 sm:col-span-2">
+            Origen
+            <select
+              className={inputClass}
+              disabled={readOnly}
+              value={t.source}
+              onChange={(e) => {
+                const next = [...trophies];
+                next[i] = {
+                  ...t,
+                  source: e.target.value as MatchPlayTrophy["source"],
+                };
+                onChange(next);
+              }}
+            >
+              <option value="match_play">Cuadro principal</option>
+              <option value="consolation_match_play">Consolación MP</option>
+              <option value="stroke_play_aggregate">Stroke agregado</option>
+            </select>
+          </label>
+          {!readOnly ? (
+            <div className="sm:col-span-1">
+              <button
+                type="button"
+                title="Quitar trofeo"
+                onClick={() => {
+                  if (!confirm(`¿Quitar trofeo "${t.label}"?`)) return;
+                  onChange(trophies.filter((_, idx) => idx !== i));
+                }}
+                style={{
+                  ...buttonStyle,
+                  background: "linear-gradient(#b91c1c, #7f1d1d)",
+                  border: "1px solid #7f1d1d",
+                  minHeight: "28px",
+                  padding: "0 8px",
+                  fontSize: "10px",
+                }}
+              >
+                Quitar
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      {!readOnly ? (
+        <button
+          type="button"
+          style={buttonStyle}
+          onClick={() =>
+            onChange([
+              ...trophies,
+              {
+                position: trophies.length + 1,
+                label:
+                  trophies.length === 0
+                    ? "Trofeo Campeón"
+                    : `Trofeo posición ${trophies.length + 1}`,
+                count_per_team: 2,
+                source: "match_play",
+              },
+            ])
+          }
+        >
+          + Trofeo
+        </button>
+      ) : null}
     </div>
   );
 }

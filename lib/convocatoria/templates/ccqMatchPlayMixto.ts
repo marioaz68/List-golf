@@ -76,6 +76,15 @@ export function ccqMatchPlayMixto(opts?: {
       },
     ],
 
+    trophies: [
+      {
+        position: 1,
+        label: "Trofeo Campeón",
+        count_per_team: 2,
+        source: "match_play",
+      },
+    ],
+
     rules_text:
       "Cada jugador da/recibe ventajas vs el jugador correspondiente (menor HI vs menor HI, mayor vs mayor) al 80% del hándicap de campo. Empate de match: muerte súbita desde hoyo 1. Stroke Play Agregado: 80% HI, suma neto pareja; desempate por retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9.",
 

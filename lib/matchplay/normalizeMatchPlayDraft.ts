@@ -42,6 +42,9 @@ export function normalizeMatchPlayConvocatoriaDraft(
     prize_shares: Array.isArray(baseMp.prize_shares)
       ? baseMp.prize_shares
       : defaults.matchplay?.prize_shares ?? [],
+    trophies: Array.isArray(baseMp.trophies)
+      ? baseMp.trophies
+      : defaults.matchplay?.trophies ?? [],
   };
 
   const round_count =
