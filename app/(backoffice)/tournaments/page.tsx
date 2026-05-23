@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
-import { togglePublic, toggleArchive } from "./actions";
+import { togglePublic, toggleArchive, deleteTournament } from "./actions";
+import DeleteTournamentButton from "./DeleteTournamentButton";
 import PosterUploadInline from "./PosterUploadInline";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { getLocale } from "@/lib/i18n/server";
@@ -1072,6 +1073,14 @@ export default async function TournamentsPage({
                                 {isArchived ? tm.reactivate : tm.archive}
                               </SubmitButton>
                             </form>
+
+                            {(entriesByTournament.get(t.id) ?? 0) === 0 ? (
+                              <DeleteTournamentButton
+                                tournamentId={t.id}
+                                tournamentName={displayTournamentName(t)}
+                                action={deleteTournament}
+                              />
+                            ) : null}
                           </>
                         ) : null}
                       </div>

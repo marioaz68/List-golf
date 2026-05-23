@@ -549,6 +549,62 @@ export async function uploadTournamentPosterFromList(
   }
 }
 
+/** Borra un torneo definitivamente. Falla si tiene inscritos. */
+export async function deleteTournament(tournamentId: string) {
+  await ensureStaffAdminAccess(tournamentId);
+
+  const admin = createAdminClient();
+
+  const { count: entryCount, error: entryError } = await admin
+    .from("tournament_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", tournamentId);
+
+  if (entryError) {
+    throw new Error(`Error revisando inscritos: ${entryError.message}`);
+  }
+
+  if ((entryCount ?? 0) > 0) {
+    throw new Error(
+      `No puedo borrar este torneo: tiene ${entryCount} inscrito(s). ` +
+        "Quita primero las inscripciones o archívalo."
+    );
+  }
+
+  const { data: current, error: readError } = await admin
+    .from("tournaments")
+    .select("id, poster_path")
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Error leyendo torneo: ${readError.message}`);
+  }
+
+  if (!current) {
+    throw new Error("Este torneo ya no existe.");
+  }
+
+  if (current.poster_path) {
+    await admin.storage
+      .from("tournament-posters")
+      .remove([current.poster_path]);
+  }
+
+  const { error: deleteError } = await admin
+    .from("tournaments")
+    .delete()
+    .eq("id", tournamentId);
+
+  if (deleteError) {
+    throw new Error(`Error borrando torneo: ${deleteError.message}`);
+  }
+
+  revalidatePath("/tournaments");
+  revalidatePath("/");
+  redirect("/tournaments");
+}
+
 export async function togglePublic(tournamentId: string) {
   await ensureStaffAdminAccess(tournamentId);
 
