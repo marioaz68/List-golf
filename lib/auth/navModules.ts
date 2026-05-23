@@ -8,6 +8,7 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   dashboard: "tournaments",
   players: "players",
   entries: "entries",
+  auction: "entries",
   teeSheet: "tee-sheet",
   scoreEntry: "score-entry",
   scorecards: "scorecards",

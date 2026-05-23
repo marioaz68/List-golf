@@ -34,6 +34,7 @@ import {
   ExternalLink,
   CalendarDays,
   Car,
+  Gavel,
   X,
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ type MenuItem = {
   icon: React.ComponentType<{ size?: number }>;
   query?: Record<string, string>;
   requiresTournament?: boolean;
+  requiresMatchPlayAuction?: boolean;
 };
 
 type TournamentMini = {
@@ -66,6 +68,7 @@ export default function Sidebar() {
   const [searchMap, setSearchMap] = useState<Record<string, string>>({});
   const [tournament, setTournament] = useState<TournamentMini | null>(null);
   const [loadingTournament, setLoadingTournament] = useState(false);
+  const [matchPlayAuctionActive, setMatchPlayAuctionActive] = useState(false);
 
   useEffect(() => {
     try {
@@ -96,6 +99,7 @@ export default function Sidebar() {
     async function loadTournament() {
       if (!tournamentId) {
         setTournament(null);
+        setMatchPlayAuctionActive(false);
         return;
       }
 
@@ -116,6 +120,27 @@ export default function Sidebar() {
       }
 
       setLoadingTournament(false);
+
+      try {
+        const { data: mpRules } = await supabase
+          .from("tournament_matchplay_rules")
+          .select("match_type, auction_enabled")
+          .eq("tournament_id", tournamentId)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        const isMatchPlayWithAuction = Boolean(
+          mpRules &&
+            (mpRules as { match_type: string | null }).match_type === "pairs" &&
+            (mpRules as { auction_enabled: boolean | null }).auction_enabled !==
+              false
+        );
+        setMatchPlayAuctionActive(isMatchPlayWithAuction);
+      } catch {
+        if (cancelled) return;
+        setMatchPlayAuctionActive(false);
+      }
     }
 
     loadTournament();
@@ -140,6 +165,13 @@ export default function Sidebar() {
         href: "/entries",
         icon: ClipboardList,
         requiresTournament: true,
+      },
+      {
+        nameKey: "auction",
+        href: "/matchplay/auction",
+        icon: Gavel,
+        requiresTournament: true,
+        requiresMatchPlayAuction: true,
       },
       {
         nameKey: "teeSheet",
@@ -309,19 +341,30 @@ export default function Sidebar() {
     () =>
       tournamentOperationNav.filter((item) => {
         if (item.requiresTournament && !tournamentId) return false;
+        if (item.requiresMatchPlayAuction && !matchPlayAuctionActive)
+          return false;
         return canAccessModule(roles, NAV_ITEM_MODULE[item.nameKey]);
       }),
-    [tournamentOperationNav, tournamentId, roles]
+    [tournamentOperationNav, tournamentId, roles, matchPlayAuctionActive]
   );
 
   const visibleMenu = useMemo(() => {
     if (mode === "operation") return operationVisible;
     const setupOnlyVisible = setupExclusiveNav.filter((item) => {
       if (item.requiresTournament && !tournamentId) return false;
+      if (item.requiresMatchPlayAuction && !matchPlayAuctionActive)
+        return false;
       return canAccessModule(roles, NAV_ITEM_MODULE[item.nameKey]);
     });
     return [...operationVisible, ...setupOnlyVisible];
-  }, [mode, operationVisible, setupExclusiveNav, tournamentId, roles]);
+  }, [
+    mode,
+    operationVisible,
+    setupExclusiveNav,
+    tournamentId,
+    roles,
+    matchPlayAuctionActive,
+  ]);
 
   const operationVisibleCount = operationVisible.length;
 
