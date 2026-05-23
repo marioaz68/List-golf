@@ -23,7 +23,8 @@ export function ccqMatchPlayMixto(opts?: {
     handicap_allowance_custom_pct: 80,
     match_tiebreaker: "sudden_death",
     holes_per_match: 18,
-    bracket_round_count: 4,
+    // 32 parejas → 5 rondas (1/16, 1/8, cuartos, semis, final). 5 victorias para ser campeón.
+    bracket_round_count: 5,
     max_pairs_per_category: 32,
     seeding_method: "auction",
     prize_places: 4,
@@ -31,8 +32,8 @@ export function ccqMatchPlayMixto(opts?: {
     pair_composition: "mixed_one_each",
     combined_hi_min: 14.0,
     combined_hi_max: 34.9,
-    play_in_enabled: true,
-    bracket_main_pairs: 16,
+    play_in_enabled: false,
+    bracket_main_pairs: 32,
 
     auction: {
       enabled: true,
@@ -106,7 +107,7 @@ export function ccqMatchPlayMixto(opts?: {
       total_holes: 18,
       cut_after_holes: null,
       cut_percent: null,
-      round_count: 4,
+      round_count: 5,
       practice_day: null,
       handicap_index_date: "2026-02-20 al 2026-05-20",
     },

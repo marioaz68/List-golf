@@ -66,7 +66,15 @@ const warnStyle: React.CSSProperties = {
   border: "1px solid #92400e",
 };
 
-type Tab = "meta" | "rules" | "auction" | "consolations" | "prizes_shares" | "categories" | "prizes";
+type Tab =
+  | "meta"
+  | "rules"
+  | "auction"
+  | "consolations"
+  | "tiebreakers"
+  | "prizes_shares"
+  | "categories"
+  | "prizes";
 
 export type MatchPlayEditorLabels = {
   statusEditing: string;
@@ -189,6 +197,7 @@ export default function MatchPlayConvocatoriaEditor({
             ["rules", labels.tabRules],
             ["auction", "Subasta/Bolsa"],
             ["consolations", "Consolaciones"],
+            ["tiebreakers", "Desempates"],
             ["prizes_shares", "Reparto bolsa"],
             ["meta", labels.tabMeta],
             ["categories", labels.tabCategories],
@@ -396,6 +405,10 @@ export default function MatchPlayConvocatoriaEditor({
                 setMatchplay({ bracket_round_count: Number(e.target.value) })
               }
             />
+            <span className="mt-0.5 block text-[10px] text-slate-500">
+              2 part. = 1 ronda · 4 = 2 · 8 = 3 · 16 = 4 · 32 = 5 · 64 = 6.
+              Para 32 parejas se requieren 5 matches para ser campeón.
+            </span>
           </label>
           <label className="text-[11px] text-slate-300">
             Tamaño máximo del cuadro
@@ -591,6 +604,19 @@ export default function MatchPlayConvocatoriaEditor({
           mp={mp}
           readOnly={readOnly}
           onChange={setMatchplay}
+        />
+      ) : null}
+
+      {tab === "tiebreakers" ? (
+        <TiebreakersPanel
+          mp={mp}
+          readOnly={readOnly}
+          onChangeMatchTb={(match_tiebreaker) =>
+            setMatchplay({ match_tiebreaker })
+          }
+          onChangeConsolations={(consolations) =>
+            setMatchplay({ consolations })
+          }
         />
       ) : null}
 
@@ -1674,6 +1700,196 @@ function TrophyTable({
           + Trofeo
         </button>
       ) : null}
+    </div>
+  );
+}
+
+const MATCH_PLAY_TIEBREAKER_LABELS: Record<MatchPlayTiebreaker, string> = {
+  sudden_death: "Muerte súbita desde hoyo 1",
+  sudden_death_18: "Muerte súbita desde hoyo 18",
+  extra_3_holes: "3 hoyos extra",
+  lowest_hi: "HI combinado más bajo",
+  play_until_decided: "Jugar hasta definir",
+};
+
+function TiebreakersPanel({
+  mp,
+  readOnly,
+  onChangeMatchTb,
+  onChangeConsolations,
+}: {
+  mp: MatchPlayConvocatoriaConfig;
+  readOnly: boolean;
+  onChangeMatchTb: (next: MatchPlayTiebreaker) => void;
+  onChangeConsolations: (next: MatchPlayConsolationRule[]) => void;
+}) {
+  const consolations = mp.consolations ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded border border-cyan-500/30 bg-cyan-950/20 p-3">
+        <h3 className="text-[12px] font-semibold text-cyan-200">
+          Desempate de match (cuadro principal)
+        </h3>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Aplica a cualquier match del cuadro principal que termine empatado al
+          completar los hoyos: final, semifinal, cuartos, octavos, dieciseisavos.
+        </p>
+        <label className="mt-2 block text-[11px] text-slate-300">
+          Regla de desempate
+          <select
+            className={inputClass}
+            disabled={readOnly}
+            value={mp.match_tiebreaker}
+            onChange={(e) =>
+              onChangeMatchTb(e.target.value as MatchPlayTiebreaker)
+            }
+          >
+            <option value="sudden_death">Muerte súbita (desde hoyo 1)</option>
+            <option value="sudden_death_18">Muerte súbita hoyo 18</option>
+            <option value="extra_3_holes">3 hoyos extra</option>
+            <option value="lowest_hi">HI combinado más bajo</option>
+            <option value="play_until_decided">Jugar hasta definir</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="rounded border border-amber-500/30 bg-amber-950/20 p-3">
+        <h3 className="text-[12px] font-semibold text-amber-200">
+          Desempates de consolación
+        </h3>
+        <p className="mt-1 text-[11px] text-slate-400">
+          Cada consolación lleva su propia regla. La consolación{" "}
+          <strong className="text-amber-200">stroke play agregado</strong> usa la
+          secuencia CCQ por defecto (h10-18 → h13-18 → h16-18 → h18 → h1-9 →
+          h4-9 → h7-9 → h9 → HI). Edita cada una abajo.
+        </p>
+
+        {consolations.length === 0 ? (
+          <p className="mt-2 text-[11px] italic text-slate-500">
+            No hay consolaciones definidas. Agrégalas en el tab «Consolaciones».
+          </p>
+        ) : null}
+
+        {consolations.map((c, i) => {
+          const updateCons = (patch: Partial<MatchPlayConsolationRule>) => {
+            const next = [...consolations];
+            next[i] = { ...c, ...patch };
+            onChangeConsolations(next);
+          };
+
+          return (
+            <div
+              key={i}
+              className="mt-3 rounded border border-white/10 bg-[#0a1220] p-2"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong className="text-[11px] text-white">
+                  {c.prize_label ?? `Consolación ${i + 1}`}
+                </strong>
+                <span className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {c.consolation_format === "match_play"
+                    ? "Match play"
+                    : "Stroke play agregado"}{" "}
+                  · desde ronda {c.from_round_no}
+                </span>
+              </div>
+
+              {c.consolation_format === "match_play" ? (
+                <label className="mt-2 block text-[11px] text-slate-300">
+                  Desempate
+                  <select
+                    className={inputClass}
+                    disabled={readOnly}
+                    value={c.match_play_tiebreaker ?? "sudden_death"}
+                    onChange={(e) =>
+                      updateCons({
+                        match_play_tiebreaker: e.target
+                          .value as MatchPlayTiebreaker,
+                      })
+                    }
+                  >
+                    <option value="sudden_death">
+                      Muerte súbita desde hoyo 1
+                    </option>
+                    <option value="sudden_death_18">
+                      Muerte súbita hoyo 18
+                    </option>
+                    <option value="extra_3_holes">3 hoyos extra</option>
+                    <option value="lowest_hi">HI combinado más bajo</option>
+                    <option value="play_until_decided">Jugar hasta definir</option>
+                  </select>
+                </label>
+              ) : (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-slate-400">
+                      Desempate stroke (orden de prioridad — neto 80% HI)
+                    </p>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        title="Cargar secuencia CCQ"
+                        onClick={() =>
+                          updateCons({
+                            stroke_aggregate_tiebreakers: [
+                              ...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+                            ],
+                          })
+                        }
+                        style={{
+                          ...buttonStyle,
+                          minHeight: "24px",
+                          padding: "0 8px",
+                          fontSize: "10px",
+                          background: "linear-gradient(#0891b2, #0e7490)",
+                          border: "1px solid #155e75",
+                        }}
+                      >
+                        Cargar secuencia CCQ
+                      </button>
+                    ) : null}
+                  </div>
+                  <StrokeAggregateTiebreakerEditor
+                    value={c.stroke_aggregate_tiebreakers ?? []}
+                    readOnly={readOnly}
+                    onChange={(arr) =>
+                      updateCons({ stroke_aggregate_tiebreakers: arr })
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <details className="rounded border border-slate-700 bg-[#0a1220] p-3 text-[11px] text-slate-300">
+        <summary className="cursor-pointer font-semibold text-slate-200">
+          Resumen para mostrar en convocatoria pública
+        </summary>
+        <pre className="mt-2 whitespace-pre-wrap text-[10px] text-slate-400">
+{`Cuadro principal: ${MATCH_PLAY_TIEBREAKER_LABELS[mp.match_tiebreaker]}.
+
+${consolations
+  .filter((c) => c.enabled)
+  .map((c) => {
+    const label = c.prize_label ?? "Consolación";
+    if (c.consolation_format === "match_play") {
+      const tb = c.match_play_tiebreaker ?? "sudden_death";
+      return `• ${label} (match play): ${MATCH_PLAY_TIEBREAKER_LABELS[tb]}.`;
+    }
+    const keys =
+      c.stroke_aggregate_tiebreakers?.length
+        ? c.stroke_aggregate_tiebreakers
+        : DEFAULT_STROKE_AGGREGATE_TIEBREAKERS;
+    return `• ${label} (stroke, neto 80% HI): ${keys
+      .map((k) => STROKE_AGGREGATE_TIEBREAKER_LABELS[k])
+      .join(" → ")}.`;
+  })
+  .join("\n")}`}
+        </pre>
+      </details>
     </div>
   );
 }
