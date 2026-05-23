@@ -16,6 +16,7 @@ type Player = {
   handicap_index: number | null;
   club_label: string | null;
   birth_year: number | null;
+  gender?: "M" | "F" | "X" | null;
 };
 
 type Category = {
@@ -27,18 +28,58 @@ type Category = {
 
 export default function SinglePlayerEntryPanel({
   players,
+  allPlayers,
+  enrolledPlayerIds,
+  playersOnTeams,
   tournamentId,
   categories,
+  matchPlayPairs = false,
 }: {
   players: Player[];
+  allPlayers?: Player[];
+  enrolledPlayerIds?: string[];
+  playersOnTeams?: string[];
   tournamentId: string;
   categories: Category[];
+  matchPlayPairs?: boolean;
 }) {
   const { t } = useAppLocale();
   const ts = t.entries.single;
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<Record<string, string>>({});
+  const [selectedPartner, setSelectedPartner] = useState<Record<string, string>>({});
   const [submittingPlayerId, setSubmittingPlayerId] = useState<string | null>(null);
+
+  const enrolledSet = useMemo(
+    () => new Set(enrolledPlayerIds ?? []),
+    [enrolledPlayerIds]
+  );
+  const teamedSet = useMemo(
+    () => new Set(playersOnTeams ?? []),
+    [playersOnTeams]
+  );
+
+  const partnerCandidatesById = useMemo(() => {
+    if (!matchPlayPairs) return new Map<string, Player[]>();
+
+    const pool = (allPlayers ?? players).filter(
+      (p) => !teamedSet.has(p.id) && p.handicap_index !== null
+    );
+    pool.sort((a, b) => {
+      const an = `${a.last_name ?? ""} ${a.first_name ?? ""}`.trim().toLowerCase();
+      const bn = `${b.last_name ?? ""} ${b.first_name ?? ""}`.trim().toLowerCase();
+      return an.localeCompare(bn);
+    });
+
+    const map = new Map<string, Player[]>();
+    for (const p of players) {
+      map.set(
+        p.id,
+        pool.filter((cand) => cand.id !== p.id)
+      );
+    }
+    return map;
+  }, [matchPlayPairs, allPlayers, players, teamedSet]);
 
   const currentYear = new Date().getFullYear();
 
@@ -109,6 +150,13 @@ export default function SinglePlayerEntryPanel({
         </div>
       </div>
 
+      {matchPlayPairs ? (
+        <div className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-900">
+          Torneo match play por parejas: al inscribir puedes asignar de una vez la pareja del jugador.
+          Si la pareja aún no estaba inscrita, también se inscribe.
+        </div>
+      ) : null}
+
       <div
         className="rounded border border-gray-300"
         style={backofficeTableStickyScroll}
@@ -131,6 +179,11 @@ export default function SinglePlayerEntryPanel({
               <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                 {ts.thCategory}
               </th>
+              {matchPlayPairs ? (
+                <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                  Pareja
+                </th>
+              ) : null}
               <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold leading-none">
                 {ts.thAction}
               </th>
@@ -191,6 +244,39 @@ export default function SinglePlayerEntryPanel({
                     )}
                   </td>
 
+                  {matchPlayPairs ? (
+                    <td className="border border-gray-300 px-1.5 py-[3px] leading-none">
+                      <select
+                        value={selectedPartner[p.id] ?? ""}
+                        onChange={(e) =>
+                          setSelectedPartner((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        disabled={isSubmittingThisPlayer}
+                        className="h-7 min-w-[180px] rounded border border-gray-300 bg-white px-2 text-[11px] text-black disabled:cursor-wait disabled:bg-gray-100"
+                      >
+                        <option value="">(sin pareja)</option>
+                        {(partnerCandidatesById.get(p.id) ?? []).map((cand) => {
+                          const enrolledTag = enrolledSet.has(cand.id)
+                            ? " ✓"
+                            : " (nuevo)";
+                          const genderTag = cand.gender
+                            ? ` ${cand.gender}`
+                            : "";
+                          return (
+                            <option key={cand.id} value={cand.id}>
+                              {`${cand.last_name ?? ""} ${cand.first_name ?? ""}`.trim()}
+                              {genderTag}
+                              {enrolledTag}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </td>
+                  ) : null}
+
                   <td className="border border-gray-300 px-1.5 py-[3px] text-center leading-none">
                     {!hasHandicap ? (
                       <button
@@ -210,6 +296,13 @@ export default function SinglePlayerEntryPanel({
                         {needsSelection && selected ? (
                           <input type="hidden" name="category_id" value={selected} />
                         ) : null}
+                        {matchPlayPairs && selectedPartner[p.id] ? (
+                          <input
+                            type="hidden"
+                            name="partner_player_id"
+                            value={selectedPartner[p.id]}
+                          />
+                        ) : null}
 
                         <button
                           type="submit"
@@ -222,7 +315,11 @@ export default function SinglePlayerEntryPanel({
                               : "inline-flex min-h-6 items-center justify-center rounded border border-green-700 bg-green-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-green-800"
                           }
                         >
-                          {isSubmittingThisPlayer ? ts.enrolling : ts.enroll}
+                          {isSubmittingThisPlayer
+                            ? ts.enrolling
+                            : matchPlayPairs && selectedPartner[p.id]
+                            ? "Inscribir + pareja"
+                            : ts.enroll}
                         </button>
                       </form>
                     )}
@@ -234,7 +331,7 @@ export default function SinglePlayerEntryPanel({
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={matchPlayPairs ? 7 : 6}
                   className="border border-gray-300 px-2 py-2 text-center text-[11px] text-gray-700"
                 >
                   {ts.emptySearch}

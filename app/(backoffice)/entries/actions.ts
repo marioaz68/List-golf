@@ -394,6 +394,7 @@ export async function addEntry(formData: FormData) {
 
   const player_id = reqStr(formData, "player_id");
   const handicap_index_input = optNum(formData, "handicap_index");
+  const partner_player_id = optStr(formData, "partner_player_id");
 
   await getTournamentData(supabase, tournament_id);
 
@@ -447,13 +448,17 @@ export async function addEntry(formData: FormData) {
     throw err;
   }
 
-  const { error } = await admin.from("tournament_entries").insert({
-    tournament_id,
-    player_id,
-    handicap_index: handicap,
-    category_id,
-    status: "confirmed",
-  });
+  const { data: insertedEntry, error } = await admin
+    .from("tournament_entries")
+    .insert({
+      tournament_id,
+      player_id,
+      handicap_index: handicap,
+      category_id,
+      status: "confirmed",
+    })
+    .select("id, category_id")
+    .single();
 
   if (error) {
     const msg = String(error.message ?? "").toLowerCase();
@@ -472,9 +477,142 @@ export async function addEntry(formData: FormData) {
     throw new Error(error.message);
   }
 
+  if (partner_player_id) {
+    try {
+      await pairWithPartnerOnEnroll({
+        admin,
+        supabase,
+        tournament_id,
+        cats,
+        primaryEntryId: insertedEntry.id,
+        primaryPlayerId: player_id,
+        primaryCategoryId: insertedEntry.category_id ?? category_id,
+        partnerPlayerId: partner_player_id,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "No se pudo emparejar.";
+      redirect(
+        buildEntriesRedirect({
+          tournamentId: tournament_id,
+          tab: "manual",
+          bulkStatus: "warning",
+          bulkMessage: `Inscrito pero no se emparejó: ${message}`,
+        })
+      );
+    }
+  }
+
   revalidatePath("/entries");
   revalidatePath("/players");
-  redirect(`/entries?tournament_id=${tournament_id}`);
+  revalidatePath("/matchplay");
+  redirect(
+    `/entries?tournament_id=${tournament_id}${
+      partner_player_id ? "&bulk_status=success&bulk_message=" +
+        encodeURIComponent("Inscrito y emparejado.") : ""
+    }`
+  );
+}
+
+async function pairWithPartnerOnEnroll(params: {
+  admin: any;
+  supabase: any;
+  tournament_id: string;
+  cats: Cat[];
+  primaryEntryId: string;
+  primaryPlayerId: string;
+  primaryCategoryId: string | null;
+  partnerPlayerId: string;
+}) {
+  const {
+    admin,
+    supabase,
+    tournament_id,
+    cats,
+    primaryEntryId,
+    primaryPlayerId,
+    primaryCategoryId,
+    partnerPlayerId,
+  } = params;
+
+  if (partnerPlayerId === primaryPlayerId) {
+    throw new Error("No puedes asignar al mismo jugador como pareja.");
+  }
+
+  const { data: existingPartnerEntry } = await admin
+    .from("tournament_entries")
+    .select("id, category_id, handicap_index")
+    .eq("tournament_id", tournament_id)
+    .eq("player_id", partnerPlayerId)
+    .maybeSingle();
+
+  let partnerEntryId: string;
+
+  if (existingPartnerEntry?.id) {
+    partnerEntryId = existingPartnerEntry.id;
+  } else {
+    const { data: partnerPlayer, error: ppErr } = await supabase
+      .from("players")
+      .select("gender, handicap_torneo, handicap_index")
+      .eq("id", partnerPlayerId)
+      .single();
+    if (ppErr) throw new Error(`Pareja: ${ppErr.message}`);
+
+    const pHi =
+      partnerPlayer?.handicap_torneo ?? partnerPlayer?.handicap_index ?? null;
+    if (pHi === null) {
+      throw new Error("La pareja no tiene handicap_index.");
+    }
+    const pGender = String(partnerPlayer?.gender ?? "X").toUpperCase() as
+      | "M"
+      | "F"
+      | "X";
+
+    const partnerCategoryId =
+      primaryCategoryId ??
+      pickCategoryId({ cats, playerGender: pGender, handicap: pHi });
+
+    const { data: inserted, error: insErr } = await admin
+      .from("tournament_entries")
+      .insert({
+        tournament_id,
+        player_id: partnerPlayerId,
+        handicap_index: pHi,
+        category_id: partnerCategoryId,
+        status: "confirmed",
+      })
+      .select("id")
+      .single();
+    if (insErr) throw new Error(`Pareja: ${insErr.message}`);
+    partnerEntryId = inserted.id;
+  }
+
+  const { data: existingTeam } = await admin
+    .from("matchplay_pair_teams")
+    .select("id")
+    .eq("tournament_id", tournament_id)
+    .eq("is_active", true)
+    .or(
+      `player_a_entry_id.eq.${partnerEntryId},player_b_entry_id.eq.${partnerEntryId}`
+    )
+    .limit(1);
+  if (existingTeam?.length) {
+    throw new Error("La pareja ya está en otro equipo.");
+  }
+
+  const { error: teamErr } = await admin.from("matchplay_pair_teams").insert({
+    tournament_id,
+    category_id: primaryCategoryId,
+    player_a_entry_id: primaryEntryId,
+    player_b_entry_id: partnerEntryId,
+    is_active: true,
+  });
+  if (teamErr) {
+    if (/uq_matchplay_team_entry|duplicate|unique/i.test(teamErr.message)) {
+      throw new Error("Uno de los dos ya está en otro equipo.");
+    }
+    throw new Error(`Equipo: ${teamErr.message}`);
+  }
 }
 
 export async function createPlayerAndAddEntry(formData: FormData) {

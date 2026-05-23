@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { fetchScorecardsForEntries } from "@/lib/entries/fetchScorecardsForEntries";
 import { createClient } from "@/utils/supabase/server";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import type { TournamentSettings } from "@/types/tournament";
 import HeaderBar from "@/components/ui/HeaderBar";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
@@ -28,6 +30,7 @@ type Tournament = {
   status: string | null;
   registration_status: "open" | "closed" | string | null;
   registration_closed_at: string | null;
+  settings?: TournamentSettings | null;
 };
 
 type Category = {
@@ -477,7 +480,12 @@ export default async function EntriesPage({
   let pageLoadError: string | null = null;
 
   const [tournamentsRes, playersRes, categoriesRes] = await Promise.all([
-    supabase.from("tournaments").select("id, name, status, registration_status, registration_closed_at").order("name"),
+    supabase
+      .from("tournaments")
+      .select(
+        "id, name, status, registration_status, registration_closed_at, settings"
+      )
+      .order("name"),
     supabase
       .from("players")
       .select(`
@@ -513,6 +521,42 @@ export default async function EntriesPage({
   const selectedTournament = tournaments.find((t) => t.id === selectedTournamentId) ?? null;
   const registrationStatus = selectedTournament?.registration_status ?? "open";
   const registrationsClosed = registrationStatus === "closed";
+  const tournamentIsMatchPlay = isMatchPlayFormat(
+    (selectedTournament?.settings ?? {}) as TournamentSettings
+  );
+
+  let matchPlayPairsEnabled = false;
+  const playersOnTeams = new Set<string>();
+
+  if (tournamentIsMatchPlay && selectedTournamentId) {
+    const { data: mpRules } = await supabase
+      .from("tournament_matchplay_rules")
+      .select("match_type")
+      .eq("tournament_id", selectedTournamentId)
+      .maybeSingle();
+    matchPlayPairsEnabled = (mpRules?.match_type ?? "pairs") === "pairs";
+
+    if (matchPlayPairsEnabled) {
+      const { data: teamsRaw } = await supabase
+        .from("matchplay_pair_teams")
+        .select(
+          "player_a_entry_id, player_b_entry_id, tournament_entries_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey(player_id), tournament_entries_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey(player_id)"
+        )
+        .eq("tournament_id", selectedTournamentId)
+        .eq("is_active", true);
+
+      type TeamRowShape = {
+        tournament_entries_a?: { player_id?: string | null } | null;
+        tournament_entries_b?: { player_id?: string | null } | null;
+      };
+      for (const row of (teamsRaw ?? []) as TeamRowShape[]) {
+        const a = row.tournament_entries_a?.player_id;
+        const b = row.tournament_entries_b?.player_id;
+        if (a) playersOnTeams.add(a);
+        if (b) playersOnTeams.add(b);
+      }
+    }
+  }
 
   const categories = ((categoriesRes.data ?? []) as Array<
     Category & { tournament_id?: string | null }
@@ -528,17 +572,17 @@ export default async function EntriesPage({
       min_age: c.min_age,
     }));
 
-  const players: Player[] = ((playersRes.data ?? []) as unknown as PlayerBaseRaw[]).map(
-    (p) => ({
-      id: p.id,
-      first_name: p.first_name,
-      last_name: p.last_name,
-      gender: p.gender,
-      handicap_index: p.handicap_index,
-      birth_year: p.birth_year,
-      club_label: clubLabelFromClub(p.clubs),
-    })
-  );
+  const players: (Player & { gender: "M" | "F" | "X" | null })[] = (
+    (playersRes.data ?? []) as unknown as PlayerBaseRaw[]
+  ).map((p) => ({
+    id: p.id,
+    first_name: p.first_name,
+    last_name: p.last_name,
+    gender: p.gender,
+    handicap_index: p.handicap_index,
+    birth_year: p.birth_year,
+    club_label: clubLabelFromClub(p.clubs),
+  }));
 
   let entries: EntryRow[] = [];
 
@@ -921,8 +965,12 @@ export default async function EntriesPage({
                 players={players.filter(
                   (p) => !entries.some((e) => e.player_id === p.id)
                 )}
+                allPlayers={players}
+                enrolledPlayerIds={entries.map((e) => e.player_id)}
+                playersOnTeams={[...playersOnTeams]}
                 tournamentId={selectedTournamentId}
                 categories={categories}
+                matchPlayPairs={matchPlayPairsEnabled}
               />
             )
           ) : null}
