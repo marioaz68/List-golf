@@ -174,6 +174,23 @@ const publicButtonStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const auctionButtonStyle: React.CSSProperties = {
+  height: 28,
+  padding: "0 10px",
+  border: "1px solid #c2410c",
+  borderRadius: 8,
+  background: "#fff7ed",
+  color: "#9a3412",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  whiteSpace: "nowrap",
+};
+
 const miniActionButtonStyle: React.CSSProperties = {
   height: 28,
   padding: "0 10px",
@@ -692,6 +709,24 @@ export default async function TournamentsPage({
   const cutRulesByTournament = countByTournament(cutRulesRes.data);
   const prizeRulesByTournament = countByTournament(prizeRulesRes.data);
 
+  const matchPlayAuctionTournaments = new Set<string>();
+  try {
+    const { data: mpRules } = await supabase
+      .from("tournament_matchplay_rules")
+      .select("tournament_id, match_type, auction_enabled");
+    for (const row of (mpRules ?? []) as Array<{
+      tournament_id: string;
+      match_type: string | null;
+      auction_enabled: boolean | null;
+    }>) {
+      if (row.match_type === "pairs" && row.auction_enabled !== false) {
+        matchPlayAuctionTournaments.add(row.tournament_id);
+      }
+    }
+  } catch {
+    // tournament_matchplay_rules puede no existir todavía (migración pendiente)
+  }
+
   const hasFilters = Boolean(club || from || to);
 
   return (
@@ -1077,6 +1112,16 @@ export default async function TournamentsPage({
                         >
                           {nav.entries}
                         </Link>
+
+                        {matchPlayAuctionTournaments.has(t.id) ? (
+                          <Link
+                            href={`/matchplay/auction?tournament_id=${t.id}`}
+                            style={auctionButtonStyle}
+                            title="Hoja de subasta · captura de posturas y orden"
+                          >
+                            🎙 Subasta
+                          </Link>
+                        ) : null}
 
                         <Link
                           href={`/score-entry?tournament_id=${t.id}`}
