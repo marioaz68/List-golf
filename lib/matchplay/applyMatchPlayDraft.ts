@@ -3,7 +3,44 @@ import type { ConvocatoriaDraft } from "@/lib/convocatoria/types";
 import { normalizeMatchPlayConvocatoriaDraft } from "./normalizeMatchPlayDraft";
 import type { TournamentSettings } from "@/types/tournament";
 import { buildMatchPlayTournamentSettings } from "./tournamentFormat";
-import type { ApplyMatchPlayResult } from "./types";
+import {
+  STROKE_AGGREGATE_TIEBREAKER_LABELS,
+  type ApplyMatchPlayResult,
+  type MatchPlayConsolationRule,
+  type MatchPlayTiebreaker,
+} from "./types";
+
+const MATCH_PLAY_TB_LABELS: Record<MatchPlayTiebreaker, string> = {
+  sudden_death: "Muerte súbita desde hoyo 1",
+  sudden_death_18: "Muerte súbita desde hoyo 18",
+  extra_3_holes: "3 hoyos extra",
+  lowest_hi: "HI combinado más bajo",
+  play_until_decided: "Jugar hasta definir",
+};
+
+function describeConsolationTiebreakers(
+  consolations: MatchPlayConsolationRule[]
+): string {
+  const enabled = consolations.filter((c) => c.enabled);
+  if (!enabled.length) return "";
+
+  const lines = enabled.map((c) => {
+    const label = c.prize_label?.trim() || "Consolación";
+    if (c.consolation_format === "match_play") {
+      const tb = c.match_play_tiebreaker ?? "sudden_death";
+      return `• ${label} (match play): desempate por ${MATCH_PLAY_TB_LABELS[tb]}.`;
+    }
+    const seq = (c.stroke_aggregate_tiebreakers ?? [])
+      .map((k) => STROKE_AGGREGATE_TIEBREAKER_LABELS[k])
+      .filter(Boolean);
+    const seqText = seq.length
+      ? seq.join(" → ")
+      : "definir desempate stroke aggregate";
+    return `• ${label} (stroke agregado): ${seqText}.`;
+  });
+
+  return ["Desempates de consolación:", ...lines].join("\n");
+}
 
 export async function applyMatchPlayDraft({
   tournamentId,
@@ -140,6 +177,33 @@ export async function applyMatchPlayDraft({
     .delete()
     .eq("tournament_id", tournamentId);
 
+  // Sembrar una regla de competencia mínima por categoría — el motor de UI
+  // requiere al menos una fila para que el módulo /competition-rules muestre
+  // contenido. En match play el "scoring" real está en tournament_matchplay_rules.
+  const competitionRows = (insertedCats ?? []).map((c) => ({
+    tournament_id: tournamentId,
+    category_id: c.id,
+    scoring_format: "match_play" as const,
+    leaderboard_basis: "match_play" as const,
+    prize_basis: "match_play" as const,
+    handicap_percentage: mp.handicap_allowance_custom_pct ?? null,
+    gross_prize_places: 1,
+    net_prize_places: null,
+    notes:
+      "Reglas match play (ver convocatoria match play). Configurado automáticamente desde la convocatoria.",
+    is_active: true,
+  }));
+
+  if (competitionRows.length) {
+    const { error: compErr } = await supabase
+      .from("category_competition_rules")
+      .insert(competitionRows);
+    if (compErr) {
+      // No bloqueamos el apply si el schema no soporta scoring_format=match_play
+      console.warn("[applyMatchPlayDraft] competition rules:", compErr.message);
+    }
+  }
+
   const prizeRows = draft.prize_rules
     .map((p, i) => {
       const categoryId = codeToId.get(p.category_code.toUpperCase());
@@ -198,7 +262,12 @@ export async function applyMatchPlayDraft({
     auction_max_bid: auction?.max_bid ?? null,
     auction_currency: auction?.currency ?? null,
     notes: mp.reference_notes,
-    rules_text: mp.rules_text ?? null,
+    rules_text: (() => {
+      const base = mp.rules_text?.trim() ?? "";
+      const consoText = describeConsolationTiebreakers(mp.consolations ?? []);
+      if (!base && !consoText) return null;
+      return [base, consoText].filter(Boolean).join("\n\n");
+    })(),
     updated_at: new Date().toISOString(),
   };
 

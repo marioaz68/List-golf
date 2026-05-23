@@ -25,6 +25,8 @@ import {
   type MatchPlaySeedingMethod,
   type MatchPlayTiebreaker,
   type MatchPlayTrophy,
+  type StrokeAggregateTiebreaker,
+  STROKE_AGGREGATE_TIEBREAKER_LABELS,
 } from "@/lib/matchplay/types";
 import {
   applyConvocatoriaToTournament,
@@ -1118,6 +1120,47 @@ function ConsolationsPanel({
               }}
             />
           </label>
+
+          {c.consolation_format === "match_play" ? (
+            <label className="text-[11px] text-slate-300 sm:col-span-5">
+              Desempate (consolación match play)
+              <select
+                className={inputClass}
+                disabled={readOnly}
+                value={c.match_play_tiebreaker ?? "sudden_death"}
+                onChange={(e) => {
+                  const next = [...list];
+                  next[i] = {
+                    ...c,
+                    match_play_tiebreaker: e.target
+                      .value as MatchPlayConsolationRule["match_play_tiebreaker"],
+                  };
+                  onChange(next);
+                }}
+              >
+                <option value="sudden_death">Muerte súbita (desde hoyo 1)</option>
+                <option value="sudden_death_18">Muerte súbita hoyo 18</option>
+                <option value="extra_3_holes">3 hoyos extra</option>
+                <option value="lowest_hi">HI combinado más bajo</option>
+                <option value="play_until_decided">Jugar hasta definir</option>
+              </select>
+            </label>
+          ) : (
+            <div className="sm:col-span-5">
+              <p className="text-[11px] text-slate-400">
+                Desempate stroke (orden de prioridad)
+              </p>
+              <StrokeAggregateTiebreakerEditor
+                value={c.stroke_aggregate_tiebreakers ?? []}
+                readOnly={readOnly}
+                onChange={(arr) => {
+                  const next = [...list];
+                  next[i] = { ...c, stroke_aggregate_tiebreakers: arr };
+                  onChange(next);
+                }}
+              />
+            </div>
+          )}
         </div>
       ))}
       {!readOnly ? (
@@ -1133,11 +1176,131 @@ function ConsolationsPanel({
                 consolation_format: "match_play",
                 prize_label: "Consolación",
                 prize_percent: 0,
+                match_play_tiebreaker: "sudden_death",
               },
             ])
           }
         >
           + Consolación
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function StrokeAggregateTiebreakerEditor({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: StrokeAggregateTiebreaker[];
+  readOnly: boolean;
+  onChange: (next: StrokeAggregateTiebreaker[]) => void;
+}) {
+  const all = Object.entries(STROKE_AGGREGATE_TIEBREAKER_LABELS) as [
+    StrokeAggregateTiebreaker,
+    string,
+  ][];
+
+  function move(idx: number, dir: -1 | 1) {
+    const j = idx + dir;
+    if (j < 0 || j >= value.length) return;
+    const next = [...value];
+    [next[idx], next[j]] = [next[j], next[idx]];
+    onChange(next);
+  }
+
+  return (
+    <div className="mt-1 space-y-1">
+      {value.length === 0 ? (
+        <p className="text-[11px] text-slate-500">
+          Sin desempates. Agrega al menos uno.
+        </p>
+      ) : null}
+      {value.map((tb, idx) => (
+        <div key={`${tb}-${idx}`} className="flex items-center gap-1">
+          <span
+            className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-700 text-[10px] font-semibold text-white"
+            title="Orden de prioridad"
+          >
+            {idx + 1}
+          </span>
+          <select
+            className={inputClass}
+            style={{ flex: 1 }}
+            disabled={readOnly}
+            value={tb}
+            onChange={(e) => {
+              const next = [...value];
+              next[idx] = e.target.value as StrokeAggregateTiebreaker;
+              onChange(next);
+            }}
+          >
+            {all.map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+          {!readOnly ? (
+            <>
+              <button
+                type="button"
+                title="Subir prioridad"
+                onClick={() => move(idx, -1)}
+                style={{
+                  ...buttonStyle,
+                  minHeight: "24px",
+                  padding: "0 6px",
+                  fontSize: "11px",
+                }}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                title="Bajar prioridad"
+                onClick={() => move(idx, 1)}
+                style={{
+                  ...buttonStyle,
+                  minHeight: "24px",
+                  padding: "0 6px",
+                  fontSize: "11px",
+                }}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                title="Quitar"
+                onClick={() => onChange(value.filter((_, i) => i !== idx))}
+                style={{
+                  ...buttonStyle,
+                  background: "linear-gradient(#b91c1c, #7f1d1d)",
+                  border: "1px solid #7f1d1d",
+                  minHeight: "24px",
+                  padding: "0 8px",
+                  fontSize: "10px",
+                }}
+              >
+                ✕
+              </button>
+            </>
+          ) : null}
+        </div>
+      ))}
+      {!readOnly ? (
+        <button
+          type="button"
+          style={{ ...buttonStyle, marginTop: 4 }}
+          onClick={() =>
+            onChange([
+              ...value,
+              (all.find(([k]) => !value.includes(k))?.[0] ?? "h10_18") as StrokeAggregateTiebreaker,
+            ])
+          }
+        >
+          + desempate
         </button>
       ) : null}
     </div>

@@ -47,6 +47,7 @@ export function ccqMatchPlayMixto(opts?: {
         consolation_format: "match_play",
         prize_label: "Consolación Match Play",
         prize_percent: 8,
+        match_play_tiebreaker: "sudden_death",
       },
       {
         enabled: true,
@@ -54,6 +55,17 @@ export function ccqMatchPlayMixto(opts?: {
         consolation_format: "stroke_play_aggregate",
         prize_label: "Stroke Play Agregado (80% HI)",
         prize_percent: 7,
+        stroke_aggregate_tiebreakers: [
+          "h10_18",
+          "h13_18",
+          "h16_18",
+          "h18",
+          "h1_9",
+          "h4_9",
+          "h7_9",
+          "h9",
+          "lowest_hi",
+        ],
       },
     ],
 

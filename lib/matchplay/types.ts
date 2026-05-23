@@ -48,6 +48,42 @@ export type MatchPlayPairComposition =
   | "ladies_only"
   | "gentlemen_only";
 
+/**
+ * Reglas de desempate aplicadas a una consolación.
+ * - `match_play_tiebreaker`: aplica si la consolación es match play y termina empatada al final de los hoyos.
+ * - `stroke_aggregate_tiebreakers`: para stroke play agregado, lista ordenada de criterios
+ *   de retrocesión (ej. "h10_18" → hoyos 10-18 neto, "h13_18", "h16_18", "h18", "h1_9", "h4_9", "h7_9", "h9", "lowest_hi").
+ */
+export type StrokeAggregateTiebreaker =
+  | "h10_18"
+  | "h13_18"
+  | "h16_18"
+  | "h18"
+  | "h1_9"
+  | "h4_9"
+  | "h7_9"
+  | "h9"
+  | "lowest_hi"
+  | "lower_hi_player"
+  | "drawing_lots";
+
+export const STROKE_AGGREGATE_TIEBREAKER_LABELS: Record<
+  StrokeAggregateTiebreaker,
+  string
+> = {
+  h10_18: "Retrocesión hoyos 10-18",
+  h13_18: "Retrocesión hoyos 13-18",
+  h16_18: "Retrocesión hoyos 16-18",
+  h18: "Hoyo 18",
+  h1_9: "Retrocesión hoyos 1-9",
+  h4_9: "Retrocesión hoyos 4-9",
+  h7_9: "Retrocesión hoyos 7-9",
+  h9: "Hoyo 9",
+  lowest_hi: "HI combinado más bajo",
+  lower_hi_player: "Jugador de HI más bajo",
+  drawing_lots: "Sorteo (último recurso)",
+};
+
 export type MatchPlayConsolationRule = {
   enabled: boolean;
   /** Ronda del bracket principal de la que vienen los participantes (1 = primera, etc.). */
@@ -58,6 +94,10 @@ export type MatchPlayConsolationRule = {
   prize_label: string | null;
   /** % de la bolsa del torneo. */
   prize_percent: number | null;
+  /** Desempate cuando la consolación es match play y termina empatada (default: sudden_death). */
+  match_play_tiebreaker?: MatchPlayTiebreaker;
+  /** Cadena de criterios de desempate para stroke play agregado, en orden de prioridad. */
+  stroke_aggregate_tiebreakers?: StrokeAggregateTiebreaker[];
 };
 
 export type MatchPlayPrizeShare = {
