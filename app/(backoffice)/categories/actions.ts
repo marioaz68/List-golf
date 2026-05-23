@@ -577,6 +577,9 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const name = reqStr(formData, "template_name");
   const description = optStr(formData, "template_description");
+  const saveMode =
+    optStr(formData, "template_save_mode") === "update" ? "update" : "new";
+  const updateTemplateId = optStr(formData, "template_id_to_update");
   const org_id = await getTournamentOrgId(tournament_id);
 
   const { data: currentCategories, error: categoriesError } = await supabase
@@ -594,17 +597,26 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
     throw new Error("Este torneo no tiene categorías para guardar como plantilla.");
   }
 
-  const { data: existingTemplate, error: existingError } = await supabase
-    .from("category_templates")
-    .select("id, name, is_active")
-    .ilike("name", name)
-    .maybeSingle();
+  let templateId = "";
 
-  if (existingError) throw new Error(existingError.message);
+  if (saveMode === "update") {
+    if (!updateTemplateId) {
+      throw new Error(
+        "Selecciona una plantilla arriba o elige «Nueva plantilla» para guardar con otro nombre."
+      );
+    }
 
-  let templateId = existingTemplate?.id ?? "";
+    const { data: row, error: loadErr } = await supabase
+      .from("category_templates")
+      .select("id, name")
+      .eq("id", updateTemplateId)
+      .maybeSingle();
 
-  if (templateId) {
+    if (loadErr) throw new Error(loadErr.message);
+    if (!row?.id) throw new Error("La plantilla a actualizar ya no existe.");
+
+    templateId = row.id;
+
     const { error: updateTemplateError } = await supabase
       .from("category_templates")
       .update({
@@ -623,6 +635,21 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
 
     if (deleteItemsError) throw new Error(deleteItemsError.message);
   } else {
+    const { data: nameClash, error: clashErr } = await supabase
+      .from("category_templates")
+      .select("id, name")
+      .ilike("name", name)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (clashErr) throw new Error(clashErr.message);
+    if (nameClash?.id) {
+      throw new Error(
+        `Ya existe una plantilla activa llamada «${nameClash.name}». ` +
+          "Usa otro nombre o elige «Actualizar plantilla seleccionada»."
+      );
+    }
+
     const { data: insertedTemplate, error: insertTemplateError } = await supabase
       .from("category_templates")
       .insert({
@@ -661,7 +688,7 @@ export async function saveTournamentCategoriesAsTemplate(formData: FormData) {
 
   revalidateCategoryPaths();
   redirect(
-    `/categories?tournament_id=${tournament_id}&tab=template&template_id=${templateId}`
+    `/categories?tournament_id=${tournament_id}&tab=template&template_id=${templateId}&template_saved=1`
   );
 }
 

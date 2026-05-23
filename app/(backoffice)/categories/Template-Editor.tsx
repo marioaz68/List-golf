@@ -81,9 +81,18 @@ const fieldBarStyle: React.CSSProperties = {
 export default function CategoryTemplateEditor({
   tournamentId,
   categories,
+  selectedTemplateId = "",
+  selectedTemplateName = "",
+  tournamentName = "",
+  defaultNewTemplateName = "",
 }: {
   tournamentId: string;
   categories: Row[];
+  selectedTemplateId?: string;
+  selectedTemplateName?: string;
+  tournamentName?: string;
+  /** Sugerencia inicial al crear plantilla nueva (ej. Match Play Mixto). */
+  defaultNewTemplateName?: string;
 }) {
   const initialRows = useMemo(
     () =>
@@ -96,9 +105,15 @@ export default function CategoryTemplateEditor({
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  const [templateName, setTemplateName] = useState("Torneos Anuales");
+  const [saveMode, setSaveMode] = useState<"new" | "update">("new");
+  const [templateName, setTemplateName] = useState(
+    defaultNewTemplateName.trim() ||
+      (tournamentName ? `${tournamentName} — categorías` : "")
+  );
   const [templateDescription, setTemplateDescription] = useState(
-    "Plantilla rescatada desde categorías actuales del torneo."
+    tournamentName
+      ? `Categorías del torneo «${tournamentName}».`
+      : "Plantilla rescatada desde categorías actuales del torneo."
   );
 
   function updateRow(
@@ -278,39 +293,88 @@ export default function CategoryTemplateEditor({
       <div className="rounded-lg border border-gray-300 bg-gray-50 p-2">
         <form
           action={saveTournamentCategoriesAsTemplate}
-          className="flex flex-wrap items-end gap-1.5"
+          className="flex flex-col gap-2"
         >
           <input type="hidden" name="tournament_id" value={tournamentId} />
-
-          <div className="flex min-w-[220px] flex-col gap-1">
-            <label className="text-[11px] font-semibold leading-none text-gray-700">
-              Guardar como plantilla
-            </label>
+          <input type="hidden" name="template_save_mode" value={saveMode} />
+          {saveMode === "update" && selectedTemplateId ? (
             <input
-              type="text"
-              name="template_name"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              style={fieldBarStyle}
+              type="hidden"
+              name="template_id_to_update"
+              value={selectedTemplateId}
             />
+          ) : null}
+
+          <p className="text-[11px] leading-snug text-gray-600">
+            Las categorías guardadas son las del torneo actual (tabla de abajo),
+            no las de la plantilla que estés viendo arriba.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-800">
+              <input
+                type="radio"
+                name="template_save_mode_ui"
+                checked={saveMode === "new"}
+                onChange={() => setSaveMode("new")}
+              />
+              Nueva plantilla (no sustituye «Torneos Anuales» ni otras)
+            </label>
+            {selectedTemplateId ? (
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-800">
+                <input
+                  type="radio"
+                  name="template_save_mode_ui"
+                  checked={saveMode === "update"}
+                  onChange={() => {
+                    setSaveMode("update");
+                    if (selectedTemplateName) {
+                      setTemplateName(selectedTemplateName);
+                    }
+                  }}
+                />
+                Actualizar plantilla seleccionada
+                {selectedTemplateName ? ` («${selectedTemplateName}»)` : ""}
+              </label>
+            ) : null}
           </div>
 
-          <div className="flex min-w-[260px] flex-1 flex-col gap-1">
-            <label className="text-[11px] font-semibold leading-none text-gray-700">
-              Descripción
-            </label>
-            <input
-              type="text"
-              name="template_description"
-              value={templateDescription}
-              onChange={(e) => setTemplateDescription(e.target.value)}
-              style={fieldBarStyle}
-            />
-          </div>
+          <div className="flex flex-wrap items-end gap-1.5">
+            <div className="flex min-w-[220px] flex-col gap-1">
+              <label className="text-[11px] font-semibold leading-none text-gray-700">
+                Nombre de la plantilla
+              </label>
+              <input
+                type="text"
+                name="template_name"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Ej. Match Play Mixto CCQ"
+                autoComplete="off"
+                readOnly={false}
+                required
+                style={fieldBarStyle}
+              />
+            </div>
 
-          <SubmitButton pendingText="Guardando plantilla...">
-            Guardar plantilla
-          </SubmitButton>
+            <div className="flex min-w-[260px] flex-1 flex-col gap-1">
+              <label className="text-[11px] font-semibold leading-none text-gray-700">
+                Descripción
+              </label>
+              <input
+                type="text"
+                name="template_description"
+                value={templateDescription}
+                onChange={(e) => setTemplateDescription(e.target.value)}
+                autoComplete="off"
+                style={fieldBarStyle}
+              />
+            </div>
+
+            <SubmitButton pendingText="Guardando plantilla...">
+              {saveMode === "new" ? "Crear plantilla nueva" : "Actualizar plantilla"}
+            </SubmitButton>
+          </div>
         </form>
       </div>
 

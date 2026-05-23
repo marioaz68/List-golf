@@ -170,6 +170,7 @@ export default async function CategoriesPage(props: {
   const tournamentId = firstOf(sp.tournament_id) ?? "";
   const currentTab = firstOf(sp.tab) ?? "template";
   const templateId = firstOf(sp.template_id) ?? "";
+  const templateSaved = firstOf(sp.template_saved) === "1";
 
   const { data: tournaments, error: tournamentsError } = await supabase
     .from("tournaments")
@@ -290,6 +291,13 @@ export default async function CategoriesPage(props: {
   return (
     <div className="space-y-2 p-2 pb-5 md:p-3 md:pb-6">
       <h1 className="text-lg font-bold leading-none text-white">Categorías</h1>
+
+      {templateSaved ? (
+        <div className="rounded-lg border border-green-400/50 bg-green-950/40 px-3 py-2 text-[12px] text-green-100">
+          Plantilla guardada. El selector de arriba ya muestra la plantilla que
+          acabas de crear o actualizar.
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-1.5">
         <a
@@ -544,6 +552,12 @@ export default async function CategoriesPage(props: {
         <CategoryTemplateEditor
           tournamentId={effectiveTournamentId}
           categories={categories}
+          selectedTemplateId={effectiveTemplateId}
+          selectedTemplateName={selectedTemplate?.name ?? ""}
+          tournamentName={selectedTournament?.name ?? ""}
+          defaultNewTemplateName={
+            tournamentIsMatchPlay ? "Match Play Mixto CCQ" : ""
+          }
         />
       </div>
     </div>
