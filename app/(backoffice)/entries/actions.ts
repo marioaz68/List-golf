@@ -3,6 +3,10 @@
 import { createClient, createAdminClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import {
+  capMatchPlayPairHandicaps,
+  syncPairEntriesCategory,
+} from "@/lib/matchplay/capPairToCategory";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { isMissingTelegramKitColumnsError } from "@/lib/entries/telegramKitColumns";
 import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
@@ -680,38 +684,27 @@ async function pairWithPartnerOnEnroll(params: {
     ? cats.find((c) => c.id === teamCategoryId) ?? null
     : null;
 
-  const adjustments: string[] = [];
-
-  if (teamCat && Number.isFinite(teamCat.handicap_max)) {
-    const maxCombined = Number(teamCat.handicap_max);
-    let liveA = primaryHi;
-    let liveB = partnerHi;
-    const combined = Math.round((liveA + liveB) * 10) / 10;
-
-    if (maxCombined > 0 && combined > maxCombined) {
-      const excess = Math.round((combined - maxCombined) * 10) / 10;
-      const higherIsA = liveA >= liveB;
-      const targetEntryId = higherIsA ? primaryEntryId : partnerEntryId;
-      const newHi = Math.round((higherIsA ? liveA - excess : liveB - excess) * 10) / 10;
-
-      if (newHi >= 0) {
-        const { error: hiErr } = await admin
-          .from("tournament_entries")
-          .update({ handicap_index: newHi })
-          .eq("id", targetEntryId);
-        if (hiErr) throw new Error(`Ajuste HI: ${hiErr.message}`);
-
-        if (higherIsA) liveA = newHi;
-        else liveB = newHi;
-
-        adjustments.push(
-          `HI ajustado: jugador con HI más alto reducido a ${newHi} para encajar en tope ${maxCombined} (categoría ${
-            teamCat.code || teamCategoryId
-          }).`
-        );
-      }
-    }
+  if (teamCategoryId) {
+    await syncPairEntriesCategory(admin, {
+      entryIds: [primaryEntryId, partnerEntryId],
+      categoryId: teamCategoryId,
+    });
   }
+
+  const cap = await capMatchPlayPairHandicaps(admin, {
+    entryAId: primaryEntryId,
+    entryBId: partnerEntryId,
+    hiA: primaryHi,
+    hiB: partnerHi,
+    category: teamCat
+      ? {
+          code: teamCat.code,
+          handicap_min: teamCat.handicap_min,
+          handicap_max: teamCat.handicap_max,
+        }
+      : null,
+  });
+  const adjustments = cap.messages;
 
   const { data: existingTeam } = await admin
     .from("matchplay_pair_teams")
@@ -731,6 +724,7 @@ async function pairWithPartnerOnEnroll(params: {
     category_id: teamCategoryId,
     player_a_entry_id: primaryEntryId,
     player_b_entry_id: partnerEntryId,
+    combined_hi: cap.combined_hi,
     is_active: true,
   });
   if (teamErr) {

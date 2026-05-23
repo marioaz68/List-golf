@@ -6,7 +6,11 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { validateTeamFormation } from "@/lib/matchplay/validateTeam";
-import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import {
+  capMatchPlayPairHandicaps,
+  syncPairEntriesCategory,
+} from "@/lib/matchplay/capPairToCategory";
+import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
 import type {
@@ -114,25 +118,55 @@ export async function createMatchPlayTeam(formData: FormData) {
         .maybeSingle()
     : { data: null };
 
+  const categorySnapshot = categoryRow
+    ? {
+        code: categoryRow.code ?? null,
+        name: categoryRow.name ?? null,
+        handicap_min:
+          categoryRow.handicap_min != null
+            ? Number(categoryRow.handicap_min)
+            : null,
+        handicap_max:
+          categoryRow.handicap_max != null
+            ? Number(categoryRow.handicap_max)
+            : null,
+      }
+    : null;
+
+  await assertEntryNotAssigned(admin, tournament_id, [
+    player_a_entry_id,
+    ...(player_b_entry_id ? [player_b_entry_id] : []),
+  ]);
+
+  const capMessages: string[] = [];
+  let combined_hi = 0;
+
+  if (match_type === "pairs" && player_b && category_id) {
+    await syncPairEntriesCategory(admin, {
+      entryIds: [player_a_entry_id, player_b_entry_id!],
+      categoryId: category_id,
+    });
+
+    const cap = await capMatchPlayPairHandicaps(admin, {
+      entryAId: player_a_entry_id,
+      entryBId: player_b_entry_id!,
+      hiA: effectiveEntryHi(player_a),
+      hiB: effectiveEntryHi(player_b),
+      category: categorySnapshot,
+    });
+    combined_hi = cap.combined_hi;
+    capMessages.push(...cap.messages);
+
+    player_a.handicap_index = cap.hiA;
+    player_b.handicap_index = cap.hiB;
+  }
+
   const validation = validateTeamFormation({
     match_type,
     player_a,
     player_b,
     rules: data.rules,
-    category: categoryRow
-      ? {
-          code: categoryRow.code ?? null,
-          name: categoryRow.name ?? null,
-          handicap_min:
-            categoryRow.handicap_min != null
-              ? Number(categoryRow.handicap_min)
-              : null,
-          handicap_max:
-            categoryRow.handicap_max != null
-              ? Number(categoryRow.handicap_max)
-              : null,
-        }
-      : null,
+    category: categorySnapshot,
     existingTeamCount: data.teams.length,
   });
 
@@ -143,12 +177,9 @@ export async function createMatchPlayTeam(formData: FormData) {
     });
   }
 
-  const combined_hi = validation.combined_hi;
-
-  await assertEntryNotAssigned(admin, tournament_id, [
-    player_a_entry_id,
-    ...(player_b_entry_id ? [player_b_entry_id] : []),
-  ]);
+  if (match_type !== "pairs" || !player_b) {
+    combined_hi = validation.combined_hi;
+  }
 
   const defaultName =
     match_type === "pairs" && player_b
@@ -178,7 +209,12 @@ export async function createMatchPlayTeam(formData: FormData) {
   }
 
   revalidatePath("/matchplay");
-  redirectMatchPlay(tournament_id, { team_status: "ok", team_message: "Equipo creado." });
+  revalidatePath("/entries");
+  const okMsg =
+    capMessages.length > 0
+      ? `Equipo creado. ${capMessages.join(" ")}`
+      : "Equipo creado.";
+  redirectMatchPlay(tournament_id, { team_status: "ok", team_message: okMsg });
 }
 
 export async function updateMatchPlayTeam(formData: FormData) {
@@ -191,12 +227,73 @@ export async function updateMatchPlayTeam(formData: FormData) {
   const team_name = optStr(formData, "team_name");
   const category_id = optStr(formData, "category_id");
 
+  const { data: team, error: teamErr } = await admin
+    .from("matchplay_pair_teams")
+    .select(
+      "player_a_entry_id, player_b_entry_id, entry_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey(handicap_index), entry_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey(handicap_index)"
+    )
+    .eq("id", team_id)
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (teamErr) throw new Error(teamErr.message);
+
+  const capMessages: string[] = [];
+  let combined_hi: number | null = null;
+
+  const entryA = Array.isArray(team?.entry_a) ? team?.entry_a[0] : team?.entry_a;
+  const entryB = Array.isArray(team?.entry_b) ? team?.entry_b[0] : team?.entry_b;
+
+  if (
+    category_id &&
+    team?.player_a_entry_id &&
+    team?.player_b_entry_id &&
+    entryA &&
+    entryB
+  ) {
+    const { data: categoryRow } = await admin
+      .from("categories")
+      .select("code, name, handicap_min, handicap_max")
+      .eq("id", category_id)
+      .eq("tournament_id", tournament_id)
+      .maybeSingle();
+
+    await syncPairEntriesCategory(admin, {
+      entryIds: [team.player_a_entry_id, team.player_b_entry_id],
+      categoryId: category_id,
+    });
+
+    const cap = await capMatchPlayPairHandicaps(admin, {
+      entryAId: team.player_a_entry_id,
+      entryBId: team.player_b_entry_id,
+      hiA: Number(entryA.handicap_index ?? 0),
+      hiB: Number(entryB.handicap_index ?? 0),
+      category: categoryRow
+        ? {
+            code: categoryRow.code,
+            name: categoryRow.name,
+            handicap_min:
+              categoryRow.handicap_min != null
+                ? Number(categoryRow.handicap_min)
+                : null,
+            handicap_max:
+              categoryRow.handicap_max != null
+                ? Number(categoryRow.handicap_max)
+                : null,
+          }
+        : null,
+    });
+    combined_hi = cap.combined_hi;
+    capMessages.push(...cap.messages);
+  }
+
   const { error } = await admin
     .from("matchplay_pair_teams")
     .update({
       seed,
       team_name,
       category_id,
+      ...(combined_hi != null ? { combined_hi } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", team_id)
@@ -205,7 +302,12 @@ export async function updateMatchPlayTeam(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/matchplay");
-  redirectMatchPlay(tournament_id, { team_status: "ok", team_message: "Equipo actualizado." });
+  revalidatePath("/entries");
+  const okMsg =
+    capMessages.length > 0
+      ? `Equipo actualizado. ${capMessages.join(" ")}`
+      : "Equipo actualizado.";
+  redirectMatchPlay(tournament_id, { team_status: "ok", team_message: okMsg });
 }
 
 export async function deleteMatchPlayTeam(formData: FormData) {
