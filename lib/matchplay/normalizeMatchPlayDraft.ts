@@ -73,8 +73,16 @@ export function normalizeMatchPlayConvocatoriaDraft(
       : defaults.matchplay?.trophies ?? [],
   };
 
-  const round_count =
+  const mainPairs =
+    matchplay.bracket_main_pairs ?? matchplay.max_pairs_per_category ?? null;
+  const minRoundsByBracket =
+    mainPairs && mainPairs > 1 ? Math.ceil(Math.log2(mainPairs)) : 0;
+  const declaredRoundCount =
     base.meta?.round_count ?? matchplay.bracket_round_count ?? 4;
+  const round_count = Math.max(declaredRoundCount, minRoundsByBracket);
+  if (round_count !== matchplay.bracket_round_count) {
+    matchplay.bracket_round_count = round_count;
+  }
 
   return {
     ...defaults,

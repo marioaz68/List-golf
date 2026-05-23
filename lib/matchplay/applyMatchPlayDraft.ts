@@ -134,7 +134,12 @@ export async function applyMatchPlayDraft({
     codeToId.set(String(row.code).toUpperCase(), row.id);
   }
 
-  const roundCount = draft.meta.round_count ?? mp.bracket_round_count;
+  const mainPairs = mp.bracket_main_pairs ?? mp.max_pairs_per_category ?? null;
+  const minRoundsByBracket =
+    mainPairs && mainPairs > 1 ? Math.ceil(Math.log2(mainPairs)) : 0;
+  const declaredRoundCount =
+    draft.meta.round_count ?? mp.bracket_round_count ?? 0;
+  const roundCount = Math.max(declaredRoundCount, minRoundsByBracket, 1);
   let rounds_created = 0;
 
   const { data: existingRounds } = await supabase
