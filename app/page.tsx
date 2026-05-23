@@ -1,7 +1,12 @@
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
+import {
+  hasPublicSupabaseEnv,
+  missingPublicSupabaseEnvMessage,
+} from "@/lib/supabaseEnv";
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 
@@ -166,6 +171,28 @@ function cardStatus(
 const selectFieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-white/10 bg-[#0c1728] px-3 py-2 text-sm text-white";
 
+async function loadPublicTournaments(supabase: SupabaseClient) {
+  const select =
+    "id,name,start_date,end_date,poster_path,club_id,course_id" as const;
+
+  const withArchive = await supabase
+    .from("tournaments")
+    .select(select)
+    .eq("is_public", true)
+    .eq("is_archived", false);
+
+  if (!withArchive.error) {
+    return withArchive;
+  }
+
+  const msg = withArchive.error.message ?? "";
+  if (!/is_archived/i.test(msg)) {
+    return withArchive;
+  }
+
+  return supabase.from("tournaments").select(select).eq("is_public", true);
+}
+
 function PublicHomeLoadError({
   h,
   detailMessage,
@@ -218,13 +245,26 @@ export default async function HomePage({
         ? "historic"
         : "");
 
-  const supabase = await createClient();
+  if (!hasPublicSupabaseEnv()) {
+    return (
+      <PublicHomeLoadError
+        h={h}
+        detailMessage={missingPublicSupabaseEnvMessage()}
+      />
+    );
+  }
 
-  const { data: tournamentsData, error: tournamentsError } = await supabase
-    .from("tournaments")
-    .select("id,name,start_date,end_date,poster_path,club_id,course_id")
-    .eq("is_public", true)
-    .eq("is_archived", false);
+  let supabase: SupabaseClient;
+  try {
+    supabase = await createClient();
+  } catch (err) {
+    const detail =
+      err instanceof Error ? err.message : "No se pudo conectar con Supabase.";
+    return <PublicHomeLoadError h={h} detailMessage={detail} />;
+  }
+
+  const { data: tournamentsData, error: tournamentsError } =
+    await loadPublicTournaments(supabase);
 
   if (tournamentsError) {
     return (
