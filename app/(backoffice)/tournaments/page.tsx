@@ -642,6 +642,10 @@ export default async function TournamentsPage({
     holesRes,
     staffRes,
     entriesRes,
+    convocatoriaRes,
+    competitionRulesRes,
+    cutRulesRes,
+    prizeRulesRes,
   ] = await Promise.all([
     tournamentsQuery,
     supabase.from("courses").select("id, name, short_name"),
@@ -656,6 +660,14 @@ export default async function TournamentsPage({
       .select("id, tournament_id")
       .eq("is_active", true),
     supabase.from("tournament_entries").select("id, tournament_id"),
+    supabase.from("tournament_convocatoria").select("tournament_id"),
+    supabase
+      .from("category_competition_rules")
+      .select("id, tournament_id"),
+    supabase
+      .from("round_advancement_rules")
+      .select("id, tournament_id"),
+    supabase.from("category_prize_rules").select("id, tournament_id"),
   ]);
 
   if (tournamentsRes.error) {
@@ -673,6 +685,12 @@ export default async function TournamentsPage({
   const holesByTournament = countByTournament(holesRes.data);
   const staffByTournament = countByTournament(staffRes.data);
   const entriesByTournament = countByTournament(entriesRes.data);
+  const convocatoriaByTournament = countByTournament(convocatoriaRes.data);
+  const competitionRulesByTournament = countByTournament(
+    competitionRulesRes.data
+  );
+  const cutRulesByTournament = countByTournament(cutRulesRes.data);
+  const prizeRulesByTournament = countByTournament(prizeRulesRes.data);
 
   const hasFilters = Boolean(club || from || to);
 
@@ -821,15 +839,17 @@ export default async function TournamentsPage({
                 <th style={thStyle}>{tm.thTournament}</th>
                 <th style={thStyle}>{tm.thStatus}</th>
                 <th style={thStyle}>{tm.thPublic}</th>
-                <th style={thStyle}>{tm.thClub}</th>
-                <th style={thStyle}>{tm.thCourse}</th>
-                <th style={thStyle}>{tm.thHoles}</th>
+                <th style={thStyle}>{tm.thConvocatoria}</th>
                 <th style={thStyle}>{tm.thCategories}</th>
-                <th style={thStyle}>{tm.colEntries}</th>
+                <th style={thStyle}>{tm.thCompetition}</th>
+                <th style={thStyle}>{tm.thCuts}</th>
+                <th style={thStyle}>{tm.thPrizes}</th>
+                <th style={thStyle}>{tm.thHoles}</th>
                 <th style={thStyle}>{tm.thTeeSets}</th>
                 <th style={thStyle}>{tm.thRules}</th>
                 <th style={thStyle}>{tm.thRounds}</th>
                 <th style={thStyle}>{tm.thStaff}</th>
+                <th style={thStyle}>{tm.colEntries}</th>
                 <th style={thStyle}>{tm.thActions}</th>
               </tr>
             </thead>
@@ -952,16 +972,10 @@ export default async function TournamentsPage({
                       </span>
                     </td>
 
-                    <td style={tdStyle}>{displayClubName(t.club_name, clubs)}</td>
-
-                    <td style={tdStyle}>
-                      {displayCourseName(t.course_name, courses)}
-                    </td>
-
                     <td style={tdStyle}>
                       {countLink(
-                        holesByTournament.get(t.id) ?? 0,
-                        `/courses?tournament_id=${t.id}`
+                        convocatoriaByTournament.get(t.id) ?? 0,
+                        `/convocatoria?tournament_id=${t.id}`
                       )}
                     </td>
 
@@ -974,8 +988,29 @@ export default async function TournamentsPage({
 
                     <td style={tdStyle}>
                       {countLink(
-                        entriesByTournament.get(t.id) ?? 0,
-                        `/entries?tournament_id=${t.id}`
+                        competitionRulesByTournament.get(t.id) ?? 0,
+                        `/competition-rules?tournament_id=${t.id}`
+                      )}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {countLink(
+                        cutRulesByTournament.get(t.id) ?? 0,
+                        `/cut-rules?tournament_id=${t.id}`
+                      )}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {countLink(
+                        prizeRulesByTournament.get(t.id) ?? 0,
+                        `/prize-rules?tournament_id=${t.id}`
+                      )}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {countLink(
+                        holesByTournament.get(t.id) ?? 0,
+                        `/courses?tournament_id=${t.id}`
                       )}
                     </td>
 
@@ -1004,6 +1039,13 @@ export default async function TournamentsPage({
                       {countLink(
                         staffByTournament.get(t.id) ?? 0,
                         `/tournaments/staff?tournament_id=${t.id}`
+                      )}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {countLink(
+                        entriesByTournament.get(t.id) ?? 0,
+                        `/entries?tournament_id=${t.id}`
                       )}
                     </td>
 
@@ -1091,7 +1133,7 @@ export default async function TournamentsPage({
 
               {tournaments.length === 0 ? (
                 <tr>
-                  <td style={tdStyle} colSpan={14}>
+                  <td style={tdStyle} colSpan={16}>
                     {tm.emptyWithFilters}
                   </td>
                 </tr>
