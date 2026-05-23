@@ -16,7 +16,8 @@ export function ccqMatchPlayMixto(opts?: {
 
   const mp: MatchPlayConvocatoriaConfig = {
     match_type: "pairs",
-    pair_format: "fourball",
+    // PDF CCQ: "menor HI vs menor HI, mayor vs mayor" → Bola Baja + Bola Alta (2 pts/hoyo).
+    pair_format: "low_high",
     bracket_type: "single_elim_consolation",
     category_basis: "open",
     handicap_allowance: "custom",
@@ -32,6 +33,9 @@ export function ccqMatchPlayMixto(opts?: {
     pair_composition: "mixed_one_each",
     combined_hi_min: 14.0,
     combined_hi_max: 34.9,
+    // Topes individuales del PDF: caballeros ≤ 25.6, damas ≤ 34.0.
+    male_individual_hi_max: 25.6,
+    female_individual_hi_max: 34.0,
     play_in_enabled: false,
     bracket_main_pairs: 32,
 
@@ -46,6 +50,7 @@ export function ccqMatchPlayMixto(opts?: {
 
     consolations: [
       {
+        // Consolación Match Play: parejas que pierden en la ronda 3 (Cuartos) según PDF CCQ.
         enabled: true,
         from_round_no: 3,
         consolation_format: "match_play",
@@ -54,6 +59,8 @@ export function ccqMatchPlayMixto(opts?: {
         match_play_tiebreaker: "sudden_death",
       },
       {
+        // Stroke Play Agregado: perdedoras de ronda 1, ronda 2 y ronda de consolación MP.
+        // Foursomes aleatorios, integrantes de la misma pareja en grupos distintos.
         enabled: true,
         from_round_no: 0,
         consolation_format: "stroke_play_aggregate",
@@ -92,10 +99,10 @@ export function ccqMatchPlayMixto(opts?: {
     ],
 
     rules_text:
-      "Cada jugador da/recibe ventajas vs el jugador correspondiente (menor HI vs menor HI, mayor vs mayor) al 80% del hándicap de campo. Empate de match: muerte súbita desde hoyo 1. Stroke Play Agregado: 80% HI, suma neto pareja; desempate por retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9.",
+      "Match Play Bola Baja + Bola Alta al 80% del hándicap de campo (2 pts/hoyo: 1 baja vs baja, 1 alta vs alta). Pareja 1 dama + 1 caballero. Topes individuales: caballeros ≤ 25.6 HI (marcas blancas), damas ≤ 34.0 HI (marcas rojas). Suma de HI: mín 14.0, máx 34.9. Máximo 32 parejas, cuadro principal de 16. Si hay >16 parejas se juega ronda clasificatoria. Empate de match: muerte súbita desde hoyo 1. Consolación MP: perdedoras de la ronda 3 (Cuartos). Stroke Play Agregado: perdedoras de R1, R2 y Consolación MP, 18 hoyos al 80% HI. Desempate stroke: retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9.",
 
     reference_notes:
-      "Convocatoria CCQ 2026 — Match Play Parejas Mixto. Sede: Club Campestre de Querétaro.",
+      "Convocatoria CCQ 2026 — Match Play Parejas Mixto. Sede: Club Campestre de Querétaro. 4–7 jun 2026. HI vigente entre 20-feb y 20-may 2026 (el menor). Inscripción $1,500/persona. Calcuta: postura $10,000-$40,000; 90% de bolsa. Subasta miércoles 3 de junio 19:00 h.",
   };
 
   return {
@@ -168,6 +175,8 @@ export function ccqMatchPlayMixto(opts?: {
       "Torneo CCQ Mixto 2026: bolsa = 90% de subasta; siembra por subasta (calcuta).",
       "Mínimo 16 parejas inscritas al 3 de junio para realizar el torneo.",
       "Edades/marcas de salida (Azul ≤6.4, Blanca 6.5-25.6, Doradas ≥65, Damas Rojas >5.9, Blancas ≤5.8) se aplican por jugador en sets de salida.",
+      "Si hay más de 16 parejas inscritas, se juega ronda 1 \"Clasificatoria\" para reducir a 16 (con 32 parejas se requieren 5 matches para ser campeón).",
+      "from_round_no de cada consolación asume 32 parejas. Si tu torneo arranca con ≤16 parejas, ajusta la ronda desde la cual entra cada consolación.",
     ],
   };
 }

@@ -86,7 +86,10 @@ export const STROKE_AGGREGATE_TIEBREAKER_LABELS: Record<
 
 /**
  * Secuencia estándar USGA / CCQ para desempate en stroke play agregado.
- * Tomado de la convocatoria CCQ: "retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9".
+ * Tomado de la convocatoria CCQ Mixto 2026:
+ * "retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9".
+ * El PDF no incluye HI ni sorteo: si persiste el empate después del hoyo 9,
+ * el comité decide. Si quieres respaldo, agrega `lowest_hi` o `drawing_lots`.
  */
 export const DEFAULT_STROKE_AGGREGATE_TIEBREAKERS: StrokeAggregateTiebreaker[] = [
   "h10_18",
@@ -97,7 +100,6 @@ export const DEFAULT_STROKE_AGGREGATE_TIEBREAKERS: StrokeAggregateTiebreaker[] =
   "h4_9",
   "h7_9",
   "h9",
-  "lowest_hi",
 ];
 
 export type MatchPlayConsolationRule = {
