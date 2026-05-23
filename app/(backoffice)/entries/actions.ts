@@ -195,6 +195,51 @@ async function getTournamentCats(supabase: any, tournament_id: string) {
   return mapCats(catsData as any[]);
 }
 
+async function isTournamentMatchPlayPairs(
+  supabase: any,
+  tournament_id: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("tournaments")
+    .select("settings")
+    .eq("id", tournament_id)
+    .maybeSingle();
+  const format = (data?.settings as any)?.format?.format_type;
+  if (format !== "matchplay") return false;
+
+  const { data: rules } = await supabase
+    .from("tournament_matchplay_rules")
+    .select("match_type")
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+  return (rules?.match_type ?? "pairs") === "pairs";
+}
+
+/**
+ * Selecciona categoría para inscribir.
+ * En torneos match play parejas la categoría aplica al equipo (suma HI),
+ * por lo que asignamos la única categoría disponible aunque el HI individual no entre.
+ */
+function pickCategoryForEnroll(params: {
+  cats: Cat[];
+  playerGender: "M" | "F" | "X";
+  handicap: number;
+  isMatchPlayPairs: boolean;
+}): string | null {
+  if (params.isMatchPlayPairs) {
+    const byGender = params.cats.filter(
+      (c) => c.gender === params.playerGender || c.gender === "X"
+    );
+    const pool = byGender.length > 0 ? byGender : params.cats;
+    if (pool.length === 1) return pool[0].id;
+  }
+  return pickCategoryId({
+    cats: params.cats,
+    playerGender: params.playerGender,
+    handicap: params.handicap,
+  });
+}
+
 async function ensureEntriesAccess(tournament_id: string) {
   await requireTournamentAccess({
     tournamentId: tournament_id,
@@ -418,12 +463,21 @@ export async function addEntry(formData: FormData) {
   }
 
   const cats = await getTournamentCats(supabase, tournament_id);
+  const isMatchPlayPairs = await isTournamentMatchPlayPairs(
+    supabase,
+    tournament_id
+  );
   const category_id_input = optStr(formData, "category_id");
 
   const category_id =
     category_id_input && category_id_input !== ""
       ? category_id_input
-      : pickCategoryId({ cats, playerGender, handicap });
+      : pickCategoryForEnroll({
+          cats,
+          playerGender,
+          handicap,
+          isMatchPlayPairs,
+        });
 
   try {
     await validateCategoryCapacity({
@@ -457,7 +511,7 @@ export async function addEntry(formData: FormData) {
       category_id,
       status: "confirmed",
     })
-    .select("id, category_id")
+    .select("id, category_id, handicap_index")
     .single();
 
   if (error) {
@@ -477,18 +531,22 @@ export async function addEntry(formData: FormData) {
     throw new Error(error.message);
   }
 
+  let pairFeedback: string | null = null;
   if (partner_player_id) {
     try {
-      await pairWithPartnerOnEnroll({
+      const result = await pairWithPartnerOnEnroll({
         admin,
         supabase,
         tournament_id,
         cats,
+        isMatchPlayPairs,
         primaryEntryId: insertedEntry.id,
         primaryPlayerId: player_id,
+        primaryHi: Number(insertedEntry.handicap_index ?? handicap),
         primaryCategoryId: insertedEntry.category_id ?? category_id,
         partnerPlayerId: partner_player_id,
       });
+      pairFeedback = result.message;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "No se pudo emparejar.";
@@ -506,12 +564,17 @@ export async function addEntry(formData: FormData) {
   revalidatePath("/entries");
   revalidatePath("/players");
   revalidatePath("/matchplay");
-  redirect(
-    `/entries?tournament_id=${tournament_id}${
-      partner_player_id ? "&bulk_status=success&bulk_message=" +
-        encodeURIComponent("Inscrito y emparejado.") : ""
-    }`
-  );
+  if (partner_player_id) {
+    redirect(
+      buildEntriesRedirect({
+        tournamentId: tournament_id,
+        tab: "manual",
+        bulkStatus: "success",
+        bulkMessage: pairFeedback ?? "Inscrito y emparejado.",
+      })
+    );
+  }
+  redirect(`/entries?tournament_id=${tournament_id}`);
 }
 
 async function pairWithPartnerOnEnroll(params: {
@@ -519,18 +582,22 @@ async function pairWithPartnerOnEnroll(params: {
   supabase: any;
   tournament_id: string;
   cats: Cat[];
+  isMatchPlayPairs: boolean;
   primaryEntryId: string;
   primaryPlayerId: string;
+  primaryHi: number;
   primaryCategoryId: string | null;
   partnerPlayerId: string;
-}) {
+}): Promise<{ message: string }> {
   const {
     admin,
     supabase,
     tournament_id,
     cats,
+    isMatchPlayPairs,
     primaryEntryId,
     primaryPlayerId,
+    primaryHi,
     primaryCategoryId,
     partnerPlayerId,
   } = params;
@@ -547,9 +614,24 @@ async function pairWithPartnerOnEnroll(params: {
     .maybeSingle();
 
   let partnerEntryId: string;
+  let partnerHi: number;
+  let partnerCategoryId: string | null = primaryCategoryId;
 
   if (existingPartnerEntry?.id) {
     partnerEntryId = existingPartnerEntry.id;
+    partnerHi = Number(existingPartnerEntry.handicap_index);
+    if (
+      isMatchPlayPairs &&
+      primaryCategoryId &&
+      existingPartnerEntry.category_id !== primaryCategoryId
+    ) {
+      await admin
+        .from("tournament_entries")
+        .update({ category_id: primaryCategoryId })
+        .eq("id", existingPartnerEntry.id);
+    } else {
+      partnerCategoryId = existingPartnerEntry.category_id ?? primaryCategoryId;
+    }
   } else {
     const { data: partnerPlayer, error: ppErr } = await supabase
       .from("players")
@@ -563,21 +645,27 @@ async function pairWithPartnerOnEnroll(params: {
     if (pHi === null) {
       throw new Error("La pareja no tiene handicap_index.");
     }
+    partnerHi = Number(pHi);
     const pGender = String(partnerPlayer?.gender ?? "X").toUpperCase() as
       | "M"
       | "F"
       | "X";
 
-    const partnerCategoryId =
+    partnerCategoryId =
       primaryCategoryId ??
-      pickCategoryId({ cats, playerGender: pGender, handicap: pHi });
+      pickCategoryForEnroll({
+        cats,
+        playerGender: pGender,
+        handicap: partnerHi,
+        isMatchPlayPairs,
+      });
 
     const { data: inserted, error: insErr } = await admin
       .from("tournament_entries")
       .insert({
         tournament_id,
         player_id: partnerPlayerId,
-        handicap_index: pHi,
+        handicap_index: partnerHi,
         category_id: partnerCategoryId,
         status: "confirmed",
       })
@@ -585,6 +673,44 @@ async function pairWithPartnerOnEnroll(params: {
       .single();
     if (insErr) throw new Error(`Pareja: ${insErr.message}`);
     partnerEntryId = inserted.id;
+  }
+
+  const teamCategoryId = primaryCategoryId ?? partnerCategoryId;
+  const teamCat = teamCategoryId
+    ? cats.find((c) => c.id === teamCategoryId) ?? null
+    : null;
+
+  const adjustments: string[] = [];
+
+  if (teamCat && Number.isFinite(teamCat.handicap_max)) {
+    const maxCombined = Number(teamCat.handicap_max);
+    let liveA = primaryHi;
+    let liveB = partnerHi;
+    const combined = Math.round((liveA + liveB) * 10) / 10;
+
+    if (maxCombined > 0 && combined > maxCombined) {
+      const excess = Math.round((combined - maxCombined) * 10) / 10;
+      const higherIsA = liveA >= liveB;
+      const targetEntryId = higherIsA ? primaryEntryId : partnerEntryId;
+      const newHi = Math.round((higherIsA ? liveA - excess : liveB - excess) * 10) / 10;
+
+      if (newHi >= 0) {
+        const { error: hiErr } = await admin
+          .from("tournament_entries")
+          .update({ handicap_index: newHi })
+          .eq("id", targetEntryId);
+        if (hiErr) throw new Error(`Ajuste HI: ${hiErr.message}`);
+
+        if (higherIsA) liveA = newHi;
+        else liveB = newHi;
+
+        adjustments.push(
+          `HI ajustado: jugador con HI más alto reducido a ${newHi} para encajar en tope ${maxCombined} (categoría ${
+            teamCat.code || teamCategoryId
+          }).`
+        );
+      }
+    }
   }
 
   const { data: existingTeam } = await admin
@@ -602,7 +728,7 @@ async function pairWithPartnerOnEnroll(params: {
 
   const { error: teamErr } = await admin.from("matchplay_pair_teams").insert({
     tournament_id,
-    category_id: primaryCategoryId,
+    category_id: teamCategoryId,
     player_a_entry_id: primaryEntryId,
     player_b_entry_id: partnerEntryId,
     is_active: true,
@@ -613,6 +739,11 @@ async function pairWithPartnerOnEnroll(params: {
     }
     throw new Error(`Equipo: ${teamErr.message}`);
   }
+
+  const baseMsg = "Inscrito y emparejado.";
+  return {
+    message: adjustments.length ? `${baseMsg} ${adjustments.join(" ")}` : baseMsg,
+  };
 }
 
 export async function createPlayerAndAddEntry(formData: FormData) {
@@ -664,9 +795,18 @@ export async function createPlayerAndAddEntry(formData: FormData) {
   const handicap = Number(
     newPlayer.handicap_torneo ?? newPlayer.handicap_index ?? handicap_index ?? 0
   );
+  const isMatchPlayPairs = await isTournamentMatchPlayPairs(
+    supabase,
+    tournament_id
+  );
   const category_id =
     handicap != null && Number.isFinite(handicap)
-      ? pickCategoryId({ cats, playerGender, handicap })
+      ? pickCategoryForEnroll({
+          cats,
+          playerGender,
+          handicap,
+          isMatchPlayPairs,
+        })
       : null;
 
   try {
