@@ -27,6 +27,7 @@ import {
   type MatchPlayTrophy,
   type StrokeAggregateTiebreaker,
   STROKE_AGGREGATE_TIEBREAKER_LABELS,
+  DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
 } from "@/lib/matchplay/types";
 import {
   applyConvocatoriaToTournament,
@@ -1040,6 +1041,13 @@ function ConsolationsPanel({
   const list = mp.consolations ?? [];
   return (
     <div className="space-y-2">
+      <p className="text-[11px] leading-snug text-slate-400">
+        La <strong className="text-cyan-200">consolación stroke play agregado</strong>{" "}
+        usa neto al 80% del hándicap de campo. El desempate sigue la secuencia de la
+        convocatoria CCQ: retrocesión 10-18 → 13-18 → 16-18 → 18 → 1-9 → 4-9 → 7-9 →
+        9 → HI combinado más bajo. Al generar parámetros se crean los perfiles de
+        desempate en el torneo automáticamente.
+      </p>
       {list.map((c, i) => (
         <div
           key={i}
@@ -1079,12 +1087,29 @@ function ConsolationsPanel({
               disabled={readOnly}
               value={c.consolation_format}
               onChange={(e) => {
+                const nextFormat = e.target
+                  .value as MatchPlayConsolationRule["consolation_format"];
                 const next = [...list];
-                next[i] = {
+                const patched: MatchPlayConsolationRule = {
                   ...c,
-                  consolation_format: e.target
-                    .value as MatchPlayConsolationRule["consolation_format"],
+                  consolation_format: nextFormat,
                 };
+                if (
+                  nextFormat === "stroke_play_aggregate" &&
+                  (!patched.stroke_aggregate_tiebreakers ||
+                    patched.stroke_aggregate_tiebreakers.length === 0)
+                ) {
+                  patched.stroke_aggregate_tiebreakers = [
+                    ...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+                  ];
+                }
+                if (
+                  nextFormat === "match_play" &&
+                  !patched.match_play_tiebreaker
+                ) {
+                  patched.match_play_tiebreaker = "sudden_death";
+                }
+                next[i] = patched;
                 onChange(next);
               }}
             >
@@ -1147,9 +1172,37 @@ function ConsolationsPanel({
             </label>
           ) : (
             <div className="sm:col-span-5">
-              <p className="text-[11px] text-slate-400">
-                Desempate stroke (orden de prioridad)
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-slate-400">
+                  Desempate stroke (orden de prioridad)
+                </p>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    title="Cargar secuencia estándar (CCQ): h10-18 → h13-18 → h16-18 → h18 → h1-9 → h4-9 → h7-9 → h9 → HI"
+                    onClick={() => {
+                      const next = [...list];
+                      next[i] = {
+                        ...c,
+                        stroke_aggregate_tiebreakers: [
+                          ...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+                        ],
+                      };
+                      onChange(next);
+                    }}
+                    style={{
+                      ...buttonStyle,
+                      minHeight: "24px",
+                      padding: "0 8px",
+                      fontSize: "10px",
+                      background: "linear-gradient(#0891b2, #0e7490)",
+                      border: "1px solid #155e75",
+                    }}
+                  >
+                    Cargar secuencia estándar
+                  </button>
+                ) : null}
+              </div>
               <StrokeAggregateTiebreakerEditor
                 value={c.stroke_aggregate_tiebreakers ?? []}
                 readOnly={readOnly}
@@ -1164,25 +1217,48 @@ function ConsolationsPanel({
         </div>
       ))}
       {!readOnly ? (
-        <button
-          type="button"
-          style={buttonStyle}
-          onClick={() =>
-            onChange([
-              ...list,
-              {
-                enabled: true,
-                from_round_no: 1,
-                consolation_format: "match_play",
-                prize_label: "Consolación",
-                prize_percent: 0,
-                match_play_tiebreaker: "sudden_death",
-              },
-            ])
-          }
-        >
-          + Consolación
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={() =>
+              onChange([
+                ...list,
+                {
+                  enabled: true,
+                  from_round_no: 3,
+                  consolation_format: "match_play",
+                  prize_label: "Consolación Match Play",
+                  prize_percent: 0,
+                  match_play_tiebreaker: "sudden_death",
+                },
+              ])
+            }
+          >
+            + Consolación match play
+          </button>
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={() =>
+              onChange([
+                ...list,
+                {
+                  enabled: true,
+                  from_round_no: 0,
+                  consolation_format: "stroke_play_aggregate",
+                  prize_label: "Stroke Play Agregado (80% HI)",
+                  prize_percent: 0,
+                  stroke_aggregate_tiebreakers: [
+                    ...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+                  ],
+                },
+              ])
+            }
+          >
+            + Consolación stroke (con desempate CCQ)
+          </button>
+        </div>
       ) : null}
     </div>
   );

@@ -1,5 +1,8 @@
 import type { ConvocatoriaDraft } from "../types";
-import type { MatchPlayConvocatoriaConfig } from "@/lib/matchplay/types";
+import {
+  DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+  type MatchPlayConvocatoriaConfig,
+} from "@/lib/matchplay/types";
 
 /**
  * Plantilla machote: Match Play de Parejas Mixto CCQ 2026 (4–7 jun 2026).
@@ -55,17 +58,7 @@ export function ccqMatchPlayMixto(opts?: {
         consolation_format: "stroke_play_aggregate",
         prize_label: "Stroke Play Agregado (80% HI)",
         prize_percent: 7,
-        stroke_aggregate_tiebreakers: [
-          "h10_18",
-          "h13_18",
-          "h16_18",
-          "h18",
-          "h1_9",
-          "h4_9",
-          "h7_9",
-          "h9",
-          "lowest_hi",
-        ],
+        stroke_aggregate_tiebreakers: [...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS],
       },
     ],
 

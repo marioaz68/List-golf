@@ -4,7 +4,11 @@ import { normalizeMatchPlayConvocatoriaDraft } from "./normalizeMatchPlayDraft";
 import type { TournamentSettings } from "@/types/tournament";
 import { buildMatchPlayTournamentSettings } from "./tournamentFormat";
 import {
-  STROKE_AGGREGATE_TIEBREAKER_LABELS,
+  seedConsolationStrokeTieBreakProfiles,
+  formatStrokeConsolationTiebreakSummary,
+} from "./seedConsolationTieBreak";
+import {
+  DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
   type ApplyMatchPlayResult,
   type MatchPlayConsolationRule,
   type MatchPlayTiebreaker,
@@ -30,13 +34,14 @@ function describeConsolationTiebreakers(
       const tb = c.match_play_tiebreaker ?? "sudden_death";
       return `• ${label} (match play): desempate por ${MATCH_PLAY_TB_LABELS[tb]}.`;
     }
-    const seq = (c.stroke_aggregate_tiebreakers ?? [])
-      .map((k) => STROKE_AGGREGATE_TIEBREAKER_LABELS[k])
-      .filter(Boolean);
-    const seqText = seq.length
-      ? seq.join(" → ")
-      : "definir desempate stroke aggregate";
-    return `• ${label} (stroke agregado): ${seqText}.`;
+    const seqText = formatStrokeConsolationTiebreakSummary({
+      ...c,
+      stroke_aggregate_tiebreakers:
+        c.stroke_aggregate_tiebreakers?.length
+          ? c.stroke_aggregate_tiebreakers
+          : DEFAULT_STROKE_AGGREGATE_TIEBREAKERS,
+    });
+    return `• ${label} (stroke agregado, neto 80% HI): ${seqText}.`;
   });
 
   return ["Desempates de consolación:", ...lines].join("\n");
@@ -283,6 +288,12 @@ export async function applyMatchPlayDraft({
     }
     throw new Error(`Reglas match play: ${rulesErr.message}`);
   }
+
+  await seedConsolationStrokeTieBreakProfiles(
+    supabase,
+    tournamentId,
+    mp.consolations ?? []
+  );
 
   return {
     categories: insertedCats?.length ?? 0,

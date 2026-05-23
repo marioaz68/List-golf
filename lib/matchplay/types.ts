@@ -84,6 +84,22 @@ export const STROKE_AGGREGATE_TIEBREAKER_LABELS: Record<
   drawing_lots: "Sorteo (último recurso)",
 };
 
+/**
+ * Secuencia estándar USGA / CCQ para desempate en stroke play agregado.
+ * Tomado de la convocatoria CCQ: "retrocesión hoyos 10-18, 13-18, 16-18, 18, 1-9, 4-9, 7-9, 9".
+ */
+export const DEFAULT_STROKE_AGGREGATE_TIEBREAKERS: StrokeAggregateTiebreaker[] = [
+  "h10_18",
+  "h13_18",
+  "h16_18",
+  "h18",
+  "h1_9",
+  "h4_9",
+  "h7_9",
+  "h9",
+  "lowest_hi",
+];
+
 export type MatchPlayConsolationRule = {
   enabled: boolean;
   /** Ronda del bracket principal de la que vienen los participantes (1 = primera, etc.). */

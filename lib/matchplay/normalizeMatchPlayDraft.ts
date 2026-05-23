@@ -2,8 +2,32 @@ import { matchPlayMachote } from "@/lib/convocatoria/templates/matchPlayMachote"
 import type { ConvocatoriaDraft } from "@/lib/convocatoria/types";
 import type {
   MatchPlayAuctionConfig,
+  MatchPlayConsolationRule,
   MatchPlayConvocatoriaConfig,
 } from "./types";
+import { DEFAULT_STROKE_AGGREGATE_TIEBREAKERS } from "./types";
+
+function normalizeConsolations(
+  list: MatchPlayConsolationRule[] | undefined
+): MatchPlayConsolationRule[] {
+  if (!Array.isArray(list)) return [];
+  return list.map((c) => {
+    if (c.consolation_format !== "stroke_play_aggregate") {
+      return {
+        ...c,
+        match_play_tiebreaker: c.match_play_tiebreaker ?? "sudden_death",
+      };
+    }
+    const tiebreakers =
+      c.stroke_aggregate_tiebreakers?.length
+        ? c.stroke_aggregate_tiebreakers
+        : [...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS];
+    return {
+      ...c,
+      stroke_aggregate_tiebreakers: tiebreakers,
+    };
+  });
+}
 
 const DEFAULT_AUCTION: MatchPlayAuctionConfig = {
   enabled: false,
@@ -36,9 +60,11 @@ export function normalizeMatchPlayConvocatoriaDraft(
       ...(defaults.matchplay?.auction ?? {}),
       ...(baseMp.auction ?? {}),
     },
-    consolations: Array.isArray(baseMp.consolations)
-      ? baseMp.consolations
-      : defaults.matchplay?.consolations ?? [],
+    consolations: normalizeConsolations(
+      Array.isArray(baseMp.consolations)
+        ? baseMp.consolations
+        : defaults.matchplay?.consolations
+    ),
     prize_shares: Array.isArray(baseMp.prize_shares)
       ? baseMp.prize_shares
       : defaults.matchplay?.prize_shares ?? [],
