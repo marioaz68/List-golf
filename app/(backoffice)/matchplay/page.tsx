@@ -215,6 +215,30 @@ export default async function MatchPlayPage(props: {
             >
               📺 Vista clásica
             </Link>
+            <Link
+              href={`/torneos/${effectiveId}/cuadro-vivo`}
+              target="_blank"
+              style={{
+                ...buttonStyle,
+                background: "linear-gradient(#059669, #047857)",
+                border: "1px solid #065f46",
+              }}
+              title="Cuadro público que se va armando en tiempo real con la subasta"
+            >
+              🎯 Cuadro vivo (público) ↗
+            </Link>
+            <Link
+              href={`/torneos/${effectiveId}/matches-vivo`}
+              target="_blank"
+              style={{
+                ...buttonStyle,
+                background: "linear-gradient(#0e7490, #155e75)",
+                border: "1px solid #164e63",
+              }}
+              title="Live scoring de todos los partidos"
+            >
+              📺 Matches vivo (público) ↗
+            </Link>
           </>
         ) : null}
       </div>

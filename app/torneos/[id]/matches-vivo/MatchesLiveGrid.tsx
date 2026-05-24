@@ -1,0 +1,453 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { createClient } from "@/utils/supabase/client";
+import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
+import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
+import { roundLabel } from "@/lib/matchplay/bracketUtils";
+
+type MatchRow = {
+  id: string;
+  bracket_id: string;
+  round_no: number;
+  position_no: number;
+  top_pair_id: string | null;
+  bottom_pair_id: string | null;
+  winner_pair_id: string | null;
+  status: string | null;
+  result_text: string | null;
+};
+
+type HoleRow = {
+  match_id: string;
+  hole_no: number;
+  top_points: number | null;
+  bottom_points: number | null;
+  match_status_after: string | null;
+};
+
+type Props = {
+  tournamentId: string;
+  tournamentName: string;
+  teams: MatchPlayTeamRow[];
+  initialMatches: MatchRow[];
+  initialHoles: HoleRow[];
+  bracketId: string | null;
+  bracketSize: number;
+  roundCount: number;
+  holesPerMatch: number;
+};
+
+function teamShortName(t: MatchPlayTeamRow | null): string {
+  if (!t) return "Por definir";
+  if (t.team_name) return t.team_name;
+  if (t.player_a) return formatPlayerName(t.player_a.player);
+  return "(equipo)";
+}
+
+function teamSubLine(t: MatchPlayTeamRow | null): string {
+  if (!t) return "";
+  const a = t.player_a ? formatPlayerName(t.player_a.player) : null;
+  const b = t.player_b ? formatPlayerName(t.player_b.player) : null;
+  if (a && b) return `${a} · ${b}`;
+  return a ?? "";
+}
+
+export default function MatchesLiveGrid({
+  tournamentId,
+  tournamentName,
+  teams: initialTeams,
+  initialMatches,
+  initialHoles,
+  bracketId,
+  bracketSize,
+  roundCount,
+  holesPerMatch,
+}: Props) {
+  const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
+  const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
+  const [holes, setHoles] = useState<HoleRow[]>(initialHoles);
+
+  // Realtime: matches del bracket
+  useEffect(() => {
+    if (!tournamentId || !bracketId) return;
+    const supabase = createClient();
+    const ch = supabase
+      .channel(`mp-public-mlist-${tournamentId}`)
+      .on(
+        "postgres_changes" as never,
+        {
+          event: "*",
+          schema: "public",
+          table: "matchplay_matches",
+          filter: `bracket_id=eq.${bracketId}`,
+        },
+        () => {
+          supabase
+            .from("matchplay_matches")
+            .select(
+              "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, result_text"
+            )
+            .eq("bracket_id", bracketId)
+            .then(({ data }) => {
+              if (data) setMatches(data as MatchRow[]);
+            });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [tournamentId, bracketId]);
+
+  // Realtime: hoyos (live scoring)
+  useEffect(() => {
+    if (!tournamentId || !bracketId || matches.length === 0) return;
+    const supabase = createClient();
+    const matchIds = matches.map((m) => m.id);
+    const ch = supabase
+      .channel(`mp-public-holes-${tournamentId}`)
+      .on(
+        "postgres_changes" as never,
+        {
+          event: "*",
+          schema: "public",
+          table: "matchplay_hole_results",
+        },
+        (payload: { eventType: string; new: HoleRow | null; old: { id?: string; match_id?: string } | null }) => {
+          const row = (payload.new ?? null) as HoleRow | null;
+          if (!row) return;
+          if (!matchIds.includes(row.match_id)) return;
+          setHoles((prev) => {
+            const without = prev.filter(
+              (h) => !(h.match_id === row.match_id && h.hole_no === row.hole_no)
+            );
+            return [...without, row];
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [tournamentId, bracketId, matches]);
+
+  const teamById = useMemo(
+    () => new Map(teams.map((t) => [t.id, t])),
+    [teams]
+  );
+
+  const holesByMatch = useMemo(() => {
+    const map = new Map<string, HoleRow[]>();
+    for (const h of holes) {
+      const list = map.get(h.match_id) ?? [];
+      list.push(h);
+      map.set(h.match_id, list);
+    }
+    return map;
+  }, [holes]);
+
+  const byRound = useMemo(() => {
+    const map = new Map<number, MatchRow[]>();
+    for (const m of matches) {
+      const list = map.get(m.round_no) ?? [];
+      list.push(m);
+      map.set(m.round_no, list);
+    }
+    return Array.from({ length: roundCount }, (_, i) => ({
+      roundNo: i + 1,
+      label: roundLabel(i + 1, roundCount, bracketSize),
+      matches: (map.get(i + 1) ?? []).sort(
+        (a, b) => a.position_no - b.position_no
+      ),
+    }));
+  }, [matches, roundCount, bracketSize]);
+
+  const totals = useMemo(() => {
+    const total = matches.length;
+    const live = matches.filter((m) => m.status === "in_progress").length;
+    const done = matches.filter((m) => m.status === "completed").length;
+    const pending = matches.filter(
+      (m) => m.status === "scheduled" || !m.status
+    ).length;
+    return { total, live, done, pending };
+  }, [matches]);
+
+  if (!bracketId || matches.length === 0) {
+    return (
+      <main className="mx-auto max-w-3xl space-y-3 p-4 text-white">
+        <h1 className="text-xl font-bold">Matches en vivo</h1>
+        <div className="rounded border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-100">
+          El cuadro todavía no se publica. Cuando se aplique la siembra y se
+          genere el bracket, aquí verás todos los partidos en tiempo real.
+        </div>
+        <Link
+          href={`/torneos/${tournamentId}/cuadro-vivo`}
+          className="inline-flex items-center rounded border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
+        >
+          🎯 Ver cuadro en vivo (por subasta)
+        </Link>
+      </main>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-[#0c1728] px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
+            📺 Live scoring · todos los matches
+          </div>
+          <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
+            {tournamentName}
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <Stat label="Partidos" value={String(totals.total)} />
+          <Stat
+            label="En juego"
+            value={String(totals.live)}
+            tone={totals.live > 0 ? "live" : undefined}
+          />
+          <Stat
+            label="Finalizados"
+            value={String(totals.done)}
+            tone={totals.done > 0 ? "ok" : undefined}
+          />
+          <Stat label="Pendientes" value={String(totals.pending)} />
+        </div>
+      </header>
+
+      <div className="space-y-4">
+        {byRound.map((round) => (
+          <section key={round.roundNo} className="space-y-2">
+            <h2 className="rounded-lg border-l-4 border-cyan-400 bg-[#0c1728] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+              {round.label}
+              <span className="ml-2 text-[10px] font-normal text-slate-400">
+                ({round.matches.length} partidos)
+              </span>
+            </h2>
+            {round.matches.length === 0 ? (
+              <p className="rounded border border-white/10 bg-[#0c1728] p-3 text-[12px] text-slate-500">
+                Sin partidos en esta ronda todavía.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {round.matches.map((m) => (
+                  <MatchCard
+                    key={m.id}
+                    match={m}
+                    topTeam={m.top_pair_id ? teamById.get(m.top_pair_id) ?? null : null}
+                    bottomTeam={
+                      m.bottom_pair_id
+                        ? teamById.get(m.bottom_pair_id) ?? null
+                        : null
+                    }
+                    holes={holesByMatch.get(m.id) ?? []}
+                    holesPerMatch={holesPerMatch}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 text-[11px]">
+        <Link
+          href={`/torneos/${tournamentId}/cuadro-vivo`}
+          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+        >
+          🎯 Ver cuadro en vivo
+        </Link>
+        <Link
+          href={`/torneos/${tournamentId}?view=bracket`}
+          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+        >
+          Bracket oficial
+        </Link>
+        <Link
+          href={`/torneos/${tournamentId}`}
+          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+        >
+          ← Página del torneo
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({
+  match,
+  topTeam,
+  bottomTeam,
+  holes,
+  holesPerMatch,
+}: {
+  match: MatchRow;
+  topTeam: MatchPlayTeamRow | null;
+  bottomTeam: MatchPlayTeamRow | null;
+  holes: HoleRow[];
+  holesPerMatch: number;
+}) {
+  const isBye = match.status === "bye";
+  const isLive = match.status === "in_progress";
+  const isDone = match.status === "completed";
+
+  const topPts = holes.reduce(
+    (acc, h) => acc + (h.top_points != null ? Number(h.top_points) : 0),
+    0
+  );
+  const bottomPts = holes.reduce(
+    (acc, h) => acc + (h.bottom_points != null ? Number(h.bottom_points) : 0),
+    0
+  );
+  const holesPlayed = holes.filter(
+    (h) => h.top_points != null || h.bottom_points != null
+  ).length;
+  const topAhead = topPts > bottomPts;
+  const bottomAhead = bottomPts > topPts;
+
+  const winnerId = match.winner_pair_id ?? null;
+  const topWin = !!winnerId && topTeam?.id === winnerId;
+  const bottomWin = !!winnerId && bottomTeam?.id === winnerId;
+
+  return (
+    <article
+      className={`rounded-xl border p-3 text-[12px] ${
+        isBye
+          ? "border-slate-700/40 bg-slate-900/40 text-slate-500"
+          : isDone
+            ? "border-emerald-500/30 bg-emerald-950/20"
+            : isLive
+              ? "border-cyan-400/40 bg-cyan-950/20 shadow-[0_0_24px_-12px_rgba(34,211,238,0.5)]"
+              : "border-white/10 bg-[#0c1728]"
+      }`}
+    >
+      <div className="mb-1.5 flex items-center justify-between text-[9px] uppercase tracking-wider">
+        <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-400">
+          R{match.round_no} · M{match.position_no}
+        </span>
+        {isLive ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2 py-0.5 font-bold text-cyan-200">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+            EN JUEGO · H{holesPlayed}/{holesPerMatch}
+          </span>
+        ) : isDone ? (
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-200">
+            ✓ FINAL
+          </span>
+        ) : isBye ? (
+          <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">
+            BYE
+          </span>
+        ) : (
+          <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">
+            Programado
+          </span>
+        )}
+      </div>
+
+      <Side
+        team={topTeam}
+        pts={isLive || isDone ? topPts : null}
+        isWinner={topWin}
+        isAhead={isLive && topAhead}
+      />
+      <div className="my-0.5 text-center text-[9px] uppercase text-slate-600">
+        vs
+      </div>
+      <Side
+        team={bottomTeam}
+        pts={isLive || isDone ? bottomPts : null}
+        isWinner={bottomWin}
+        isAhead={isLive && bottomAhead}
+      />
+
+      {match.result_text ? (
+        <p className="mt-2 text-center text-[10px] font-bold text-emerald-300">
+          {match.result_text}
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function Side({
+  team,
+  pts,
+  isWinner,
+  isAhead,
+}: {
+  team: MatchPlayTeamRow | null;
+  pts: number | null;
+  isWinner: boolean;
+  isAhead: boolean;
+}) {
+  const tone = isWinner
+    ? "bg-emerald-900/50 border-emerald-400/50"
+    : isAhead
+      ? "bg-cyan-900/30 border-cyan-400/40"
+      : "bg-white/5 border-white/10";
+  return (
+    <div className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${tone}`}>
+      {team?.seed != null ? (
+        <span className="inline-flex h-5 w-7 shrink-0 items-center justify-center rounded bg-cyan-500/20 text-[10px] font-bold text-cyan-200">
+          #{team.seed}
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <div
+          className={`truncate text-[12px] font-bold leading-tight ${
+            isWinner ? "text-emerald-200" : team ? "text-white" : "text-slate-600 italic"
+          }`}
+        >
+          {teamShortName(team)}
+        </div>
+        <div className="truncate text-[9px] text-slate-400">
+          {teamSubLine(team)}
+        </div>
+      </div>
+      {pts !== null ? (
+        <span
+          className={`shrink-0 rounded px-2 py-0.5 text-[14px] font-extrabold ${
+            isWinner
+              ? "bg-emerald-500/30 text-emerald-100"
+              : isAhead
+                ? "bg-cyan-500/30 text-cyan-100"
+                : "bg-white/10 text-slate-200"
+          }`}
+        >
+          {Number.isInteger(pts) ? pts : pts.toFixed(1).replace(/\.0$/, "")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "ok" | "live";
+}) {
+  const color =
+    tone === "live"
+      ? "text-cyan-300"
+      : tone === "ok"
+        ? "text-emerald-300"
+        : "text-white";
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#0a1220] px-3 py-1.5">
+      <div className="text-[9px] uppercase tracking-wider text-slate-500">
+        {label}
+      </div>
+      <div className={`text-sm font-bold ${color}`}>{value}</div>
+    </div>
+  );
+}

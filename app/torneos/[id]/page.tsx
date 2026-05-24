@@ -1410,6 +1410,23 @@ export default async function PublicTournamentPage({
                   {pub.bracket}
                 </Link>
               ) : null}
+
+              {isMatchPlayTournament ? (
+                <>
+                  <Link
+                    href={`/torneos/${id}/cuadro-vivo`}
+                    className="inline-flex items-center justify-center rounded-full border border-emerald-400/40 bg-emerald-950/40 px-3 py-1.5 text-[11px] font-bold text-emerald-200 hover:bg-emerald-900/60"
+                  >
+                    🎯 Cuadro en vivo
+                  </Link>
+                  <Link
+                    href={`/torneos/${id}/matches-vivo`}
+                    className="inline-flex items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-950/40 px-3 py-1.5 text-[11px] font-bold text-cyan-200 hover:bg-cyan-900/60"
+                  >
+                    📺 Matches en vivo
+                  </Link>
+                </>
+              ) : null}
             </div>
           </div>
 

@@ -604,6 +604,22 @@ export default function RaffleStage({
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-black/30 px-4 py-2 text-[12px] sm:px-6">
         <div className="flex flex-wrap gap-2">
           <Link
+            href={`/torneos/${tournamentId}/cuadro-vivo`}
+            target="_blank"
+            className="rounded border border-emerald-400/40 bg-emerald-950/40 px-3 py-1.5 font-bold text-emerald-200 hover:bg-emerald-900/60"
+            title="Abre el cuadro público en nueva ventana — se va armando conforme adjudicas"
+          >
+            🎯 Cuadro público en vivo ↗
+          </Link>
+          <Link
+            href={`/torneos/${tournamentId}/matches-vivo`}
+            target="_blank"
+            className="rounded border border-cyan-400/40 bg-cyan-950/40 px-3 py-1.5 font-bold text-cyan-200 hover:bg-cyan-900/60"
+            title="Abre matches en vivo en nueva ventana"
+          >
+            📺 Matches en vivo ↗
+          </Link>
+          <Link
             href={`/matchplay/auction?tournament_id=${tournamentId}`}
             className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
           >
@@ -613,7 +629,7 @@ export default function RaffleStage({
             href={`/matchplay/auction/show?tournament_id=${tournamentId}`}
             className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
           >
-            📺 Vista en vivo (clásica)
+            📺 Vista clásica
           </Link>
           <Link
             href={`/matchplay?tournament_id=${tournamentId}`}
