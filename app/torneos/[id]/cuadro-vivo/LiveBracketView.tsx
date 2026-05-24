@@ -41,17 +41,29 @@ function money(v: number | null | undefined, currency: string) {
   return `$${Math.round(v).toLocaleString("es-MX")} ${currency}`;
 }
 
-function teamShortName(t: MatchPlayTeamRow): string {
-  if (t.team_name) return t.team_name;
-  if (t.player_a) return formatPlayerName(t.player_a.player);
-  return "(equipo)";
-}
-
-function teamSubLine(t: MatchPlayTeamRow): string {
-  const a = t.player_a ? formatPlayerName(t.player_a.player) : null;
-  const b = t.player_b ? formatPlayerName(t.player_b.player) : null;
-  if (a && b) return `${a} · ${b}`;
-  return a ?? "";
+/** Devuelve [hombre, mujer] cuando es posible; si no, conserva el orden A,B. */
+function playersOrderedMaleFirst(
+  t: MatchPlayTeamRow
+): Array<{ label: string; gender: "M" | "F" | "X" }> {
+  const list: Array<{ label: string; gender: "M" | "F" | "X" }> = [];
+  if (t.player_a) {
+    list.push({
+      label: formatPlayerName(t.player_a.player),
+      gender: (t.player_a.player.gender ?? "X") as "M" | "F" | "X",
+    });
+  }
+  if (t.player_b) {
+    list.push({
+      label: formatPlayerName(t.player_b.player),
+      gender: (t.player_b.player.gender ?? "X") as "M" | "F" | "X",
+    });
+  }
+  // Hombre primero, mujer después; otros casos (X/X) mantienen orden original.
+  list.sort((a, b) => {
+    const order: Record<"M" | "F" | "X", number> = { M: 0, F: 1, X: 2 };
+    return order[a.gender] - order[b.gender];
+  });
+  return list;
 }
 
 export default function LiveBracketView({
@@ -162,6 +174,102 @@ export default function LiveBracketView({
     return map;
   }, [matches]);
 
+  // Slots calculados por (round, position) con cascada de BYE:
+  // - Ronda 1: leemos seeds del seedOrder; el slot puede ser un equipo o null.
+  // - Si en un match solo hay un equipo (faltó el otro), ese equipo gana por BYE
+  //   y sube como ganador a la siguiente ronda automáticamente.
+  // - Si ya hay match real publicado en BD, esos datos mandan (incluye winner_pair_id).
+  const slotsByRound = useMemo(() => {
+    type Slot = {
+      top: MatchPlayTeamRow | null;
+      bottom: MatchPlayTeamRow | null;
+      topSeed: number | null;
+      bottomSeed: number | null;
+      winner: MatchPlayTeamRow | null;
+      byeSide: "top" | "bottom" | null;
+    };
+    const rounds: Array<Map<number, Slot>> = [];
+
+    // Ronda 1
+    const r1 = new Map<number, Slot>();
+    const r1Count = targetSize / 2;
+    for (let p = 0; p < r1Count; p++) {
+      const tSeed = seedOrder[p * 2] ?? null;
+      const bSeed = seedOrder[p * 2 + 1] ?? null;
+      let top = tSeed != null ? teamBySeed.get(tSeed) ?? null : null;
+      let bottom = bSeed != null ? teamBySeed.get(bSeed) ?? null : null;
+      // Overlay con match real si existe
+      const real = matchByPos.get(`1-${p + 1}`);
+      if (real) {
+        if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
+        if (real.bottom_pair_id)
+          bottom = teamById.get(real.bottom_pair_id) ?? bottom;
+      }
+      // BYE: si solo hay uno → ese pasa.
+      let winner: MatchPlayTeamRow | null = null;
+      let byeSide: "top" | "bottom" | null = null;
+      if (real?.winner_pair_id) {
+        winner = teamById.get(real.winner_pair_id) ?? null;
+      } else if (top && !bottom) {
+        winner = top;
+        byeSide = "bottom";
+      } else if (!top && bottom) {
+        winner = bottom;
+        byeSide = "top";
+      }
+      r1.set(p, { top, bottom, topSeed: tSeed, bottomSeed: bSeed, winner, byeSide });
+    }
+    rounds.push(r1);
+
+    // Rondas r >= 2: ganador(r-1, 2p) vs ganador(r-1, 2p+1)
+    for (let r = 2; r <= roundCount; r++) {
+      const prev = rounds[r - 2];
+      const cur = new Map<number, Slot>();
+      const count = targetSize / Math.pow(2, r);
+      for (let p = 0; p < count; p++) {
+        const upMatch = prev.get(p * 2);
+        const dnMatch = prev.get(p * 2 + 1);
+        let top: MatchPlayTeamRow | null = upMatch?.winner ?? null;
+        let bottom: MatchPlayTeamRow | null = dnMatch?.winner ?? null;
+        // Overlay con match real
+        const real = matchByPos.get(`${r}-${p + 1}`);
+        if (real) {
+          if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
+          if (real.bottom_pair_id)
+            bottom = teamById.get(real.bottom_pair_id) ?? bottom;
+        }
+        let winner: MatchPlayTeamRow | null = null;
+        let byeSide: "top" | "bottom" | null = null;
+        if (real?.winner_pair_id) {
+          winner = teamById.get(real.winner_pair_id) ?? null;
+        } else if (top && !bottom) {
+          winner = top;
+          byeSide = "bottom";
+        } else if (!top && bottom) {
+          winner = bottom;
+          byeSide = "top";
+        }
+        cur.set(p, {
+          top,
+          bottom,
+          topSeed: null,
+          bottomSeed: null,
+          winner,
+          byeSide,
+        });
+      }
+      rounds.push(cur);
+    }
+    return rounds;
+  }, [
+    seedOrder,
+    teamBySeed,
+    teamById,
+    matchByPos,
+    targetSize,
+    roundCount,
+  ]);
+
   const totalActive = seededTeams.length;
   const awardedCount = seededTeams.filter((t) => t.auction_order != null).length;
   const totalRaised = seededTeams.reduce(
@@ -230,6 +338,8 @@ export default function LiveBracketView({
             const items: React.ReactNode[] = [];
             for (let i = 0; i < matchesInRound; i++) {
               const gridRowStart = span * i + 2; // +2 para dejar fila 1 a header
+              const slot = slotsByRound[r - 1]?.get(i);
+              const real = matchByPos.get(`${r}-${i + 1}`) ?? null;
               items.push(
                 <BracketMatchCell
                   key={`m-${r}-${i}`}
@@ -238,11 +348,13 @@ export default function LiveBracketView({
                   span={span}
                   rowStart={gridRowStart}
                   roundCount={roundCount}
-                  targetSize={targetSize}
-                  seedOrder={seedOrder}
-                  teamBySeed={teamBySeed}
-                  teamById={teamById}
-                  matchByPos={matchByPos}
+                  topTeam={slot?.top ?? null}
+                  bottomTeam={slot?.bottom ?? null}
+                  topSeed={slot?.topSeed ?? null}
+                  bottomSeed={slot?.bottomSeed ?? null}
+                  byeSide={slot?.byeSide ?? null}
+                  computedWinnerId={slot?.winner?.id ?? null}
+                  realMatch={real}
                   currency={currency}
                 />
               );
@@ -329,11 +441,13 @@ function BracketMatchCell({
   span,
   rowStart,
   roundCount,
-  targetSize,
-  seedOrder,
-  teamBySeed,
-  teamById,
-  matchByPos,
+  topTeam,
+  bottomTeam,
+  topSeed,
+  bottomSeed,
+  byeSide,
+  computedWinnerId,
+  realMatch,
   currency,
 }: {
   round: number;
@@ -341,47 +455,38 @@ function BracketMatchCell({
   span: number;
   rowStart: number;
   roundCount: number;
-  targetSize: number;
-  seedOrder: number[];
-  teamBySeed: Map<number, MatchPlayTeamRow>;
-  teamById: Map<string, MatchPlayTeamRow>;
-  matchByPos: Map<string, { top_pair_id: string | null; bottom_pair_id: string | null; winner_pair_id: string | null; status: string | null; result_text: string | null }>;
+  topTeam: MatchPlayTeamRow | null;
+  bottomTeam: MatchPlayTeamRow | null;
+  topSeed: number | null;
+  bottomSeed: number | null;
+  byeSide: "top" | "bottom" | null;
+  computedWinnerId: string | null;
+  realMatch: {
+    top_pair_id: string | null;
+    bottom_pair_id: string | null;
+    winner_pair_id: string | null;
+    status: string | null;
+    result_text: string | null;
+  } | null;
   currency: string;
 }) {
-  // Para ronda 1, leemos seeds según seedOrder
-  let topTeam: MatchPlayTeamRow | null = null;
-  let bottomTeam: MatchPlayTeamRow | null = null;
-  let topSeed: number | null = null;
-  let bottomSeed: number | null = null;
-
-  if (round === 1) {
-    topSeed = seedOrder[positionIdx * 2] ?? null;
-    bottomSeed = seedOrder[positionIdx * 2 + 1] ?? null;
-    topTeam = topSeed != null ? teamBySeed.get(topSeed) ?? null : null;
-    bottomTeam = bottomSeed != null ? teamBySeed.get(bottomSeed) ?? null : null;
-  }
-
-  // Match real (cuando ya hay matchplay_matches en BD)
-  const realMatch = matchByPos.get(`${round}-${positionIdx + 1}`) ?? null;
-  if (realMatch) {
-    if (realMatch.top_pair_id) {
-      topTeam = teamById.get(realMatch.top_pair_id) ?? topTeam;
-    }
-    if (realMatch.bottom_pair_id) {
-      bottomTeam = teamById.get(realMatch.bottom_pair_id) ?? bottomTeam;
-    }
-  }
-
-  const winnerId = realMatch?.winner_pair_id ?? null;
+  const winnerId = realMatch?.winner_pair_id ?? computedWinnerId ?? null;
   const isFinal = round === roundCount;
+  const hasBye = byeSide !== null;
+
+  // Fondo distintivo solo en los brackets:
+  // - Final: dorado.
+  // - BYE: tono pizarra apagado.
+  // - Resto: azul-cyan medio con sombra para que resalte sobre la página.
+  const cellBg = isFinal
+    ? "rounded-2xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-900/60 via-amber-950/60 to-[#1a1304] p-3 shadow-[0_0_36px_-12px_rgba(251,191,36,0.55)]"
+    : hasBye && !realMatch
+      ? "rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/70 to-[#0a1220] p-2 shadow-md"
+      : "rounded-xl border border-cyan-400/40 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_4px_18px_-6px_rgba(8,145,178,0.45)]";
 
   return (
     <div
-      className={`relative ${
-        isFinal
-          ? "rounded-2xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-950/40 to-[#0c1728] p-3 shadow-[0_0_30px_-10px_rgba(251,191,36,0.4)]"
-          : "rounded-xl border border-white/10 bg-[#0c1728] p-2"
-      } flex flex-col justify-center`}
+      className={`relative flex flex-col justify-center ${cellBg}`}
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
@@ -392,10 +497,11 @@ function BracketMatchCell({
         seed={topSeed}
         team={topTeam}
         isWinner={!!winnerId && topTeam?.id === winnerId}
+        isBye={byeSide === "top"}
         showBid={round === 1}
         currency={currency}
       />
-      <div className="my-1 text-center text-[9px] uppercase tracking-wider text-slate-600">
+      <div className="my-1 text-center text-[9px] uppercase tracking-wider text-slate-400/70">
         vs
       </div>
       <SidePill
@@ -403,30 +509,37 @@ function BracketMatchCell({
         seed={bottomSeed}
         team={bottomTeam}
         isWinner={!!winnerId && bottomTeam?.id === winnerId}
+        isBye={byeSide === "bottom"}
         showBid={round === 1}
         currency={currency}
       />
+
       {realMatch?.result_text ? (
         <p className="mt-1 text-center text-[10px] font-bold text-emerald-300">
           {realMatch.result_text}
         </p>
       ) : null}
       {realMatch?.status === "in_progress" ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-cyan-400/80">
+        <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-cyan-300">
           ● en juego
         </p>
       ) : null}
-      {!realMatch && round === 1 && !topTeam && !bottomTeam ? (
-        <p className="mt-1 text-center text-[9px] text-slate-600">
+      {hasBye && !realMatch ? (
+        <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-amber-300">
+          Pasa por BYE
+        </p>
+      ) : null}
+      {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (
+        <p className="mt-1 text-center text-[9px] text-slate-400/70">
           (esperando subasta)
         </p>
       ) : null}
       {isFinal ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-amber-300/90">
+        <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200">
           🏆 Final
         </p>
       ) : null}
-      <p className="mt-1 text-center text-[8px] text-slate-600">
+      <p className="mt-1 text-center text-[8px] text-slate-400/60">
         R{round} · M{positionIdx + 1}
       </p>
     </div>
@@ -438,6 +551,7 @@ function SidePill({
   seed,
   team,
   isWinner,
+  isBye,
   showBid,
   currency,
 }: {
@@ -445,49 +559,77 @@ function SidePill({
   seed: number | null;
   team: MatchPlayTeamRow | null;
   isWinner: boolean;
+  isBye: boolean;
   showBid: boolean;
   currency: string;
 }) {
-  const tone = isWinner
-    ? "bg-emerald-900/60 border-emerald-400/60"
-    : team
-      ? "bg-white/5 border-white/10"
-      : "bg-black/30 border-white/5";
+  const tone = isBye
+    ? "bg-slate-800/70 border-slate-600/40"
+    : isWinner
+      ? "bg-emerald-900/70 border-emerald-400/70"
+      : team
+        ? "bg-[#0b1c34]/80 border-white/15"
+        : "bg-black/40 border-white/10";
+
+  const players = team ? playersOrderedMaleFirst(team) : [];
+
   return (
-    <div
-      className={`rounded-lg border px-2 py-1 ${tone}`}
-      data-side={side}
-    >
-      <div className="flex items-center gap-1.5">
+    <div className={`rounded-lg border px-2 py-1.5 ${tone}`} data-side={side}>
+      <div className="flex items-start gap-1.5">
         <span
-          className={`inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
+          className={`mt-0.5 inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
             seed != null
-              ? "bg-cyan-500/20 text-cyan-200"
-              : "bg-slate-700/40 text-slate-500"
+              ? "bg-cyan-500/30 text-cyan-100"
+              : "bg-slate-700/40 text-slate-400"
           }`}
         >
           {seed != null ? `#${seed}` : "—"}
         </span>
         <div className="min-w-0 flex-1">
-          <div
-            className={`truncate text-[12px] font-bold leading-tight ${
-              isWinner
-                ? "text-emerald-200"
-                : team
-                  ? "text-white"
-                  : "text-slate-600 italic"
-            }`}
-          >
-            {team ? teamShortName(team) : "Por definir"}
-          </div>
-          {team ? (
-            <div className="truncate text-[9px] text-slate-400">
-              {teamSubLine(team)}
+          {isBye ? (
+            <div className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
+              BYE
             </div>
-          ) : null}
+          ) : team ? (
+            <ul className="space-y-0.5">
+              {players.map((p, i) => (
+                <li
+                  key={`${p.label}-${i}`}
+                  className={`flex items-center gap-1 truncate text-[12px] font-semibold leading-tight ${
+                    isWinner ? "text-emerald-100" : "text-white"
+                  }`}
+                >
+                  <span
+                    className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold ${
+                      p.gender === "F"
+                        ? "bg-pink-500/30 text-pink-200"
+                        : p.gender === "M"
+                          ? "bg-blue-500/30 text-blue-200"
+                          : "bg-slate-500/30 text-slate-200"
+                    }`}
+                    title={
+                      p.gender === "F"
+                        ? "Mujer"
+                        : p.gender === "M"
+                          ? "Hombre"
+                          : "Sin género"
+                    }
+                  >
+                    {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
+                  </span>
+                  <span className="truncate">{p.label}</span>
+                </li>
+              ))}
+              {players.length === 0 ? (
+                <li className="text-[12px] italic text-slate-400">(equipo)</li>
+              ) : null}
+            </ul>
+          ) : (
+            <div className="text-[12px] italic text-slate-500">Por definir</div>
+          )}
         </div>
-        {showBid && team?.auction_bid != null ? (
-          <span className="ml-auto shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+        {showBid && team?.auction_bid != null && !isBye ? (
+          <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
             {money(team.auction_bid, currency)}
           </span>
         ) : null}

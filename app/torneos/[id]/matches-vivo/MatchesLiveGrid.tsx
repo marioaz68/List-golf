@@ -40,19 +40,29 @@ type Props = {
   holesPerMatch: number;
 };
 
-function teamShortName(t: MatchPlayTeamRow | null): string {
-  if (!t) return "Por definir";
-  if (t.team_name) return t.team_name;
-  if (t.player_a) return formatPlayerName(t.player_a.player);
-  return "(equipo)";
-}
-
-function teamSubLine(t: MatchPlayTeamRow | null): string {
-  if (!t) return "";
-  const a = t.player_a ? formatPlayerName(t.player_a.player) : null;
-  const b = t.player_b ? formatPlayerName(t.player_b.player) : null;
-  if (a && b) return `${a} · ${b}`;
-  return a ?? "";
+/** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
+function playersOrderedMaleFirst(
+  t: MatchPlayTeamRow | null
+): Array<{ label: string; gender: "M" | "F" | "X" }> {
+  if (!t) return [];
+  const list: Array<{ label: string; gender: "M" | "F" | "X" }> = [];
+  if (t.player_a) {
+    list.push({
+      label: formatPlayerName(t.player_a.player),
+      gender: (t.player_a.player.gender ?? "X") as "M" | "F" | "X",
+    });
+  }
+  if (t.player_b) {
+    list.push({
+      label: formatPlayerName(t.player_b.player),
+      gender: (t.player_b.player.gender ?? "X") as "M" | "F" | "X",
+    });
+  }
+  list.sort((a, b) => {
+    const order: Record<"M" | "F" | "X", number> = { M: 0, F: 1, X: 2 };
+    return order[a.gender] - order[b.gender];
+  });
+  return list;
 }
 
 export default function MatchesLiveGrid({
@@ -391,28 +401,56 @@ function Side({
     : isAhead
       ? "bg-cyan-900/30 border-cyan-400/40"
       : "bg-white/5 border-white/10";
+  const players = playersOrderedMaleFirst(team);
   return (
-    <div className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${tone}`}>
+    <div className={`flex items-start gap-2 rounded-md border px-2 py-1.5 ${tone}`}>
       {team?.seed != null ? (
-        <span className="inline-flex h-5 w-7 shrink-0 items-center justify-center rounded bg-cyan-500/20 text-[10px] font-bold text-cyan-200">
+        <span className="mt-0.5 inline-flex h-5 w-7 shrink-0 items-center justify-center rounded bg-cyan-500/20 text-[10px] font-bold text-cyan-200">
           #{team.seed}
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-        <div
-          className={`truncate text-[12px] font-bold leading-tight ${
-            isWinner ? "text-emerald-200" : team ? "text-white" : "text-slate-600 italic"
-          }`}
-        >
-          {teamShortName(team)}
-        </div>
-        <div className="truncate text-[9px] text-slate-400">
-          {teamSubLine(team)}
-        </div>
+        {team ? (
+          <ul className="space-y-0.5">
+            {players.map((p, i) => (
+              <li
+                key={`${p.label}-${i}`}
+                className={`flex items-center gap-1 truncate text-[12px] font-semibold leading-tight ${
+                  isWinner ? "text-emerald-100" : "text-white"
+                }`}
+              >
+                <span
+                  className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold ${
+                    p.gender === "F"
+                      ? "bg-pink-500/30 text-pink-200"
+                      : p.gender === "M"
+                        ? "bg-blue-500/30 text-blue-200"
+                        : "bg-slate-500/30 text-slate-200"
+                  }`}
+                  title={
+                    p.gender === "F"
+                      ? "Mujer"
+                      : p.gender === "M"
+                        ? "Hombre"
+                        : "Sin género"
+                  }
+                >
+                  {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
+                </span>
+                <span className="truncate">{p.label}</span>
+              </li>
+            ))}
+            {players.length === 0 ? (
+              <li className="text-[12px] italic text-slate-400">(equipo)</li>
+            ) : null}
+          </ul>
+        ) : (
+          <div className="text-[12px] italic text-slate-500">Por definir</div>
+        )}
       </div>
       {pts !== null ? (
         <span
-          className={`shrink-0 rounded px-2 py-0.5 text-[14px] font-extrabold ${
+          className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-[14px] font-extrabold ${
             isWinner
               ? "bg-emerald-500/30 text-emerald-100"
               : isAhead
