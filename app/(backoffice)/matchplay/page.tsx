@@ -182,6 +182,20 @@ export default async function MatchPlayPage(props: {
         {isMatchPlay ? (
           <>
             <Link
+              href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
+              style={{
+                ...buttonStyle,
+                background: "linear-gradient(#fbbf24, #d97706)",
+                border: "1px solid #92400e",
+                color: "#0b1224",
+                fontWeight: 800,
+                boxShadow: "0 6px 20px -6px rgba(217, 119, 6, 0.6)",
+              }}
+              title="Pantalla teatral con motor de rifa, confeti y captura inline"
+            >
+              🎰 Rifa de turnos
+            </Link>
+            <Link
               href={`/matchplay/auction?tournament_id=${effectiveId}`}
               style={{
                 ...buttonStyle,
@@ -189,17 +203,17 @@ export default async function MatchPlayPage(props: {
                 border: "1px solid #155e75",
               }}
             >
-              Hoja de subasta
+              📝 Hoja de subasta
             </Link>
             <Link
               href={`/matchplay/auction/show?tournament_id=${effectiveId}`}
               style={{
                 ...buttonStyle,
-                background: "linear-gradient(#f59e0b, #b45309)",
-                border: "1px solid #78350f",
+                background: "linear-gradient(#475569, #334155)",
+                border: "1px solid #1e293b",
               }}
             >
-              🎙 Subasta en vivo
+              📺 Vista clásica
             </Link>
           </>
         ) : null}

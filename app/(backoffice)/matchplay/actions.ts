@@ -726,15 +726,23 @@ export async function awardAuctionBid(formData: FormData) {
   revalidatePath("/matchplay");
   revalidatePath("/matchplay/auction");
   revalidatePath("/matchplay/auction/show");
+  revalidatePath("/matchplay/auction/raffle");
+
+  const awardMsg = `Adjudicado #${auction_order} en ${
+    bid != null ? `$${bid.toLocaleString("es-MX")}` : "—"
+  }.`;
 
   if (redirect_to === "show") {
     redirect(
       `/matchplay/auction/show?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(
-        `Adjudicado #${auction_order} en ${
-          bid != null
-            ? `$${bid.toLocaleString("es-MX")}`
-            : "—"
-        }.`
+        awardMsg
+      )}`
+    );
+  }
+  if (redirect_to === "raffle") {
+    redirect(
+      `/matchplay/auction/raffle?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(
+        awardMsg
       )}`
     );
   }
@@ -775,13 +783,17 @@ export async function resetAuctionData(formData: FormData) {
   revalidatePath("/matchplay");
   revalidatePath("/matchplay/auction");
   revalidatePath("/matchplay/auction/show");
+  revalidatePath("/matchplay/auction/raffle");
 
+  const resetMsg = "Subasta reiniciada.";
   const target =
     redirect_to === "show"
-      ? `/matchplay/auction/show?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent("Subasta reiniciada.")}`
-      : redirect_to === "sheet"
-        ? `/matchplay/auction?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent("Subasta reiniciada.")}`
-        : `/matchplay?tournament_id=${tournament_id}&bracket_status=ok&bracket_message=${encodeURIComponent("Subasta reiniciada.")}`;
+      ? `/matchplay/auction/show?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(resetMsg)}`
+      : redirect_to === "raffle"
+        ? `/matchplay/auction/raffle?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(resetMsg)}`
+        : redirect_to === "sheet"
+          ? `/matchplay/auction?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(resetMsg)}`
+          : `/matchplay?tournament_id=${tournament_id}&bracket_status=ok&bracket_message=${encodeURIComponent(resetMsg)}`;
   redirect(target);
 }
 

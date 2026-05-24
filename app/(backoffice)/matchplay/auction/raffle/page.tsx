@@ -8,7 +8,7 @@ import type {
   MatchPlayConvocatoriaConfig,
   MatchPlayPrizeShare,
 } from "@/lib/matchplay/types";
-import AuctionShowClient from "./AuctionShowClient";
+import RaffleStage from "./RaffleStage";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ const buttonStyle: React.CSSProperties = {
   textDecoration: "none",
 };
 
-export default async function AuctionShowPage(props: {
+export default async function AuctionRafflePage(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const supabase = createAdminClient();
@@ -51,13 +51,13 @@ export default async function AuctionShowPage(props: {
     tournamentId || (list[0]?.id as string | undefined) || "";
 
   if (!tournamentId && effectiveId) {
-    redirect(`/matchplay/auction/show?tournament_id=${effectiveId}`);
+    redirect(`/matchplay/auction/raffle?tournament_id=${effectiveId}`);
   }
 
   if (!effectiveId) {
     return (
       <div className="space-y-2 p-3">
-        <h1 className="text-lg font-bold text-white">Subasta en vivo</h1>
+        <h1 className="text-lg font-bold text-white">Rifa de subasta</h1>
         <p className="text-sm text-amber-200">Crea un torneo primero.</p>
         <Link href="/tournaments/new" style={buttonStyle}>
           Nuevo torneo
@@ -74,7 +74,7 @@ export default async function AuctionShowPage(props: {
   if (!isMatchPlay) {
     return (
       <div className="space-y-2 p-3">
-        <h1 className="text-lg font-bold text-white">Subasta en vivo</h1>
+        <h1 className="text-lg font-bold text-white">Rifa de subasta</h1>
         <p className="text-sm text-amber-200">
           Este torneo no es match play.
         </p>
@@ -90,7 +90,7 @@ export default async function AuctionShowPage(props: {
   if (teamsData.migrationMissing) {
     return (
       <div className="space-y-2 p-3">
-        <h1 className="text-lg font-bold text-white">Subasta en vivo</h1>
+        <h1 className="text-lg font-bold text-white">Rifa de subasta</h1>
         <div className="rounded border border-amber-400/50 bg-amber-950/40 p-3 text-[12px] text-amber-100">
           Faltan migraciones match play en Supabase.
         </div>
@@ -130,56 +130,18 @@ export default async function AuctionShowPage(props: {
       : null;
 
   return (
-    <div className="space-y-3 p-2 md:p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-white">
-            🎙 Subasta en vivo
-          </h1>
-          <p className="text-[12px] text-slate-400">
-            {tournament?.name ?? "Torneo"} · Motor de rifa + siembra en vivo
-            (Supabase Realtime).
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Link
-            href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
-            style={{
-              ...buttonStyle,
-              background: "linear-gradient(#f59e0b, #b45309)",
-              border: "1px solid #78350f",
-            }}
-          >
-            🎰 Rifa teatral
-          </Link>
-          <Link
-            href={`/matchplay/auction?tournament_id=${effectiveId}`}
-            style={buttonStyle}
-          >
-            Hoja
-          </Link>
-          <Link
-            href={`/matchplay?tournament_id=${effectiveId}`}
-            style={buttonStyle}
-          >
-            ← Match play
-          </Link>
-        </div>
-      </div>
-
-      <AuctionShowClient
-        tournamentId={effectiveId}
-        tournamentName={tournament?.name ?? "Torneo"}
-        teams={teamsData.teams}
-        potPercent={potPercent}
-        minBid={minBid}
-        maxBid={maxBid}
-        currency={currency}
-        playerCoverPercent={playerCoverPercent}
-        prizeShares={prizeShares}
-        flashStatus={sp.status}
-        flashMessage={sp.message}
-      />
-    </div>
+    <RaffleStage
+      tournamentId={effectiveId}
+      tournamentName={tournament?.name ?? "Torneo"}
+      teams={teamsData.teams}
+      potPercent={potPercent}
+      minBid={minBid}
+      maxBid={maxBid}
+      currency={currency}
+      playerCoverPercent={playerCoverPercent}
+      prizeShares={prizeShares}
+      flashStatus={sp.status}
+      flashMessage={sp.message}
+    />
   );
 }
