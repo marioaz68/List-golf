@@ -284,6 +284,62 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   redirectWith(tournament_id, { ok: "hi_applied", tab: "admin" });
 }
 
+export async function resetHandicapCommitteeVotes(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
+
+  if (confirm !== "REINICIAR") {
+    redirectWith(tournament_id, {
+      err: "Escribe REINICIAR para confirmar el borrado de votos.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    redirectWith(tournament_id, {
+      err: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { data: committee } = await admin
+    .from("tournament_handicap_committees")
+    .select("id")
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (!committee?.id) {
+    redirectWith(tournament_id, {
+      err: "Comité no encontrado.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { error } = await admin
+    .from("handicap_committee_votes")
+    .delete()
+    .eq("committee_id", committee.id);
+
+  if (error) {
+    redirectWith(tournament_id, { err: error.message, tab: "admin" });
+    return;
+  }
+
+  revalidatePath("/comite-handicap");
+  redirectWith(tournament_id, { ok: "votes_reset", tab: "admin" });
+}
+
 export async function setHandicapCommitteeTrim(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const rawHigh = Number(String(formData.get("trim_high") ?? "0"));
