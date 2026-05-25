@@ -310,6 +310,31 @@ export default async function ComiteHandicapPage(props: {
   const abstainedByEntry = new Map<string, number>();
   let memberCount = 0;
 
+  // Cargamos los votos agregados (anónimos) SIEMPRE que haya admin client
+  // y exista comité, no solo para admins, para poder mostrar el promedio
+  // final al votante cuando la votación esté cerrada.
+  if (admin && committee?.id) {
+    const { data: voteRows } = await admin
+      .from("handicap_committee_votes")
+      .select("entry_id, adjustment, abstained")
+      .eq("committee_id", committee.id);
+
+    for (const v of voteRows ?? []) {
+      const eid = String((v as any).entry_id);
+      if ((v as any).abstained) {
+        abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
+        continue;
+      }
+      const adj = (v as any).adjustment;
+      if (adj == null) continue;
+      const n = Number(adj);
+      if (!Number.isFinite(n)) continue;
+      const list = votesByEntry.get(eid) ?? [];
+      list.push(n);
+      votesByEntry.set(eid, list);
+    }
+  }
+
   type CommitteeScope = "tournament" | "club" | "global";
   type CandidateRow = {
     user_id: string;
@@ -339,27 +364,6 @@ export default async function ComiteHandicapPage(props: {
       avg_adjustment:
         s.avg_adjustment != null ? Number(s.avg_adjustment) : null,
     }));
-
-    // Votos individuales (anónimos: no incluimos member_user_id).
-    const { data: voteRows } = await admin
-      .from("handicap_committee_votes")
-      .select("entry_id, adjustment, abstained")
-      .eq("committee_id", committee.id);
-
-    for (const v of voteRows ?? []) {
-      const eid = String((v as any).entry_id);
-      if ((v as any).abstained) {
-        abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
-        continue;
-      }
-      const adj = (v as any).adjustment;
-      if (adj == null) continue;
-      const n = Number(adj);
-      if (!Number.isFinite(n)) continue;
-      const list = votesByEntry.get(eid) ?? [];
-      list.push(n);
-      votesByEntry.set(eid, list);
-    }
 
     const { data: roleRows } = await admin
       .from("roles")
@@ -528,6 +532,27 @@ export default async function ComiteHandicapPage(props: {
   }
 
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
+
+  // Resumen anónimo para mostrar al votante (solo cuando la votación está
+  // cerrada, lo deja visible en la pestaña Votar para que todos los miembros
+  // vean el resultado final aunque no sean admin).
+  const trimLowGlobal = Number(committee?.trim_low ?? 0);
+  const trimHighGlobal = Number(committee?.trim_high ?? 0);
+  const voteSummariesForVoter = entries.map((e) => {
+    const adjustments = votesByEntry.get(e.entry_id) ?? [];
+    const trim = trimmedAverage(adjustments, trimLowGlobal, trimHighGlobal);
+    const suggested =
+      e.handicap_index != null && trim.avg != null
+        ? Math.round((e.handicap_index + trim.avg) * 10) / 10
+        : null;
+    return {
+      entry_id: e.entry_id,
+      n_votes: adjustments.length,
+      n_live: trim.liveCount,
+      avg_adjustment: trim.avg,
+      suggested_hi: suggested,
+    };
+  });
   const showAdmin = access.isAdmin && tab === "admin";
   const showVote = tab === "vote" || !access.isAdmin;
 
@@ -1107,6 +1132,7 @@ export default async function ComiteHandicapPage(props: {
             committeeOpen={committee.status === "open"}
             isPresent={myPresence}
             isAdmin={access.isAdmin}
+            voteSummaries={voteSummariesForVoter}
           />
         ) : (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
