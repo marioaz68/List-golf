@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
@@ -85,8 +92,8 @@ export default function LiveBracketView({
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
 
-  // Zoom para móvil: por defecto 0.55 en pantallas <768px (cabe completo),
-  // 1.0 en desktop. El usuario puede ajustar con los botones o pellizcando.
+  // Escalado visual real con CSS transform (no reflowea texto: solo encoge).
+  // 0.55 por defecto en móvil para que quepa el cuadro completo de un vistazo.
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -98,6 +105,22 @@ export default function LiveBracketView({
       const next = Math.round((z + delta) * 100) / 100;
       return Math.min(1.8, Math.max(0.3, next));
     });
+  }, []);
+
+  // Medimos las dimensiones reales del bracket para que el contenedor de scroll
+  // refleje el tamaño escalado (transform: scale() no afecta el layout box).
+  const bracketRef = useRef<HTMLDivElement>(null);
+  const [bracketSize, setBracketSize] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    if (!bracketRef.current) return;
+    const el = bracketRef.current;
+    const measure = () => {
+      setBracketSize({ w: el.scrollWidth, h: el.scrollHeight });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   // Realtime para matches reales (cuando el cuadro ya está publicado)
@@ -451,14 +474,22 @@ export default function LiveBracketView({
         </div>
       </div>
 
-      {/* BRACKET (con zoom CSS) */}
+      {/* BRACKET (con transform scale: encoge VISUALMENTE sin reflowear texto) */}
       <div className="overflow-auto pb-3">
-        <div style={{ zoom }} className="origin-top-left">
+        <div
+          style={{
+            width: bracketSize.w ? bracketSize.w * zoom : undefined,
+            height: bracketSize.h ? bracketSize.h * zoom : undefined,
+          }}
+        >
           <div
+            ref={bracketRef}
             className="relative grid min-w-max gap-x-4"
             style={{
               gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 280px))`,
               gridTemplateRows: `repeat(${targetSize}, minmax(34px, auto))`,
+              transform: `scale(${zoom})`,
+              transformOrigin: "top left",
             }}
           >
             {/* Cabeceras */}
@@ -799,7 +830,7 @@ function SidePill({
               {players.map((p, i) => (
                 <li
                   key={`${p.label}-${i}`}
-                  className={`flex items-start gap-1 whitespace-normal break-words text-[12px] font-semibold leading-tight ${
+                  className={`flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold leading-tight ${
                     isWinner ? "text-emerald-100" : "text-white"
                   }`}
                 >
@@ -821,7 +852,7 @@ function SidePill({
                   >
                     {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
                   </span>
-                  <span className="break-words leading-tight">{p.label}</span>
+                  <span className="whitespace-nowrap">{p.label}</span>
                 </li>
               ))}
               {players.length === 0 ? (
