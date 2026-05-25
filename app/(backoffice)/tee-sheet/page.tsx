@@ -159,7 +159,12 @@ export default async function TeeSheetPage(props: {
   const activeTournament = tournaments.find(
     (t) => t.id === effectiveTournamentId
   );
-  const isMatchPlay = isMatchPlayFormat(activeTournament?.settings ?? null);
+  let isMatchPlay = false;
+  try {
+    isMatchPlay = isMatchPlayFormat(activeTournament?.settings ?? null);
+  } catch (err) {
+    console.error("[tee-sheet] isMatchPlayFormat:", err);
+  }
 
   const { data: rData, error: rErr } = effectiveTournamentId
     ? await supabase
@@ -672,6 +677,40 @@ for (const row of membersRaw) {
     }
   }
 
+  // Match play: preview de matches del bracket para el día seleccionado.
+  let matchplayRealMatchesCount = 0;
+  let matchplayByeCount = 0;
+  let matchplayHasBracket = false;
+  let matchplayMatchesInRound = 0;
+  if (isMatchPlay && effectiveTournamentId) {
+    try {
+      const { data: bracketRow } = await supabase
+        .from("matchplay_brackets")
+        .select("id")
+        .eq("tournament_id", effectiveTournamentId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (bracketRow?.id) {
+        matchplayHasBracket = true;
+        const { data: mpMatches } = await supabase
+          .from("matchplay_matches")
+          .select("id, top_pair_id, bottom_pair_id")
+          .eq("bracket_id", bracketRow.id)
+          .eq("round_no", targetRoundNo);
+
+        matchplayMatchesInRound = (mpMatches ?? []).length;
+        matchplayRealMatchesCount = (mpMatches ?? []).filter(
+          (m: any) => m.top_pair_id && m.bottom_pair_id
+        ).length;
+        matchplayByeCount = matchplayMatchesInRound - matchplayRealMatchesCount;
+      }
+    } catch (err) {
+      console.error("[tee-sheet] matchplay preview:", err);
+    }
+  }
+
   if (selectedRound && selectedRound.round_no > 1 && effectiveTournamentId) {
     const categoryIdsToCheck =
       blockCategoryIds.length > 0
@@ -860,19 +899,46 @@ for (const row of membersRaw) {
                 Match Play · Grupos automáticos por bracket
               </h2>
               <p className="mt-1 text-sm text-amber-900">
-                En match play los grupos se arman desde el cuadro: cada match
-                de la ronda <strong>R{targetRoundNo}</strong> = 1 foursome
-                (pareja A vs pareja B).
-              </p>
-              <p className="mt-1 text-sm text-amber-900">
-                <strong>Importante:</strong> en R1 las parejas que pasan por
-                BYE <strong>no juegan</strong>, solo se generan salidas para
-                los matches reales (las dos parejas asignadas). En R2+ ya no
-                hay BYEs. Intervalo recomendado por convocatoria CCQ:
-                <strong> 10 min</strong>.
+                Cada match del cuadro de la ronda <strong>R{targetRoundNo}</strong>
+                {" = 1 foursome (pareja A vs pareja B). "}
+                Las parejas con <strong>BYE no juegan</strong>: solo se generan
+                salidas para los matches reales (con las dos parejas
+                asignadas).
               </p>
             </div>
+
+            <div className="rounded border border-amber-300 bg-white px-3 py-2 text-xs text-amber-950 shadow-sm">
+              <div>
+                Bracket:{" "}
+                <strong>{matchplayHasBracket ? "OK" : "no generado"}</strong>
+              </div>
+              <div>
+                Matches R{targetRoundNo}:{" "}
+                <strong>{matchplayMatchesInRound}</strong>
+              </div>
+              <div>
+                Reales (foursomes a crear):{" "}
+                <strong>{matchplayRealMatchesCount}</strong>
+              </div>
+              <div>
+                Parejas con BYE: <strong>{matchplayByeCount}</strong>
+              </div>
+            </div>
           </header>
+
+          {!matchplayHasBracket ? (
+            <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+              Todavía no existe un bracket para este torneo. Genéralo desde el
+              módulo <strong>Match Play → Cuadro</strong> antes de armar las
+              salidas.
+            </div>
+          ) : matchplayRealMatchesCount === 0 ? (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-100 px-3 py-2 text-sm text-amber-950">
+              No hay matches reales en la ronda <strong>R{targetRoundNo}</strong>{" "}
+              (todos son BYE o aún sin asignar). Termina la subasta /
+              siembra del bracket, o cambia al día/ronda correcto.
+            </div>
+          ) : null}
 
           <form action={generateMatchPlayTeeSheet} className="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
@@ -887,7 +953,11 @@ for (const row of membersRaw) {
                 name="interval_minutes"
                 min={5}
                 max={20}
-                defaultValue={selectedRound?.interval_minutes ?? 10}
+                defaultValue={
+                  selectedRound?.interval_minutes != null
+                    ? String(selectedRound.interval_minutes)
+                    : "10"
+                }
                 className="w-24 rounded border border-amber-400 bg-white px-2 py-1 text-amber-950"
                 disabled={startingOrderConfirmed}
               />
@@ -900,7 +970,11 @@ for (const row of membersRaw) {
               <input
                 type="time"
                 name="start_time"
-                defaultValue={selectedRound?.start_time ?? "07:00"}
+                defaultValue={
+                  typeof selectedRound?.start_time === "string"
+                    ? selectedRound.start_time.slice(0, 5)
+                    : "07:00"
+                }
                 className="rounded border border-amber-400 bg-white px-2 py-1 text-amber-950"
                 disabled={startingOrderConfirmed}
               />
@@ -909,7 +983,12 @@ for (const row of membersRaw) {
             <button
               type="submit"
               className="rounded bg-amber-700 px-4 py-2 font-semibold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={startingOrderConfirmed || teeSheetGenerateBlocked}
+              disabled={
+                startingOrderConfirmed ||
+                teeSheetGenerateBlocked ||
+                !matchplayHasBracket ||
+                matchplayRealMatchesCount === 0
+              }
             >
               Generar foursomes desde bracket R{targetRoundNo}
             </button>
