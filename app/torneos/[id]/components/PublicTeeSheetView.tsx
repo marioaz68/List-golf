@@ -230,6 +230,22 @@ export default function PublicTeeSheetView({
                                 <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-1.5 text-xs font-black text-cyan-200">
                                   {member.position}
                                 </span>
+                                {member.tee_color ? (
+                                  <span
+                                    className="inline-block h-2.5 w-2.5 shrink-0 self-center rounded-full ring-1 ring-white/40"
+                                    style={{ background: member.tee_color }}
+                                    title={
+                                      member.tee_name
+                                        ? `Sale de: ${member.tee_name}`
+                                        : "Marca de salida asignada"
+                                    }
+                                    aria-label={
+                                      member.tee_name
+                                        ? `Sale de ${member.tee_name}`
+                                        : "Marca de salida asignada"
+                                    }
+                                  />
+                                ) : null}
                                 <span className="min-w-0 break-words text-sm font-semibold leading-snug text-white">
                                   {member.player_name}
                                 </span>

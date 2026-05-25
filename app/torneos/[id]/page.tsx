@@ -1089,10 +1089,13 @@ export default async function PublicTournamentPage({
             tournament_entries (
               id,
               handicap_index,
+              category_id,
               player:players (
                 id,
                 first_name,
                 last_name,
+                gender,
+                birth_year,
                 club,
                 club_id,
                 clubs:clubs (
@@ -1113,6 +1116,76 @@ export default async function PublicTournamentPage({
           )
           .order("position", { ascending: true })
       : { data: [], error: null };
+
+  // Reglas + sets de salidas para mostrar el dot del tee asignado en cada
+  // jugador (igual que en /cuadro-vivo y backoffice). Defensivo ante errores.
+  let publicTeeSetsRes: { data: any[] | null } = { data: [] };
+  let publicTeeRulesRes: { data: any[] | null } = { data: [] };
+  try {
+    [publicTeeSetsRes, publicTeeRulesRes] = await Promise.all([
+      supabase
+        .from("tee_sets")
+        .select("id, name, code, color")
+        .eq("tournament_id", typedTournament.id),
+      supabase
+        .from("category_tee_rules")
+        .select(
+          "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+        )
+        .eq("tournament_id", typedTournament.id)
+        .order("priority", { ascending: true }),
+    ]);
+  } catch (err) {
+    console.error("[public tee-sheet] tee rules:", err);
+  }
+  const publicTeeSets = (publicTeeSetsRes.data ?? []) as Array<{
+    id: string;
+    name: string | null;
+    code: string | null;
+    color: string | null;
+  }>;
+  const publicTeeRules = (publicTeeRulesRes.data ?? []) as Array<{
+    id: string;
+    category_id: string;
+    tee_set_id: string;
+    priority: number | null;
+    age_min: number | null;
+    age_max: number | null;
+    gender: "M" | "F" | "X" | null;
+    handicap_min: number | null;
+    handicap_max: number | null;
+  }>;
+  const publicTeeSetById = new Map(publicTeeSets.map((t) => [t.id, t]));
+
+  function resolvePublicTeeForPlayer(p: {
+    gender: string | null;
+    handicap_index: number | null;
+    category_id: string | null;
+    birth_year: number | null;
+  }): { color: string | null; name: string | null } {
+    if (!p.category_id) return { color: null, name: null };
+    const age =
+      p.birth_year && p.birth_year > 0
+        ? new Date().getFullYear() - p.birth_year
+        : null;
+    const hi = p.handicap_index == null ? null : Number(p.handicap_index);
+    const pg = String(p.gender ?? "X").trim().toUpperCase();
+    const candidates = publicTeeRules
+      .filter((r) => r.category_id === p.category_id)
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+    for (const r of candidates) {
+      if (r.gender && r.gender !== pg) continue;
+      if (r.age_min != null && (age == null || age < r.age_min)) continue;
+      if (r.age_max != null && (age == null || age > r.age_max)) continue;
+      if (r.handicap_min != null && (hi == null || hi < Number(r.handicap_min)))
+        continue;
+      if (r.handicap_max != null && (hi == null || hi > Number(r.handicap_max)))
+        continue;
+      const tee = publicTeeSetById.get(r.tee_set_id);
+      if (tee) return { color: tee.color ?? null, name: tee.name ?? null };
+    }
+    return { color: null, name: null };
+  }
 
   if (pairingMembersError) {
     console.error(
@@ -1152,6 +1225,14 @@ export default async function PublicTournamentPage({
     const memberRoundNo =
       roundById.get(memberRoundId ?? "")?.round_no ?? 1;
 
+    const memberCategoryId = category?.id ?? te?.category_id ?? null;
+    const teeInfo = resolvePublicTeeForPlayer({
+      gender: player?.gender ?? null,
+      handicap_index: te?.handicap_index ?? null,
+      category_id: memberCategoryId,
+      birth_year: player?.birth_year ?? null,
+    });
+
     const member: PairingMember = {
       entry_id: row.entry_id,
       position: Number(row.position ?? 0),
@@ -1159,7 +1240,7 @@ export default async function PublicTournamentPage({
       club_id: playerClubId,
       club_label: normalizeClubLabel(club),
       category_code: category?.code ?? category?.name ?? null,
-      category_id: category?.id ?? te?.category_id ?? null,
+      category_id: memberCategoryId,
       handicap_index: te?.handicap_index ?? null,
       standing_display:
         memberRoundNo > 1
@@ -1167,6 +1248,8 @@ export default async function PublicTournamentPage({
               `${row.entry_id}:${memberRoundNo}`
             ) ?? null
           : null,
+      tee_color: teeInfo.color,
+      tee_name: teeInfo.name,
     };
 
     const list = membersByGroup.get(row.group_id) ?? [];

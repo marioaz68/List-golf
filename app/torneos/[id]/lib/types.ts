@@ -124,6 +124,10 @@ export type PairingMember = {
   handicap_index: number | null;
   /** R2+: total acumulado para salidas (R1 o R1+R2). */
   standing_display: string | null;
+  /** Color del tee asignado (Azules/Blancas/Doradas/Rojas). */
+  tee_color: string | null;
+  /** Nombre legible del tee (para tooltip / accesibilidad). */
+  tee_name: string | null;
 };
 
 export type PublicPairingGroup = {
