@@ -156,10 +156,12 @@ RETURNS boolean AS $$
     );
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
--- Tanto el rol explícito 'handicap_committee' como los directores del torneo
--- (y administradores con manage permission) cuentan como miembros: pueden
--- emitir voto. La asistencia (presente/ausente) se gestiona en una tabla
--- aparte y bloquea el voto en la capa de aplicación.
+-- El rol 'handicap_committee' puede asignarse en 3 alcances:
+--   * Torneo único (user_tournament_roles)
+--   * Club (user_club_roles → todos los torneos del club)
+--   * Global (user_global_roles → todos los torneos del sistema)
+-- Cualquiera de los 3, más los directores del torneo y administradores
+-- con manage permission, cuenta como miembro del comité y puede votar.
 CREATE OR REPLACE FUNCTION fn_user_is_handicap_committee_member(user_uuid uuid, tour_uuid uuid)
 RETURNS boolean AS $$
   SELECT EXISTS (
@@ -170,6 +172,24 @@ RETURNS boolean AS $$
       AND utr.tournament_id = tour_uuid
       AND utr.is_active = true
       AND r.code IN ('handicap_committee', 'tournament_director')
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM tournaments t
+    JOIN user_club_roles ucr ON ucr.club_id = t.club_id
+    JOIN roles r ON r.id = ucr.role_id
+    WHERE t.id = tour_uuid
+      AND ucr.user_id = user_uuid
+      AND ucr.is_active = true
+      AND r.code = 'handicap_committee'
+  )
+  OR EXISTS (
+    SELECT 1
+    FROM user_global_roles ugr
+    JOIN roles r ON r.id = ugr.role_id
+    WHERE ugr.user_id = user_uuid
+      AND ugr.is_active = true
+      AND r.code = 'handicap_committee'
   )
   OR fn_user_can_manage_tournament(user_uuid, tour_uuid);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;

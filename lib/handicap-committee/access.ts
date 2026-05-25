@@ -4,6 +4,16 @@ export type HandicapCommitteeAccess = {
   userId: string;
   isAdmin: boolean;
   isMember: boolean;
+  /**
+   * Alcance con el que el usuario es miembro del comité (puede haber más
+   * de uno; se devuelve el más amplio para mostrar en la UI).
+   *   - "global"     → rol en user_global_roles
+   *   - "club"       → rol en user_club_roles para el club del torneo
+   *   - "tournament" → rol en user_tournament_roles para este torneo
+   *   - "admin"      → administrador del torneo (no por rol explícito)
+   *   - null         → no es miembro
+   */
+  memberScope: "global" | "club" | "tournament" | "admin" | null;
 };
 
 function hasRoleCode(rows: unknown[], code: string) {
@@ -20,6 +30,15 @@ export async function loadHandicapCommitteeAccess(
   userId: string,
   tournamentId: string
 ): Promise<HandicapCommitteeAccess> {
+  // Necesitamos el club del torneo para resolver el alcance "club".
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("id, club_id")
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  const clubId: string | null = (tournament as any)?.club_id ?? null;
+
   const [{ data: globalRows }, { data: clubRows }, { data: tourRows }] =
     await Promise.all([
       supabase
@@ -43,13 +62,37 @@ export async function loadHandicapCommitteeAccess(
   const isSuperAdmin = hasRoleCode(globalRows ?? [], "super_admin");
   const isClubAdmin = hasRoleCode(clubRows ?? [], "club_admin");
   const isDirector = hasRoleCode(tourRows ?? [], "tournament_director");
-  const isMember = hasRoleCode(tourRows ?? [], "handicap_committee");
+
+  const isGlobalMember = hasRoleCode(globalRows ?? [], "handicap_committee");
+  const isClubMember = (clubRows ?? []).some((row: any) => {
+    const r = row.roles;
+    const role = Array.isArray(r) ? r[0] : r;
+    return (
+      role?.code === "handicap_committee" &&
+      clubId &&
+      String(row.club_id) === clubId
+    );
+  });
+  const isTournamentMember = hasRoleCode(tourRows ?? [], "handicap_committee");
 
   const isAdmin = isSuperAdmin || isClubAdmin || isDirector;
+  const isMember =
+    isAdmin || isGlobalMember || isClubMember || isTournamentMember;
+
+  const memberScope: HandicapCommitteeAccess["memberScope"] = isGlobalMember
+    ? "global"
+    : isClubMember
+      ? "club"
+      : isTournamentMember
+        ? "tournament"
+        : isAdmin
+          ? "admin"
+          : null;
 
   return {
     userId,
     isAdmin,
-    isMember: isMember || isAdmin,
+    isMember,
+    memberScope,
   };
 }

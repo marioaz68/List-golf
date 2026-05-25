@@ -14,9 +14,9 @@ import {
   setHandicapCommitteeStatus,
   applyHandicapCommitteeSuggestion,
   setHandicapCommitteeMemberPresence,
-  assignHandicapCommitteeRole,
   revokeHandicapCommitteeRole,
   setHandicapCommitteeTrim,
+  inviteHandicapCommitteeMember,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
@@ -65,13 +65,14 @@ export default async function ComiteHandicapPage(props: {
 
     let allowedTournamentIds: string[] | null = null;
     if (!isGlobalAdmin) {
+      const ids = new Set<string>();
+
       const { data: scoped } = await supabase
         .from("user_tournament_roles")
         .select("tournament_id, roles:role_id(code)")
         .eq("user_id", user.id)
         .eq("is_active", true);
 
-      const ids = new Set<string>();
       for (const row of scoped ?? []) {
         const r: any = (row as any).roles;
         const code = Array.isArray(r) ? r[0]?.code : r?.code;
@@ -79,7 +80,47 @@ export default async function ComiteHandicapPage(props: {
           if ((row as any).tournament_id) ids.add(String((row as any).tournament_id));
         }
       }
-      allowedTournamentIds = Array.from(ids);
+
+      // Alcance club: todos los torneos del club donde tiene comité.
+      const { data: clubScoped } = await supabase
+        .from("user_club_roles")
+        .select("club_id, roles:role_id(code)")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+
+      const committeeClubIds = new Set<string>();
+      for (const row of clubScoped ?? []) {
+        const r: any = (row as any).roles;
+        const code = Array.isArray(r) ? r[0]?.code : r?.code;
+        if (code === "handicap_committee" && (row as any).club_id) {
+          committeeClubIds.add(String((row as any).club_id));
+        }
+      }
+      if (committeeClubIds.size > 0) {
+        const { data: clubTournaments } = await supabase
+          .from("tournaments")
+          .select("id")
+          .in("club_id", Array.from(committeeClubIds));
+        for (const t of clubTournaments ?? []) {
+          if ((t as any).id) ids.add(String((t as any).id));
+        }
+      }
+
+      // Alcance global: comité en todo el sistema.
+      const { data: globalScoped } = await supabase
+        .from("user_global_roles")
+        .select("roles:role_id(code)")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+      const isGlobalCommittee = (globalScoped ?? []).some((row: any) => {
+        const r = Array.isArray(row.roles) ? row.roles[0] : row.roles;
+        return r?.code === "handicap_committee";
+      });
+      if (isGlobalCommittee) {
+        allowedTournamentIds = null;
+      } else {
+        allowedTournamentIds = Array.from(ids);
+      }
     }
 
     let tournamentsQuery = supabase
@@ -222,16 +263,21 @@ export default async function ComiteHandicapPage(props: {
   const abstainedByEntry = new Map<string, number>();
   let memberCount = 0;
 
+  type CommitteeScope = "tournament" | "club" | "global";
   type CandidateRow = {
     user_id: string;
     full_name: string;
     email: string | null;
     role_codes: string[];
+    committee_scopes: CommitteeScope[];
     is_present: boolean;
     has_presence_row: boolean;
   };
   let candidateRows: CandidateRow[] = [];
   let presentCount = 0;
+  let tournamentClubId: string | null = null;
+  let actorIsSuperAdmin = false;
+  let actorIsClubAdmin = false;
 
   if (access.isAdmin && admin && committee?.id) {
     const { data: summary } = await admin
@@ -278,9 +324,6 @@ export default async function ComiteHandicapPage(props: {
     );
     const handicapRoleId = roleIdByCode.get("handicap_committee") ?? null;
     const directorRoleId = roleIdByCode.get("tournament_director") ?? null;
-    const candidateRoleIds = [handicapRoleId, directorRoleId].filter(
-      (v): v is string => Boolean(v)
-    );
 
     if (handicapRoleId) {
       const { count } = await admin
@@ -292,6 +335,61 @@ export default async function ComiteHandicapPage(props: {
       memberCount = count ?? 0;
     }
 
+    // Club_id del torneo para resolver alcance "club".
+    const { data: tournamentClubRow } = await admin
+      .from("tournaments")
+      .select("club_id")
+      .eq("id", tournamentId)
+      .maybeSingle();
+    tournamentClubId = (tournamentClubRow as any)?.club_id ?? null;
+
+    // Quién es el actor (super/club/dir) para mostrar opciones de alcance.
+    const [{ data: actorGlobals }, { data: actorClubs }] = await Promise.all([
+      admin
+        .from("user_global_roles")
+        .select("roles:role_id(code)")
+        .eq("user_id", user.id)
+        .eq("is_active", true),
+      admin
+        .from("user_club_roles")
+        .select("club_id, roles:role_id(code)")
+        .eq("user_id", user.id)
+        .eq("is_active", true),
+    ]);
+    actorIsSuperAdmin = (actorGlobals ?? []).some((r: any) => {
+      const x = Array.isArray(r.roles) ? r.roles[0] : r.roles;
+      return x?.code === "super_admin";
+    });
+    actorIsClubAdmin = (actorClubs ?? []).some((r: any) => {
+      const x = Array.isArray(r.roles) ? r.roles[0] : r.roles;
+      return (
+        x?.code === "club_admin" &&
+        tournamentClubId &&
+        String(r.club_id) === tournamentClubId
+      );
+    });
+
+    const codeById = new Map<string, string>(
+      (roleRows ?? []).map((r) => [String(r.id), String(r.code)])
+    );
+
+    // Mapa por usuario de roles + alcances de comité.
+    const codesByUser = new Map<string, Set<string>>();
+    const scopesByUser = new Map<string, Set<CommitteeScope>>();
+
+    function addCode(uid: string, code: string) {
+      if (!codesByUser.has(uid)) codesByUser.set(uid, new Set());
+      codesByUser.get(uid)!.add(code);
+    }
+    function addScope(uid: string, scope: CommitteeScope) {
+      if (!scopesByUser.has(uid)) scopesByUser.set(uid, new Set());
+      scopesByUser.get(uid)!.add(scope);
+    }
+
+    // 1) Roles directos en este torneo (handicap_committee + tournament_director).
+    const candidateRoleIds = [handicapRoleId, directorRoleId].filter(
+      (v): v is string => Boolean(v)
+    );
     if (candidateRoleIds.length > 0) {
       const { data: roleAssignments } = await admin
         .from("user_tournament_roles")
@@ -300,58 +398,86 @@ export default async function ComiteHandicapPage(props: {
         .in("role_id", candidateRoleIds)
         .eq("is_active", true);
 
-      const codeById = new Map<string, string>(
-        (roleRows ?? []).map((r) => [String(r.id), String(r.code)])
-      );
-
-      const codesByUser = new Map<string, Set<string>>();
       for (const r of roleAssignments ?? []) {
         const uid = String((r as any).user_id);
         const code = codeById.get(String((r as any).role_id));
         if (!uid || !code) continue;
-        if (!codesByUser.has(uid)) codesByUser.set(uid, new Set());
-        codesByUser.get(uid)!.add(code);
+        addCode(uid, code);
+        if (code === "handicap_committee") addScope(uid, "tournament");
       }
-
-      const userIds = Array.from(codesByUser.keys());
-
-      const [{ data: profilesRows }, { data: presenceRows }] = await Promise.all([
-        userIds.length
-          ? admin
-              .from("profiles")
-              .select("id, first_name, last_name, email")
-              .in("id", userIds)
-          : Promise.resolve({ data: [] as any[] }),
-        admin
-          .from("handicap_committee_member_presence")
-          .select("user_id, is_present")
-          .eq("committee_id", committee.id),
-      ]);
-
-      const presenceByUser = new Map<string, boolean>();
-      for (const p of presenceRows ?? []) {
-        presenceByUser.set(String((p as any).user_id), Boolean((p as any).is_present));
-      }
-
-      candidateRows = (profilesRows ?? []).map((p: any) => {
-        const fullName = `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() ||
-          (p.email ?? "Usuario");
-        const codes = Array.from(codesByUser.get(String(p.id)) ?? []);
-        const hasPresence = presenceByUser.has(String(p.id));
-        const isPresent = presenceByUser.get(String(p.id)) ?? false;
-        return {
-          user_id: String(p.id),
-          full_name: fullName,
-          email: p.email ?? null,
-          role_codes: codes,
-          is_present: isPresent,
-          has_presence_row: hasPresence,
-        };
-      });
-
-      candidateRows.sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
-      presentCount = candidateRows.filter((c) => c.is_present).length;
     }
+
+    // 2) Comité a nivel club del torneo.
+    if (handicapRoleId && tournamentClubId) {
+      const { data: clubMembers } = await admin
+        .from("user_club_roles")
+        .select("user_id")
+        .eq("club_id", tournamentClubId)
+        .eq("role_id", handicapRoleId)
+        .eq("is_active", true);
+      for (const r of clubMembers ?? []) {
+        const uid = String((r as any).user_id);
+        if (!uid) continue;
+        addCode(uid, "handicap_committee");
+        addScope(uid, "club");
+      }
+    }
+
+    // 3) Comité a nivel global.
+    if (handicapRoleId) {
+      const { data: globalMembers } = await admin
+        .from("user_global_roles")
+        .select("user_id")
+        .eq("role_id", handicapRoleId)
+        .eq("is_active", true);
+      for (const r of globalMembers ?? []) {
+        const uid = String((r as any).user_id);
+        if (!uid) continue;
+        addCode(uid, "handicap_committee");
+        addScope(uid, "global");
+      }
+    }
+
+    const userIds = Array.from(codesByUser.keys());
+
+    const [{ data: profilesRows }, { data: presenceRows }] = await Promise.all([
+      userIds.length
+        ? admin
+            .from("profiles")
+            .select("id, first_name, last_name, email")
+            .in("id", userIds)
+        : Promise.resolve({ data: [] as any[] }),
+      admin
+        .from("handicap_committee_member_presence")
+        .select("user_id, is_present")
+        .eq("committee_id", committee.id),
+    ]);
+
+    const presenceByUser = new Map<string, boolean>();
+    for (const p of presenceRows ?? []) {
+      presenceByUser.set(String((p as any).user_id), Boolean((p as any).is_present));
+    }
+
+    candidateRows = (profilesRows ?? []).map((p: any) => {
+      const fullName = `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() ||
+        (p.email ?? "Usuario");
+      const codes = Array.from(codesByUser.get(String(p.id)) ?? []);
+      const scopes = Array.from(scopesByUser.get(String(p.id)) ?? []);
+      const hasPresence = presenceByUser.has(String(p.id));
+      const isPresent = presenceByUser.get(String(p.id)) ?? false;
+      return {
+        user_id: String(p.id),
+        full_name: fullName,
+        email: p.email ?? null,
+        role_codes: codes,
+        committee_scopes: scopes as CommitteeScope[],
+        is_present: isPresent,
+        has_presence_row: hasPresence,
+      };
+    });
+
+    candidateRows.sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
+    presentCount = candidateRows.filter((c) => c.is_present).length;
   }
 
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
@@ -517,27 +643,79 @@ export default async function ComiteHandicapPage(props: {
                     Miembros del comité (marcar presentes)
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Directores del torneo y usuarios con rol «Comité de Handicap».
-                    Solo los marcados <strong>presentes</strong> pueden votar.
+                    Autoriza quién puede votar en <strong>este torneo</strong> y
+                    marca su asistencia. El alcance define si el acceso es solo
+                    aquí, en todo el club o en todo el sistema.
                   </p>
                 </div>
 
+                <form
+                  action={inviteHandicapCommitteeMember}
+                  className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-300 bg-white p-3"
+                >
+                  <input type="hidden" name="tournament_id" value={tournamentId} />
+                  <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
+                    <span className="font-semibold text-slate-800">
+                      Invitar miembro (email)
+                    </span>
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      placeholder="miembro@email.com"
+                      className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="font-semibold text-slate-800">Alcance</span>
+                    <select
+                      name="scope"
+                      defaultValue="tournament"
+                      className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="tournament">Solo este torneo</option>
+                      {(actorIsSuperAdmin || actorIsClubAdmin) && (
+                        <option value="club">Todo el club del torneo</option>
+                      )}
+                      {actorIsSuperAdmin && (
+                        <option value="global">Todo el sistema</option>
+                      )}
+                    </select>
+                  </label>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white"
+                  >
+                    Autorizar acceso
+                  </button>
+                </form>
+
                 {candidateRows.length === 0 ? (
                   <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-                    Aún no hay candidatos. Asigna el rol «Comité de Handicap» en{" "}
+                    Aún no hay miembros autorizados. Usa el formulario de arriba o
+                    asigna el rol en{" "}
                     <Link
                       href={`/users?tournament_id=${tournamentId}`}
                       className="font-semibold underline"
                     >
                       Usuarios
                     </Link>
-                    , o los directores del torneo aparecerán aquí automáticamente.
+                    . Los directores del torneo aparecen automáticamente.
                   </div>
                 ) : (
                   <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                     {candidateRows.map((c) => {
                       const isDirector = c.role_codes.includes("tournament_director");
-                      const isCommittee = c.role_codes.includes("handicap_committee");
+                      const scopeLabels: Record<CommitteeScope, string> = {
+                        tournament: "Este torneo",
+                        club: "Todo el club",
+                        global: "Todo el sistema",
+                      };
+                      const scopeColors: Record<CommitteeScope, string> = {
+                        tournament: "bg-violet-800 text-white",
+                        club: "bg-indigo-700 text-white",
+                        global: "bg-fuchsia-800 text-white",
+                      };
                       return (
                         <li
                           key={c.user_id}
@@ -556,11 +734,14 @@ export default async function ComiteHandicapPage(props: {
                               {c.email ?? "—"}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
-                              {isCommittee ? (
-                                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                                  Comité
+                              {c.committee_scopes.map((sc) => (
+                                <span
+                                  key={sc}
+                                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${scopeColors[sc]}`}
+                                >
+                                  {scopeLabels[sc]}
                                 </span>
-                              ) : null}
+                              ))}
                               {isDirector ? (
                                 <span className="rounded-full bg-blue-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                                   Director
@@ -604,51 +785,41 @@ export default async function ComiteHandicapPage(props: {
                               </button>
                             </form>
 
-                            {isCommittee && !isDirector ? (
-                              <form action={revokeHandicapCommitteeRole}>
-                                <input
-                                  type="hidden"
-                                  name="tournament_id"
-                                  value={tournamentId}
-                                />
-                                <input type="hidden" name="user_id" value={c.user_id} />
-                                <button
-                                  type="submit"
-                                  className="rounded border border-rose-500 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700"
+                            {c.committee_scopes.map((sc) => {
+                              const canRevoke =
+                                sc === "global"
+                                  ? actorIsSuperAdmin
+                                  : sc === "club"
+                                    ? actorIsSuperAdmin || actorIsClubAdmin
+                                    : true;
+                              if (!canRevoke) return null;
+                              return (
+                                <form
+                                  key={`revoke-${c.user_id}-${sc}`}
+                                  action={revokeHandicapCommitteeRole}
                                 >
-                                  Quitar del comité
-                                </button>
-                              </form>
-                            ) : null}
+                                  <input
+                                    type="hidden"
+                                    name="tournament_id"
+                                    value={tournamentId}
+                                  />
+                                  <input type="hidden" name="user_id" value={c.user_id} />
+                                  <input type="hidden" name="scope" value={sc} />
+                                  <button
+                                    type="submit"
+                                    className="rounded border border-rose-500 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700"
+                                  >
+                                    Quitar ({scopeLabels[sc]})
+                                  </button>
+                                </form>
+                              );
+                            })}
                           </div>
                         </li>
                       );
                     })}
                   </ul>
                 )}
-
-                <details className="mt-3 rounded border border-slate-200 bg-white p-2">
-                  <summary className="cursor-pointer text-xs font-semibold text-slate-800">
-                    Agregar miembro por email
-                  </summary>
-                  <p className="mt-2 text-[11px] text-slate-600">
-                    Crea usuarios en{" "}
-                    <Link
-                      href={`/users/new?tournament_id=${tournamentId}`}
-                      className="font-semibold underline"
-                    >
-                      Usuarios → Nuevo
-                    </Link>{" "}
-                    o asígnales el rol «Comité de Handicap» en{" "}
-                    <Link
-                      href={`/users?tournament_id=${tournamentId}`}
-                      className="font-semibold underline"
-                    >
-                      Usuarios
-                    </Link>
-                    . Aquí solo gestionas la asistencia.
-                  </p>
-                </details>
               </section>
 
               <form
