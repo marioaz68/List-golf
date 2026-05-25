@@ -222,7 +222,10 @@ export default function LiveBracketView({
     }
     rounds.push(r1);
 
-    // Rondas r >= 2: ganador(r-1, 2p) vs ganador(r-1, 2p+1)
+    // Rondas r >= 2: ganador(r-1, 2p) vs ganador(r-1, 2p+1).
+    // IMPORTANTE: a partir de R2 NO hay BYE automático. Si un slot llega vacío,
+    // simplemente queda en "esperando ganador" hasta que se juegue/avance el
+    // match correspondiente. Esto cumple la regla: BYE solo en R1.
     for (let r = 2; r <= roundCount; r++) {
       const prev = rounds[r - 2];
       const cur = new Map<number, Slot>();
@@ -232,31 +235,23 @@ export default function LiveBracketView({
         const dnMatch = prev.get(p * 2 + 1);
         let top: MatchPlayTeamRow | null = upMatch?.winner ?? null;
         let bottom: MatchPlayTeamRow | null = dnMatch?.winner ?? null;
-        // Overlay con match real
         const real = matchByPos.get(`${r}-${p + 1}`);
         if (real) {
           if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
           if (real.bottom_pair_id)
             bottom = teamById.get(real.bottom_pair_id) ?? bottom;
         }
-        let winner: MatchPlayTeamRow | null = null;
-        let byeSide: "top" | "bottom" | null = null;
-        if (real?.winner_pair_id) {
-          winner = teamById.get(real.winner_pair_id) ?? null;
-        } else if (top && !bottom) {
-          winner = top;
-          byeSide = "bottom";
-        } else if (!top && bottom) {
-          winner = bottom;
-          byeSide = "top";
-        }
+        // Solo el winner viene de la BD; nada de BYE automático en R2+.
+        const winner = real?.winner_pair_id
+          ? teamById.get(real.winner_pair_id) ?? null
+          : null;
         cur.set(p, {
           top,
           bottom,
           topSeed: null,
           bottomSeed: null,
           winner,
-          byeSide,
+          byeSide: null,
         });
       }
       rounds.push(cur);
@@ -414,11 +409,17 @@ export default function LiveBracketView({
               <strong>{realMatchesR1}</strong> matches reales.
             </li>
             <li>
-              <span className="font-bold text-amber-200">5.</span> Badge{" "}
+              <span className="font-bold text-amber-200">5.</span>{" "}
+              <strong>BYE solo en R1.</strong> A partir de R2 nadie pasa por
+              BYE: los ganadores de R1 se enfrentan entre sí.
+            </li>
+            <li>
+              <span className="font-bold text-amber-200">6.</span> Badge{" "}
               <span className="rounded bg-slate-600/40 px-1 py-0.5 text-[10px] font-bold text-slate-300">
                 s/p
               </span>{" "}
-              = pareja inscrita sin postura adjudicada todavía.
+              = pareja inscrita sin postura adjudicada todavía (cambia de seed
+              conforme avanza la subasta).
             </li>
           </ul>
         </section>
@@ -556,7 +557,7 @@ function BracketMatchCell({
       ) : null}
       {hasBye && !realMatch ? (
         <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-amber-300">
-          Pasa por BYE
+          Pasa por BYE → espera R2
         </p>
       ) : null}
       {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (
