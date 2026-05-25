@@ -5,6 +5,7 @@ import { formatStartingHoleLabelParts } from "@/lib/tee-sheet/formatStartingHole
 import { pairingGroupMatchesCategory } from "@/lib/tee-sheet/pairingGroupCategoryMatch";
 import {
   MATCH_PLAY_PAIR_COLORS,
+  compactPlayerName,
   matchPlayPairSideForPosition,
   parseMatchPlayGroupNotes,
 } from "@/lib/tee-sheet/matchPlayPairing";
@@ -227,35 +228,25 @@ export default function PublicTeeSheetView({
                       {isMatchPlay ? (
                         <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-white/[0.02] px-2.5 py-1.5 text-[11px] font-bold sm:px-3">
                           <span
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
+                            className="inline-flex items-center rounded-md px-2 py-0.5"
                             style={{
                               backgroundColor: topPair.badgeBg,
                               color: topPair.badgeFg,
                             }}
                           >
-                            <span
-                              className="inline-block h-2 w-2 rounded-full"
-                              style={{ backgroundColor: topPair.badgeFg, opacity: 0.85 }}
-                              aria-hidden
-                            />
                             {matchPlayInfo.topLabel}
                           </span>
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300">
                             vs
                           </span>
                           <span
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
+                            className="inline-flex items-center rounded-md px-2 py-0.5"
                             style={{
                               backgroundColor: bottomPair.badgeBg,
                               color: bottomPair.badgeFg,
                             }}
                           >
                             {matchPlayInfo.bottomLabel}
-                            <span
-                              className="inline-block h-2 w-2 rounded-full"
-                              style={{ backgroundColor: bottomPair.badgeFg, opacity: 0.85 }}
-                              aria-hidden
-                            />
                           </span>
                         </div>
                       ) : null}
@@ -299,22 +290,24 @@ export default function PublicTeeSheetView({
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                  <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-1.5 text-xs font-black text-cyan-200">
+                                  <span
+                                    className={[
+                                      "inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md px-1.5 text-xs font-black",
+                                      pairColors
+                                        ? ""
+                                        : "border border-cyan-500/25 bg-cyan-500/10 text-cyan-200",
+                                    ].join(" ")}
+                                    style={
+                                      pairColors
+                                        ? {
+                                            backgroundColor: pairColors.badgeBg,
+                                            color: pairColors.badgeFg,
+                                          }
+                                        : undefined
+                                    }
+                                  >
                                     {member.position}
                                   </span>
-                                  {pairColors ? (
-                                    <span
-                                      className="inline-flex h-5 items-center justify-center rounded-md px-1.5 text-[10px] font-black uppercase tracking-wide"
-                                      style={{
-                                        backgroundColor: pairColors.badgeBg,
-                                        color: pairColors.badgeFg,
-                                      }}
-                                      title={pairColors.label}
-                                      aria-label={pairColors.label}
-                                    >
-                                      {pairSide === "top" ? "A" : "B"}
-                                    </span>
-                                  ) : null}
                                   {member.tee_color ? (
                                     <span
                                       className="inline-block h-2.5 w-2.5 shrink-0 self-center rounded-full ring-1 ring-white/40"
@@ -337,7 +330,13 @@ export default function PublicTeeSheetView({
                                       pairColors ? "text-slate-900" : "text-white",
                                     ].join(" ")}
                                   >
-                                    {member.player_name}
+                                    {isMatchPlay
+                                      ? compactPlayerName({
+                                          first_name: member.first_name,
+                                          last_name: member.last_name,
+                                          player_name: member.player_name,
+                                        })
+                                      : member.player_name}
                                   </span>
                                 </div>
                                 <div

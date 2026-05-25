@@ -117,6 +117,10 @@ export type PairingMember = {
   entry_id: string;
   position: number;
   player_name: string;
+  /** Nombre/s pila (para versión compacta en match play). */
+  first_name?: string | null;
+  /** Apellido/s (para versión compacta en match play). */
+  last_name?: string | null;
   club_id: string | null;
   club_label: string | null;
   category_id: string | null;

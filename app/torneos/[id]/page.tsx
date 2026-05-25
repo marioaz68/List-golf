@@ -1237,6 +1237,8 @@ export default async function PublicTournamentPage({
       entry_id: row.entry_id,
       position: Number(row.position ?? 0),
       player_name: nameOfPlayer(player),
+      first_name: player?.first_name ?? null,
+      last_name: player?.last_name ?? null,
       club_id: playerClubId,
       club_label: normalizeClubLabel(club),
       category_code: category?.code ?? category?.name ?? null,

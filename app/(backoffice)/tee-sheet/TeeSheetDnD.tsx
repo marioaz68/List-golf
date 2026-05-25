@@ -21,6 +21,7 @@ import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel
 import { formatGroupTeeScheduleLabel } from "./sessionBlock";
 import {
   MATCH_PLAY_PAIR_COLORS,
+  compactPlayerName,
   matchPlayPairSideForPosition,
   parseMatchPlayGroupNotes,
   type MatchPlayPairSide,
@@ -888,6 +889,12 @@ function PlayerRow({
 
   const fullName = nameOf(member);
   const isMatch = qn ? norm(fullName).includes(qn) : false;
+  const displayName = pairColors
+    ? compactPlayerName({
+        first_name: member.first_name,
+        last_name: member.last_name,
+      })
+    : fullName;
 
   return (
     <div
@@ -909,20 +916,6 @@ function PlayerRow({
 
         <ClubMiniLogo member={member} size={20} />
 
-        {pairColors ? (
-          <span
-            className="inline-flex h-4 items-center justify-center rounded px-1 text-[9px] font-black uppercase tracking-wide"
-            style={{
-              backgroundColor: pairColors.badgeBg,
-              color: pairColors.badgeFg,
-            }}
-            title={pairColors.label}
-            aria-label={pairColors.label}
-          >
-            {matchPlayPair === "top" ? "A" : "B"}
-          </span>
-        ) : null}
-
         {member.tee_color ? (
           <span
             className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-slate-400/60"
@@ -941,7 +934,7 @@ function PlayerRow({
         ) : null}
 
         <div className="min-w-0 flex-1 truncate font-medium text-slate-900">
-          {fullName}
+          {displayName}
         </div>
 
         <div className="w-10 shrink-0 text-right font-bold text-green-700">
