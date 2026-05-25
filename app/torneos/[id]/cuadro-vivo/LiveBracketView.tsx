@@ -551,14 +551,13 @@ function BracketMatchCell({
   const isFinal = round === roundCount;
   const hasBye = byeSide !== null;
 
-  // Fondo distintivo solo en los brackets:
-  // - Final: dorado.
-  // - BYE: tono pizarra apagado.
-  // - Resto: azul-cyan medio con sombra para que resalte sobre la página.
-  const cellBg = isFinal
-    ? "rounded-2xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-900/60 via-amber-950/60 to-[#1a1304] p-3 shadow-[0_0_36px_-12px_rgba(251,191,36,0.55)]"
-    : hasBye && !realMatch
-      ? "rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/70 to-[#0a1220] p-2 shadow-md"
+  // Fondo: azul-cyan para TODAS las celdas (R1 reales, R2..R5 y final).
+  // BYE (solo en R1) usa tono pizarra apagado para diferenciarse.
+  // La final mantiene un borde dorado de acento (mismo fondo que el resto).
+  const cellBg = hasBye && !realMatch
+    ? "rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/70 to-[#0a1220] p-2 shadow-md"
+    : isFinal
+      ? "rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_0_28px_-10px_rgba(251,191,36,0.55)]"
       : "rounded-xl border border-cyan-400/40 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_4px_18px_-6px_rgba(8,145,178,0.45)]";
 
   return (
