@@ -731,9 +731,14 @@ export default async function ComiteHandicapPage(props: {
                           ? Math.round((e.handicap_index + avg) * 10) / 10
                           : null;
 
-                      const sortedChips = [...trim.values].sort(
-                        (a, b) => a.value - b.value
-                      );
+                      const shuffledChips = (() => {
+                        const arr = [...trim.values];
+                        for (let i = arr.length - 1; i > 0; i -= 1) {
+                          const j = Math.floor(Math.random() * (i + 1));
+                          [arr[i], arr[j]] = [arr[j], arr[i]];
+                        }
+                        return arr;
+                      })();
 
                       return (
                         <tr key={e.entry_id} className="border-t border-slate-100 align-top">
@@ -741,12 +746,12 @@ export default async function ComiteHandicapPage(props: {
                           <td className="px-3 py-2 tabular-nums">{e.handicap_index ?? "—"}</td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
-                              {sortedChips.length === 0 ? (
+                              {shuffledChips.length === 0 ? (
                                 <span className="text-xs text-slate-400">
                                   Sin votos
                                 </span>
                               ) : (
-                                sortedChips.map((v, idx) => (
+                                shuffledChips.map((v, idx) => (
                                   <span
                                     key={`${e.entry_id}-${idx}`}
                                     title={
