@@ -10,7 +10,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
+import type { MatchPlayEntryRow, MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
@@ -39,6 +39,26 @@ type PrizeShareRow = {
   source?: "match_play" | "consolation_match_play" | "stroke_play_aggregate";
 };
 
+export type TeeSetLite = {
+  id: string;
+  name: string;
+  code: string | null;
+  color: string | null;
+  tee_color: string | null;
+};
+
+export type TeeRuleLite = {
+  id: string;
+  category_id: string;
+  tee_set_id: string;
+  priority: number;
+  age_min: number | null;
+  age_max: number | null;
+  gender: "M" | "F" | "X" | null;
+  handicap_min: number | null;
+  handicap_max: number | null;
+};
+
 type Props = {
   tournamentId: string;
   tournamentName: string;
@@ -48,6 +68,9 @@ type Props = {
   currency: string;
   potPercent: number | null;
   prizeShares: PrizeShareRow[];
+  teeSets?: TeeSetLite[];
+  teeRules?: TeeRuleLite[];
+  birthYearByPlayerId?: Record<string, number | null>;
 };
 
 function money(v: number | null | undefined, currency: string) {
@@ -66,30 +89,83 @@ function formatPlayerNameCompact(p: {
   return `${first} ${last}`.trim() || "—";
 }
 
-/** Devuelve [hombre, mujer] cuando es posible; si no, conserva el orden A,B. */
+type DisplayPlayer = {
+  label: string;
+  gender: "M" | "F" | "X";
+  tee: TeeSetLite | null;
+};
+
+/** Devuelve [hombre, mujer] cuando es posible; si no, conserva el orden A,B.
+ *  Incluye el tee asignado por las reglas. */
 function playersOrderedMaleFirst(
   t: MatchPlayTeamRow,
-  compact: boolean
-): Array<{ label: string; gender: "M" | "F" | "X" }> {
+  compact: boolean,
+  teeRules: TeeRuleLite[],
+  teeSets: TeeSetLite[],
+  birthYearByPlayerId: Record<string, number | null>
+): DisplayPlayer[] {
   const fmt = compact ? formatPlayerNameCompact : formatPlayerName;
-  const list: Array<{ label: string; gender: "M" | "F" | "X" }> = [];
-  if (t.player_a) {
+  const list: DisplayPlayer[] = [];
+  const push = (entry: MatchPlayEntryRow | null) => {
+    if (!entry) return;
+    const tee = resolveTeeForPlayer(
+      {
+        id: entry.player.id,
+        gender: entry.player.gender,
+        handicap_index: entry.handicap_index ?? entry.effective_hi ?? null,
+        category_id: entry.category_id ?? null,
+      },
+      teeRules,
+      teeSets,
+      birthYearByPlayerId[entry.player.id] ?? null
+    );
     list.push({
-      label: fmt(t.player_a.player),
-      gender: (t.player_a.player.gender ?? "X") as "M" | "F" | "X",
+      label: fmt(entry.player),
+      gender: (entry.player.gender ?? "X") as "M" | "F" | "X",
+      tee,
     });
-  }
-  if (t.player_b) {
-    list.push({
-      label: fmt(t.player_b.player),
-      gender: (t.player_b.player.gender ?? "X") as "M" | "F" | "X",
-    });
-  }
+  };
+  push(t.player_a);
+  push(t.player_b);
   list.sort((a, b) => {
     const order: Record<"M" | "F" | "X", number> = { M: 0, F: 1, X: 2 };
     return order[a.gender] - order[b.gender];
   });
   return list;
+}
+
+/** Devuelve el tee set asignado a un jugador según las reglas y datos del jugador.
+ *  Retorna null si no hay match (o no hay reglas). */
+function resolveTeeForPlayer(
+  player: {
+    id: string;
+    gender: "M" | "F" | "X" | null;
+    handicap_index: number | null;
+    category_id: string | null;
+  },
+  rules: TeeRuleLite[],
+  teeSets: TeeSetLite[],
+  birthYear: number | null
+): TeeSetLite | null {
+  if (!player.category_id) return null;
+  const age =
+    birthYear != null && birthYear > 0
+      ? new Date().getFullYear() - birthYear
+      : null;
+  const hi = player.handicap_index ?? null;
+  const candidates = rules
+    .filter((r) => r.category_id === player.category_id)
+    .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+  for (const r of candidates) {
+    if (r.gender && r.gender !== player.gender) continue;
+    if (r.age_min != null && (age == null || age < r.age_min)) continue;
+    if (r.age_max != null && (age == null || age > r.age_max)) continue;
+    if (r.handicap_min != null && (hi == null || hi < r.handicap_min)) continue;
+    if (r.handicap_max != null && (hi == null || hi > r.handicap_max)) continue;
+    const tee = teeSets.find((t) => t.id === r.tee_set_id);
+    if (tee) return tee;
+  }
+  return null;
 }
 
 export default function LiveBracketView({
@@ -101,6 +177,9 @@ export default function LiveBracketView({
   currency,
   potPercent,
   prizeShares,
+  teeSets = [],
+  teeRules = [],
+  birthYearByPlayerId = {},
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
 
@@ -588,6 +667,9 @@ export default function LiveBracketView({
                     realMatch={real}
                     currency={currency}
                     compactNames={isMobile}
+                    teeRules={teeRules}
+                    teeSets={teeSets}
+                    birthYearByPlayerId={birthYearByPlayerId}
                   />
                 );
               }
@@ -693,6 +775,9 @@ function BracketMatchCell({
   realMatch,
   currency,
   compactNames,
+  teeRules,
+  teeSets,
+  birthYearByPlayerId,
 }: {
   round: number;
   positionIdx: number;
@@ -717,6 +802,9 @@ function BracketMatchCell({
   } | null;
   currency: string;
   compactNames: boolean;
+  teeRules: TeeRuleLite[];
+  teeSets: TeeSetLite[];
+  birthYearByPlayerId: Record<string, number | null>;
 }) {
   const winnerId = realMatch?.winner_pair_id ?? computedWinnerId ?? null;
   const isFinal = round === roundCount;
@@ -753,6 +841,9 @@ function BracketMatchCell({
         showBid={round === 1}
         currency={currency}
         compactNames={compactNames}
+        teeRules={teeRules}
+        teeSets={teeSets}
+        birthYearByPlayerId={birthYearByPlayerId}
       />
       <div className="my-1 text-center text-[9px] uppercase tracking-wider text-slate-400/70">
         vs
@@ -767,6 +858,9 @@ function BracketMatchCell({
         showBid={round === 1}
         currency={currency}
         compactNames={compactNames}
+        teeRules={teeRules}
+        teeSets={teeSets}
+        birthYearByPlayerId={birthYearByPlayerId}
       />
 
       {realMatch?.result_text ? (
@@ -811,6 +905,9 @@ function SidePill({
   showBid,
   currency,
   compactNames,
+  teeRules,
+  teeSets,
+  birthYearByPlayerId,
 }: {
   side: "top" | "bottom";
   seed: number | null;
@@ -821,6 +918,9 @@ function SidePill({
   showBid: boolean;
   currency: string;
   compactNames: boolean;
+  teeRules: TeeRuleLite[];
+  teeSets: TeeSetLite[];
+  birthYearByPlayerId: Record<string, number | null>;
 }) {
   // Vacante = seed nunca se llenará (genera BYE). Pending = seed inscrito pero
   // aún no adjudicado en la subasta. Equipo = ya adjudicado.
@@ -834,7 +934,9 @@ function SidePill({
           ? "bg-[#0b1c34]/80 border-white/15"
           : "bg-black/40 border-white/10";
 
-  const players = team ? playersOrderedMaleFirst(team, compactNames) : [];
+  const players = team
+    ? playersOrderedMaleFirst(team, compactNames, teeRules, teeSets, birthYearByPlayerId)
+    : [];
 
   return (
     <div
@@ -886,6 +988,13 @@ function SidePill({
                   >
                     {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
                   </span>
+                  {p.tee ? (
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40"
+                      style={{ background: p.tee.color ?? "#9ca3af" }}
+                      title={`Sale de: ${p.tee.name}`}
+                    />
+                  ) : null}
                   <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                     {p.label}
                   </span>

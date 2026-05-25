@@ -8,7 +8,7 @@ import type {
   MatchPlayConvocatoriaConfig,
   MatchPlayPrizeShare,
 } from "@/lib/matchplay/types";
-import LiveBracketView from "./LiveBracketView";
+import LiveBracketView, { type TeeRuleLite, type TeeSetLite } from "./LiveBracketView";
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +145,54 @@ export default async function PublicLiveBracketPage(props: {
     existingMatches = matchesRaw ?? [];
   }
 
+  // Reglas + sets de salidas para mostrar marca de tee por jugador.
+  // También cargamos birth_year de los jugadores en juego (para regla DORADAS 65+).
+  const playerIds = new Set<string>();
+  for (const t of teamsData.teams) {
+    if (t.player_a?.player_id) playerIds.add(t.player_a.player_id);
+    if (t.player_b?.player_id) playerIds.add(t.player_b.player_id);
+  }
+
+  const [teeSetsRes, teeRulesRes, playersRes] = await Promise.all([
+    supabase
+      .from("tee_sets")
+      .select("id, name, code, color, tee_color")
+      .eq("tournament_id", tournamentId),
+    supabase
+      .from("category_tee_rules")
+      .select(
+        "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+      )
+      .eq("tournament_id", tournamentId)
+      .order("priority", { ascending: true }),
+    playerIds.size > 0
+      ? supabase.from("players").select("id, birth_year").in("id", Array.from(playerIds))
+      : Promise.resolve({ data: [] as Array<{ id: string; birth_year: number | null }> }),
+  ]);
+
+  const teeSets: TeeSetLite[] = (teeSetsRes.data ?? []).map((t) => ({
+    id: t.id,
+    name: t.name ?? "",
+    code: t.code ?? null,
+    color: t.color ?? null,
+    tee_color: t.tee_color ?? null,
+  }));
+  const teeRules: TeeRuleLite[] = (teeRulesRes.data ?? []).map((r) => ({
+    id: r.id,
+    category_id: r.category_id,
+    tee_set_id: r.tee_set_id,
+    priority: r.priority ?? 999,
+    age_min: r.age_min ?? null,
+    age_max: r.age_max ?? null,
+    gender: (r.gender ?? null) as "M" | "F" | "X" | null,
+    handicap_min: r.handicap_min == null ? null : Number(r.handicap_min),
+    handicap_max: r.handicap_max == null ? null : Number(r.handicap_max),
+  }));
+  const birthYearByPlayerId: Record<string, number | null> = {};
+  for (const p of playersRes.data ?? []) {
+    birthYearByPlayerId[p.id] = p.birth_year ?? null;
+  }
+
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
       <LiveBracketView
@@ -156,6 +204,9 @@ export default async function PublicLiveBracketPage(props: {
         currency={currency}
         potPercent={potPercent}
         prizeShares={prizeShares}
+        teeSets={teeSets}
+        teeRules={teeRules}
+        birthYearByPlayerId={birthYearByPlayerId}
       />
     </main>
   );
