@@ -99,7 +99,7 @@ export default function HandicapCommitteeVoter({
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-300 bg-white p-4 text-slate-900 shadow-sm">
         <div className="text-sm font-semibold text-slate-900">Tu progreso</div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
           <div
@@ -230,7 +230,9 @@ function PlayerVoteCard({
     <article
       className={[
         "rounded-xl border p-3 shadow-sm",
-        saved ? "border-emerald-400/60 bg-emerald-50/40" : "border-slate-300 bg-white",
+        saved
+          ? "border-emerald-400/60 bg-emerald-50/40 text-slate-900"
+          : "border-slate-300 bg-white text-slate-900",
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-2">
