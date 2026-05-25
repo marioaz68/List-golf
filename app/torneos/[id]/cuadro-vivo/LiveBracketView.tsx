@@ -55,24 +55,36 @@ function money(v: number | null | undefined, currency: string) {
   return `$${Math.round(v).toLocaleString("es-MX")} ${currency}`;
 }
 
+/** Nombre compacto para móvil: solo primer nombre + primer apellido.
+ *  Ej.: "Leticia Sosa Rodriguez" → "Leticia Sosa". */
+function formatPlayerNameCompact(p: {
+  first_name?: string | null;
+  last_name?: string | null;
+}): string {
+  const first = (p.first_name ?? "").trim().split(/\s+/)[0] ?? "";
+  const last = (p.last_name ?? "").trim().split(/\s+/)[0] ?? "";
+  return `${first} ${last}`.trim() || "—";
+}
+
 /** Devuelve [hombre, mujer] cuando es posible; si no, conserva el orden A,B. */
 function playersOrderedMaleFirst(
-  t: MatchPlayTeamRow
+  t: MatchPlayTeamRow,
+  compact: boolean
 ): Array<{ label: string; gender: "M" | "F" | "X" }> {
+  const fmt = compact ? formatPlayerNameCompact : formatPlayerName;
   const list: Array<{ label: string; gender: "M" | "F" | "X" }> = [];
   if (t.player_a) {
     list.push({
-      label: formatPlayerName(t.player_a.player),
+      label: fmt(t.player_a.player),
       gender: (t.player_a.player.gender ?? "X") as "M" | "F" | "X",
     });
   }
   if (t.player_b) {
     list.push({
-      label: formatPlayerName(t.player_b.player),
+      label: fmt(t.player_b.player),
       gender: (t.player_b.player.gender ?? "X") as "M" | "F" | "X",
     });
   }
-  // Hombre primero, mujer después; otros casos (X/X) mantienen orden original.
   list.sort((a, b) => {
     const order: Record<"M" | "F" | "X", number> = { M: 0, F: 1, X: 2 };
     return order[a.gender] - order[b.gender];
@@ -92,13 +104,24 @@ export default function LiveBracketView({
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
 
+  // Detección reactiva de móvil para usar nombres compactos.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   // Escalado visual real con CSS transform (no reflowea texto: solo encoge).
   // 0.55 por defecto en móvil para que quepa el cuadro completo de un vistazo.
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const isMobile = window.matchMedia("(max-width: 767px)").matches;
-    if (isMobile) setZoom(0.55);
+    const mobile = window.matchMedia("(max-width: 767px)").matches;
+    if (mobile) setZoom(0.55);
   }, []);
   const stepZoom = useCallback((delta: number) => {
     setZoom((z) => {
@@ -564,6 +587,7 @@ export default function LiveBracketView({
                     computedWinnerId={slot?.winner?.id ?? null}
                     realMatch={real}
                     currency={currency}
+                    compactNames={isMobile}
                   />
                 );
               }
@@ -668,6 +692,7 @@ function BracketMatchCell({
   computedWinnerId,
   realMatch,
   currency,
+  compactNames,
 }: {
   round: number;
   positionIdx: number;
@@ -691,6 +716,7 @@ function BracketMatchCell({
     result_text: string | null;
   } | null;
   currency: string;
+  compactNames: boolean;
 }) {
   const winnerId = realMatch?.winner_pair_id ?? computedWinnerId ?? null;
   const isFinal = round === roundCount;
@@ -726,6 +752,7 @@ function BracketMatchCell({
         isPending={!topVacant && !topTeam && round === 1}
         showBid={round === 1}
         currency={currency}
+        compactNames={compactNames}
       />
       <div className="my-1 text-center text-[9px] uppercase tracking-wider text-slate-400/70">
         vs
@@ -739,6 +766,7 @@ function BracketMatchCell({
         isPending={!bottomVacant && !bottomTeam && round === 1}
         showBid={round === 1}
         currency={currency}
+        compactNames={compactNames}
       />
 
       {realMatch?.result_text ? (
@@ -782,6 +810,7 @@ function SidePill({
   isPending,
   showBid,
   currency,
+  compactNames,
 }: {
   side: "top" | "bottom";
   seed: number | null;
@@ -791,6 +820,7 @@ function SidePill({
   isPending: boolean;
   showBid: boolean;
   currency: string;
+  compactNames: boolean;
 }) {
   // Vacante = seed nunca se llenará (genera BYE). Pending = seed inscrito pero
   // aún no adjudicado en la subasta. Equipo = ya adjudicado.
@@ -804,10 +834,13 @@ function SidePill({
           ? "bg-[#0b1c34]/80 border-white/15"
           : "bg-black/40 border-white/10";
 
-  const players = team ? playersOrderedMaleFirst(team) : [];
+  const players = team ? playersOrderedMaleFirst(team, compactNames) : [];
 
   return (
-    <div className={`rounded-lg border px-2 py-1.5 ${tone}`} data-side={side}>
+    <div
+      className={`overflow-hidden rounded-lg border px-2 py-1.5 ${tone}`}
+      data-side={side}
+    >
       <div className="flex items-start gap-1.5">
         <span
           className={`mt-0.5 inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
@@ -820,7 +853,7 @@ function SidePill({
         >
           {seed != null ? `#${seed}` : "—"}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           {isVacant ? (
             <div className="text-[12px] font-bold uppercase tracking-wider text-slate-500">
               BYE · vacante
@@ -830,7 +863,7 @@ function SidePill({
               {players.map((p, i) => (
                 <li
                   key={`${p.label}-${i}`}
-                  className={`flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold leading-tight ${
+                  className={`flex items-center gap-1 overflow-hidden whitespace-nowrap text-[12px] font-semibold leading-tight ${
                     isWinner ? "text-emerald-100" : "text-white"
                   }`}
                 >
@@ -852,7 +885,9 @@ function SidePill({
                   >
                     {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
                   </span>
-                  <span className="whitespace-nowrap">{p.label}</span>
+                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                    {p.label}
+                  </span>
                 </li>
               ))}
               {players.length === 0 ? (
