@@ -17,6 +17,7 @@ import {
   revokeHandicapCommitteeRole,
   setHandicapCommitteeTrim,
   inviteHandicapCommitteeMember,
+  resetHandicapCommitteeVotes,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
@@ -538,6 +539,11 @@ export default async function ComiteHandicapPage(props: {
           Recorte de outliers actualizado.
         </div>
       ) : null}
+      {actionOk === "votes_reset" ? (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-950">
+          Votación reiniciada: se borraron todos los votos del comité.
+        </div>
+      ) : null}
 
       {access.isAdmin ? (
         <div className="flex flex-wrap gap-2">
@@ -635,6 +641,45 @@ export default async function ComiteHandicapPage(props: {
                     </button>
                   </form>
                 )}
+
+                <details className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2">
+                  <summary className="cursor-pointer text-sm font-semibold text-rose-900">
+                    Reiniciar votación (pruebas)
+                  </summary>
+                  <form
+                    action={resetHandicapCommitteeVotes}
+                    className="mt-2 flex flex-wrap items-end gap-2"
+                  >
+                    <input
+                      type="hidden"
+                      name="tournament_id"
+                      value={tournamentId}
+                    />
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="font-medium text-rose-900">
+                        Escribe REINICIAR para confirmar
+                      </span>
+                      <input
+                        type="text"
+                        name="confirm"
+                        placeholder="REINICIAR"
+                        autoComplete="off"
+                        className="w-40 rounded border border-rose-400 bg-white px-2 py-1 text-sm"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white"
+                    >
+                      Borrar todos los votos
+                    </button>
+                    <p className="basis-full text-[11px] text-rose-900/80">
+                      Elimina <strong>todos</strong> los votos guardados del comité
+                      en este torneo. Usar solo para pruebas o cuando los datos
+                      iniciales eran incorrectos. La acción no se puede deshacer.
+                    </p>
+                  </form>
+                </details>
               </div>
 
               <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
