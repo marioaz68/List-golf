@@ -706,6 +706,19 @@ function DroppableGroupCard({
   const topPairColors = MATCH_PLAY_PAIR_COLORS.top;
   const bottomPairColors = MATCH_PLAY_PAIR_COLORS.bottom;
 
+  const matchPlayCardStyle: React.CSSProperties = isMatchPlay
+    ? {
+        backgroundColor: "#e2e8f0",
+        borderColor: "#94a3b8",
+      }
+    : color.cardStyle;
+  const matchPlayHeaderStyle: React.CSSProperties = isMatchPlay
+    ? {
+        backgroundColor: "#cbd5e1",
+        borderColor: "#94a3b8",
+      }
+    : color.headerStyle;
+
   return (
     <div
       ref={(el) => {
@@ -714,15 +727,21 @@ function DroppableGroupCard({
       }}
       className={[
         "rounded border p-0.5 shadow-sm transition-colors",
-        color.card,
+        isMatchPlay ? "" : color.card,
         highlight ? "ring-2 ring-black" : "",
         isOverGroup ? "ring-2 ring-blue-500" : "",
       ].join(" ")}
-      style={color.cardStyle}
+      style={matchPlayCardStyle}
       title="Suelta aquí para mandar al final del grupo"
     >
-      <div className={["rounded-sm border px-1 py-0.5", color.header].join(" ")} style={color.headerStyle}>
-        <div className="flex items-center justify-between gap-1 border-b border-slate-200/70 pb-0.5">
+      <div
+        className={[
+          "rounded-sm border px-1 py-0.5",
+          isMatchPlay ? "" : color.header,
+        ].join(" ")}
+        style={matchPlayHeaderStyle}
+      >
+        <div className="flex items-center justify-between gap-1 border-b border-slate-300/70 pb-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="text-[10px] font-semibold text-slate-400">
               G{group.group_no}

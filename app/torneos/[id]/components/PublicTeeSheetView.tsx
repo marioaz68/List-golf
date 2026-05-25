@@ -190,34 +190,84 @@ export default function PublicTeeSheetView({
                   return (
                     <article
                       key={group.id}
-                      className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#0c1728] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                      className={[
+                        "min-w-0 overflow-hidden rounded-2xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+                        isMatchPlay
+                          ? "border-slate-400/60 bg-slate-200"
+                          : "border-white/10 bg-[#0c1728]",
+                      ].join(" ")}
                     >
-                      <div className="flex flex-col gap-2 border-b border-white/10 bg-white/[0.04] px-2.5 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:px-3 sm:py-2">
+                      <div
+                        className={[
+                          "flex flex-col gap-2 border-b px-2.5 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2 sm:px-3 sm:py-2",
+                          isMatchPlay
+                            ? "border-slate-300 bg-slate-300/80"
+                            : "border-white/10 bg-white/[0.04]",
+                        ].join(" ")}
+                      >
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
-                          <span className="rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[11px] font-black text-cyan-200 sm:text-xs">
+                          <span
+                            className={[
+                              "rounded-md px-2 py-1 text-[11px] font-black sm:text-xs",
+                              isMatchPlay
+                                ? "border border-slate-500/50 bg-slate-100 text-slate-800"
+                                : "border border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+                            ].join(" ")}
+                          >
                             G{group.group_no}
                           </span>
-                          <span className="text-sm font-bold text-white">
+                          <span
+                            className={[
+                              "text-sm font-bold",
+                              isMatchPlay ? "text-slate-900" : "text-white",
+                            ].join(" ")}
+                          >
                             {formatTime(group.tee_time)}
                           </span>
                           {holeText !== "—" ? (
                             <>
-                              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-slate-100 sm:text-xs">
+                              <span
+                                className={[
+                                  "rounded-md px-2 py-1 text-[11px] font-bold sm:text-xs",
+                                  isMatchPlay
+                                    ? "border border-slate-500/40 bg-slate-100 text-slate-800"
+                                    : "border border-white/10 bg-white/5 text-slate-100",
+                                ].join(" ")}
+                              >
                                 {holeText}
                               </span>
                               {side ? (
-                                <span className="rounded-md border border-amber-300/35 bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-100">
+                                <span
+                                  className={[
+                                    "rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                                    isMatchPlay
+                                      ? "border border-amber-500/50 bg-amber-100 text-amber-900"
+                                      : "border border-amber-300/35 bg-amber-400/15 text-amber-100",
+                                  ].join(" ")}
+                                >
                                   {labels.startingTee} {side}
                                 </span>
                               ) : null}
                             </>
                           ) : (
-                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-slate-400">
+                            <span
+                              className={[
+                                "rounded-md px-2 py-1 text-[11px] font-bold",
+                                isMatchPlay
+                                  ? "border border-slate-400/50 bg-slate-100 text-slate-500"
+                                  : "border border-white/10 bg-white/5 text-slate-400",
+                              ].join(" ")}
+                            >
                               —
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] font-semibold text-slate-400 sm:text-[11px]">
+                        <div
+                          className={[
+                            "text-[10px] font-semibold sm:text-[11px]",
+                            isMatchPlay ? "text-slate-700" : "text-slate-400",
+                          ].join(" ")}
+                        >
                           {group.members.length}{" "}
                           {group.members.length === 1
                             ? labels.playerOne
@@ -226,7 +276,7 @@ export default function PublicTeeSheetView({
                       </div>
 
                       {isMatchPlay ? (
-                        <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-white/[0.02] px-2.5 py-1.5 text-[11px] font-bold sm:px-3">
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-300 bg-slate-300/60 px-2.5 py-1.5 text-[11px] font-bold sm:px-3">
                           <span
                             className="inline-flex items-center rounded-md px-2 py-0.5"
                             style={{
@@ -236,7 +286,7 @@ export default function PublicTeeSheetView({
                           >
                             {matchPlayInfo.topLabel}
                           </span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">
                             vs
                           </span>
                           <span
@@ -251,7 +301,13 @@ export default function PublicTeeSheetView({
                         </div>
                       ) : null}
 
-                      <div className="divide-y divide-white/10">
+                      <div
+                        className={
+                          isMatchPlay
+                            ? "divide-y divide-slate-400/50"
+                            : "divide-y divide-white/10"
+                        }
+                      >
                         {group.members.map((member, idx) => {
                           const pairSide = isMatchPlay
                             ? matchPlayPairSideForPosition(member.position ?? idx + 1)
@@ -272,7 +328,11 @@ export default function PublicTeeSheetView({
                               key={`${group.id}-${member.entry_id}`}
                               className={[
                                 "relative flex items-start gap-2 px-2.5 py-2.5 sm:items-center sm:gap-3 sm:px-3 sm:py-2",
-                                showPairDivider ? "border-t-2 border-white/30" : "",
+                                showPairDivider
+                                  ? isMatchPlay
+                                    ? "border-t-2 border-slate-500/70"
+                                    : "border-t-2 border-white/30"
+                                  : "",
                               ].join(" ")}
                               style={
                                 pairColors
