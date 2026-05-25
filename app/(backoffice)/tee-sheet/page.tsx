@@ -143,6 +143,8 @@ export default async function TeeSheetPage(props: {
       : 4;
 
   const catParam = typeof sp.cat === "string" ? sp.cat.trim() : "";
+  const actionError = typeof sp.err === "string" ? sp.err.trim() : "";
+  const actionOk = typeof sp.ok === "string" ? sp.ok.trim() : "";
 
   const { data: tData, error: tErr } = await supabase
     .from("tournaments")
@@ -1340,11 +1342,27 @@ for (const row of membersRaw) {
       </section>
 
       <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm">
+        {actionError ? (
+          <div className="mb-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+            {actionError}
+          </div>
+        ) : null}
+        {actionOk === "starting_order_confirmed" ? (
+          <div className="mb-3 rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+            Orden definitivo confirmado. Las salidas ya pueden mostrarse en la página pública del torneo.
+          </div>
+        ) : null}
+        {actionOk === "starting_order_reopened" ? (
+          <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            Orden reabierto. Puedes volver a editar grupos y salidas.
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="font-semibold text-slate-950">Orden definitivo del día</div>
             <div className="mt-1 text-sm text-slate-700">
-              Confirma cuando ya revisaste grupos, categorías y hoyos de salida. Al confirmar se bloquean cambios accidentales.
+              Confirma cuando ya revisaste grupos, categorías y hoyos de salida. Al confirmar se bloquean cambios accidentales y se publican en la web del torneo.
             </div>
           </div>
 
@@ -1354,7 +1372,10 @@ for (const row of membersRaw) {
               <input type="hidden" name="round_id" value={effectiveRoundId} />
               <input type="hidden" name="group_size" value={effectiveGroupSize} />
               <input type="hidden" name="cat" value={effectiveCat} />
-              <button className="rounded border border-amber-500 bg-amber-50 px-4 py-2 font-medium text-amber-900 hover:bg-amber-100">
+              <button
+                type="submit"
+                className="rounded border border-amber-500 bg-amber-50 px-4 py-2 font-medium text-amber-900 hover:bg-amber-100"
+              >
                 Reabrir orden para editar
               </button>
             </form>
@@ -1365,6 +1386,7 @@ for (const row of membersRaw) {
               <input type="hidden" name="group_size" value={effectiveGroupSize} />
               <input type="hidden" name="cat" value={effectiveCat} />
               <button
+                type="submit"
                 className="rounded bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={groupsForUI.length === 0}
               >

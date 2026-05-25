@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { createAdminClient, tryCreateAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { listCategoriesBlockedForRound } from "@/lib/rounds/categoryRoundGate";
@@ -57,6 +57,8 @@ function redirectToTeeSheet(params: {
   round_id: string;
   group_size: number;
   cat?: string | null;
+  err?: string | null;
+  ok?: string | null;
 }) {
   const qs = new URLSearchParams({
     tournament_id: params.tournament_id,
@@ -68,7 +70,25 @@ function redirectToTeeSheet(params: {
     qs.set("cat", params.cat);
   }
 
+  if (params.err) {
+    qs.set("err", params.err);
+  }
+
+  if (params.ok) {
+    qs.set("ok", params.ok);
+  }
+
   redirect(`/tee-sheet?${qs.toString()}`);
+}
+
+async function teeSheetDataClient() {
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    throw new Error(
+      "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor. Configúrala para confirmar o reabrir el orden de salidas."
+    );
+  }
+  return admin;
 }
 
 type EntryRow = {
@@ -951,75 +971,163 @@ export async function saveCategoryPlanOrder(formData: FormData) {
 }
 
 export async function confirmStartingOrder(formData: FormData) {
-  const supabase = createAdminClient();
-
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
+  const back = { tournament_id, round_id, group_size, cat };
+
+  const supabase = await teeSheetDataClient();
+
+  let sessionRounds: SessionRoundFields[];
+  try {
+    sessionRounds = await loadTournamentSessionRounds(
+      supabase,
+      tournament_id,
+      round_id
+    );
+  } catch (e) {
+    redirectToTeeSheet({
+      ...back,
+      err: e instanceof Error ? e.message : "Error leyendo el bloque de juego.",
+    });
+    return;
+  }
+
+  const sessionRoundIds = sessionRounds.map((sr) => sr.id);
 
   const { data: groups, error: groupsErr } = await supabase
     .from("pairing_groups")
     .select("id")
-    .eq("round_id", round_id)
+    .in("round_id", sessionRoundIds)
     .limit(1);
 
-  if (groupsErr) throw new Error("Error validando grupos: " + groupsErr.message);
+  if (groupsErr) {
+    redirectToTeeSheet({
+      ...back,
+      err: "Error validando grupos: " + groupsErr.message,
+    });
+    return;
+  }
   if ((groups ?? []).length === 0) {
-    throw new Error("No puedes confirmar el orden definitivo sin grupos generados.");
+    redirectToTeeSheet({
+      ...back,
+      err: "No puedes confirmar el orden definitivo sin grupos generados en este bloque.",
+    });
+    return;
   }
 
-  const { data: round, error: roundErr } = await supabase
+  const { data: roundRows, error: roundErr } = await supabase
     .from("rounds")
     .select("id, tournament_id, notes")
-    .eq("id", round_id)
-    .single();
+    .in("id", sessionRoundIds);
 
-  if (roundErr || !round) throw new Error("No se pudo leer round: " + (roundErr?.message ?? ""));
-  if (round.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
+  if (roundErr) {
+    redirectToTeeSheet({
+      ...back,
+      err: "No se pudo leer las rondas del bloque: " + roundErr.message,
+    });
+    return;
+  }
 
-  const currentNotes = String(round.notes ?? "").trim();
-  const nextNotes = isStartingOrderConfirmed(currentNotes)
-    ? currentNotes
-    : [currentNotes, STARTING_ORDER_CONFIRMED_MARKER].filter(Boolean).join("\n");
+  for (const round of roundRows ?? []) {
+    if (round.tournament_id !== tournament_id) {
+      redirectToTeeSheet({
+        ...back,
+        err: "Una ronda del bloque no pertenece al torneo seleccionado.",
+      });
+      return;
+    }
 
-  const { error } = await supabase
-    .from("rounds")
-    .update({ notes: nextNotes })
-    .eq("id", round_id);
+    const currentNotes = String(round.notes ?? "").trim();
+    const nextNotes = isStartingOrderConfirmed(currentNotes)
+      ? currentNotes
+      : [currentNotes, STARTING_ORDER_CONFIRMED_MARKER].filter(Boolean).join("\n");
 
-  if (error) throw new Error("Error confirmando orden definitivo: " + error.message);
+    const { error } = await supabase
+      .from("rounds")
+      .update({ notes: nextNotes })
+      .eq("id", round.id);
+
+    if (error) {
+      redirectToTeeSheet({
+        ...back,
+        err: "Error confirmando orden definitivo: " + error.message,
+      });
+      return;
+    }
+  }
 
   revalidatePath("/tee-sheet");
-  redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
+  revalidatePath(`/torneos/${tournament_id}`);
+  redirectToTeeSheet({ ...back, ok: "starting_order_confirmed" });
 }
 
 export async function reopenStartingOrder(formData: FormData) {
-  const supabase = createAdminClient();
-
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
   const group_size = reqGroupSize(formData);
   const cat = optStr(formData, "cat");
+  const back = { tournament_id, round_id, group_size, cat };
 
-  const { data: round, error: roundErr } = await supabase
+  const supabase = await teeSheetDataClient();
+
+  let sessionRounds: SessionRoundFields[];
+  try {
+    sessionRounds = await loadTournamentSessionRounds(
+      supabase,
+      tournament_id,
+      round_id
+    );
+  } catch (e) {
+    redirectToTeeSheet({
+      ...back,
+      err: e instanceof Error ? e.message : "Error leyendo el bloque de juego.",
+    });
+    return;
+  }
+
+  const sessionRoundIds = sessionRounds.map((sr) => sr.id);
+
+  const { data: roundRows, error: roundErr } = await supabase
     .from("rounds")
     .select("id, tournament_id, notes")
-    .eq("id", round_id)
-    .single();
+    .in("id", sessionRoundIds);
 
-  if (roundErr || !round) throw new Error("No se pudo leer round: " + (roundErr?.message ?? ""));
-  if (round.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
+  if (roundErr) {
+    redirectToTeeSheet({
+      ...back,
+      err: "No se pudo leer las rondas del bloque: " + roundErr.message,
+    });
+    return;
+  }
 
-  const { error } = await supabase
-    .from("rounds")
-    .update({ notes: stripStartingOrderConfirmedMarker(round.notes) })
-    .eq("id", round_id);
+  for (const round of roundRows ?? []) {
+    if (round.tournament_id !== tournament_id) {
+      redirectToTeeSheet({
+        ...back,
+        err: "Una ronda del bloque no pertenece al torneo seleccionado.",
+      });
+      return;
+    }
 
-  if (error) throw new Error("Error reabriendo orden definitivo: " + error.message);
+    const { error } = await supabase
+      .from("rounds")
+      .update({ notes: stripStartingOrderConfirmedMarker(round.notes) })
+      .eq("id", round.id);
+
+    if (error) {
+      redirectToTeeSheet({
+        ...back,
+        err: "Error reabriendo orden definitivo: " + error.message,
+      });
+      return;
+    }
+  }
 
   revalidatePath("/tee-sheet");
-  redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
+  revalidatePath(`/torneos/${tournament_id}`);
+  redirectToTeeSheet({ ...back, ok: "starting_order_reopened" });
 }
 
 export async function generateMatchPlayTeeSheet(formData: FormData) {
