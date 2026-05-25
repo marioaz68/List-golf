@@ -45,6 +45,11 @@ export function relativePhInMatch(
   ];
 }
 
+/**
+ * Fallback (sin slope/rating): se aplica solo % al HI. Solo se usa si no hay
+ * PH almacenado en `tournament_entries`. Para el cálculo correcto WHS
+ * usar `lib/handicap/whs.ts` y guardar el PH en la entry.
+ */
 export function courseHandicapFromHi(hi: number, allowancePct: number): number {
   return playingHandicap(hi, allowancePct);
 }
@@ -92,12 +97,22 @@ export function scoreLowHighHole(params: {
   /** HI efectivo por jugador: top_a, top_b, bottom_a, bottom_b */
   hi: [number, number, number, number];
   allowance_pct: number;
+  /**
+   * Si se proporciona, se usa como PH oficial de cada jugador (ya con
+   * allowance% aplicado vía WHS). Si no, se calcula desde HI × %.
+   */
+  playing_handicaps?: [
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+  ];
   strokeIndexByHole?: StrokeIndexByHole;
   top_total_before: number;
   bottom_total_before: number;
   holes_in_match: number;
 }): LowHighHoleResult | null {
-  const { hole_no, gross, hi, allowance_pct, strokeIndexByHole } = params;
+  const { hole_no, gross, hi, allowance_pct, strokeIndexByHole, playing_handicaps } = params;
   const g = gross;
 
   if (
@@ -109,12 +124,10 @@ export function scoreLowHighHole(params: {
     return null;
   }
 
-  const ph = hi.map((h) => courseHandicapFromHi(h, allowance_pct)) as [
-    number,
-    number,
-    number,
-    number,
-  ];
+  const ph = (playing_handicaps ?? [null, null, null, null]).map((stored, i) => {
+    if (stored != null && Number.isFinite(stored)) return Number(stored);
+    return courseHandicapFromHi(hi[i], allowance_pct);
+  }) as [number, number, number, number];
   const [rTopA, rTopB, rBotA, rBotB] = relativePhInMatch(ph);
 
   const nets: LowHighPlayerNet = {

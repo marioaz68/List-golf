@@ -7,6 +7,7 @@ import type { TournamentSettings } from "@/types/tournament";
 import MatchPlayTeamsPanel from "./MatchPlayTeamsPanel";
 import MatchPlayBracketPanel from "./MatchPlayBracketPanel";
 import MatchPlayAuctionPanel from "./MatchPlayAuctionPanel";
+import MatchPlayHandicapPanel from "./MatchPlayHandicapPanel";
 import { loadBracketView } from "@/lib/matchplay/loadBracketView";
 import type {
   MatchPlayConvocatoriaConfig,
@@ -22,6 +23,8 @@ type SP = {
   team_message?: string;
   bracket_status?: string;
   bracket_message?: string;
+  whs_status?: string;
+  whs_message?: string;
 };
 
 const buttonStyle: React.CSSProperties = {
@@ -80,7 +83,7 @@ export default async function MatchPlayPage(props: {
   const { data: rulesRow, error: rulesError } = await supabase
     .from("tournament_matchplay_rules")
     .select(
-      "match_type, pair_format, bracket_type, bracket_round_count, holes_per_match, pair_composition, combined_hi_min, combined_hi_max, male_individual_hi_max, female_individual_hi_max, handicap_allowance, handicap_allowance_pct, match_tiebreaker, auction_enabled, auction_pot_percent, auction_min_bid, auction_max_bid, auction_currency, bracket_main_pairs, play_in_enabled, max_pairs_per_category, config_json"
+      "match_type, pair_format, bracket_type, bracket_round_count, holes_per_match, pair_composition, combined_hi_min, combined_hi_max, male_individual_hi_max, female_individual_hi_max, handicap_allowance, handicap_allowance_pct, match_tiebreaker, auction_enabled, auction_pot_percent, auction_min_bid, auction_max_bid, auction_currency, bracket_main_pairs, play_in_enabled, max_pairs_per_category, config_json, whs_slope_men, whs_slope_women, whs_course_rating_men, whs_course_rating_women, whs_par_men, whs_par_women"
     )
     .eq("tournament_id", effectiveId)
     .maybeSingle();
@@ -299,6 +302,39 @@ export default async function MatchPlayPage(props: {
 
       {isMatchPlay && teamsData && !teamsData.migrationMissing ? (
         <>
+          <MatchPlayHandicapPanel
+            tournamentId={effectiveId}
+            rules={{
+              allowance_pct: allowancePct,
+              whs_slope_men:
+                rulesRow?.whs_slope_men != null
+                  ? Number(rulesRow.whs_slope_men)
+                  : null,
+              whs_slope_women:
+                rulesRow?.whs_slope_women != null
+                  ? Number(rulesRow.whs_slope_women)
+                  : null,
+              whs_course_rating_men:
+                rulesRow?.whs_course_rating_men != null
+                  ? Number(rulesRow.whs_course_rating_men)
+                  : null,
+              whs_course_rating_women:
+                rulesRow?.whs_course_rating_women != null
+                  ? Number(rulesRow.whs_course_rating_women)
+                  : null,
+              whs_par_men:
+                rulesRow?.whs_par_men != null
+                  ? Number(rulesRow.whs_par_men)
+                  : null,
+              whs_par_women:
+                rulesRow?.whs_par_women != null
+                  ? Number(rulesRow.whs_par_women)
+                  : null,
+            }}
+            entries={teamsData.entries}
+            flashStatus={sp.whs_status}
+            flashMessage={sp.whs_message}
+          />
           <MatchPlayTeamsPanel
             tournamentId={effectiveId}
             matchType={matchType}

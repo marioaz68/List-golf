@@ -3,6 +3,7 @@ import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { loadMatchPlayTeamsData } from "./loadMatchPlayTeamsData";
 import { effectiveEntryHi } from "./entryHi";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
+import type { MatchPlayEntryRow } from "./teamTypes";
 import type {
   LowHighPlayerGross,
   LowHighHoleBreakdown,
@@ -37,9 +38,21 @@ export type MatchForScoring = {
   winner_pair_id: string | null;
   top_label: string;
   bottom_label: string;
-  top_players: [{ label: string; hi: number }, { label: string; hi: number }];
-  bottom_players: [{ label: string; hi: number }, { label: string; hi: number }];
+  /**
+   * `hi` aquí es el HI del jugador (informativo).
+   * `ph` es el Playing Handicap ya con allowance% aplicado vía WHS;
+   * el motor de scoring debe usar `ph` directamente sin volver a aplicar el %.
+   */
+  top_players: [
+    { label: string; hi: number; ph: number | null },
+    { label: string; hi: number; ph: number | null },
+  ];
+  bottom_players: [
+    { label: string; hi: number; ph: number | null },
+    { label: string; hi: number; ph: number | null },
+  ];
   pair_format: MatchPlayPairFormat;
+  /** Sigue siendo el % oficial del formato, por si hay que recomputar PH faltante. */
   allowance_pct: number;
   holes_in_match: number;
   stroke_index_by_hole: StrokeIndexByHole;
@@ -90,34 +103,26 @@ export async function loadMatchForScoring(
   const top = match.top_pair_id ? teamById.get(match.top_pair_id) : null;
   const bottom = match.bottom_pair_id ? teamById.get(match.bottom_pair_id) : null;
 
+  function entryToScoringPlayer(
+    entry: MatchPlayEntryRow | null,
+    fallbackLabel: string
+  ): { label: string; hi: number; ph: number | null } {
+    if (!entry) return { label: fallbackLabel, hi: 0, ph: null };
+    return {
+      label: `${entry.player.first_name ?? ""} ${entry.player.last_name ?? ""}`.trim() || fallbackLabel,
+      hi: effectiveEntryHi(entry),
+      ph: entry.playing_handicap != null ? Number(entry.playing_handicap) : null,
+    };
+  }
+
   const topPlayers: MatchForScoring["top_players"] = [
-    {
-      label: top?.player_a
-        ? `${top.player_a.player.first_name ?? ""} ${top.player_a.player.last_name ?? ""}`.trim()
-        : "Jugador A",
-      hi: top?.player_a ? effectiveEntryHi(top.player_a) : 0,
-    },
-    {
-      label: top?.player_b
-        ? `${top.player_b.player.first_name ?? ""} ${top.player_b.player.last_name ?? ""}`.trim()
-        : "Jugador B",
-      hi: top?.player_b ? effectiveEntryHi(top.player_b) : 0,
-    },
+    entryToScoringPlayer(top?.player_a ?? null, "Jugador A"),
+    entryToScoringPlayer(top?.player_b ?? null, "Jugador B"),
   ];
 
   const bottomPlayers: MatchForScoring["bottom_players"] = [
-    {
-      label: bottom?.player_a
-        ? `${bottom.player_a.player.first_name ?? ""} ${bottom.player_a.player.last_name ?? ""}`.trim()
-        : "Jugador A",
-      hi: bottom?.player_a ? effectiveEntryHi(bottom.player_a) : 0,
-    },
-    {
-      label: bottom?.player_b
-        ? `${bottom.player_b.player.first_name ?? ""} ${bottom.player_b.player.last_name ?? ""}`.trim()
-        : "Jugador B",
-      hi: bottom?.player_b ? effectiveEntryHi(bottom.player_b) : 0,
-    },
+    entryToScoringPlayer(bottom?.player_a ?? null, "Jugador A"),
+    entryToScoringPlayer(bottom?.player_b ?? null, "Jugador B"),
   ];
 
   const { data: tholes } = await supabase

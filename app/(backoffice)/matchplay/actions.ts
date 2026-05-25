@@ -1074,6 +1074,17 @@ export async function saveLowHighMatchScores(formData: FormData) {
     match.bottom_players[0].hi,
     match.bottom_players[1].hi,
   ];
+  const phTuple: [
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+  ] = [
+    match.top_players[0].ph,
+    match.top_players[1].ph,
+    match.bottom_players[0].ph,
+    match.bottom_players[1].ph,
+  ];
 
   let topRunning = 0;
   let bottomRunning = 0;
@@ -1107,6 +1118,7 @@ export async function saveLowHighMatchScores(formData: FormData) {
       hole_no: i,
       gross,
       hi: hiTuple,
+      playing_handicaps: phTuple,
       allowance_pct: match.allowance_pct,
       strokeIndexByHole: match.stroke_index_by_hole,
       top_total_before: topRunning,

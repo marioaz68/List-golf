@@ -78,6 +78,21 @@ export default function MatchPlayLowHighScorePanel({
     [match]
   );
 
+  const phTuple: [
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+  ] = useMemo(
+    () => [
+      match.top_players[0].ph,
+      match.top_players[1].ph,
+      match.bottom_players[0].ph,
+      match.bottom_players[1].ph,
+    ],
+    [match]
+  );
+
   const preview = useMemo(() => {
     let topRunning = 0;
     let bottomRunning = 0;
@@ -116,6 +131,7 @@ export default function MatchPlayLowHighScorePanel({
         hole_no: h.hole_no,
         gross,
         hi: hiTuple,
+        playing_handicaps: phTuple,
         allowance_pct: match.allowance_pct,
         strokeIndexByHole: match.stroke_index_by_hole,
         top_total_before: topRunning,
@@ -157,7 +173,7 @@ export default function MatchPlayLowHighScorePanel({
         match.holes_in_match
       ),
     };
-  }, [holes, hiTuple, match]);
+  }, [holes, hiTuple, phTuple, match]);
 
   function updateHole(
     holeNo: number,

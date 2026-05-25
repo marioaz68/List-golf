@@ -13,6 +13,10 @@ export type MatchPlayEntryRow = {
   handicap_index: number | null;
   status: string | null;
   effective_hi: number;
+  course_handicap: number | null;
+  playing_handicap: number | null;
+  playing_handicap_override: number | null;
+  playing_handicap_override_reason: string | null;
   player: MatchPlayEntryPlayer;
   category_id: string | null;
   category_code: string | null;
