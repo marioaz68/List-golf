@@ -13,6 +13,10 @@ type RawEntry = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  course_handicap: number | null;
+  playing_handicap: number | null;
+  playing_handicap_override: number | null;
+  playing_handicap_override_reason: string | null;
   status: string | null;
   players: {
     id: string;
@@ -60,6 +64,16 @@ function mapEntry(raw: RawEntry): MatchPlayEntryRow {
     handicap_index: raw.handicap_index,
     status: raw.status,
     effective_hi: 0,
+    course_handicap:
+      raw.course_handicap != null ? Number(raw.course_handicap) : null,
+    playing_handicap:
+      raw.playing_handicap != null ? Number(raw.playing_handicap) : null,
+    playing_handicap_override:
+      raw.playing_handicap_override != null
+        ? Number(raw.playing_handicap_override)
+        : null,
+    playing_handicap_override_reason:
+      raw.playing_handicap_override_reason ?? null,
     player: {
       id: player?.id ?? raw.player_id,
       first_name: player?.first_name ?? null,

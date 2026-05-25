@@ -18,6 +18,10 @@ export const ENTRY_SELECT_WITHOUT_KIT = `
   player_id,
   player_number,
   handicap_index,
+  course_handicap,
+  playing_handicap,
+  playing_handicap_override,
+  playing_handicap_override_reason,
   status,
   players:players (
     id,
