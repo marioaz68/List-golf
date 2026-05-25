@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
+import { getUserRoles } from "@/lib/auth/getUserRoles";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   formatAdjustmentLabel,
@@ -55,13 +57,46 @@ export default async function ComiteHandicapPage(props: {
     );
   }
 
-  const { data: tournaments } = await supabase
-    .from("tournaments")
-    .select("id, name, start_date")
-    .order("start_date", { ascending: false })
-    .limit(80);
-
   if (!tournamentId) {
+    const roles = await getUserRoles(supabase, user.id);
+    const isGlobalAdmin = roles.includes("super_admin") || roles.includes("club_admin");
+
+    let allowedTournamentIds: string[] | null = null;
+    if (!isGlobalAdmin) {
+      const { data: scoped } = await supabase
+        .from("user_tournament_roles")
+        .select("tournament_id, roles:role_id(code)")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+
+      const ids = new Set<string>();
+      for (const row of scoped ?? []) {
+        const r: any = (row as any).roles;
+        const code = Array.isArray(r) ? r[0]?.code : r?.code;
+        if (code === "handicap_committee" || code === "tournament_director") {
+          if ((row as any).tournament_id) ids.add(String((row as any).tournament_id));
+        }
+      }
+      allowedTournamentIds = Array.from(ids);
+    }
+
+    let tournamentsQuery = supabase
+      .from("tournaments")
+      .select("id, name, start_date")
+      .order("start_date", { ascending: false })
+      .limit(80);
+    if (allowedTournamentIds && allowedTournamentIds.length === 0) {
+      tournamentsQuery = tournamentsQuery.eq("id", "__none__");
+    } else if (allowedTournamentIds) {
+      tournamentsQuery = tournamentsQuery.in("id", allowedTournamentIds);
+    }
+
+    const { data: tournaments } = await tournamentsQuery;
+
+    if ((tournaments ?? []).length === 1) {
+      redirect(`/comite-handicap?tournament_id=${tournaments![0].id}`);
+    }
+
     return (
       <div className="space-y-6 p-4 md:p-6">
         <div>
@@ -70,17 +105,24 @@ export default async function ComiteHandicapPage(props: {
             Elige un torneo para auditar handicaps o votar (voto anónimo entre miembros).
           </p>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {(tournaments ?? []).map((t) => (
-            <Link
-              key={t.id}
-              href={`/comite-handicap?tournament_id=${t.id}`}
-              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
-            >
-              {t.name ?? t.id.slice(0, 8)}
-            </Link>
-          ))}
-        </div>
+        {(tournaments ?? []).length === 0 ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            No tienes torneos asignados. Pide a un administrador que te asigne el rol
+            «Comité de Handicap» o «Director del Torneo» en algún torneo.
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(tournaments ?? []).map((t) => (
+              <Link
+                key={t.id}
+                href={`/comite-handicap?tournament_id=${t.id}`}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
+              >
+                {t.name ?? t.id.slice(0, 8)}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

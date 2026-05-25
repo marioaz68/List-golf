@@ -62,5 +62,8 @@ export async function loginAction(
     return { ok: false, message: error.message };
   }
 
-  redirect("/");
+  // /dashboard requiere auth + módulo "tournaments"; el middleware ya redirige
+  // automáticamente al usuario de comité de handicap a /comite-handicap si no
+  // tiene acceso al panel principal.
+  redirect("/dashboard");
 }

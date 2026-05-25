@@ -214,7 +214,6 @@ export default function Sidebar() {
         nameKey: "handicapCommittee",
         href: "/comite-handicap",
         icon: Scale,
-        requiresTournament: true,
       },
     ],
     []
