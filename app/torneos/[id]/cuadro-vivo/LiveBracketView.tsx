@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
@@ -84,6 +84,21 @@ export default function LiveBracketView({
   prizeShares,
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
+
+  // Zoom para móvil: por defecto 0.55 en pantallas <768px (cabe completo),
+  // 1.0 en desktop. El usuario puede ajustar con los botones o pellizcando.
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isMobile = window.matchMedia("(max-width: 767px)").matches;
+    if (isMobile) setZoom(0.55);
+  }, []);
+  const stepZoom = useCallback((delta: number) => {
+    setZoom((z) => {
+      const next = Math.round((z + delta) * 100) / 100;
+      return Math.min(1.8, Math.max(0.3, next));
+    });
+  }, []);
 
   // Realtime para matches reales (cuando el cuadro ya está publicado)
   const [matches, setMatches] = useState<ExistingMatch[]>(initialMatches);
@@ -363,62 +378,167 @@ export default function LiveBracketView({
         </div>
       </header>
 
-      {/* BRACKET */}
-      <div className="overflow-x-auto pb-3">
-        <div
-          className="grid min-w-max gap-x-4"
-          style={{
-            gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 280px))`,
-            gridTemplateRows: `repeat(${targetSize}, minmax(34px, auto))`,
-          }}
-        >
-          {/* Cabeceras */}
-          {Array.from({ length: roundCount }, (_, ri) => {
-            const r = ri + 1;
-            return (
-              <div
-                key={`hdr-${r}`}
-                className="sticky top-0 z-10 col-start-auto rounded-t-xl border border-white/10 bg-[#0c1728] px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300"
-                style={{ gridColumn: r, gridRow: "1 / span 1" }}
-              >
-                {roundLabel(r, roundCount, targetSize)}
-              </div>
-            );
-          })}
+      {/* CONTROL DE ZOOM + GUÍA PELLIZCO */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-[#0c1728] px-3 py-2">
+        <div className="flex items-center gap-2 text-[12px] text-slate-300">
+          <span className="text-xl leading-none" aria-hidden>
+            🤏
+          </span>
+          <span>
+            <span className="hidden sm:inline">
+              Pellizca para hacer zoom o usa los botones.
+            </span>
+            <span className="sm:hidden">Pellizca o usa botones →</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-[12px]">
+          <button
+            type="button"
+            onClick={() => stepZoom(-0.1)}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
+            aria-label="Alejar"
+          >
+            −
+          </button>
+          <span className="w-14 text-center text-[11px] font-bold text-cyan-200">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => stepZoom(0.1)}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
+            aria-label="Acercar"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            className="ml-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20"
+          >
+            100%
+          </button>
+        </div>
+      </div>
 
-          {/* Matches */}
-          {Array.from({ length: roundCount }, (_, ri) => {
-            const r = ri + 1;
-            const span = Math.pow(2, r);
-            const matchesInRound = targetSize / span;
-            const items: React.ReactNode[] = [];
-            for (let i = 0; i < matchesInRound; i++) {
-              const gridRowStart = span * i + 2; // +2 para dejar fila 1 a header
-              const slot = slotsByRound[r - 1]?.get(i);
-              const real = matchByPos.get(`${r}-${i + 1}`) ?? null;
-              items.push(
-                <BracketMatchCell
-                  key={`m-${r}-${i}`}
-                  round={r}
-                  positionIdx={i}
-                  span={span}
-                  rowStart={gridRowStart}
-                  roundCount={roundCount}
-                  topTeam={slot?.top ?? null}
-                  bottomTeam={slot?.bottom ?? null}
-                  topSeed={slot?.topSeed ?? null}
-                  bottomSeed={slot?.bottomSeed ?? null}
-                  topVacant={slot?.topVacant ?? false}
-                  bottomVacant={slot?.bottomVacant ?? false}
-                  byeSide={slot?.byeSide ?? null}
-                  computedWinnerId={slot?.winner?.id ?? null}
-                  realMatch={real}
-                  currency={currency}
-                />
+      {/* BANDERAS DE CUADRO SUPERIOR / INFERIOR */}
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div className="flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5">
+          <span className="text-base" aria-hidden>
+            ⬆
+          </span>
+          <div>
+            <div className="font-bold uppercase tracking-wider text-cyan-200">
+              Cuadro Superior
+            </div>
+            <div className="text-[10px] text-cyan-200/70">
+              Mitad de arriba · fondo azul-cyan
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-1.5">
+          <span className="text-base" aria-hidden>
+            ⬇
+          </span>
+          <div>
+            <div className="font-bold uppercase tracking-wider text-violet-200">
+              Cuadro Inferior
+            </div>
+            <div className="text-[10px] text-violet-200/70">
+              Mitad de abajo · fondo violeta
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* BRACKET (con zoom CSS) */}
+      <div className="overflow-auto pb-3">
+        <div style={{ zoom }} className="origin-top-left">
+          <div
+            className="relative grid min-w-max gap-x-4"
+            style={{
+              gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 280px))`,
+              gridTemplateRows: `repeat(${targetSize}, minmax(34px, auto))`,
+            }}
+          >
+            {/* Cabeceras */}
+            {Array.from({ length: roundCount }, (_, ri) => {
+              const r = ri + 1;
+              return (
+                <div
+                  key={`hdr-${r}`}
+                  className="sticky top-0 z-10 col-start-auto rounded-t-xl border border-white/10 bg-[#0c1728] px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300"
+                  style={{ gridColumn: r, gridRow: "1 / span 1" }}
+                >
+                  {roundLabel(r, roundCount, targetSize)}
+                </div>
               );
-            }
-            return items;
-          })}
+            })}
+
+            {/* DIVISOR HORIZONTAL entre cuadro superior e inferior */}
+            <div
+              className="pointer-events-none flex items-center justify-center"
+              style={{
+                gridColumn: `1 / span ${roundCount}`,
+                gridRow: `${targetSize / 2 + 1} / span 1`,
+                alignSelf: "end",
+                marginBottom: "-1px",
+                zIndex: 5,
+              }}
+            >
+              <div className="flex w-full items-center gap-2">
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-cyan-400/60 via-amber-400/60 to-violet-400/60" />
+                <span className="rounded-full border border-amber-400/50 bg-[#0c1728] px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                  ━━ línea divisoria ━━
+                </span>
+                <div className="h-0.5 flex-1 bg-gradient-to-r from-violet-400/60 via-amber-400/60 to-cyan-400/60" />
+              </div>
+            </div>
+
+            {/* Matches */}
+            {Array.from({ length: roundCount }, (_, ri) => {
+              const r = ri + 1;
+              const span = Math.pow(2, r);
+              const matchesInRound = targetSize / span;
+              const items: React.ReactNode[] = [];
+              for (let i = 0; i < matchesInRound; i++) {
+                const gridRowStart = span * i + 2;
+                const slot = slotsByRound[r - 1]?.get(i);
+                const real = matchByPos.get(`${r}-${i + 1}`) ?? null;
+                // Mitad superior: positionIdx en la primera mitad de los
+                // matches de esa ronda. La final (matchesInRound === 1) se
+                // considera "ninguno".
+                const half: "top" | "bottom" | "final" =
+                  matchesInRound === 1
+                    ? "final"
+                    : i < matchesInRound / 2
+                      ? "top"
+                      : "bottom";
+                items.push(
+                  <BracketMatchCell
+                    key={`m-${r}-${i}`}
+                    round={r}
+                    positionIdx={i}
+                    span={span}
+                    rowStart={gridRowStart}
+                    roundCount={roundCount}
+                    half={half}
+                    topTeam={slot?.top ?? null}
+                    bottomTeam={slot?.bottom ?? null}
+                    topSeed={slot?.topSeed ?? null}
+                    bottomSeed={slot?.bottomSeed ?? null}
+                    topVacant={slot?.topVacant ?? false}
+                    bottomVacant={slot?.bottomVacant ?? false}
+                    byeSide={slot?.byeSide ?? null}
+                    computedWinnerId={slot?.winner?.id ?? null}
+                    realMatch={real}
+                    currency={currency}
+                  />
+                );
+              }
+              return items;
+            })}
+          </div>
         </div>
       </div>
 
@@ -506,6 +626,7 @@ function BracketMatchCell({
   span,
   rowStart,
   roundCount,
+  half,
   topTeam,
   bottomTeam,
   topSeed,
@@ -522,6 +643,7 @@ function BracketMatchCell({
   span: number;
   rowStart: number;
   roundCount: number;
+  half: "top" | "bottom" | "final";
   topTeam: MatchPlayTeamRow | null;
   bottomTeam: MatchPlayTeamRow | null;
   topSeed: number | null;
@@ -543,14 +665,18 @@ function BracketMatchCell({
   const isFinal = round === roundCount;
   const hasBye = byeSide !== null;
 
-  // Fondo: azul-cyan para TODAS las celdas (R1 reales, R2..R5 y final).
-  // BYE (solo en R1) usa tono pizarra apagado para diferenciarse.
-  // La final mantiene un borde dorado de acento (mismo fondo que el resto).
+  // Fondo según la mitad del cuadro:
+  // - Superior: azul-cyan.
+  // - Inferior: violeta-índigo.
+  // - Final: cyan con borde dorado de acento.
+  // BYE (R1) siempre usa pizarra, sea cual sea la mitad.
   const cellBg = hasBye && !realMatch
     ? "rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/70 to-[#0a1220] p-2 shadow-md"
-    : isFinal
+    : isFinal || half === "final"
       ? "rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_0_28px_-10px_rgba(251,191,36,0.55)]"
-      : "rounded-xl border border-cyan-400/40 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_4px_18px_-6px_rgba(8,145,178,0.45)]";
+      : half === "bottom"
+        ? "rounded-xl border border-violet-400/40 bg-gradient-to-br from-violet-900/45 via-[#160e3a] to-[#0e0a24] p-2 shadow-[0_4px_18px_-6px_rgba(139,92,246,0.45)]"
+        : "rounded-xl border border-cyan-400/40 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_4px_18px_-6px_rgba(8,145,178,0.45)]";
 
   return (
     <div
@@ -673,7 +799,7 @@ function SidePill({
               {players.map((p, i) => (
                 <li
                   key={`${p.label}-${i}`}
-                  className={`flex items-center gap-1 truncate text-[12px] font-semibold leading-tight ${
+                  className={`flex items-start gap-1 whitespace-normal break-words text-[12px] font-semibold leading-tight ${
                     isWinner ? "text-emerald-100" : "text-white"
                   }`}
                 >
@@ -695,7 +821,7 @@ function SidePill({
                   >
                     {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
                   </span>
-                  <span className="truncate">{p.label}</span>
+                  <span className="break-words leading-tight">{p.label}</span>
                 </li>
               ))}
               {players.length === 0 ? (
