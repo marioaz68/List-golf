@@ -153,14 +153,22 @@ export default function LiveBracketView({
   const roundCount = roundCountForBracketSize(targetSize);
   const seedOrder = useMemo(() => bracketSeedOrder(targetSize), [targetSize]);
 
+  // Total inscritos (define cuántos slots del cuadro NUNCA se llenarán = BYE).
+  // Esto es independiente de cuántos ya se hayan adjudicado en subasta.
+  const totalInscribed = useMemo(
+    () => seededTeams.length,
+    [seededTeams.length]
+  );
+
   // Slots por seed → team id.
-  // TODAS las parejas activas ocupan un slot (las adjudicadas con postura
-  // van primero por sortTeamsForSeeding('auction'); las pendientes caen al
-  // final con seed más alto). Los slots restantes (seeds > #parejas) quedan
-  // vacíos y generan BYE automático para el seed contrario en R1.
+  // SOLO equipos ya ADJUDICADOS en la subasta ocupan un slot. Los demás
+  // (seeds ≤ totalInscribed pero aún sin postura) se muestran como
+  // "Por adjudicar"; los seeds > totalInscribed se muestran como vacantes
+  // (BYE para su oponente).
   const teamBySeed = useMemo(() => {
     const map = new Map<number, MatchPlayTeamRow>();
-    seededTeams.forEach((t, i) => {
+    const auctioned = seededTeams.filter((t) => t.auction_order != null);
+    auctioned.forEach((t, i) => {
       map.set(i + 1, t.team);
     });
     return map;
@@ -186,39 +194,64 @@ export default function LiveBracketView({
       bottom: MatchPlayTeamRow | null;
       topSeed: number | null;
       bottomSeed: number | null;
+      topVacant: boolean; // seed > totalInscribed → nunca se llenará
+      bottomVacant: boolean;
       winner: MatchPlayTeamRow | null;
       byeSide: "top" | "bottom" | null;
     };
     const rounds: Array<Map<number, Slot>> = [];
 
-    // Ronda 1
+    // Ronda 1.
+    // Vacancia se determina por totalInscribed (no por equipos adjudicados):
+    // - Si el seed > totalInscribed → esa posición NUNCA se llenará → BYE para el
+    //   oponente.
+    // - Si el seed ≤ totalInscribed pero aún no adjudicado → "por adjudicar".
     const r1 = new Map<number, Slot>();
     const r1Count = targetSize / 2;
     for (let p = 0; p < r1Count; p++) {
       const tSeed = seedOrder[p * 2] ?? null;
       const bSeed = seedOrder[p * 2 + 1] ?? null;
-      let top = tSeed != null ? teamBySeed.get(tSeed) ?? null : null;
-      let bottom = bSeed != null ? teamBySeed.get(bSeed) ?? null : null;
-      // Overlay con match real si existe
+      const topVacant = tSeed != null && tSeed > totalInscribed;
+      const bottomVacant = bSeed != null && bSeed > totalInscribed;
+      let top =
+        !topVacant && tSeed != null ? teamBySeed.get(tSeed) ?? null : null;
+      let bottom =
+        !bottomVacant && bSeed != null ? teamBySeed.get(bSeed) ?? null : null;
       const real = matchByPos.get(`1-${p + 1}`);
       if (real) {
         if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
         if (real.bottom_pair_id)
           bottom = teamById.get(real.bottom_pair_id) ?? bottom;
       }
-      // BYE: si solo hay uno → ese pasa.
+      // BYE: si la posición es VACANTE (basado en totalInscribed) → el otro lado
+      // pasa por BYE (aunque aún no esté adjudicado). El "ganador" del BYE solo
+      // existe si el lado ocupado ya tiene equipo.
       let winner: MatchPlayTeamRow | null = null;
       let byeSide: "top" | "bottom" | null = null;
       if (real?.winner_pair_id) {
         winner = teamById.get(real.winner_pair_id) ?? null;
-      } else if (top && !bottom) {
-        winner = top;
-        byeSide = "bottom";
-      } else if (!top && bottom) {
-        winner = bottom;
+      } else if (topVacant && !bottomVacant) {
         byeSide = "top";
+        if (bottom) winner = bottom;
+      } else if (bottomVacant && !topVacant) {
+        byeSide = "bottom";
+        if (top) winner = top;
+      } else if (top && !bottom && !bottomVacant) {
+        // Edge: ambos seeds ≤ totalInscribed pero solo uno adjudicado → NO es
+        // BYE; espera el otro adjudicado.
+      } else if (!top && bottom && !topVacant) {
+        // Edge: igual al anterior pero invertido.
       }
-      r1.set(p, { top, bottom, topSeed: tSeed, bottomSeed: bSeed, winner, byeSide });
+      r1.set(p, {
+        top,
+        bottom,
+        topSeed: tSeed,
+        bottomSeed: bSeed,
+        topVacant,
+        bottomVacant,
+        winner,
+        byeSide,
+      });
     }
     rounds.push(r1);
 
@@ -250,6 +283,8 @@ export default function LiveBracketView({
           bottom,
           topSeed: null,
           bottomSeed: null,
+          topVacant: false,
+          bottomVacant: false,
           winner,
           byeSide: null,
         });
@@ -264,20 +299,24 @@ export default function LiveBracketView({
     matchByPos,
     targetSize,
     roundCount,
+    totalInscribed,
   ]);
 
-  const totalActive = seededTeams.length;
+  const totalActive = totalInscribed;
   const awardedCount = seededTeams.filter((t) => t.auction_order != null).length;
   const totalRaised = seededTeams.reduce(
     (acc, t) => acc + (t.auction_bid ?? 0),
     0
   );
   const pot = potPercent != null ? (totalRaised * potPercent) / 100 : totalRaised;
-  // R1: cada slot vacío manda BYE al contrincante. Si N parejas en cuadro de S,
-  // hay (S - N) slots vacíos → (S - N) BYEs en R1 → (N - (S - N))/2 = N - S/2
-  // matches reales (mínimo 0).
-  const byesR1 = Math.max(0, targetSize - totalActive);
-  const realMatchesR1 = Math.max(0, Math.floor((totalActive - byesR1) / 2));
+  // R1: cada slot VACANTE (seed > totalInscritos) manda BYE al oponente.
+  // Con N inscritos en cuadro S, hay (S - N) BYEs y (N - (S - N))/2 = N - S/2
+  // matches reales en R1.
+  const byesR1 = Math.max(0, targetSize - totalInscribed);
+  const realMatchesR1 = Math.max(
+    0,
+    Math.floor((totalInscribed - byesR1) / 2)
+  );
 
   // Render: cada ronda como columna; cada match con grid-row span 2^k
   return (
@@ -362,6 +401,8 @@ export default function LiveBracketView({
                   bottomTeam={slot?.bottom ?? null}
                   topSeed={slot?.topSeed ?? null}
                   bottomSeed={slot?.bottomSeed ?? null}
+                  topVacant={slot?.topVacant ?? false}
+                  bottomVacant={slot?.bottomVacant ?? false}
                   byeSide={slot?.byeSide ?? null}
                   computedWinnerId={slot?.winner?.id ?? null}
                   realMatch={real}
@@ -382,16 +423,12 @@ export default function LiveBracketView({
           </h2>
           <ul className="mt-2 space-y-1">
             <li>
-              <span className="font-bold text-amber-200">1.</span> Mayor postura
-              → mejor seed.
+              <span className="font-bold text-amber-200">1.</span> Solo entran
+              al cuadro las parejas <strong>YA ADJUDICADAS</strong> en subasta
+              (mayor postura → mejor seed; en empate, la subastada primero).
             </li>
             <li>
-              <span className="font-bold text-amber-200">2.</span> En empate,
-              prioridad para la pareja con menor # de subasta (la que salió
-              primero).
-            </li>
-            <li>
-              <span className="font-bold text-amber-200">3.</span> Cuadro de{" "}
+              <span className="font-bold text-amber-200">2.</span> Cuadro de{" "}
               {targetSize} (
               <code className="text-cyan-300">1 vs {targetSize}</code>,{" "}
               <code className="text-cyan-300">
@@ -401,12 +438,20 @@ export default function LiveBracketView({
               , …).
             </li>
             <li>
-              <span className="font-bold text-amber-200">4.</span> Con{" "}
-              <strong className="text-cyan-200">{totalActive}</strong> parejas
-              en cuadro de {targetSize}, los mejores{" "}
-              <strong className="text-amber-200">{byesR1}</strong> seeds pasan
-              por <strong>BYE</strong> en R1 y juegan{" "}
+              <span className="font-bold text-amber-200">3.</span> Con{" "}
+              <strong className="text-cyan-200">{totalInscribed}</strong>{" "}
+              inscritos en cuadro de {targetSize}, hay{" "}
+              <strong className="text-amber-200">{byesR1}</strong> slots
+              vacantes → <strong>{byesR1} BYEs</strong> pre-definidos en R1 y{" "}
               <strong>{realMatchesR1}</strong> matches reales.
+            </li>
+            <li>
+              <span className="font-bold text-amber-200">4.</span> Slots:{" "}
+              <span className="text-white">equipo</span> = adjudicado ·{" "}
+              <span className="text-cyan-200/70 italic">Por adjudicar</span> =
+              seed inscrito sin postura aún ·{" "}
+              <span className="text-slate-500 uppercase">BYE · vacante</span> =
+              seed que nunca se llena (cuadro mayor a inscritos).
             </li>
             <li>
               <span className="font-bold text-amber-200">5.</span>{" "}
@@ -414,12 +459,9 @@ export default function LiveBracketView({
               BYE: los ganadores de R1 se enfrentan entre sí.
             </li>
             <li>
-              <span className="font-bold text-amber-200">6.</span> Badge{" "}
-              <span className="rounded bg-slate-600/40 px-1 py-0.5 text-[10px] font-bold text-slate-300">
-                s/p
-              </span>{" "}
-              = pareja inscrita sin postura adjudicada todavía (cambia de seed
-              conforme avanza la subasta).
+              <span className="font-bold text-amber-200">6.</span> Las
+              posiciones se reordenan en tiempo real conforme avanza la
+              subasta (nueva postura más alta → sube de seed).
             </li>
           </ul>
         </section>
@@ -476,6 +518,8 @@ function BracketMatchCell({
   bottomTeam,
   topSeed,
   bottomSeed,
+  topVacant,
+  bottomVacant,
   byeSide,
   computedWinnerId,
   realMatch,
@@ -490,6 +534,8 @@ function BracketMatchCell({
   bottomTeam: MatchPlayTeamRow | null;
   topSeed: number | null;
   bottomSeed: number | null;
+  topVacant: boolean;
+  bottomVacant: boolean;
   byeSide: "top" | "bottom" | null;
   computedWinnerId: string | null;
   realMatch: {
@@ -528,7 +574,8 @@ function BracketMatchCell({
         seed={topSeed}
         team={topTeam}
         isWinner={!!winnerId && topTeam?.id === winnerId}
-        isBye={byeSide === "top"}
+        isVacant={topVacant}
+        isPending={!topVacant && !topTeam && round === 1}
         showBid={round === 1}
         currency={currency}
       />
@@ -540,7 +587,8 @@ function BracketMatchCell({
         seed={bottomSeed}
         team={bottomTeam}
         isWinner={!!winnerId && bottomTeam?.id === winnerId}
-        isBye={byeSide === "bottom"}
+        isVacant={bottomVacant}
+        isPending={!bottomVacant && !bottomTeam && round === 1}
         showBid={round === 1}
         currency={currency}
       />
@@ -582,7 +630,8 @@ function SidePill({
   seed,
   team,
   isWinner,
-  isBye,
+  isVacant,
+  isPending,
   showBid,
   currency,
 }: {
@@ -590,17 +639,22 @@ function SidePill({
   seed: number | null;
   team: MatchPlayTeamRow | null;
   isWinner: boolean;
-  isBye: boolean;
+  isVacant: boolean;
+  isPending: boolean;
   showBid: boolean;
   currency: string;
 }) {
-  const tone = isBye
-    ? "bg-slate-800/70 border-slate-600/40"
-    : isWinner
-      ? "bg-emerald-900/70 border-emerald-400/70"
-      : team
-        ? "bg-[#0b1c34]/80 border-white/15"
-        : "bg-black/40 border-white/10";
+  // Vacante = seed nunca se llenará (genera BYE). Pending = seed inscrito pero
+  // aún no adjudicado en la subasta. Equipo = ya adjudicado.
+  const tone = isVacant
+    ? "bg-slate-900/60 border-slate-600/30 border-dashed"
+    : isPending
+      ? "bg-[#0a1426]/70 border-cyan-700/30 border-dashed"
+      : isWinner
+        ? "bg-emerald-900/70 border-emerald-400/70"
+        : team
+          ? "bg-[#0b1c34]/80 border-white/15"
+          : "bg-black/40 border-white/10";
 
   const players = team ? playersOrderedMaleFirst(team) : [];
 
@@ -609,17 +663,19 @@ function SidePill({
       <div className="flex items-start gap-1.5">
         <span
           className={`mt-0.5 inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
-            seed != null
-              ? "bg-cyan-500/30 text-cyan-100"
-              : "bg-slate-700/40 text-slate-400"
+            isVacant
+              ? "bg-slate-700/40 text-slate-500"
+              : seed != null
+                ? "bg-cyan-500/30 text-cyan-100"
+                : "bg-slate-700/40 text-slate-400"
           }`}
         >
           {seed != null ? `#${seed}` : "—"}
         </span>
         <div className="min-w-0 flex-1">
-          {isBye ? (
-            <div className="text-[12px] font-bold uppercase tracking-wider text-slate-400">
-              BYE
+          {isVacant ? (
+            <div className="text-[12px] font-bold uppercase tracking-wider text-slate-500">
+              BYE · vacante
             </div>
           ) : team ? (
             <ul className="space-y-0.5">
@@ -655,23 +711,18 @@ function SidePill({
                 <li className="text-[12px] italic text-slate-400">(equipo)</li>
               ) : null}
             </ul>
+          ) : isPending ? (
+            <div className="text-[11px] italic text-cyan-200/70">
+              Por adjudicar
+            </div>
           ) : (
             <div className="text-[12px] italic text-slate-500">Por definir</div>
           )}
         </div>
-        {showBid && !isBye && team ? (
-          team.auction_bid != null ? (
-            <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
-              {money(team.auction_bid, currency)}
-            </span>
-          ) : (
-            <span
-              className="ml-auto shrink-0 rounded bg-slate-600/40 px-1.5 py-0.5 text-[10px] font-bold text-slate-300"
-              title="Pareja inscrita aún sin postura adjudicada"
-            >
-              s/p
-            </span>
-          )
+        {showBid && team && team.auction_bid != null ? (
+          <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+            {money(team.auction_bid, currency)}
+          </span>
         ) : null}
       </div>
     </div>
