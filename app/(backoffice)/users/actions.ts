@@ -253,14 +253,18 @@ function canAssignTournamentRole(
   const allowedForClubAdmin = new Set([
     "tournament_director",
     "score_capture",
+    "entries_operator",
     "checkin",
     "viewer",
+    "handicap_committee",
   ]);
 
   const allowedForTournamentDirector = new Set([
     "score_capture",
+    "entries_operator",
     "checkin",
     "viewer",
+    "handicap_committee",
   ]);
 
   if (actor.allowedClubIds.size > 0) {
@@ -392,33 +396,69 @@ export async function removeUserClubRoleAction(formData: FormData) {
 export async function assignUserTournamentRoleAction(formData: FormData) {
   const profileId = reqStr(formData, "profile_id");
   const tournamentId = reqStr(formData, "tournament_id");
-  const roleId = reqStr(formData, "role_id");
+
+  const rawIds = formData.getAll("role_ids");
+  const fallback = String(formData.get("role_id") ?? "").trim();
+  const roleIds = Array.from(
+    new Set(
+      [
+        ...rawIds.map((v) => String(v).trim()),
+        ...(fallback ? [fallback] : []),
+      ].filter(Boolean)
+    )
+  );
+
+  if (roleIds.length === 0) {
+    throw new Error("Selecciona al menos un rol para asignar.");
+  }
 
   const ctx = await ensureUsersManageAccess(tournamentId);
   await ensureCanTouchProfile(profileId, tournamentId);
 
-  const role = await getRoleById(roleId);
+  const supabase = await createClient();
+  const { data: rolesData, error: rolesErr } = await supabase
+    .from("roles")
+    .select("id, code")
+    .in("id", roleIds);
 
-  if (!canAssignTournamentRole(ctx, role.code)) {
-    throw new Error("No tienes permisos para asignar ese rol de torneo.");
+  if (rolesErr) {
+    throw new Error(`Error verificando roles: ${rolesErr.message}`);
   }
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.from("user_tournament_roles").upsert(
-    {
-      user_id: profileId,
-      tournament_id: tournamentId,
-      role_id: roleId,
-      is_active: true,
-    },
-    {
-      onConflict: "user_id,tournament_id,role_id",
-    }
+  const rolesById = new Map<string, string | null>(
+    (rolesData ?? []).map((r: any) => [String(r.id), r.code ?? null])
   );
 
+  const missing = roleIds.filter((id) => !rolesById.has(id));
+  if (missing.length > 0) {
+    throw new Error("Algún rol seleccionado no existe.");
+  }
+
+  const blocked: string[] = [];
+  for (const id of roleIds) {
+    if (!canAssignTournamentRole(ctx, rolesById.get(id) ?? null)) {
+      blocked.push(rolesById.get(id) ?? id);
+    }
+  }
+  if (blocked.length > 0) {
+    throw new Error(
+      `No tienes permisos para asignar estos roles: ${blocked.join(", ")}`
+    );
+  }
+
+  const rows = roleIds.map((roleId) => ({
+    user_id: profileId,
+    tournament_id: tournamentId,
+    role_id: roleId,
+    is_active: true,
+  }));
+
+  const { error } = await supabase
+    .from("user_tournament_roles")
+    .upsert(rows, { onConflict: "user_id,tournament_id,role_id" });
+
   if (error) {
-    throw new Error(`Error asignando rol de torneo: ${error.message}`);
+    throw new Error(`Error asignando roles de torneo: ${error.message}`);
   }
 
   revalidateUsersPaths(tournamentId);
