@@ -192,31 +192,77 @@ export default async function ComiteHandicapPage(props: {
     .eq("tournament_id", tournamentId)
     .maybeSingle();
 
-  const { data: entriesRaw } = await supabase
+  const adminEarly = tryCreateAdminClient();
+  const entriesClient = adminEarly ?? supabase;
+
+  const { data: entriesRaw } = await entriesClient
     .from("tournament_entries")
-    .select(
-      `
-      id,
-      handicap_index,
-      status,
-      players (
-        first_name,
-        last_name,
-        clubs:club_id ( name, short_name )
-      ),
-      categories:category_id ( code, name )
-    `
-    )
+    .select("id, player_id, category_id, handicap_index, status")
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled")
     .order("handicap_index", { ascending: true });
 
+  const playerIds = Array.from(
+    new Set(
+      (entriesRaw ?? [])
+        .map((e: any) => (e.player_id ? String(e.player_id) : null))
+        .filter((v): v is string => Boolean(v))
+    )
+  );
+  const categoryIds = Array.from(
+    new Set(
+      (entriesRaw ?? [])
+        .map((e: any) => (e.category_id ? String(e.category_id) : null))
+        .filter((v): v is string => Boolean(v))
+    )
+  );
+
+  const [{ data: playerRows }, { data: categoryRows }] = await Promise.all([
+    playerIds.length
+      ? entriesClient
+          .from("players")
+          .select("id, first_name, last_name, club_id")
+          .in("id", playerIds)
+      : Promise.resolve({ data: [] as any[] }),
+    categoryIds.length
+      ? entriesClient
+          .from("categories")
+          .select("id, code, name")
+          .in("id", categoryIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const playerById = new Map<string, any>(
+    (playerRows ?? []).map((p: any) => [String(p.id), p])
+  );
+  const categoryById = new Map<string, any>(
+    (categoryRows ?? []).map((c: any) => [String(c.id), c])
+  );
+
+  const clubIds = Array.from(
+    new Set(
+      (playerRows ?? [])
+        .map((p: any) => (p.club_id ? String(p.club_id) : null))
+        .filter((v): v is string => Boolean(v))
+    )
+  );
+
+  const { data: clubRows } = clubIds.length
+    ? await entriesClient
+        .from("clubs")
+        .select("id, name, short_name")
+        .in("id", clubIds)
+    : { data: [] as any[] };
+
+  const clubById = new Map<string, any>(
+    (clubRows ?? []).map((c: any) => [String(c.id), c])
+  );
+
   const entries: HandicapEntryRow[] = (entriesRaw ?? [])
     .map((row: any) => {
-      const player = Array.isArray(row.players) ? row.players[0] : row.players;
-      const cat = Array.isArray(row.categories) ? row.categories[0] : row.categories;
-      const clubRaw = player?.clubs;
-      const club = Array.isArray(clubRaw) ? clubRaw[0] : clubRaw;
+      const player = row.player_id ? playerById.get(String(row.player_id)) : null;
+      const cat = row.category_id ? categoryById.get(String(row.category_id)) : null;
+      const club = player?.club_id ? clubById.get(String(player.club_id)) : null;
       return {
         entry_id: row.id as string,
         player_name: playerName(player),
@@ -918,6 +964,20 @@ export default async function ComiteHandicapPage(props: {
                 Resumen agregado (anonimizado): se muestran los votos individuales
                 sin nombre. Verde = activo, gris = descartado por recorte.
               </p>
+
+              {entries.length === 0 ? (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                  No hay inscripciones activas en este torneo todavía. Agrega
+                  jugadores en{" "}
+                  <Link
+                    href={`/entries?tournament_id=${tournamentId}`}
+                    className="font-semibold underline"
+                  >
+                    Inscripciones
+                  </Link>{" "}
+                  para que el comité los pueda calificar.
+                </div>
+              ) : null}
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="min-w-full text-left text-sm">
