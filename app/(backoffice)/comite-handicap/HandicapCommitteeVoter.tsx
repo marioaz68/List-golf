@@ -133,6 +133,7 @@ export default function HandicapCommitteeVoter({
             tournamentId={tournamentId}
             initial={voteByEntry.get(entry.entry_id)}
             disabled={!canVote || pending}
+            committeeOpen={committeeOpen}
             onSaved={() => setMsg("")}
             onError={(e) => setMsg(e)}
             startTransition={startTransition}
@@ -153,6 +154,7 @@ function PlayerVoteCard({
   tournamentId,
   initial,
   disabled,
+  committeeOpen,
   onSaved,
   onError,
   startTransition,
@@ -161,18 +163,23 @@ function PlayerVoteCard({
   tournamentId: string;
   initial?: HandicapVoteRow;
   disabled: boolean;
+  committeeOpen: boolean;
   onSaved: () => void;
   onError: (msg: string) => void;
   startTransition: (fn: () => void) => void;
 }) {
   const saved = Boolean(initial);
-  const [abstained, setAbstained] = useState(initial?.abstained ?? false);
-  const [adjustment, setAdjustment] = useState(
+  const defaultAdjustment =
     initial?.abstained || initial?.adjustment == null
       ? -1.0
-      : Number(initial.adjustment)
-  );
+      : Number(initial.adjustment);
+
+  const [abstained, setAbstained] = useState(initial?.abstained ?? false);
+  const [adjustment, setAdjustment] = useState(defaultAdjustment);
+  const [editing, setEditing] = useState(!saved);
   const [justSaved, setJustSaved] = useState(false);
+
+  const lockedByClosing = !committeeOpen;
 
   async function handleSave() {
     const fd = new FormData();
@@ -188,8 +195,17 @@ function PlayerVoteCard({
     }
     onSaved();
     setJustSaved(true);
+    setEditing(false);
     window.setTimeout(() => setJustSaved(false), 2000);
   }
+
+  function handleCancel() {
+    setAbstained(initial?.abstained ?? false);
+    setAdjustment(defaultAdjustment);
+    setEditing(false);
+  }
+
+  const showControls = editing && !lockedByClosing;
 
   return (
     <article
@@ -218,49 +234,105 @@ function PlayerVoteCard({
         )}
       </div>
 
-      <label className="mt-3 flex items-center gap-2 text-sm text-slate-800">
-        <input
-          type="checkbox"
-          checked={abstained}
-          disabled={disabled}
-          onChange={(e) => setAbstained(e.target.checked)}
-        />
-        Sin opinión (abstenerse)
-      </label>
+      {!showControls && saved ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+          <div className="text-sm text-slate-800">
+            {initial?.abstained ? (
+              <>
+                <span className="font-semibold">Te abstuviste</span> en este jugador.
+              </>
+            ) : (
+              <>
+                Calificación guardada:{" "}
+                <span className="font-bold tabular-nums text-slate-950">
+                  {formatAdjustmentLabel(initial?.adjustment ?? null)} pts
+                </span>
+              </>
+            )}
+          </div>
 
-      {!abstained ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium text-slate-800">Bajar HI</span>
-            <span className="font-bold tabular-nums text-slate-950">
-              {formatAdjustmentLabel(adjustment)} pts
+          {lockedByClosing ? (
+            <span className="text-[11px] font-semibold uppercase text-amber-800">
+              Bloqueado · votación cerrada
             </span>
-          </div>
-          <input
-            type="range"
-            min={HANDICAP_ADJUSTMENT_MIN}
-            max={HANDICAP_ADJUSTMENT_MAX}
-            step={HANDICAP_ADJUSTMENT_STEP}
-            value={adjustment}
-            disabled={disabled}
-            onChange={(e) => setAdjustment(Number(e.target.value))}
-            className="h-3 w-full accent-slate-800"
-          />
-          <div className="flex justify-between text-[10px] text-slate-500">
-            <span>−5.0 (máx.)</span>
-            <span>−0.5 (mín.)</span>
-          </div>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setEditing(true)}
+              className="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 disabled:opacity-50"
+            >
+              Editar calificación
+            </button>
+          )}
         </div>
       ) : null}
 
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => startTransition(() => handleSave())}
-        className="mt-3 w-full rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-      >
-        Guardar calificación
-      </button>
+      {showControls ? (
+        <>
+          <label className="mt-3 flex items-center gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              checked={abstained}
+              disabled={disabled}
+              onChange={(e) => setAbstained(e.target.checked)}
+            />
+            Sin opinión (abstenerse)
+          </label>
+
+          {!abstained ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-800">Bajar HI</span>
+                <span className="font-bold tabular-nums text-slate-950">
+                  {formatAdjustmentLabel(adjustment)} pts
+                </span>
+              </div>
+              <input
+                type="range"
+                min={HANDICAP_ADJUSTMENT_MIN}
+                max={HANDICAP_ADJUSTMENT_MAX}
+                step={HANDICAP_ADJUSTMENT_STEP}
+                value={adjustment}
+                disabled={disabled}
+                onChange={(e) => setAdjustment(Number(e.target.value))}
+                className="h-3 w-full accent-slate-800"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>−5.0 (máx.)</span>
+                <span>−0.5 (mín.)</span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => startTransition(() => handleSave())}
+              className="flex-1 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {saved ? "Guardar cambios" : "Guardar calificación"}
+            </button>
+            {saved ? (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={handleCancel}
+                className="rounded-lg border border-slate-400 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
+      {!showControls && !saved && lockedByClosing ? (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          No alcanzaste a votar y la votación ya está cerrada.
+        </div>
+      ) : null}
     </article>
   );
 }
