@@ -842,8 +842,9 @@ function SidePill({
       data-side={side}
     >
       <div className="flex items-start gap-1.5">
+        {/* Seed: oculto en móvil para aprovechar espacio */}
         <span
-          className={`mt-0.5 inline-flex h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold ${
+          className={`mt-0.5 hidden h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold sm:inline-flex ${
             isVacant
               ? "bg-slate-700/40 text-slate-500"
               : seed != null
@@ -903,7 +904,7 @@ function SidePill({
           )}
         </div>
         {showBid && team && team.auction_bid != null ? (
-          <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+          <span className="ml-auto hidden shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200 sm:inline-flex">
             {money(team.auction_bid, currency)}
           </span>
         ) : null}
