@@ -23,6 +23,14 @@ export type HandicapVoteRow = {
   abstained: boolean;
 };
 
+export type HandicapVoteSummaryRow = {
+  entry_id: string;
+  n_votes: number;
+  n_live: number;
+  avg_adjustment: number | null;
+  suggested_hi: number | null;
+};
+
 type Props = {
   tournamentId: string;
   entries: HandicapEntryRow[];
@@ -30,6 +38,7 @@ type Props = {
   committeeOpen: boolean;
   isPresent: boolean;
   isAdmin: boolean;
+  voteSummaries?: HandicapVoteSummaryRow[];
 };
 
 export default function HandicapCommitteeVoter({
@@ -39,6 +48,7 @@ export default function HandicapCommitteeVoter({
   committeeOpen,
   isPresent,
   isAdmin,
+  voteSummaries = [],
 }: Props) {
   const [q, setQ] = useState("");
   const [pending, startTransition] = useTransition();
@@ -49,6 +59,12 @@ export default function HandicapCommitteeVoter({
     for (const v of myVotes) m.set(v.entry_id, v);
     return m;
   }, [myVotes]);
+
+  const summaryByEntry = useMemo(() => {
+    const m = new Map<string, HandicapVoteSummaryRow>();
+    for (const s of voteSummaries) m.set(s.entry_id, s);
+    return m;
+  }, [voteSummaries]);
 
   const votedCount = useMemo(
     () => entries.filter((e) => voteByEntry.has(e.entry_id)).length,
@@ -132,6 +148,7 @@ export default function HandicapCommitteeVoter({
             entry={entry}
             tournamentId={tournamentId}
             initial={voteByEntry.get(entry.entry_id)}
+            summary={summaryByEntry.get(entry.entry_id)}
             disabled={!canVote || pending}
             committeeOpen={committeeOpen}
             onSaved={() => setMsg("")}
@@ -153,6 +170,7 @@ function PlayerVoteCard({
   entry,
   tournamentId,
   initial,
+  summary,
   disabled,
   committeeOpen,
   onSaved,
@@ -162,6 +180,7 @@ function PlayerVoteCard({
   entry: HandicapEntryRow;
   tournamentId: string;
   initial?: HandicapVoteRow;
+  summary?: HandicapVoteSummaryRow;
   disabled: boolean;
   committeeOpen: boolean;
   onSaved: () => void;
@@ -331,6 +350,40 @@ function PlayerVoteCard({
       {!showControls && !saved && lockedByClosing ? (
         <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           No alcanzaste a votar y la votación ya está cerrada.
+        </div>
+      ) : null}
+
+      {lockedByClosing && summary ? (
+        <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-center">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              HI actual
+            </div>
+            <div className="mt-0.5 text-sm font-bold tabular-nums text-slate-950">
+              {entry.handicap_index ?? "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Promedio
+            </div>
+            <div className="mt-0.5 text-sm font-bold tabular-nums text-slate-950">
+              {summary.avg_adjustment != null
+                ? formatAdjustmentLabel(summary.avg_adjustment)
+                : "—"}
+            </div>
+            <div className="text-[10px] text-slate-500">
+              {summary.n_live} / {summary.n_votes} votos
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              HI sugerido
+            </div>
+            <div className="mt-0.5 text-sm font-bold tabular-nums text-emerald-700">
+              {summary.suggested_hi ?? "—"}
+            </div>
+          </div>
         </div>
       ) : null}
     </article>
