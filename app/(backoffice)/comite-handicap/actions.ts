@@ -7,6 +7,7 @@ import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   clampAdjustment,
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
+  trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 
@@ -204,7 +205,7 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
 
   const { data: committee } = await admin
     .from("tournament_handicap_committees")
-    .select("id")
+    .select("id, trim_high, trim_low")
     .eq("tournament_id", tournament_id)
     .maybeSingle();
 
@@ -213,18 +214,36 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
     return;
   }
 
-  const { data: summary } = await admin
-    .from("handicap_committee_vote_summary")
-    .select("avg_adjustment, n_votes")
+  const { data: voteRows } = await admin
+    .from("handicap_committee_votes")
+    .select("adjustment, abstained")
     .eq("committee_id", committee.id)
     .eq("entry_id", entry_id)
-    .maybeSingle();
+    .eq("abstained", false);
 
-  const avg = summary?.avg_adjustment != null ? Number(summary.avg_adjustment) : null;
-  const nVotes = Number(summary?.n_votes ?? 0);
-  if (avg == null || !Number.isFinite(avg) || nVotes < 1) {
+  const adjustments = (voteRows ?? [])
+    .map((v: any) =>
+      v.adjustment != null ? Number(v.adjustment) : Number.NaN
+    )
+    .filter((n) => Number.isFinite(n));
+
+  if (adjustments.length === 0) {
     redirectWith(tournament_id, {
       err: "No hay votos suficientes para aplicar un ajuste.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const trim = trimmedAverage(
+    adjustments,
+    Number(committee.trim_low ?? 0),
+    Number(committee.trim_high ?? 0)
+  );
+  const avg = trim.avg;
+  if (avg == null || !Number.isFinite(avg) || trim.liveCount < 1) {
+    redirectWith(tournament_id, {
+      err: "El recorte deja menos de un voto vivo; ajusta los parámetros.",
       tab: "admin",
     });
     return;
@@ -263,6 +282,39 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   revalidatePath("/comite-handicap");
   revalidatePath("/entries");
   redirectWith(tournament_id, { ok: "hi_applied", tab: "admin" });
+}
+
+export async function setHandicapCommitteeTrim(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const rawHigh = Number(String(formData.get("trim_high") ?? "0"));
+  const rawLow = Number(String(formData.get("trim_low") ?? "0"));
+
+  const trim_high = Number.isFinite(rawHigh)
+    ? Math.min(20, Math.max(0, Math.trunc(rawHigh)))
+    : 0;
+  const trim_low = Number.isFinite(rawLow)
+    ? Math.min(20, Math.max(0, Math.trunc(rawLow)))
+    : 0;
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const { error } = await supabase
+    .from("tournament_handicap_committees")
+    .update({ trim_high, trim_low })
+    .eq("tournament_id", tournament_id);
+
+  if (error) {
+    redirectWith(tournament_id, { err: error.message, tab: "admin" });
+    return;
+  }
+
+  revalidatePath("/comite-handicap");
+  redirectWith(tournament_id, { ok: "trim_saved", tab: "admin" });
 }
 
 export async function setHandicapCommitteeMemberPresence(formData: FormData) {
