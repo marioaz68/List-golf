@@ -25,6 +25,13 @@ type ExistingMatch = {
   result_text: string | null;
 };
 
+type PrizeShareRow = {
+  position: number;
+  label: string;
+  percent: number;
+  source?: "match_play" | "consolation_match_play" | "stroke_play_aggregate";
+};
+
 type Props = {
   tournamentId: string;
   tournamentName: string;
@@ -33,7 +40,7 @@ type Props = {
   bracketMainPairs: number | null;
   currency: string;
   potPercent: number | null;
-  prizeShares: Array<{ position: number; label: string; percent: number }>;
+  prizeShares: PrizeShareRow[];
 };
 
 function money(v: number | null | undefined, currency: string) {
@@ -467,26 +474,11 @@ export default function LiveBracketView({
         </section>
 
         {prizeShares.length > 0 ? (
-          <section className="rounded-xl border border-amber-500/30 bg-[#0c1728] p-3">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">
-              Distribución de bolsa proyectada
-            </h2>
-            <div className="mt-2 grid gap-1">
-              {prizeShares.map((p, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded bg-white/5 px-2 py-1.5 text-[12px]"
-                >
-                  <span className="text-slate-300">
-                    {p.label} ({p.percent}%)
-                  </span>
-                  <span className="font-bold text-amber-200">
-                    {money((pot * p.percent) / 100, currency)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
+          <PrizeBreakdown
+            prizeShares={prizeShares}
+            pot={pot}
+            currency={currency}
+          />
         ) : null}
       </footer>
 
@@ -725,6 +717,122 @@ function SidePill({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function PrizeBreakdown({
+  prizeShares,
+  pot,
+  currency,
+}: {
+  prizeShares: PrizeShareRow[];
+  pot: number;
+  currency: string;
+}) {
+  const groups: Array<{
+    key: "match_play" | "consolation_match_play" | "stroke_play_aggregate";
+    title: string;
+    tone: string;
+    icon: string;
+  }> = [
+    {
+      key: "match_play",
+      title: "Match Play (cuadro principal)",
+      tone: "border-amber-500/40 bg-amber-950/20",
+      icon: "🏆",
+    },
+    {
+      key: "consolation_match_play",
+      title: "Consolación Match Play",
+      tone: "border-emerald-500/40 bg-emerald-950/20",
+      icon: "🎯",
+    },
+    {
+      key: "stroke_play_aggregate",
+      title: "Consolación Stroke Play (agregado)",
+      tone: "border-sky-500/40 bg-sky-950/20",
+      icon: "🎳",
+    },
+  ];
+
+  const totalPct = prizeShares.reduce((acc, p) => acc + (p.percent ?? 0), 0);
+  const totalAmount = (pot * totalPct) / 100;
+
+  return (
+    <section className="rounded-xl border border-amber-500/30 bg-[#0c1728] p-3">
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300">
+          Distribución de bolsa proyectada
+        </h2>
+        <div className="text-[11px] text-slate-400">
+          Total repartido:{" "}
+          <strong className="text-amber-200">{totalPct}%</strong> ={" "}
+          <strong className="text-amber-200">
+            {money(totalAmount, currency)}
+          </strong>
+        </div>
+      </header>
+
+      <div className="mt-2 grid gap-2">
+        {groups.map((g) => {
+          const items = prizeShares.filter(
+            (p) => (p.source ?? "match_play") === g.key
+          );
+          const subtotalPct = items.reduce(
+            (acc, p) => acc + (p.percent ?? 0),
+            0
+          );
+          return (
+            <div
+              key={g.key}
+              className={`rounded-lg border ${g.tone} p-2`}
+            >
+              <div className="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider">
+                <span className="flex items-center gap-1.5 text-white">
+                  <span aria-hidden>{g.icon}</span>
+                  {g.title}
+                </span>
+                <span className="text-slate-300">
+                  {items.length > 0
+                    ? `${subtotalPct}% · ${money((pot * subtotalPct) / 100, currency)}`
+                    : "Sin asignar"}
+                </span>
+              </div>
+              {items.length > 0 ? (
+                <ul className="space-y-0.5">
+                  {items
+                    .slice()
+                    .sort((a, b) => a.position - b.position)
+                    .map((p, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between rounded bg-white/5 px-2 py-1 text-[12px]"
+                      >
+                        <span className="flex items-center gap-2 text-slate-200">
+                          <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-white/10 text-[9px] font-bold text-white">
+                            {p.position}
+                          </span>
+                          <span>
+                            {p.label}{" "}
+                            <span className="text-slate-400">({p.percent}%)</span>
+                          </span>
+                        </span>
+                        <span className="font-bold text-amber-200">
+                          {money((pot * p.percent) / 100, currency)}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] italic text-slate-500">
+                  No hay premio configurado para esta categoría.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

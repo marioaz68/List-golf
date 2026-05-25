@@ -74,9 +74,38 @@ export default async function PublicLiveBracketPage(props: {
     .maybeSingle();
 
   const cfg = (rulesRow?.config_json ?? {}) as Partial<MatchPlayConvocatoriaConfig>;
-  const prizeShares: MatchPlayPrizeShare[] = Array.isArray(cfg.prize_shares)
+  const rawPrizeShares: MatchPlayPrizeShare[] = Array.isArray(cfg.prize_shares)
     ? (cfg.prize_shares as MatchPlayPrizeShare[])
     : [];
+
+  // Fallback: si alguna consolación tiene prize_percent en `consolations[]`
+  // pero no aparece en prize_shares, la sintetizamos para que se vea en el
+  // reparto público.
+  const consolations = Array.isArray(cfg.consolations)
+    ? cfg.consolations
+    : [];
+  const prizeShares: MatchPlayPrizeShare[] = [...rawPrizeShares];
+  for (const rule of consolations) {
+    if (!rule?.enabled || rule.prize_percent == null) continue;
+    const targetSource =
+      rule.consolation_format === "stroke_play_aggregate"
+        ? "stroke_play_aggregate"
+        : "consolation_match_play";
+    const alreadyPresent = rawPrizeShares.some(
+      (p) => (p.source ?? "match_play") === targetSource
+    );
+    if (alreadyPresent) continue;
+    prizeShares.push({
+      position: 1,
+      label:
+        rule.prize_label ??
+        (targetSource === "stroke_play_aggregate"
+          ? "Consolación Stroke Play"
+          : "Consolación Match Play"),
+      percent: rule.prize_percent,
+      source: targetSource,
+    });
+  }
   const currency =
     (cfg.auction?.currency ?? rulesRow?.auction_currency ?? "MXN") as string;
   const potPercent =
