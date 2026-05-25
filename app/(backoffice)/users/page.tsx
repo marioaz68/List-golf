@@ -839,32 +839,95 @@ export default async function UsersPage({
                                   ))
                                 )}
 
-                                {canAssignTournamentRoles && (
-                                  <form
-                                    action={assignUserTournamentRoleAction}
-                                    style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-                                  >
-                                    <input type="hidden" name="profile_id" value={u.id} />
-                                    <input
-                                      type="hidden"
-                                      name="tournament_id"
-                                      value={tournamentId}
-                                    />
+                                {canAssignTournamentRoles && (() => {
+                                  const assignedRoleIds = new Set(
+                                    filteredTournamentRoles
+                                      .map((r) => r.role_id)
+                                      .filter(Boolean)
+                                  );
+                                  const available = (tournamentRoleOptions ?? []).filter(
+                                    (role) => !assignedRoleIds.has(role.id)
+                                  );
 
-                                    <select name="role_id" style={selectStyle} defaultValue="">
-                                      <option value="">Agregar rol torneo</option>
-                                      {(tournamentRoleOptions ?? []).map((role: RoleOption) => (
-                                        <option key={role.id} value={role.id}>
-                                          {role.name ?? role.code ?? role.id}
-                                        </option>
-                                      ))}
-                                    </select>
+                                  if (available.length === 0) {
+                                    return (
+                                      <div style={{ fontSize: 11, color: "#64748b" }}>
+                                        Ya tiene todos los roles disponibles.
+                                      </div>
+                                    );
+                                  }
 
-                                    <button type="submit" style={miniButtonStyle}>
-                                      Agregar
-                                    </button>
-                                  </form>
-                                )}
+                                  return (
+                                    <form
+                                      action={assignUserTournamentRoleAction}
+                                      style={{
+                                        display: "grid",
+                                        gap: 6,
+                                        border: "1px dashed #cbd5e1",
+                                        borderRadius: 8,
+                                        padding: 8,
+                                        background: "#f8fafc",
+                                      }}
+                                    >
+                                      <input type="hidden" name="profile_id" value={u.id} />
+                                      <input
+                                        type="hidden"
+                                        name="tournament_id"
+                                        value={tournamentId}
+                                      />
+
+                                      <div
+                                        style={{
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          color: "#334155",
+                                        }}
+                                      >
+                                        Agregar uno o varios roles
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          display: "grid",
+                                          gap: 4,
+                                          gridTemplateColumns:
+                                            "repeat(auto-fill, minmax(150px, 1fr))",
+                                        }}
+                                      >
+                                        {available.map((role: RoleOption) => (
+                                          <label
+                                            key={role.id}
+                                            style={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 6,
+                                              fontSize: 12,
+                                              color: "#0f172a",
+                                              background: "#fff",
+                                              border: "1px solid #e2e8f0",
+                                              borderRadius: 6,
+                                              padding: "4px 8px",
+                                              cursor: "pointer",
+                                            }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              name="role_ids"
+                                              value={role.id}
+                                            />
+                                            <span>
+                                              {role.name ?? role.code ?? role.id}
+                                            </span>
+                                          </label>
+                                        ))}
+                                      </div>
+
+                                      <button type="submit" style={miniButtonStyle}>
+                                        Agregar seleccionados
+                                      </button>
+                                    </form>
+                                  );
+                                })()}
                               </>
                             ) : (
                               <div style={{ fontSize: 11, color: "#64748b" }}>
