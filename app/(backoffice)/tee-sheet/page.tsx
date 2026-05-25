@@ -328,11 +328,17 @@ export default async function TeeSheetPage(props: {
   const membersRaw = (mData ?? []) as any[];
 
   // Reglas + sets de salidas para colorear cada jugador por su tee asignado.
-  const [teeSetsRes, teeRulesRes] = effectiveTournamentId
-    ? await Promise.all([
+  // Defensivo: si las queries fallan (tablas vacías, columnas extra, etc.)
+  // seguimos renderizando la página sin los dots.
+  let teeSetsRes: { data: any[] | null; error: any } = { data: [], error: null };
+  let teeRulesRes: { data: any[] | null; error: any } = { data: [], error: null };
+
+  if (effectiveTournamentId) {
+    try {
+      [teeSetsRes, teeRulesRes] = await Promise.all([
         supabase
           .from("tee_sets")
-          .select("id, name, code, color, tee_color")
+          .select("id, name, code, color")
           .eq("tournament_id", effectiveTournamentId),
         supabase
           .from("category_tee_rules")
@@ -341,18 +347,17 @@ export default async function TeeSheetPage(props: {
           )
           .eq("tournament_id", effectiveTournamentId)
           .order("priority", { ascending: true }),
-      ])
-    : [
-        { data: [] as any[], error: null },
-        { data: [] as any[], error: null },
-      ];
+      ]);
+    } catch (err) {
+      console.error("[tee-sheet] tee_sets/category_tee_rules:", err);
+    }
+  }
 
   const teeSets = (teeSetsRes.data ?? []) as Array<{
     id: string;
     name: string | null;
     code: string | null;
     color: string | null;
-    tee_color: string | null;
   }>;
   const teeRules = (teeRulesRes.data ?? []) as Array<{
     id: string;
@@ -857,8 +862,13 @@ for (const row of membersRaw) {
               <p className="mt-1 text-sm text-amber-900">
                 En match play los grupos se arman desde el cuadro: cada match
                 de la ronda <strong>R{targetRoundNo}</strong> = 1 foursome
-                (pareja A vs pareja B). Las parejas que pasan por BYE en R1 no
-                se incluyen. Por convocatoria CCQ, intervalo recomendado:
+                (pareja A vs pareja B).
+              </p>
+              <p className="mt-1 text-sm text-amber-900">
+                <strong>Importante:</strong> en R1 las parejas que pasan por
+                BYE <strong>no juegan</strong>, solo se generan salidas para
+                los matches reales (las dos parejas asignadas). En R2+ ya no
+                hay BYEs. Intervalo recomendado por convocatoria CCQ:
                 <strong> 10 min</strong>.
               </p>
             </div>

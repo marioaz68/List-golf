@@ -153,29 +153,37 @@ export default async function PublicLiveBracketPage(props: {
     if (t.player_b?.player_id) playerIds.add(t.player_b.player_id);
   }
 
-  const [teeSetsRes, teeRulesRes, playersRes] = await Promise.all([
-    supabase
-      .from("tee_sets")
-      .select("id, name, code, color, tee_color")
-      .eq("tournament_id", tournamentId),
-    supabase
-      .from("category_tee_rules")
-      .select(
-        "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
-      )
-      .eq("tournament_id", tournamentId)
-      .order("priority", { ascending: true }),
-    playerIds.size > 0
-      ? supabase.from("players").select("id, birth_year").in("id", Array.from(playerIds))
-      : Promise.resolve({ data: [] as Array<{ id: string; birth_year: number | null }> }),
-  ]);
+  let teeSetsRes: { data: any[] | null } = { data: [] };
+  let teeRulesRes: { data: any[] | null } = { data: [] };
+  let playersRes: { data: Array<{ id: string; birth_year: number | null }> | null } = { data: [] };
+
+  try {
+    [teeSetsRes, teeRulesRes, playersRes] = await Promise.all([
+      supabase
+        .from("tee_sets")
+        .select("id, name, code, color")
+        .eq("tournament_id", tournamentId),
+      supabase
+        .from("category_tee_rules")
+        .select(
+          "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+        )
+        .eq("tournament_id", tournamentId)
+        .order("priority", { ascending: true }),
+      playerIds.size > 0
+        ? supabase.from("players").select("id, birth_year").in("id", Array.from(playerIds))
+        : Promise.resolve({ data: [] as Array<{ id: string; birth_year: number | null }> }),
+    ]) as any;
+  } catch (err) {
+    console.error("[cuadro-vivo] tee_sets/category_tee_rules:", err);
+  }
 
   const teeSets: TeeSetLite[] = (teeSetsRes.data ?? []).map((t) => ({
     id: t.id,
     name: t.name ?? "",
     code: t.code ?? null,
     color: t.color ?? null,
-    tee_color: t.tee_color ?? null,
+    tee_color: null,
   }));
   const teeRules: TeeRuleLite[] = (teeRulesRes.data ?? []).map((r) => ({
     id: r.id,
