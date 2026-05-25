@@ -25,10 +25,24 @@ type WhsRules = {
   whs_par_women: number | null;
 };
 
+export type CourseTeeSetForWhs = {
+  id: string;
+  code: string | null;
+  name: string | null;
+  gender_default: "M" | "F" | "X" | null;
+  slope_men: number | null;
+  slope_women: number | null;
+  course_rating_men: number | null;
+  course_rating_women: number | null;
+  par: number | null;
+  yardage: number | null;
+};
+
 type Props = {
   tournamentId: string;
   rules: WhsRules;
   entries: MatchPlayEntryRow[];
+  courseTeeSets: CourseTeeSetForWhs[];
   flashStatus?: string | null;
   flashMessage?: string | null;
 };
@@ -60,21 +74,74 @@ export default function MatchPlayHandicapPanel({
   tournamentId,
   rules,
   entries,
+  courseTeeSets,
   flashStatus,
   flashMessage,
 }: Props) {
   const [search, setSearch] = useState("");
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
 
+  const [slopeMen, setSlopeMen] = useState<string>(
+    rules.whs_slope_men != null ? String(rules.whs_slope_men) : ""
+  );
+  const [crMen, setCrMen] = useState<string>(
+    rules.whs_course_rating_men != null ? String(rules.whs_course_rating_men) : ""
+  );
+  const [parMen, setParMen] = useState<string>(
+    rules.whs_par_men != null ? String(rules.whs_par_men) : ""
+  );
+  const [slopeWomen, setSlopeWomen] = useState<string>(
+    rules.whs_slope_women != null ? String(rules.whs_slope_women) : ""
+  );
+  const [crWomen, setCrWomen] = useState<string>(
+    rules.whs_course_rating_women != null ? String(rules.whs_course_rating_women) : ""
+  );
+  const [parWomen, setParWomen] = useState<string>(
+    rules.whs_par_women != null ? String(rules.whs_par_women) : ""
+  );
+
+  const teeOptionsMen = useMemo(
+    () =>
+      courseTeeSets.filter(
+        (t) =>
+          t.slope_men != null && t.course_rating_men != null && t.par != null
+      ),
+    [courseTeeSets]
+  );
+  const teeOptionsWomen = useMemo(
+    () =>
+      courseTeeSets.filter(
+        (t) =>
+          t.slope_women != null && t.course_rating_women != null && t.par != null
+      ),
+    [courseTeeSets]
+  );
+
+  function applyTeeMen(teeId: string) {
+    const tee = teeOptionsMen.find((t) => t.id === teeId);
+    if (!tee) return;
+    setSlopeMen(String(tee.slope_men ?? ""));
+    setCrMen(String(tee.course_rating_men ?? ""));
+    setParMen(String(tee.par ?? ""));
+  }
+
+  function applyTeeWomen(teeId: string) {
+    const tee = teeOptionsWomen.find((t) => t.id === teeId);
+    if (!tee) return;
+    setSlopeWomen(String(tee.slope_women ?? ""));
+    setCrWomen(String(tee.course_rating_women ?? ""));
+    setParWomen(String(tee.par ?? ""));
+  }
+
   const tee_men: Partial<WhsTeeData> = {
-    slope: rules.whs_slope_men ?? undefined,
-    course_rating: rules.whs_course_rating_men ?? undefined,
-    par: rules.whs_par_men ?? undefined,
+    slope: Number(slopeMen) || undefined,
+    course_rating: Number(crMen) || undefined,
+    par: Number(parMen) || undefined,
   };
   const tee_women: Partial<WhsTeeData> = {
-    slope: rules.whs_slope_women ?? undefined,
-    course_rating: rules.whs_course_rating_women ?? undefined,
-    par: rules.whs_par_women ?? undefined,
+    slope: Number(slopeWomen) || undefined,
+    course_rating: Number(crWomen) || undefined,
+    par: Number(parWomen) || undefined,
   };
   const menValid = isValidWhsTee(tee_men);
   const womenValid = isValidWhsTee(tee_women);
@@ -160,6 +227,33 @@ export default function MatchPlayHandicapPanel({
           <legend className="text-[11px] font-semibold uppercase tracking-wide text-cyan-300">
             Salida caballeros (M)
           </legend>
+
+          {teeOptionsMen.length > 0 ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex-1 min-w-[160px]">
+                <label className={labelClass}>Cargar del campo</label>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      applyTeeMen(e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Seleccionar salida…</option>
+                  {teeOptionsMen.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name ?? t.code} · Slope {t.slope_men} · CR{" "}
+                      {t.course_rating_men} · Par {t.par}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-3 gap-2">
             <div>
               <label className={labelClass}>Slope</label>
@@ -169,7 +263,8 @@ export default function MatchPlayHandicapPanel({
                 min={55}
                 max={155}
                 step={1}
-                defaultValue={rules.whs_slope_men ?? ""}
+                value={slopeMen}
+                onChange={(e) => setSlopeMen(e.target.value)}
                 placeholder="113"
                 className={inputClass}
               />
@@ -182,7 +277,8 @@ export default function MatchPlayHandicapPanel({
                 min={50}
                 max={90}
                 step={0.1}
-                defaultValue={rules.whs_course_rating_men ?? ""}
+                value={crMen}
+                onChange={(e) => setCrMen(e.target.value)}
                 placeholder="71.4"
                 className={inputClass}
               />
@@ -195,7 +291,8 @@ export default function MatchPlayHandicapPanel({
                 min={60}
                 max={80}
                 step={1}
-                defaultValue={rules.whs_par_men ?? ""}
+                value={parMen}
+                onChange={(e) => setParMen(e.target.value)}
                 placeholder="72"
                 className={inputClass}
               />
@@ -207,6 +304,33 @@ export default function MatchPlayHandicapPanel({
           <legend className="text-[11px] font-semibold uppercase tracking-wide text-pink-300">
             Salida damas (F)
           </legend>
+
+          {teeOptionsWomen.length > 0 ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex-1 min-w-[160px]">
+                <label className={labelClass}>Cargar del campo</label>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      applyTeeWomen(e.target.value);
+                      e.target.value = "";
+                    }
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">Seleccionar salida…</option>
+                  {teeOptionsWomen.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name ?? t.code} · Slope {t.slope_women} · CR{" "}
+                      {t.course_rating_women} · Par {t.par}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-3 gap-2">
             <div>
               <label className={labelClass}>Slope</label>
@@ -216,7 +340,8 @@ export default function MatchPlayHandicapPanel({
                 min={55}
                 max={155}
                 step={1}
-                defaultValue={rules.whs_slope_women ?? ""}
+                value={slopeWomen}
+                onChange={(e) => setSlopeWomen(e.target.value)}
                 placeholder="119"
                 className={inputClass}
               />
@@ -229,7 +354,8 @@ export default function MatchPlayHandicapPanel({
                 min={50}
                 max={90}
                 step={0.1}
-                defaultValue={rules.whs_course_rating_women ?? ""}
+                value={crWomen}
+                onChange={(e) => setCrWomen(e.target.value)}
                 placeholder="72.6"
                 className={inputClass}
               />
@@ -242,7 +368,8 @@ export default function MatchPlayHandicapPanel({
                 min={60}
                 max={80}
                 step={1}
-                defaultValue={rules.whs_par_women ?? ""}
+                value={parWomen}
+                onChange={(e) => setParWomen(e.target.value)}
                 placeholder="72"
                 className={inputClass}
               />

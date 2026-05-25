@@ -52,7 +52,7 @@ export default async function MatchPlayPage(props: {
 
   const { data: tournaments } = await supabase
     .from("tournaments")
-    .select("id, name, settings, created_at")
+    .select("id, name, settings, course_id, created_at")
     .order("created_at", { ascending: false });
 
   const tournamentList = tournaments ?? [];
@@ -95,6 +95,32 @@ export default async function MatchPlayPage(props: {
   let teamsData = null;
   let bracketView = null;
   let seedingMethod = "hi_combined";
+
+  const courseId = (tournament as { course_id?: string | null } | undefined)
+    ?.course_id ?? null;
+  const { data: courseTeesRaw } = courseId
+    ? await supabase
+        .from("course_tee_sets")
+        .select(
+          "id, code, name, gender_default, slope_men, slope_women, course_rating_men, course_rating_women, par, yardage, sort_order"
+        )
+        .eq("course_id", courseId)
+        .order("sort_order", { ascending: true })
+    : { data: [] };
+  const courseTeeSets = (courseTeesRaw ?? []).map((t) => ({
+    id: t.id as string,
+    code: (t.code as string | null) ?? null,
+    name: (t.name as string | null) ?? null,
+    gender_default: (t.gender_default as "M" | "F" | "X" | null) ?? null,
+    slope_men: t.slope_men != null ? Number(t.slope_men) : null,
+    slope_women: t.slope_women != null ? Number(t.slope_women) : null,
+    course_rating_men:
+      t.course_rating_men != null ? Number(t.course_rating_men) : null,
+    course_rating_women:
+      t.course_rating_women != null ? Number(t.course_rating_women) : null,
+    par: t.par != null ? Number(t.par) : null,
+    yardage: t.yardage != null ? Number(t.yardage) : null,
+  }));
 
   if (isMatchPlay && !migrationMissing) {
     try {
@@ -332,6 +358,7 @@ export default async function MatchPlayPage(props: {
                   : null,
             }}
             entries={teamsData.entries}
+            courseTeeSets={courseTeeSets}
             flashStatus={sp.whs_status}
             flashMessage={sp.whs_message}
           />
