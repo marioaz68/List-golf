@@ -34,6 +34,10 @@ type MemberUI = {
   club_logo_url: string | null;
   club_generated_logo_url: string | null;
   club_primary_color: string | null;
+  /** Color del tee asignado al jugador (hex). null = sin regla. */
+  tee_color: string | null;
+  /** Nombre del tee asignado (Azules, Blancas, Doradas, Rojas, etc.). */
+  tee_name: string | null;
 };
 
 type GroupUI = {
@@ -835,6 +839,23 @@ function PlayerRow({
         </div>
 
         <ClubMiniLogo member={member} size={20} />
+
+        {member.tee_color ? (
+          <span
+            className="inline-block h-3 w-3 shrink-0 rounded-full ring-1 ring-slate-400/60"
+            style={{ background: member.tee_color }}
+            title={
+              member.tee_name
+                ? `Sale de: ${member.tee_name}`
+                : "Marca de salida asignada"
+            }
+            aria-label={
+              member.tee_name
+                ? `Sale de ${member.tee_name}`
+                : "Sale de tee asignado"
+            }
+          />
+        ) : null}
 
         <div className="min-w-0 flex-1 truncate font-medium text-slate-900">
           {fullName}

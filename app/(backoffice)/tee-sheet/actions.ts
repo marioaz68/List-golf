@@ -1022,6 +1022,266 @@ export async function reopenStartingOrder(formData: FormData) {
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
 }
 
+export async function generateMatchPlayTeeSheet(formData: FormData) {
+  const supabase = await createClient();
+
+  const tournament_id = reqStr(formData, "tournament_id");
+  const round_id = reqStr(formData, "round_id");
+
+  const intervalRaw = String(formData.get("interval_minutes") ?? "10").trim();
+  const intervalNum = Number(intervalRaw);
+  const interval =
+    Number.isFinite(intervalNum) && intervalNum >= 5 && intervalNum <= 30
+      ? Math.trunc(intervalNum)
+      : 10;
+
+  const startTimeRaw = String(formData.get("start_time") ?? "").trim();
+  const baseMinutes = startTimeRaw ? parseHHMM(startTimeRaw) : null;
+
+  const sessionRounds = await loadTournamentSessionRounds(
+    supabase,
+    tournament_id,
+    round_id
+  );
+  await ensureSessionStartingOrderIsEditable(supabase, sessionRounds);
+
+  const registrationStatus = await fetchTournamentRegistrationStatus(
+    supabase,
+    tournament_id
+  );
+  assertRegistrationClosedForTeeSheet(registrationStatus);
+
+  const { data: r, error: rErr } = await supabase
+    .from("rounds")
+    .select("id, tournament_id, round_no, start_type, start_time, interval_minutes")
+    .eq("id", round_id)
+    .single();
+
+  if (rErr || !r) {
+    throw new Error("No se pudo leer round: " + (rErr?.message ?? ""));
+  }
+  if (r.tournament_id !== tournament_id) {
+    throw new Error("El round no pertenece al torneo seleccionado.");
+  }
+
+  const targetRoundNo = Number(r.round_no ?? 1);
+
+  // Persistimos hora/intervalo en el round para que coincidan
+  // con la regeneración / recalculo posterior.
+  if (baseMinutes != null || interval) {
+    const update: Record<string, unknown> = {
+      start_type: "tee_times",
+      interval_minutes: interval,
+    };
+    if (baseMinutes != null) update.start_time = formatHHMM(baseMinutes);
+    const { error: updRoundErr } = await supabase
+      .from("rounds")
+      .update(update)
+      .eq("id", round_id);
+    if (updRoundErr) {
+      throw new Error("Error actualizando hora/intervalo del round: " + updRoundErr.message);
+    }
+  }
+
+  const effectiveBase =
+    baseMinutes != null
+      ? baseMinutes
+      : typeof r.start_time === "string"
+        ? parseHHMM(r.start_time)
+        : null;
+
+  if (effectiveBase == null) {
+    throw new Error(
+      "Falta hora de inicio (start_time) válida para el día. Configúrala en el módulo de rondas (ej. 07:00)."
+    );
+  }
+
+  // Buscamos el bracket activo del torneo.
+  const { data: bracket, error: brErr } = await supabase
+    .from("matchplay_brackets")
+    .select("id, name")
+    .eq("tournament_id", tournament_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (brErr) {
+    throw new Error("Error leyendo bracket: " + brErr.message);
+  }
+  if (!bracket) {
+    throw new Error(
+      "No hay bracket de match play creado todavía. Genéralo desde el módulo Match Play antes de armar salidas."
+    );
+  }
+
+  // Para tee-sheet de match play tomamos el bracket round = round_no del día.
+  // Si el día corresponde a una stroke play clasificatoria previa, no habrá
+  // matches y mostramos error útil.
+  const { data: matchesRaw, error: mErr } = await supabase
+    .from("matchplay_matches")
+    .select(
+      "id, round_no, position_no, top_pair_id, bottom_pair_id"
+    )
+    .eq("bracket_id", bracket.id)
+    .eq("round_no", targetRoundNo)
+    .order("position_no", { ascending: true });
+
+  if (mErr) {
+    throw new Error("Error leyendo matches del bracket: " + mErr.message);
+  }
+
+  const matches = (matchesRaw ?? []) as Array<{
+    id: string;
+    round_no: number;
+    position_no: number;
+    top_pair_id: string | null;
+    bottom_pair_id: string | null;
+  }>;
+
+  if (matches.length === 0) {
+    throw new Error(
+      `No hay matches del bracket para la ronda ${targetRoundNo}. ` +
+        `Verifica que esta ronda corresponde a un día de match play y que el bracket esté generado.`
+    );
+  }
+
+  const realMatches = matches.filter(
+    (m) => m.top_pair_id && m.bottom_pair_id
+  );
+
+  if (realMatches.length === 0) {
+    throw new Error(
+      `Todos los matches de la ronda ${targetRoundNo} son BYE o están sin postura. ` +
+        `Termina la subasta y la siembra del bracket antes de generar salidas.`
+    );
+  }
+
+  const pairIds = new Set<string>();
+  for (const m of realMatches) {
+    if (m.top_pair_id) pairIds.add(m.top_pair_id);
+    if (m.bottom_pair_id) pairIds.add(m.bottom_pair_id);
+  }
+
+  const { data: teamsRaw, error: tErr } = await supabase
+    .from("matchplay_pair_teams")
+    .select(
+      `id, seed, team_name,
+       player_a_entry_id, player_b_entry_id,
+       entry_a:tournament_entries!matchplay_pair_teams_player_a_entry_id_fkey (
+         id, handicap_index,
+         players ( first_name, last_name, gender )
+       ),
+       entry_b:tournament_entries!matchplay_pair_teams_player_b_entry_id_fkey (
+         id, handicap_index,
+         players ( first_name, last_name, gender )
+       )
+      `
+    )
+    .in("id", Array.from(pairIds));
+
+  if (tErr) {
+    throw new Error("Error leyendo parejas de match play: " + tErr.message);
+  }
+
+  type TeamLite = {
+    id: string;
+    seed: number | null;
+    entry_a_id: string | null;
+    entry_b_id: string | null;
+    entry_a_label: string;
+    entry_b_label: string;
+  };
+
+  function labelEntry(e: any) {
+    const p = Array.isArray(e?.players) ? e.players[0] : e?.players;
+    const fn = String(p?.first_name ?? "").trim();
+    const ln = String(p?.last_name ?? "").trim();
+    return [fn, ln].filter(Boolean).join(" ") || "—";
+  }
+
+  const teamById = new Map<string, TeamLite>();
+  for (const row of (teamsRaw ?? []) as any[]) {
+    const ea = Array.isArray(row.entry_a) ? row.entry_a[0] : row.entry_a;
+    const eb = Array.isArray(row.entry_b) ? row.entry_b[0] : row.entry_b;
+    teamById.set(row.id, {
+      id: row.id,
+      seed: row.seed ?? null,
+      entry_a_id: row.player_a_entry_id ?? null,
+      entry_b_id: row.player_b_entry_id ?? null,
+      entry_a_label: labelEntry(ea),
+      entry_b_label: labelEntry(eb),
+    });
+  }
+
+  // Borramos cualquier grupo previo del round.
+  await deletePairingGroupsForRoundIds(supabase, [round_id]);
+
+  let groupNo = 1;
+  for (const match of realMatches) {
+    const top = match.top_pair_id ? teamById.get(match.top_pair_id) : null;
+    const bot = match.bottom_pair_id ? teamById.get(match.bottom_pair_id) : null;
+    if (!top || !bot) continue;
+
+    const teeMinutes = effectiveBase + (groupNo - 1) * interval;
+    const tee_time = formatHHMM(teeMinutes);
+
+    const topLabel =
+      top.seed != null ? `#${top.seed}` : "TOP";
+    const botLabel =
+      bot.seed != null ? `#${bot.seed}` : "BOT";
+
+    const notes = `MATCH PLAY · ${topLabel} vs ${botLabel}`;
+
+    const { data: pg, error: insG } = await supabase
+      .from("pairing_groups")
+      .insert({
+        round_id,
+        group_no: groupNo,
+        tee_time,
+        starting_hole: null,
+        notes,
+      })
+      .select("id")
+      .single();
+
+    if (insG || !pg) {
+      throw new Error("Error creando grupo (foursome): " + (insG?.message ?? ""));
+    }
+
+    const orderedEntries = [
+      top.entry_a_id,
+      top.entry_b_id,
+      bot.entry_a_id,
+      bot.entry_b_id,
+    ].filter((id): id is string => !!id);
+
+    const members = orderedEntries.map((entry_id, idx) => ({
+      group_id: pg.id,
+      entry_id,
+      position: idx + 1,
+    }));
+
+    if (members.length > 0) {
+      const { error: insM } = await supabase
+        .from("pairing_group_members")
+        .insert(members);
+      if (insM) {
+        throw new Error("Error agregando jugadores al foursome: " + insM.message);
+      }
+    }
+
+    groupNo += 1;
+  }
+
+  revalidatePath("/tee-sheet");
+  redirectToTeeSheet({
+    tournament_id,
+    round_id,
+    group_size: 4,
+    cat: null,
+  });
+}
+
 export async function generateGroupsByCategory(formData: FormData) {
   const supabase = await createClient();
 

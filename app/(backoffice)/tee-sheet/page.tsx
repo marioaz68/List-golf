@@ -32,11 +32,14 @@ import {
   clearGroups,
   confirmStartingOrder,
   generateGroupsByCategory,
+  generateMatchPlayTeeSheet,
   recalculateTeeTimes,
   reopenStartingOrder,
   saveCategoryPlanOrder,
 } from "./actions";
 import TeeSheetDnD from "./TeeSheetDnD";
+import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import type { TournamentSettings } from "@/types/tournament";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,6 +93,8 @@ type MemberUI = {
   club_logo_url: string | null;
   club_generated_logo_url: string | null;
   club_primary_color: string | null;
+  tee_color: string | null;
+  tee_name: string | null;
 };
 
 type GroupUI = GroupRow & {
@@ -141,15 +146,20 @@ export default async function TeeSheetPage(props: {
 
   const { data: tData, error: tErr } = await supabase
     .from("tournaments")
-    .select("id,name,created_at")
+    .select("id,name,settings,created_at")
     .order("created_at", { ascending: false });
 
   if (tErr) {
     throw new Error("Error leyendo torneos: " + tErr.message);
   }
 
-  const tournaments: Tournament[] = (tData ?? []) as any[];
+  const tournaments: (Tournament & { settings: TournamentSettings | null })[] =
+    (tData ?? []) as any[];
   const effectiveTournamentId = tournamentId || tournaments[0]?.id || "";
+  const activeTournament = tournaments.find(
+    (t) => t.id === effectiveTournamentId
+  );
+  const isMatchPlay = isMatchPlayFormat(activeTournament?.settings ?? null);
 
   const { data: rData, error: rErr } = effectiveTournamentId
     ? await supabase
@@ -287,9 +297,12 @@ export default async function TeeSheetPage(props: {
             entry_id,
             tournament_entries (
               handicap_index,
+              category_id,
               players (
                 first_name,
                 last_name,
+                gender,
+                birth_year,
                 club_id,
                 clubs:clubs (
                   name,
@@ -314,6 +327,76 @@ export default async function TeeSheetPage(props: {
 
   const membersRaw = (mData ?? []) as any[];
 
+  // Reglas + sets de salidas para colorear cada jugador por su tee asignado.
+  const [teeSetsRes, teeRulesRes] = effectiveTournamentId
+    ? await Promise.all([
+        supabase
+          .from("tee_sets")
+          .select("id, name, code, color, tee_color")
+          .eq("tournament_id", effectiveTournamentId),
+        supabase
+          .from("category_tee_rules")
+          .select(
+            "id, category_id, tee_set_id, priority, age_min, age_max, gender, handicap_min, handicap_max"
+          )
+          .eq("tournament_id", effectiveTournamentId)
+          .order("priority", { ascending: true }),
+      ])
+    : [
+        { data: [] as any[], error: null },
+        { data: [] as any[], error: null },
+      ];
+
+  const teeSets = (teeSetsRes.data ?? []) as Array<{
+    id: string;
+    name: string | null;
+    code: string | null;
+    color: string | null;
+    tee_color: string | null;
+  }>;
+  const teeRules = (teeRulesRes.data ?? []) as Array<{
+    id: string;
+    category_id: string;
+    tee_set_id: string;
+    priority: number | null;
+    age_min: number | null;
+    age_max: number | null;
+    gender: "M" | "F" | "X" | null;
+    handicap_min: number | null;
+    handicap_max: number | null;
+  }>;
+  const teeSetById = new Map(teeSets.map((t) => [t.id, t]));
+
+  function resolveTeeForPlayer(p: {
+    gender: string | null;
+    handicap_index: number | null;
+    category_id: string | null;
+    birth_year: number | null;
+  }): { color: string | null; name: string | null } {
+    if (!p.category_id) return { color: null, name: null };
+    const age =
+      p.birth_year && p.birth_year > 0
+        ? new Date().getFullYear() - p.birth_year
+        : null;
+    const hi = p.handicap_index == null ? null : Number(p.handicap_index);
+    const pg = String(p.gender ?? "X").trim().toUpperCase();
+    const candidates = teeRules
+      .filter((r) => r.category_id === p.category_id)
+      .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+    for (const r of candidates) {
+      if (r.gender && r.gender !== pg) continue;
+      if (r.age_min != null && (age == null || age < r.age_min)) continue;
+      if (r.age_max != null && (age == null || age > r.age_max)) continue;
+      if (r.handicap_min != null && (hi == null || hi < Number(r.handicap_min)))
+        continue;
+      if (r.handicap_max != null && (hi == null || hi > Number(r.handicap_max)))
+        continue;
+      const tee = teeSetById.get(r.tee_set_id);
+      if (tee) return { color: tee.color ?? null, name: tee.name ?? null };
+    }
+    return { color: null, name: null };
+  }
+
   const membersByGroup = new Map<string, MemberUI[]>();
 for (const row of membersRaw) {
   const gid = row.group_id as string;
@@ -335,6 +418,13 @@ for (const row of membersRaw) {
       ? player.club_id.trim()
       : null;
 
+  const teeInfo = resolveTeeForPlayer({
+    gender: player?.gender ?? null,
+    handicap_index: te?.handicap_index ?? null,
+    category_id: te?.category_id ?? null,
+    birth_year: player?.birth_year ?? null,
+  });
+
   const item: MemberUI = {
     entry_id: row.entry_id,
     group_id: gid,
@@ -351,6 +441,8 @@ for (const row of membersRaw) {
       : null,
     club_generated_logo_url: null,
     club_primary_color: club?.primary_color ?? null,
+    tee_color: teeInfo.color,
+    tee_name: teeInfo.name,
   };
 
   if (!membersByGroup.has(gid)) membersByGroup.set(gid, []);
@@ -754,6 +846,72 @@ for (const row of membersRaw) {
           Jugadores: <span className="font-semibold">{visiblePlayers}</span>
         </div>
       </section>
+
+      {isMatchPlay ? (
+        <section className="border-2 border-amber-400 rounded-lg bg-amber-50 p-4 shadow-sm">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-amber-950">
+                Match Play · Grupos automáticos por bracket
+              </h2>
+              <p className="mt-1 text-sm text-amber-900">
+                En match play los grupos se arman desde el cuadro: cada match
+                de la ronda <strong>R{targetRoundNo}</strong> = 1 foursome
+                (pareja A vs pareja B). Las parejas que pasan por BYE en R1 no
+                se incluyen. Por convocatoria CCQ, intervalo recomendado:
+                <strong> 10 min</strong>.
+              </p>
+            </div>
+          </header>
+
+          <form action={generateMatchPlayTeeSheet} className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+            <input type="hidden" name="round_id" value={effectiveRoundId} />
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Intervalo entre salidas (min)
+              </span>
+              <input
+                type="number"
+                name="interval_minutes"
+                min={5}
+                max={20}
+                defaultValue={selectedRound?.interval_minutes ?? 10}
+                className="w-24 rounded border border-amber-400 bg-white px-2 py-1 text-amber-950"
+                disabled={startingOrderConfirmed}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Hora 1er match
+              </span>
+              <input
+                type="time"
+                name="start_time"
+                defaultValue={selectedRound?.start_time ?? "07:00"}
+                className="rounded border border-amber-400 bg-white px-2 py-1 text-amber-950"
+                disabled={startingOrderConfirmed}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="rounded bg-amber-700 px-4 py-2 font-semibold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={startingOrderConfirmed || teeSheetGenerateBlocked}
+            >
+              Generar foursomes desde bracket R{targetRoundNo}
+            </button>
+          </form>
+
+          {startingOrderConfirmed ? (
+            <p className="mt-2 text-xs text-amber-900">
+              Orden confirmado · reabre para regenerar.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <form action={generateGroupsByCategory} className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
         <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
