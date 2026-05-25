@@ -138,6 +138,21 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
     return { ok: false, error: "La votación está cerrada." };
   }
 
+  const { data: presence } = await supabase
+    .from("handicap_committee_member_presence")
+    .select("is_present")
+    .eq("committee_id", committee.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!presence?.is_present) {
+    return {
+      ok: false,
+      error:
+        "No estás marcado como presente en esta sesión del comité. Pide a un director que te active.",
+    };
+  }
+
   let adjustment: number | null = null;
   if (!abstained) {
     const raw = Number(String(formData.get("adjustment") ?? "").trim());
@@ -248,4 +263,156 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   revalidatePath("/comite-handicap");
   revalidatePath("/entries");
   redirectWith(tournament_id, { ok: "hi_applied", tab: "admin" });
+}
+
+export async function setHandicapCommitteeMemberPresence(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const target_user_id = reqStr(formData, "user_id");
+  const wantPresent = String(formData.get("is_present") ?? "") === "true";
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const { data: committee } = await supabase
+    .from("tournament_handicap_committees")
+    .select("id")
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (!committee?.id) {
+    redirectWith(tournament_id, {
+      err: "Activa primero el comité para gestionar miembros.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { error } = await supabase
+    .from("handicap_committee_member_presence")
+    .upsert(
+      {
+        committee_id: committee.id,
+        tournament_id,
+        user_id: target_user_id,
+        is_present: wantPresent,
+        marked_at: new Date().toISOString(),
+        marked_by: user.id,
+      },
+      { onConflict: "committee_id,user_id" }
+    );
+
+  if (error) {
+    redirectWith(tournament_id, { err: error.message, tab: "admin" });
+    return;
+  }
+
+  revalidatePath("/comite-handicap");
+  redirectWith(tournament_id, {
+    ok: wantPresent ? "member_present" : "member_absent",
+    tab: "admin",
+  });
+}
+
+export async function assignHandicapCommitteeRole(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const target_user_id = reqStr(formData, "user_id");
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    redirectWith(tournament_id, {
+      err: "Falta SUPABASE_SERVICE_ROLE_KEY para asignar roles.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { data: roleRow, error: rErr } = await admin
+    .from("roles")
+    .select("id")
+    .eq("code", "handicap_committee")
+    .maybeSingle();
+
+  if (rErr || !roleRow?.id) {
+    redirectWith(tournament_id, {
+      err: "Rol handicap_committee no encontrado en el catálogo.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { error } = await admin.from("user_tournament_roles").upsert(
+    {
+      user_id: target_user_id,
+      tournament_id,
+      role_id: roleRow.id,
+      is_active: true,
+    },
+    { onConflict: "user_id,tournament_id,role_id" }
+  );
+
+  if (error) {
+    redirectWith(tournament_id, { err: error.message, tab: "admin" });
+    return;
+  }
+
+  revalidatePath("/comite-handicap");
+  redirectWith(tournament_id, { ok: "role_assigned", tab: "admin" });
+}
+
+export async function revokeHandicapCommitteeRole(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const target_user_id = reqStr(formData, "user_id");
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    redirectWith(tournament_id, {
+      err: "Falta SUPABASE_SERVICE_ROLE_KEY para revocar roles.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { data: roleRow } = await admin
+    .from("roles")
+    .select("id")
+    .eq("code", "handicap_committee")
+    .maybeSingle();
+
+  if (!roleRow?.id) {
+    redirectWith(tournament_id, { err: "Rol no encontrado.", tab: "admin" });
+    return;
+  }
+
+  const { error } = await admin
+    .from("user_tournament_roles")
+    .update({ is_active: false })
+    .eq("user_id", target_user_id)
+    .eq("tournament_id", tournament_id)
+    .eq("role_id", roleRow.id);
+
+  if (error) {
+    redirectWith(tournament_id, { err: error.message, tab: "admin" });
+    return;
+  }
+
+  revalidatePath("/comite-handicap");
+  redirectWith(tournament_id, { ok: "role_revoked", tab: "admin" });
 }

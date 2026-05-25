@@ -141,6 +141,10 @@ RETURNS boolean AS $$
     );
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
+-- Tanto el rol explícito 'handicap_committee' como los directores del torneo
+-- (y administradores con manage permission) cuentan como miembros: pueden
+-- emitir voto. La asistencia (presente/ausente) se gestiona en una tabla
+-- aparte y bloquea el voto en la capa de aplicación.
 CREATE OR REPLACE FUNCTION fn_user_is_handicap_committee_member(user_uuid uuid, tour_uuid uuid)
 RETURNS boolean AS $$
   SELECT EXISTS (
@@ -150,8 +154,9 @@ RETURNS boolean AS $$
     WHERE utr.user_id = user_uuid
       AND utr.tournament_id = tour_uuid
       AND utr.is_active = true
-      AND r.code = 'handicap_committee'
-  );
+      AND r.code IN ('handicap_committee', 'tournament_director')
+  )
+  OR fn_user_can_manage_tournament(user_uuid, tour_uuid);
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- Política: SELECT comité --------------------------------------------
@@ -234,6 +239,43 @@ CREATE POLICY handicap_votes_delete_self ON handicap_committee_votes
 
 -- 7) Grants en la vista (anon/auth pueden leer agregado) -------------
 GRANT SELECT ON handicap_committee_vote_summary TO authenticated;
+
+-- 8) Asistencia ("presentes hoy") -------------------------------------
+-- Tabla por sesión donde el admin marca qué miembros del comité están
+-- físicamente presentes. Solo los marcados is_present=true pueden votar
+-- (validación en server actions). El admin la gestiona desde el módulo.
+CREATE TABLE IF NOT EXISTS handicap_committee_member_presence (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  committee_id uuid NOT NULL REFERENCES tournament_handicap_committees(id) ON DELETE CASCADE,
+  tournament_id uuid NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  is_present boolean NOT NULL DEFAULT true,
+  marked_at timestamptz NOT NULL DEFAULT now(),
+  marked_by uuid REFERENCES profiles(id),
+  CONSTRAINT handicap_presence_unique UNIQUE (committee_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_handicap_presence_committee
+  ON handicap_committee_member_presence (committee_id);
+CREATE INDEX IF NOT EXISTS idx_handicap_presence_user
+  ON handicap_committee_member_presence (user_id);
+
+ALTER TABLE handicap_committee_member_presence ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS handicap_presence_select ON handicap_committee_member_presence;
+CREATE POLICY handicap_presence_select ON handicap_committee_member_presence
+  FOR SELECT TO authenticated
+  USING (
+    fn_user_can_manage_tournament(auth.uid(), tournament_id)
+    OR fn_user_is_handicap_committee_member(auth.uid(), tournament_id)
+    OR user_id = auth.uid()
+  );
+
+DROP POLICY IF EXISTS handicap_presence_mutate ON handicap_committee_member_presence;
+CREATE POLICY handicap_presence_mutate ON handicap_committee_member_presence
+  FOR ALL TO authenticated
+  USING (fn_user_can_manage_tournament(auth.uid(), tournament_id))
+  WITH CHECK (fn_user_can_manage_tournament(auth.uid(), tournament_id));
 
 COMMENT ON TABLE tournament_handicap_committees IS
   'Configuración del Comité de Handicap por torneo. Estado open=miembros pueden votar, closed=lectura/cierre.';

@@ -695,6 +695,18 @@ export default async function TournamentSetupPage({
                   >
                     {ts.linkScoreEntry}
                   </Link>
+
+                  <Link
+                    href={`/comite-handicap?tournament_id=${selectedTournament.id}`}
+                    style={{
+                      ...buttonSecondary,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {ts.linkHandicapCommittee}
+                  </Link>
                 </div>
               </div>
 

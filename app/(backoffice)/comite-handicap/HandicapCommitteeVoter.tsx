@@ -28,6 +28,8 @@ type Props = {
   entries: HandicapEntryRow[];
   myVotes: HandicapVoteRow[];
   committeeOpen: boolean;
+  isPresent: boolean;
+  isAdmin: boolean;
 };
 
 export default function HandicapCommitteeVoter({
@@ -35,6 +37,8 @@ export default function HandicapCommitteeVoter({
   entries,
   myVotes,
   committeeOpen,
+  isPresent,
+  isAdmin,
 }: Props) {
   const [q, setQ] = useState("");
   const [pending, startTransition] = useTransition();
@@ -64,8 +68,21 @@ export default function HandicapCommitteeVoter({
     });
   }, [entries, qn]);
 
+  const canVote = committeeOpen && isPresent;
+
   return (
     <div className="space-y-4">
+      {!isPresent ? (
+        <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="font-semibold">No estás marcado como presente.</div>
+          <p className="mt-1">
+            {isAdmin
+              ? "Marca tu asistencia en la sección «Miembros del comité» del panel de Administración para poder votar."
+              : "Pide al director del torneo que te active en el panel del comité. Mientras tanto no podrás guardar votos."}
+          </p>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
         <div className="text-sm font-semibold text-slate-900">Tu progreso</div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -115,7 +132,7 @@ export default function HandicapCommitteeVoter({
             entry={entry}
             tournamentId={tournamentId}
             initial={voteByEntry.get(entry.entry_id)}
-            disabled={!committeeOpen || pending}
+            disabled={!canVote || pending}
             onSaved={() => setMsg("")}
             onError={(e) => setMsg(e)}
             startTransition={startTransition}

@@ -10,6 +10,9 @@ import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
   applyHandicapCommitteeSuggestion,
+  setHandicapCommitteeMemberPresence,
+  assignHandicapCommitteeRole,
+  revokeHandicapCommitteeRole,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
@@ -153,6 +156,17 @@ export default async function ComiteHandicapPage(props: {
     }));
   }
 
+  let myPresence = false;
+  if (committee?.id) {
+    const { data: presenceMine } = await supabase
+      .from("handicap_committee_member_presence")
+      .select("is_present")
+      .eq("committee_id", committee.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    myPresence = Boolean(presenceMine?.is_present);
+  }
+
   const admin = tryCreateAdminClient();
   let summaryRows: Array<{
     entry_id: string;
@@ -161,6 +175,17 @@ export default async function ComiteHandicapPage(props: {
     avg_adjustment: number | null;
   }> = [];
   let memberCount = 0;
+
+  type CandidateRow = {
+    user_id: string;
+    full_name: string;
+    email: string | null;
+    role_codes: string[];
+    is_present: boolean;
+    has_presence_row: boolean;
+  };
+  let candidateRows: CandidateRow[] = [];
+  let presentCount = 0;
 
   if (access.isAdmin && admin && committee?.id) {
     const { data: summary } = await admin
@@ -176,20 +201,89 @@ export default async function ComiteHandicapPage(props: {
         s.avg_adjustment != null ? Number(s.avg_adjustment) : null,
     }));
 
-    const { data: roleRow } = await admin
+    const { data: roleRows } = await admin
       .from("roles")
-      .select("id")
-      .eq("code", "handicap_committee")
-      .maybeSingle();
+      .select("id, code")
+      .in("code", ["handicap_committee", "tournament_director"]);
 
-    if (roleRow?.id) {
+    const roleIdByCode = new Map<string, string>(
+      (roleRows ?? []).map((r) => [String(r.code), String(r.id)])
+    );
+    const handicapRoleId = roleIdByCode.get("handicap_committee") ?? null;
+    const directorRoleId = roleIdByCode.get("tournament_director") ?? null;
+    const candidateRoleIds = [handicapRoleId, directorRoleId].filter(
+      (v): v is string => Boolean(v)
+    );
+
+    if (handicapRoleId) {
       const { count } = await admin
         .from("user_tournament_roles")
         .select("id", { count: "exact", head: true })
         .eq("tournament_id", tournamentId)
-        .eq("role_id", roleRow.id)
+        .eq("role_id", handicapRoleId)
         .eq("is_active", true);
       memberCount = count ?? 0;
+    }
+
+    if (candidateRoleIds.length > 0) {
+      const { data: roleAssignments } = await admin
+        .from("user_tournament_roles")
+        .select("user_id, role_id")
+        .eq("tournament_id", tournamentId)
+        .in("role_id", candidateRoleIds)
+        .eq("is_active", true);
+
+      const codeById = new Map<string, string>(
+        (roleRows ?? []).map((r) => [String(r.id), String(r.code)])
+      );
+
+      const codesByUser = new Map<string, Set<string>>();
+      for (const r of roleAssignments ?? []) {
+        const uid = String((r as any).user_id);
+        const code = codeById.get(String((r as any).role_id));
+        if (!uid || !code) continue;
+        if (!codesByUser.has(uid)) codesByUser.set(uid, new Set());
+        codesByUser.get(uid)!.add(code);
+      }
+
+      const userIds = Array.from(codesByUser.keys());
+
+      const [{ data: profilesRows }, { data: presenceRows }] = await Promise.all([
+        userIds.length
+          ? admin
+              .from("profiles")
+              .select("id, first_name, last_name, email")
+              .in("id", userIds)
+          : Promise.resolve({ data: [] as any[] }),
+        admin
+          .from("handicap_committee_member_presence")
+          .select("user_id, is_present")
+          .eq("committee_id", committee.id),
+      ]);
+
+      const presenceByUser = new Map<string, boolean>();
+      for (const p of presenceRows ?? []) {
+        presenceByUser.set(String((p as any).user_id), Boolean((p as any).is_present));
+      }
+
+      candidateRows = (profilesRows ?? []).map((p: any) => {
+        const fullName = `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() ||
+          (p.email ?? "Usuario");
+        const codes = Array.from(codesByUser.get(String(p.id)) ?? []);
+        const hasPresence = presenceByUser.has(String(p.id));
+        const isPresent = presenceByUser.get(String(p.id)) ?? false;
+        return {
+          user_id: String(p.id),
+          full_name: fullName,
+          email: p.email ?? null,
+          role_codes: codes,
+          is_present: isPresent,
+          has_presence_row: hasPresence,
+        };
+      });
+
+      candidateRows.sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
+      presentCount = candidateRows.filter((c) => c.is_present).length;
     }
   }
 
@@ -224,6 +318,26 @@ export default async function ComiteHandicapPage(props: {
       {actionOk === "hi_applied" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
           HI del torneo actualizado con el ajuste sugerido.
+        </div>
+      ) : null}
+      {actionOk === "member_present" ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          Miembro marcado como presente.
+        </div>
+      ) : null}
+      {actionOk === "member_absent" ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Miembro marcado como ausente.
+        </div>
+      ) : null}
+      {actionOk === "role_assigned" ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          Usuario agregado al comité.
+        </div>
+      ) : null}
+      {actionOk === "role_revoked" ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Usuario removido del comité.
         </div>
       ) : null}
 
@@ -294,6 +408,9 @@ export default async function ComiteHandicapPage(props: {
                   Miembros con rol: <strong>{memberCount}</strong> /{" "}
                   {committee.expected_members}
                 </span>
+                <span>
+                  Presentes hoy: <strong>{presentCount}</strong> / {candidateRows.length}
+                </span>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -321,6 +438,146 @@ export default async function ComiteHandicapPage(props: {
                   </form>
                 )}
               </div>
+
+              <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Miembros del comité (marcar presentes)
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Directores del torneo y usuarios con rol «Comité de Handicap».
+                    Solo los marcados <strong>presentes</strong> pueden votar.
+                  </p>
+                </div>
+
+                {candidateRows.length === 0 ? (
+                  <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+                    Aún no hay candidatos. Asigna el rol «Comité de Handicap» en{" "}
+                    <Link
+                      href={`/users?tournament_id=${tournamentId}`}
+                      className="font-semibold underline"
+                    >
+                      Usuarios
+                    </Link>
+                    , o los directores del torneo aparecerán aquí automáticamente.
+                  </div>
+                ) : (
+                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {candidateRows.map((c) => {
+                      const isDirector = c.role_codes.includes("tournament_director");
+                      const isCommittee = c.role_codes.includes("handicap_committee");
+                      return (
+                        <li
+                          key={c.user_id}
+                          className={[
+                            "flex flex-col gap-2 rounded-lg border bg-white p-2.5",
+                            c.is_present
+                              ? "border-emerald-400/70"
+                              : "border-slate-300",
+                          ].join(" ")}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-950">
+                              {c.full_name}
+                            </div>
+                            <div className="truncate text-[11px] text-slate-600">
+                              {c.email ?? "—"}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {isCommittee ? (
+                                <span className="rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                                  Comité
+                                </span>
+                              ) : null}
+                              {isDirector ? (
+                                <span className="rounded-full bg-blue-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                                  Director
+                                </span>
+                              ) : null}
+                              {c.is_present ? (
+                                <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                                  Presente
+                                </span>
+                              ) : (
+                                <span className="rounded-full border border-slate-400 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-700">
+                                  Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            <form action={setHandicapCommitteeMemberPresence}>
+                              <input
+                                type="hidden"
+                                name="tournament_id"
+                                value={tournamentId}
+                              />
+                              <input type="hidden" name="user_id" value={c.user_id} />
+                              <input
+                                type="hidden"
+                                name="is_present"
+                                value={c.is_present ? "false" : "true"}
+                              />
+                              <button
+                                type="submit"
+                                className={[
+                                  "rounded px-2.5 py-1 text-xs font-semibold",
+                                  c.is_present
+                                    ? "border border-amber-600 bg-amber-50 text-amber-900"
+                                    : "bg-emerald-700 text-white",
+                                ].join(" ")}
+                              >
+                                {c.is_present ? "Marcar ausente" : "Marcar presente"}
+                              </button>
+                            </form>
+
+                            {isCommittee && !isDirector ? (
+                              <form action={revokeHandicapCommitteeRole}>
+                                <input
+                                  type="hidden"
+                                  name="tournament_id"
+                                  value={tournamentId}
+                                />
+                                <input type="hidden" name="user_id" value={c.user_id} />
+                                <button
+                                  type="submit"
+                                  className="rounded border border-rose-500 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700"
+                                >
+                                  Quitar del comité
+                                </button>
+                              </form>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                <details className="mt-3 rounded border border-slate-200 bg-white p-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-800">
+                    Agregar miembro por email
+                  </summary>
+                  <p className="mt-2 text-[11px] text-slate-600">
+                    Crea usuarios en{" "}
+                    <Link
+                      href={`/users/new?tournament_id=${tournamentId}`}
+                      className="font-semibold underline"
+                    >
+                      Usuarios → Nuevo
+                    </Link>{" "}
+                    o asígnales el rol «Comité de Handicap» en{" "}
+                    <Link
+                      href={`/users?tournament_id=${tournamentId}`}
+                      className="font-semibold underline"
+                    >
+                      Usuarios
+                    </Link>
+                    . Aquí solo gestionas la asistencia.
+                  </p>
+                </details>
+              </section>
 
               <p className="text-xs text-slate-600">
                 Resumen agregado (anonimizado): no se muestra quién votó qué. Aplica el HI
@@ -399,6 +656,8 @@ export default async function ComiteHandicapPage(props: {
             entries={entries}
             myVotes={myVotes}
             committeeOpen={committee.status === "open"}
+            isPresent={myPresence}
+            isAdmin={access.isAdmin}
           />
         ) : (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
