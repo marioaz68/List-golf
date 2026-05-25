@@ -19,6 +19,12 @@ import { useRouter } from "next/navigation";
 import { moveEntryToGroupPosition, balanceGroupsByCategory } from "./actions";
 import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { formatGroupTeeScheduleLabel } from "./sessionBlock";
+import {
+  MATCH_PLAY_PAIR_COLORS,
+  matchPlayPairSideForPosition,
+  parseMatchPlayGroupNotes,
+  type MatchPlayPairSide,
+} from "@/lib/tee-sheet/matchPlayPairing";
 
 type MemberUI = {
   entry_id: string;
@@ -694,6 +700,10 @@ function DroppableGroupCard({
 
   const categoryLabel = catKey(group.notes);
   const color = categoryColor;
+  const matchPlayInfo = parseMatchPlayGroupNotes(group.notes);
+  const isMatchPlay = matchPlayInfo.isMatchPlay;
+  const topPairColors = MATCH_PLAY_PAIR_COLORS.top;
+  const bottomPairColors = MATCH_PLAY_PAIR_COLORS.bottom;
 
   return (
     <div
@@ -728,9 +738,35 @@ function DroppableGroupCard({
               )}
             </div>
 
-            <div className={["min-w-0 truncate rounded px-1 py-0.5 text-[10px] font-semibold", color.badge].join(" ")} style={color.badgeStyle}>
-              {categoryLabel}
-            </div>
+            {isMatchPlay ? (
+              <div className="flex items-center gap-1">
+                <span
+                  className="rounded px-1 py-0.5 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: topPairColors.badgeBg,
+                    color: topPairColors.badgeFg,
+                  }}
+                  title="Pareja A (parte superior del bracket)"
+                >
+                  {matchPlayInfo.topLabel}
+                </span>
+                <span className="text-[10px] font-semibold text-slate-500">vs</span>
+                <span
+                  className="rounded px-1 py-0.5 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: bottomPairColors.badgeBg,
+                    color: bottomPairColors.badgeFg,
+                  }}
+                  title="Pareja B (parte inferior del bracket)"
+                >
+                  {matchPlayInfo.bottomLabel}
+                </span>
+              </div>
+            ) : (
+              <div className={["min-w-0 truncate rounded px-1 py-0.5 text-[10px] font-semibold", color.badge].join(" ")} style={color.badgeStyle}>
+                {categoryLabel}
+              </div>
+            )}
           </div>
 
           <div className="shrink-0 text-[10px] font-semibold text-slate-600">
@@ -738,21 +774,42 @@ function DroppableGroupCard({
           </div>
         </div>
 
-        <div className={["mt-0.5 h-1 rounded-full", color.stripe].join(" ")} style={color.stripeStyle} />
+        {isMatchPlay ? (
+          <div className="mt-0.5 flex h-1 overflow-hidden rounded-full">
+            <div className="flex-1" style={{ backgroundColor: topPairColors.accent }} />
+            <div className="flex-1" style={{ backgroundColor: bottomPairColors.accent }} />
+          </div>
+        ) : (
+          <div className={["mt-0.5 h-1 rounded-full", color.stripe].join(" ")} style={color.stripeStyle} />
+        )}
 
         <div className="mt-0.5 space-y-0.5">
-          {mem.map((m, idx) => (
-            <React.Fragment key={m.entry_id}>
-              <DropSlot groupId={group.id} pos={idx + 1} />
-              <PlayerRow
-                member={m}
-                qn={qn}
-                showPairingScore={showPairingScore}
-                colorClassName={color.player}
-                colorStyle={color.playerStyle}
-              />
-            </React.Fragment>
-          ))}
+          {mem.map((m, idx) => {
+            const pairSide: MatchPlayPairSide | null = isMatchPlay
+              ? matchPlayPairSideForPosition(m.position ?? idx + 1)
+              : null;
+            const showPairDivider =
+              isMatchPlay &&
+              idx > 0 &&
+              pairSide !== matchPlayPairSideForPosition(mem[idx - 1].position ?? idx);
+
+            return (
+              <React.Fragment key={m.entry_id}>
+                <DropSlot groupId={group.id} pos={idx + 1} />
+                {showPairDivider ? (
+                  <div className="my-0.5 h-px bg-slate-300/70" aria-hidden />
+                ) : null}
+                <PlayerRow
+                  member={m}
+                  qn={qn}
+                  showPairingScore={showPairingScore}
+                  colorClassName={color.player}
+                  colorStyle={color.playerStyle}
+                  matchPlayPair={pairSide}
+                />
+              </React.Fragment>
+            );
+          })}
 
           <DropSlot groupId={group.id} pos={mem.length + 1} finalSlot />
         </div>
@@ -797,17 +854,21 @@ function PlayerRow({
   showPairingScore,
   colorClassName,
   colorStyle,
+  matchPlayPair,
 }: {
   member: MemberUI;
   qn: string;
   showPairingScore: boolean;
   colorClassName: string;
   colorStyle: React.CSSProperties;
+  matchPlayPair?: MatchPlayPairSide | null;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: entryDragId(member.entry_id),
     });
+
+  const pairColors = matchPlayPair ? MATCH_PLAY_PAIR_COLORS[matchPlayPair] : null;
 
   const style: React.CSSProperties = {
     ...colorStyle,
@@ -815,6 +876,14 @@ function PlayerRow({
       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
       : undefined,
     opacity: isDragging ? 0.45 : 1,
+    ...(pairColors
+      ? {
+          backgroundColor: pairColors.rowBg,
+          borderColor: pairColors.rowBorder,
+          borderLeftWidth: 4,
+          borderLeftColor: pairColors.accent,
+        }
+      : null),
   };
 
   const fullName = nameOf(member);
@@ -839,6 +908,20 @@ function PlayerRow({
         </div>
 
         <ClubMiniLogo member={member} size={20} />
+
+        {pairColors ? (
+          <span
+            className="inline-flex h-4 items-center justify-center rounded px-1 text-[9px] font-black uppercase tracking-wide"
+            style={{
+              backgroundColor: pairColors.badgeBg,
+              color: pairColors.badgeFg,
+            }}
+            title={pairColors.label}
+            aria-label={pairColors.label}
+          >
+            {matchPlayPair === "top" ? "A" : "B"}
+          </span>
+        ) : null}
 
         {member.tee_color ? (
           <span

@@ -4,6 +4,11 @@ import ClubLogoThumb from "@/components/public/ClubLogoThumb";
 import { formatStartingHoleLabelParts } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { pairingGroupMatchesCategory } from "@/lib/tee-sheet/pairingGroupCategoryMatch";
 import {
+  MATCH_PLAY_PAIR_COLORS,
+  matchPlayPairSideForPosition,
+  parseMatchPlayGroupNotes,
+} from "@/lib/tee-sheet/matchPlayPairing";
+import {
   buildHref,
   formatPublicSalidasKicker,
   formatPublicTeeSheetRoundPill,
@@ -176,6 +181,11 @@ export default function PublicTeeSheetView({
                     group.starting_hole
                   );
 
+                  const matchPlayInfo = parseMatchPlayGroupNotes(group.notes);
+                  const isMatchPlay = matchPlayInfo.isMatchPlay;
+                  const topPair = MATCH_PLAY_PAIR_COLORS.top;
+                  const bottomPair = MATCH_PLAY_PAIR_COLORS.bottom;
+
                   return (
                     <article
                       key={group.id}
@@ -214,64 +224,160 @@ export default function PublicTeeSheetView({
                         </div>
                       </div>
 
-                      <div className="divide-y divide-white/10">
-                        {group.members.map((member) => (
-                          <div
-                            key={`${group.id}-${member.entry_id}`}
-                            className="flex items-start gap-2 px-2.5 py-2.5 sm:items-center sm:gap-3 sm:px-3 sm:py-2"
+                      {isMatchPlay ? (
+                        <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-white/[0.02] px-2.5 py-1.5 text-[11px] font-bold sm:px-3">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
+                            style={{
+                              backgroundColor: topPair.badgeBg,
+                              color: topPair.badgeFg,
+                            }}
                           >
-                            <ClubLogoThumb
-                              clubId={member.club_id}
-                              size={40}
-                              title={member.club_label ?? undefined}
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ backgroundColor: topPair.badgeFg, opacity: 0.85 }}
+                              aria-hidden
                             />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-1.5 text-xs font-black text-cyan-200">
-                                  {member.position}
-                                </span>
-                                {member.tee_color ? (
-                                  <span
-                                    className="inline-block h-2.5 w-2.5 shrink-0 self-center rounded-full ring-1 ring-white/40"
-                                    style={{ background: member.tee_color }}
-                                    title={
-                                      member.tee_name
-                                        ? `Sale de: ${member.tee_name}`
-                                        : "Marca de salida asignada"
+                            {matchPlayInfo.topLabel}
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                            vs
+                          </span>
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-0.5"
+                            style={{
+                              backgroundColor: bottomPair.badgeBg,
+                              color: bottomPair.badgeFg,
+                            }}
+                          >
+                            {matchPlayInfo.bottomLabel}
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ backgroundColor: bottomPair.badgeFg, opacity: 0.85 }}
+                              aria-hidden
+                            />
+                          </span>
+                        </div>
+                      ) : null}
+
+                      <div className="divide-y divide-white/10">
+                        {group.members.map((member, idx) => {
+                          const pairSide = isMatchPlay
+                            ? matchPlayPairSideForPosition(member.position ?? idx + 1)
+                            : null;
+                          const pairColors = pairSide
+                            ? MATCH_PLAY_PAIR_COLORS[pairSide]
+                            : null;
+                          const showPairDivider =
+                            isMatchPlay &&
+                            idx > 0 &&
+                            pairSide !==
+                              matchPlayPairSideForPosition(
+                                group.members[idx - 1].position ?? idx
+                              );
+
+                          return (
+                            <div
+                              key={`${group.id}-${member.entry_id}`}
+                              className={[
+                                "relative flex items-start gap-2 px-2.5 py-2.5 sm:items-center sm:gap-3 sm:px-3 sm:py-2",
+                                showPairDivider ? "border-t-2 border-white/30" : "",
+                              ].join(" ")}
+                              style={
+                                pairColors
+                                  ? {
+                                      backgroundColor: pairColors.rowBg,
+                                      borderLeft: `4px solid ${pairColors.accent}`,
                                     }
-                                    aria-label={
-                                      member.tee_name
-                                        ? `Sale de ${member.tee_name}`
-                                        : "Marca de salida asignada"
-                                    }
-                                  />
-                                ) : null}
-                                <span className="min-w-0 break-words text-sm font-semibold leading-snug text-white">
-                                  {member.player_name}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] leading-snug text-slate-400">
-                                {member.club_label ? (
-                                  <span className="break-words">{member.club_label}</span>
-                                ) : null}
-                                {member.category_code ? (
-                                  <span className="text-slate-500">
-                                    {member.club_label ? "· " : ""}
-                                    {member.category_code}
+                                  : undefined
+                              }
+                            >
+                              <ClubLogoThumb
+                                clubId={member.club_id}
+                                size={40}
+                                title={member.club_label ?? undefined}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                  <span className="inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-md border border-cyan-500/25 bg-cyan-500/10 px-1.5 text-xs font-black text-cyan-200">
+                                    {member.position}
                                   </span>
-                                ) : null}
+                                  {pairColors ? (
+                                    <span
+                                      className="inline-flex h-5 items-center justify-center rounded-md px-1.5 text-[10px] font-black uppercase tracking-wide"
+                                      style={{
+                                        backgroundColor: pairColors.badgeBg,
+                                        color: pairColors.badgeFg,
+                                      }}
+                                      title={pairColors.label}
+                                      aria-label={pairColors.label}
+                                    >
+                                      {pairSide === "top" ? "A" : "B"}
+                                    </span>
+                                  ) : null}
+                                  {member.tee_color ? (
+                                    <span
+                                      className="inline-block h-2.5 w-2.5 shrink-0 self-center rounded-full ring-1 ring-white/40"
+                                      style={{ background: member.tee_color }}
+                                      title={
+                                        member.tee_name
+                                          ? `Sale de: ${member.tee_name}`
+                                          : "Marca de salida asignada"
+                                      }
+                                      aria-label={
+                                        member.tee_name
+                                          ? `Sale de ${member.tee_name}`
+                                          : "Marca de salida asignada"
+                                      }
+                                    />
+                                  ) : null}
+                                  <span
+                                    className={[
+                                      "min-w-0 break-words text-sm font-semibold leading-snug",
+                                      pairColors ? "text-slate-900" : "text-white",
+                                    ].join(" ")}
+                                  >
+                                    {member.player_name}
+                                  </span>
+                                </div>
+                                <div
+                                  className={[
+                                    "mt-0.5 flex flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] leading-snug",
+                                    pairColors ? "text-slate-700" : "text-slate-400",
+                                  ].join(" ")}
+                                >
+                                  {member.club_label ? (
+                                    <span className="break-words">{member.club_label}</span>
+                                  ) : null}
+                                  {member.category_code ? (
+                                    <span className={pairColors ? "text-slate-600" : "text-slate-500"}>
+                                      {member.club_label ? "· " : ""}
+                                      {member.category_code}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div
+                                className={[
+                                  "shrink-0 pt-0.5 text-right text-xs font-bold tabular-nums sm:pt-0",
+                                  pairColors ? "text-slate-900" : "text-emerald-300",
+                                ].join(" ")}
+                              >
+                                <span
+                                  className={[
+                                    "block text-[9px] font-semibold uppercase tracking-wide sm:hidden",
+                                    pairColors ? "text-slate-600" : "text-slate-500",
+                                  ].join(" ")}
+                                >
+                                  {scoreColumnLabel}
+                                </span>
+                                {round.round_no > 1
+                                  ? member.standing_display ?? "—"
+                                  : member.handicap_index ?? "—"}
                               </div>
                             </div>
-                            <div className="shrink-0 pt-0.5 text-right text-xs font-bold tabular-nums text-emerald-300 sm:pt-0">
-                              <span className="block text-[9px] font-semibold uppercase tracking-wide text-slate-500 sm:hidden">
-                                {scoreColumnLabel}
-                              </span>
-                              {round.round_no > 1
-                                ? member.standing_display ?? "—"
-                                : member.handicap_index ?? "—"}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </article>
                   );
