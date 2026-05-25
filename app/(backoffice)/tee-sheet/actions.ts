@@ -1096,64 +1096,172 @@ export async function generateMatchPlayTeeSheet(formData: FormData) {
     );
   }
 
-  // Buscamos el bracket activo del torneo.
-  const { data: bracket, error: brErr } = await supabase
-    .from("matchplay_brackets")
-    .select("id, name")
-    .eq("tournament_id", tournament_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (brErr) {
-    throw new Error("Error leyendo bracket: " + brErr.message);
-  }
-  if (!bracket) {
-    throw new Error(
-      "No hay bracket de match play creado todavía. Genéralo desde el módulo Match Play antes de armar salidas."
-    );
-  }
-
-  // Para tee-sheet de match play tomamos el bracket round = round_no del día.
-  // Si el día corresponde a una stroke play clasificatoria previa, no habrá
-  // matches y mostramos error útil.
-  const { data: matchesRaw, error: mErr } = await supabase
-    .from("matchplay_matches")
-    .select(
-      "id, round_no, position_no, top_pair_id, bottom_pair_id"
-    )
-    .eq("bracket_id", bracket.id)
-    .eq("round_no", targetRoundNo)
-    .order("position_no", { ascending: true });
-
-  if (mErr) {
-    throw new Error("Error leyendo matches del bracket: " + mErr.message);
-  }
-
-  const matches = (matchesRaw ?? []) as Array<{
-    id: string;
-    round_no: number;
+  // Lógica de matches:
+  //   - R1: derivamos los enfrentamientos desde los seeds (auction_order) de
+  //     los equipos activos, igual que el bracket público. NO requiere que la
+  //     tabla matchplay_brackets/matchplay_matches esté poblada.
+  //   - R2+: requerimos matchplay_matches reales para esa ronda (los ganadores
+  //     dependen de las rondas anteriores).
+  type RealMatch = {
+    top_pair_id: string;
+    bottom_pair_id: string;
     position_no: number;
-    top_pair_id: string | null;
-    bottom_pair_id: string | null;
-  }>;
+  };
 
-  if (matches.length === 0) {
-    throw new Error(
-      `No hay matches del bracket para la ronda ${targetRoundNo}. ` +
-        `Verifica que esta ronda corresponde a un día de match play y que el bracket esté generado.`
-    );
-  }
+  let realMatches: RealMatch[] = [];
 
-  const realMatches = matches.filter(
-    (m) => m.top_pair_id && m.bottom_pair_id
-  );
+  if (targetRoundNo === 1) {
+    // Cargar reglas para targetSize y teams activos con auction_order.
+    const { data: rulesRow } = await supabase
+      .from("tournament_matchplay_rules")
+      .select("bracket_main_pairs, max_pairs_per_category")
+      .eq("tournament_id", tournament_id)
+      .maybeSingle();
 
-  if (realMatches.length === 0) {
-    throw new Error(
-      `Todos los matches de la ronda ${targetRoundNo} son BYE o están sin postura. ` +
-        `Termina la subasta y la siembra del bracket antes de generar salidas.`
-    );
+    const { data: teamsRowsRaw, error: teamsErr } = await supabase
+      .from("matchplay_pair_teams")
+      .select(
+        "id, seed, auction_order, player_a_entry_id, player_b_entry_id, is_active"
+      )
+      .eq("tournament_id", tournament_id)
+      .eq("is_active", true);
+
+    if (teamsErr) {
+      throw new Error("Error leyendo equipos: " + teamsErr.message);
+    }
+
+    const activeTeams = (teamsRowsRaw ?? []) as Array<{
+      id: string;
+      seed: number | null;
+      auction_order: number | null;
+      player_a_entry_id: string | null;
+      player_b_entry_id: string | null;
+    }>;
+
+    if (activeTeams.length === 0) {
+      throw new Error(
+        "No hay equipos activos para este torneo. Asegúrate de cerrar inscripciones y formar parejas."
+      );
+    }
+
+    // targetSize: respeta bracket_main_pairs (siguiente potencia de 2);
+    // si no hay, capacidad mínima que cubra los equipos activos.
+    const bracketMainPairs =
+      rulesRow?.bracket_main_pairs ?? rulesRow?.max_pairs_per_category ?? null;
+    function nextPow2(n: number) {
+      let p = 2;
+      while (p < n) p *= 2;
+      return p;
+    }
+    const targetSize =
+      bracketMainPairs && bracketMainPairs >= 2
+        ? nextPow2(Number(bracketMainPairs))
+        : nextPow2(Math.max(activeTeams.length, 2));
+
+    function bracketSeedOrder(size: number): number[] {
+      if (size === 2) return [1, 2];
+      const half = size / 2;
+      const prev = bracketSeedOrder(half);
+      const out: number[] = [];
+      for (const s of prev) {
+        out.push(s);
+        out.push(size + 1 - s);
+      }
+      return out;
+    }
+    const seedOrder = bracketSeedOrder(targetSize);
+
+    // teamBySeed = orden por auction_order (igual que la página pública).
+    const auctioned = activeTeams
+      .filter((t) => t.auction_order != null)
+      .sort((a, b) => Number(a.auction_order) - Number(b.auction_order));
+
+    const teamBySeed = new Map<number, (typeof activeTeams)[number]>();
+    auctioned.forEach((t, i) => teamBySeed.set(i + 1, t));
+
+    const totalInscribed = activeTeams.length;
+    const r1Count = targetSize / 2;
+    for (let p = 0; p < r1Count; p++) {
+      const tSeed = seedOrder[p * 2] ?? null;
+      const bSeed = seedOrder[p * 2 + 1] ?? null;
+      const topVacant = tSeed != null && tSeed > totalInscribed;
+      const bottomVacant = bSeed != null && bSeed > totalInscribed;
+      const top =
+        !topVacant && tSeed != null ? teamBySeed.get(tSeed) ?? null : null;
+      const bottom =
+        !bottomVacant && bSeed != null ? teamBySeed.get(bSeed) ?? null : null;
+      // Solo se generan salidas para matches con AMBAS parejas asignadas
+      // (BYE explícito o pareja "Por adjudicar" no juega).
+      if (top && bottom) {
+        realMatches.push({
+          top_pair_id: top.id,
+          bottom_pair_id: bottom.id,
+          position_no: p + 1,
+        });
+      }
+    }
+
+    if (realMatches.length === 0) {
+      throw new Error(
+        "No hay matches reales en R1 (todas las parejas todavía no están adjudicadas o se irían por BYE). " +
+          "Termina la subasta para que se siembren los enfrentamientos."
+      );
+    }
+  } else {
+    // R2+: requerimos bracket publicado.
+    const { data: bracket, error: brErr } = await supabase
+      .from("matchplay_brackets")
+      .select("id, name")
+      .eq("tournament_id", tournament_id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (brErr) {
+      throw new Error("Error leyendo bracket: " + brErr.message);
+    }
+    if (!bracket) {
+      throw new Error(
+        `Para R${targetRoundNo} se necesita el bracket publicado en BD. ` +
+          "Cierra R1 (publica resultados) y avanza ganadores antes de generar salidas."
+      );
+    }
+
+    const { data: matchesRaw, error: mErr } = await supabase
+      .from("matchplay_matches")
+      .select("id, round_no, position_no, top_pair_id, bottom_pair_id")
+      .eq("bracket_id", bracket.id)
+      .eq("round_no", targetRoundNo)
+      .order("position_no", { ascending: true });
+
+    if (mErr) {
+      throw new Error("Error leyendo matches del bracket: " + mErr.message);
+    }
+
+    const matches = (matchesRaw ?? []) as Array<{
+      id: string;
+      round_no: number;
+      position_no: number;
+      top_pair_id: string | null;
+      bottom_pair_id: string | null;
+    }>;
+
+    realMatches = matches
+      .filter(
+        (m): m is typeof m & { top_pair_id: string; bottom_pair_id: string } =>
+          !!m.top_pair_id && !!m.bottom_pair_id
+      )
+      .map((m) => ({
+        top_pair_id: m.top_pair_id,
+        bottom_pair_id: m.bottom_pair_id,
+        position_no: m.position_no,
+      }));
+
+    if (realMatches.length === 0) {
+      throw new Error(
+        `Todos los matches de R${targetRoundNo} están vacíos. Avanza ganadores antes de armar salidas.`
+      );
+    }
   }
 
   const pairIds = new Set<string>();

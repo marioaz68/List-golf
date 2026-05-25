@@ -677,34 +677,120 @@ for (const row of membersRaw) {
     }
   }
 
-  // Match play: preview de matches del bracket para el día seleccionado.
+  // Match play: preview de matches del cuadro para el día seleccionado.
+  // No depende de matchplay_brackets en BD; deriva R1 desde seeds (auction_order)
+  // igual que la página pública. Para R2+ sí consulta matchplay_matches.
   let matchplayRealMatchesCount = 0;
   let matchplayByeCount = 0;
-  let matchplayHasBracket = false;
-  let matchplayMatchesInRound = 0;
+  let matchplayPendingCount = 0;
+  let matchplayActiveTeams = 0;
+  let matchplayAuctionedTeams = 0;
+  let matchplayTargetSize = 0;
+  let matchplaySource: "derived_r1" | "bracket" | "none" = "none";
   if (isMatchPlay && effectiveTournamentId) {
     try {
-      const { data: bracketRow } = await supabase
-        .from("matchplay_brackets")
-        .select("id")
-        .eq("tournament_id", effectiveTournamentId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      if (targetRoundNo === 1) {
+        const { data: rulesRow } = await supabase
+          .from("tournament_matchplay_rules")
+          .select("bracket_main_pairs, max_pairs_per_category")
+          .eq("tournament_id", effectiveTournamentId)
+          .maybeSingle();
 
-      if (bracketRow?.id) {
-        matchplayHasBracket = true;
-        const { data: mpMatches } = await supabase
-          .from("matchplay_matches")
-          .select("id, top_pair_id, bottom_pair_id")
-          .eq("bracket_id", bracketRow.id)
-          .eq("round_no", targetRoundNo);
+        const { data: teamsRows } = await supabase
+          .from("matchplay_pair_teams")
+          .select("id, auction_order, player_a_entry_id, player_b_entry_id")
+          .eq("tournament_id", effectiveTournamentId)
+          .eq("is_active", true);
 
-        matchplayMatchesInRound = (mpMatches ?? []).length;
-        matchplayRealMatchesCount = (mpMatches ?? []).filter(
-          (m: any) => m.top_pair_id && m.bottom_pair_id
-        ).length;
-        matchplayByeCount = matchplayMatchesInRound - matchplayRealMatchesCount;
+        const activeTeams = (teamsRows ?? []) as Array<{
+          id: string;
+          auction_order: number | null;
+          player_a_entry_id: string | null;
+          player_b_entry_id: string | null;
+        }>;
+        matchplayActiveTeams = activeTeams.length;
+        const auctioned = activeTeams.filter((t) => t.auction_order != null);
+        matchplayAuctionedTeams = auctioned.length;
+
+        const bracketMainPairs =
+          rulesRow?.bracket_main_pairs ??
+          rulesRow?.max_pairs_per_category ??
+          null;
+        function nextPow2(n: number) {
+          let p = 2;
+          while (p < n) p *= 2;
+          return p;
+        }
+        const targetSize =
+          bracketMainPairs && bracketMainPairs >= 2
+            ? nextPow2(Number(bracketMainPairs))
+            : nextPow2(Math.max(activeTeams.length, 2));
+        matchplayTargetSize = targetSize;
+
+        function bracketSeedOrder(size: number): number[] {
+          if (size === 2) return [1, 2];
+          const half = size / 2;
+          const prev = bracketSeedOrder(half);
+          const out: number[] = [];
+          for (const s of prev) {
+            out.push(s);
+            out.push(size + 1 - s);
+          }
+          return out;
+        }
+        const seedOrder = bracketSeedOrder(targetSize);
+        const sortedAuctioned = [...auctioned].sort(
+          (a, b) => Number(a.auction_order) - Number(b.auction_order)
+        );
+        const teamBySeed = new Map<number, (typeof activeTeams)[number]>();
+        sortedAuctioned.forEach((t, i) => teamBySeed.set(i + 1, t));
+
+        const totalInscribed = activeTeams.length;
+        const r1Count = targetSize / 2;
+        let real = 0;
+        let bye = 0;
+        let pending = 0;
+        for (let p = 0; p < r1Count; p++) {
+          const tSeed = seedOrder[p * 2] ?? null;
+          const bSeed = seedOrder[p * 2 + 1] ?? null;
+          const topVacant = tSeed != null && tSeed > totalInscribed;
+          const bottomVacant = bSeed != null && bSeed > totalInscribed;
+          const topAssigned =
+            !topVacant && tSeed != null && teamBySeed.has(tSeed);
+          const bottomAssigned =
+            !bottomVacant && bSeed != null && teamBySeed.has(bSeed);
+          if (topAssigned && bottomAssigned) real += 1;
+          else if (topVacant || bottomVacant) bye += 1;
+          else pending += 1;
+        }
+        matchplayRealMatchesCount = real;
+        matchplayByeCount = bye;
+        matchplayPendingCount = pending;
+        matchplaySource = "derived_r1";
+      } else {
+        // R2+: usar bracket en BD
+        const { data: bracketRow } = await supabase
+          .from("matchplay_brackets")
+          .select("id")
+          .eq("tournament_id", effectiveTournamentId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (bracketRow?.id) {
+          const { data: mpMatches } = await supabase
+            .from("matchplay_matches")
+            .select("id, top_pair_id, bottom_pair_id")
+            .eq("bracket_id", bracketRow.id)
+            .eq("round_no", targetRoundNo);
+
+          const total = (mpMatches ?? []).length;
+          matchplayRealMatchesCount = (mpMatches ?? []).filter(
+            (m: any) => m.top_pair_id && m.bottom_pair_id
+          ).length;
+          matchplayByeCount = total - matchplayRealMatchesCount;
+          matchplaySource = "bracket";
+        }
       }
     } catch (err) {
       console.error("[tee-sheet] matchplay preview:", err);
@@ -909,34 +995,58 @@ for (const row of membersRaw) {
 
             <div className="rounded border border-amber-300 bg-white px-3 py-2 text-xs text-amber-950 shadow-sm">
               <div>
-                Bracket:{" "}
-                <strong>{matchplayHasBracket ? "OK" : "no generado"}</strong>
+                Fuente:{" "}
+                <strong>
+                  {matchplaySource === "derived_r1"
+                    ? "Cuadro derivado de subasta (R1)"
+                    : matchplaySource === "bracket"
+                      ? "Bracket publicado"
+                      : "—"}
+                </strong>
+              </div>
+              {targetRoundNo === 1 ? (
+                <>
+                  <div>
+                    Parejas activas: <strong>{matchplayActiveTeams}</strong> ·
+                    adjudicadas: <strong>{matchplayAuctionedTeams}</strong>
+                  </div>
+                  <div>
+                    Tamaño del cuadro: <strong>{matchplayTargetSize}</strong>
+                  </div>
+                </>
+              ) : null}
+              <div>
+                Foursomes a crear:{" "}
+                <strong className="text-emerald-700">
+                  {matchplayRealMatchesCount}
+                </strong>
               </div>
               <div>
-                Matches R{targetRoundNo}:{" "}
-                <strong>{matchplayMatchesInRound}</strong>
+                BYEs (no juegan): <strong>{matchplayByeCount}</strong>
               </div>
-              <div>
-                Reales (foursomes a crear):{" "}
-                <strong>{matchplayRealMatchesCount}</strong>
-              </div>
-              <div>
-                Parejas con BYE: <strong>{matchplayByeCount}</strong>
-              </div>
+              {targetRoundNo === 1 && matchplayPendingCount > 0 ? (
+                <div>
+                  Pendientes de subasta:{" "}
+                  <strong className="text-amber-700">
+                    {matchplayPendingCount}
+                  </strong>
+                </div>
+              ) : null}
             </div>
           </header>
 
-          {!matchplayHasBracket ? (
-            <div className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
-              Todavía no existe un bracket para este torneo. Genéralo desde el
-              módulo <strong>Match Play → Cuadro</strong> antes de armar las
-              salidas.
-            </div>
-          ) : matchplayRealMatchesCount === 0 ? (
+          {matchplayRealMatchesCount === 0 ? (
             <div className="mt-3 rounded border border-amber-300 bg-amber-100 px-3 py-2 text-sm text-amber-950">
-              No hay matches reales en la ronda <strong>R{targetRoundNo}</strong>{" "}
-              (todos son BYE o aún sin asignar). Termina la subasta /
-              siembra del bracket, o cambia al día/ronda correcto.
+              No hay foursomes para R{targetRoundNo} todavía
+              {targetRoundNo === 1 ? (
+                <>
+                  : faltan parejas por adjudicar en la subasta (
+                  <strong>{matchplayPendingCount}</strong> pendientes). Termina
+                  la subasta y vuelve aquí.
+                </>
+              ) : (
+                <>: asegúrate que el bracket esté publicado y avanzados los ganadores.</>
+              )}
             </div>
           ) : null}
 
@@ -986,7 +1096,6 @@ for (const row of membersRaw) {
               disabled={
                 startingOrderConfirmed ||
                 teeSheetGenerateBlocked ||
-                !matchplayHasBracket ||
                 matchplayRealMatchesCount === 0
               }
             >
