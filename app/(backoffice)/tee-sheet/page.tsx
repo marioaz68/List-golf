@@ -1111,6 +1111,7 @@ for (const row of membersRaw) {
         </section>
       ) : null}
 
+      {isMatchPlay ? null : (
       <form action={generateGroupsByCategory} className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
         <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
         <input type="hidden" name="round_id" value={effectiveRoundId} />
@@ -1306,6 +1307,7 @@ for (const row of membersRaw) {
           </button>
         </div>
       </form>
+      )}
 
       <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm flex flex-wrap gap-3">
         <form action={clearGroups}>
@@ -1321,18 +1323,20 @@ for (const row of membersRaw) {
           </button>
         </form>
 
-        <form action={recalculateTeeTimes}>
-          <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
-          <input type="hidden" name="round_id" value={effectiveRoundId} />
-          <input type="hidden" name="group_size" value={effectiveGroupSize} />
-          <input type="hidden" name="cat" value={effectiveCat} />
-          <button
-            className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={startingOrderConfirmed}
-          >
-            Recalcular Tee Times
-          </button>
-        </form>
+        {isMatchPlay ? null : (
+          <form action={recalculateTeeTimes}>
+            <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
+            <input type="hidden" name="round_id" value={effectiveRoundId} />
+            <input type="hidden" name="group_size" value={effectiveGroupSize} />
+            <input type="hidden" name="cat" value={effectiveCat} />
+            <button
+              className="rounded bg-slate-900 text-white px-4 py-2 font-medium hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={startingOrderConfirmed}
+            >
+              Recalcular Tee Times
+            </button>
+          </form>
+        )}
       </section>
 
       <section className="border border-slate-300 rounded-lg p-4 bg-white shadow-sm">
