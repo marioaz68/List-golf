@@ -1,0 +1,412 @@
+import Link from "next/link";
+import { createClient } from "@/utils/supabase/server";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
+import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
+import {
+  HANDICAP_COMMITTEE_DEFAULT_SIZE,
+  formatAdjustmentLabel,
+} from "@/lib/handicap-committee/constants";
+import {
+  enableHandicapCommittee,
+  setHandicapCommitteeStatus,
+  applyHandicapCommitteeSuggestion,
+} from "./actions";
+import HandicapCommitteeVoter, {
+  type HandicapEntryRow,
+  type HandicapVoteRow,
+} from "./HandicapCommitteeVoter";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type SP = { [key: string]: string | string[] | undefined };
+
+function playerName(p: {
+  first_name?: string | null;
+  last_name?: string | null;
+} | null) {
+  const ln = String(p?.last_name ?? "").trim();
+  const fn = String(p?.first_name ?? "").trim();
+  return `${ln} ${fn}`.trim() || "Jugador";
+}
+
+export default async function ComiteHandicapPage(props: {
+  searchParams?: SP | Promise<SP>;
+}) {
+  const sp = props.searchParams ? await props.searchParams : {};
+  const tournamentId =
+    typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
+  const actionError = typeof sp.err === "string" ? sp.err.trim() : "";
+  const actionOk = typeof sp.ok === "string" ? sp.ok.trim() : "";
+  const tab =
+    typeof sp.tab === "string" && sp.tab === "admin" ? "admin" : "vote";
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <div className="p-6 text-red-700">Inicia sesión para acceder al comité.</div>
+    );
+  }
+
+  const { data: tournaments } = await supabase
+    .from("tournaments")
+    .select("id, name, start_date")
+    .order("start_date", { ascending: false })
+    .limit(80);
+
+  if (!tournamentId) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Comité de Handicap</h1>
+          <p className="mt-1 text-sm text-slate-300">
+            Elige un torneo para auditar handicaps o votar (voto anónimo entre miembros).
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {(tournaments ?? []).map((t) => (
+            <Link
+              key={t.id}
+              href={`/comite-handicap?tournament_id=${t.id}`}
+              className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
+            >
+              {t.name ?? t.id.slice(0, 8)}
+            </Link>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournamentId);
+  if (!access.isMember) {
+    return (
+      <div className="p-6 text-red-700">
+        No tienes acceso al comité de handicap de este torneo.
+      </div>
+    );
+  }
+
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("id, name")
+    .eq("id", tournamentId)
+    .single();
+
+  const { data: committee } = await supabase
+    .from("tournament_handicap_committees")
+    .select("id, status, expected_members, opens_at, closes_at")
+    .eq("tournament_id", tournamentId)
+    .maybeSingle();
+
+  const { data: entriesRaw } = await supabase
+    .from("tournament_entries")
+    .select(
+      `
+      id,
+      handicap_index,
+      status,
+      players (
+        first_name,
+        last_name,
+        clubs:club_id ( name, short_name )
+      ),
+      categories:category_id ( code, name )
+    `
+    )
+    .eq("tournament_id", tournamentId)
+    .neq("status", "cancelled")
+    .order("handicap_index", { ascending: true });
+
+  const entries: HandicapEntryRow[] = (entriesRaw ?? [])
+    .map((row: any) => {
+      const player = Array.isArray(row.players) ? row.players[0] : row.players;
+      const cat = Array.isArray(row.categories) ? row.categories[0] : row.categories;
+      const clubRaw = player?.clubs;
+      const club = Array.isArray(clubRaw) ? clubRaw[0] : clubRaw;
+      return {
+        entry_id: row.id as string,
+        player_name: playerName(player),
+        handicap_index: row.handicap_index != null ? Number(row.handicap_index) : null,
+        category_code: cat?.code ?? cat?.name ?? null,
+        club_label: club?.short_name ?? club?.name ?? null,
+      };
+    })
+    .filter((e) => e.entry_id);
+
+  let myVotes: HandicapVoteRow[] = [];
+  if (committee?.id) {
+    const { data: votes } = await supabase
+      .from("handicap_committee_votes")
+      .select("entry_id, adjustment, abstained")
+      .eq("committee_id", committee.id)
+      .eq("member_user_id", user.id);
+
+    myVotes = (votes ?? []).map((v) => ({
+      entry_id: v.entry_id as string,
+      adjustment: v.adjustment != null ? Number(v.adjustment) : null,
+      abstained: Boolean(v.abstained),
+    }));
+  }
+
+  const admin = tryCreateAdminClient();
+  let summaryRows: Array<{
+    entry_id: string;
+    n_votes: number;
+    n_abstained: number;
+    avg_adjustment: number | null;
+  }> = [];
+  let memberCount = 0;
+
+  if (access.isAdmin && admin && committee?.id) {
+    const { data: summary } = await admin
+      .from("handicap_committee_vote_summary")
+      .select("entry_id, n_votes, n_abstained, avg_adjustment")
+      .eq("committee_id", committee.id);
+
+    summaryRows = (summary ?? []).map((s) => ({
+      entry_id: s.entry_id as string,
+      n_votes: Number(s.n_votes ?? 0),
+      n_abstained: Number(s.n_abstained ?? 0),
+      avg_adjustment:
+        s.avg_adjustment != null ? Number(s.avg_adjustment) : null,
+    }));
+
+    const { data: roleRow } = await admin
+      .from("roles")
+      .select("id")
+      .eq("code", "handicap_committee")
+      .maybeSingle();
+
+    if (roleRow?.id) {
+      const { count } = await admin
+        .from("user_tournament_roles")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", tournamentId)
+        .eq("role_id", roleRow.id)
+        .eq("is_active", true);
+      memberCount = count ?? 0;
+    }
+  }
+
+  const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
+  const showAdmin = access.isAdmin && tab === "admin";
+  const showVote = tab === "vote" || !access.isAdmin;
+
+  return (
+    <div className="space-y-6 p-4 md:p-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Comité de Handicap</h1>
+        <p className="mt-1 text-sm text-slate-300">
+          {tournament?.name ?? "Torneo"} · Voto anónimo · Solo bajar HI (−0.5 a −5.0)
+        </p>
+      </div>
+
+      {actionError ? (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+          {actionError}
+        </div>
+      ) : null}
+      {actionOk === "committee_enabled" ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          Comité activado. Asigna el rol «Comité de Handicap» a los 9 miembros en Usuarios.
+        </div>
+      ) : null}
+      {actionOk === "committee_closed" ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          Votación cerrada.
+        </div>
+      ) : null}
+      {actionOk === "hi_applied" ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          HI del torneo actualizado con el ajuste sugerido.
+        </div>
+      ) : null}
+
+      {access.isAdmin ? (
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/comite-handicap?tournament_id=${tournamentId}&tab=vote`}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              showVote
+                ? "bg-emerald-600 text-white"
+                : "border border-slate-400 bg-white text-slate-800"
+            }`}
+          >
+            Votar (prueba)
+          </Link>
+          <Link
+            href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              showAdmin
+                ? "bg-emerald-600 text-white"
+                : "border border-slate-400 bg-white text-slate-800"
+            }`}
+          >
+            Administración
+          </Link>
+          <Link
+            href={`/users?tournament_id=${tournamentId}`}
+            className="rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+          >
+            Gestionar miembros
+          </Link>
+        </div>
+      ) : null}
+
+      {showAdmin ? (
+        <section className="space-y-4 rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-950">Administración del comité</h2>
+
+          {!committee ? (
+            <form action={enableHandicapCommittee} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="tournament_id" value={tournamentId} />
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-slate-800">Miembros esperados</span>
+                <input
+                  type="number"
+                  name="expected_members"
+                  min={1}
+                  max={50}
+                  defaultValue={HANDICAP_COMMITTEE_DEFAULT_SIZE}
+                  className="w-24 rounded border border-slate-300 px-2 py-1"
+                />
+              </label>
+              <button
+                type="submit"
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Activar comité en este torneo
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-4 text-sm text-slate-800">
+                <span>
+                  Estado:{" "}
+                  <strong>{committee.status === "open" ? "Abierta" : "Cerrada"}</strong>
+                </span>
+                <span>
+                  Miembros con rol: <strong>{memberCount}</strong> /{" "}
+                  {committee.expected_members}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {committee.status === "open" ? (
+                  <form action={setHandicapCommitteeStatus}>
+                    <input type="hidden" name="tournament_id" value={tournamentId} />
+                    <input type="hidden" name="status" value="closed" />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-amber-600 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900"
+                    >
+                      Cerrar votación
+                    </button>
+                  </form>
+                ) : (
+                  <form action={setHandicapCommitteeStatus}>
+                    <input type="hidden" name="tournament_id" value={tournamentId} />
+                    <input type="hidden" name="status" value="open" />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-semibold text-slate-900"
+                    >
+                      Reabrir votación
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-600">
+                Resumen agregado (anonimizado): no se muestra quién votó qué. Aplica el HI
+                sugerido manualmente por jugador.
+              </p>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2">Jugador</th>
+                      <th className="px-3 py-2">HI actual</th>
+                      <th className="px-3 py-2">Votos</th>
+                      <th className="px-3 py-2">Ajuste prom.</th>
+                      <th className="px-3 py-2">HI sugerido</th>
+                      <th className="px-3 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((e) => {
+                      const s = summaryByEntry.get(e.entry_id);
+                      const avg = s?.avg_adjustment ?? null;
+                      const suggested =
+                        e.handicap_index != null && avg != null
+                          ? Math.round((e.handicap_index + avg) * 10) / 10
+                          : null;
+                      return (
+                        <tr key={e.entry_id} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-medium">{e.player_name}</td>
+                          <td className="px-3 py-2 tabular-nums">{e.handicap_index ?? "—"}</td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {s?.n_votes ?? 0}
+                            {s?.n_abstained ? ` (+${s.n_abstained} abst.)` : ""}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums">
+                            {avg != null ? formatAdjustmentLabel(avg) : "—"}
+                          </td>
+                          <td className="px-3 py-2 tabular-nums font-semibold">
+                            {suggested ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {avg != null && (s?.n_votes ?? 0) > 0 ? (
+                              <form action={applyHandicapCommitteeSuggestion}>
+                                <input
+                                  type="hidden"
+                                  name="tournament_id"
+                                  value={tournamentId}
+                                />
+                                <input type="hidden" name="entry_id" value={e.entry_id} />
+                                <button
+                                  type="submit"
+                                  className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white"
+                                >
+                                  Aplicar HI
+                                </button>
+                              </form>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {showVote ? (
+        committee ? (
+          <HandicapCommitteeVoter
+            tournamentId={tournamentId}
+            entries={entries}
+            myVotes={myVotes}
+            committeeOpen={committee.status === "open"}
+          />
+        ) : (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            El comité aún no está activo en este torneo. Un administrador debe activarlo
+            primero.
+          </div>
+        )
+      ) : null}
+    </div>
+  );
+}

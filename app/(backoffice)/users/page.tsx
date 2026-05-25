@@ -245,6 +245,8 @@ function formatRoleLabel(code: string) {
       return "Check-in";
     case "viewer":
       return "Viewer";
+    case "handicap_committee":
+      return "Comité de Handicap";
     default:
       return code;
   }
@@ -557,10 +559,10 @@ export default async function UsersPage({
 
   const clubRoleCodes = isSuperAdmin ? ["club_admin"] : [];
   const tournamentRoleCodes = isSuperAdmin
-    ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer"]
+    ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"]
     : isClubAdmin
-      ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer"]
-      : ["score_capture", "entries_operator", "checkin", "viewer"];
+      ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"]
+      : ["score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"];
 
   const { data: clubRoleOptions } = clubRoleCodes.length
     ? await supabase

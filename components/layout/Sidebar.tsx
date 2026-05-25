@@ -35,6 +35,7 @@ import {
   CalendarDays,
   Car,
   Gavel,
+  Scale,
   X,
 } from "lucide-react";
 
@@ -207,6 +208,12 @@ export default function Sidebar() {
         nameKey: "reports",
         href: "/reports",
         icon: BarChart3,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "handicapCommittee",
+        href: "/comite-handicap",
+        icon: Scale,
         requiresTournament: true,
       },
     ],

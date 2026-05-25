@@ -73,9 +73,11 @@ export async function middleware(request: NextRequest) {
   const roles = await getUserRoles(supabase, user.id);
 
   if (!canAccessModule(roles, module)) {
-    const fallback = canAccessAnyBackofficeModule(roles)
-      ? "/tournaments"
-      : "/login";
+    const fallback = roles.includes("handicap_committee")
+      ? "/comite-handicap"
+      : canAccessAnyBackofficeModule(roles)
+        ? "/tournaments"
+        : "/login";
     return NextResponse.redirect(new URL(fallback, request.url));
   }
 

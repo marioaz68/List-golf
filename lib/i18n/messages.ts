@@ -56,6 +56,7 @@ const es = {
       convocatoria: "Convocatoria",
       categoryTemplates: "Plantillas cat.",
       users: "Usuarios",
+      handicapCommittee: "Comité de Handicap",
     },
   },
   common: {
@@ -1295,6 +1296,7 @@ const en: Messages = {
       convocatoria: "Call / rules doc",
       categoryTemplates: "Category templates",
       users: "Users",
+      handicapCommittee: "Handicap committee",
     },
   },
   common: {

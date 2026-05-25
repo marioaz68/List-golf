@@ -30,4 +30,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   prizeRules: "tournaments-setup",
   categoryTemplates: "catalog",
   users: "users",
+  handicapCommittee: "comite-handicap",
 };

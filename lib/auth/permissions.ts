@@ -6,7 +6,8 @@ export type AppRole =
   | "entries_operator"
   | "caddie_manager"
   | "checkin"
-  | "viewer";
+  | "viewer"
+  | "handicap_committee";
 
 export type AppModule =
   | "users"
@@ -21,7 +22,8 @@ export type AppModule =
   | "scorecards"
   | "leaderboard"
   | "caddies"
-  | "reports";
+  | "reports"
+  | "comite-handicap";
 
 const ENTRIES_ROLES: AppRole[] = [
   "super_admin",
@@ -113,6 +115,13 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "tournament_director",
     "score_capture",
   ],
+
+  "comite-handicap": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "handicap_committee",
+  ],
 };
 
 /** Rutas del backoffice que exigen sesión (cualquier módulo). */
@@ -141,6 +150,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/category-tee-rules",
   "/course-holes",
   "/users",
+  "/comite-handicap",
 ] as const;
 
 export function isBackofficePath(pathname: string): boolean {
@@ -161,6 +171,7 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "caddie_manager",
     "checkin",
     "viewer",
+    "handicap_committee",
   ];
 
   return valid.includes(role as AppRole) ? (role as AppRole) : null;
@@ -180,6 +191,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/caddies")) return "caddies";
   if (pathname.startsWith("/reports")) return "reports";
+  if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/dashboard")) return "tournaments";
 
   if (
