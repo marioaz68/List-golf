@@ -153,14 +153,15 @@ export default function LiveBracketView({
   const roundCount = roundCountForBracketSize(targetSize);
   const seedOrder = useMemo(() => bracketSeedOrder(targetSize), [targetSize]);
 
-  // Slots por seed → team id (si ya hay equipo en ese seed por subasta)
+  // Slots por seed → team id.
+  // TODAS las parejas activas ocupan un slot (las adjudicadas con postura
+  // van primero por sortTeamsForSeeding('auction'); las pendientes caen al
+  // final con seed más alto). Los slots restantes (seeds > #parejas) quedan
+  // vacíos y generan BYE automático para el seed contrario en R1.
   const teamBySeed = useMemo(() => {
     const map = new Map<number, MatchPlayTeamRow>();
     seededTeams.forEach((t, i) => {
-      // Sólo asignamos seed cuando ya tiene postura (orden de subasta definido)
-      if (t.auction_order != null) {
-        map.set(i + 1, t.team);
-      }
+      map.set(i + 1, t.team);
     });
     return map;
   }, [seededTeams]);
@@ -277,6 +278,11 @@ export default function LiveBracketView({
     0
   );
   const pot = potPercent != null ? (totalRaised * potPercent) / 100 : totalRaised;
+  // R1: cada slot vacío manda BYE al contrincante. Si N parejas en cuadro de S,
+  // hay (S - N) slots vacíos → (S - N) BYEs en R1 → (N - (S - N))/2 = N - S/2
+  // matches reales (mínimo 0).
+  const byesR1 = Math.max(0, targetSize - totalActive);
+  const realMatchesR1 = Math.max(0, Math.floor((totalActive - byesR1) / 2));
 
   // Render: cada ronda como columna; cada match con grid-row span 2^k
   return (
@@ -293,11 +299,20 @@ export default function LiveBracketView({
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <Stat
-            label="Adjudicados"
-            value={`${awardedCount} / ${targetSize}`}
+            label={`Cuadro ${targetSize}`}
+            value={`${totalActive} parejas`}
             tone="ok"
           />
-          <Stat label="Activos" value={String(totalActive)} />
+          <Stat
+            label="R1 matches"
+            value={String(realMatchesR1)}
+            tone="ok"
+          />
+          <Stat label="R1 BYEs" value={String(byesR1)} tone="warn" />
+          <Stat
+            label="Adjudicados"
+            value={`${awardedCount} / ${totalActive}`}
+          />
           <Stat label="Subastado" value={money(totalRaised, currency)} tone="ok" />
           <Stat
             label={`Bolsa (${potPercent ?? 100}%)`}
@@ -389,6 +404,21 @@ export default function LiveBracketView({
                 {Math.floor(targetSize / 2) + 1}
               </code>
               , …).
+            </li>
+            <li>
+              <span className="font-bold text-amber-200">4.</span> Con{" "}
+              <strong className="text-cyan-200">{totalActive}</strong> parejas
+              en cuadro de {targetSize}, los mejores{" "}
+              <strong className="text-amber-200">{byesR1}</strong> seeds pasan
+              por <strong>BYE</strong> en R1 y juegan{" "}
+              <strong>{realMatchesR1}</strong> matches reales.
+            </li>
+            <li>
+              <span className="font-bold text-amber-200">5.</span> Badge{" "}
+              <span className="rounded bg-slate-600/40 px-1 py-0.5 text-[10px] font-bold text-slate-300">
+                s/p
+              </span>{" "}
+              = pareja inscrita sin postura adjudicada todavía.
             </li>
           </ul>
         </section>
@@ -628,10 +658,19 @@ function SidePill({
             <div className="text-[12px] italic text-slate-500">Por definir</div>
           )}
         </div>
-        {showBid && team?.auction_bid != null && !isBye ? (
-          <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
-            {money(team.auction_bid, currency)}
-          </span>
+        {showBid && !isBye && team ? (
+          team.auction_bid != null ? (
+            <span className="ml-auto shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+              {money(team.auction_bid, currency)}
+            </span>
+          ) : (
+            <span
+              className="ml-auto shrink-0 rounded bg-slate-600/40 px-1.5 py-0.5 text-[10px] font-bold text-slate-300"
+              title="Pareja inscrita aún sin postura adjudicada"
+            >
+              s/p
+            </span>
+          )
         ) : null}
       </div>
     </div>
