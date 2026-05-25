@@ -24,10 +24,25 @@ CREATE TABLE IF NOT EXISTS tournament_handicap_committees (
   closes_at timestamptz,
   closed_by uuid REFERENCES profiles(id),
   notes text,
+  -- Cuántos votos eliminar al promediar: trim_high recorta los menos
+  -- castigadores (valores más altos, más cerca de 0), trim_low recorta los
+  -- más castigadores (valores más bajos, más cerca de -5). El recorte es
+  -- por jugador y se aplica también al "HI sugerido".
+  trim_high int NOT NULL DEFAULT 0 CHECK (trim_high >= 0 AND trim_high <= 20),
+  trim_low int NOT NULL DEFAULT 0 CHECK (trim_low >= 0 AND trim_low <= 20),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (tournament_id)
 );
+
+ALTER TABLE tournament_handicap_committees
+  ADD COLUMN IF NOT EXISTS trim_high int NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS trim_low int NOT NULL DEFAULT 0;
+ALTER TABLE tournament_handicap_committees
+  DROP CONSTRAINT IF EXISTS handicap_committee_trim_range;
+ALTER TABLE tournament_handicap_committees
+  ADD CONSTRAINT handicap_committee_trim_range
+  CHECK (trim_high >= 0 AND trim_high <= 20 AND trim_low >= 0 AND trim_low <= 20);
 
 CREATE INDEX IF NOT EXISTS idx_handicap_committees_tournament
   ON tournament_handicap_committees (tournament_id);

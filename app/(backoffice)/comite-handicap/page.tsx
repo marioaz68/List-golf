@@ -7,6 +7,7 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   formatAdjustmentLabel,
+  trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import {
   enableHandicapCommittee,
@@ -15,6 +16,7 @@ import {
   setHandicapCommitteeMemberPresence,
   assignHandicapCommitteeRole,
   revokeHandicapCommitteeRole,
+  setHandicapCommitteeTrim,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
@@ -144,7 +146,7 @@ export default async function ComiteHandicapPage(props: {
 
   const { data: committee } = await supabase
     .from("tournament_handicap_committees")
-    .select("id, status, expected_members, opens_at, closes_at")
+    .select("id, status, expected_members, opens_at, closes_at, trim_high, trim_low")
     .eq("tournament_id", tournamentId)
     .maybeSingle();
 
@@ -216,6 +218,8 @@ export default async function ComiteHandicapPage(props: {
     n_abstained: number;
     avg_adjustment: number | null;
   }> = [];
+  const votesByEntry = new Map<string, number[]>();
+  const abstainedByEntry = new Map<string, number>();
   let memberCount = 0;
 
   type CandidateRow = {
@@ -242,6 +246,27 @@ export default async function ComiteHandicapPage(props: {
       avg_adjustment:
         s.avg_adjustment != null ? Number(s.avg_adjustment) : null,
     }));
+
+    // Votos individuales (anónimos: no incluimos member_user_id).
+    const { data: voteRows } = await admin
+      .from("handicap_committee_votes")
+      .select("entry_id, adjustment, abstained")
+      .eq("committee_id", committee.id);
+
+    for (const v of voteRows ?? []) {
+      const eid = String((v as any).entry_id);
+      if ((v as any).abstained) {
+        abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
+        continue;
+      }
+      const adj = (v as any).adjustment;
+      if (adj == null) continue;
+      const n = Number(adj);
+      if (!Number.isFinite(n)) continue;
+      const list = votesByEntry.get(eid) ?? [];
+      list.push(n);
+      votesByEntry.set(eid, list);
+    }
 
     const { data: roleRows } = await admin
       .from("roles")
@@ -380,6 +405,11 @@ export default async function ComiteHandicapPage(props: {
       {actionOk === "role_revoked" ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
           Usuario removido del comité.
+        </div>
+      ) : null}
+      {actionOk === "trim_saved" ? (
+        <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+          Recorte de outliers actualizado.
         </div>
       ) : null}
 
@@ -621,9 +651,56 @@ export default async function ComiteHandicapPage(props: {
                 </details>
               </section>
 
+              <form
+                action={setHandicapCommitteeTrim}
+                className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
+                <input type="hidden" name="tournament_id" value={tournamentId} />
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Recorte de outliers
+                </div>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-medium text-slate-800">
+                    Quitar votos altos (más suaves)
+                  </span>
+                  <input
+                    type="number"
+                    name="trim_high"
+                    min={0}
+                    max={20}
+                    defaultValue={Number(committee.trim_high ?? 0)}
+                    className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-medium text-slate-800">
+                    Quitar votos bajos (más severos)
+                  </span>
+                  <input
+                    type="number"
+                    name="trim_low"
+                    min={0}
+                    max={20}
+                    defaultValue={Number(committee.trim_low ?? 0)}
+                    className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  Guardar recorte
+                </button>
+                <p className="basis-full text-[11px] text-slate-600">
+                  Por cada jugador se descartan los N votos más cercanos a 0 y los
+                  N votos más cercanos a −5; el promedio y el HI sugerido se
+                  recalculan con los votos vivos.
+                </p>
+              </form>
+
               <p className="text-xs text-slate-600">
-                Resumen agregado (anonimizado): no se muestra quién votó qué. Aplica el HI
-                sugerido manualmente por jugador.
+                Resumen agregado (anonimizado): se muestran los votos individuales
+                sin nombre. Verde = activo, gris = descartado por recorte.
               </p>
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -632,27 +709,76 @@ export default async function ComiteHandicapPage(props: {
                     <tr>
                       <th className="px-3 py-2">Jugador</th>
                       <th className="px-3 py-2">HI actual</th>
-                      <th className="px-3 py-2">Votos</th>
-                      <th className="px-3 py-2">Ajuste prom.</th>
+                      <th className="px-3 py-2">Votos (anónimos)</th>
+                      <th className="px-3 py-2">Vivos</th>
+                      <th className="px-3 py-2">Prom. recortado</th>
                       <th className="px-3 py-2">HI sugerido</th>
                       <th className="px-3 py-2" />
                     </tr>
                   </thead>
                   <tbody>
                     {entries.map((e) => {
-                      const s = summaryByEntry.get(e.entry_id);
-                      const avg = s?.avg_adjustment ?? null;
+                      const adjustments = votesByEntry.get(e.entry_id) ?? [];
+                      const trim = trimmedAverage(
+                        adjustments,
+                        Number(committee.trim_low ?? 0),
+                        Number(committee.trim_high ?? 0)
+                      );
+                      const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
+                      const avg = trim.avg;
                       const suggested =
                         e.handicap_index != null && avg != null
                           ? Math.round((e.handicap_index + avg) * 10) / 10
                           : null;
+
+                      const sortedChips = [...trim.values].sort(
+                        (a, b) => a.value - b.value
+                      );
+
                       return (
-                        <tr key={e.entry_id} className="border-t border-slate-100">
+                        <tr key={e.entry_id} className="border-t border-slate-100 align-top">
                           <td className="px-3 py-2 font-medium">{e.player_name}</td>
                           <td className="px-3 py-2 tabular-nums">{e.handicap_index ?? "—"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-1">
+                              {sortedChips.length === 0 ? (
+                                <span className="text-xs text-slate-400">
+                                  Sin votos
+                                </span>
+                              ) : (
+                                sortedChips.map((v, idx) => (
+                                  <span
+                                    key={`${e.entry_id}-${idx}`}
+                                    title={
+                                      v.trimmed
+                                        ? v.reason === "low"
+                                          ? "Descartado (más severo)"
+                                          : "Descartado (más suave)"
+                                        : "Voto vivo"
+                                    }
+                                    className={[
+                                      "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                                      v.trimmed
+                                        ? "border border-slate-300 bg-slate-100 text-slate-500 line-through"
+                                        : "bg-emerald-600 text-white",
+                                    ].join(" ")}
+                                  >
+                                    {formatAdjustmentLabel(v.value)}
+                                  </span>
+                                ))
+                              )}
+                              {abstained > 0 ? (
+                                <span
+                                  className="rounded border border-amber-400 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800"
+                                  title="Miembros que se abstuvieron"
+                                >
+                                  {abstained} abst.
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
                           <td className="px-3 py-2 tabular-nums">
-                            {s?.n_votes ?? 0}
-                            {s?.n_abstained ? ` (+${s.n_abstained} abst.)` : ""}
+                            {trim.liveCount} / {adjustments.length}
                           </td>
                           <td className="px-3 py-2 tabular-nums">
                             {avg != null ? formatAdjustmentLabel(avg) : "—"}
@@ -661,7 +787,7 @@ export default async function ComiteHandicapPage(props: {
                             {suggested ?? "—"}
                           </td>
                           <td className="px-3 py-2">
-                            {avg != null && (s?.n_votes ?? 0) > 0 ? (
+                            {avg != null && trim.liveCount > 0 ? (
                               <form action={applyHandicapCommitteeSuggestion}>
                                 <input
                                   type="hidden"
