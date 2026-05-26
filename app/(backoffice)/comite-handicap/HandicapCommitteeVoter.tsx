@@ -28,6 +28,7 @@ export type HandicapVoteSummaryRow = {
   entry_id: string;
   n_votes: number;
   n_live: number;
+  n_abstained?: number;
   avg_adjustment: number | null;
   suggested_hi: number | null;
   n_disqualify?: number;
@@ -172,6 +173,7 @@ export default function HandicapCommitteeVoter({
                   <th className="px-3 py-2">Jugador</th>
                   <th className="px-3 py-2">HI actual</th>
                   <th className="px-3 py-2">Votos</th>
+                  <th className="px-3 py-2">Abst.</th>
                   <th className="px-3 py-2">Prom. recortado</th>
                   <th className="px-3 py-2">HI sugerido</th>
                   <th className="px-3 py-2">No jugar</th>
@@ -181,6 +183,7 @@ export default function HandicapCommitteeVoter({
                 {entries.map((e) => {
                   const s = summaryByEntry.get(e.entry_id);
                   const totalVotes = s?.n_votes ?? 0;
+                  const nAbst = s?.n_abstained ?? 0;
                   return (
                     <tr
                       key={e.entry_id}
@@ -202,6 +205,15 @@ export default function HandicapCommitteeVoter({
                           <span className="text-[11px] text-slate-400">
                             —
                           </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">
+                        {nAbst > 0 ? (
+                          <span className="rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
+                            {nAbst}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2 tabular-nums">
