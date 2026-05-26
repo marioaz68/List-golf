@@ -189,7 +189,7 @@ export default async function ComiteHandicapPage(props: {
   const { data: committee } = await supabase
     .from("tournament_handicap_committees")
     .select(
-      "id, status, expected_members, opens_at, closes_at, trim_high, trim_low"
+      "id, status, expected_members, opens_at, closes_at, trim_high, trim_low, disqualify_threshold"
     )
     .eq("tournament_id", tournamentId)
     .maybeSingle();
@@ -953,8 +953,8 @@ export default async function ComiteHandicapPage(props: {
                 className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
               >
                 <input type="hidden" name="tournament_id" value={tournamentId} />
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  Recorte de outliers
+                <div className="basis-full text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Recorte de outliers y umbral «No jugar»
                 </div>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-medium text-slate-800">
@@ -982,16 +982,38 @@ export default async function ComiteHandicapPage(props: {
                     className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
                   />
                 </label>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-medium text-rose-800">
+                    Mínimo de votos «No jugar»
+                  </span>
+                  <input
+                    type="number"
+                    name="disqualify_threshold"
+                    min={0}
+                    max={50}
+                    defaultValue={Number(
+                      (committee as { disqualify_threshold?: number | null })
+                        .disqualify_threshold ?? 0
+                    )}
+                    className="w-20 rounded border border-rose-300 bg-white px-2 py-1 text-sm"
+                  />
+                </label>
                 <button
                   type="submit"
                   className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
                 >
-                  Guardar recorte
+                  Guardar reglas
                 </button>
                 <p className="basis-full text-[11px] text-slate-600">
-                  Por cada jugador se descartan los N votos más cercanos a 0 y los
-                  N votos más cercanos a −5; el promedio y el HI sugerido se
-                  recalculan con los votos vivos.
+                  Recorte: por cada jugador se descartan los N votos más cercanos
+                  a 0 y los N votos más cercanos a −5; el promedio y el HI
+                  sugerido se recalculan con los votos vivos.
+                </p>
+                <p className="basis-full text-[11px] text-rose-700">
+                  Umbral «No jugar»: si un jugador acumula ese número (o más)
+                  de votos «No permitir jugar este torneo», queda marcado en
+                  rojo abajo. <strong>0</strong> = solo se muestra el conteo,
+                  sin marcar.
                 </p>
               </form>
 
@@ -1105,13 +1127,48 @@ export default async function ComiteHandicapPage(props: {
                             {suggested ?? "—"}
                           </td>
                           <td className="px-3 py-2">
-                            {disqVotes > 0 ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800">
-                                {disqVotes} votos
-                              </span>
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
+                            {(() => {
+                              const threshold = Number(
+                                (committee as {
+                                  disqualify_threshold?: number | null;
+                                }).disqualify_threshold ?? 0
+                              );
+                              if (disqVotes === 0) {
+                                return (
+                                  <span className="text-xs text-slate-400">—</span>
+                                );
+                              }
+                              const over =
+                                threshold > 0 && disqVotes >= threshold;
+                              return (
+                                <span
+                                  className={[
+                                    "inline-flex flex-col items-start gap-0.5 rounded-md px-2 py-0.5 text-[11px] font-semibold",
+                                    over
+                                      ? "bg-rose-700 text-white"
+                                      : "bg-rose-100 text-rose-800",
+                                  ].join(" ")}
+                                  title={
+                                    over
+                                      ? "Supera el umbral: jugador no autorizado"
+                                      : threshold > 0
+                                        ? `Umbral configurado: ${threshold}`
+                                        : "Solo informativo (umbral desactivado)"
+                                  }
+                                >
+                                  <span>
+                                    {disqVotes}
+                                    {threshold > 0 ? ` / ${threshold}` : ""}{" "}
+                                    votos
+                                  </span>
+                                  {over ? (
+                                    <span className="text-[10px] uppercase tracking-wide">
+                                      No autorizado
+                                    </span>
+                                  ) : null}
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-3 py-2">
                             {avg != null && trim.liveCount > 0 ? (
