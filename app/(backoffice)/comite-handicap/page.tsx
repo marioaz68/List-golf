@@ -618,10 +618,12 @@ export default async function ComiteHandicapPage(props: {
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
+    const nAbst = abstainedByEntry.get(e.entry_id) ?? 0;
     return {
       entry_id: e.entry_id,
       n_votes: adjustments.length,
       n_live: trim.liveCount,
+      n_abstained: nAbst,
       avg_adjustment: trim.avg,
       suggested_hi: suggested,
       n_disqualify: nDisq,
@@ -1036,21 +1038,26 @@ export default async function ComiteHandicapPage(props: {
                 ) : (
                   <>
                     {(() => {
-                      const presentMembers = candidateRows.filter(
-                        (c) => c.is_present
+                      // Cuenta a quien ya votó aunque no esté marcado presente
+                      // todavía, para que el avance no se vea en 0 cuando los
+                      // votos están entrando.
+                      const activeMembers = candidateRows.filter(
+                        (c) => c.is_present || c.voted_count > 0
                       );
-                      const totalSlots = presentMembers.length * entries.length;
-                      const filledSlots = presentMembers.reduce(
+                      const totalSlots = activeMembers.length * entries.length;
+                      const filledSlots = activeMembers.reduce(
                         (acc, c) => acc + c.voted_count,
                         0
                       );
                       const pct = totalSlots
                         ? Math.round((filledSlots / totalSlots) * 100)
                         : 0;
-                      const completos = presentMembers.filter(
-                        (c) => entries.length > 0 && c.voted_count >= entries.length
+                      const completos = activeMembers.filter(
+                        (c) =>
+                          entries.length > 0 &&
+                          c.voted_count >= entries.length
                       ).length;
-                      const pendientes = presentMembers.length - completos;
+                      const pendientes = activeMembers.length - completos;
                       return (
                         <div className="mt-3 rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-800">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -1069,9 +1076,9 @@ export default async function ComiteHandicapPage(props: {
                           </div>
                           <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-600">
                             <span>
-                              Miembros presentes:{" "}
+                              Miembros activos:{" "}
                               <strong className="text-slate-900">
-                                {presentMembers.length}
+                                {activeMembers.length}
                               </strong>
                             </span>
                             <span>
