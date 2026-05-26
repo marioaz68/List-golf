@@ -347,12 +347,18 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const rawHigh = Number(String(formData.get("trim_high") ?? "0"));
   const rawLow = Number(String(formData.get("trim_low") ?? "0"));
+  const rawThreshold = Number(
+    String(formData.get("disqualify_threshold") ?? "0")
+  );
 
   const trim_high = Number.isFinite(rawHigh)
     ? Math.min(20, Math.max(0, Math.trunc(rawHigh)))
     : 0;
   const trim_low = Number.isFinite(rawLow)
     ? Math.min(20, Math.max(0, Math.trunc(rawLow)))
+    : 0;
+  const disqualify_threshold = Number.isFinite(rawThreshold)
+    ? Math.min(50, Math.max(0, Math.trunc(rawThreshold)))
     : 0;
 
   const { supabase, user } = await requireUser();
@@ -364,7 +370,7 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
 
   const { error } = await supabase
     .from("tournament_handicap_committees")
-    .update({ trim_high, trim_low })
+    .update({ trim_high, trim_low, disqualify_threshold })
     .eq("tournament_id", tournament_id);
 
   if (error) {
