@@ -649,7 +649,8 @@ export default async function ComiteHandicapPage(props: {
     }
   }
 
-  const showAdmin = access.isAdmin && requestedTab === "admin";
+  const isCommitteeAdmin = access.isAdmin === true;
+  const showAdmin = isCommitteeAdmin && requestedTab === "admin";
   const showVote = !showAdmin;
 
   return (
@@ -713,38 +714,39 @@ export default async function ComiteHandicapPage(props: {
         </div>
       ) : null}
 
-      {access.isAdmin ? (
-        <div className="flex flex-wrap gap-2">
+      {access.isAdmin && showAdmin ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-emerald-900">
+            Modo administración
+          </span>
           <Link
-            href={`/comite-handicap?tournament_id=${tournamentId}&tab=vote`}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-              showVote
-                ? "bg-emerald-600 text-white"
-                : "border border-slate-400 bg-white text-slate-800"
-            }`}
+            href={`/comite-handicap?tournament_id=${tournamentId}`}
+            className="rounded-lg border border-emerald-700 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
           >
-            Votar
-          </Link>
-          <Link
-            href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-              showAdmin
-                ? "bg-emerald-600 text-white"
-                : "border border-slate-400 bg-white text-slate-800"
-            }`}
-          >
-            Administración
+            ← Volver a votación
           </Link>
           <Link
             href={`/users?tournament_id=${tournamentId}`}
-            className="rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm font-semibold text-slate-800"
+            className="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800"
           >
             Gestionar miembros
           </Link>
         </div>
       ) : null}
 
-      {showAdmin ? (
+      {access.isAdmin && !showAdmin ? (
+        <div className="flex justify-end">
+          <Link
+            href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
+            className="rounded-lg border border-slate-500 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+            title="Solo visible para administradores y directores del torneo"
+          >
+            ⚙ Administración
+          </Link>
+        </div>
+      ) : null}
+
+      {showAdmin && isCommitteeAdmin ? (
         <section className="space-y-4 rounded-xl border border-slate-300 bg-white p-4 text-slate-900 shadow-sm">
           <h2 className="text-lg font-bold text-slate-950">Administración del comité</h2>
 

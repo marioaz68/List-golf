@@ -60,7 +60,15 @@ export async function loadHandicapCommitteeAccess(
     ]);
 
   const isSuperAdmin = hasRoleCode(globalRows ?? [], "super_admin");
-  const isClubAdmin = hasRoleCode(clubRows ?? [], "club_admin");
+  const isClubAdmin = (clubRows ?? []).some((row: any) => {
+    const r = row.roles;
+    const role = Array.isArray(r) ? r[0] : r;
+    return (
+      role?.code === "club_admin" &&
+      clubId &&
+      String(row.club_id) === clubId
+    );
+  });
   const isDirector = hasRoleCode(tourRows ?? [], "tournament_director");
 
   const isGlobalMember = hasRoleCode(globalRows ?? [], "handicap_committee");
