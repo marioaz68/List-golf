@@ -21,6 +21,7 @@ export type HandicapVoteRow = {
   entry_id: string;
   adjustment: number | null;
   abstained: boolean;
+  disqualify_vote?: boolean;
 };
 
 export type HandicapVoteSummaryRow = {
@@ -195,6 +196,9 @@ function PlayerVoteCard({
 
   const [abstained, setAbstained] = useState(initial?.abstained ?? false);
   const [adjustment, setAdjustment] = useState(defaultAdjustment);
+  const [disqualify, setDisqualify] = useState<boolean>(
+    initial?.disqualify_vote ?? false
+  );
   const [editing, setEditing] = useState(!saved);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -205,6 +209,7 @@ function PlayerVoteCard({
     fd.set("tournament_id", tournamentId);
     fd.set("entry_id", entry.entry_id);
     fd.set("abstained", abstained ? "true" : "false");
+    fd.set("disqualify_vote", disqualify ? "true" : "false");
     if (!abstained) fd.set("adjustment", String(adjustment));
 
     const res = await saveHandicapCommitteeVote(fd);
@@ -221,6 +226,7 @@ function PlayerVoteCard({
   function handleCancel() {
     setAbstained(initial?.abstained ?? false);
     setAdjustment(defaultAdjustment);
+    setDisqualify(initial?.disqualify_vote ?? false);
     setEditing(false);
   }
 
@@ -270,6 +276,11 @@ function PlayerVoteCard({
                 </span>
               </>
             )}
+            {initial?.disqualify_vote ? (
+              <div className="mt-1 text-xs font-semibold text-rose-700">
+                Marcaste: no permitir jugar este torneo
+              </div>
+            ) : null}
           </div>
 
           {lockedByClosing ? (
@@ -291,40 +302,58 @@ function PlayerVoteCard({
 
       {showControls ? (
         <>
-          <label className="mt-3 flex items-center gap-2 text-sm text-slate-800">
-            <input
-              type="checkbox"
-              checked={abstained}
-              disabled={disabled}
-              onChange={(e) => setAbstained(e.target.checked)}
-            />
-            Sin opinión (abstenerse)
-          </label>
-
-          {!abstained ? (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-800">Bajar HI</span>
-                <span className="font-bold tabular-nums text-slate-950">
-                  {formatAdjustmentLabel(adjustment)} pts
-                </span>
-              </div>
+          <div className="mt-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm text-slate-800">
               <input
-                type="range"
-                min={HANDICAP_ADJUSTMENT_MIN}
-                max={HANDICAP_ADJUSTMENT_MAX}
-                step={HANDICAP_ADJUSTMENT_STEP}
-                value={adjustment}
+                type="checkbox"
+                checked={abstained}
                 disabled={disabled}
-                onChange={(e) => setAdjustment(Number(e.target.value))}
-                className="h-3 w-full accent-slate-800"
+                onChange={(e) => setAbstained(e.target.checked)}
               />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>−5.0 (máx.)</span>
-                <span>−0.5 (mín.)</span>
+              Sin opinión (abstenerse)
+            </label>
+
+            {!abstained ? (
+              <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-800">Bajar HI</span>
+                  <span className="font-bold tabular-nums text-slate-950">
+                    {formatAdjustmentLabel(adjustment)} pts
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={HANDICAP_ADJUSTMENT_MIN}
+                  max={HANDICAP_ADJUSTMENT_MAX}
+                  step={HANDICAP_ADJUSTMENT_STEP}
+                  value={adjustment}
+                  disabled={disabled}
+                  onChange={(e) => setAdjustment(Number(e.target.value))}
+                  className="h-3 w-full accent-slate-800"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>−5.0 (máx.)</span>
+                  <span>−0.5 (mín.)</span>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+
+            <label className="flex items-start gap-2 text-sm text-rose-800">
+              <input
+                type="checkbox"
+                checked={disqualify}
+                disabled={disabled}
+                onChange={(e) => setDisqualify(e.target.checked)}
+              />
+              <span>
+                <span className="font-semibold">No permitir jugar este torneo</span>
+                <span className="block text-xs text-rose-700">
+                  Marca solo en casos excepcionales (conducta, trampa, riesgo grave,
+                  etc.). Este voto también es anónimo.
+                </span>
+              </span>
+            </label>
+          </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
