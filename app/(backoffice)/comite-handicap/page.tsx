@@ -744,35 +744,49 @@ export default async function ComiteHandicapPage(props: {
         </div>
       ) : null}
 
-      {access.isAdmin && showAdmin ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2">
-          <span className="text-xs font-bold uppercase tracking-wide text-emerald-900">
-            Modo administración
-          </span>
-          <Link
-            href={`/comite-handicap?tournament_id=${tournamentId}`}
-            className="rounded-lg border border-emerald-700 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
-          >
-            ← Volver a votación
-          </Link>
-          <Link
-            href={`/users?tournament_id=${tournamentId}`}
-            className="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800"
-          >
-            Gestionar miembros
-          </Link>
-        </div>
-      ) : null}
-
-      {access.isAdmin && !showAdmin ? (
-        <div className="flex justify-end">
-          <Link
-            href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
-            className="rounded-lg border border-slate-500 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
-            title="Solo visible para administradores y directores del torneo"
-          >
-            ⚙ Administración
-          </Link>
+      {access.isAdmin ? (
+        <div className="rounded-xl border-2 border-slate-700 bg-slate-900 p-3 text-white shadow-md">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-900">
+              Solo admin
+            </span>
+            <span className="text-xs font-semibold text-white/80">
+              Como Director / Club Admin / Super Admin puedes parametrizar
+              reglas, marcar presentes, cerrar votación, reiniciar e historial.
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link
+              href={`/comite-handicap?tournament_id=${tournamentId}`}
+              className={[
+                "rounded-lg px-4 py-2 text-sm font-bold",
+                !showAdmin
+                  ? "bg-[#63BC46] text-slate-950 shadow"
+                  : "border border-white/30 bg-transparent text-white hover:bg-white/10",
+              ].join(" ")}
+            >
+              Votar
+            </Link>
+            <Link
+              href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
+              className={[
+                "rounded-lg px-4 py-2 text-sm font-bold",
+                showAdmin
+                  ? "bg-[#63BC46] text-slate-950 shadow"
+                  : "border-2 border-amber-400 bg-amber-50 text-slate-900 hover:bg-amber-100",
+              ].join(" ")}
+            >
+              ⚙ Administración
+            </Link>
+            {showAdmin ? (
+              <Link
+                href={`/users?tournament_id=${tournamentId}`}
+                className="rounded-lg border border-white/40 bg-transparent px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
+              >
+                Gestionar miembros
+              </Link>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
