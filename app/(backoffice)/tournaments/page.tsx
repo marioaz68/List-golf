@@ -1002,9 +1002,51 @@ export default async function TournamentsPage({
                     </td>
 
                     <td style={tdStyle}>
-                      <span style={visibilityBadge(isPublic, isArchived)}>
-                        {visibilityLabel(isPublic, isArchived, tm.visibility)}
-                      </span>
+                      {isScoreCapture ? (
+                        <span style={visibilityBadge(isPublic, isArchived)}>
+                          {visibilityLabel(isPublic, isArchived, tm.visibility)}
+                        </span>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            gap: 4,
+                          }}
+                        >
+                          <span style={visibilityBadge(isPublic, isArchived)}>
+                            {visibilityLabel(isPublic, isArchived, tm.visibility)}
+                          </span>
+                          {isArchived ? (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: "#64748b",
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              {tm.showArchivedHint}
+                            </span>
+                          ) : (
+                            <form
+                              action={togglePublic.bind(null, t.id)}
+                              style={inlineFormStyle}
+                            >
+                              <SubmitButton
+                                pendingText={tm.updating}
+                                className={
+                                  isPublic
+                                    ? "inline-flex h-7 items-center justify-center whitespace-normal rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-800"
+                                    : "inline-flex h-7 items-center justify-center whitespace-normal rounded-lg border border-emerald-400 bg-emerald-600 px-2.5 text-[11px] font-bold text-white"
+                                }
+                              >
+                                {isPublic ? tm.hide : tm.show}
+                              </SubmitButton>
+                            </form>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     <td style={tdStyle}>
@@ -1136,18 +1178,6 @@ export default async function TournamentsPage({
                               tournamentId={t.id}
                               hasPoster={Boolean(t.poster_path)}
                             />
-
-                            <form
-                              action={togglePublic.bind(null, t.id)}
-                              style={inlineFormStyle}
-                            >
-                              <SubmitButton
-                                pendingText={tm.updating}
-                                className="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-900"
-                              >
-                                {isPublic ? tm.hide : tm.show}
-                              </SubmitButton>
-                            </form>
 
                             <form
                               action={toggleArchive.bind(null, t.id)}
