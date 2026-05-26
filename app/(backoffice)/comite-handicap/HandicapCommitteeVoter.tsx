@@ -386,15 +386,33 @@ function PlayerVoteCard({
       {showControls ? (
         <>
           <div className="mt-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm text-slate-800">
-              <input
-                type="checkbox"
-                checked={abstained}
-                disabled={disabled}
-                onChange={(e) => setAbstained(e.target.checked)}
-              />
-              Sin opinión (abstenerse)
-            </label>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setAbstained((v) => !v)}
+              aria-pressed={abstained}
+              className={[
+                "flex w-full items-center gap-3 rounded-xl border-2 px-4 py-2.5 text-left transition disabled:opacity-50",
+                abstained
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              <span
+                className={[
+                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 text-sm font-bold",
+                  abstained
+                    ? "border-white bg-white text-slate-900"
+                    : "border-slate-400 bg-white text-transparent",
+                ].join(" ")}
+                aria-hidden="true"
+              >
+                ✓
+              </span>
+              <span className="text-sm font-semibold">
+                Sin opinión (abstenerse)
+              </span>
+            </button>
 
             {!abstained ? (
               <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2">
@@ -421,21 +439,56 @@ function PlayerVoteCard({
               </div>
             ) : null}
 
-            <label className="flex items-start gap-2 text-sm text-rose-800">
-              <input
-                type="checkbox"
-                checked={disqualify}
-                disabled={disabled}
-                onChange={(e) => setDisqualify(e.target.checked)}
-              />
-              <span>
-                <span className="font-semibold">No permitir jugar este torneo</span>
-                <span className="block text-xs text-rose-700">
-                  Marca solo en casos excepcionales (conducta, trampa, riesgo grave,
-                  etc.). Este voto también es anónimo.
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setDisqualify((v) => !v)}
+              aria-pressed={disqualify}
+              className={[
+                "flex w-full items-center justify-between gap-3 rounded-xl border-2 px-4 py-3 text-left transition disabled:opacity-50",
+                disqualify
+                  ? "border-rose-700 bg-rose-700 text-white shadow-md"
+                  : "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100",
+              ].join(" ")}
+            >
+              <span className="flex items-center gap-3">
+                <span
+                  className={[
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 text-base font-bold",
+                    disqualify
+                      ? "border-white bg-white text-rose-700"
+                      : "border-rose-500 bg-white text-transparent",
+                  ].join(" ")}
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-base font-bold leading-tight">
+                    No permitir jugar este torneo
+                  </span>
+                  <span
+                    className={[
+                      "mt-0.5 text-xs leading-tight",
+                      disqualify ? "text-rose-100" : "text-rose-700",
+                    ].join(" ")}
+                  >
+                    Solo en casos excepcionales (conducta, trampa, riesgo grave).
+                    Voto anónimo.
+                  </span>
                 </span>
               </span>
-            </label>
+              <span
+                className={[
+                  "shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide",
+                  disqualify
+                    ? "bg-white text-rose-700"
+                    : "border border-rose-400 text-rose-700",
+                ].join(" ")}
+              >
+                {disqualify ? "Marcado" : "Tocar"}
+              </span>
+            </button>
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
