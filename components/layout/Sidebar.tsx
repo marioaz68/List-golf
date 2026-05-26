@@ -354,6 +354,23 @@ export default function Sidebar() {
     [tournamentOperationNav, tournamentId, roles, matchPlayAuctionActive]
   );
 
+  /**
+   * Un usuario "solo comité": tiene únicamente el rol handicap_committee
+   * (sin super_admin, club_admin, tournament_director, ni cualquier otro
+   * rol del backoffice). Para él escondemos switch Operación/Configuración,
+   * el link a Lista de torneos y dejamos el logo apuntando al comité.
+   */
+  const isCommitteeOnlyUser = useMemo(() => {
+    if (roles.length === 0) return false;
+    const allowed = new Set(["handicap_committee"]);
+    return roles.every((r) => allowed.has(r));
+  }, [roles]);
+
+  const canSeeTournamentsList = useMemo(
+    () => canAccessModule(roles, "tournaments"),
+    [roles]
+  );
+
   const visibleMenu = useMemo(() => {
     if (mode === "operation") return operationVisible;
     const setupOnlyVisible = setupExclusiveNav.filter((item) => {
@@ -393,7 +410,7 @@ export default function Sidebar() {
       <div className="border-b border-white/10 px-4 py-4 md:px-6 md:py-5">
         <div className="flex items-center justify-between gap-2">
           <Link
-            href="/tournaments"
+            href={canSeeTournamentsList ? "/tournaments" : "/comite-handicap"}
             className="flex min-w-0 flex-1 items-center"
             onClick={() => setOpen(false)}
           >
@@ -443,37 +460,39 @@ export default function Sidebar() {
         )}
       </div>
 
-      <div className="border-b border-white/10 px-3 py-3">
-        <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
-          {t.sidebar.modePrefix} {modeLabel}
-        </div>
+      {isCommitteeOnlyUser ? null : (
+        <div className="border-b border-white/10 px-3 py-3">
+          <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+            {t.sidebar.modePrefix} {modeLabel}
+          </div>
 
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/20 p-1">
-          <button
-            type="button"
-            onClick={() => setSidebarMode("operation")}
-            className={`rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
-              mode === "operation"
-                ? "bg-[#63BC46] text-black shadow-sm"
-                : "text-white/70 hover:bg-white/10"
-            }`}
-          >
-            {t.sidebar.operation}
-          </button>
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-black/20 p-1">
+            <button
+              type="button"
+              onClick={() => setSidebarMode("operation")}
+              className={`rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+                mode === "operation"
+                  ? "bg-[#63BC46] text-black shadow-sm"
+                  : "text-white/70 hover:bg-white/10"
+              }`}
+            >
+              {t.sidebar.operation}
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSidebarMode("setup")}
-            className={`rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
-              mode === "setup"
-                ? "bg-[#63BC46] text-black shadow-sm"
-                : "text-white/70 hover:bg-white/10"
-            }`}
-          >
-            {t.sidebar.configShort}
-          </button>
+            <button
+              type="button"
+              onClick={() => setSidebarMode("setup")}
+              className={`rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+                mode === "setup"
+                  ? "bg-[#63BC46] text-black shadow-sm"
+                  : "text-white/70 hover:bg-white/10"
+              }`}
+            >
+              {t.sidebar.configShort}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {visibleMenu.map((item, idx) => {
@@ -537,33 +556,39 @@ export default function Sidebar() {
           <span className="min-w-0 flex-1 truncate">{t.sidebar.publicPage}</span>
         </Link>
 
-        <button
-          type="button"
-          onClick={() => setSidebarMode(nextMode)}
-          className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10 md:px-4 md:py-3"
-        >
-          <span className="flex shrink-0">
-            <Repeat2 size={18} />
-          </span>
-          <span className="min-w-0 flex-1 break-words leading-snug">
-            {t.sidebar.switchTo} {nextModeLabel}
-          </span>
-        </button>
+        {isCommitteeOnlyUser ? null : (
+          <button
+            type="button"
+            onClick={() => setSidebarMode(nextMode)}
+            className="flex w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-white/85 hover:bg-white/10 md:px-4 md:py-3"
+          >
+            <span className="flex shrink-0">
+              <Repeat2 size={18} />
+            </span>
+            <span className="min-w-0 flex-1 break-words leading-snug">
+              {t.sidebar.switchTo} {nextModeLabel}
+            </span>
+          </button>
+        )}
 
-        <Link
-          href="/tournaments"
-          onClick={() => setOpen(false)}
-          className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
-            pathname === "/tournaments"
-              ? "bg-[#63BC46] text-black"
-              : "text-white/85 hover:bg-white/10"
-          }`}
-        >
-          <span className="flex shrink-0">
-            <ArrowLeftCircle size={18} />
-          </span>
-          <span className="min-w-0 flex-1 truncate">{t.sidebar.listTournaments}</span>
-        </Link>
+        {canSeeTournamentsList ? (
+          <Link
+            href="/tournaments"
+            onClick={() => setOpen(false)}
+            className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
+              pathname === "/tournaments"
+                ? "bg-[#63BC46] text-black"
+                : "text-white/85 hover:bg-white/10"
+            }`}
+          >
+            <span className="flex shrink-0">
+              <ArrowLeftCircle size={18} />
+            </span>
+            <span className="min-w-0 flex-1 truncate">
+              {t.sidebar.listTournaments}
+            </span>
+          </Link>
+        ) : null}
 
         <div className="pt-1 text-xs text-white/35">{t.sidebar.brand}</div>
       </div>
