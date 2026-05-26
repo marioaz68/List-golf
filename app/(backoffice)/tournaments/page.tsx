@@ -1011,12 +1011,24 @@ export default async function TournamentsPage({
                           style={{
                             display: "flex",
                             flexDirection: "column",
-                            alignItems: "flex-start",
-                            gap: 4,
+                            alignItems: "stretch",
+                            gap: 6,
+                            minWidth: 168,
                           }}
                         >
-                          <span style={visibilityBadge(isPublic, isArchived)}>
-                            {visibilityLabel(isPublic, isArchived, tm.visibility)}
+                          <span
+                            style={{
+                              ...visibilityBadge(isPublic, isArchived),
+                              alignSelf: "flex-start",
+                            }}
+                          >
+                            {isPublic && !isArchived ? "👁 " : null}
+                            {!isPublic && !isArchived ? "🚫 " : null}
+                            {visibilityLabel(
+                              isPublic,
+                              isArchived,
+                              tm.visibility
+                            )}
                           </span>
                           {isArchived ? (
                             <span
@@ -1037,11 +1049,11 @@ export default async function TournamentsPage({
                                 pendingText={tm.updating}
                                 className={
                                   isPublic
-                                    ? "inline-flex h-7 items-center justify-center whitespace-normal rounded-lg border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-800"
-                                    : "inline-flex h-7 items-center justify-center whitespace-normal rounded-lg border border-emerald-400 bg-emerald-600 px-2.5 text-[11px] font-bold text-white"
+                                    ? "inline-flex w-full items-center justify-center gap-1.5 whitespace-normal rounded-lg border-2 border-rose-500 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 shadow-sm hover:bg-rose-100"
+                                    : "inline-flex w-full items-center justify-center gap-1.5 whitespace-normal rounded-lg border-2 border-emerald-600 bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"
                                 }
                               >
-                                {isPublic ? tm.hide : tm.show}
+                                {isPublic ? `🔒 ${tm.hide}` : `🌐 ${tm.show}`}
                               </SubmitButton>
                             </form>
                           )}
