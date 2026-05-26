@@ -188,7 +188,9 @@ export default async function ComiteHandicapPage(props: {
 
   const { data: committee } = await supabase
     .from("tournament_handicap_committees")
-    .select("id, status, expected_members, opens_at, closes_at, trim_high, trim_low")
+    .select(
+      "id, status, expected_members, opens_at, closes_at, trim_high, trim_low"
+    )
     .eq("tournament_id", tournamentId)
     .maybeSingle();
 
@@ -277,7 +279,7 @@ export default async function ComiteHandicapPage(props: {
   if (committee?.id) {
     const { data: votes } = await supabase
       .from("handicap_committee_votes")
-      .select("entry_id, adjustment, abstained")
+      .select("entry_id, adjustment, abstained, disqualify_vote")
       .eq("committee_id", committee.id)
       .eq("member_user_id", user.id);
 
@@ -285,6 +287,7 @@ export default async function ComiteHandicapPage(props: {
       entry_id: v.entry_id as string,
       adjustment: v.adjustment != null ? Number(v.adjustment) : null,
       abstained: Boolean(v.abstained),
+      disqualify_vote: Boolean((v as { disqualify_vote?: boolean }).disqualify_vote),
     }));
   }
 
@@ -308,6 +311,7 @@ export default async function ComiteHandicapPage(props: {
   }> = [];
   const votesByEntry = new Map<string, number[]>();
   const abstainedByEntry = new Map<string, number>();
+  const disqualifyByEntry = new Map<string, number>();
   let memberCount = 0;
 
   // Cargamos los votos agregados (anónimos) SIEMPRE que haya admin client
@@ -316,15 +320,21 @@ export default async function ComiteHandicapPage(props: {
   if (admin && committee?.id) {
     const { data: voteRows } = await admin
       .from("handicap_committee_votes")
-      .select("entry_id, adjustment, abstained")
+      .select("entry_id, adjustment, abstained, disqualify_vote")
       .eq("committee_id", committee.id);
 
     for (const v of voteRows ?? []) {
       const eid = String((v as any).entry_id);
       if ((v as any).abstained) {
         abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
-        continue;
       }
+      if ((v as any).disqualify_vote) {
+        disqualifyByEntry.set(
+          eid,
+          (disqualifyByEntry.get(eid) ?? 0) + 1
+        );
+      }
+      if ((v as any).abstained) continue;
       const adj = (v as any).adjustment;
       if (adj == null) continue;
       const n = Number(adj);
@@ -1014,6 +1024,7 @@ export default async function ComiteHandicapPage(props: {
                       <th className="px-3 py-2">Vivos</th>
                       <th className="px-3 py-2">Prom. recortado</th>
                       <th className="px-3 py-2">HI sugerido</th>
+                      <th className="px-3 py-2">No jugar</th>
                       <th className="px-3 py-2" />
                     </tr>
                   </thead>
@@ -1026,6 +1037,7 @@ export default async function ComiteHandicapPage(props: {
                         Number(committee.trim_high ?? 0)
                       );
                       const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
+                      const disqVotes = disqualifyByEntry.get(e.entry_id) ?? 0;
                       const avg = trim.avg;
                       const suggested =
                         e.handicap_index != null && avg != null
@@ -1091,6 +1103,15 @@ export default async function ComiteHandicapPage(props: {
                           </td>
                           <td className="px-3 py-2 tabular-nums font-semibold">
                             {suggested ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            {disqVotes > 0 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800">
+                                {disqVotes} votos
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
                           </td>
                           <td className="px-3 py-2">
                             {avg != null && trim.liveCount > 0 ? (

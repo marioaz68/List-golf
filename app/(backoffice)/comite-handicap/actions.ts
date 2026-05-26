@@ -119,6 +119,8 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const entry_id = reqStr(formData, "entry_id");
   const abstained = String(formData.get("abstained") ?? "") === "true";
+  const disqualifyVote =
+    String(formData.get("disqualify_vote") ?? "") === "true";
 
   const { supabase, user } = await requireUser();
   const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
@@ -171,6 +173,7 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
       member_user_id: user.id,
       adjustment,
       abstained,
+      disqualify_vote: disqualifyVote,
     },
     { onConflict: "committee_id,entry_id,member_user_id" }
   );
