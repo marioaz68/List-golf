@@ -91,6 +91,19 @@ export default function Sidebar() {
     }
 
     setSearchMap(map);
+
+    // Listado global: sin torneo activo en la barra lateral.
+    if (pathname === "/tournaments") {
+      setTournamentId(null);
+      setMode("setup");
+      try {
+        window.localStorage.setItem(STORAGE_KEY, "setup");
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
     setTournamentId(params.get("tournament_id"));
   }, [pathname]);
 
@@ -222,7 +235,6 @@ export default function Sidebar() {
   /** Solo modo Config.: módulos de armado del torneo (después de la navegación operativa). */
   const setupExclusiveNav: MenuItem[] = useMemo(
     () => [
-      { nameKey: "tournaments", href: "/tournaments", icon: Trophy },
       {
         nameKey: "editTournament",
         href: "/tournaments/edit",
@@ -574,7 +586,11 @@ export default function Sidebar() {
         {canSeeTournamentsList ? (
           <Link
             href="/tournaments"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              setOpen(false);
+              setTournamentId(null);
+              setSidebarMode("setup");
+            }}
             className={`flex min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm md:px-4 md:py-3 ${
               pathname === "/tournaments"
                 ? "bg-[#63BC46] text-black"

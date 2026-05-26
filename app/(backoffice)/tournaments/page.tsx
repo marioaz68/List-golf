@@ -737,6 +737,23 @@ export default async function TournamentsPage({
           <div>
             <h1 style={titleStyle}>{tm.title}</h1>
             <p style={subStyle}>{tm.subtitle}</p>
+            {!isScoreCapture ? (
+              <p
+                style={{
+                  ...subStyle,
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #bbf7d0",
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  fontWeight: 600,
+                }}
+              >
+                Columna «Público» (junto al nombre del torneo): botón verde
+                publicar u ocultar en la página pública.
+              </p>
+            ) : null}
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -872,8 +889,8 @@ export default async function TournamentsPage({
               <tr>
                 <th style={thStyle}>{tm.thDate}</th>
                 <th style={thStyle}>{tm.thTournament}</th>
-                <th style={thStyle}>{tm.thStatus}</th>
                 <th style={thStyle}>{tm.thPublic}</th>
+                <th style={thStyle}>{tm.thStatus}</th>
                 <th style={thStyle}>{tm.thConvocatoria}</th>
                 <th style={thStyle}>{tm.thCategories}</th>
                 <th style={thStyle}>{tm.thCompetition}</th>
@@ -986,23 +1003,6 @@ export default async function TournamentsPage({
 
                     <td style={tdStyle}>
                       {isScoreCapture ? (
-                        <span style={statusBadge(t.status)}>
-                          {t.status ?? "—"}
-                        </span>
-                      ) : (
-                        <Link
-                          href={`/tournaments/edit?tournament_id=${t.id}`}
-                          style={{ textDecoration: "none" }}
-                        >
-                          <span style={statusBadge(t.status)}>
-                            {t.status ?? "—"}
-                          </span>
-                        </Link>
-                      )}
-                    </td>
-
-                    <td style={tdStyle}>
-                      {isScoreCapture ? (
                         <span style={visibilityBadge(isPublic, isArchived)}>
                           {visibilityLabel(isPublic, isArchived, tm.visibility)}
                         </span>
@@ -1013,7 +1013,7 @@ export default async function TournamentsPage({
                             flexDirection: "column",
                             alignItems: "stretch",
                             gap: 6,
-                            minWidth: 168,
+                            minWidth: 180,
                           }}
                         >
                           <span
@@ -1058,6 +1058,23 @@ export default async function TournamentsPage({
                             </form>
                           )}
                         </div>
+                      )}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {isScoreCapture ? (
+                        <span style={statusBadge(t.status)}>
+                          {t.status ?? "—"}
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/tournaments/edit?tournament_id=${t.id}`}
+                          style={{ textDecoration: "none" }}
+                        >
+                          <span style={statusBadge(t.status)}>
+                            {t.status ?? "—"}
+                          </span>
+                        </Link>
                       )}
                     </td>
 
@@ -1140,6 +1157,24 @@ export default async function TournamentsPage({
 
                     <td style={actionCellStyle}>
                       <div style={actionsRowStyle}>
+                        {!isScoreCapture && !isArchived ? (
+                          <form
+                            action={togglePublic.bind(null, t.id)}
+                            style={inlineFormStyle}
+                          >
+                            <SubmitButton
+                              pendingText={tm.updating}
+                              className={
+                                isPublic
+                                  ? "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-lg border border-rose-400 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-800"
+                                  : "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 text-[11px] font-bold text-white"
+                              }
+                            >
+                              {isPublic ? "🔒 Ocultar" : "🌐 Publicar"}
+                            </SubmitButton>
+                          </form>
+                        ) : null}
+
                         {isPublic && !isArchived ? (
                           <Link
                             href={`/torneos/${t.id}`}
