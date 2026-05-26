@@ -316,6 +316,10 @@ export default async function ComiteHandicapPage(props: {
   const votesByEntry = new Map<string, number[]>();
   const abstainedByEntry = new Map<string, number>();
   const disqualifyByEntry = new Map<string, number>();
+  const votesByMember = new Map<
+    string,
+    { voted: number; abstained: number; entries: Set<string> }
+  >();
   let memberCount = 0;
 
   // Cargamos los votos agregados (anónimos) SIEMPRE que haya admin client
@@ -324,12 +328,33 @@ export default async function ComiteHandicapPage(props: {
   if (admin && committee?.id) {
     const { data: voteRows } = await admin
       .from("handicap_committee_votes")
-      .select("entry_id, adjustment, abstained, disqualify_vote")
+      .select("entry_id, adjustment, abstained, disqualify_vote, member_user_id")
       .eq("committee_id", committee.id);
 
     for (const v of voteRows ?? []) {
       const eid = String((v as any).entry_id);
-      if ((v as any).abstained) {
+      const uid = (v as any).member_user_id
+        ? String((v as any).member_user_id)
+        : null;
+      const isAbstained = Boolean((v as any).abstained);
+
+      if (uid) {
+        const slot =
+          votesByMember.get(uid) ??
+          ({ voted: 0, abstained: 0, entries: new Set<string>() } as {
+            voted: number;
+            abstained: number;
+            entries: Set<string>;
+          });
+        if (!slot.entries.has(eid)) {
+          slot.entries.add(eid);
+          slot.voted += 1;
+          if (isAbstained) slot.abstained += 1;
+        }
+        votesByMember.set(uid, slot);
+      }
+
+      if (isAbstained) {
         abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
       }
       if ((v as any).disqualify_vote) {
@@ -338,7 +363,7 @@ export default async function ComiteHandicapPage(props: {
           (disqualifyByEntry.get(eid) ?? 0) + 1
         );
       }
-      if ((v as any).abstained) continue;
+      if (isAbstained) continue;
       const adj = (v as any).adjustment;
       if (adj == null) continue;
       const n = Number(adj);
@@ -358,6 +383,8 @@ export default async function ComiteHandicapPage(props: {
     committee_scopes: CommitteeScope[];
     is_present: boolean;
     has_presence_row: boolean;
+    voted_count: number;
+    abstained_count: number;
   };
   let candidateRows: CandidateRow[] = [];
   let presentCount = 0;
@@ -530,6 +557,7 @@ export default async function ComiteHandicapPage(props: {
       const scopes = Array.from(scopesByUser.get(String(p.id)) ?? []);
       const hasPresence = presenceByUser.has(String(p.id));
       const isPresent = presenceByUser.get(String(p.id)) ?? false;
+      const memberStats = votesByMember.get(String(p.id));
       return {
         user_id: String(p.id),
         full_name: fullName,
@@ -538,6 +566,8 @@ export default async function ComiteHandicapPage(props: {
         committee_scopes: scopes as CommitteeScope[],
         is_present: isPresent,
         has_presence_row: hasPresence,
+        voted_count: memberStats?.voted ?? 0,
+        abstained_count: memberStats?.abstained ?? 0,
       };
     });
 
@@ -785,6 +815,12 @@ export default async function ComiteHandicapPage(props: {
                 <span>
                   Presentes hoy: <strong>{presentCount}</strong> / {candidateRows.length}
                 </span>
+                {committee.status === "open" ? (
+                  <span className="rounded-full border border-slate-400 bg-white px-2 py-0.5 text-xs text-slate-700">
+                    Puedes cerrar la votación aunque falten miembros por
+                    calificar a todos los jugadores.
+                  </span>
+                ) : null}
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -881,6 +917,67 @@ export default async function ComiteHandicapPage(props: {
                     . Los directores del torneo aparecen automáticamente.
                   </div>
                 ) : (
+                  <>
+                    {(() => {
+                      const presentMembers = candidateRows.filter(
+                        (c) => c.is_present
+                      );
+                      const totalSlots = presentMembers.length * entries.length;
+                      const filledSlots = presentMembers.reduce(
+                        (acc, c) => acc + c.voted_count,
+                        0
+                      );
+                      const pct = totalSlots
+                        ? Math.round((filledSlots / totalSlots) * 100)
+                        : 0;
+                      const completos = presentMembers.filter(
+                        (c) => entries.length > 0 && c.voted_count >= entries.length
+                      ).length;
+                      const pendientes = presentMembers.length - completos;
+                      return (
+                        <div className="mt-3 rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-800">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <strong className="text-sm text-slate-950">
+                              Avance global del comité
+                            </strong>
+                            <span className="tabular-nums text-slate-700">
+                              {filledSlots} / {totalSlots} votos · {pct}%
+                            </span>
+                          </div>
+                          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-emerald-600 transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-600">
+                            <span>
+                              Miembros presentes:{" "}
+                              <strong className="text-slate-900">
+                                {presentMembers.length}
+                              </strong>
+                            </span>
+                            <span>
+                              Jugadores: <strong className="text-slate-900">
+                                {entries.length}
+                              </strong>
+                            </span>
+                            <span>
+                              Completaron 100%:{" "}
+                              <strong className="text-emerald-700">
+                                {completos}
+                              </strong>
+                            </span>
+                            <span>
+                              Pendientes:{" "}
+                              <strong className="text-rose-700">
+                                {pendientes}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   <ul className="mt-3 grid gap-2 sm:grid-cols-2">
                     {candidateRows.map((c) => {
                       const isDirector = c.role_codes.includes("tournament_director");
@@ -935,6 +1032,52 @@ export default async function ComiteHandicapPage(props: {
                                 </span>
                               )}
                             </div>
+                            {(() => {
+                              const total = entries.length;
+                              const voted = c.voted_count;
+                              const isComplete = total > 0 && voted >= total;
+                              const isEmpty = voted === 0;
+                              const pct = total
+                                ? Math.min(100, Math.round((voted / total) * 100))
+                                : 0;
+                              return (
+                                <div className="mt-2">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                    <span className="font-semibold text-slate-700">
+                                      Votos realizados
+                                    </span>
+                                    <span
+                                      className={[
+                                        "tabular-nums font-bold",
+                                        isComplete
+                                          ? "text-emerald-700"
+                                          : isEmpty
+                                            ? "text-rose-700"
+                                            : "text-amber-700",
+                                      ].join(" ")}
+                                    >
+                                      {voted} / {total}
+                                      {c.abstained_count > 0
+                                        ? ` · ${c.abstained_count} abst.`
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                                    <div
+                                      className={[
+                                        "h-full rounded-full transition-all",
+                                        isComplete
+                                          ? "bg-emerald-600"
+                                          : isEmpty
+                                            ? "bg-rose-300"
+                                            : "bg-amber-500",
+                                      ].join(" ")}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="flex flex-wrap gap-1.5">
@@ -997,6 +1140,7 @@ export default async function ComiteHandicapPage(props: {
                       );
                     })}
                   </ul>
+                  </>
                 )}
               </section>
 
