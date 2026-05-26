@@ -17,6 +17,7 @@ import {
   revokeHandicapCommitteeRole,
   setHandicapCommitteeTrim,
   inviteHandicapCommitteeMember,
+  assignHandicapCommitteeRole,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
@@ -575,6 +576,29 @@ export default async function ComiteHandicapPage(props: {
     presentCount = candidateRows.filter((c) => c.is_present).length;
   }
 
+  let availableProfiles: Array<{
+    id: string;
+    full_name: string;
+    email: string | null;
+  }> = [];
+  if (access.isAdmin && admin) {
+    const memberIdSet = new Set(candidateRows.map((c) => c.user_id));
+    const { data: allProfiles } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name, email")
+      .order("last_name", { ascending: true })
+      .limit(500);
+    availableProfiles = (allProfiles ?? [])
+      .filter((p: any) => !memberIdSet.has(String(p.id)))
+      .map((p: any) => ({
+        id: String(p.id),
+        full_name:
+          `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() ||
+          (p.email ?? "Usuario"),
+        email: p.email ?? null,
+      }));
+  }
+
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
 
   // Resumen anónimo para mostrar al votante (solo cuando la votación está
@@ -878,32 +902,43 @@ export default async function ComiteHandicapPage(props: {
                 </div>
 
                 <form
-                  action={inviteHandicapCommitteeMember}
-                  className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-slate-300 bg-white p-3 text-slate-900"
+                  action={assignHandicapCommitteeRole}
+                  className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-emerald-400 bg-emerald-50 p-3 text-slate-900"
                 >
                   <input type="hidden" name="tournament_id" value={tournamentId} />
-                  <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
-                    <span className="font-semibold text-slate-800">
-                      Invitar miembro (email)
+                  <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs">
+                    <span className="font-semibold text-emerald-900">
+                      Agregar miembro existente
                     </span>
-                    <input
-                      type="email"
-                      name="email"
+                    <select
+                      name="user_id"
                       required
-                      placeholder="miembro@email.com"
-                      className="rounded border border-slate-300 px-2 py-1.5 text-sm"
-                    />
+                      defaultValue=""
+                      className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
+                    >
+                      <option value="" disabled>
+                        — elige un usuario —
+                      </option>
+                      {availableProfiles.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.full_name}
+                          {u.email ? ` (${u.email})` : ""}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
-                    <span className="font-semibold text-slate-800">Alcance</span>
+                    <span className="font-semibold text-emerald-900">
+                      Alcance
+                    </span>
                     <select
                       name="scope"
                       defaultValue="tournament"
-                      className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                      className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
                     >
                       <option value="tournament">Solo este torneo</option>
                       {(actorIsSuperAdmin || actorIsClubAdmin) && (
-                        <option value="club">Todo el club del torneo</option>
+                        <option value="club">Todo el club</option>
                       )}
                       {actorIsSuperAdmin && (
                         <option value="global">Todo el sistema</option>
@@ -912,11 +947,79 @@ export default async function ComiteHandicapPage(props: {
                   </label>
                   <button
                     type="submit"
-                    className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white"
+                    className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-800"
                   >
-                    Autorizar acceso
+                    + Agregar al comité
                   </button>
+                  <p className="basis-full text-[11px] text-emerald-900/80">
+                    El usuario quedará con permiso «Comité de Handicap». Después
+                    marca su asistencia con el botón verde de su tarjeta para
+                    habilitar su voto.
+                  </p>
                 </form>
+
+                <details className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
+                  <summary className="cursor-pointer font-semibold text-slate-800">
+                    ¿No está en la lista? Invitar por email
+                  </summary>
+                  <form
+                    action={inviteHandicapCommitteeMember}
+                    className="mt-2 flex flex-wrap items-end gap-2"
+                  >
+                    <input
+                      type="hidden"
+                      name="tournament_id"
+                      value={tournamentId}
+                    />
+                    <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
+                      <span className="font-semibold text-slate-800">
+                        Email del usuario
+                      </span>
+                      <input
+                        type="email"
+                        name="email"
+                        required
+                        placeholder="miembro@email.com"
+                        className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="font-semibold text-slate-800">
+                        Alcance
+                      </span>
+                      <select
+                        name="scope"
+                        defaultValue="tournament"
+                        className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+                      >
+                        <option value="tournament">Solo este torneo</option>
+                        {(actorIsSuperAdmin || actorIsClubAdmin) && (
+                          <option value="club">Todo el club</option>
+                        )}
+                        {actorIsSuperAdmin && (
+                          <option value="global">Todo el sistema</option>
+                        )}
+                      </select>
+                    </label>
+                    <button
+                      type="submit"
+                      className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Buscar y autorizar
+                    </button>
+                    <p className="basis-full text-[11px] text-slate-600">
+                      Requiere que el usuario ya exista en el sistema. Si no
+                      existe, créalo primero en{" "}
+                      <Link
+                        href="/users/new"
+                        className="font-semibold underline"
+                      >
+                        Usuarios → Nuevo
+                      </Link>
+                      .
+                    </p>
+                  </form>
+                </details>
 
                 {candidateRows.length === 0 ? (
                   <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
@@ -1095,7 +1198,10 @@ export default async function ComiteHandicapPage(props: {
                           </div>
 
                           <div className="flex flex-wrap gap-1.5">
-                            <form action={setHandicapCommitteeMemberPresence}>
+                            <form
+                              action={setHandicapCommitteeMemberPresence}
+                              className="flex-1 min-w-[160px]"
+                            >
                               <input
                                 type="hidden"
                                 name="tournament_id"
@@ -1110,13 +1216,15 @@ export default async function ComiteHandicapPage(props: {
                               <button
                                 type="submit"
                                 className={[
-                                  "rounded px-2.5 py-1 text-xs font-semibold",
+                                  "w-full rounded-lg border-2 px-3 py-2 text-sm font-bold shadow-sm transition",
                                   c.is_present
-                                    ? "border border-amber-600 bg-amber-50 text-amber-900"
-                                    : "bg-emerald-700 text-white",
+                                    ? "border-amber-500 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                                    : "border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700",
                                 ].join(" ")}
                               >
-                                {c.is_present ? "Marcar ausente" : "Marcar presente"}
+                                {c.is_present
+                                  ? "🔕 Marcar ausente"
+                                  : "✅ Marcar presente"}
                               </button>
                             </form>
 
