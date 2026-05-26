@@ -17,12 +17,16 @@ import {
   revokeHandicapCommitteeRole,
   setHandicapCommitteeTrim,
   inviteHandicapCommitteeMember,
-  resetHandicapCommitteeVotes,
 } from "./actions";
 import HandicapCommitteeVoter, {
   type HandicapEntryRow,
   type HandicapVoteRow,
 } from "./HandicapCommitteeVoter";
+import ResetCommitteeVotesPanel from "./ResetCommitteeVotesPanel";
+import CommitteeVoteHistory, {
+  type ArchivedSession,
+  type ArchivedSnapshot,
+} from "./CommitteeVoteHistory";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -46,7 +50,7 @@ export default async function ComiteHandicapPage(props: {
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
   const actionError = typeof sp.err === "string" ? sp.err.trim() : "";
   const actionOk = typeof sp.ok === "string" ? sp.ok.trim() : "";
-  const tab =
+  const requestedTab =
     typeof sp.tab === "string" && sp.tab === "admin" ? "admin" : "vote";
 
   const supabase = await createClient();
@@ -548,6 +552,10 @@ export default async function ComiteHandicapPage(props: {
   // vean el resultado final aunque no sean admin).
   const trimLowGlobal = Number(committee?.trim_low ?? 0);
   const trimHighGlobal = Number(committee?.trim_high ?? 0);
+  const disqualifyThresholdGlobal = Number(
+    (committee as { disqualify_threshold?: number | null })?.disqualify_threshold ??
+      0
+  );
   const voteSummariesForVoter = entries.map((e) => {
     const adjustments = votesByEntry.get(e.entry_id) ?? [];
     const trim = trimmedAverage(adjustments, trimLowGlobal, trimHighGlobal);
@@ -555,16 +563,94 @@ export default async function ComiteHandicapPage(props: {
       e.handicap_index != null && trim.avg != null
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
+    const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
     return {
       entry_id: e.entry_id,
       n_votes: adjustments.length,
       n_live: trim.liveCount,
       avg_adjustment: trim.avg,
       suggested_hi: suggested,
+      n_disqualify: nDisq,
+      disqualified:
+        disqualifyThresholdGlobal > 0 && nDisq >= disqualifyThresholdGlobal,
     };
   });
-  const showAdmin = access.isAdmin && tab === "admin";
-  const showVote = tab === "vote" || !access.isAdmin;
+
+  let archivedSessions: ArchivedSession[] = [];
+  let snapshotsBySession: Record<string, ArchivedSnapshot[]> = {};
+
+  if (access.isAdmin && admin && committee?.id) {
+    const { data: sessionsRaw } = await admin
+      .from("handicap_committee_vote_sessions")
+      .select(
+        "id, session_no, name, notes, archived_at, trim_high, trim_low, disqualify_threshold, n_members_present, n_voters, n_entries"
+      )
+      .eq("committee_id", committee.id)
+      .order("archived_at", { ascending: false })
+      .limit(30);
+
+    archivedSessions = (sessionsRaw ?? []).map((s: any) => ({
+      id: String(s.id),
+      session_no: Number(s.session_no ?? 1),
+      name: s.name ?? null,
+      notes: s.notes ?? null,
+      archived_at: String(s.archived_at),
+      trim_high: Number(s.trim_high ?? 0),
+      trim_low: Number(s.trim_low ?? 0),
+      disqualify_threshold: Number(s.disqualify_threshold ?? 0),
+      n_members_present: Number(s.n_members_present ?? 0),
+      n_voters: Number(s.n_voters ?? 0),
+      n_entries: Number(s.n_entries ?? 0),
+    }));
+
+    const sessionIds = archivedSessions.map((s) => s.id);
+    if (sessionIds.length > 0) {
+      const { data: snapsRaw } = await admin
+        .from("handicap_committee_vote_snapshots")
+        .select(
+          "id, session_id, entry_player_name, entry_handicap_index, entry_category_code, n_votes, n_abstained, n_disqualify, avg_adjustment, suggested_hi, votes_anon"
+        )
+        .in("session_id", sessionIds);
+
+      for (const row of snapsRaw ?? []) {
+        const sid = String((row as any).session_id);
+        if (!snapshotsBySession[sid]) snapshotsBySession[sid] = [];
+        snapshotsBySession[sid].push({
+          id: String((row as any).id),
+          session_id: sid,
+          entry_player_name: (row as any).entry_player_name ?? null,
+          entry_handicap_index:
+            (row as any).entry_handicap_index != null
+              ? Number((row as any).entry_handicap_index)
+              : null,
+          entry_category_code: (row as any).entry_category_code ?? null,
+          n_votes: Number((row as any).n_votes ?? 0),
+          n_abstained: Number((row as any).n_abstained ?? 0),
+          n_disqualify: Number((row as any).n_disqualify ?? 0),
+          avg_adjustment:
+            (row as any).avg_adjustment != null
+              ? Number((row as any).avg_adjustment)
+              : null,
+          suggested_hi:
+            (row as any).suggested_hi != null
+              ? Number((row as any).suggested_hi)
+              : null,
+          votes_anon: (row as any).votes_anon ?? null,
+        });
+      }
+      for (const sid of Object.keys(snapshotsBySession)) {
+        snapshotsBySession[sid].sort((a, b) =>
+          (a.entry_player_name ?? "").localeCompare(
+            b.entry_player_name ?? "",
+            "es"
+          )
+        );
+      }
+    }
+  }
+
+  const showAdmin = access.isAdmin && requestedTab === "admin";
+  const showVote = !showAdmin;
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -622,7 +708,8 @@ export default async function ComiteHandicapPage(props: {
       ) : null}
       {actionOk === "votes_reset" ? (
         <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-950">
-          Votación reiniciada: se borraron todos los votos del comité.
+          Votación reiniciada: se archivó la sesión anterior y todos los miembros
+          deben volver a votar desde cero.
         </div>
       ) : null}
 
@@ -636,7 +723,7 @@ export default async function ComiteHandicapPage(props: {
                 : "border border-slate-400 bg-white text-slate-800"
             }`}
           >
-            Votar (prueba)
+            Votar
           </Link>
           <Link
             href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
@@ -723,44 +810,7 @@ export default async function ComiteHandicapPage(props: {
                   </form>
                 )}
 
-                <details className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2">
-                  <summary className="cursor-pointer text-sm font-semibold text-rose-900">
-                    Reiniciar votación (pruebas)
-                  </summary>
-                  <form
-                    action={resetHandicapCommitteeVotes}
-                    className="mt-2 flex flex-wrap items-end gap-2"
-                  >
-                    <input
-                      type="hidden"
-                      name="tournament_id"
-                      value={tournamentId}
-                    />
-                    <label className="flex flex-col gap-1 text-xs">
-                      <span className="font-medium text-rose-900">
-                        Escribe REINICIAR para confirmar
-                      </span>
-                      <input
-                        type="text"
-                        name="confirm"
-                        placeholder="REINICIAR"
-                        autoComplete="off"
-                        className="w-40 rounded border border-rose-400 bg-white px-2 py-1 text-sm"
-                      />
-                    </label>
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white"
-                    >
-                      Borrar todos los votos
-                    </button>
-                    <p className="basis-full text-[11px] text-rose-900/80">
-                      Elimina <strong>todos</strong> los votos guardados del comité
-                      en este torneo. Usar solo para pruebas o cuando los datos
-                      iniciales eran incorrectos. La acción no se puede deshacer.
-                    </p>
-                  </form>
-                </details>
+                <ResetCommitteeVotesPanel tournamentId={tournamentId} />
               </div>
 
               <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -1196,6 +1246,11 @@ export default async function ComiteHandicapPage(props: {
                   </tbody>
                 </table>
               </div>
+
+              <CommitteeVoteHistory
+                sessions={archivedSessions}
+                snapshotsBySession={snapshotsBySession}
+              />
             </>
           )}
         </section>
