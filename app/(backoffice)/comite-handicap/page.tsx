@@ -612,17 +612,23 @@ export default async function ComiteHandicapPage(props: {
   );
   const voteSummariesForVoter = entries.map((e) => {
     const adjustments = votesByEntry.get(e.entry_id) ?? [];
-    const trim = trimmedAverage(adjustments, trimLowGlobal, trimHighGlobal);
+    const nAbst = abstainedByEntry.get(e.entry_id) ?? 0;
+    const trim = trimmedAverage(
+      adjustments,
+      trimLowGlobal,
+      trimHighGlobal,
+      nAbst
+    );
     const suggested =
       e.handicap_index != null && trim.avg != null
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
-    const nAbst = abstainedByEntry.get(e.entry_id) ?? 0;
     return {
       entry_id: e.entry_id,
       n_votes: adjustments.length,
       n_live: trim.liveCount,
+      n_avg_denominator: trim.averageDenominator,
       n_abstained: nAbst,
       avg_adjustment: trim.avg,
       suggested_hi: suggested,
@@ -1368,7 +1374,7 @@ export default async function ComiteHandicapPage(props: {
                       <th className="px-3 py-2">Jugador</th>
                       <th className="px-3 py-2">HI actual</th>
                       <th className="px-3 py-2">Votos (anónimos)</th>
-                      <th className="px-3 py-2">Vivos</th>
+                      <th className="px-3 py-2">Vivos / prom.</th>
                       <th className="px-3 py-2">Prom. recortado</th>
                       <th className="px-3 py-2">HI sugerido</th>
                       <th className="px-3 py-2">No jugar</th>
@@ -1378,12 +1384,13 @@ export default async function ComiteHandicapPage(props: {
                   <tbody>
                     {entries.map((e) => {
                       const adjustments = votesByEntry.get(e.entry_id) ?? [];
+                      const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
                       const trim = trimmedAverage(
                         adjustments,
                         Number(committee.trim_low ?? 0),
-                        Number(committee.trim_high ?? 0)
+                        Number(committee.trim_high ?? 0),
+                        abstained
                       );
-                      const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
                       const disqVotes = disqualifyByEntry.get(e.entry_id) ?? 0;
                       const avg = trim.avg;
                       const suggested =
@@ -1443,7 +1450,15 @@ export default async function ComiteHandicapPage(props: {
                             </div>
                           </td>
                           <td className="px-3 py-2 tabular-nums">
-                            {trim.liveCount} / {adjustments.length}
+                            <div>
+                              {trim.liveCount} / {adjustments.length}
+                            </div>
+                            <div className="text-[10px] font-normal text-slate-500">
+                              Prom.: ÷{trim.averageDenominator}
+                              {trim.liveAbstainedAsZero > 0
+                                ? ` (${trim.liveAbstainedAsZero} abst. como 0)`
+                                : ""}
+                            </div>
                           </td>
                           <td className="px-3 py-2 tabular-nums">
                             {avg != null ? formatAdjustmentLabel(avg) : "—"}

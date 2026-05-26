@@ -28,6 +28,8 @@ export type HandicapVoteSummaryRow = {
   entry_id: string;
   n_votes: number;
   n_live: number;
+  /** Numerador efectivo del promedio (núm. vivos + abstenciones como 0). */
+  n_avg_denominator?: number;
   n_abstained?: number;
   avg_adjustment: number | null;
   suggested_hi: number | null;
@@ -163,8 +165,8 @@ export default function HandicapCommitteeVoter({
           </div>
           <p className="mt-1 text-xs text-slate-600">
             {committeeOpen
-              ? "Conteo anónimo conforme van votando los miembros. Refresca la página para ver los últimos cambios."
-              : "Promedio recortado anónimo por jugador. Solo lectura."}
+              ? "Conteo anónimo conforme van votando. Las abstenciones cuentan como 0 en el promedio (entran en la división). Refresca la página para actualizar."
+              : "Las abstenciones cuentan como 0 en el promedio. Solo lectura."}
           </p>
           <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full text-left text-sm">
@@ -172,7 +174,7 @@ export default function HandicapCommitteeVoter({
                 <tr>
                   <th className="px-3 py-2">Jugador</th>
                   <th className="px-3 py-2">HI actual</th>
-                  <th className="px-3 py-2">Votos</th>
+                  <th className="px-3 py-2">Vivos / total</th>
                   <th className="px-3 py-2">Abst.</th>
                   <th className="px-3 py-2">Prom. recortado</th>
                   <th className="px-3 py-2">HI sugerido</th>
@@ -197,10 +199,19 @@ export default function HandicapCommitteeVoter({
                         {e.handicap_index ?? "—"}
                       </td>
                       <td className="px-3 py-2 tabular-nums">
-                        {totalVotes > 0 ? (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
-                            {s?.n_live}/{totalVotes}
-                          </span>
+                        {totalVotes > 0 ||
+                        (s?.n_avg_denominator != null &&
+                          s.n_avg_denominator > 0) ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
+                              {s?.n_live}/{totalVotes} núm.
+                            </span>
+                            {(s?.n_avg_denominator ?? 0) > 0 ? (
+                              <span className="text-[10px] text-slate-500">
+                                ÷{s?.n_avg_denominator} en prom.
+                              </span>
+                            ) : null}
+                          </div>
                         ) : (
                           <span className="text-[11px] text-slate-400">
                             —
@@ -581,7 +592,12 @@ function PlayerVoteCard({
                 : "—"}
             </div>
             <div className="text-[10px] text-slate-500">
-              {summary.n_live} / {summary.n_votes} votos
+              {summary.n_live} núm. vivos / {summary.n_votes} núm.; prom. ÷
+              {summary.n_avg_denominator ??
+                summary.n_live + (summary.n_abstained ?? 0)}
+              {(summary.n_abstained ?? 0) > 0
+                ? ` (${summary.n_abstained} abst. como 0)`
+                : ""}
             </div>
           </div>
           <div>

@@ -24,19 +24,53 @@ export function clampAdjustment(raw: number) {
 export type TrimmedAverage = {
   values: { value: number; trimmed: boolean; reason: "low" | "high" | null }[];
   avg: number | null;
+  /** Votos numéricos que sobreviven al recorte (sin contar abstenciones). */
   liveCount: number;
+  /**
+   * Abstenciones que entran al promedio como 0 (suman al denominador).
+   */
+  liveAbstainedAsZero: number;
+  /** Denominador del promedio: liveCount + liveAbstainedAsZero */
+  averageDenominator: number;
 };
 
+/**
+ * Calcula promedio recortado.
+ *
+ * - `rawValues`: ajustes numéricos (votos con calificación).
+ * - `trimLow` / `trimHigh`: cuántos valores extremos descartar.
+ * - `liveAbstainedAsZero`: opcional. Si se proporciona, las abstenciones
+ *   "vivas" se cuentan como votos con valor 0 en el cálculo del promedio
+ *   (suman al denominador pero no al numerador). No se incluyen como chips
+ *   en `values` porque no son ajustes numéricos.
+ */
 export function trimmedAverage(
   rawValues: number[],
   trimLow: number,
-  trimHigh: number
+  trimHigh: number,
+  liveAbstainedAsZero: number = 0
 ): TrimmedAverage {
   const valid = rawValues
     .filter((v) => Number.isFinite(v))
     .map((v) => Number(v));
+  const abstZero = Math.max(0, Math.trunc(liveAbstainedAsZero));
   if (valid.length === 0) {
-    return { values: [], avg: null, liveCount: 0 };
+    if (abstZero > 0) {
+      return {
+        values: [],
+        avg: 0,
+        liveCount: 0,
+        liveAbstainedAsZero: abstZero,
+        averageDenominator: abstZero,
+      };
+    }
+    return {
+      values: [],
+      avg: null,
+      liveCount: 0,
+      liveAbstainedAsZero: 0,
+      averageDenominator: 0,
+    };
   }
 
   const sortedAsc = [...valid].sort((a, b) => a - b);
@@ -91,11 +125,16 @@ export function trimmedAverage(
     return { value: v, trimmed: false as const, reason: null as null };
   });
 
-  const avg = liveCount > 0 ? liveSum / liveCount : null;
+  const numericLiveCount = liveCount;
+  const averageDenominator = numericLiveCount + abstZero;
+  const avg =
+    averageDenominator > 0 ? liveSum / averageDenominator : null;
 
   return {
     values: tagged,
     avg,
-    liveCount,
+    liveCount: numericLiveCount,
+    liveAbstainedAsZero: abstZero,
+    averageDenominator,
   };
 }
