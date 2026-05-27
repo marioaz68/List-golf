@@ -260,7 +260,7 @@ export default async function ComiteHandicapPage(props: {
       playerIds.length
         ? entriesClient
             .from("players")
-            .select("id, first_name, last_name, club_id, gender")
+            .select("id, first_name, last_name, club_id, gender, ghin_number")
             .in("id", playerIds)
         : Promise.resolve({ data: [] as any[] }),
       categoryIds.length
@@ -379,10 +379,12 @@ export default async function ComiteHandicapPage(props: {
       }
 
       const pid = row.player_id ? String(row.player_id) : "";
+      const ghinRaw = player?.ghin_number != null ? String(player.ghin_number).trim() : "";
       return {
         entry_id: row.id as string,
         player_id: pid,
         player_name: playerName(player),
+        ghin_number: ghinRaw ? ghinRaw : null,
         handicap_index: hi,
         category_code: cat?.code ?? cat?.name ?? null,
         club_label: club?.short_name ?? club?.name ?? null,
@@ -1548,7 +1550,19 @@ export default async function ComiteHandicapPage(props: {
 
                       return (
                         <tr key={e.entry_id} className="border-t border-slate-100 align-top">
-                          <td className="px-3 py-2 font-medium">{e.player_name}</td>
+                          <td className="px-3 py-2 font-medium">
+                            <span className="inline-flex flex-wrap items-center gap-1">
+                              <span>{e.player_name}</span>
+                              {e.ghin_number ? (
+                                <span
+                                  className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-slate-700"
+                                  title="GHIN del jugador"
+                                >
+                                  GHIN {e.ghin_number}
+                                </span>
+                              ) : null}
+                            </span>
+                          </td>
                           <td className="px-3 py-2 tabular-nums">{e.handicap_index ?? "—"}</td>
                           <td className="px-3 py-2">
                             <div className="flex flex-wrap gap-1">
