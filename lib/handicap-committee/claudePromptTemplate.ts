@@ -60,28 +60,56 @@ Por favor:
    - Vocabulario suavizado (sin "trampa", "sandbagger", "BANDERA ROJA")
 
    📈 GRÁFICA 1: Historial de HI Index (línea, últimos 12 meses)
+   - Ancho mínimo 1400 px con scroll horizontal en móvil
 
    📊 GRÁFICA 2: Diferencial por Torneo
+   - Ancho mínimo 1800 px (extrawide) por la cantidad de torneos
+   - Scroll horizontal en móvil
    - Puntos rojos = cada torneo
    - Verdes = las 8 mejores (las que cuentan para HI Solo Torneos)
    - Línea naranja punteada = HI Tablero
    - Línea verde punteada = HI Solo Torneos
 
-   ⛳ GRÁFICA 3: Promedio por Hoyo 2026 (barras coloreadas vs par)
+   ⛳ GRÁFICA 3: Promedio BRUTO por Hoyo 2026 (barras coloreadas vs par)
+   - Ancho mínimo 1400 px con scroll horizontal
    - Verde si bajo par
    - Gris si dentro de 0.5
    - Amarillo si hasta 1 sobre par
    - Rojo si más de 1 sobre par
-   - Línea blanca punteada = par
+   - LÍNEA NEGRA del par dibujada ENCIMA de las barras (order: 0)
+   - Puntos del par con borde blanco y radio 6 para que se vea claro
 
-   🎯 GRÁFICA 4: Scores totales — puntos rojos torneos vs grises casuales
-   - En el tiempo (últimos 2 años aprox)
+   🎯 GRÁFICA 4: Promedio NETO por Hoyo 2026 (descontando H 80%)
+   - Ancho mínimo 1400 px con scroll horizontal
+   - Misma estructura que la gráfica 3 PERO con score neto
+   - Para cada hoyo: NETO = BRUTO − strokes recibidos según H 80% y SI
+   - Distribución de strokes: base = floor(H80/18), extra = H80%18 en los SI más bajos
+   - Etiquetas del eje X muestran "Hoyo N (Par X) (-Y)" donde Y = strokes recibidos
+   - Línea negra del par encima de las barras (igual que gráfica 3)
+   - Tooltip muestra: Neto, Bruto − strokes recibidos
+   - Colores iguales que gráfica 3 (verde/gris/amarillo/rojo vs par)
 
 6. Mobile-friendly:
    - Meta viewport configurado
    - Layout responsive (1 columna en móvil)
    - Botones grandes para touch
    - Funciona en Safari iOS, Chrome Android, Samsung Internet
+   - GRÁFICAS CON EJE Y FIJO Y SCROLL HORIZONTAL:
+     * .chart-wrap usa display: flex (no overflow directo)
+     * .y-axis-canvas: 60px de ancho, fijo a la izquierda, contiene
+       el canvas yChart_X que muestra SOLO el eje Y con valores
+     * .scroll-canvas: el resto del ancho, overflow-x: auto +
+       -webkit-overflow-scrolling: touch
+     * .chart-inner dentro de scroll-canvas: min-width 1400px (wide)
+       o 1800px (extrawide)
+     * El canvas principal (chartXxx) NO muestra ticks ni título del eje Y
+       (display: false). El eje Y solo se muestra en yChart_X (canvas fijo).
+     * AMBOS canvas usan los MISMOS yMin/yMax para que las escalas coincidan
+       exactamente.
+   - Helper JS makeYAxisOnlyChart(canvasId, type, yMin, yMax, yTitle):
+     crea un chart "fantasma" con un dataset transparente que solo
+     renderea el eje Y con la escala correcta
+   - Debajo de cada gráfica un texto "← desliza para ver toda la gráfica →"
 
 7. Archivos AUTOCONTENIDOS:
    - Todos los datos del jugador embebidos en el HTML
@@ -109,6 +137,30 @@ mismo jugador. Sin ffill, los reportes salen incompletos.
 
 ---
 
+## ✅ CHECKLIST QUE CLAUDE DEBE VERIFICAR
+
+Al recibir tu petición, Claude debe:
+
+- Aplicar ffill al cargar los archivos Hole by Hole
+- Verificar que cada jugador tenga al menos 1 ronda de torneo (si no, avisar)
+- Calcular HI Solo Torneos con mejores 8 de últimas 20
+- Tomar el HI Tablero del campo \`hi_roster\` en \`buro_data.json\`
+- Usar slopes correctos según tee (Rojas / Blancas / Azules / Doradas / Negras)
+- Calcular CH del Campo (100%) usando HI × (Slope/113) + (CR − Par)
+- Calcular H 80% Match Play = round(CH 100% × 0.80)
+- Pasar \`h_80\` al \`data_json\` para que la gráfica 4 (NETO) lo use
+- Distribuir strokes por hoyo: base = floor(H80/18), extra = H80%18 en SI más bajos
+- Generar la diferencia HI Tab − HI Tor para clasificar caso
+- Aplicar vocabulario suavizado (sin "sandbagger", etc.)
+- Verificar que las 4 gráficas se rendericen correctamente
+- Confirmar que la línea del par esté ENCIMA de las barras (gráficas 3 y 4)
+- Confirmar scroll horizontal en cada gráfica (wide / extrawide)
+- Confirmar EJE Y FIJO a la izquierda — al deslizar el contenido, los valores numéricos del eje Y permanecen visibles
+- Verificar que \`yMin\` / \`yMax\` sean idénticos entre el canvas de eje Y y el canvas principal (escalas alineadas)
+- Sincronizar archivos a CEREBRO GALLO Y a la carpeta de proyecto
+
+---
+
 ## 📁 UBICACIONES IMPORTANTES
 
 | Qué | Dónde |
@@ -117,7 +169,9 @@ mismo jugador. Sin ffill, los reportes salen incompletos.
 | Archivos Hole by Hole | \`Archivos fuente/Hole by Hole/\` |
 | Plantilla del reporte | \`Jugadores en revision comite/_TEMPLATE_reporte_jugador.html\` |
 | Reportes generados | \`Jugadores en revision comite/<GHIN>.html\` |
+| Buró principal | \`Reportes/Buró de Handicap.html\` |
 | Datos JSON | \`outputs/buro_data.json\` |
+| Nota de problemas | \`08 - Problemas conocidos y validaciones obligatorias.md\` |
 
 ---
 
