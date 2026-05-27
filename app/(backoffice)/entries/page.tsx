@@ -16,7 +16,10 @@ import { closeTournamentRegistration, reopenTournamentRegistration } from "./act
 import {
   ENTRY_SELECT_WITH_KIT,
   ENTRY_SELECT_WITHOUT_KIT,
+  ENTRY_SELECT_WITH_KIT_NO_FLAG,
+  ENTRY_SELECT_MINIMAL,
   isMissingTelegramKitColumnsError,
+  isMissingCommitteeFlagColumnsError,
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 import { queryInChunks } from "@/lib/supabase/queryInChunks";
@@ -627,40 +630,46 @@ export default async function EntriesPage({
 
   if (selectedTournamentId && !pageLoadError) {
     try {
-    const entriesResKit = await supabase
-      .from("tournament_entries")
-      .select(ENTRY_SELECT_WITH_KIT)
-      .eq("tournament_id", selectedTournamentId)
-      .order("player_number", { ascending: true, nullsFirst: false });
-
-    let entryRows: EntryRowBase[];
-
-    if (
-      entriesResKit.error &&
-      isMissingTelegramKitColumnsError(entriesResKit.error)
-    ) {
-      const entriesResBase = await supabase
+    async function fetchEntries(select: string) {
+      return supabase
         .from("tournament_entries")
-        .select(ENTRY_SELECT_WITHOUT_KIT)
+        .select(select)
         .eq("tournament_id", selectedTournamentId)
         .order("player_number", { ascending: true, nullsFirst: false });
-
-      if (entriesResBase.error) {
-        throw new Error(
-          `Error leyendo tournament_entries: ${entriesResBase.error.message}`
-        );
-      }
-
-      entryRows = (entriesResBase.data ?? []) as unknown as EntryRowBase[];
-    } else {
-      if (entriesResKit.error) {
-        throw new Error(
-          `Error leyendo tournament_entries: ${entriesResKit.error.message}`
-        );
-      }
-
-      entryRows = (entriesResKit.data ?? []) as unknown as EntryRowBase[];
     }
+
+    let entryRows: EntryRowBase[] = [];
+    let entriesRes = await fetchEntries(ENTRY_SELECT_WITH_KIT);
+
+    if (
+      entriesRes.error &&
+      isMissingCommitteeFlagColumnsError(entriesRes.error)
+    ) {
+      entriesRes = await fetchEntries(ENTRY_SELECT_WITH_KIT_NO_FLAG);
+    }
+
+    if (
+      entriesRes.error &&
+      isMissingTelegramKitColumnsError(entriesRes.error)
+    ) {
+      entriesRes = await fetchEntries(ENTRY_SELECT_WITHOUT_KIT);
+    }
+
+    if (
+      entriesRes.error &&
+      (isMissingCommitteeFlagColumnsError(entriesRes.error) ||
+        isMissingTelegramKitColumnsError(entriesRes.error))
+    ) {
+      entriesRes = await fetchEntries(ENTRY_SELECT_MINIMAL);
+    }
+
+    if (entriesRes.error) {
+      throw new Error(
+        `Error leyendo tournament_entries: ${entriesRes.error.message}`
+      );
+    }
+
+    entryRows = (entriesRes.data ?? []) as unknown as EntryRowBase[];
     const entryIds = entryRows.map((e) => e.id);
 
     const roundsRes = await supabase

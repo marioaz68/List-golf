@@ -208,14 +208,37 @@ export default async function ComiteHandicapPage(props: {
   const adminEarly = tryCreateAdminClient();
   const entriesClient = adminEarly ?? supabase;
 
-  const { data: entriesRaw } = await entriesClient
-    .from("tournament_entries")
-    .select(
-      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason"
-    )
-    .eq("tournament_id", tournamentId)
-    .neq("status", "cancelled")
-    .order("handicap_index", { ascending: true });
+  let entriesRaw: Array<Record<string, unknown>> = [];
+  {
+    const fullSelect =
+      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason";
+    const baseSelect =
+      "id, player_id, category_id, handicap_index, status";
+
+    const fullRes = await entriesClient
+      .from("tournament_entries")
+      .select(fullSelect)
+      .eq("tournament_id", tournamentId)
+      .neq("status", "cancelled")
+      .order("handicap_index", { ascending: true });
+
+    if (!fullRes.error) {
+      entriesRaw = (fullRes.data ?? []) as Array<Record<string, unknown>>;
+    } else if (
+      fullRes.error.code === "42703" ||
+      String(fullRes.error.message ?? "")
+        .toLowerCase()
+        .includes("flagged_")
+    ) {
+      const baseRes = await entriesClient
+        .from("tournament_entries")
+        .select(baseSelect)
+        .eq("tournament_id", tournamentId)
+        .neq("status", "cancelled")
+        .order("handicap_index", { ascending: true });
+      entriesRaw = (baseRes.data ?? []) as Array<Record<string, unknown>>;
+    }
+  }
 
   const playerIds = Array.from(
     new Set(
@@ -306,14 +329,18 @@ export default async function ComiteHandicapPage(props: {
 
   const playersWithHandicapFile = new Set<string>();
   if (adminEarly && playerIds.length > 0) {
-    const { data: fileRows } = await adminEarly
+    const { data: fileRows, error: fileErr } = await adminEarly
       .from("player_files")
       .select("player_id")
       .in("player_id", playerIds)
       .eq("kind", "handicap_report");
-    for (const f of fileRows ?? []) {
-      if ((f as { player_id?: string }).player_id) {
-        playersWithHandicapFile.add(String((f as { player_id: string }).player_id));
+    if (!fileErr) {
+      for (const f of fileRows ?? []) {
+        if ((f as { player_id?: string }).player_id) {
+          playersWithHandicapFile.add(
+            String((f as { player_id: string }).player_id)
+          );
+        }
       }
     }
   }
