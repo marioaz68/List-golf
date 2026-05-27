@@ -173,17 +173,18 @@ export default function HandicapCommitteeVoter({
 
       {/* Segmented tab bar: Pendientes / Calificados / Resultados */}
       <div className="sticky top-0 z-10 -mx-1 rounded-xl border border-slate-300 bg-white/95 p-1 shadow-sm backdrop-blur">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
             onClick={() => setTab("pending")}
-            className={[
-              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
-              tab === "pending"
-                ? "bg-amber-500 text-white shadow"
-                : "bg-slate-100 text-slate-700",
-            ].join(" ")}
             disabled={!committeeOpen}
+            aria-pressed={tab === "pending"}
+            className={[
+              "flex flex-col items-center justify-center rounded-lg border px-2 py-2 text-[11px] font-bold uppercase tracking-wide shadow-sm transition active:scale-[0.98] active:shadow-inner disabled:opacity-50",
+              tab === "pending"
+                ? "border-amber-600 bg-amber-500 text-white shadow-md"
+                : "border-amber-300 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-900 hover:bg-amber-100",
+            ].join(" ")}
           >
             <span>Pendientes</span>
             <span className="mt-0.5 text-base font-extrabold tabular-nums">
@@ -193,11 +194,12 @@ export default function HandicapCommitteeVoter({
           <button
             type="button"
             onClick={() => setTab("voted")}
+            aria-pressed={tab === "voted"}
             className={[
-              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
+              "flex flex-col items-center justify-center rounded-lg border px-2 py-2 text-[11px] font-bold uppercase tracking-wide shadow-sm transition active:scale-[0.98] active:shadow-inner",
               tab === "voted"
-                ? "bg-emerald-600 text-white shadow"
-                : "bg-slate-100 text-slate-700",
+                ? "border-emerald-700 bg-emerald-600 text-white shadow-md"
+                : "border-emerald-300 bg-gradient-to-b from-emerald-50 to-emerald-100 text-emerald-900 hover:bg-emerald-100",
             ].join(" ")}
           >
             <span>Calificados</span>
@@ -208,13 +210,14 @@ export default function HandicapCommitteeVoter({
           <button
             type="button"
             onClick={() => setTab("results")}
-            className={[
-              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
-              tab === "results"
-                ? "bg-slate-900 text-white shadow"
-                : "bg-slate-100 text-slate-700",
-            ].join(" ")}
             disabled={!hasResults}
+            aria-pressed={tab === "results"}
+            className={[
+              "flex flex-col items-center justify-center rounded-lg border px-2 py-2 text-[11px] font-bold uppercase tracking-wide shadow-sm transition active:scale-[0.98] active:shadow-inner disabled:opacity-50",
+              tab === "results"
+                ? "border-slate-950 bg-slate-900 text-white shadow-md"
+                : "border-slate-400 bg-gradient-to-b from-slate-50 to-slate-200 text-slate-900 hover:bg-slate-200",
+            ].join(" ")}
           >
             <span>Resultados</span>
             <span className="mt-0.5 text-base font-extrabold tabular-nums">
