@@ -10,7 +10,7 @@ import {
   isBackofficePath,
 } from "@/lib/auth/permissions";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
   const module = getModuleFromPath(pathname);
   const needsAuth = isBackofficePath(pathname);
 
-  // Rutas públicas: no crear cliente Supabase (evita tumbar "/" si falla env/cookies).
+  // Rutas publicas: no crear cliente Supabase (evita tumbar "/" si falla env/cookies).
   if (!needsAuth && !module) {
     return NextResponse.next({
       request: { headers: requestHeaders },
