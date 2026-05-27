@@ -136,11 +136,27 @@ export default function TarjetaCaptureClient({
     scoresFromPlayers(initial.players)
   );
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
+  const [draftScore, setDraftScore] = useState<string>("");
+  /** Si true, el primer dígito reemplaza al valor previo (no se concatena). */
+  const [draftFresh, setDraftFresh] = useState<boolean>(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [syncHint, setSyncHint] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const activeCellRef = useRef<ActiveCell | null>(null);
   const savingRef = useRef(false);
+
+  function openCell(entryId: string, hole: HoleNumber) {
+    const existing = scoresByEntry[entryId]?.[hole] ?? null;
+    setActiveCell({ entryId, hole });
+    setDraftScore(existing != null ? String(existing) : "");
+    setDraftFresh(true);
+  }
+
+  function closeKeypad() {
+    setActiveCell(null);
+    setDraftScore("");
+    setDraftFresh(false);
+  }
 
   useEffect(() => {
     activeCellRef.current = activeCell;
@@ -239,7 +255,30 @@ export default function TarjetaCaptureClient({
   function pickScore(strokes: number | null) {
     if (!activeCell) return;
     void persistScore(activeCell.entryId, activeCell.hole, strokes);
-    setActiveCell(null);
+    closeKeypad();
+  }
+
+  function pressDigit(n: number) {
+    if (!activeCell) return;
+    const base = draftFresh ? "" : draftScore;
+    const next = `${base}${n}`.replace(/^0+(?=\d)/, "");
+    setDraftScore(next);
+    if (draftFresh) setDraftFresh(false);
+  }
+
+  function pressBackspace() {
+    if (!activeCell) return;
+    setDraftFresh(false);
+    setDraftScore((cur) => cur.slice(0, -1));
+  }
+
+  function pressEnter() {
+    if (!activeCell) return;
+    const numeric = Number(draftScore);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      void persistScore(activeCell.entryId, activeCell.hole, numeric);
+    }
+    closeKeypad();
   }
 
   const mobileUrl = `/score-entry/mobile?group_id=${encodeURIComponent(meta.groupId)}`;
@@ -305,7 +344,7 @@ export default function TarjetaCaptureClient({
                   scoresByEntry={scoresByEntry}
                   activeCell={activeCell}
                   savingKey={savingKey}
-                  onCellTap={(entryId, hole) => setActiveCell({ entryId, hole })}
+                  onCellTap={openCell}
                 />
                 <Section
                   title="BACK 9"
@@ -314,7 +353,7 @@ export default function TarjetaCaptureClient({
                   scoresByEntry={scoresByEntry}
                   activeCell={activeCell}
                   savingKey={savingKey}
-                  onCellTap={(entryId, hole) => setActiveCell({ entryId, hole })}
+                  onCellTap={openCell}
                 />
               </>
             )}
@@ -325,43 +364,75 @@ export default function TarjetaCaptureClient({
       {activeCell && activePlayer ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-300 bg-white px-2 pb-3 pt-2 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]">
           <div className="mx-auto max-w-[390px]">
-            <div className="mb-2 flex items-center justify-between text-xs">
+            <div className="mb-1 flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-900">
                 {activePlayer.initials} · Hoyo {activeCell.hole} (Par{" "}
                 {PAR_BY_HOLE[activeCell.hole]})
               </span>
               <button
                 type="button"
-                onClick={() => setActiveCell(null)}
+                onClick={closeKeypad}
                 className="text-slate-500"
               >
                 Cerrar
               </button>
             </div>
-            <div className="grid grid-cols-6 gap-1.5">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
+            <div
+              className={[
+                "mb-2 text-center text-3xl font-bold leading-tight",
+                draftFresh ? "text-slate-400" : "text-black",
+              ].join(" ")}
+            >
+              {draftScore || "—"}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                 <button
                   key={n}
                   type="button"
-                  onClick={() => pickScore(n)}
-                  className="h-10 rounded-lg bg-slate-900 text-sm font-bold text-white"
+                  onClick={() => pressDigit(n)}
+                  className="h-11 rounded-lg bg-slate-100 text-lg font-bold text-slate-900"
                 >
                   {n}
                 </button>
               ))}
               <button
                 type="button"
+                onClick={() => pickScore(null)}
+                className="h-11 rounded-lg bg-red-100 text-sm font-semibold text-red-700"
+              >
+                Borrar
+              </button>
+              <button
+                type="button"
+                onClick={() => pressDigit(0)}
+                className="h-11 rounded-lg bg-slate-100 text-lg font-bold text-slate-900"
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={pressBackspace}
+                className="h-11 rounded-lg bg-slate-200 text-sm font-semibold text-slate-900"
+              >
+                ←
+              </button>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
                 onClick={() => pickScore(PAR_BY_HOLE[activeCell.hole])}
-                className="h-10 rounded-lg border-2 border-slate-800 text-sm font-bold text-slate-900"
+                className="h-11 rounded-lg border-2 border-slate-800 text-sm font-bold text-slate-900"
               >
                 Par
               </button>
               <button
                 type="button"
-                onClick={() => pickScore(null)}
-                className="col-span-2 h-10 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700"
+                onClick={pressEnter}
+                disabled={!draftScore || Number(draftScore) <= 0}
+                className="h-11 rounded-lg bg-emerald-600 text-sm font-bold text-white disabled:opacity-50"
               >
-                Borrar
+                Enter
               </button>
             </div>
           </div>
