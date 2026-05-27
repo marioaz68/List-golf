@@ -148,23 +148,51 @@ export default function HandicapCommitteeVoter({
   // Al regresar del visor del reporte, la URL trae #entry-<id>. Si el
   // jugador está en "Calificados" (ya voté), tenemos que cambiar a esa
   // pestaña antes de que la carta se monte para que el scroll funcione.
+  // IMPORTANTE: solo lo aplicamos UNA VEZ al cargar la página; si el efecto
+  // dependiera de `tab` o se ejecutara después, se pelearía con el cambio
+  // manual del usuario (ej. tocar "Resultados") y revertiría su click.
+  const hashAppliedRef = useRef(false);
   useEffect(() => {
+    if (hashAppliedRef.current) return;
     if (typeof window === "undefined") return;
     const hash = window.location.hash;
-    if (!hash.startsWith("#entry-")) return;
+    if (!hash.startsWith("#entry-")) {
+      hashAppliedRef.current = true;
+      return;
+    }
     const targetId = hash.slice("#entry-".length);
-    if (!targetId) return;
+    if (!targetId) {
+      hashAppliedRef.current = true;
+      return;
+    }
+
+    const isInEntries = entries.some((e) => e.entry_id === targetId);
+    if (!isInEntries) {
+      hashAppliedRef.current = true;
+      return;
+    }
 
     const isInVoted = voteByEntry.has(targetId);
-    const isInEntries = entries.some((e) => e.entry_id === targetId);
-    if (!isInEntries) return;
-
-    if (isInVoted && tab !== "voted") {
+    if (isInVoted) {
       setTab("voted");
-    } else if (!isInVoted && tab !== "pending" && committeeOpen) {
+    } else if (committeeOpen) {
       setTab("pending");
     }
-  }, [voteByEntry, entries, tab, committeeOpen]);
+    hashAppliedRef.current = true;
+  }, [voteByEntry, entries, committeeOpen]);
+
+  // Cuando el usuario cambia de pestaña a mano, limpiamos el hash para que
+  // no se intente "regresar al jugador" en futuras navegaciones.
+  function handleTabClick(next: VoteTab) {
+    setTab(next);
+    if (typeof window !== "undefined" && window.location.hash) {
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
+  }
 
   const canVote = committeeOpen && isPresent;
 
@@ -216,7 +244,7 @@ export default function HandicapCommitteeVoter({
         <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
-            onClick={() => setTab("pending")}
+            onClick={() => handleTabClick("pending")}
             disabled={!committeeOpen}
             aria-pressed={tab === "pending"}
             className={[
@@ -233,7 +261,7 @@ export default function HandicapCommitteeVoter({
           </button>
           <button
             type="button"
-            onClick={() => setTab("voted")}
+            onClick={() => handleTabClick("voted")}
             aria-pressed={tab === "voted"}
             className={[
               "flex flex-col items-center justify-center rounded-lg border px-2 py-2 text-[11px] font-bold uppercase tracking-wide shadow-sm transition active:scale-[0.98] active:shadow-inner",
@@ -249,7 +277,7 @@ export default function HandicapCommitteeVoter({
           </button>
           <button
             type="button"
-            onClick={() => setTab("results")}
+            onClick={() => handleTabClick("results")}
             disabled={!hasResults}
             aria-pressed={tab === "results"}
             className={[
@@ -688,11 +716,15 @@ function PlayerVoteCard({
   // Si esta carta es la del hash actual (regreso desde el visor de reporte),
   // la abrimos y la centramos en pantalla. Esperamos a que el navegador
   // termine su scroll-restoration y a que el contenido expandido se
-  // renderee antes de tomar el control del scroll.
+  // renderee antes de tomar el control del scroll. Después limpiamos el
+  // hash para que el regreso solo ocurra una vez.
+  const scrollAppliedRef = useRef(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (scrollAppliedRef.current) return;
     if (window.location.hash !== `#${articleId}`) return;
     setOpen(true);
+    scrollAppliedRef.current = true;
     let raf = 0;
     const t = window.setTimeout(() => {
       raf = window.requestAnimationFrame(() => {
@@ -700,6 +732,11 @@ function PlayerVoteCard({
           block: "center",
           behavior: "smooth",
         });
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search
+        );
       });
     }, 250);
     return () => {
