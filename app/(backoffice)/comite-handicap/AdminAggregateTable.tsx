@@ -83,9 +83,13 @@ export default function AdminAggregateTable({
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const r of rows) {
-      // Por defecto, marcamos las filas con votos vivos y promedio calculado.
+      // Por defecto solo preseleccionamos filas con votos y ajuste distinto de cero.
+      const adj = defaultAdjustment(r.avg_adjustment);
       init[r.entry_id] =
-        r.avg_adjustment != null && r.liveCount > 0;
+        r.hi_current != null &&
+        r.avg_adjustment != null &&
+        r.liveCount > 0 &&
+        adj !== 0;
     }
     return init;
   });
@@ -110,11 +114,10 @@ export default function AdminAggregateTable({
     setSelected((prev) => ({ ...prev, [entryId]: !prev[entryId] }));
   }
 
-  function selectAllWithVotes() {
+  function selectAllEligible() {
     const next: Record<string, boolean> = {};
     for (const r of rows) {
-      next[r.entry_id] =
-        r.avg_adjustment != null && r.liveCount > 0;
+      next[r.entry_id] = r.hi_current != null;
     }
     setSelected(next);
   }
@@ -183,7 +186,7 @@ export default function AdminAggregateTable({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={selectAllWithVotes}
+            onClick={selectAllEligible}
             disabled={anyDisabled}
             className="rounded border border-slate-400 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
           >
@@ -222,13 +225,11 @@ export default function AdminAggregateTable({
                     rows.length > 0 &&
                     rows.every(
                       (r) =>
-                        selected[r.entry_id] ||
-                        r.avg_adjustment == null ||
-                        r.liveCount === 0
+                        selected[r.entry_id] || r.hi_current == null
                     )
                   }
                   onChange={(e) => {
-                    if (e.target.checked) selectAllWithVotes();
+                    if (e.target.checked) selectAllEligible();
                     else clearAllSelected();
                   }}
                   className="h-4 w-4 accent-emerald-700"
@@ -255,9 +256,10 @@ export default function AdminAggregateTable({
               const adj = adjustments[r.entry_id] ?? 0;
               const finalHi = computeFinalHi(r.hi_current, adj);
               const hasVotes = r.avg_adjustment != null && r.liveCount > 0;
+              const canEdit = r.hi_current != null;
               const isSel = !!selected[r.entry_id];
               const isBusy = busyEntry === r.entry_id;
-              const disableRow = anyDisabled || !hasVotes || r.hi_current == null;
+              const disableApply = anyDisabled || !canEdit || adj === 0;
               const over =
                 disqualifyThreshold > 0 &&
                 r.disqualifyVotes >= disqualifyThreshold;
@@ -267,6 +269,7 @@ export default function AdminAggregateTable({
                   className={[
                     "border-t border-slate-100 align-top",
                     isSel ? "bg-emerald-50/40" : "",
+                    !hasVotes ? "bg-slate-50/60" : "",
                   ].join(" ")}
                 >
                   <td className="px-2 py-2 text-center">
@@ -274,7 +277,7 @@ export default function AdminAggregateTable({
                       type="checkbox"
                       checked={isSel}
                       onChange={() => toggleSelected(r.entry_id)}
-                      disabled={anyDisabled || !hasVotes || r.hi_current == null}
+                      disabled={anyDisabled || !canEdit}
                       className="h-4 w-4 accent-emerald-700"
                       aria-label={r.player_name}
                     />
@@ -349,7 +352,7 @@ export default function AdminAggregateTable({
                       : "—"}
                   </td>
                   <td className="px-3 py-2">
-                    {hasVotes ? (
+                    {canEdit ? (
                       <input
                         type="number"
                         min={-5}
@@ -366,16 +369,24 @@ export default function AdminAggregateTable({
                             ? "text-slate-400"
                             : "text-emerald-800",
                         ].join(" ")}
+                        title={
+                          !hasVotes ? tA.manualAdjNoVotesHint : undefined
+                        }
                       />
                     ) : (
-                      <span className="text-xs text-slate-400">
-                        {tA.noLiveVotes}
-                      </span>
+                      <span className="text-xs text-slate-400">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {hasVotes && finalHi != null ? (
-                      <span className="rounded bg-emerald-100 px-2 py-1 text-emerald-900">
+                    {canEdit && finalHi != null ? (
+                      <span
+                        className={[
+                          "rounded px-2 py-1 tabular-nums",
+                          adj === 0
+                            ? "bg-slate-100 text-slate-600"
+                            : "bg-emerald-100 text-emerald-900",
+                        ].join(" ")}
+                      >
                         {finalHi.toFixed(1)}
                       </span>
                     ) : (
@@ -420,7 +431,7 @@ export default function AdminAggregateTable({
                     <button
                       type="button"
                       onClick={() => handleApplyOne(r.entry_id)}
-                      disabled={disableRow || adj === 0}
+                      disabled={disableApply}
                       className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
                     >
                       {isBusy ? tA.bulkBarApplying : tA.applyHi}
