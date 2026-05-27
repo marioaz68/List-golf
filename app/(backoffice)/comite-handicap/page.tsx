@@ -6,6 +6,7 @@ import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
+  distributionChips,
   formatAdjustmentLabel,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
@@ -1399,13 +1400,19 @@ export default async function ComiteHandicapPage(props: {
                           : null;
 
                       const shuffledChips = (() => {
-                        const arr = [...trim.values];
+                        const arr = distributionChips(
+                          trim.values,
+                          trim.liveAbstainedAsZero
+                        );
                         for (let i = arr.length - 1; i > 0; i -= 1) {
                           const j = Math.floor(Math.random() * (i + 1));
                           [arr[i], arr[j]] = [arr[j], arr[i]];
                         }
                         return arr;
                       })();
+
+                      const totalVotesIncAbst = adjustments.length + abstained;
+                      const liveIncAbst = trim.liveCount + trim.liveAbstainedAsZero;
 
                       return (
                         <tr key={e.entry_id} className="border-t border-slate-100 align-top">
@@ -1422,41 +1429,39 @@ export default async function ComiteHandicapPage(props: {
                                   <span
                                     key={`${e.entry_id}-${idx}`}
                                     title={
-                                      v.trimmed
-                                        ? v.reason === "low"
-                                          ? "Descartado (más severo)"
-                                          : "Descartado (más suave)"
-                                        : "Voto vivo"
+                                      v.abstained
+                                        ? "Abstención (cuenta como 0 en el promedio)"
+                                        : v.trimmed
+                                          ? v.reason === "low"
+                                            ? "Descartado (más severo)"
+                                            : "Descartado (más suave)"
+                                          : "Voto vivo"
                                     }
                                     className={[
                                       "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
                                       v.trimmed
                                         ? "border border-slate-300 bg-slate-100 text-slate-500 line-through"
-                                        : "bg-emerald-600 text-white",
+                                        : v.abstained
+                                          ? "border border-emerald-600 bg-emerald-50 text-emerald-800"
+                                          : "bg-emerald-600 text-white",
                                     ].join(" ")}
                                   >
-                                    {formatAdjustmentLabel(v.value)}
+                                    {v.abstained
+                                      ? "0·abst"
+                                      : formatAdjustmentLabel(v.value)}
                                   </span>
                                 ))
                               )}
-                              {abstained > 0 ? (
-                                <span
-                                  className="rounded border border-amber-400 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800"
-                                  title="Miembros que se abstuvieron"
-                                >
-                                  {abstained} abst.
-                                </span>
-                              ) : null}
                             </div>
                           </td>
                           <td className="px-3 py-2 tabular-nums">
                             <div>
-                              {trim.liveCount} / {adjustments.length}
+                              {liveIncAbst} / {totalVotesIncAbst}
                             </div>
                             <div className="text-[10px] font-normal text-slate-500">
                               Prom.: ÷{trim.averageDenominator}
                               {trim.liveAbstainedAsZero > 0
-                                ? ` (${trim.liveAbstainedAsZero} abst. como 0)`
+                                ? ` (${trim.liveAbstainedAsZero} abst. = 0)`
                                 : ""}
                             </div>
                           </td>

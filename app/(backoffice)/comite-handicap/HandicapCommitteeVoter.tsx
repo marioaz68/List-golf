@@ -165,8 +165,8 @@ export default function HandicapCommitteeVoter({
           </div>
           <p className="mt-1 text-xs text-slate-600">
             {committeeOpen
-              ? "Conteo anónimo conforme van votando. Las abstenciones cuentan como 0 en el promedio (entran en la división). Refresca la página para actualizar."
-              : "Las abstenciones cuentan como 0 en el promedio. Solo lectura."}
+              ? "Conteo anónimo. Las abstenciones cuentan como voto vivo con valor 0 (entran en el divisor del promedio). Refresca para actualizar."
+              : "Las abstenciones cuentan como voto vivo con valor 0. Solo lectura."}
           </p>
           <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full text-left text-sm">
@@ -184,8 +184,10 @@ export default function HandicapCommitteeVoter({
               <tbody>
                 {entries.map((e) => {
                   const s = summaryByEntry.get(e.entry_id);
-                  const totalVotes = s?.n_votes ?? 0;
+                  const totalNumeric = s?.n_votes ?? 0;
                   const nAbst = s?.n_abstained ?? 0;
+                  const totalVotes = totalNumeric + nAbst;
+                  const liveIncAbst = (s?.n_live ?? 0) + nAbst;
                   return (
                     <tr
                       key={e.entry_id}
@@ -203,8 +205,11 @@ export default function HandicapCommitteeVoter({
                         (s?.n_avg_denominator != null &&
                           s.n_avg_denominator > 0) ? (
                           <div className="flex flex-col gap-0.5">
-                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
-                              {s?.n_live}/{totalVotes} núm.
+                            <span
+                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800"
+                              title="Votos vivos (incluye abstenciones como 0) / votos totales recibidos"
+                            >
+                              {liveIncAbst}/{totalVotes}
                             </span>
                             {(s?.n_avg_denominator ?? 0) > 0 ? (
                               <span className="text-[10px] text-slate-500">

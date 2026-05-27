@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { formatAdjustmentLabel } from "@/lib/handicap-committee/constants";
+import {
+  distributionChips,
+  formatAdjustmentLabel,
+} from "@/lib/handicap-committee/constants";
 
 export type ArchivedSession = {
   id: string;
@@ -28,7 +31,11 @@ export type ArchivedSnapshot = {
   n_disqualify: number;
   avg_adjustment: number | null;
   suggested_hi: number | null;
-  votes_anon: Array<{ value: number; trimmed: boolean; reason?: string }> | null;
+  votes_anon: Array<{
+    value: number;
+    trimmed: boolean;
+    reason?: "low" | "high" | null;
+  }> | null;
 };
 
 type Props = {
@@ -130,7 +137,17 @@ export default function CommitteeVoteHistory({
                           const over =
                             s.disqualify_threshold > 0 &&
                             row.n_disqualify >= s.disqualify_threshold;
-                          const chips = row.votes_anon ?? [];
+                          const chips = distributionChips(
+                            (row.votes_anon ?? []).map((v) => ({
+                              value: Number(v.value),
+                              trimmed: Boolean(v.trimmed),
+                              reason:
+                                v.reason === "low" || v.reason === "high"
+                                  ? v.reason
+                                  : null,
+                            })),
+                            row.n_abstained
+                          );
                           return (
                             <tr
                               key={row.id}
@@ -150,22 +167,28 @@ export default function CommitteeVoteHistory({
                                     chips.map((v, i) => (
                                       <span
                                         key={i}
+                                        title={
+                                          v.abstained
+                                            ? "Abstención (cuenta como 0)"
+                                            : v.trimmed
+                                              ? "Descartado por recorte"
+                                              : "Voto vivo"
+                                        }
                                         className={[
                                           "rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums",
                                           v.trimmed
                                             ? "bg-slate-100 text-slate-500 line-through"
-                                            : "bg-emerald-600 text-white",
+                                            : v.abstained
+                                              ? "border border-emerald-600 bg-emerald-50 text-emerald-800"
+                                              : "bg-emerald-600 text-white",
                                         ].join(" ")}
                                       >
-                                        {formatAdjustmentLabel(v.value)}
+                                        {v.abstained
+                                          ? "0·abst"
+                                          : formatAdjustmentLabel(v.value)}
                                       </span>
                                     ))
                                   )}
-                                  {row.n_abstained > 0 ? (
-                                    <span className="text-[10px] text-amber-700">
-                                      {row.n_abstained} abst.
-                                    </span>
-                                  ) : null}
                                 </div>
                               </td>
                               <td className="px-2 py-1.5 tabular-nums">
