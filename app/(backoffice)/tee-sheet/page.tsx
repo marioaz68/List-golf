@@ -37,8 +37,8 @@ import {
   reopenStartingOrder,
   saveCategoryPlanOrder,
 } from "./actions";
-import TeeSheetDnD from "./TeeSheetDnD";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import TeeSheetDnD from "./TeeSheetDnDLoader";
 import type { TournamentSettings } from "@/types/tournament";
 
 export const dynamic = "force-dynamic";
@@ -168,19 +168,30 @@ export default async function TeeSheetPage(props: {
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     console.error("[tee-sheet] render:", err);
-    const locale = await getLocale();
-    const ts = messages[locale].teeSheet;
     const message =
       err instanceof Error ? err.message : "Error inesperado al cargar salidas.";
+    let title = "Salidas/Grupos";
+    let loadTitle = "No se pudo cargar salidas/grupos";
+    let loadBody =
+      "Puede deberse a permisos en Supabase (RLS), a una columna faltante en producción (migraciones pendientes) o a otro error de PostgREST.";
+    let loadTechnical = "Detalle del servidor";
+    try {
+      const locale = await getLocale();
+      const ts = messages[locale].teeSheet;
+      title = ts.title;
+      loadTitle = ts.loadErrorTitle;
+      loadBody = ts.loadErrorBody;
+      loadTechnical = ts.loadErrorTechnical;
+    } catch {
+      /* no volver a fallar en el catch */
+    }
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          {ts.title}
-        </h1>
+        <h1 className="text-3xl font-bold tracking-tight text-white">{title}</h1>
         <TeeSheetLoadError
-          title={ts.loadErrorTitle}
-          body={ts.loadErrorBody}
-          technicalLabel={ts.loadErrorTechnical}
+          title={loadTitle}
+          body={loadBody}
+          technicalLabel={loadTechnical}
           message={message}
         />
       </div>
@@ -191,10 +202,36 @@ export default async function TeeSheetPage(props: {
 async function TeeSheetPageInner(props: {
   searchParams?: SP | Promise<SP>;
 }) {
-  const locale = await getLocale();
+  let locale: "es" | "en" = "es";
+  try {
+    locale = await getLocale();
+  } catch (err) {
+    console.error("[tee-sheet] getLocale:", err);
+  }
   const teeTitle = messages[locale].teeSheet.title;
   const ts = messages[locale].teeSheet;
-  const supabase = await createClient();
+
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  try {
+    supabase = await createClient();
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "No se pudo conectar con Supabase en el servidor.";
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold tracking-tight text-white">{teeTitle}</h1>
+        <TeeSheetLoadError
+          title={ts.loadErrorTitle}
+          body={ts.loadErrorBody}
+          technicalLabel={ts.loadErrorTechnical}
+          message={message}
+        />
+      </div>
+    );
+  }
+
   const sp = props.searchParams ? await props.searchParams : {};
   let pageLoadError: string | null = null;
   const noteLoadError = (msg: string) => {
