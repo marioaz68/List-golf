@@ -121,7 +121,74 @@ function isStartingOrderConfirmed(notes: string | null | undefined) {
   return String(notes ?? "").includes(STARTING_ORDER_CONFIRMED_MARKER);
 }
 
+function isNextRedirect(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "digest" in err &&
+    typeof (err as { digest?: string }).digest === "string" &&
+    String((err as { digest: string }).digest).startsWith("NEXT_REDIRECT")
+  );
+}
+
+function TeeSheetLoadError({
+  title,
+  body,
+  technicalLabel,
+  message,
+}: {
+  title: string;
+  body: string;
+  technicalLabel: string;
+  message: string;
+}) {
+  return (
+    <div className="space-y-6">
+      <section className="rounded-lg border border-red-300 bg-red-50 p-4 text-slate-950 shadow-sm">
+        <p className="font-semibold text-red-950">{title}</p>
+        <p className="mt-2 text-sm text-red-900">{body}</p>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm font-medium text-red-800">
+            {technicalLabel}
+          </summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs text-red-700">
+            {message}
+          </pre>
+        </details>
+      </section>
+    </div>
+  );
+}
+
 export default async function TeeSheetPage(props: {
+  searchParams?: SP | Promise<SP>;
+}) {
+  try {
+    return await TeeSheetPageInner(props);
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    console.error("[tee-sheet] render:", err);
+    const locale = await getLocale();
+    const ts = messages[locale].teeSheet;
+    const message =
+      err instanceof Error ? err.message : "Error inesperado al cargar salidas.";
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold tracking-tight text-white">
+          {ts.title}
+        </h1>
+        <TeeSheetLoadError
+          title={ts.loadErrorTitle}
+          body={ts.loadErrorBody}
+          technicalLabel={ts.loadErrorTechnical}
+          message={message}
+        />
+      </div>
+    );
+  }
+}
+
+async function TeeSheetPageInner(props: {
   searchParams?: SP | Promise<SP>;
 }) {
   const locale = await getLocale();
@@ -129,6 +196,10 @@ export default async function TeeSheetPage(props: {
   const ts = messages[locale].teeSheet;
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
+  let pageLoadError: string | null = null;
+  const noteLoadError = (msg: string) => {
+    if (!pageLoadError) pageLoadError = msg;
+  };
 
   const tournamentId =
     typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
@@ -152,7 +223,7 @@ export default async function TeeSheetPage(props: {
     .order("created_at", { ascending: false });
 
   if (tErr) {
-    throw new Error("Error leyendo torneos: " + tErr.message);
+    noteLoadError("Error leyendo torneos: " + tErr.message);
   }
 
   const tournaments: (Tournament & { settings: TournamentSettings | null })[] =
@@ -192,7 +263,7 @@ export default async function TeeSheetPage(props: {
     : { data: [], error: null };
 
   if (rErr) {
-    throw new Error("Error leyendo rounds: " + rErr.message);
+    noteLoadError("Error leyendo rounds: " + rErr.message);
   }
 
   const rounds: Round[] = (rData ?? []) as any[];
@@ -290,7 +361,7 @@ export default async function TeeSheetPage(props: {
       : { data: [], error: null };
 
   if (gErr) {
-    throw new Error("Error leyendo grupos: " + gErr.message);
+    noteLoadError("Error leyendo grupos: " + gErr.message);
   }
 
   const groups: GroupRow[] = (gData ?? []) as any[];
@@ -331,7 +402,7 @@ export default async function TeeSheetPage(props: {
       : { data: [], error: null };
 
   if (mErr) {
-    throw new Error("Error leyendo miembros de grupos: " + mErr.message);
+    noteLoadError("Error leyendo miembros de grupos: " + mErr.message);
   }
 
   const membersRaw = (mData ?? []) as any[];
@@ -534,7 +605,9 @@ for (const row of membersRaw) {
       : { data: [], error: null };
 
   if (planCategoriesErr) {
-    throw new Error("Error leyendo categorías para planeación: " + planCategoriesErr.message);
+    noteLoadError(
+      "Error leyendo categorías para planeación: " + planCategoriesErr.message
+    );
   }
 
   const allPlanCategories = (planCategoriesData ?? []) as Array<{
@@ -568,7 +641,9 @@ for (const row of membersRaw) {
     : { data: [], error: null };
 
   if (planEntriesErr) {
-    throw new Error("Error leyendo inscritos para planeación: " + planEntriesErr.message);
+    noteLoadError(
+      "Error leyendo inscritos para planeación: " + planEntriesErr.message
+    );
   }
 
   const planEntryRows = (planEntriesData ?? []) as Array<{
@@ -856,6 +931,22 @@ for (const row of membersRaw) {
         console.error("[tee-sheet] category round gate:", err);
       }
     }
+  }
+
+  if (pageLoadError) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between text-white">
+          <h1 className="text-3xl font-bold tracking-tight">{teeTitle}</h1>
+        </div>
+        <TeeSheetLoadError
+          title={ts.loadErrorTitle}
+          body={ts.loadErrorBody}
+          technicalLabel={ts.loadErrorTechnical}
+          message={pageLoadError}
+        />
+      </div>
+    );
   }
 
   if (!effectiveTournamentId) {

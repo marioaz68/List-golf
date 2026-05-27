@@ -360,6 +360,10 @@ const es = {
   },
   teeSheet: {
     title: "Salidas/Grupos",
+    loadErrorTitle: "No se pudo cargar salidas/grupos",
+    loadErrorBody:
+      "Puede deberse a permisos en Supabase (RLS), a una columna faltante en producción (migraciones pendientes) o a otro error de PostgREST. Revisa el detalle técnico abajo.",
+    loadErrorTechnical: "Detalle del servidor",
     registrationOpenGate:
       "Inscripciones abiertas. Cierra inscripciones antes de generar salidas y grupos (R1, R2…).",
     priorRoundGate:
@@ -2020,6 +2024,10 @@ const en: Messages = {
   },
   teeSheet: {
     title: "Starters / Groups",
+    loadErrorTitle: "Could not load tee sheet",
+    loadErrorBody:
+      "This may be Supabase RLS, a missing column in production (pending migrations), or another PostgREST error. See the technical detail below.",
+    loadErrorTechnical: "Server detail",
     registrationOpenGate:
       "Registration is still open. Close registration before generating tee sheet groups (R1, R2…).",
     priorRoundGate:
