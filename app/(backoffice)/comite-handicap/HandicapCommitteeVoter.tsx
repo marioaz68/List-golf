@@ -15,6 +15,16 @@ export type HandicapEntryRow = {
   club_label: string | null;
   handicap_index: number | null;
   category_code: string | null;
+  gender?: "M" | "F" | null;
+  /** Course Handicap calculado con slope/CR/par del campo (entero). */
+  course_handicap?: number | null;
+  /** Playing Handicap = CH × allowance% (entero). */
+  playing_handicap?: number | null;
+  /** % de allowance vigente para el torneo (ej. 80 en match play). */
+  allowance_pct?: number | null;
+  tee_slope?: number | null;
+  tee_course_rating?: number | null;
+  tee_par?: number | null;
 };
 
 export type HandicapVoteRow = {
@@ -90,10 +100,26 @@ export default function HandicapCommitteeVoter({
     });
   }, [entries, qn]);
 
+  const pendingFiltered = useMemo(
+    () => filtered.filter((e) => !voteByEntry.has(e.entry_id)),
+    [filtered, voteByEntry]
+  );
+  const votedFiltered = useMemo(
+    () => filtered.filter((e) => voteByEntry.has(e.entry_id)),
+    [filtered, voteByEntry]
+  );
+
+  const pendingTotal = entries.length - votedCount;
+  const hasResults = voteSummaries.length > 0;
+
+  type VoteTab = "pending" | "voted" | "results";
+  const defaultTab: VoteTab = committeeOpen ? "pending" : "results";
+  const [tab, setTab] = useState<VoteTab>(defaultTab);
+
   const canVote = committeeOpen && isPresent;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {!isPresent ? (
         <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="font-semibold">No estás marcado como presente.</div>
@@ -105,9 +131,16 @@ export default function HandicapCommitteeVoter({
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-slate-300 bg-white p-4 text-slate-900 shadow-sm">
-        <div className="text-sm font-semibold text-slate-900">Tu progreso</div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+      <div className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Tu progreso
+          </div>
+          <div className="text-sm font-bold tabular-nums text-slate-900">
+            {votedCount}/{entries.length}
+          </div>
+        </div>
+        <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
           <div
             className="h-full rounded-full bg-emerald-600 transition-all"
             style={{
@@ -117,20 +150,68 @@ export default function HandicapCommitteeVoter({
             }}
           />
         </div>
-        <div className="mt-2 text-sm text-slate-700">
-          Has calificado <span className="font-bold">{votedCount}</span> de{" "}
-          <span className="font-bold">{entries.length}</span> jugadores
-        </div>
         {!committeeOpen ? (
-          <p className="mt-2 text-sm text-amber-800">
+          <p className="mt-1.5 text-xs text-amber-800">
             La votación está cerrada. Ya no puedes cambiar tus calificaciones.
           </p>
         ) : (
-          <p className="mt-2 text-xs text-slate-600">
-            Tu voto es privado: ningún otro miembro ve tus calificaciones. Solo bajar HI
-            (−0.5 a −5.0).
+          <p className="mt-1.5 text-[11px] leading-tight text-slate-600">
+            Voto privado. Solo bajar HI (−0.5 a −5.0).
           </p>
         )}
+      </div>
+
+      {/* Segmented tab bar: Pendientes / Calificados / Resultados */}
+      <div className="sticky top-0 z-10 -mx-1 rounded-xl border border-slate-300 bg-white/95 p-1 shadow-sm backdrop-blur">
+        <div className="grid grid-cols-3 gap-1">
+          <button
+            type="button"
+            onClick={() => setTab("pending")}
+            className={[
+              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
+              tab === "pending"
+                ? "bg-amber-500 text-white shadow"
+                : "bg-slate-100 text-slate-700",
+            ].join(" ")}
+            disabled={!committeeOpen}
+          >
+            <span>Pendientes</span>
+            <span className="mt-0.5 text-base font-extrabold tabular-nums">
+              {pendingTotal}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("voted")}
+            className={[
+              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
+              tab === "voted"
+                ? "bg-emerald-600 text-white shadow"
+                : "bg-slate-100 text-slate-700",
+            ].join(" ")}
+          >
+            <span>Calificados</span>
+            <span className="mt-0.5 text-base font-extrabold tabular-nums">
+              {votedCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("results")}
+            className={[
+              "flex flex-col items-center justify-center rounded-lg px-2 py-2 text-[11px] font-bold uppercase tracking-wide transition",
+              tab === "results"
+                ? "bg-slate-900 text-white shadow"
+                : "bg-slate-100 text-slate-700",
+            ].join(" ")}
+            disabled={!hasResults}
+          >
+            <span>Resultados</span>
+            <span className="mt-0.5 text-base font-extrabold tabular-nums">
+              {hasResults ? "✓" : "—"}
+            </span>
+          </button>
+        </div>
       </div>
 
       {msg ? (
@@ -139,7 +220,7 @@ export default function HandicapCommitteeVoter({
         </div>
       ) : null}
 
-      {voteSummaries.length > 0 ? (
+      {tab === "results" && voteSummaries.length > 0 ? (
         <section
           className={[
             "rounded-xl border bg-white p-4 text-slate-900 shadow-sm",
@@ -266,41 +347,102 @@ export default function HandicapCommitteeVoter({
         </section>
       ) : null}
 
-      {committeeOpen ? (
+      {(tab === "pending" && committeeOpen) || tab === "voted" ? (
         <>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar jugador, club, HI…"
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar jugador, club, HI…"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+            {q ? (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700"
+                aria-label="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            ) : null}
+          </div>
 
-          <div className="space-y-3">
-            {filtered.map((entry) => (
-              <PlayerVoteCard
-                key={entry.entry_id}
-                entry={entry}
-                tournamentId={tournamentId}
-                initial={voteByEntry.get(entry.entry_id)}
-                summary={summaryByEntry.get(entry.entry_id)}
-                disabled={!canVote || pending}
-                committeeOpen={committeeOpen}
-                onSaved={() => setMsg("")}
-                onError={(e) => setMsg(e)}
-                startTransition={startTransition}
-              />
-            ))}
-            {filtered.length === 0 ? (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                Sin resultados para esta búsqueda.
+          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700">
+            {tab === "pending" ? (
+              <>
+                <span>
+                  Faltan{" "}
+                  <span className="text-base font-extrabold text-amber-700 tabular-nums">
+                    {pendingFiltered.length}
+                  </span>
+                  {qn ? " (filtrados)" : ""}
+                </span>
+                <span className="text-slate-500">
+                  Calificados {votedCount}/{entries.length}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  Mostrando{" "}
+                  <span className="text-base font-extrabold text-emerald-700 tabular-nums">
+                    {votedFiltered.length}
+                  </span>{" "}
+                  calificados
+                </span>
+                <span className="text-slate-500">
+                  Faltan {pendingTotal} de {entries.length}
+                </span>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {(tab === "pending" ? pendingFiltered : votedFiltered).map(
+              (entry) => (
+                <PlayerVoteCard
+                  key={entry.entry_id}
+                  entry={entry}
+                  tournamentId={tournamentId}
+                  initial={voteByEntry.get(entry.entry_id)}
+                  summary={summaryByEntry.get(entry.entry_id)}
+                  disabled={!canVote || pending}
+                  committeeOpen={committeeOpen}
+                  collapsedByDefault={tab === "voted"}
+                  onSaved={() => setMsg("")}
+                  onError={(e) => setMsg(e)}
+                  startTransition={startTransition}
+                />
+              )
+            )}
+            {(tab === "pending" ? pendingFiltered : votedFiltered).length ===
+            0 ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-600">
+                {tab === "pending"
+                  ? qn
+                    ? "Sin pendientes que coincidan con la búsqueda."
+                    : "¡Listo! No te faltan jugadores por calificar."
+                  : qn
+                    ? "No tienes calificaciones que coincidan."
+                    : "Aún no has calificado a ningún jugador."}
               </div>
             ) : null}
           </div>
         </>
-      ) : voteSummaries.length === 0 ? (
+      ) : null}
+
+      {tab === "pending" && !committeeOpen ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          La votación está cerrada. Aún no hay resultados agregados para mostrar.
+          La votación está cerrada. Cambia a «Resultados» para ver los promedios
+          o a «Calificados» para revisar tus votos.
+        </div>
+      ) : null}
+
+      {tab === "results" && voteSummaries.length === 0 ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          Aún no hay resultados agregados para mostrar.
         </div>
       ) : null}
     </div>
@@ -314,6 +456,7 @@ function PlayerVoteCard({
   summary,
   disabled,
   committeeOpen,
+  collapsedByDefault = false,
   onSaved,
   onError,
   startTransition,
@@ -324,6 +467,7 @@ function PlayerVoteCard({
   summary?: HandicapVoteSummaryRow;
   disabled: boolean;
   committeeOpen: boolean;
+  collapsedByDefault?: boolean;
   onSaved: () => void;
   onError: (msg: string) => void;
   startTransition: (fn: () => void) => void;
@@ -341,6 +485,7 @@ function PlayerVoteCard({
   );
   const [editing, setEditing] = useState(!saved);
   const [justSaved, setJustSaved] = useState(false);
+  const [open, setOpen] = useState(!collapsedByDefault);
 
   const lockedByClosing = !committeeOpen;
 
@@ -371,38 +516,111 @@ function PlayerVoteCard({
   }
 
   const showControls = editing && !lockedByClosing;
+  const hiDisplay =
+    entry.handicap_index != null ? entry.handicap_index.toFixed(1) : "—";
 
   return (
     <article
       className={[
-        "rounded-xl border p-3 shadow-sm",
+        "rounded-lg border shadow-sm",
         saved
-          ? "border-emerald-400/60 bg-emerald-50/40 text-slate-900"
+          ? "border-emerald-400/70 bg-emerald-50/40 text-slate-900"
           : "border-slate-300 bg-white text-slate-900",
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-semibold text-slate-950">{entry.player_name}</div>
-          <div className="mt-0.5 text-xs text-slate-600">
-            {entry.club_label ? `${entry.club_label} · ` : ""}
-            HI {entry.handicap_index ?? "—"}
-            {entry.category_code ? ` · ${entry.category_code}` : ""}
+      {/* Cabecera siempre visible */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold leading-tight text-slate-950">
+            {entry.player_name}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] leading-tight text-slate-600">
+            {entry.club_label ? (
+              <span className="truncate">{entry.club_label}</span>
+            ) : null}
+            {entry.category_code ? (
+              <span className="rounded bg-slate-100 px-1 font-semibold text-slate-700">
+                {entry.category_code}
+              </span>
+            ) : null}
+            {entry.gender ? (
+              <span
+                className={[
+                  "rounded px-1 font-semibold",
+                  entry.gender === "F"
+                    ? "bg-pink-100 text-pink-800"
+                    : "bg-sky-100 text-sky-800",
+                ].join(" ")}
+              >
+                {entry.gender === "F" ? "♀" : "♂"}
+              </span>
+            ) : null}
           </div>
         </div>
-        {saved ? (
-          <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-            {justSaved ? "Guardado" : "Listo"}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex items-baseline gap-0.5 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <span className="opacity-70">HI</span>
+            <span className="tabular-nums">{hiDisplay}</span>
+          </div>
+          {entry.course_handicap != null ? (
+            <div
+              className="flex items-baseline gap-0.5 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+              title={
+                entry.tee_slope != null
+                  ? `Slope ${entry.tee_slope} · CR ${entry.tee_course_rating} · Par ${entry.tee_par}`
+                  : "Course Handicap"
+              }
+            >
+              <span className="opacity-70">CH</span>
+              <span className="tabular-nums">{entry.course_handicap}</span>
+            </div>
+          ) : null}
+          {entry.playing_handicap != null ? (
+            <div
+              className="flex items-baseline gap-0.5 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+              title={
+                entry.allowance_pct != null
+                  ? `Playing Handicap (allowance ${entry.allowance_pct}%)`
+                  : "Playing Handicap"
+              }
+            >
+              <span className="opacity-70">PH</span>
+              <span className="tabular-nums">{entry.playing_handicap}</span>
+              {entry.allowance_pct != null ? (
+                <span className="opacity-70">·{entry.allowance_pct}%</span>
+              ) : null}
+            </div>
+          ) : null}
+          {saved ? (
+            <span
+              className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white"
+              aria-label="Voto guardado"
+            >
+              {justSaved ? "Guardado" : "✓"}
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">
+              {committeeOpen ? "Pend" : "—"}
+            </span>
+          )}
+          <span
+            className="ml-0.5 text-[10px] text-slate-400"
+            aria-hidden="true"
+          >
+            {open ? "▾" : "▸"}
           </span>
-        ) : (
-          <span className="shrink-0 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-900">
-            Pendiente
-          </span>
-        )}
-      </div>
+        </div>
+      </button>
+
+      {!open ? null : (
+        <div className="px-2.5 pb-2.5">
 
       {!showControls && saved ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
           <div className="text-sm text-slate-800">
             {initial?.abstained ? (
               <>
@@ -615,6 +833,8 @@ function PlayerVoteCard({
           </div>
         </div>
       ) : null}
+        </div>
+      )}
     </article>
   );
 }
