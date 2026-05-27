@@ -696,6 +696,12 @@ export default async function ComiteHandicapPage(props: {
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
+    const chips = distributionChips(trim.values, trim.liveAbstainedAsZero);
+    // Mezclamos para mantener anonimato (no se puede saber quién votó qué).
+    for (let i = chips.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chips[i], chips[j]] = [chips[j], chips[i]];
+    }
     return {
       entry_id: e.entry_id,
       n_votes: adjustments.length,
@@ -707,6 +713,12 @@ export default async function ComiteHandicapPage(props: {
       n_disqualify: nDisq,
       disqualified:
         disqualifyThresholdGlobal > 0 && nDisq >= disqualifyThresholdGlobal,
+      chips: chips.map((c) => ({
+        value: c.value,
+        trimmed: c.trimmed,
+        abstained: c.abstained,
+        reason: c.reason,
+      })),
     };
   });
 

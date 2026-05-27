@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import {
   HANDICAP_ADJUSTMENT_MAX,
   HANDICAP_ADJUSTMENT_MIN,
@@ -34,6 +34,13 @@ export type HandicapVoteRow = {
   disqualify_vote?: boolean;
 };
 
+export type HandicapVoteSummaryChip = {
+  value: number;
+  trimmed: boolean;
+  abstained: boolean;
+  reason?: "low" | "high" | null;
+};
+
 export type HandicapVoteSummaryRow = {
   entry_id: string;
   n_votes: number;
@@ -45,6 +52,8 @@ export type HandicapVoteSummaryRow = {
   suggested_hi: number | null;
   n_disqualify?: number;
   disqualified?: boolean;
+  /** Distribución anónima (mezclada) de los votos para mostrar al expandir. */
+  chips?: HandicapVoteSummaryChip[];
 };
 
 type Props = {
@@ -115,6 +124,7 @@ export default function HandicapCommitteeVoter({
   type VoteTab = "pending" | "voted" | "results";
   const defaultTab: VoteTab = committeeOpen ? "pending" : "results";
   const [tab, setTab] = useState<VoteTab>(defaultTab);
+  const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
 
   const canVote = committeeOpen && isPresent;
 
@@ -223,15 +233,15 @@ export default function HandicapCommitteeVoter({
       {tab === "results" && voteSummaries.length > 0 ? (
         <section
           className={[
-            "rounded-xl border bg-white p-4 text-slate-900 shadow-sm",
+            "rounded-xl border bg-white p-2 text-slate-900 shadow-sm sm:p-4",
             committeeOpen ? "border-amber-300" : "border-emerald-300",
           ].join(" ")}
         >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-base font-bold text-slate-950">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 sm:px-0">
+            <h2 className="text-sm font-bold text-slate-950 sm:text-base">
               {committeeOpen
                 ? "Resultados parciales en vivo"
-                : "Resultados finales del comité"}
+                : "Resultados finales"}
             </h2>
             <span
               className={[
@@ -244,22 +254,42 @@ export default function HandicapCommitteeVoter({
               {committeeOpen ? "🔴 En vivo" : "✓ Final"}
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-600">
-            {committeeOpen
-              ? "Conteo anónimo. Las abstenciones cuentan como voto vivo con valor 0 (entran en el divisor del promedio). Refresca para actualizar."
-              : "Las abstenciones cuentan como voto vivo con valor 0. Solo lectura."}
+          <p className="mt-1 px-1 text-[10px] leading-tight text-slate-600 sm:px-0 sm:text-xs">
+            Toca un jugador para ver la distribución de votos. Abstenciones =
+            voto vivo 0. Anónimo.
           </p>
-          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-100 text-xs uppercase text-slate-600">
+          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full table-fixed text-left text-[11px] sm:text-sm">
+              <colgroup>
+                <col className="w-[34%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[14%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[12%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+              </colgroup>
+              <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 sm:text-xs">
                 <tr>
-                  <th className="px-3 py-2">Jugador</th>
-                  <th className="px-3 py-2">HI actual</th>
-                  <th className="px-3 py-2">Vivos / total</th>
-                  <th className="px-3 py-2">Abst.</th>
-                  <th className="px-3 py-2">Prom. recortado</th>
-                  <th className="px-3 py-2">HI sugerido</th>
-                  <th className="px-3 py-2">No jugar</th>
+                  <th className="px-1 py-1.5 sm:px-3 sm:py-2">Jugador</th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    HI
+                  </th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    Vivos/tot
+                  </th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    Abst
+                  </th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    Prom
+                  </th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    HI sug
+                  </th>
+                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                    No j.
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -269,76 +299,175 @@ export default function HandicapCommitteeVoter({
                   const nAbst = s?.n_abstained ?? 0;
                   const totalVotes = totalNumeric + nAbst;
                   const liveIncAbst = (s?.n_live ?? 0) + nAbst;
+                  const isExpanded = expandedResultId === e.entry_id;
+                  const chips = s?.chips ?? [];
                   return (
-                    <tr
-                      key={e.entry_id}
-                      className={[
-                        "border-t border-slate-100",
-                        s?.disqualified ? "bg-rose-50" : "",
-                      ].join(" ")}
-                    >
-                      <td className="px-3 py-2 font-medium">{e.player_name}</td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {e.handicap_index ?? "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {totalVotes > 0 ||
-                        (s?.n_avg_denominator != null &&
-                          s.n_avg_denominator > 0) ? (
-                          <div className="flex flex-col gap-0.5">
+                    <Fragment key={e.entry_id}>
+                      <tr
+                        className={[
+                          "cursor-pointer border-t border-slate-100 align-top transition hover:bg-slate-50",
+                          s?.disqualified ? "bg-rose-50" : "",
+                          isExpanded ? "bg-slate-50" : "",
+                        ].join(" ")}
+                        onClick={() =>
+                          setExpandedResultId((prev) =>
+                            prev === e.entry_id ? null : e.entry_id
+                          )
+                        }
+                      >
+                        <td className="px-1 py-1.5 font-medium sm:px-3 sm:py-2">
+                          <div className="flex items-start gap-1">
                             <span
-                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800"
-                              title="Votos vivos (incluye abstenciones como 0) / votos totales recibidos"
+                              className="text-[9px] text-slate-400 sm:text-[10px]"
+                              aria-hidden="true"
                             >
-                              {liveIncAbst}/{totalVotes}
+                              {isExpanded ? "▾" : "▸"}
                             </span>
-                            {(s?.n_avg_denominator ?? 0) > 0 ? (
-                              <span className="text-[10px] text-slate-500">
-                                ÷{s?.n_avg_denominator} en prom.
-                              </span>
-                            ) : null}
+                            <span className="leading-tight">
+                              {e.player_name}
+                            </span>
                           </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">
-                            —
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {nAbst > 0 ? (
-                          <span className="rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800">
-                            {nAbst}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums">
-                        {s?.avg_adjustment != null
-                          ? formatAdjustmentLabel(s.avg_adjustment)
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums font-semibold text-emerald-800">
-                        {s?.suggested_hi ?? "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {(s?.n_disqualify ?? 0) > 0 ? (
-                          <span
-                            className={[
-                              "rounded px-2 py-0.5 text-[11px] font-semibold",
-                              s?.disqualified
-                                ? "bg-rose-700 text-white"
-                                : "bg-rose-100 text-rose-800",
-                            ].join(" ")}
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
+                          {e.handicap_index ?? "—"}
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
+                          {totalVotes > 0 ||
+                          (s?.n_avg_denominator != null &&
+                            s.n_avg_denominator > 0) ? (
+                            <div className="flex flex-col gap-0">
+                              <span
+                                className="inline-block rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]"
+                                title="Vivos (incluye abst. como 0) / total"
+                              >
+                                {liveIncAbst}/{totalVotes}
+                              </span>
+                              {(s?.n_avg_denominator ?? 0) > 0 ? (
+                                <span className="text-[9px] text-slate-500 sm:text-[10px]">
+                                  ÷{s?.n_avg_denominator}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
+                          {nAbst > 0 ? (
+                            <span className="inline-block rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-semibold text-amber-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]">
+                              {nAbst}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
+                          {s?.avg_adjustment != null
+                            ? formatAdjustmentLabel(s.avg_adjustment)
+                            : "—"}
+                        </td>
+                        <td className="px-1 py-1.5 text-center font-bold tabular-nums text-emerald-800 sm:px-3 sm:py-2 sm:text-left sm:font-semibold">
+                          {s?.suggested_hi ?? "—"}
+                        </td>
+                        <td className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                          {(s?.n_disqualify ?? 0) > 0 ? (
+                            <span
+                              className={[
+                                "inline-block rounded px-1 text-[10px] font-semibold sm:px-2 sm:py-0.5 sm:text-[11px]",
+                                s?.disqualified
+                                  ? "bg-rose-700 text-white"
+                                  : "bg-rose-100 text-rose-800",
+                              ].join(" ")}
+                            >
+                              {s?.n_disqualify}
+                              {s?.disqualified ? " ⊘" : ""}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                      {isExpanded ? (
+                        <tr className="border-t border-slate-100 bg-slate-50">
+                          <td
+                            colSpan={7}
+                            className="px-2 py-2 sm:px-3 sm:py-3"
                           >
-                            {s?.n_disqualify}
-                            {s?.disqualified ? " · No autorizado" : ""}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                    </tr>
+                            <div className="space-y-1.5">
+                              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                                Votos uno por uno (anónimos)
+                              </div>
+                              {chips.length === 0 ? (
+                                <div className="text-[11px] text-slate-500">
+                                  Aún no hay votos para este jugador.
+                                </div>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {chips.map((c, idx) => (
+                                    <span
+                                      key={`${e.entry_id}-c-${idx}`}
+                                      title={
+                                        c.abstained
+                                          ? "Abstención (cuenta como 0 en el promedio)"
+                                          : c.trimmed
+                                            ? c.reason === "low"
+                                              ? "Descartado (más severo)"
+                                              : "Descartado (más suave)"
+                                            : "Voto vivo"
+                                      }
+                                      className={[
+                                        "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+                                        c.trimmed
+                                          ? "border border-slate-300 bg-white text-slate-500 line-through"
+                                          : c.abstained
+                                            ? "border border-emerald-600 bg-emerald-50 text-emerald-800"
+                                            : "bg-emerald-600 text-white",
+                                      ].join(" ")}
+                                    >
+                                      {c.abstained
+                                        ? "0·abst"
+                                        : formatAdjustmentLabel(c.value)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="grid grid-cols-3 gap-1 text-[10px] text-slate-700 sm:text-xs">
+                                <div className="rounded bg-white px-1.5 py-1 text-center">
+                                  <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
+                                    HI actual
+                                  </div>
+                                  <div className="font-bold tabular-nums">
+                                    {e.handicap_index ?? "—"}
+                                  </div>
+                                </div>
+                                <div className="rounded bg-white px-1.5 py-1 text-center">
+                                  <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
+                                    Prom.
+                                  </div>
+                                  <div className="font-bold tabular-nums">
+                                    {s?.avg_adjustment != null
+                                      ? formatAdjustmentLabel(s.avg_adjustment)
+                                      : "—"}
+                                  </div>
+                                </div>
+                                <div className="rounded bg-white px-1.5 py-1 text-center">
+                                  <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
+                                    HI sug.
+                                  </div>
+                                  <div className="font-bold tabular-nums text-emerald-700">
+                                    {s?.suggested_hi ?? "—"}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
