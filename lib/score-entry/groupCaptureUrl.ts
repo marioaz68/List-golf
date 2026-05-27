@@ -53,11 +53,19 @@ export function buildGroupCaptureUrl(params: {
   roundId: string;
   groupId: string;
   base?: string;
+  /** entry_id del jugador receptor — habilita su fila privada. */
+  meEntryId?: string | null;
+  /** caddie_id receptor — habilita filas privadas de jugadores asignados. */
+  caddieId?: string | null;
 }): string {
   const base = normalizeBase(params.base) ?? appBaseUrl();
   const sp = new URLSearchParams();
   sp.set("group_id", params.groupId);
   if (params.tournamentId) sp.set("tournament_id", params.tournamentId);
   if (params.roundId) sp.set("round_id", params.roundId);
+  const me = String(params.meEntryId ?? "").trim();
+  if (me) sp.set("me", me);
+  const caddie = String(params.caddieId ?? "").trim();
+  if (caddie) sp.set("caddie", caddie);
   return `${base}/captura/tarjeta?${sp.toString()}`;
 }

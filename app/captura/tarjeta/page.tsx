@@ -16,6 +16,10 @@ export default async function TarjetaPage({
   const params = (await searchParams) ?? {};
   const rawGroupId = params.group_id;
   const groupId = Array.isArray(rawGroupId) ? rawGroupId[0] : rawGroupId ?? "";
+  const rawMe = params.me;
+  const meEntryId = Array.isArray(rawMe) ? rawMe[0] : rawMe ?? "";
+  const rawCaddie = params.caddie;
+  const caddieId = Array.isArray(rawCaddie) ? rawCaddie[0] : rawCaddie ?? "";
 
   if (!groupId.trim()) {
     return (
@@ -28,7 +32,10 @@ export default async function TarjetaPage({
 
   const admin = tryCreateAdminClient();
   const supabase = admin ?? (await createClient());
-  const data = await loadGroupCapture(supabase, groupId);
+  const data = await loadGroupCapture(supabase, groupId, {
+    meEntryId: meEntryId.trim() || null,
+    caddieId: caddieId.trim() || null,
+  });
 
   if (!data) {
     return (

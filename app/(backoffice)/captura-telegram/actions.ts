@@ -40,6 +40,10 @@ type Recipient = {
   name: string;
   role: "player" | "caddie";
   greeting: string;
+  /** entry_id del jugador (si role=player) — para personalizar la URL. */
+  entryId?: string | null;
+  /** caddie_id (si role=caddie). */
+  caddieId?: string | null;
 };
 
 async function loadGroupRecipients(args: {
@@ -87,9 +91,9 @@ async function loadGroupRecipients(args: {
     .from("pairing_group_members")
     .select(
       `
-      id, position,
+      id, position, entry_id,
       tournament_entries (
-        player_number,
+        id, player_number,
         players ( id, first_name, last_name, telegram_user_id, telegram_chat_id )
       )
     `
@@ -100,8 +104,10 @@ async function loadGroupRecipients(args: {
   type MemberRaw = {
     id: string;
     position: number | null;
+    entry_id: string | null;
     tournament_entries:
       | {
+          id: string | null;
           player_number: number | null;
           players:
             | {
@@ -127,11 +133,13 @@ async function loadGroupRecipients(args: {
     const chatId = String(player.telegram_chat_id ?? player.telegram_user_id ?? "").trim();
     if (!chatId) continue;
     const name = fullName(player.first_name, player.last_name);
+    const entryId = String(m.entry_id ?? entry?.id ?? "").trim();
     recipients.push({
       chatId,
       name,
       role: "player",
       greeting: `Hola ${name}`,
+      entryId: entryId || null,
     });
   }
 
@@ -183,17 +191,20 @@ async function loadGroupRecipients(args: {
           name,
           role: "caddie",
           greeting: `Hola ${name} (caddie)`,
+          caddieId: c.id,
         });
       }
     }
     // Si falla por columnas faltantes, simplemente no hay caddies destinatarios todavía.
   }
 
-  // Dedupe por chatId (si jugador y caddie son el mismo chat)
+  // Dedupe por (chatId + role): si jugador y caddie comparten chat, cada
+  // uno recibe un mensaje con su propia URL (?me=... vs ?caddie=...).
   const seen = new Set<string>();
   const unique = recipients.filter((r) => {
-    if (seen.has(r.chatId)) return false;
-    seen.add(r.chatId);
+    const key = `${r.chatId}|${r.role}|${r.entryId ?? ""}|${r.caddieId ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
@@ -248,10 +259,16 @@ export async function sendCaptureLinkToGroupAction(
     if (data.recipients.length === 0) {
       return { ok: true, sent: 0, failed: 0 };
     }
-    const url = buildGroupCaptureUrl({ tournamentId, roundId, groupId });
     let sent = 0;
     let failed = 0;
     for (const r of data.recipients) {
+      const personalUrl = buildGroupCaptureUrl({
+        tournamentId,
+        roundId,
+        groupId,
+        meEntryId: r.role === "player" ? r.entryId ?? null : null,
+        caddieId: r.role === "caddie" ? r.caddieId ?? null : null,
+      });
       const text = buildMessage({
         groupNo: data.groupNo,
         startingHole: data.startingHole,
@@ -263,7 +280,7 @@ export async function sendCaptureLinkToGroupAction(
       const res = await sendTelegramMessage({
         chatId: r.chatId,
         text,
-        buttons: [[{ text: buttonLabel, url }]],
+        buttons: [[{ text: buttonLabel, url: personalUrl }]],
         disablePreview: true,
       });
       if (res.ok) sent += 1;

@@ -26,6 +26,16 @@ export type GroupCapturePlayer = {
   name: string;
   initials: string;
   scores: HoleScores;
+  /** Si la celda está en rojo: alguien modificó el score y se espera testigo. */
+  pending: Partial<Record<HoleNumber, boolean>>;
+  /** Score privado del jugador ("Mi Tarjeta"). Solo se incluye si el cliente
+   *  está autorizado para verla (?me=entryId del propio jugador o caddie). */
+  privateScores?: HoleScores;
+};
+
+export type WitnessAssignmentPayload = {
+  entryId: string;
+  witnessEntryId: string;
 };
 
 export type GroupCapturePayload = {
@@ -37,4 +47,11 @@ export type GroupCapturePayload = {
   teeTime: string | null;
   tournamentName: string | null;
   players: GroupCapturePlayer[];
+  witnesses: WitnessAssignmentPayload[];
+  /** entryId del jugador identificado por el link (?me=...). Null si el
+   *  visitante abrió un link genérico. */
+  myEntryId: string | null;
+  /** Si el visitante es caddie: lista de entry_ids cuyas tarjetas privadas
+   *  puede leer/editar. */
+  caddieForEntryIds: string[];
 };

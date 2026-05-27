@@ -5,6 +5,8 @@ import type {
   HoleNumber,
   HoleScores,
 } from "./types";
+import { ensureGroupWitnesses } from "./witnesses";
+import { loadPrivateScoresForGroup } from "./privateScores";
 
 export const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -77,9 +79,17 @@ export function getScoreClass(score: number | null, par: number) {
   return "";
 }
 
+export type LoadGroupCaptureOptions = {
+  /** entry_id que viene en el link (?me=...) — habilita la fila privada del jugador. */
+  meEntryId?: string | null;
+  /** caddie_id (?caddie=...) — habilita filas privadas de sus jugadores asignados. */
+  caddieId?: string | null;
+};
+
 export async function loadGroupCapture(
   supabase: SupabaseClient,
-  groupId: string
+  groupId: string,
+  options: LoadGroupCaptureOptions = {}
 ): Promise<GroupCapturePayload | null> {
   const gid = groupId.trim();
   if (!gid) return null;
@@ -134,6 +144,9 @@ export async function loadGroupCapture(
       teeTime: safeString(groupRow?.tee_time) || null,
       tournamentName,
       players: [],
+      witnesses: [],
+      myEntryId: null,
+      caddieForEntryIds: [],
     };
   }
 
@@ -153,7 +166,9 @@ export async function loadGroupCapture(
 
   const { data: scoreRows } = await supabase
     .from("hole_scores")
-    .select("entry_id, hole_no, hole_number, strokes")
+    .select(
+      "entry_id, hole_no, hole_number, strokes, pending_witness"
+    )
     .eq("round_id", roundId)
     .in("entry_id", entryIds);
 
@@ -173,8 +188,13 @@ export async function loadGroupCapture(
   );
 
   const scoresByEntryId = new Map<string, HoleScores>();
+  const pendingByEntryId = new Map<
+    string,
+    Partial<Record<HoleNumber, boolean>>
+  >();
   for (const entryId of entryIds) {
     scoresByEntryId.set(entryId, createEmptyScores());
+    pendingByEntryId.set(entryId, {});
   }
 
   for (const row of scoreRows ?? []) {
@@ -187,7 +207,59 @@ export async function loadGroupCapture(
     const scores = scoresByEntryId.get(entryId);
     if (!scores) continue;
     scores[hole] = typeof row.strokes === "number" ? row.strokes : null;
+    const r = row as { pending_witness?: boolean | null };
+    if (r.pending_witness) {
+      const pendingMap = pendingByEntryId.get(entryId);
+      if (pendingMap) pendingMap[hole] = true;
+    }
   }
+
+  // Asignar / cargar testigos del grupo.
+  const witnessRows = await ensureGroupWitnesses(supabase, gid);
+
+  // Tarjetas privadas: cargamos todas y luego decidimos a quién las
+  // mostramos. Cliente solo recibe las que le corresponden por su rol.
+  const privateScoresByEntry = await loadPrivateScoresForGroup(
+    supabase,
+    gid,
+    entryIds
+  );
+
+  // Identidad del visitante (me=entry_id o caddie=caddie_id).
+  const meEntryIdRaw = String(options.meEntryId ?? "").trim();
+  const meEntryId = entryIds.includes(meEntryIdRaw) ? meEntryIdRaw : null;
+
+  const caddieIdRaw = String(options.caddieId ?? "").trim();
+  let caddieForEntryIds: string[] = [];
+  if (caddieIdRaw) {
+    const { data: caddieAssigns } = await supabase
+      .from("caddie_assignments")
+      .select("entry_id, is_active, pairing_group_id, round_id")
+      .eq("caddie_id", caddieIdRaw);
+    const validAssigns = ((caddieAssigns ?? []) as Array<{
+      entry_id: string | null;
+      is_active: boolean | null;
+      pairing_group_id: string | null;
+      round_id: string | null;
+    }>).filter((a) => {
+      if (a.is_active === false) return false;
+      if (a.pairing_group_id && a.pairing_group_id !== gid) return false;
+      if (!a.pairing_group_id && a.round_id && a.round_id !== roundId) {
+        return false;
+      }
+      return true;
+    });
+    const assignedEntryIds = new Set(
+      validAssigns
+        .map((a) => String(a.entry_id ?? "").trim())
+        .filter(Boolean)
+    );
+    caddieForEntryIds = entryIds.filter((eid) => assignedEntryIds.has(eid));
+  }
+
+  const visibilityByEntry = new Set<string>();
+  if (meEntryId) visibilityByEntry.add(meEntryId);
+  for (const eid of caddieForEntryIds) visibilityByEntry.add(eid);
 
   const orderedMembers = [...(memberRows ?? [])].sort(
     (a, b) => (a.position ?? 0) - (b.position ?? 0)
@@ -202,12 +274,17 @@ export async function loadGroupCapture(
     const player = playersById.get(playerId);
     if (!player) continue;
     const fullName = buildName(player.first_name, player.last_name) || "Jugador";
+    const includePrivate = visibilityByEntry.has(entryId);
     players.push({
       entryId,
       playerId,
       name: fullName,
       initials: buildInitials(fullName, player.initials),
       scores: scoresByEntryId.get(entryId) ?? createEmptyScores(),
+      pending: pendingByEntryId.get(entryId) ?? {},
+      privateScores: includePrivate
+        ? privateScoresByEntry[entryId] ?? createEmptyScores()
+        : undefined,
     });
   }
 
@@ -221,5 +298,11 @@ export async function loadGroupCapture(
     teeTime: safeString(groupRow?.tee_time) || null,
     tournamentName,
     players,
+    witnesses: witnessRows.map((w) => ({
+      entryId: w.entryId,
+      witnessEntryId: w.witnessEntryId,
+    })),
+    myEntryId: meEntryId,
+    caddieForEntryIds,
   };
 }
