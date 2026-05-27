@@ -41,7 +41,44 @@ type TeeSetRow = {
   name: string;
   color: string;
   sort_order?: number;
+  gender_default?: string | null;
+  slope_men?: number | null;
+  slope_women?: number | null;
+  course_rating_men?: number | null;
+  course_rating_women?: number | null;
+  par?: number | null;
+  yardage?: number | null;
 };
+
+function optNum(fd: FormData, key: string): number | null {
+  const raw = String(fd.get(key) ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function optInt(fd: FormData, key: string): number | null {
+  const n = optNum(fd, key);
+  return n == null ? null : Math.trunc(n);
+}
+
+function optGender(fd: FormData, key: string): string | null {
+  const v = String(fd.get(key) ?? "").trim().toUpperCase();
+  if (v === "M" || v === "F" || v === "X") return v;
+  return null;
+}
+
+function whsPayload(r: TeeSetRow) {
+  return {
+    gender_default: r.gender_default ?? null,
+    slope_men: r.slope_men ?? null,
+    slope_women: r.slope_women ?? null,
+    course_rating_men: r.course_rating_men ?? null,
+    course_rating_women: r.course_rating_women ?? null,
+    par: r.par ?? null,
+    yardage: r.yardage ?? null,
+  };
+}
 
 type ClubRow = {
   id: string;
@@ -261,12 +298,13 @@ export async function saveCourseTeeSets(formData: FormData) {
   const course_id = reqStr(formData, "course_id");
   const rowsRaw = reqStr(formData, "rows_json");
   const deleteIdsRaw = String(formData.get("delete_ids_json") ?? "").trim();
+  const rowCount = reqInt(formData, "tee_row_count");
 
-  let rows: TeeSetRow[] = [];
+  let idRows: Array<{ id?: string }> = [];
   let deleteIds: string[] = [];
 
   try {
-    rows = JSON.parse(rowsRaw);
+    idRows = JSON.parse(rowsRaw);
   } catch {
     throw new Error("rows_json inválido");
   }
@@ -277,18 +315,30 @@ export async function saveCourseTeeSets(formData: FormData) {
     throw new Error("delete_ids_json inválido");
   }
 
-  if (!Array.isArray(rows)) throw new Error("rows_json debe ser un arreglo");
+  if (!Array.isArray(idRows)) throw new Error("rows_json debe ser un arreglo");
   if (!Array.isArray(deleteIds)) {
     throw new Error("delete_ids_json debe ser un arreglo");
   }
 
-  const normalized = rows.map((r, i) => ({
-    id: String(r.id ?? "").trim(),
-    code: normalizeCode(r.code),
-    name: String(r.name ?? "").trim(),
-    color: String(r.color ?? "").trim(),
-    sort_order: i + 1,
-  }));
+  if (idRows.length !== rowCount) {
+    throw new Error("tee_row_count no coincide con las filas del formulario");
+  }
+
+  const normalized: TeeSetRow[] = idRows.map((meta, i) => {
+    const n = i + 1;
+    return {
+      id: String(meta.id ?? "").trim(),
+      code: normalizeCode(String(formData.get(`tee_code_${n}`) ?? "")),
+      name: String(formData.get(`tee_name_${n}`) ?? "").trim(),
+      color: String(formData.get(`tee_color_${n}`) ?? "").trim(),
+      gender_default: optGender(formData, `tee_gender_${n}`),
+      course_rating_men: optNum(formData, `tee_rating_men_${n}`),
+      slope_men: optInt(formData, `tee_slope_men_${n}`),
+      course_rating_women: optNum(formData, `tee_rating_women_${n}`),
+      slope_women: optInt(formData, `tee_slope_women_${n}`),
+      sort_order: n,
+    };
+  });
 
   const used = new Set<string>();
   for (let i = 0; i < normalized.length; i++) {
@@ -324,6 +374,7 @@ export async function saveCourseTeeSets(formData: FormData) {
         name: r.name,
         color: r.color || null,
         sort_order: r.sort_order,
+        ...whsPayload(r),
       })
       .eq("id", r.id)
       .eq("course_id", course_id);
@@ -338,6 +389,7 @@ export async function saveCourseTeeSets(formData: FormData) {
       name: r.name,
       color: r.color || null,
       sort_order: r.sort_order,
+      ...whsPayload(r),
     }));
 
     const { error } = await supabase.from("course_tee_sets").insert(payload);
