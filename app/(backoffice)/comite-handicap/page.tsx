@@ -345,7 +345,13 @@ export default async function ComiteHandicapPage(props: {
     }
   }
 
-  const entries: HandicapEntryRow[] = (entriesRaw ?? [])
+  // Conjunto de entry_ids que el comité ya tocó (votos, abstenciones,
+  // descalificaciones o resúmenes). Lo usamos para que aunque el director
+  // les quite la marca "→ Comité HI" más tarde, no desaparezcan de la lista
+  // y no se pierda el voto guardado.
+  const entriesWithAnyVote = new Set<string>();
+
+  const allEntries: HandicapEntryRow[] = (entriesRaw ?? [])
     .map((row: any) => {
       const player = row.player_id ? playerById.get(String(row.player_id)) : null;
       const cat = row.category_id ? categoryById.get(String(row.category_id)) : null;
@@ -417,6 +423,9 @@ export default async function ComiteHandicapPage(props: {
       abstained: Boolean(v.abstained),
       disqualify_vote: Boolean((v as { disqualify_vote?: boolean }).disqualify_vote),
     }));
+    for (const v of myVotes) {
+      if (v.entry_id) entriesWithAnyVote.add(v.entry_id);
+    }
   }
 
   let myPresence = false;
@@ -457,6 +466,7 @@ export default async function ComiteHandicapPage(props: {
 
     for (const v of voteRows ?? []) {
       const eid = String((v as any).entry_id);
+      if (eid) entriesWithAnyVote.add(eid);
       const uid = (v as any).member_user_id
         ? String((v as any).member_user_id)
         : null;
@@ -529,6 +539,9 @@ export default async function ComiteHandicapPage(props: {
       avg_adjustment:
         s.avg_adjustment != null ? Number(s.avg_adjustment) : null,
     }));
+    for (const s of summaryRows) {
+      if (s.entry_id) entriesWithAnyVote.add(s.entry_id);
+    }
 
     const { data: roleRows } = await admin
       .from("roles")
@@ -723,6 +736,16 @@ export default async function ComiteHandicapPage(props: {
   }
 
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
+
+  // El comité solo trabaja con jugadores marcados desde Inscritos
+  // (botón "→ Comité HI"). Pero si una inscripción ya tiene voto guardado
+  // del comité (mío, de cualquier miembro o resumen anónimo) la dejamos
+  // visible para que no se pierda lo ya revisado, aunque el director le
+  // haya quitado la marca después.
+  const entries: HandicapEntryRow[] = allEntries.filter(
+    (e) =>
+      Boolean(e.flagged_for_committee) || entriesWithAnyVote.has(e.entry_id)
+  );
 
   // Resumen anónimo para mostrar al votante (solo cuando la votación está
   // cerrada, lo deja visible en la pestaña Votar para que todos los miembros
@@ -1489,17 +1512,32 @@ export default async function ComiteHandicapPage(props: {
               </p>
 
               {entries.length === 0 ? (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                  No hay inscripciones activas en este torneo todavía. Agrega
-                  jugadores en{" "}
-                  <Link
-                    href={`/entries?tournament_id=${tournamentId}`}
-                    className="font-semibold underline"
-                  >
-                    Inscripciones
-                  </Link>{" "}
-                  para que el comité los pueda calificar.
-                </div>
+                allEntries.length === 0 ? (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    No hay inscripciones activas en este torneo todavía. Agrega
+                    jugadores en{" "}
+                    <Link
+                      href={`/entries?tournament_id=${tournamentId}`}
+                      className="font-semibold underline"
+                    >
+                      Inscripciones
+                    </Link>{" "}
+                    para que el comité los pueda calificar.
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                    Ningún jugador marcado para revisión todavía. Ve a{" "}
+                    <Link
+                      href={`/entries?tournament_id=${tournamentId}`}
+                      className="font-semibold underline"
+                    >
+                      Inscritos
+                    </Link>{" "}
+                    y usa el botón <strong>«→ Comité HI»</strong> en cada
+                    jugador que el comité deba revisar. Puedes mandar más
+                    durante el torneo y los votos ya guardados no se pierden.
+                  </div>
+                )
               ) : null}
 
               <div className="overflow-x-auto rounded-lg border border-slate-200">
@@ -1699,15 +1737,32 @@ export default async function ComiteHandicapPage(props: {
 
       {showVote ? (
         committee ? (
-          <HandicapCommitteeVoter
-            tournamentId={tournamentId}
-            entries={entries}
-            myVotes={myVotes}
-            committeeOpen={committee.status === "open"}
-            isPresent={myPresence}
-            isAdmin={access.isAdmin}
-            voteSummaries={voteSummariesForVoter}
-          />
+          <>
+            {entries.length === 0 && allEntries.length > 0 ? (
+              <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                Ningún jugador marcado para revisión del comité todavía. El
+                director debe marcarlos desde{" "}
+                <Link
+                  href={`/entries?tournament_id=${tournamentId}`}
+                  className="font-semibold underline"
+                >
+                  Inscritos
+                </Link>{" "}
+                con el botón <strong>«→ Comité HI»</strong>. Mientras tanto
+                aquí no aparece ningún jugador. Puedes seguir marcando jugadores
+                durante el torneo y los votos ya guardados no se pierden.
+              </div>
+            ) : null}
+            <HandicapCommitteeVoter
+              tournamentId={tournamentId}
+              entries={entries}
+              myVotes={myVotes}
+              committeeOpen={committee.status === "open"}
+              isPresent={myPresence}
+              isAdmin={access.isAdmin}
+              voteSummaries={voteSummariesForVoter}
+            />
+          </>
         ) : (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             El comité aún no está activo en este torneo. Un administrador debe activarlo
