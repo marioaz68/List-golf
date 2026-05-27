@@ -11,6 +11,11 @@ import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { isMissingTelegramKitColumnsError } from "@/lib/entries/telegramKitColumns";
 import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
 import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
+import {
+  buildClaudePromptMarkdown,
+  buildPromptDownloadFilename,
+  type FlaggedPlayerForPrompt,
+} from "@/lib/handicap-committee/claudePromptTemplate";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -1916,4 +1921,71 @@ export async function toggleEntryCommitteeFlag(formData: FormData) {
   revalidatePath("/entries");
   revalidatePath("/comite-handicap");
   redirect(`/entries?tournament_id=${tournament_id}&committee_flag=1`);
+}
+
+export async function exportCommitteePromptMarkdown(tournamentId: string) {
+  await requireTournamentAccess({
+    tournamentId,
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
+  });
+
+  const supabase = await createClient();
+
+  const { data: tournament, error: tErr } = await supabase
+    .from("tournaments")
+    .select("name")
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  if (tErr) {
+    throw new Error(tErr.message);
+  }
+
+  const { data: rows, error: eErr } = await supabase
+    .from("tournament_entries")
+    .select(
+      `
+      flagged_committee_reason,
+      players:players (
+        ghin_number,
+        first_name,
+        last_name
+      )
+    `
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("flagged_for_committee", true)
+    .neq("status", "cancelled")
+    .order("player_number", { ascending: true, nullsFirst: false });
+
+  if (eErr) {
+    throw new Error(eErr.message);
+  }
+
+  const players: FlaggedPlayerForPrompt[] = (rows ?? []).map((row) => {
+    const p = row.players as {
+      ghin_number?: string | null;
+      first_name?: string | null;
+      last_name?: string | null;
+    } | null;
+    const fullName = [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim();
+    return {
+      ghin: p?.ghin_number ?? null,
+      fullName,
+      reason: (row.flagged_committee_reason as string | null) ?? null,
+    };
+  });
+
+  const generatedAt = new Date();
+  const tournamentName = (tournament?.name as string | null) ?? "Torneo";
+
+  return {
+    markdown: buildClaudePromptMarkdown({
+      tournamentName,
+      players,
+      generatedAt,
+    }),
+    filename: buildPromptDownloadFilename(tournamentName, generatedAt),
+    count: players.length,
+  };
 }
