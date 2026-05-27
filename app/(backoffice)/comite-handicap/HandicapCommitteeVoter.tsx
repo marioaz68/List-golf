@@ -8,9 +8,11 @@ import {
   formatAdjustmentLabel,
 } from "@/lib/handicap-committee/constants";
 import { saveHandicapCommitteeVote } from "./actions";
+import OpenHandicapFileButton from "./OpenHandicapFileButton";
 
 export type HandicapEntryRow = {
   entry_id: string;
+  player_id?: string;
   player_name: string;
   club_label: string | null;
   handicap_index: number | null;
@@ -25,6 +27,9 @@ export type HandicapEntryRow = {
   tee_slope?: number | null;
   tee_course_rating?: number | null;
   tee_par?: number | null;
+  has_handicap_file?: boolean;
+  flagged_for_committee?: boolean;
+  flagged_committee_reason?: string | null;
 };
 
 export type HandicapVoteRow = {
@@ -674,13 +679,17 @@ function PlayerVoteCard({
   const hiDisplay =
     entry.handicap_index != null ? entry.handicap_index.toFixed(1) : "—";
 
+  const flagged = entry.flagged_for_committee === true;
+
   return (
     <article
       className={[
         "rounded-lg border shadow-sm",
-        saved
-          ? "border-emerald-400/70 bg-emerald-50/40 text-slate-900"
-          : "border-slate-300 bg-white text-slate-900",
+        flagged
+          ? "border-rose-400 bg-rose-50/50 text-slate-900 ring-1 ring-rose-200"
+          : saved
+            ? "border-emerald-400/70 bg-emerald-50/40 text-slate-900"
+            : "border-slate-300 bg-white text-slate-900",
       ].join(" ")}
     >
       {/* Cabecera siempre visible */}
@@ -690,9 +699,21 @@ function PlayerVoteCard({
         className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
       >
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold leading-tight text-slate-950">
-            {entry.player_name}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="truncate text-sm font-semibold leading-tight text-slate-950">
+              {entry.player_name}
+            </span>
+            {flagged ? (
+              <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
+                Revisar
+              </span>
+            ) : null}
           </div>
+          {flagged && entry.flagged_committee_reason ? (
+            <p className="mt-0.5 text-[10px] font-medium text-rose-800">
+              {entry.flagged_committee_reason}
+            </p>
+          ) : null}
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] leading-tight text-slate-600">
             {entry.club_label ? (
               <span className="truncate">{entry.club_label}</span>
@@ -773,6 +794,16 @@ function PlayerVoteCard({
 
       {!open ? null : (
         <div className="px-2.5 pb-2.5">
+
+      {entry.player_id && entry.has_handicap_file ? (
+        <div className="mb-2">
+          <OpenHandicapFileButton
+            playerId={entry.player_id}
+            hasFile={Boolean(entry.has_handicap_file)}
+            compact={false}
+          />
+        </div>
+      ) : null}
 
       {!showControls && saved ? (
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">

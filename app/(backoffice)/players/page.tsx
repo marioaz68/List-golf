@@ -559,6 +559,9 @@ export default async function PlayersPage(props: {
             >
               Categorías
             </a>
+            <a href="/players/handicap-files" style={buttonStyle}>
+              Archivos GHIN
+            </a>
           </div>
         </div>
       </header>

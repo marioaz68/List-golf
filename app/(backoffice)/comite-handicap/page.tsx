@@ -210,7 +210,9 @@ export default async function ComiteHandicapPage(props: {
 
   const { data: entriesRaw } = await entriesClient
     .from("tournament_entries")
-    .select("id, player_id, category_id, handicap_index, status")
+    .select(
+      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason"
+    )
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled")
     .order("handicap_index", { ascending: true });
@@ -302,6 +304,20 @@ export default async function ComiteHandicapPage(props: {
     (clubRows ?? []).map((c: any) => [String(c.id), c])
   );
 
+  const playersWithHandicapFile = new Set<string>();
+  if (adminEarly && playerIds.length > 0) {
+    const { data: fileRows } = await adminEarly
+      .from("player_files")
+      .select("player_id")
+      .in("player_id", playerIds)
+      .eq("kind", "handicap_report");
+    for (const f of fileRows ?? []) {
+      if ((f as { player_id?: string }).player_id) {
+        playersWithHandicapFile.add(String((f as { player_id: string }).player_id));
+      }
+    }
+  }
+
   const entries: HandicapEntryRow[] = (entriesRaw ?? [])
     .map((row: any) => {
       const player = row.player_id ? playerById.get(String(row.player_id)) : null;
@@ -335,8 +351,10 @@ export default async function ComiteHandicapPage(props: {
         playing_handicap = calc.playing_handicap;
       }
 
+      const pid = row.player_id ? String(row.player_id) : "";
       return {
         entry_id: row.id as string,
+        player_id: pid,
         player_name: playerName(player),
         handicap_index: hi,
         category_code: cat?.code ?? cat?.name ?? null,
@@ -348,6 +366,10 @@ export default async function ComiteHandicapPage(props: {
         tee_slope: tee?.slope ?? null,
         tee_course_rating: tee?.course_rating ?? null,
         tee_par: tee?.par ?? null,
+        has_handicap_file: pid ? playersWithHandicapFile.has(pid) : false,
+        flagged_for_committee: Boolean(row.flagged_for_committee),
+        flagged_committee_reason:
+          (row.flagged_committee_reason as string | null) ?? null,
       };
     })
     .filter((e) => e.entry_id);

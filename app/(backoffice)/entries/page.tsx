@@ -991,6 +991,15 @@ export default async function EntriesPage({
               >
                 {ep.tabSummary}
               </a>
+
+              <span className="mx-1 hidden h-5 w-px bg-gray-300 sm:inline" aria-hidden />
+
+              <a
+                href="/players/handicap-files"
+                className="inline-flex min-h-7 items-center justify-center rounded border border-violet-600 bg-violet-50 px-2.5 text-[11px] font-semibold text-violet-900 shadow-sm hover:bg-violet-100"
+              >
+                Archivos GHIN
+              </a>
             </div>
           </section>
 

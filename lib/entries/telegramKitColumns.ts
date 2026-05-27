@@ -22,6 +22,8 @@ export const ENTRY_SELECT_WITHOUT_KIT = `
   playing_handicap,
   playing_handicap_override,
   playing_handicap_override_reason,
+  flagged_for_committee,
+  flagged_committee_reason,
   status,
   players:players (
     id,
@@ -59,6 +61,8 @@ export const ENTRY_SELECT_WITH_KIT = `
   player_id,
   player_number,
   handicap_index,
+  flagged_for_committee,
+  flagged_committee_reason,
   status,
   telegram_kit_sent_at,
   telegram_kit_received_at,
