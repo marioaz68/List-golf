@@ -251,5 +251,5 @@ export function buildPromptDownloadFilename(
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}Z$/, "")
     .slice(0, 15);
-  return `prompt-comite-${slug}-${stamp}.md`;
+  return `prompt-comite-${slug}-${stamp}.doc`;
 }
