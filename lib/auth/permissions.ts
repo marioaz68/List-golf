@@ -23,7 +23,8 @@ export type AppModule =
   | "leaderboard"
   | "caddies"
   | "reports"
-  | "comite-handicap";
+  | "comite-handicap"
+  | "captura-telegram";
 
 const ENTRIES_ROLES: AppRole[] = [
   "super_admin",
@@ -122,6 +123,14 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "tournament_director",
     "handicap_committee",
   ],
+
+  "captura-telegram": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "caddie_manager",
+  ],
 };
 
 /** Rutas del backoffice que exigen sesión (cualquier módulo). */
@@ -151,6 +160,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/course-holes",
   "/users",
   "/comite-handicap",
+  "/captura-telegram",
 ] as const;
 
 export function isBackofficePath(pathname: string): boolean {
@@ -192,6 +202,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/caddies")) return "caddies";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
+  if (pathname.startsWith("/captura-telegram")) return "captura-telegram";
   if (pathname.startsWith("/dashboard")) return "tournaments";
 
   if (

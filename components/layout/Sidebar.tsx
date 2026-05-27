@@ -36,6 +36,7 @@ import {
   Car,
   Gavel,
   Scale,
+  Send,
   X,
 } from "lucide-react";
 
@@ -215,6 +216,12 @@ export default function Sidebar() {
         nameKey: "caddies",
         href: "/caddies",
         icon: Car,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "capturaTelegram",
+        href: "/captura-telegram",
+        icon: Send,
         requiresTournament: true,
       },
       {
