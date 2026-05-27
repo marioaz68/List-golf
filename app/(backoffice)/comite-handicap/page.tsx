@@ -1123,13 +1123,17 @@ export default async function ComiteHandicapPage(props: {
                     </span>
                     <select
                       name="scope"
-                      defaultValue="tournament"
+                      defaultValue={
+                        actorIsSuperAdmin || actorIsClubAdmin
+                          ? "club"
+                          : "tournament"
+                      }
                       className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
                     >
-                      <option value="tournament">{t.admin.scopeTournament}</option>
                       {(actorIsSuperAdmin || actorIsClubAdmin) && (
                         <option value="club">{t.admin.scopeClub}</option>
                       )}
+                      <option value="tournament">{t.admin.scopeTournament}</option>
                       {actorIsSuperAdmin && (
                         <option value="global">{t.admin.scopeGlobal}</option>
                       )}
@@ -1141,6 +1145,9 @@ export default async function ComiteHandicapPage(props: {
                   >
                     {t.admin.btnAddCommittee}
                   </button>
+                  <p className="basis-full text-[11px] font-medium text-emerald-900">
+                    {t.admin.scopeHint}
+                  </p>
                   <p className="basis-full text-[11px] text-emerald-900/80">
                     {t.admin.addCommitteeHint}
                   </p>
@@ -1177,13 +1184,17 @@ export default async function ComiteHandicapPage(props: {
                       </span>
                       <select
                         name="scope"
-                        defaultValue="tournament"
+                        defaultValue={
+                          actorIsSuperAdmin || actorIsClubAdmin
+                            ? "club"
+                            : "tournament"
+                        }
                         className="rounded border border-slate-300 px-2 py-1.5 text-sm"
                       >
-                        <option value="tournament">{t.admin.scopeTournament}</option>
                         {(actorIsSuperAdmin || actorIsClubAdmin) && (
                           <option value="club">{t.admin.scopeClub}</option>
                         )}
+                        <option value="tournament">{t.admin.scopeTournament}</option>
                         {actorIsSuperAdmin && (
                           <option value="global">{t.admin.scopeGlobal}</option>
                         )}
@@ -1288,7 +1299,15 @@ export default async function ComiteHandicapPage(props: {
                         </div>
                       );
                     })()}
-                  <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2">
+                    <div className="text-sm font-bold text-emerald-900">
+                      {t.admin.attendanceTitle}
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-emerald-900/80">
+                      {t.admin.attendanceHint}
+                    </p>
+                  </div>
+                  <ul className="mt-2 grid gap-2 sm:grid-cols-2">
                     {candidateRows.map((c) => {
                       const isDirector = c.role_codes.includes("tournament_director");
                       const scopeLabels: Record<CommitteeScope, string> = {
