@@ -43,8 +43,8 @@ function buildUnlinkedTelegramReply(telegramUserId: string) {
     : "Pide al comité el nombre de usuario del bot de Telegram del torneo.";
 
   const webHint = appUrl
-    ? `\nWeb: ${appUrl}\n(Inscripciones → Inscritos → buscar tu nombre → botón KIT.)`
-    : "\nEn el backoffice: Inscripciones → Inscritos → buscar tu nombre → botón KIT.";
+    ? `\nWeb: ${appUrl}\nJugador: Inscripciones → Inscritos → KIT.\nCaddie: Caddies → tu ficha → pegar el ID.`
+    : "\nJugador: Inscripciones → Inscritos → KIT.\nCaddie: Caddies → tu ficha → pegar el ID.";
 
   const idLine = telegramUserId.trim();
 
@@ -55,15 +55,11 @@ function buildUnlinkedTelegramReply(telegramUserId: string) {
     idLine || "ERROR: no se pudo leer tu ID. Escribe a @userinfobot y envía el número al comité.",
     "━━━━━━━━━━━━━━━━━━━━",
     "",
-    "Envía este número al comité o pégalo en la pantalla KIT.",
+    "Envía este número al comité (o pégalo tú mismo si tienes acceso).",
+    "Si eres caddie, el comité te vincula desde Caddies.",
     "Comandos: ID · HOLA · /start",
     "",
     botLine,
-    "",
-    "Pasos:",
-    "1) Comité: Inscripciones → Inscritos → tu nombre → KIT.",
-    "2) Pegar el ID de arriba → Guardar.",
-    "3) Vuelve a escribir HOLA aquí.",
     webHint,
   ].join("\n");
 }
@@ -158,9 +154,56 @@ export async function POST(req: Request) {
         .eq("telegram_user_id", userId)
         .maybeSingle();
 
+      // Si no es jugador vinculado, probamos con caddie.
+      // Si la columna telegram_user_id aún no existe en caddies, simplemente ignoramos.
+      type CaddieMatch = {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+        telegram_chat_id?: string | null;
+      };
+      let caddieRow: CaddieMatch | null = null;
+      if (!playerError && !player) {
+        const caddieLookup = await supabase
+          .from("caddies")
+          .select("id, first_name, last_name, telegram_chat_id")
+          .eq("telegram_user_id", userId)
+          .maybeSingle();
+        if (!caddieLookup.error && caddieLookup.data) {
+          caddieRow = caddieLookup.data as unknown as CaddieMatch;
+        }
+      }
+
       if (playerError) {
         console.error("TELEGRAM PLAYER LOOKUP ERROR:", playerError);
         replyText = "Ocurrió un error buscando tu jugador.";
+      } else if (!player && caddieRow) {
+        // Caddie vinculado: actualizar chat_id si cambió y responder.
+        if (
+          chatId &&
+          (!caddieRow.telegram_chat_id || caddieRow.telegram_chat_id !== chatId)
+        ) {
+          await supabase
+            .from("caddies")
+            .update({ telegram_chat_id: chatId })
+            .eq("id", caddieRow.id);
+        }
+        await supabase
+          .from("telegram_pending_links")
+          .delete()
+          .eq("telegram_user_id", userId);
+
+        const caddieName = formatPlayerName(
+          caddieRow.first_name,
+          caddieRow.last_name
+        );
+        replyText = [
+          `Hola ${caddieName} (caddie), ya te identifiqué.`,
+          "",
+          "Cuando el comité te asigne grupo recibirás aquí el link de captura por grupo.",
+          "",
+          "Comandos: HOLA · ID",
+        ].join("\n");
       } else if (!player) {
         replyText = buildUnlinkedTelegramReply(userId);
         await recordPendingTelegramLink({

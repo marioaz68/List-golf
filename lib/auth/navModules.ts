@@ -31,4 +31,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   categoryTemplates: "catalog",
   users: "users",
   handicapCommittee: "comite-handicap",
+  capturaTelegram: "captura-telegram",
 };
