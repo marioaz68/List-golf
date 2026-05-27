@@ -485,7 +485,10 @@ function HoleDots({
             >
               {hole}
               {isDone ? (
-                <span className="absolute -right-1 -top-1 text-[9px] leading-none text-emerald-600">
+                <span
+                  aria-label="Hoyo completo"
+                  className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[12px] font-black leading-none text-white shadow-sm"
+                >
                   ✓
                 </span>
               ) : null}

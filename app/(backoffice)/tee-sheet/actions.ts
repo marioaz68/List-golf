@@ -107,19 +107,43 @@ function pickBackParamsFromFormData(fd: FormData) {
  * para que la UI muestre el error sin tumbar la página.
  */
 function withTeeSheetErrorRedirect(
-  fn: (formData: FormData) => Promise<unknown>
+  fn: (formData: FormData) => Promise<unknown>,
+  actionName?: string
 ): (formData: FormData) => Promise<void> {
   return async (formData: FormData) => {
     try {
       await fn(formData);
     } catch (err) {
       if (isNextRedirectError(err)) throw err;
-      console.error("[tee-sheet action]", err);
+      const label = actionName ? `[tee-sheet/${actionName}]` : "[tee-sheet action]";
+      console.error(label, err);
       const back = pickBackParamsFromFormData(formData);
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Ocurrió un error al ejecutar la acción.";
+
+      let message: string;
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === "string") {
+        message = err;
+      } else {
+        message = "Ocurrió un error al ejecutar la acción.";
+      }
+
+      const digest =
+        typeof err === "object" && err && "digest" in err
+          ? String((err as { digest?: unknown }).digest ?? "")
+          : "";
+
+      const looksMasked = /server components render/i.test(message);
+      if (looksMasked || !message.trim()) {
+        const hint = actionName ? ` en "${actionName}"` : "";
+        message =
+          `El servidor reportó un error${hint}. Revisa logs de Vercel para el detalle` +
+          (digest ? ` (digest ${digest})` : "") +
+          ".";
+      } else if (digest && !message.includes(digest)) {
+        message = `${message} [digest ${digest}]`;
+      }
+
       redirectToTeeSheet({ ...back, err: message });
     }
   };
@@ -1982,14 +2006,28 @@ async function _generateGroupsByCategory(formData: FormData) {
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
 }
 
-export const clearGroups = withTeeSheetErrorRedirect(_clearGroups);
-export const recalculateTeeTimes = withTeeSheetErrorRedirect(_recalculateTeeTimes);
-export const saveCategoryPlanOrder = withTeeSheetErrorRedirect(_saveCategoryPlanOrder);
-export const confirmStartingOrder = withTeeSheetErrorRedirect(_confirmStartingOrder);
-export const reopenStartingOrder = withTeeSheetErrorRedirect(_reopenStartingOrder);
+export const clearGroups = withTeeSheetErrorRedirect(_clearGroups, "clearGroups");
+export const recalculateTeeTimes = withTeeSheetErrorRedirect(
+  _recalculateTeeTimes,
+  "recalculateTeeTimes"
+);
+export const saveCategoryPlanOrder = withTeeSheetErrorRedirect(
+  _saveCategoryPlanOrder,
+  "saveCategoryPlanOrder"
+);
+export const confirmStartingOrder = withTeeSheetErrorRedirect(
+  _confirmStartingOrder,
+  "confirmStartingOrder"
+);
+export const reopenStartingOrder = withTeeSheetErrorRedirect(
+  _reopenStartingOrder,
+  "reopenStartingOrder"
+);
 export const generateMatchPlayTeeSheet = withTeeSheetErrorRedirect(
-  _generateMatchPlayTeeSheet
+  _generateMatchPlayTeeSheet,
+  "generateMatchPlayTeeSheet"
 );
 export const generateGroupsByCategory = withTeeSheetErrorRedirect(
-  _generateGroupsByCategory
+  _generateGroupsByCategory,
+  "generateGroupsByCategory"
 );

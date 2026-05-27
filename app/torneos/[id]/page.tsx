@@ -391,8 +391,19 @@ export default async function PublicTournamentPage({
     ? rounds
     : roundsInCategoryScope;
   const publishedDayKeys = publishedCompetitiveDayKeys(rounds, roundNotesById);
+  // Si la vista pública de salidas está sin filtro explícito de categoría,
+  // mostramos las rondas/grupos de TODAS las categorías (info operativa para
+  // encontrar grupo). Lo decidimos aquí para usarlo también al cargar grupos.
+  const teeSheetShowAllCategories =
+    view === "tee-sheet" && !requestedCategoryId;
+
   const publicTeeSheetRounds = rounds.filter((round) => {
-    if (!roundBelongsToCategory(round, selectedCategoryId || null)) return false;
+    if (
+      !teeSheetShowAllCategories &&
+      !roundBelongsToCategory(round, selectedCategoryId || null)
+    ) {
+      return false;
+    }
     return publishedDayKeys.has(competitiveDayKey(round));
   });
 
@@ -1290,15 +1301,16 @@ export default async function PublicTournamentPage({
         ),
       };
     })
-    .filter((group) =>
-      pairingGroupMatchesCategory(
+    .filter((group) => {
+      if (teeSheetShowAllCategories) return true;
+      return pairingGroupMatchesCategory(
         group.notes,
         group.members,
         selectedCategoryCode || selectedCategory?.code,
         selectedCategory?.name,
         selectedCategoryId || null
-      )
-    )
+      );
+    })
     .sort((a, b) => {
       if (a.round_no !== b.round_no) return a.round_no - b.round_no;
       return a.group_no - b.group_no;
@@ -1882,9 +1894,13 @@ export default async function PublicTournamentPage({
               groups={publicPairingGroups}
               rounds={publicTeeSheetRounds}
               tournamentId={typedTournament.id}
-              selectedCategoryUuid={selectedCategoryId ?? ""}
+              selectedCategoryUuid={
+                teeSheetShowAllCategories ? "" : selectedCategoryId ?? ""
+              }
               selectedCategoryCode={
-                selectedCategory?.code ?? selectedCategory?.name ?? ""
+                teeSheetShowAllCategories
+                  ? ""
+                  : selectedCategory?.code ?? selectedCategory?.name ?? ""
               }
               selectedRoundId={
                 publicTeeSheetRounds.some(
