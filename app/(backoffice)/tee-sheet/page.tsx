@@ -21,7 +21,7 @@ import {
   representativeRoundId,
   roundsInSameSession,
 } from "./sessionBlock";
-import { createAdminClient } from "@/utils/supabase/admin";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import {
   cutEnforcesAtTargetRound,
@@ -260,16 +260,18 @@ export default async function TeeSheetPage(props: {
   let standingDisplayByEntryId = new Map<string, string>();
   if (targetRoundNo > 1 && effectiveTournamentId) {
     try {
-      const admin = createAdminClient();
-      const pairingOrder = await buildTeeSheetEntryOrderMap(
-        admin,
-        effectiveTournamentId,
-        targetRoundNo
-      );
-      teeSheetOrderMap = pairingOrder.orderMap;
-      for (const [entryId, info] of teeSheetOrderMap) {
-        if (info.standingDisplay) {
-          standingDisplayByEntryId.set(entryId, info.standingDisplay);
+      const admin = tryCreateAdminClient();
+      if (admin) {
+        const pairingOrder = await buildTeeSheetEntryOrderMap(
+          admin,
+          effectiveTournamentId,
+          targetRoundNo
+        );
+        teeSheetOrderMap = pairingOrder.orderMap;
+        for (const [entryId, info] of teeSheetOrderMap) {
+          if (info.standingDisplay) {
+            standingDisplayByEntryId.set(entryId, info.standingDisplay);
+          }
         }
       }
     } catch (err) {
@@ -630,17 +632,23 @@ for (const row of membersRaw) {
 
   let cutEnforcesForPairing = false;
   if (targetRoundNo > 1 && effectiveTournamentId) {
-    const admin = createAdminClient();
-    await repairCutRulesTargetFinalRound(admin, effectiveTournamentId);
-    const { data: advancementRows } = await admin
-      .from("round_advancement_rules")
-      .select("from_round_no, to_round_no, is_active")
-      .eq("tournament_id", effectiveTournamentId)
-      .eq("is_active", true);
-    cutEnforcesForPairing = cutEnforcesAtTargetRound(
-      (advancementRows ?? []) as RoundAdvancementRule[],
-      targetRoundNo
-    );
+    try {
+      const admin = tryCreateAdminClient();
+      if (admin) {
+        await repairCutRulesTargetFinalRound(admin, effectiveTournamentId);
+        const { data: advancementRows } = await admin
+          .from("round_advancement_rules")
+          .select("from_round_no, to_round_no, is_active")
+          .eq("tournament_id", effectiveTournamentId)
+          .eq("is_active", true);
+        cutEnforcesForPairing = cutEnforcesAtTargetRound(
+          (advancementRows ?? []) as RoundAdvancementRule[],
+          targetRoundNo
+        );
+      }
+    } catch (err) {
+      console.error("[tee-sheet] cut rules / advancement:", err);
+    }
   }
 
   const isShotgunBlock =
@@ -669,13 +677,17 @@ for (const row of membersRaw) {
   let teeSheetRegistrationMessage = "";
 
   if (effectiveTournamentId) {
-    const regStatus = await fetchTournamentRegistrationStatus(
-      supabase,
-      effectiveTournamentId
-    );
-    if (!isRegistrationClosed(regStatus)) {
-      teeSheetGenerateBlocked = true;
-      teeSheetRegistrationMessage = ts.registrationOpenGate;
+    try {
+      const regStatus = await fetchTournamentRegistrationStatus(
+        supabase,
+        effectiveTournamentId
+      );
+      if (!isRegistrationClosed(regStatus)) {
+        teeSheetGenerateBlocked = true;
+        teeSheetRegistrationMessage = ts.registrationOpenGate;
+      }
+    } catch (err) {
+      console.error("[tee-sheet] registration status:", err);
     }
   }
 
@@ -806,38 +818,42 @@ for (const row of membersRaw) {
         : planRows.map((row) => row.id).filter((id) => id !== "NO_CAT");
 
     if (categoryIdsToCheck.length > 0) {
-      const gateCtx = await loadCategoryRoundGateContext(
-        supabase,
-        effectiveTournamentId
-      );
-      const { data: tournamentRow } = await supabase
-        .from("tournaments")
-        .select("settings")
-        .eq("id", effectiveTournamentId)
-        .maybeSingle();
-      const blockedIds = listCategoriesBlockedForRound(
-        gateCtx.entries,
-        gateCtx.rounds,
-        selectedRound.round_no,
-        categoryIdsToCheck,
-        gateCtx.lookups,
-        tournamentRow?.settings ?? null
-      );
+      try {
+        const gateCtx = await loadCategoryRoundGateContext(
+          supabase,
+          effectiveTournamentId
+        );
+        const { data: tournamentRow } = await supabase
+          .from("tournaments")
+          .select("settings")
+          .eq("id", effectiveTournamentId)
+          .maybeSingle();
+        const blockedIds = listCategoriesBlockedForRound(
+          gateCtx.entries,
+          gateCtx.rounds,
+          selectedRound.round_no,
+          categoryIdsToCheck,
+          gateCtx.lookups,
+          tournamentRow?.settings ?? null
+        );
 
-      if (blockedIds.length > 0) {
-        teeSheetGenerateBlocked = true;
-        const blockedLabels = blockedIds
-          .map((id) => {
-            const c = allPlanCategories.find((x) => x.id === id);
-            return [c?.code, c?.name].filter(Boolean).join(" — ") || id;
-          })
-          .join(", ");
+        if (blockedIds.length > 0) {
+          teeSheetGenerateBlocked = true;
+          const blockedLabels = blockedIds
+            .map((id) => {
+              const c = allPlanCategories.find((x) => x.id === id);
+              return [c?.code, c?.name].filter(Boolean).join(" — ") || id;
+            })
+            .join(", ");
 
-        teeSheetRoundGateMessage = fmt(ts.priorRoundGate, {
-          round: selectedRound.round_no,
-          prior: selectedRound.round_no - 1,
-          categories: blockedLabels,
-        });
+          teeSheetRoundGateMessage = fmt(ts.priorRoundGate, {
+            round: selectedRound.round_no,
+            prior: selectedRound.round_no - 1,
+            categories: blockedLabels,
+          });
+        }
+      } catch (err) {
+        console.error("[tee-sheet] category round gate:", err);
       }
     }
   }
