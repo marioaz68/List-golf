@@ -2,7 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HoleNumber } from "./types";
 
 export type SaveHoleScoreResult =
-  | { ok: true; strokes: number | null }
+  | {
+      ok: true;
+      strokes: number | null;
+      /** True si la celda quedó marcada como pendiente de aprobación por el testigo. */
+      pendingWitness?: boolean;
+    }
   | { ok: false; error: string };
 
 function safeString(v: unknown): string {
@@ -17,6 +22,14 @@ export async function saveGroupHoleScore(
     entryId: string;
     hole: HoleNumber;
     strokes: number | null;
+    /**
+     * Modo de la operación:
+     *  - "modify"  : caddie/jugador captura/modifica (puede dejar la celda en rojo)
+     *  - "approve" : testigo aprueba el cambio (limpia el flag pending)
+     */
+    mode?: "modify" | "approve";
+    /** Quién está capturando (sirve para auditoría/lectura futura). */
+    actorRole?: "player" | "caddie" | "witness" | "admin" | null;
   }
 ): Promise<SaveHoleScoreResult> {
   const groupId = params.groupId.trim();
@@ -97,16 +110,39 @@ export async function saveGroupHoleScore(
 
   const { data: existingHole } = await admin
     .from("hole_scores")
-    .select("id")
+    .select("id, strokes, pending_witness")
     .eq("round_score_id", roundScoreId)
     .eq("hole_number", hole)
     .maybeSingle();
+
+  const mode = params.mode ?? "modify";
+  const actorRole = params.actorRole ?? null;
+  let pendingWitness = false;
 
   if (params.strokes == null) {
     if (existingHole?.id) {
       await admin.from("hole_scores").delete().eq("id", existingHole.id);
     }
   } else if (existingHole?.id) {
+    const previousStrokes =
+      typeof (existingHole as { strokes?: number | null }).strokes === "number"
+        ? ((existingHole as { strokes: number }).strokes as number)
+        : null;
+    const wasPending = Boolean(
+      (existingHole as { pending_witness?: boolean }).pending_witness
+    );
+
+    if (mode === "approve") {
+      pendingWitness = false;
+    } else if (
+      previousStrokes != null &&
+      previousStrokes !== params.strokes
+    ) {
+      pendingWitness = true;
+    } else {
+      pendingWitness = wasPending;
+    }
+
     const { error: upErr } = await admin
       .from("hole_scores")
       .update({
@@ -115,10 +151,14 @@ export async function saveGroupHoleScore(
         hole_number: hole,
         entry_id: entryId,
         round_id: roundId,
+        pending_witness: pendingWitness,
+        pending_at: pendingWitness ? new Date().toISOString() : null,
+        pending_by_role: pendingWitness ? actorRole : null,
       })
       .eq("id", existingHole.id);
     if (upErr) return { ok: false, error: upErr.message };
   } else {
+    // Inserción nueva: la primera captura nunca queda pendiente.
     const { error: insErr } = await admin.from("hole_scores").insert({
       round_score_id: roundScoreId,
       entry_id: entryId,
@@ -126,6 +166,7 @@ export async function saveGroupHoleScore(
       hole_no: hole,
       hole_number: hole,
       strokes: params.strokes,
+      pending_witness: false,
     });
     if (insErr) return { ok: false, error: insErr.message };
   }
@@ -146,5 +187,5 @@ export async function saveGroupHoleScore(
     .update({ gross_score: gross })
     .eq("id", roundScoreId);
 
-  return { ok: true, strokes: params.strokes };
+  return { ok: true, strokes: params.strokes, pendingWitness };
 }

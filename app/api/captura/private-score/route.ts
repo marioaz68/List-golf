@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { saveGroupHoleScore } from "@/lib/captura/saveGroupHoleScore";
+import { savePrivateHoleScore } from "@/lib/captura/privateScores";
 import type { HoleNumber } from "@/lib/captura/types";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +11,12 @@ function parseHole(raw: unknown): HoleNumber | null {
   return Math.trunc(n) as HoleNumber;
 }
 
+/**
+ * Tarjeta privada de un jugador ("Mi Tarjeta"). El servidor verifica que
+ * el escritor sea o bien el propio jugador (me=entry_id que coincide) o
+ * el caddie asignado a ese jugador (caddie=caddie_id con asignación
+ * activa al entry_id).
+ */
 export async function POST(req: Request) {
   let body: unknown;
   try {
@@ -27,21 +33,19 @@ export async function POST(req: Request) {
   const entryId = String(o.entry_id ?? "").trim();
   const hole = parseHole(o.hole);
   const strokesRaw = o.strokes;
-  const rawMode = String(o.mode ?? "").trim().toLowerCase();
-  const mode: "modify" | "approve" =
-    rawMode === "approve" ? "approve" : "modify";
-  const rawRole = String(o.role ?? "").trim().toLowerCase();
-  const actorRole: "player" | "caddie" | "witness" | "admin" | null =
-    rawRole === "player" ||
-    rawRole === "caddie" ||
-    rawRole === "witness" ||
-    rawRole === "admin"
-      ? (rawRole as "player" | "caddie" | "witness" | "admin")
-      : null;
+  const meEntryId = String(o.me ?? "").trim();
+  const caddieId = String(o.caddie ?? "").trim();
 
   if (!groupId || !entryId || hole == null) {
     return NextResponse.json(
       { ok: false, error: "Faltan group_id, entry_id o hole." },
+      { status: 400 }
+    );
+  }
+
+  if (!meEntryId && !caddieId) {
+    return NextResponse.json(
+      { ok: false, error: "Falta identidad (me o caddie)." },
       { status: 400 }
     );
   }
@@ -62,14 +66,45 @@ export async function POST(req: Request) {
 
   try {
     const admin = createAdminClient();
-    const result = await saveGroupHoleScore(admin, {
+
+    let role: "player" | "caddie" | null = null;
+    if (meEntryId && meEntryId === entryId) {
+      role = "player";
+    } else if (caddieId) {
+      const { data: assigns } = await admin
+        .from("caddie_assignments")
+        .select("entry_id, pairing_group_id, is_active")
+        .eq("caddie_id", caddieId)
+        .eq("entry_id", entryId);
+
+      const isAuthorized = ((assigns ?? []) as Array<{
+        entry_id: string | null;
+        pairing_group_id: string | null;
+        is_active: boolean | null;
+      }>).some(
+        (a) =>
+          a.is_active !== false &&
+          (!a.pairing_group_id || a.pairing_group_id === groupId)
+      );
+
+      if (isAuthorized) role = "caddie";
+    }
+
+    if (!role) {
+      return NextResponse.json(
+        { ok: false, error: "No autorizado para esta tarjeta privada." },
+        { status: 403 }
+      );
+    }
+
+    const result = await savePrivateHoleScore(admin, {
       groupId,
       entryId,
       hole,
       strokes,
-      mode,
-      actorRole,
+      role,
     });
+
     if (!result.ok) {
       return NextResponse.json(result, { status: 400 });
     }
@@ -78,7 +113,10 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : "Error guardando score.",
+        error:
+          err instanceof Error
+            ? err.message
+            : "Error guardando tarjeta privada.",
       },
       { status: 500 }
     );
