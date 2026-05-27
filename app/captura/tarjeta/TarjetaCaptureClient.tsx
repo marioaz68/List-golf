@@ -70,7 +70,7 @@ function Section({
                     {done ? (
                       <span
                         aria-label="Hoyo completo"
-                        className="absolute right-0 top-0 inline-flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-[7px] font-black leading-none text-white shadow-sm"
+                        className="absolute -right-0.5 -top-0.5 inline-flex h-[14px] w-[14px] items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black leading-none text-white shadow-sm"
                       >
                         ✓
                       </span>
