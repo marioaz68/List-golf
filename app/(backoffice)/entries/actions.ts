@@ -1901,7 +1901,7 @@ export async function toggleEntryCommitteeFlag(formData: FormData) {
   } = await supabase.auth.getUser();
 
   const admin = await createAdminClient();
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("tournament_entries")
     .update({
       flagged_for_committee: flag,
@@ -1910,11 +1910,18 @@ export async function toggleEntryCommitteeFlag(formData: FormData) {
       flagged_committee_by: flag ? user?.id ?? null : null,
     })
     .eq("id", entry_id)
-    .eq("tournament_id", tournament_id);
+    .eq("tournament_id", tournament_id)
+    .select("id");
 
   if (error) {
     redirect(
       `/entries?tournament_id=${tournament_id}&err=${encodeURIComponent(error.message)}`
+    );
+  }
+
+  if (!updated?.length) {
+    redirect(
+      `/entries?tournament_id=${tournament_id}&err=${encodeURIComponent("No se encontró la inscripción para actualizar")}`
     );
   }
 
@@ -1930,6 +1937,7 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
   });
 
   const supabase = await createClient();
+  const admin = await createAdminClient();
 
   const { data: tournament, error: tErr } = await supabase
     .from("tournaments")
@@ -1941,7 +1949,7 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     throw new Error(tErr.message);
   }
 
-  const { data: rows, error: eErr } = await supabase
+  const { data: rows, error: eErr } = await admin
     .from("tournament_entries")
     .select(
       `

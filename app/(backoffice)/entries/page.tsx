@@ -130,6 +130,8 @@ type EntryRowBase = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  flagged_for_committee?: boolean | null;
+  flagged_committee_reason?: string | null;
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
   players: EntryPlayerRaw | EntryPlayerRaw[] | null;
@@ -142,6 +144,8 @@ type EntryRow = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  flagged_for_committee?: boolean;
+  flagged_committee_reason?: string | null;
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
   round_signatures: RoundSignature[];
@@ -762,6 +766,8 @@ export default async function EntriesPage({
         player_number: e.player_number,
         handicap_index: e.handicap_index,
         status: e.status,
+        flagged_for_committee: Boolean(e.flagged_for_committee),
+        flagged_committee_reason: e.flagged_committee_reason ?? null,
         telegram_kit_sent_at: e.telegram_kit_sent_at ?? null,
         telegram_kit_received_at: e.telegram_kit_received_at ?? null,
         round_signatures: buildRoundSignatures(
