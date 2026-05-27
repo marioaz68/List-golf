@@ -4,6 +4,8 @@ import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   distributionChips,
@@ -60,15 +62,16 @@ export default async function ComiteHandicapPage(props: {
   const requestedTab =
     typeof sp.tab === "string" && sp.tab === "admin" ? "admin" : "vote";
 
+  const locale = await getLocale();
+  const t = messages[locale].handicapCommittee;
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return (
-      <div className="p-6 text-red-700">Inicia sesión para acceder al comité.</div>
-    );
+    return <div className="p-6 text-red-700">{t.notLoggedIn}</div>;
   }
 
   if (!tournamentId) {
@@ -155,25 +158,22 @@ export default async function ComiteHandicapPage(props: {
     return (
       <div className="space-y-6 p-4 md:p-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Comité de Handicap</h1>
-          <p className="mt-1 text-sm text-slate-300">
-            Elige un torneo para auditar handicaps o votar (voto anónimo entre miembros).
-          </p>
+          <h1 className="text-2xl font-bold text-white">{t.pageTitle}</h1>
+          <p className="mt-1 text-sm text-slate-300">{t.pickTournament}</p>
         </div>
         {(tournaments ?? []).length === 0 ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            No tienes torneos asignados. Pide a un administrador que te asigne el rol
-            «Comité de Handicap» o «Director del Torneo» en algún torneo.
+            {t.noTournaments}
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {(tournaments ?? []).map((t) => (
+            {(tournaments ?? []).map((row) => (
               <Link
-                key={t.id}
-                href={`/comite-handicap?tournament_id=${t.id}`}
+                key={row.id}
+                href={`/comite-handicap?tournament_id=${row.id}`}
                 className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
               >
-                {t.name ?? t.id.slice(0, 8)}
+                {row.name ?? row.id.slice(0, 8)}
               </Link>
             ))}
           </div>
@@ -184,11 +184,7 @@ export default async function ComiteHandicapPage(props: {
 
   const access = await loadHandicapCommitteeAccess(supabase, user.id, tournamentId);
   if (!access.isMember) {
-    return (
-      <div className="p-6 text-red-700">
-        No tienes acceso al comité de handicap de este torneo.
-      </div>
-    );
+    return <div className="p-6 text-red-700">{t.noAccess}</div>;
   }
 
   const { data: tournament } = await supabase
@@ -876,9 +872,9 @@ export default async function ComiteHandicapPage(props: {
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Comité de Handicap</h1>
+        <h1 className="text-2xl font-bold text-white">{t.pageTitle}</h1>
         <p className="mt-1 text-sm text-slate-300">
-          {tournament?.name ?? "Torneo"} · Voto anónimo · Solo bajar HI (−0.5 a −5.0)
+          {tournament?.name ?? "—"} · {t.pageSubtitle}
         </p>
       </div>
 
@@ -889,48 +885,47 @@ export default async function ComiteHandicapPage(props: {
       ) : null}
       {actionOk === "committee_enabled" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          Comité activado. Asigna el rol «Comité de Handicap» a los 9 miembros en Usuarios.
+          {t.bannerEnabled}
         </div>
       ) : null}
       {actionOk === "committee_closed" ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Votación cerrada.
+          {t.bannerClosed}
         </div>
       ) : null}
       {actionOk === "hi_applied" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          HI del torneo actualizado con el ajuste sugerido.
+          {t.bannerHiApplied}
         </div>
       ) : null}
       {actionOk === "member_present" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          Miembro marcado como presente.
+          {t.bannerPresent}
         </div>
       ) : null}
       {actionOk === "member_absent" ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Miembro marcado como ausente.
+          {t.bannerAbsent}
         </div>
       ) : null}
       {actionOk === "role_assigned" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          Usuario agregado al comité.
+          {t.bannerRoleAssigned}
         </div>
       ) : null}
       {actionOk === "role_revoked" ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-          Usuario removido del comité.
+          {t.bannerRoleRevoked}
         </div>
       ) : null}
       {actionOk === "trim_saved" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
-          Recorte de outliers actualizado.
+          {t.bannerTrimSaved}
         </div>
       ) : null}
       {actionOk === "votes_reset" ? (
         <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-950">
-          Votación reiniciada: se archivó la sesión anterior y todos los miembros
-          deben volver a votar desde cero.
+          {t.bannerVotesReset}
         </div>
       ) : null}
 
@@ -938,11 +933,10 @@ export default async function ComiteHandicapPage(props: {
         <div className="rounded-xl border-2 border-slate-700 bg-slate-900 p-3 text-white shadow-md">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-900">
-              Solo admin
+              {t.adminBadge}
             </span>
             <span className="text-xs font-semibold text-white/80">
-              Como Director / Club Admin / Super Admin puedes parametrizar
-              reglas, marcar presentes, cerrar votación, reiniciar e historial.
+              {t.adminScopeDesc}
             </span>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -955,7 +949,7 @@ export default async function ComiteHandicapPage(props: {
                   : "border border-white/30 bg-transparent text-white hover:bg-white/10",
               ].join(" ")}
             >
-              Votar
+              {t.btnVote}
             </Link>
             <Link
               href={`/comite-handicap?tournament_id=${tournamentId}&tab=admin`}
@@ -966,14 +960,14 @@ export default async function ComiteHandicapPage(props: {
                   : "border-2 border-amber-400 bg-amber-50 text-slate-900 hover:bg-amber-100",
               ].join(" ")}
             >
-              ⚙ Administración
+              {t.btnAdmin}
             </Link>
             {showAdmin ? (
               <Link
                 href={`/users?tournament_id=${tournamentId}`}
                 className="rounded-lg border border-white/40 bg-transparent px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
               >
-                Gestionar miembros
+                {t.btnManageMembers}
               </Link>
             ) : null}
           </div>
@@ -982,13 +976,17 @@ export default async function ComiteHandicapPage(props: {
 
       {showAdmin && isCommitteeAdmin ? (
         <section className="space-y-4 rounded-xl border border-slate-300 bg-white p-4 text-slate-900 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">Administración del comité</h2>
+          <h2 className="text-lg font-bold text-slate-950">
+            {t.admin.sectionTitle}
+          </h2>
 
           {!committee ? (
             <form action={enableHandicapCommittee} className="flex flex-wrap items-end gap-3">
               <input type="hidden" name="tournament_id" value={tournamentId} />
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-800">Miembros esperados</span>
+                <span className="font-medium text-slate-800">
+                  {t.admin.expectedMembers}
+                </span>
                 <input
                   type="number"
                   name="expected_members"
@@ -1002,27 +1000,31 @@ export default async function ComiteHandicapPage(props: {
                 type="submit"
                 className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white"
               >
-                Activar comité en este torneo
+                {t.admin.activate}
               </button>
             </form>
           ) : (
             <>
               <div className="flex flex-wrap gap-4 text-sm text-slate-800">
                 <span>
-                  Estado:{" "}
-                  <strong>{committee.status === "open" ? "Abierta" : "Cerrada"}</strong>
+                  {t.admin.statusLabel}{" "}
+                  <strong>
+                    {committee.status === "open"
+                      ? t.admin.statusOpen
+                      : t.admin.statusClosed}
+                  </strong>
                 </span>
                 <span>
-                  Miembros con rol: <strong>{memberCount}</strong> /{" "}
+                  {t.admin.membersWithRole} <strong>{memberCount}</strong> /{" "}
                   {committee.expected_members}
                 </span>
                 <span>
-                  Presentes hoy: <strong>{presentCount}</strong> / {candidateRows.length}
+                  {t.admin.presentToday} <strong>{presentCount}</strong> /{" "}
+                  {candidateRows.length}
                 </span>
                 {committee.status === "open" ? (
                   <span className="rounded-full border border-slate-400 bg-white px-2 py-0.5 text-xs text-slate-700">
-                    Puedes cerrar la votación aunque falten miembros por
-                    calificar a todos los jugadores.
+                    {t.admin.canCloseHint}
                   </span>
                 ) : null}
               </div>
@@ -1036,7 +1038,7 @@ export default async function ComiteHandicapPage(props: {
                       type="submit"
                       className="rounded-lg border border-amber-600 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900"
                     >
-                      Cerrar votación
+                      {t.admin.btnClose}
                     </button>
                   </form>
                 ) : (
@@ -1047,24 +1049,20 @@ export default async function ComiteHandicapPage(props: {
                       type="submit"
                       className="rounded-lg border border-slate-600 bg-white px-4 py-2 text-sm font-semibold text-slate-900"
                     >
-                      Reabrir votación
+                      {t.admin.btnReopen}
                     </button>
                   </form>
                 )}
 
-                <ResetCommitteeVotesPanel tournamentId={tournamentId} />
+                <ResetCommitteeVotesPanel tournamentId={tournamentId} t={t} />
               </div>
 
               <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <h3 className="text-sm font-bold text-slate-900">
-                    Miembros del comité (marcar presentes)
+                    {t.admin.membersTitle}
                   </h3>
-                  <p className="text-xs text-slate-600">
-                    Autoriza quién puede votar en <strong>este torneo</strong> y
-                    marca su asistencia. El alcance define si el acceso es solo
-                    aquí, en todo el club o en todo el sistema.
-                  </p>
+                  <p className="text-xs text-slate-600">{t.admin.membersHelp}</p>
                 </div>
 
                 <form
@@ -1074,7 +1072,7 @@ export default async function ComiteHandicapPage(props: {
                   <input type="hidden" name="tournament_id" value={tournamentId} />
                   <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs">
                     <span className="font-semibold text-emerald-900">
-                      Agregar miembro existente
+                      {t.admin.addMember}
                     </span>
                     <select
                       name="user_id"
@@ -1083,7 +1081,7 @@ export default async function ComiteHandicapPage(props: {
                       className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
                     >
                       <option value="" disabled>
-                        — elige un usuario —
+                        {t.admin.chooseUser}
                       </option>
                       {availableProfiles.map((u) => (
                         <option key={u.id} value={u.id}>
@@ -1095,19 +1093,19 @@ export default async function ComiteHandicapPage(props: {
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
                     <span className="font-semibold text-emerald-900">
-                      Alcance
+                      {t.admin.scopeLabel}
                     </span>
                     <select
                       name="scope"
                       defaultValue="tournament"
                       className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm"
                     >
-                      <option value="tournament">Solo este torneo</option>
+                      <option value="tournament">{t.admin.scopeTournament}</option>
                       {(actorIsSuperAdmin || actorIsClubAdmin) && (
-                        <option value="club">Todo el club</option>
+                        <option value="club">{t.admin.scopeClub}</option>
                       )}
                       {actorIsSuperAdmin && (
-                        <option value="global">Todo el sistema</option>
+                        <option value="global">{t.admin.scopeGlobal}</option>
                       )}
                     </select>
                   </label>
@@ -1115,18 +1113,16 @@ export default async function ComiteHandicapPage(props: {
                     type="submit"
                     className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-800"
                   >
-                    + Agregar al comité
+                    {t.admin.btnAddCommittee}
                   </button>
                   <p className="basis-full text-[11px] text-emerald-900/80">
-                    El usuario quedará con permiso «Comité de Handicap». Después
-                    marca su asistencia con el botón verde de su tarjeta para
-                    habilitar su voto.
+                    {t.admin.addCommitteeHint}
                   </p>
                 </form>
 
                 <details className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700">
                   <summary className="cursor-pointer font-semibold text-slate-800">
-                    ¿No está en la lista? Invitar por email
+                    {t.admin.inviteByEmail}
                   </summary>
                   <form
                     action={inviteHandicapCommitteeMember}
@@ -1139,31 +1135,31 @@ export default async function ComiteHandicapPage(props: {
                     />
                     <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs">
                       <span className="font-semibold text-slate-800">
-                        Email del usuario
+                        {t.admin.userEmail}
                       </span>
                       <input
                         type="email"
                         name="email"
                         required
-                        placeholder="miembro@email.com"
+                        placeholder={t.admin.emailPh}
                         className="rounded border border-slate-300 px-2 py-1.5 text-sm"
                       />
                     </label>
                     <label className="flex flex-col gap-1 text-xs">
                       <span className="font-semibold text-slate-800">
-                        Alcance
+                        {t.admin.scopeLabel}
                       </span>
                       <select
                         name="scope"
                         defaultValue="tournament"
                         className="rounded border border-slate-300 px-2 py-1.5 text-sm"
                       >
-                        <option value="tournament">Solo este torneo</option>
+                        <option value="tournament">{t.admin.scopeTournament}</option>
                         {(actorIsSuperAdmin || actorIsClubAdmin) && (
-                          <option value="club">Todo el club</option>
+                          <option value="club">{t.admin.scopeClub}</option>
                         )}
                         {actorIsSuperAdmin && (
-                          <option value="global">Todo el sistema</option>
+                          <option value="global">{t.admin.scopeGlobal}</option>
                         )}
                       </select>
                     </label>
@@ -1171,16 +1167,15 @@ export default async function ComiteHandicapPage(props: {
                       type="submit"
                       className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
                     >
-                      Buscar y autorizar
+                      {t.admin.btnSearchAuthorize}
                     </button>
                     <p className="basis-full text-[11px] text-slate-600">
-                      Requiere que el usuario ya exista en el sistema. Si no
-                      existe, créalo primero en{" "}
+                      {t.admin.inviteRequires}{" "}
                       <Link
                         href="/users/new"
                         className="font-semibold underline"
                       >
-                        Usuarios → Nuevo
+                        {t.admin.usersNewLabel}
                       </Link>
                       .
                     </p>
@@ -1189,15 +1184,14 @@ export default async function ComiteHandicapPage(props: {
 
                 {candidateRows.length === 0 ? (
                   <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
-                    Aún no hay miembros autorizados. Usa el formulario de arriba o
-                    asigna el rol en{" "}
+                    {t.admin.noMembersWarning}{" "}
                     <Link
                       href={`/users?tournament_id=${tournamentId}`}
                       className="font-semibold underline"
                     >
-                      Usuarios
+                      {t.admin.usersLink}
                     </Link>
-                    . Los directores del torneo aparecen automáticamente.
+                    {t.admin.directorsAutoIncluded}
                   </div>
                 ) : (
                   <>
@@ -1226,10 +1220,11 @@ export default async function ComiteHandicapPage(props: {
                         <div className="mt-3 rounded-lg border border-slate-300 bg-white p-3 text-xs text-slate-800">
                           <div className="flex flex-wrap items-baseline justify-between gap-2">
                             <strong className="text-sm text-slate-950">
-                              Avance global del comité
+                              {t.admin.globalProgress}
                             </strong>
                             <span className="tabular-nums text-slate-700">
-                              {filledSlots} / {totalSlots} votos · {pct}%
+                              {filledSlots} / {totalSlots} {t.admin.votesShort} ·{" "}
+                              {pct}%
                             </span>
                           </div>
                           <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -1240,24 +1235,25 @@ export default async function ComiteHandicapPage(props: {
                           </div>
                           <div className="mt-1.5 flex flex-wrap gap-3 text-[11px] text-slate-600">
                             <span>
-                              Miembros activos:{" "}
+                              {t.admin.activeMembers}{" "}
                               <strong className="text-slate-900">
                                 {activeMembers.length}
                               </strong>
                             </span>
                             <span>
-                              Jugadores: <strong className="text-slate-900">
+                              {t.admin.playersLabel}{" "}
+                              <strong className="text-slate-900">
                                 {entries.length}
                               </strong>
                             </span>
                             <span>
-                              Completaron 100%:{" "}
+                              {t.admin.completed100}{" "}
                               <strong className="text-emerald-700">
                                 {completos}
                               </strong>
                             </span>
                             <span>
-                              Pendientes:{" "}
+                              {t.admin.pendingMembers}{" "}
                               <strong className="text-rose-700">
                                 {pendientes}
                               </strong>
@@ -1270,9 +1266,9 @@ export default async function ComiteHandicapPage(props: {
                     {candidateRows.map((c) => {
                       const isDirector = c.role_codes.includes("tournament_director");
                       const scopeLabels: Record<CommitteeScope, string> = {
-                        tournament: "Este torneo",
-                        club: "Todo el club",
-                        global: "Todo el sistema",
+                        tournament: t.admin.scopeBadgeTournament,
+                        club: t.admin.scopeBadgeClub,
+                        global: t.admin.scopeBadgeGlobal,
                       };
                       const scopeColors: Record<CommitteeScope, string> = {
                         tournament: "bg-violet-800 text-white",
@@ -1307,16 +1303,16 @@ export default async function ComiteHandicapPage(props: {
                               ))}
                               {isDirector ? (
                                 <span className="rounded-full bg-blue-900 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                                  Director
+                                  {t.admin.director}
                                 </span>
                               ) : null}
                               {c.is_present ? (
                                 <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                                  Presente
+                                  {t.admin.present}
                                 </span>
                               ) : (
                                 <span className="rounded-full border border-slate-400 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-700">
-                                  Ausente
+                                  {t.admin.absent}
                                 </span>
                               )}
                             </div>
@@ -1332,7 +1328,7 @@ export default async function ComiteHandicapPage(props: {
                                 <div className="mt-2">
                                   <div className="flex items-center justify-between text-[11px]">
                                     <span className="font-semibold text-slate-700">
-                                      Votos realizados
+                                      {t.admin.votesDone}
                                     </span>
                                     <span
                                       className={[
@@ -1346,7 +1342,7 @@ export default async function ComiteHandicapPage(props: {
                                     >
                                       {voted} / {total}
                                       {c.abstained_count > 0
-                                        ? ` · ${c.abstained_count} abst.`
+                                        ? ` · ${c.abstained_count} ${t.admin.abstSuffix}`
                                         : ""}
                                     </span>
                                   </div>
@@ -1394,8 +1390,8 @@ export default async function ComiteHandicapPage(props: {
                                 ].join(" ")}
                               >
                                 {c.is_present
-                                  ? "🔕 Marcar ausente"
-                                  : "✅ Marcar presente"}
+                                  ? t.admin.btnMarkAbsent
+                                  : t.admin.btnMarkPresent}
                               </button>
                             </form>
 
@@ -1423,7 +1419,7 @@ export default async function ComiteHandicapPage(props: {
                                     type="submit"
                                     className="rounded border border-rose-500 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700"
                                   >
-                                    Quitar ({scopeLabels[sc]})
+                                    {t.admin.btnRevoke} ({scopeLabels[sc]})
                                   </button>
                                 </form>
                               );
@@ -1443,11 +1439,11 @@ export default async function ComiteHandicapPage(props: {
               >
                 <input type="hidden" name="tournament_id" value={tournamentId} />
                 <div className="basis-full text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  Recorte de outliers y umbral «No jugar»
+                  {t.admin.trimSectionTitle}
                 </div>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-medium text-slate-800">
-                    Quitar votos altos (más suaves)
+                    {t.admin.removeHighVotes}
                   </span>
                   <input
                     type="number"
@@ -1460,7 +1456,7 @@ export default async function ComiteHandicapPage(props: {
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-medium text-slate-800">
-                    Quitar votos bajos (más severos)
+                    {t.admin.removeLowVotes}
                   </span>
                   <input
                     type="number"
@@ -1473,7 +1469,7 @@ export default async function ComiteHandicapPage(props: {
                 </label>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-medium text-rose-800">
-                    Mínimo de votos «No jugar»
+                    {t.admin.minDqVotes}
                   </span>
                   <input
                     type="number"
@@ -1491,51 +1487,55 @@ export default async function ComiteHandicapPage(props: {
                   type="submit"
                   className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
                 >
-                  Guardar reglas
+                  {t.admin.btnSaveRules}
                 </button>
                 <p className="basis-full text-[11px] text-slate-600">
-                  Recorte: por cada jugador se descartan los N votos más cercanos
-                  a 0 y los N votos más cercanos a −5; el promedio y el HI
-                  sugerido se recalculan con los votos vivos.
+                  {t.admin.trimExplain}
                 </p>
                 <p className="basis-full text-[11px] text-rose-700">
-                  Umbral «No jugar»: si un jugador acumula ese número (o más)
-                  de votos «No permitir jugar este torneo», queda marcado en
-                  rojo abajo. <strong>0</strong> = solo se muestra el conteo,
-                  sin marcar.
+                  {t.admin.thresholdExplain1} <strong>0</strong>{" "}
+                  {t.admin.thresholdExplain2}
                 </p>
               </form>
 
-              <p className="text-xs text-slate-600">
-                Resumen agregado (anonimizado): se muestran los votos individuales
-                sin nombre. Verde = activo, gris = descartado por recorte.
-              </p>
+              <p className="text-xs text-slate-600">{t.admin.aggregateHelp}</p>
 
               {entries.length === 0 ? (
                 allEntries.length === 0 ? (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                    No hay inscripciones activas en este torneo todavía. Agrega
-                    jugadores en{" "}
-                    <Link
-                      href={`/entries?tournament_id=${tournamentId}`}
-                      className="font-semibold underline"
-                    >
-                      Inscripciones
-                    </Link>{" "}
-                    para que el comité los pueda calificar.
+                    {t.emptyNoEntries
+                      .split("{entriesLink}")
+                      .map((chunk, i, arr) => (
+                        <span key={i}>
+                          {chunk}
+                          {i < arr.length - 1 ? (
+                            <Link
+                              href={`/entries?tournament_id=${tournamentId}`}
+                              className="font-semibold underline"
+                            >
+                              {t.entriesLinkLabel}
+                            </Link>
+                          ) : null}
+                        </span>
+                      ))}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                    Ningún jugador marcado para revisión todavía. Ve a{" "}
-                    <Link
-                      href={`/entries?tournament_id=${tournamentId}`}
-                      className="font-semibold underline"
-                    >
-                      Inscritos
-                    </Link>{" "}
-                    y usa el botón <strong>«→ Comité HI»</strong> en cada
-                    jugador que el comité deba revisar. Puedes mandar más
-                    durante el torneo y los votos ya guardados no se pierden.
+                    {t.emptyNoFlagged
+                      .split("{entriesLink}")
+                      .map((chunk, i, arr) => (
+                        <span key={i}>
+                          {chunk}
+                          {i < arr.length - 1 ? (
+                            <Link
+                              href={`/entries?tournament_id=${tournamentId}`}
+                              className="font-semibold underline"
+                            >
+                              {t.entriesLinkLabel}
+                            </Link>
+                          ) : null}
+                        </span>
+                      ))}
                   </div>
                 )
               ) : null}
@@ -1544,13 +1544,13 @@ export default async function ComiteHandicapPage(props: {
                 <table className="min-w-full text-left text-sm text-slate-900">
                   <thead className="bg-slate-100 text-xs uppercase text-slate-600">
                     <tr>
-                      <th className="px-3 py-2">Jugador</th>
-                      <th className="px-3 py-2">HI actual</th>
-                      <th className="px-3 py-2">Votos (anónimos)</th>
-                      <th className="px-3 py-2">Vivos / prom.</th>
-                      <th className="px-3 py-2">Prom. recortado</th>
-                      <th className="px-3 py-2">HI sugerido</th>
-                      <th className="px-3 py-2">No jugar</th>
+                      <th className="px-3 py-2">{t.admin.thPlayer}</th>
+                      <th className="px-3 py-2">{t.admin.thHiCurrent}</th>
+                      <th className="px-3 py-2">{t.admin.thVotesAnon}</th>
+                      <th className="px-3 py-2">{t.admin.thLiveAvg}</th>
+                      <th className="px-3 py-2">{t.admin.thAvgTrim}</th>
+                      <th className="px-3 py-2">{t.admin.thHiSug}</th>
+                      <th className="px-3 py-2">{t.admin.thNoPlay}</th>
                       <th className="px-3 py-2" />
                     </tr>
                   </thead>
@@ -1594,7 +1594,7 @@ export default async function ComiteHandicapPage(props: {
                               {e.ghin_number ? (
                                 <span
                                   className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-slate-700"
-                                  title="GHIN del jugador"
+                                  title={t.admin.ghinTitle}
                                 >
                                   GHIN {e.ghin_number}
                                 </span>
@@ -1606,7 +1606,7 @@ export default async function ComiteHandicapPage(props: {
                             <div className="flex flex-wrap gap-1">
                               {shuffledChips.length === 0 ? (
                                 <span className="text-xs text-slate-400">
-                                  Sin votos
+                                  {t.admin.noVotes}
                                 </span>
                               ) : (
                                 shuffledChips.map((v, idx) => (
@@ -1614,12 +1614,12 @@ export default async function ComiteHandicapPage(props: {
                                     key={`${e.entry_id}-${idx}`}
                                     title={
                                       v.abstained
-                                        ? "Abstención (cuenta como 0 en el promedio)"
+                                        ? t.admin.chipAbstain
                                         : v.trimmed
                                           ? v.reason === "low"
-                                            ? "Descartado (más severo)"
-                                            : "Descartado (más suave)"
-                                          : "Voto vivo"
+                                            ? t.admin.chipTrimmedLow
+                                            : t.admin.chipTrimmedHigh
+                                          : t.admin.chipLive
                                     }
                                     className={[
                                       "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
@@ -1631,7 +1631,7 @@ export default async function ComiteHandicapPage(props: {
                                     ].join(" ")}
                                   >
                                     {v.abstained
-                                      ? "0·abst"
+                                      ? t.admin.chipAbst
                                       : formatAdjustmentLabel(v.value)}
                                   </span>
                                 ))
@@ -1643,9 +1643,10 @@ export default async function ComiteHandicapPage(props: {
                               {liveIncAbst} / {totalVotesIncAbst}
                             </div>
                             <div className="text-[10px] font-normal text-slate-500">
-                              Prom.: ÷{trim.averageDenominator}
+                              {t.admin.avgDivisor}
+                              {trim.averageDenominator}
                               {trim.liveAbstainedAsZero > 0
-                                ? ` (${trim.liveAbstainedAsZero} abst. = 0)`
+                                ? ` (${trim.liveAbstainedAsZero} ${t.admin.abstAsZero})`
                                 : ""}
                             </div>
                           </td>
@@ -1679,20 +1680,20 @@ export default async function ComiteHandicapPage(props: {
                                   ].join(" ")}
                                   title={
                                     over
-                                      ? "Supera el umbral: jugador no autorizado"
+                                      ? t.admin.thresholdAuto
                                       : threshold > 0
-                                        ? `Umbral configurado: ${threshold}`
-                                        : "Solo informativo (umbral desactivado)"
+                                        ? `${t.admin.thresholdConfigured} ${threshold}`
+                                        : t.admin.thresholdInfo
                                   }
                                 >
                                   <span>
                                     {disqVotes}
                                     {threshold > 0 ? ` / ${threshold}` : ""}{" "}
-                                    votos
+                                    {t.admin.votesWord}
                                   </span>
                                   {over ? (
                                     <span className="text-[10px] uppercase tracking-wide">
-                                      No autorizado
+                                      {t.admin.notAuthorized}
                                     </span>
                                   ) : null}
                                 </span>
@@ -1712,7 +1713,7 @@ export default async function ComiteHandicapPage(props: {
                                   type="submit"
                                   className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white"
                                 >
-                                  Aplicar HI
+                                  {t.admin.applyHi}
                                 </button>
                               </form>
                             ) : (
@@ -1729,6 +1730,8 @@ export default async function ComiteHandicapPage(props: {
               <CommitteeVoteHistory
                 sessions={archivedSessions}
                 snapshotsBySession={snapshotsBySession}
+                t={t}
+                locale={locale}
               />
             </>
           )}
@@ -1740,17 +1743,19 @@ export default async function ComiteHandicapPage(props: {
           <>
             {entries.length === 0 && allEntries.length > 0 ? (
               <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                Ningún jugador marcado para revisión del comité todavía. El
-                director debe marcarlos desde{" "}
-                <Link
-                  href={`/entries?tournament_id=${tournamentId}`}
-                  className="font-semibold underline"
-                >
-                  Inscritos
-                </Link>{" "}
-                con el botón <strong>«→ Comité HI»</strong>. Mientras tanto
-                aquí no aparece ningún jugador. Puedes seguir marcando jugadores
-                durante el torneo y los votos ya guardados no se pierden.
+                {t.emptyNoFlaggedVoter.split("{entriesLink}").map((chunk, i, arr) => (
+                  <span key={i}>
+                    {chunk}
+                    {i < arr.length - 1 ? (
+                      <Link
+                        href={`/entries?tournament_id=${tournamentId}`}
+                        className="font-semibold underline"
+                      >
+                        {t.entriesLinkLabel}
+                      </Link>
+                    ) : null}
+                  </span>
+                ))}
               </div>
             ) : null}
             <HandicapCommitteeVoter
@@ -1761,12 +1766,12 @@ export default async function ComiteHandicapPage(props: {
               isPresent={myPresence}
               isAdmin={access.isAdmin}
               voteSummaries={voteSummariesForVoter}
+              t={t}
             />
           </>
         ) : (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-            El comité aún no está activo en este torneo. Un administrador debe activarlo
-            primero.
+            {t.notActive}
           </div>
         )
       ) : null}

@@ -9,6 +9,7 @@ type Props = {
   entryId?: string | null;
   hasFile: boolean;
   compact?: boolean;
+  label?: string;
 };
 
 /**
@@ -20,6 +21,7 @@ export default function OpenHandicapFileButton({
   entryId,
   hasFile,
   compact = false,
+  label = "📄 Ver reporte GHIN",
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -44,7 +46,7 @@ export default function OpenHandicapFileButton({
             : "flex w-full items-center justify-center rounded-lg border border-indigo-700 bg-indigo-600 px-3 py-2 text-sm font-semibold text-white no-underline hover:bg-indigo-700 active:bg-indigo-800"
         }
       >
-        📄 Ver reporte GHIN
+        {label}
       </a>
     </div>
   );

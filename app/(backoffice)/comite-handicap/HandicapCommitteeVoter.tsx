@@ -14,8 +14,11 @@ import {
   HANDICAP_ADJUSTMENT_STEP,
   formatAdjustmentLabel,
 } from "@/lib/handicap-committee/constants";
+import type { AppMessages } from "@/lib/i18n/messages";
 import { saveHandicapCommitteeVote } from "./actions";
 import OpenHandicapFileButton from "./OpenHandicapFileButton";
+
+export type HandicapCommitteeT = AppMessages["handicapCommittee"];
 
 export type HandicapEntryRow = {
   entry_id: string;
@@ -77,6 +80,7 @@ type Props = {
   isPresent: boolean;
   isAdmin: boolean;
   voteSummaries?: HandicapVoteSummaryRow[];
+  t: HandicapCommitteeT;
 };
 
 export default function HandicapCommitteeVoter({
@@ -87,7 +91,9 @@ export default function HandicapCommitteeVoter({
   isPresent,
   isAdmin,
   voteSummaries = [],
+  t,
 }: Props) {
+  const vt = t.voter;
   const [q, setQ] = useState("");
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState("");
@@ -200,11 +206,9 @@ export default function HandicapCommitteeVoter({
     <div className="space-y-3">
       {!isPresent ? (
         <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="font-semibold">No estás marcado como presente.</div>
+          <div className="font-semibold">{vt.presenceTitle}</div>
           <p className="mt-1">
-            {isAdmin
-              ? "Marca tu asistencia en la sección «Miembros del comité» del panel de Administración para poder votar."
-              : "Pide al director del torneo que te active en el panel del comité. Mientras tanto no podrás guardar votos."}
+            {isAdmin ? vt.presenceAdmin : vt.presenceMember}
           </p>
         </div>
       ) : null}
@@ -212,7 +216,7 @@ export default function HandicapCommitteeVoter({
       <div className="rounded-xl border border-slate-300 bg-white p-3 text-slate-900 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Tu progreso
+            {vt.progressLabel}
           </div>
           <div className="text-sm font-bold tabular-nums text-slate-900">
             {votedCount}/{entries.length}
@@ -229,12 +233,10 @@ export default function HandicapCommitteeVoter({
           />
         </div>
         {!committeeOpen ? (
-          <p className="mt-1.5 text-xs text-amber-800">
-            La votación está cerrada. Ya no puedes cambiar tus calificaciones.
-          </p>
+          <p className="mt-1.5 text-xs text-amber-800">{vt.progressClosed}</p>
         ) : (
           <p className="mt-1.5 text-[11px] leading-tight text-slate-600">
-            Voto privado. Solo bajar HI (−0.5 a −5.0).
+            {vt.progressVotePrivate}
           </p>
         )}
       </div>
@@ -254,7 +256,7 @@ export default function HandicapCommitteeVoter({
                 : "border-amber-300 bg-gradient-to-b from-amber-50 to-amber-100 text-amber-900 hover:bg-amber-100",
             ].join(" ")}
           >
-            <span>Pendientes</span>
+            <span>{vt.tabPending}</span>
             <span className="mt-0.5 text-base font-extrabold tabular-nums">
               {pendingTotal}
             </span>
@@ -270,7 +272,7 @@ export default function HandicapCommitteeVoter({
                 : "border-emerald-300 bg-gradient-to-b from-emerald-50 to-emerald-100 text-emerald-900 hover:bg-emerald-100",
             ].join(" ")}
           >
-            <span>Calificados</span>
+            <span>{vt.tabRated}</span>
             <span className="mt-0.5 text-base font-extrabold tabular-nums">
               {votedCount}
             </span>
@@ -287,7 +289,7 @@ export default function HandicapCommitteeVoter({
                 : "border-slate-400 bg-gradient-to-b from-slate-50 to-slate-200 text-slate-900 hover:bg-slate-200",
             ].join(" ")}
           >
-            <span>Resultados</span>
+            <span>{vt.tabResults}</span>
             <span className="mt-0.5 text-base font-extrabold tabular-nums">
               {hasResults ? "✓" : "—"}
             </span>
@@ -310,9 +312,7 @@ export default function HandicapCommitteeVoter({
         >
           <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 sm:px-0">
             <h2 className="text-sm font-bold text-slate-950 sm:text-base">
-              {committeeOpen
-                ? "Resultados parciales en vivo"
-                : "Resultados finales"}
+              {committeeOpen ? vt.resultsLiveTitle : vt.resultsFinalTitle}
             </h2>
             <span
               className={[
@@ -322,12 +322,11 @@ export default function HandicapCommitteeVoter({
                   : "bg-emerald-600 text-white",
               ].join(" ")}
             >
-              {committeeOpen ? "🔴 En vivo" : "✓ Final"}
+              {committeeOpen ? vt.resultsLiveBadge : vt.resultsFinalBadge}
             </span>
           </div>
           <p className="mt-1 px-1 text-[10px] leading-tight text-slate-600 sm:px-0 sm:text-xs">
-            Toca el nombre del jugador (subrayado azul) para ver la distribución
-            voto por voto y las abstenciones. Anónimo.
+            {vt.resultsHelp}
           </p>
           <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full table-fixed text-left text-[11px] sm:text-sm">
@@ -342,42 +341,42 @@ export default function HandicapCommitteeVoter({
               </colgroup>
               <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 sm:text-xs">
                 <tr>
-                  <th className="px-1 py-1.5 sm:px-3 sm:py-2">Jugador</th>
+                  <th className="px-1 py-1.5 sm:px-3 sm:py-2">{vt.thPlayer}</th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="Handicap Index actual del torneo"
+                    title={vt.thHiTitle}
                   >
-                    HI
+                    {vt.thHi}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="Votos emitidos (incluye abstenciones)"
+                    title={vt.thVotesTitle}
                   >
-                    Votos
+                    {vt.thVotes}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="Vivos / total contando abstenciones como 0"
+                    title={vt.thLiveTitle}
                   >
-                    Vivos
+                    {vt.thLive}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="Promedio recortado del ajuste"
+                    title={vt.thAvgTitle}
                   >
-                    Prom
+                    {vt.thAvg}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="HI sugerido = HI actual + Promedio"
+                    title={vt.thHiSugTitle}
                   >
-                    HI sug
+                    {vt.thHiSug}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title="Votos de «No permitir jugar este torneo»"
+                    title={vt.thVetosTitle}
                   >
-                    Vetos
+                    {vt.thVetos}
                   </th>
                 </tr>
               </thead>
@@ -421,7 +420,7 @@ export default function HandicapCommitteeVoter({
                         </td>
                         <td
                           className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
-                          title="Total de votos emitidos (numéricos + abstenciones)"
+                          title={vt.thVotesTitle}
                         >
                           {totalVotes > 0 ? (
                             <span className="inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[11px] font-bold text-white">
@@ -435,7 +434,7 @@ export default function HandicapCommitteeVoter({
                         </td>
                         <td
                           className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
-                          title="Vivos (incluye abst. como 0) / suman para el promedio"
+                          title={vt.thLiveTitle}
                         >
                           {totalVotes > 0 ||
                           (s?.n_avg_denominator != null &&
@@ -459,7 +458,7 @@ export default function HandicapCommitteeVoter({
                         </td>
                         <td
                           className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                          title="Votos de «No permitir jugar este torneo»"
+                          title={vt.thVetosTitle}
                         >
                           {(s?.n_disqualify ?? 0) > 0 ? (
                             <span
@@ -485,11 +484,11 @@ export default function HandicapCommitteeVoter({
                           >
                             <div className="space-y-1.5">
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                                Votos uno por uno (anónimos)
+                                {vt.expandedTitle}
                               </div>
                               {chips.length === 0 ? (
                                 <div className="text-[11px] text-slate-500">
-                                  Aún no hay votos para este jugador.
+                                  {vt.expandedNoVotes}
                                 </div>
                               ) : (
                                 <div className="flex flex-wrap gap-1">
@@ -498,12 +497,12 @@ export default function HandicapCommitteeVoter({
                                       key={`${e.entry_id}-c-${idx}`}
                                       title={
                                         c.abstained
-                                          ? "Abstención (cuenta como 0 en el promedio)"
+                                          ? vt.chipAbstainTitle
                                           : c.trimmed
                                             ? c.reason === "low"
-                                              ? "Descartado (más severo)"
-                                              : "Descartado (más suave)"
-                                            : "Voto vivo"
+                                              ? vt.chipTrimmedLow
+                                              : vt.chipTrimmedHigh
+                                            : vt.chipLive
                                       }
                                       className={[
                                         "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
@@ -515,7 +514,7 @@ export default function HandicapCommitteeVoter({
                                       ].join(" ")}
                                     >
                                       {c.abstained
-                                        ? "0·abst"
+                                        ? vt.chipAbst
                                         : formatAdjustmentLabel(c.value)}
                                     </span>
                                   ))}
@@ -524,7 +523,7 @@ export default function HandicapCommitteeVoter({
                               <div className="grid grid-cols-3 gap-1 text-[10px] text-slate-700 sm:text-xs">
                                 <div className="rounded bg-white px-1.5 py-1 text-center">
                                   <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
-                                    HI actual
+                                    {vt.expandedHi}
                                   </div>
                                   <div className="font-bold tabular-nums">
                                     {e.handicap_index ?? "—"}
@@ -532,7 +531,7 @@ export default function HandicapCommitteeVoter({
                                 </div>
                                 <div className="rounded bg-white px-1.5 py-1 text-center">
                                   <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
-                                    Prom.
+                                    {vt.expandedAvg}
                                   </div>
                                   <div className="font-bold tabular-nums">
                                     {s?.avg_adjustment != null
@@ -542,7 +541,7 @@ export default function HandicapCommitteeVoter({
                                 </div>
                                 <div className="rounded bg-white px-1.5 py-1 text-center">
                                   <div className="text-[8px] uppercase text-slate-500 sm:text-[10px]">
-                                    HI sug.
+                                    {vt.expandedHiSug}
                                   </div>
                                   <div className="font-bold tabular-nums text-emerald-700">
                                     {s?.suggested_hi ?? "—"}
@@ -560,12 +559,12 @@ export default function HandicapCommitteeVoter({
             </table>
           </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[10px] leading-tight text-slate-600 sm:text-[11px]">
-            <span><b>HI</b> = Handicap Index actual</span>
-            <span><b>Votos</b> = emitidos en total</span>
-            <span><b>Vivos</b> = que cuentan al promedio (incluye abst. como 0)</span>
-            <span><b>Prom</b> = promedio recortado</span>
-            <span><b>HI sug</b> = HI + Prom</span>
-            <span><b>⊘ Vetos</b> = votos de «No permitir jugar»</span>
+            <span><b>{vt.thHi}</b> = {vt.legendHi}</span>
+            <span><b>{vt.thVotes}</b> = {vt.legendVotes}</span>
+            <span><b>{vt.thLive}</b> = {vt.legendLive}</span>
+            <span><b>{vt.thAvg}</b> = {vt.legendAvg}</span>
+            <span><b>{vt.thHiSug}</b> = {vt.legendHiSug}</span>
+            <span><b>⊘ {vt.thVetos}</b> = {vt.legendVetos}</span>
           </div>
         </section>
       ) : null}
@@ -577,7 +576,7 @@ export default function HandicapCommitteeVoter({
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar jugador, club, HI…"
+              placeholder={vt.searchPlaceholder}
               className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             />
             {q ? (
@@ -585,7 +584,7 @@ export default function HandicapCommitteeVoter({
                 type="button"
                 onClick={() => setQ("")}
                 className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700"
-                aria-label="Limpiar búsqueda"
+                aria-label={vt.clearSearch}
               >
                 ✕
               </button>
@@ -596,27 +595,28 @@ export default function HandicapCommitteeVoter({
             {tab === "pending" ? (
               <>
                 <span>
-                  Faltan{" "}
+                  {vt.pendingMissing}{" "}
                   <span className="text-base font-extrabold text-amber-700 tabular-nums">
                     {pendingFiltered.length}
                   </span>
-                  {qn ? " (filtrados)" : ""}
+                  {qn ? vt.pendingFiltered : ""}
                 </span>
                 <span className="text-slate-500">
-                  Calificados {votedCount}/{entries.length}
+                  {vt.pendingRated} {votedCount}/{entries.length}
                 </span>
               </>
             ) : (
               <>
                 <span>
-                  Mostrando{" "}
+                  {vt.ratedShowing}{" "}
                   <span className="text-base font-extrabold text-emerald-700 tabular-nums">
                     {votedFiltered.length}
                   </span>{" "}
-                  calificados
+                  {vt.ratedSuffix}
                 </span>
                 <span className="text-slate-500">
-                  Faltan {pendingTotal} de {entries.length}
+                  {vt.ratedRemaining} {pendingTotal} {vt.ratedOf}{" "}
+                  {entries.length}
                 </span>
               </>
             )}
@@ -637,6 +637,7 @@ export default function HandicapCommitteeVoter({
                   onSaved={() => setMsg("")}
                   onError={(e) => setMsg(e)}
                   startTransition={startTransition}
+                  t={t}
                 />
               )
             )}
@@ -645,11 +646,11 @@ export default function HandicapCommitteeVoter({
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-center text-sm text-slate-600">
                 {tab === "pending"
                   ? qn
-                    ? "Sin pendientes que coincidan con la búsqueda."
-                    : "¡Listo! No te faltan jugadores por calificar."
+                    ? vt.emptyPendingSearch
+                    : vt.emptyPendingDone
                   : qn
-                    ? "No tienes calificaciones que coincidan."
-                    : "Aún no has calificado a ningún jugador."}
+                    ? vt.emptyRatedSearch
+                    : vt.emptyRatedNone}
               </div>
             ) : null}
           </div>
@@ -658,14 +659,13 @@ export default function HandicapCommitteeVoter({
 
       {tab === "pending" && !committeeOpen ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          La votación está cerrada. Cambia a «Resultados» para ver los promedios
-          o a «Calificados» para revisar tus votos.
+          {vt.closedHint}
         </div>
       ) : null}
 
       {tab === "results" && voteSummaries.length === 0 ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-          Aún no hay resultados agregados para mostrar.
+          {vt.resultsEmpty}
         </div>
       ) : null}
     </div>
@@ -683,6 +683,7 @@ function PlayerVoteCard({
   onSaved,
   onError,
   startTransition,
+  t,
 }: {
   entry: HandicapEntryRow;
   tournamentId: string;
@@ -694,7 +695,9 @@ function PlayerVoteCard({
   onSaved: () => void;
   onError: (msg: string) => void;
   startTransition: (fn: () => void) => void;
+  t: HandicapCommitteeT;
 }) {
+  const c = t.card;
   const saved = Boolean(initial);
   const defaultAdjustment =
     initial?.abstained || initial?.adjustment == null
@@ -757,7 +760,7 @@ function PlayerVoteCard({
 
     const res = await saveHandicapCommitteeVote(fd);
     if (!res.ok) {
-      onError(res.error ?? "Error al guardar");
+      onError(res.error ?? c.errorSave);
       return;
     }
     onSaved();
@@ -806,14 +809,14 @@ function PlayerVoteCard({
             {entry.ghin_number ? (
               <span
                 className="shrink-0 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold tabular-nums text-slate-700"
-                title="GHIN del jugador"
+                title={c.ghinTitle}
               >
-                GHIN {entry.ghin_number}
+                {c.ghinChip} {entry.ghin_number}
               </span>
             ) : null}
             {flagged ? (
               <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
-                Revisar
+                {c.reviewBadge}
               </span>
             ) : null}
           </div>
@@ -847,7 +850,7 @@ function PlayerVoteCard({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <div className="flex items-baseline gap-0.5 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
-            <span className="opacity-70">HI</span>
+            <span className="opacity-70">{c.hiLabel}</span>
             <span className="tabular-nums">{hiDisplay}</span>
           </div>
           {entry.course_handicap != null ? (
@@ -855,11 +858,11 @@ function PlayerVoteCard({
               className="flex items-baseline gap-0.5 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
               title={
                 entry.tee_slope != null
-                  ? `Slope ${entry.tee_slope} · CR ${entry.tee_course_rating} · Par ${entry.tee_par}`
-                  : "Course Handicap"
+                  ? `${c.chTitlePrefix} ${entry.tee_slope} · CR ${entry.tee_course_rating} · Par ${entry.tee_par}`
+                  : c.chTitleFallback
               }
             >
-              <span className="opacity-70">CH</span>
+              <span className="opacity-70">{c.chLabel}</span>
               <span className="tabular-nums">{entry.course_handicap}</span>
             </div>
           ) : null}
@@ -868,11 +871,11 @@ function PlayerVoteCard({
               className="flex items-baseline gap-0.5 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
               title={
                 entry.allowance_pct != null
-                  ? `Playing Handicap (allowance ${entry.allowance_pct}%)`
-                  : "Playing Handicap"
+                  ? `${c.phTitlePrefix} ${entry.allowance_pct}%)`
+                  : c.phTitleFallback
               }
             >
-              <span className="opacity-70">PH</span>
+              <span className="opacity-70">{c.phLabel}</span>
               <span className="tabular-nums">{entry.playing_handicap}</span>
               {entry.allowance_pct != null ? (
                 <span className="opacity-70">·{entry.allowance_pct}%</span>
@@ -882,13 +885,13 @@ function PlayerVoteCard({
           {saved ? (
             <span
               className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white"
-              aria-label="Voto guardado"
+              aria-label={c.savedAria}
             >
-              {justSaved ? "Guardado" : "✓"}
+              {justSaved ? c.savedJustNow : "✓"}
             </span>
           ) : (
             <span className="shrink-0 rounded-full border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-900">
-              {committeeOpen ? "Pend" : "—"}
+              {committeeOpen ? c.pendBadge : "—"}
             </span>
           )}
           <span
@@ -910,6 +913,7 @@ function PlayerVoteCard({
             entryId={entry.entry_id}
             hasFile={Boolean(entry.has_handicap_file)}
             compact={false}
+            label={c.voteOpenReport}
           />
         </div>
       ) : null}
@@ -919,26 +923,27 @@ function PlayerVoteCard({
           <div className="text-sm text-slate-800">
             {initial?.abstained ? (
               <>
-                <span className="font-semibold">Te abstuviste</span> en este jugador.
+                <span className="font-semibold">{c.youAbstained}</span>{" "}
+                {c.onThisPlayer}
               </>
             ) : (
               <>
-                Calificación guardada:{" "}
+                {c.ratingSavedPrefix}{" "}
                 <span className="font-bold tabular-nums text-slate-950">
-                  {formatAdjustmentLabel(initial?.adjustment ?? null)} pts
+                  {formatAdjustmentLabel(initial?.adjustment ?? null)} {c.pts}
                 </span>
               </>
             )}
             {initial?.disqualify_vote ? (
               <div className="mt-1 text-xs font-semibold text-rose-700">
-                Marcaste: no permitir jugar este torneo
+                {c.dqMarkedLine}
               </div>
             ) : null}
           </div>
 
           {lockedByClosing ? (
             <span className="text-[11px] font-semibold uppercase text-amber-800">
-              Bloqueado · votación cerrada
+              {c.lockedHint}
             </span>
           ) : (
             <button
@@ -947,7 +952,7 @@ function PlayerVoteCard({
               onClick={() => setEditing(true)}
               className="rounded-lg border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 disabled:opacity-50"
             >
-              Editar calificación
+              {c.editBtn}
             </button>
           )}
         </div>
@@ -979,17 +984,17 @@ function PlayerVoteCard({
               >
                 ✓
               </span>
-              <span className="text-sm font-semibold">
-                Sin opinión (abstenerse)
-              </span>
+              <span className="text-sm font-semibold">{c.abstainBtn}</span>
             </button>
 
             {!abstained ? (
               <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-800">Bajar HI</span>
+                  <span className="font-medium text-slate-800">
+                    {c.lowerHiLabel}
+                  </span>
                   <span className="font-bold tabular-nums text-slate-950">
-                    {formatAdjustmentLabel(adjustment)} pts
+                    {formatAdjustmentLabel(adjustment)} {c.pts}
                   </span>
                 </div>
                 <input
@@ -1003,8 +1008,8 @@ function PlayerVoteCard({
                   className="h-3 w-full accent-slate-800"
                 />
                 <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>−5.0 (máx.)</span>
-                  <span>−0.5 (mín.)</span>
+                  <span>{c.sliderMin}</span>
+                  <span>{c.sliderMax}</span>
                 </div>
               </div>
             ) : null}
@@ -1035,7 +1040,7 @@ function PlayerVoteCard({
                 </span>
                 <span className="flex flex-col">
                   <span className="text-base font-bold leading-tight">
-                    No permitir jugar este torneo
+                    {c.dqTitle}
                   </span>
                   <span
                     className={[
@@ -1043,8 +1048,7 @@ function PlayerVoteCard({
                       disqualify ? "text-rose-100" : "text-rose-700",
                     ].join(" ")}
                   >
-                    Solo en casos excepcionales (conducta, trampa, riesgo grave).
-                    Voto anónimo.
+                    {c.dqHint}
                   </span>
                 </span>
               </span>
@@ -1056,7 +1060,7 @@ function PlayerVoteCard({
                     : "border border-rose-400 text-rose-700",
                 ].join(" ")}
               >
-                {disqualify ? "Marcado" : "Tocar"}
+                {disqualify ? c.dqBadgeMarked : c.dqBadgeTap}
               </span>
             </button>
           </div>
@@ -1068,7 +1072,7 @@ function PlayerVoteCard({
               onClick={() => startTransition(() => handleSave())}
               className="flex-1 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
-              {saved ? "Guardar cambios" : "Guardar calificación"}
+              {saved ? c.saveBtnUpdate : c.saveBtn}
             </button>
             {saved ? (
               <button
@@ -1077,7 +1081,7 @@ function PlayerVoteCard({
                 onClick={handleCancel}
                 className="rounded-lg border border-slate-400 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 disabled:opacity-50"
               >
-                Cancelar
+                {c.cancelBtn}
               </button>
             ) : null}
           </div>
@@ -1086,7 +1090,7 @@ function PlayerVoteCard({
 
       {!showControls && !saved && lockedByClosing ? (
         <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          No alcanzaste a votar y la votación ya está cerrada.
+          {c.tooLateClosed}
         </div>
       ) : null}
 
@@ -1094,7 +1098,7 @@ function PlayerVoteCard({
         <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-center">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              HI actual
+              {c.summaryHiCurrent}
             </div>
             <div className="mt-0.5 text-sm font-bold tabular-nums text-slate-950">
               {entry.handicap_index ?? "—"}
@@ -1102,7 +1106,7 @@ function PlayerVoteCard({
           </div>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Promedio
+              {c.summaryAvg}
             </div>
             <div className="mt-0.5 text-sm font-bold tabular-nums text-slate-950">
               {summary.avg_adjustment != null
@@ -1110,17 +1114,18 @@ function PlayerVoteCard({
                 : "—"}
             </div>
             <div className="text-[10px] text-slate-500">
-              {summary.n_live} núm. vivos / {summary.n_votes} núm.; prom. ÷
+              {summary.n_live} {c.summaryLiveLong} / {summary.n_votes}{" "}
+              {c.summaryNumShort}
               {summary.n_avg_denominator ??
                 summary.n_live + (summary.n_abstained ?? 0)}
               {(summary.n_abstained ?? 0) > 0
-                ? ` (${summary.n_abstained} abst. como 0)`
+                ? ` (${summary.n_abstained} ${c.summaryAbstSuffix})`
                 : ""}
             </div>
           </div>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              HI sugerido
+              {c.summaryHiSug}
             </div>
             <div className="mt-0.5 text-sm font-bold tabular-nums text-emerald-700">
               {summary.suggested_hi ?? "—"}

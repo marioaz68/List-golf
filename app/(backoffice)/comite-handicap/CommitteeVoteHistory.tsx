@@ -5,6 +5,7 @@ import {
   distributionChips,
   formatAdjustmentLabel,
 } from "@/lib/handicap-committee/constants";
+import type { HandicapCommitteeT } from "./HandicapCommitteeVoter";
 
 export type ArchivedSession = {
   id: string;
@@ -41,11 +42,13 @@ export type ArchivedSnapshot = {
 type Props = {
   sessions: ArchivedSession[];
   snapshotsBySession: Record<string, ArchivedSnapshot[]>;
+  t: HandicapCommitteeT;
+  locale: "es" | "en";
 };
 
-function formatWhen(iso: string) {
+function formatWhen(iso: string, locale: "es" | "en") {
   try {
-    return new Date(iso).toLocaleString("es-MX", {
+    return new Date(iso).toLocaleString(locale === "en" ? "en-US" : "es-MX", {
       dateStyle: "medium",
       timeStyle: "short",
     });
@@ -57,19 +60,17 @@ function formatWhen(iso: string) {
 export default function CommitteeVoteHistory({
   sessions,
   snapshotsBySession,
+  t,
+  locale,
 }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const h = t.history;
 
   if (sessions.length === 0) {
     return (
       <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <h3 className="text-sm font-bold text-slate-900">
-          Historial de votaciones
-        </h3>
-        <p className="mt-2 text-xs text-slate-600">
-          Aún no hay sesiones archivadas. Al reiniciar la votación se guardará
-          aquí un resumen anónimo de los resultados.
-        </p>
+        <h3 className="text-sm font-bold text-slate-900">{h.title}</h3>
+        <p className="mt-2 text-xs text-slate-600">{h.empty}</p>
       </section>
     );
   }
@@ -77,12 +78,9 @@ export default function CommitteeVoteHistory({
   return (
     <section className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <h3 className="text-sm font-bold text-slate-900">
-        Historial de votaciones ({sessions.length})
+        {h.titleWithCount.replace("{n}", String(sessions.length))}
       </h3>
-      <p className="text-xs text-slate-600">
-        Sesiones guardadas al reiniciar. Los votos individuales permanecen
-        anónimos.
-      </p>
+      <p className="text-xs text-slate-600">{h.subtitle}</p>
 
       <ul className="space-y-2">
         {sessions.map((s) => {
@@ -99,11 +97,11 @@ export default function CommitteeVoteHistory({
                 className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-sm text-slate-900 hover:bg-slate-50"
               >
                 <span className="font-semibold">
-                  {s.name ?? `Sesión ${s.session_no}`}
+                  {s.name ?? `${h.sessionFallback} ${s.session_no}`}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {formatWhen(s.archived_at)} · {s.n_voters} votantes ·{" "}
-                  {s.n_entries} jugadores
+                  {formatWhen(s.archived_at, locale)} · {s.n_voters}{" "}
+                  {h.summaryVoters} · {s.n_entries} {h.summaryPlayers}
                 </span>
               </button>
 
@@ -111,25 +109,34 @@ export default function CommitteeVoteHistory({
                 <div className="border-t border-slate-200 px-3 py-2">
                   <div className="mb-2 flex flex-wrap gap-3 text-[11px] text-slate-600">
                     <span>
-                      Recorte: −{s.trim_low} suaves / −{s.trim_high} severos
+                      {h.trimSummary
+                        .replace("{soft}", String(s.trim_low))
+                        .replace("{hard}", String(s.trim_high))}
                     </span>
                     <span>
-                      Umbral «No jugar»: {s.disqualify_threshold || "off"}
+                      {h.vetoThreshold}{" "}
+                      {s.disqualify_threshold || h.thresholdOff}
                     </span>
-                    <span>Presentes: {s.n_members_present}</span>
-                    {s.notes ? <span>Notas: {s.notes}</span> : null}
+                    <span>
+                      {h.presentLabel} {s.n_members_present}
+                    </span>
+                    {s.notes ? (
+                      <span>
+                        {h.notesLabel} {s.notes}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-xs text-slate-900">
                       <thead className="bg-slate-100 uppercase text-slate-600">
                         <tr>
-                          <th className="px-2 py-1.5">Jugador</th>
-                          <th className="px-2 py-1.5">HI</th>
-                          <th className="px-2 py-1.5">Votos</th>
-                          <th className="px-2 py-1.5">Prom.</th>
-                          <th className="px-2 py-1.5">HI sug.</th>
-                          <th className="px-2 py-1.5">No jugar</th>
+                          <th className="px-2 py-1.5">{h.thPlayer}</th>
+                          <th className="px-2 py-1.5">{h.thHi}</th>
+                          <th className="px-2 py-1.5">{h.thVotes}</th>
+                          <th className="px-2 py-1.5">{h.thAvg}</th>
+                          <th className="px-2 py-1.5">{h.thHiSug}</th>
+                          <th className="px-2 py-1.5">{h.thNoPlay}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -169,10 +176,10 @@ export default function CommitteeVoteHistory({
                                         key={i}
                                         title={
                                           v.abstained
-                                            ? "Abstención (cuenta como 0)"
+                                            ? h.chipAbstention
                                             : v.trimmed
-                                              ? "Descartado por recorte"
-                                              : "Voto vivo"
+                                              ? h.chipTrimmed
+                                              : h.chipLive
                                         }
                                         className={[
                                           "rounded px-1 py-0.5 text-[10px] font-semibold tabular-nums",
@@ -184,7 +191,7 @@ export default function CommitteeVoteHistory({
                                         ].join(" ")}
                                       >
                                         {v.abstained
-                                          ? "0·abst"
+                                          ? h.chipAbst
                                           : formatAdjustmentLabel(v.value)}
                                       </span>
                                     ))
@@ -210,7 +217,7 @@ export default function CommitteeVoteHistory({
                                     ].join(" ")}
                                   >
                                     {row.n_disqualify}
-                                    {over ? " · No autorizado" : ""}
+                                    {over ? h.notAuthorized : ""}
                                   </span>
                                 ) : (
                                   "—"
