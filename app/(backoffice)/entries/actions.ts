@@ -1954,10 +1954,12 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     .select(
       `
       flagged_committee_reason,
+      handicap_index,
       players:players (
         ghin_number,
         first_name,
-        last_name
+        last_name,
+        handicap_torneo
       )
     `
     )
@@ -1974,7 +1976,14 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     ghin_number?: string | null;
     first_name?: string | null;
     last_name?: string | null;
+    handicap_torneo?: number | string | null;
   };
+
+  function parseHi(value: unknown): number | null {
+    if (value == null || value === "") return null;
+    const n = typeof value === "number" ? value : Number(value);
+    return Number.isFinite(n) ? Number(n.toFixed(1)) : null;
+  }
 
   const players: FlaggedPlayerForPrompt[] = (rows ?? []).map((row) => {
     const raw = (row as { players?: RawPlayer | RawPlayer[] | null }).players;
@@ -1984,10 +1993,21 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
       .join(" ")
       .trim();
     const ghinRaw = p?.ghin_number != null ? String(p.ghin_number).trim() : "";
+
+    // HI del torneo: priorizamos handicap_index de la inscripción (es el
+    // valor "asignado al torneo" que ve el comité). Si está vacío caemos a
+    // players.handicap_torneo y por último a null.
+    const hiEntry = parseHi(
+      (row as { handicap_index?: number | string | null }).handicap_index
+    );
+    const hiPlayer = parseHi(p?.handicap_torneo);
+    const hiTorneo = hiEntry ?? hiPlayer ?? null;
+
     return {
       ghin: ghinRaw ? ghinRaw : null,
       fullName,
       reason: (row.flagged_committee_reason as string | null) ?? null,
+      hiTorneo,
     };
   });
 
@@ -1996,6 +2016,10 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
 
   const missingGhinPlayers = players
     .filter((p) => !(p.ghin ?? "").trim())
+    .map((p) => p.fullName.trim() || "Sin nombre");
+
+  const missingHiPlayers = players
+    .filter((p) => p.hiTorneo == null)
     .map((p) => p.fullName.trim() || "Sin nombre");
 
   return {
@@ -2007,5 +2031,6 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     filename: buildPromptDownloadFilename(tournamentName, generatedAt),
     count: players.length,
     missingGhinPlayers,
+    missingHiPlayers,
   };
 }
