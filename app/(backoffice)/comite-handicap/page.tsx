@@ -11,6 +11,11 @@ import {
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import {
+  computeWhsHandicap,
+  pickTeeForGender,
+  type WhsTeeData,
+} from "@/lib/handicap/whs";
+import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
   applyHandicapCommitteeSuggestion,
@@ -225,20 +230,51 @@ export default async function ComiteHandicapPage(props: {
     )
   );
 
-  const [{ data: playerRows }, { data: categoryRows }] = await Promise.all([
-    playerIds.length
-      ? entriesClient
-          .from("players")
-          .select("id, first_name, last_name, club_id")
-          .in("id", playerIds)
-      : Promise.resolve({ data: [] as any[] }),
-    categoryIds.length
-      ? entriesClient
-          .from("categories")
-          .select("id, code, name")
-          .in("id", categoryIds)
-      : Promise.resolve({ data: [] as any[] }),
-  ]);
+  const [{ data: playerRows }, { data: categoryRows }, { data: mpRules }] =
+    await Promise.all([
+      playerIds.length
+        ? entriesClient
+            .from("players")
+            .select("id, first_name, last_name, club_id, gender")
+            .in("id", playerIds)
+        : Promise.resolve({ data: [] as any[] }),
+      categoryIds.length
+        ? entriesClient
+            .from("categories")
+            .select("id, code, name")
+            .in("id", categoryIds)
+        : Promise.resolve({ data: [] as any[] }),
+      entriesClient
+        .from("tournament_matchplay_rules")
+        .select(
+          "handicap_allowance_pct, whs_slope_men, whs_slope_women, whs_course_rating_men, whs_course_rating_women, whs_par_men, whs_par_women"
+        )
+        .eq("tournament_id", tournamentId)
+        .maybeSingle(),
+    ]);
+
+  const allowancePct =
+    mpRules && (mpRules as any).handicap_allowance_pct != null
+      ? Number((mpRules as any).handicap_allowance_pct)
+      : null;
+
+  const teeMen: Partial<WhsTeeData> | null =
+    mpRules && (mpRules as any).whs_slope_men != null
+      ? {
+          slope: Number((mpRules as any).whs_slope_men),
+          course_rating: Number((mpRules as any).whs_course_rating_men ?? 0),
+          par: Number((mpRules as any).whs_par_men ?? 0),
+        }
+      : null;
+  const teeWomen: Partial<WhsTeeData> | null =
+    mpRules && (mpRules as any).whs_slope_women != null
+      ? {
+          slope: Number((mpRules as any).whs_slope_women),
+          course_rating: Number((mpRules as any).whs_course_rating_women ?? 0),
+          par: Number((mpRules as any).whs_par_women ?? 0),
+        }
+      : null;
+  const whsConfigured = Boolean(teeMen || teeWomen);
 
   const playerById = new Map<string, any>(
     (playerRows ?? []).map((p: any) => [String(p.id), p])
@@ -271,12 +307,47 @@ export default async function ComiteHandicapPage(props: {
       const player = row.player_id ? playerById.get(String(row.player_id)) : null;
       const cat = row.category_id ? categoryById.get(String(row.category_id)) : null;
       const club = player?.club_id ? clubById.get(String(player.club_id)) : null;
+      const hi =
+        row.handicap_index != null && Number.isFinite(Number(row.handicap_index))
+          ? Number(row.handicap_index)
+          : null;
+
+      const gender = (player?.gender ?? "X").toString().toUpperCase() as
+        | "M"
+        | "F"
+        | "X";
+      const tee =
+        whsConfigured
+          ? pickTeeForGender({ gender, men: teeMen, women: teeWomen })
+          : null;
+
+      let course_handicap: number | null = null;
+      let playing_handicap: number | null = null;
+      if (hi != null && tee && allowancePct != null && allowancePct > 0) {
+        const calc = computeWhsHandicap({
+          hi,
+          slope: tee.slope,
+          course_rating: tee.course_rating,
+          par: tee.par,
+          allowance_pct: allowancePct,
+        });
+        course_handicap = calc.course_handicap;
+        playing_handicap = calc.playing_handicap;
+      }
+
       return {
         entry_id: row.id as string,
         player_name: playerName(player),
-        handicap_index: row.handicap_index != null ? Number(row.handicap_index) : null,
+        handicap_index: hi,
         category_code: cat?.code ?? cat?.name ?? null,
         club_label: club?.short_name ?? club?.name ?? null,
+        gender: gender === "M" || gender === "F" ? gender : null,
+        course_handicap,
+        playing_handicap,
+        allowance_pct: allowancePct,
+        tee_slope: tee?.slope ?? null,
+        tee_course_rating: tee?.course_rating ?? null,
+        tee_par: tee?.par ?? null,
       };
     })
     .filter((e) => e.entry_id);
