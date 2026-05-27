@@ -254,33 +254,8 @@ export async function bulkUploadPlayerHandicapFiles(
 export async function getPlayerHandicapFileSignedUrl(
   playerId: string
 ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: "No autenticado" };
-
-  const { data: fileRow, error } = await supabase
-    .from("player_files")
-    .select("id, file_path, mime_type")
-    .eq("player_id", playerId)
-    .eq("kind", "handicap_report")
-    .order("uploaded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !fileRow?.file_path) {
-    return { ok: false, error: "No hay archivo de handicap para este jugador" };
-  }
-
-  const admin = createAdminClient();
-  const { data: signed, error: signErr } = await admin.storage
-    .from(BUCKET)
-    .createSignedUrl(fileRow.file_path, 3600);
-
-  if (signErr || !signed?.signedUrl) {
-    return { ok: false, error: signErr?.message ?? "No se pudo abrir el archivo" };
-  }
-
-  return { ok: true, url: signed.signedUrl };
+  const { getPlayerHandicapReportSignedUrl } = await import(
+    "@/lib/player-files/handicapReportUrl"
+  );
+  return getPlayerHandicapReportSignedUrl(playerId);
 }
