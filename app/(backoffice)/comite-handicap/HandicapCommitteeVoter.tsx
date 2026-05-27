@@ -14,6 +14,7 @@ export type HandicapEntryRow = {
   entry_id: string;
   player_id?: string;
   player_name: string;
+  ghin_number?: string | null;
   club_label: string | null;
   handicap_index: number | null;
   category_code: string | null;
@@ -106,7 +107,13 @@ export default function HandicapCommitteeVoter({
   const filtered = useMemo(() => {
     if (!qn) return entries;
     return entries.filter((e) => {
-      const hay = [e.player_name, e.club_label, e.category_code, String(e.handicap_index ?? "")]
+      const hay = [
+        e.player_name,
+        e.ghin_number,
+        e.club_label,
+        e.category_code,
+        String(e.handicap_index ?? ""),
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -703,6 +710,14 @@ function PlayerVoteCard({
             <span className="truncate text-sm font-semibold leading-tight text-slate-950">
               {entry.player_name}
             </span>
+            {entry.ghin_number ? (
+              <span
+                className="shrink-0 rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[9px] font-bold tabular-nums text-slate-700"
+                title="GHIN del jugador"
+              >
+                GHIN {entry.ghin_number}
+              </span>
+            ) : null}
             {flagged ? (
               <span className="shrink-0 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
                 Revisar
