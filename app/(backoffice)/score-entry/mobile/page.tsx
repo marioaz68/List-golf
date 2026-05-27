@@ -520,6 +520,8 @@ function MobileScoreEntryContent() {
 
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [draftScore, setDraftScore] = useState<string>("");
+  /** Tras abrir el keypad para un jugador, el primer dígito reemplaza el valor previo. */
+  const [draftFresh, setDraftFresh] = useState<boolean>(false);
   const [signPlayerId, setSignPlayerId] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<Record<string, string | null>>({});
 
@@ -642,13 +644,18 @@ function MobileScoreEntryContent() {
     const existing = player?.scores[currentHole];
     setActivePlayerId(playerId);
     setDraftScore(existing ? String(existing) : "");
+    // Si abre con un valor previo, el primer dígito que escriba lo reemplaza
+    // (no se concatena). Si no hay valor, también se empieza limpio.
+    setDraftFresh(true);
   }
 
   function handleNumber(n: number) {
     if (!activePlayerId) return;
 
-    const next = `${draftScore}${n}`.replace(/^0+(?=\d)/, "");
+    const base = draftFresh ? "" : draftScore;
+    const next = `${base}${n}`.replace(/^0+(?=\d)/, "");
     setDraftScore(next);
+    if (draftFresh) setDraftFresh(false);
 
     const numeric = Number(next);
     if (numeric > 0) {
@@ -659,6 +666,7 @@ function MobileScoreEntryContent() {
   function handleClear() {
     if (!activePlayerId) return;
     setDraftScore("");
+    setDraftFresh(false);
     setHoleScore(activePlayerId, currentHole, null);
   }
 
@@ -667,6 +675,7 @@ function MobileScoreEntryContent() {
 
     const next = draftScore.slice(0, -1);
     setDraftScore(next);
+    setDraftFresh(false);
 
     if (!next) {
       setHoleScore(activePlayerId, currentHole, null);
@@ -679,16 +688,29 @@ function MobileScoreEntryContent() {
     }
   }
 
+  function handleEnter() {
+    if (!activePlayerId) return;
+    const numeric = Number(draftScore);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      setHoleScore(activePlayerId, currentHole, numeric);
+    }
+    setActivePlayerId(null);
+    setDraftScore("");
+    setDraftFresh(false);
+  }
+
   function handlePreset(playerId: string, value: number) {
     setHoleScore(playerId, currentHole, value);
     setActivePlayerId(null);
     setDraftScore("");
+    setDraftFresh(false);
   }
 
   function handleOpenSign(playerId: string) {
     setSignPlayerId(playerId);
     setActivePlayerId(null);
     setDraftScore("");
+    setDraftFresh(false);
     setTab("firmar");
   }
 
@@ -731,6 +753,7 @@ function MobileScoreEntryContent() {
               setCurrentHole(hole);
               setActivePlayerId(null);
               setDraftScore("");
+              setDraftFresh(false);
             }}
             isHoleComplete={isHoleComplete}
           />
@@ -756,6 +779,7 @@ function MobileScoreEntryContent() {
               setTab("tarjeta");
               setActivePlayerId(null);
               setDraftScore("");
+              setDraftFresh(false);
             }}
             className={[
               "flex-1 py-2 text-sm font-semibold",
@@ -888,12 +912,20 @@ function MobileScoreEntryContent() {
             {activePlayerId && (
               <div className="fixed bottom-0 left-0 right-0 z-30">
                 <div className="mx-auto w-full max-w-md border-t border-slate-200 bg-white p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
-                  <div className="mb-2 text-center text-xs font-semibold">
-                    {activePlayer?.name}
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold">
+                    <span>{activePlayer?.name}</span>
+                    <span className="text-slate-500">
+                      Hoyo {currentHole} · Par {PAR_BY_HOLE[currentHole]}
+                    </span>
                   </div>
 
-                  <div className="mb-2 text-center text-3xl font-bold text-black">
-                    {draftScore}
+                  <div
+                    className={[
+                      "mb-2 text-center text-3xl font-bold",
+                      draftFresh ? "text-slate-400" : "text-black",
+                    ].join(" ")}
+                  >
+                    {draftScore || "—"}
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
@@ -932,6 +964,15 @@ function MobileScoreEntryContent() {
                       ←
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleEnter}
+                    disabled={!draftScore || Number(draftScore) <= 0}
+                    className="mt-2 h-12 w-full rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
+                  >
+                    Enter
+                  </button>
                 </div>
               </div>
             )}
