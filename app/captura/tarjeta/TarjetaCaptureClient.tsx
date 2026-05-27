@@ -629,7 +629,8 @@ export default function TarjetaCaptureClient({
       const caddie = params.get("caddie")?.trim();
       if (caddie) sp.set("caddie", caddie);
     }
-    return `/score-entry/mobile?${sp.toString()}`;
+    // Ruta pública (sin login) — espejo del módulo backoffice.
+    return `/captura/mobile?${sp.toString()}`;
   }, [meta.groupId, meta.myEntryId]);
 
   // Cantidad de pendientes que ME tocan aprobar
