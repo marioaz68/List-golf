@@ -9,7 +9,6 @@ import { messages } from "@/lib/i18n/messages";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   distributionChips,
-  formatAdjustmentLabel,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import {
@@ -20,7 +19,6 @@ import {
 import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
-  applyHandicapCommitteeSuggestion,
   setHandicapCommitteeMemberPresence,
   revokeHandicapCommitteeRole,
   setHandicapCommitteeTrim,
@@ -36,6 +34,9 @@ import CommitteeVoteHistory, {
   type ArchivedSession,
   type ArchivedSnapshot,
 } from "./CommitteeVoteHistory";
+import AdminAggregateTable, {
+  type AdminAggregateRow,
+} from "./AdminAggregateTable";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -898,6 +899,31 @@ export default async function ComiteHandicapPage(props: {
           {t.bannerHiApplied}
         </div>
       ) : null}
+      {actionOk.startsWith("hi_applied_bulk_") ? (
+        (() => {
+          // Formato: "hi_applied_bulk_<ok>" o "hi_applied_bulk_<ok>_fail_<fail>".
+          const rest = actionOk.slice("hi_applied_bulk_".length);
+          const failMatch = rest.match(/^(\d+)_fail_(\d+)$/);
+          const okMatch = rest.match(/^(\d+)$/);
+          if (failMatch) {
+            return (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                {t.bannerHiAppliedBulkPartial
+                  .replace("{ok}", failMatch[1])
+                  .replace("{fail}", failMatch[2])}
+              </div>
+            );
+          }
+          if (okMatch) {
+            return (
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                {t.bannerHiAppliedBulk.replace("{n}", okMatch[1])}
+              </div>
+            );
+          }
+          return null;
+        })()
+      ) : null}
       {actionOk === "member_present" ? (
         <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
           {t.bannerPresent}
@@ -1540,192 +1566,75 @@ export default async function ComiteHandicapPage(props: {
                 )
               ) : null}
 
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
-                <table className="min-w-full text-left text-sm text-slate-900">
-                  <thead className="bg-slate-100 text-xs uppercase text-slate-600">
-                    <tr>
-                      <th className="px-3 py-2">{t.admin.thPlayer}</th>
-                      <th className="px-3 py-2">{t.admin.thHiCurrent}</th>
-                      <th className="px-3 py-2">{t.admin.thVotesAnon}</th>
-                      <th className="px-3 py-2">{t.admin.thLiveAvg}</th>
-                      <th className="px-3 py-2">{t.admin.thAvgTrim}</th>
-                      <th className="px-3 py-2">{t.admin.thHiSug}</th>
-                      <th className="px-3 py-2">{t.admin.thNoPlay}</th>
-                      <th className="px-3 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((e) => {
-                      const adjustments = votesByEntry.get(e.entry_id) ?? [];
-                      const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
-                      const trim = trimmedAverage(
-                        adjustments,
-                        Number(committee.trim_low ?? 0),
-                        Number(committee.trim_high ?? 0),
-                        abstained
-                      );
-                      const disqVotes = disqualifyByEntry.get(e.entry_id) ?? 0;
-                      const avg = trim.avg;
-                      const suggested =
-                        e.handicap_index != null && avg != null
-                          ? Math.round((e.handicap_index + avg) * 10) / 10
-                          : null;
+              {(() => {
+                const disqualifyThreshold = Number(
+                  (committee as { disqualify_threshold?: number | null })
+                    .disqualify_threshold ?? 0
+                );
 
-                      const shuffledChips = (() => {
-                        const arr = distributionChips(
-                          trim.values,
-                          trim.liveAbstainedAsZero
-                        );
-                        for (let i = arr.length - 1; i > 0; i -= 1) {
-                          const j = Math.floor(Math.random() * (i + 1));
-                          [arr[i], arr[j]] = [arr[j], arr[i]];
-                        }
-                        return arr;
-                      })();
+                const aggregateRows: AdminAggregateRow[] = entries.map((e) => {
+                  const adjustmentList = votesByEntry.get(e.entry_id) ?? [];
+                  const abstained = abstainedByEntry.get(e.entry_id) ?? 0;
+                  const trim = trimmedAverage(
+                    adjustmentList,
+                    Number(committee.trim_low ?? 0),
+                    Number(committee.trim_high ?? 0),
+                    abstained
+                  );
+                  const disqVotes =
+                    disqualifyByEntry.get(e.entry_id) ?? 0;
+                  const avg = trim.avg;
+                  const suggested =
+                    e.handicap_index != null && avg != null
+                      ? Math.round((e.handicap_index + avg) * 10) / 10
+                      : null;
 
-                      const totalVotesIncAbst = adjustments.length + abstained;
-                      const liveIncAbst = trim.liveCount + trim.liveAbstainedAsZero;
+                  const chips = (() => {
+                    const arr = distributionChips(
+                      trim.values,
+                      trim.liveAbstainedAsZero
+                    );
+                    for (let i = arr.length - 1; i > 0; i -= 1) {
+                      const j = Math.floor(Math.random() * (i + 1));
+                      [arr[i], arr[j]] = [arr[j], arr[i]];
+                    }
+                    return arr;
+                  })();
 
-                      return (
-                        <tr key={e.entry_id} className="border-t border-slate-100 align-top">
-                          <td className="px-3 py-2 font-medium">
-                            <span className="inline-flex flex-wrap items-center gap-1">
-                              <span>{e.player_name}</span>
-                              {e.ghin_number ? (
-                                <span
-                                  className="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-slate-700"
-                                  title={t.admin.ghinTitle}
-                                >
-                                  GHIN {e.ghin_number}
-                                </span>
-                              ) : null}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">{e.handicap_index ?? "—"}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-1">
-                              {shuffledChips.length === 0 ? (
-                                <span className="text-xs text-slate-400">
-                                  {t.admin.noVotes}
-                                </span>
-                              ) : (
-                                shuffledChips.map((v, idx) => (
-                                  <span
-                                    key={`${e.entry_id}-${idx}`}
-                                    title={
-                                      v.abstained
-                                        ? t.admin.chipAbstain
-                                        : v.trimmed
-                                          ? v.reason === "low"
-                                            ? t.admin.chipTrimmedLow
-                                            : t.admin.chipTrimmedHigh
-                                          : t.admin.chipLive
-                                    }
-                                    className={[
-                                      "rounded px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-                                      v.trimmed
-                                        ? "border border-slate-300 bg-slate-100 text-slate-500 line-through"
-                                        : v.abstained
-                                          ? "border border-emerald-600 bg-emerald-50 text-emerald-800"
-                                          : "bg-emerald-600 text-white",
-                                    ].join(" ")}
-                                  >
-                                    {v.abstained
-                                      ? t.admin.chipAbst
-                                      : formatAdjustmentLabel(v.value)}
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
-                            <div>
-                              {liveIncAbst} / {totalVotesIncAbst}
-                            </div>
-                            <div className="text-[10px] font-normal text-slate-500">
-                              {t.admin.avgDivisor}
-                              {trim.averageDenominator}
-                              {trim.liveAbstainedAsZero > 0
-                                ? ` (${trim.liveAbstainedAsZero} ${t.admin.abstAsZero})`
-                                : ""}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 tabular-nums">
-                            {avg != null ? formatAdjustmentLabel(avg) : "—"}
-                          </td>
-                          <td className="px-3 py-2 tabular-nums font-semibold">
-                            {suggested ?? "—"}
-                          </td>
-                          <td className="px-3 py-2">
-                            {(() => {
-                              const threshold = Number(
-                                (committee as {
-                                  disqualify_threshold?: number | null;
-                                }).disqualify_threshold ?? 0
-                              );
-                              if (disqVotes === 0) {
-                                return (
-                                  <span className="text-xs text-slate-400">—</span>
-                                );
-                              }
-                              const over =
-                                threshold > 0 && disqVotes >= threshold;
-                              return (
-                                <span
-                                  className={[
-                                    "inline-flex flex-col items-start gap-0.5 rounded-md px-2 py-0.5 text-[11px] font-semibold",
-                                    over
-                                      ? "bg-rose-700 text-white"
-                                      : "bg-rose-100 text-rose-800",
-                                  ].join(" ")}
-                                  title={
-                                    over
-                                      ? t.admin.thresholdAuto
-                                      : threshold > 0
-                                        ? `${t.admin.thresholdConfigured} ${threshold}`
-                                        : t.admin.thresholdInfo
-                                  }
-                                >
-                                  <span>
-                                    {disqVotes}
-                                    {threshold > 0 ? ` / ${threshold}` : ""}{" "}
-                                    {t.admin.votesWord}
-                                  </span>
-                                  {over ? (
-                                    <span className="text-[10px] uppercase tracking-wide">
-                                      {t.admin.notAuthorized}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td className="px-3 py-2">
-                            {avg != null && trim.liveCount > 0 ? (
-                              <form action={applyHandicapCommitteeSuggestion}>
-                                <input
-                                  type="hidden"
-                                  name="tournament_id"
-                                  value={tournamentId}
-                                />
-                                <input type="hidden" name="entry_id" value={e.entry_id} />
-                                <button
-                                  type="submit"
-                                  className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white"
-                                >
-                                  {t.admin.applyHi}
-                                </button>
-                              </form>
-                            ) : (
-                              <span className="text-xs text-slate-400">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                  const totalVotesIncAbst =
+                    adjustmentList.length + abstained;
+                  const liveIncAbst =
+                    trim.liveCount + trim.liveAbstainedAsZero;
+
+                  return {
+                    entry_id: e.entry_id,
+                    player_name: e.player_name,
+                    ghin_number: e.ghin_number ?? null,
+                    hi_current:
+                      e.handicap_index != null
+                        ? Number(e.handicap_index)
+                        : null,
+                    avg_adjustment: avg ?? null,
+                    suggested_hi: suggested,
+                    liveCount: trim.liveCount,
+                    liveIncAbst,
+                    totalVotesIncAbst,
+                    averageDenominator: trim.averageDenominator,
+                    liveAbstainedAsZero: trim.liveAbstainedAsZero,
+                    disqualifyVotes: disqVotes,
+                    chips,
+                  };
+                });
+
+                return (
+                  <AdminAggregateTable
+                    rows={aggregateRows}
+                    tournamentId={tournamentId}
+                    disqualifyThreshold={disqualifyThreshold}
+                    t={t}
+                  />
+                );
+              })()}
 
               <CommitteeVoteHistory
                 sessions={archivedSessions}

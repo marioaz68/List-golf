@@ -186,9 +186,102 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
   return { ok: true };
 }
 
+/**
+ * Resuelve el ajuste que se aplicará al HI del torneo para una sola
+ * inscripción. Permite override (cuando el admin redondea el promedio del
+ * comité en la tabla agregada) o, si no se pasa, recalcula el promedio
+ * recortado actual y lo usa.
+ *
+ * Devuelve `{ ok: true, current, adjustment, nextHi }` o `{ ok: false, error }`.
+ */
+async function computeApplyForEntry(
+  admin: ReturnType<typeof tryCreateAdminClient> extends infer T
+    ? Exclude<T, null>
+    : never,
+  committeeId: string,
+  tournament_id: string,
+  entry_id: string,
+  trim_low: number,
+  trim_high: number,
+  override: number | null
+): Promise<
+  | {
+      ok: true;
+      adjustment: number;
+      current: number;
+      nextHi: number;
+    }
+  | { ok: false; error: string }
+> {
+  let adjustmentToApply: number | null = null;
+
+  if (override != null && Number.isFinite(override)) {
+    // El admin nos da el ajuste exacto (redondeado en la UI). Se usa tal cual.
+    adjustmentToApply = override;
+  } else {
+    // Recalcular promedio recortado a partir de los votos vivos.
+    const { data: voteRows } = await admin
+      .from("handicap_committee_votes")
+      .select("adjustment, abstained")
+      .eq("committee_id", committeeId)
+      .eq("entry_id", entry_id);
+
+    let n_abstained = 0;
+    const adjustments: number[] = [];
+    for (const row of voteRows ?? []) {
+      if ((row as { abstained?: boolean }).abstained) {
+        n_abstained += 1;
+        continue;
+      }
+      const adj = (row as { adjustment?: unknown }).adjustment;
+      if (adj == null) continue;
+      const n = Number(adj);
+      if (Number.isFinite(n)) adjustments.push(n);
+    }
+
+    if (adjustments.length === 0) {
+      return { ok: false, error: "no_votes" };
+    }
+
+    const trim = trimmedAverage(
+      adjustments,
+      trim_low,
+      trim_high,
+      n_abstained
+    );
+    const avg = trim.avg;
+    if (avg == null || !Number.isFinite(avg) || trim.averageDenominator < 1) {
+      return { ok: false, error: "trim_empty" };
+    }
+    adjustmentToApply = avg;
+  }
+
+  const { data: entry, error: eErr } = await admin
+    .from("tournament_entries")
+    .select("id, handicap_index")
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id)
+    .single();
+
+  if (eErr || !entry) {
+    return { ok: false, error: "entry_not_found" };
+  }
+
+  const current =
+    entry.handicap_index != null ? Number(entry.handicap_index) : null;
+  if (current == null || !Number.isFinite(current)) {
+    return { ok: false, error: "no_hi" };
+  }
+
+  const nextHi = Math.round((current + adjustmentToApply) * 10) / 10;
+  return { ok: true, adjustment: adjustmentToApply, current, nextHi };
+}
+
 export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const entry_id = reqStr(formData, "entry_id");
+  const overrideRaw = String(formData.get("adjustment_override") ?? "").trim();
+  const override = overrideRaw === "" ? null : Number(overrideRaw);
 
   const { supabase, user } = await requireUser();
   const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
@@ -217,75 +310,34 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
     return;
   }
 
-  const { data: voteRows } = await admin
-    .from("handicap_committee_votes")
-    .select("adjustment, abstained")
-    .eq("committee_id", committee.id)
-    .eq("entry_id", entry_id);
-
-  let n_abstained = 0;
-  const adjustments: number[] = [];
-  for (const row of voteRows ?? []) {
-    if ((row as { abstained?: boolean }).abstained) {
-      n_abstained += 1;
-      continue;
-    }
-    const adj = (row as { adjustment?: unknown }).adjustment;
-    if (adj == null) continue;
-    const n = Number(adj);
-    if (Number.isFinite(n)) adjustments.push(n);
-  }
-
-  if (adjustments.length === 0) {
-    redirectWith(tournament_id, {
-      err: "No hay votos suficientes para aplicar un ajuste.",
-      tab: "admin",
-    });
-    return;
-  }
-
-  const trim = trimmedAverage(
-    adjustments,
+  const res = await computeApplyForEntry(
+    admin,
+    committee.id,
+    tournament_id,
+    entry_id,
     Number(committee.trim_low ?? 0),
     Number(committee.trim_high ?? 0),
-    n_abstained
+    override
   );
-  const avg = trim.avg;
-  if (
-    avg == null ||
-    !Number.isFinite(avg) ||
-    trim.averageDenominator < 1
-  ) {
+
+  if (!res.ok) {
+    const map: Record<string, string> = {
+      no_votes: "No hay votos suficientes para aplicar un ajuste.",
+      trim_empty:
+        "El recorte deja menos de un voto vivo; ajusta los parámetros.",
+      entry_not_found: "Inscripción no encontrada.",
+      no_hi: "El jugador no tiene HI en el torneo.",
+    };
     redirectWith(tournament_id, {
-      err: "El recorte deja menos de un voto vivo; ajusta los parámetros.",
+      err: map[res.error] ?? res.error,
       tab: "admin",
     });
     return;
   }
-
-  const { data: entry, error: eErr } = await admin
-    .from("tournament_entries")
-    .select("id, handicap_index")
-    .eq("id", entry_id)
-    .eq("tournament_id", tournament_id)
-    .single();
-
-  if (eErr || !entry) {
-    redirectWith(tournament_id, { err: "Inscripción no encontrada.", tab: "admin" });
-    return;
-  }
-
-  const current = entry.handicap_index != null ? Number(entry.handicap_index) : null;
-  if (current == null || !Number.isFinite(current)) {
-    redirectWith(tournament_id, { err: "El jugador no tiene HI en el torneo.", tab: "admin" });
-    return;
-  }
-
-  const nextHi = Math.round((current + avg) * 10) / 10;
 
   const { error: updErr } = await admin
     .from("tournament_entries")
-    .update({ handicap_index: nextHi })
+    .update({ handicap_index: res.nextHi })
     .eq("id", entry_id);
 
   if (updErr) {
@@ -296,6 +348,112 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   revalidatePath("/comite-handicap");
   revalidatePath("/entries");
   redirectWith(tournament_id, { ok: "hi_applied", tab: "admin" });
+}
+
+/**
+ * Aplica el HI ajustado para varias inscripciones a la vez. Por cada
+ * inscripción incluida, el formulario debe traer:
+ *   - entry_ids = "id1,id2,id3,..."
+ *   - adj_<id> = "-0.5" (ajuste redondeado por el admin)
+ *
+ * Las inscripciones que no traigan adjuste se ignoran (no se modifica su HI).
+ */
+export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+
+  const { supabase, user } = await requireUser();
+  const access = await loadHandicapCommitteeAccess(
+    supabase,
+    user.id,
+    tournament_id
+  );
+  if (!access.isAdmin) {
+    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+    return;
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    redirectWith(tournament_id, {
+      err: "Falta SUPABASE_SERVICE_ROLE_KEY para aplicar ajustes.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  const { data: committee } = await admin
+    .from("tournament_handicap_committees")
+    .select("id, trim_high, trim_low")
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (!committee) {
+    redirectWith(tournament_id, { err: "Comité no encontrado.", tab: "admin" });
+    return;
+  }
+
+  const idsRaw = String(formData.get("entry_ids") ?? "").trim();
+  const entryIds = idsRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (entryIds.length === 0) {
+    redirectWith(tournament_id, {
+      err: "No hay inscripciones seleccionadas.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  let okCount = 0;
+  const failures: string[] = [];
+
+  for (const entry_id of entryIds) {
+    const overrideRaw = String(formData.get(`adj_${entry_id}`) ?? "").trim();
+    const override = overrideRaw === "" ? null : Number(overrideRaw);
+
+    const res = await computeApplyForEntry(
+      admin,
+      committee.id,
+      tournament_id,
+      entry_id,
+      Number(committee.trim_low ?? 0),
+      Number(committee.trim_high ?? 0),
+      override
+    );
+    if (!res.ok) {
+      failures.push(entry_id);
+      continue;
+    }
+    const { error: updErr } = await admin
+      .from("tournament_entries")
+      .update({ handicap_index: res.nextHi })
+      .eq("id", entry_id);
+    if (updErr) {
+      failures.push(entry_id);
+      continue;
+    }
+    okCount += 1;
+  }
+
+  revalidatePath("/comite-handicap");
+  revalidatePath("/entries");
+
+  if (okCount === 0) {
+    redirectWith(tournament_id, {
+      err: "No se pudo aplicar ningún ajuste.",
+      tab: "admin",
+    });
+    return;
+  }
+
+  redirectWith(tournament_id, {
+    ok:
+      failures.length === 0
+        ? `hi_applied_bulk_${okCount}`
+        : `hi_applied_bulk_${okCount}_fail_${failures.length}`,
+    tab: "admin",
+  });
 }
 
 export async function resetHandicapCommitteeVotes(formData: FormData) {
