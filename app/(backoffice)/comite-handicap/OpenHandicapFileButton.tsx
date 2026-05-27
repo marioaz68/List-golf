@@ -4,6 +4,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 type Props = {
   playerId: string;
+  /** Inscripción del jugador en el torneo actual; se usa como ancla para
+   * que el regreso del visor del reporte abra la misma carta. */
+  entryId?: string | null;
   hasFile: boolean;
   compact?: boolean;
 };
@@ -14,6 +17,7 @@ type Props = {
  */
 export default function OpenHandicapFileButton({
   playerId,
+  entryId,
   hasFile,
   compact = false,
 }: Props) {
@@ -23,7 +27,8 @@ export default function OpenHandicapFileButton({
   if (!hasFile) return null;
 
   const search = searchParams?.toString();
-  const currentUrl = search ? `${pathname}?${search}` : pathname;
+  const hash = entryId ? `#entry-${entryId}` : "";
+  const currentUrl = `${pathname}${search ? `?${search}` : ""}${hash}`;
   const href = `/handicap-report/${encodeURIComponent(playerId)}?return=${encodeURIComponent(currentUrl)}`;
 
   return (
