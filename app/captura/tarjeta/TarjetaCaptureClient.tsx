@@ -57,6 +57,7 @@ function PublicSection({
   savingKey,
   onCellTap,
   witnessEntryIdForMe,
+  myEntryId,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -67,6 +68,7 @@ function PublicSection({
   savingKey: string | null;
   onCellTap: (entryId: string, hole: HoleNumber, table: TableKind) => void;
   witnessEntryIdForMe: string | null;
+  myEntryId: string | null;
 }) {
   const isHoleComplete = (hole: HoleNumber) =>
     players.length > 0 &&
@@ -128,21 +130,27 @@ function PublicSection({
               const isMyWitnessTarget =
                 witnessEntryIdForMe != null &&
                 witnessEntryIdForMe === player.entryId;
+              const isMe = myEntryId != null && myEntryId === player.entryId;
               const total = holes.reduce(
                 (acc, hole) => acc + (scores[hole] ?? 0),
                 0
               );
+              // Fondo de fila: el jugador identificado se pinta en azul cielo,
+              // el jugador al que YO atestiguo, en ámbar.
+              const rowBg = isMe
+                ? "bg-sky-50"
+                : isMyWitnessTarget
+                  ? "bg-amber-50"
+                  : "";
               return (
                 <tr
                   key={player.entryId}
-                  className="border-b border-slate-300 last:border-b-0"
+                  className={[
+                    "border-b border-slate-300 last:border-b-0",
+                    rowBg,
+                  ].join(" ")}
                 >
-                  <td
-                    className={[
-                      "px-1 py-2 font-bold text-slate-900",
-                      isMyWitnessTarget ? "bg-amber-50" : "",
-                    ].join(" ")}
-                  >
+                  <td className="px-1 py-2 font-bold text-slate-900">
                     {player.initials}
                   </td>
                   {holes.map((hole) => {
@@ -176,7 +184,12 @@ function PublicSection({
                       </td>
                     );
                   })}
-                  <td className="px-0 py-1 text-center font-bold text-slate-900">
+                  <td
+                    className={[
+                      "px-0 py-1 text-center font-bold text-slate-900",
+                      isMe ? "bg-sky-100" : "",
+                    ].join(" ")}
+                  >
                     {total > 0 ? total : ""}
                   </td>
                 </tr>
@@ -296,12 +309,42 @@ export default function TarjetaCaptureClient({
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [syncHint, setSyncHint] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /**
+   * Visibilidad del bloque "Mi Tarjeta" + banner del testigo.
+   * Por defecto visible en el primer render; se persiste por jugador en
+   * `localStorage` para que se respete entre navegaciones (Anotar → Tarjeta).
+   */
+  const [showMyCard, setShowMyCard] = useState<boolean>(true);
   const activeCellRef = useRef<ActiveCell | null>(null);
   const savingRef = useRef(false);
 
   useEffect(() => {
     activeCellRef.current = activeCell;
   }, [activeCell]);
+
+  // Carga inicial del toggle desde localStorage (si existe).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = `tarjeta:show-my-card:${initial.groupId}:${initial.myEntryId ?? "anon"}`;
+    try {
+      const v = window.localStorage.getItem(key);
+      if (v === "0") setShowMyCard(false);
+      else if (v === "1") setShowMyCard(true);
+    } catch {
+      // ignore
+    }
+  }, [initial.groupId, initial.myEntryId]);
+
+  // Persiste el toggle cuando cambie.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = `tarjeta:show-my-card:${initial.groupId}:${initial.myEntryId ?? "anon"}`;
+    try {
+      window.localStorage.setItem(key, showMyCard ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [showMyCard, initial.groupId, initial.myEntryId]);
 
   // Listas y mapas derivados
   const witnessAssignmentMap = useMemo(() => {
@@ -678,7 +721,7 @@ export default function TarjetaCaptureClient({
                 </div>
               ) : null}
 
-              {witnessTargetPlayer ? (
+              {showMyCard && witnessTargetPlayer ? (
                 <div
                   className={[
                     "mt-2 rounded-md border px-2 py-1 text-[10px]",
@@ -693,7 +736,7 @@ export default function TarjetaCaptureClient({
                     : "Sin cambios pendientes por aprobar."}
                 </div>
               ) : null}
-              {myWitnessPlayer ? (
+              {showMyCard && myWitnessPlayer ? (
                 <div className="mt-1 text-[10px] text-slate-500">
                   Tu testigo: {myWitnessPlayer.name}
                 </div>
@@ -710,6 +753,21 @@ export default function TarjetaCaptureClient({
                 >
                   Anotar por hoyo
                 </Link>
+                {privateEntryIds.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowMyCard((v) => !v)}
+                    className={[
+                      "inline-flex rounded-lg border px-3 py-1.5 text-[11px] font-semibold",
+                      showMyCard
+                        ? "border-amber-400 bg-amber-100 text-amber-900"
+                        : "border-slate-300 bg-white text-slate-900",
+                    ].join(" ")}
+                    aria-pressed={showMyCard}
+                  >
+                    {showMyCard ? "Ocultar Mi Tarjeta" : "Mostrar Mi Tarjeta"}
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -735,6 +793,7 @@ export default function TarjetaCaptureClient({
                   savingKey={savingKey}
                   onCellTap={openCell}
                   witnessEntryIdForMe={witnessTargetForMe}
+                  myEntryId={meta.myEntryId}
                 />
                 <PublicSection
                   title="BACK 9"
@@ -746,9 +805,10 @@ export default function TarjetaCaptureClient({
                   savingKey={savingKey}
                   onCellTap={openCell}
                   witnessEntryIdForMe={witnessTargetForMe}
+                  myEntryId={meta.myEntryId}
                 />
 
-                {privateEntryIds.map((eid) => {
+                {showMyCard && privateEntryIds.map((eid) => {
                   const player = playersById.get(eid);
                   if (!player) return null;
                   const privScores =

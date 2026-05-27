@@ -323,12 +323,15 @@ function CompactCardSection({
   players,
   totalLabel,
   showGrandTotal,
+  highlightPlayerId,
 }: {
   title: string;
   holes: HoleNumber[];
   players: PlayerRow[];
   totalLabel: string;
   showGrandTotal: boolean;
+  /** Si se proporciona, esa fila se pinta en azul cielo (jugador identificado). */
+  highlightPlayerId?: string | null;
 }) {
   const gridCols = showGrandTotal
     ? "56px repeat(9,minmax(0,1fr)) 36px 36px"
@@ -413,11 +416,16 @@ function CompactCardSection({
         {players.map((player) => {
           const sectionTotal = sumScores(player.scores, holes);
           const grandTotal = sumScores(player.scores, ALL_HOLES);
+          const isMe =
+            highlightPlayerId != null && player.id === highlightPlayerId;
 
           return (
             <div
               key={`${title}-player-${player.id}`}
-              className="grid items-center border-b border-slate-200 bg-white last:border-b-0"
+              className={[
+                "grid items-center border-b border-slate-200 last:border-b-0",
+                isMe ? "bg-sky-50" : "bg-white",
+              ].join(" ")}
               style={{ gridTemplateColumns: gridCols }}
             >
               <div className="px-1 py-1 text-center">
@@ -438,18 +446,129 @@ function CompactCardSection({
                 </div>
               ))}
 
-              <div className="py-1 text-center text-[10px] font-bold text-slate-900">
+              <div
+                className={[
+                  "py-1 text-center text-[10px] font-bold text-slate-900",
+                  isMe ? "bg-sky-100" : "",
+                ].join(" ")}
+              >
                 {sectionTotal > 0 ? sectionTotal : ""}
               </div>
 
               {showGrandTotal ? (
-                <div className="py-1 text-center text-[10px] font-bold text-slate-900">
+                <div
+                  className={[
+                    "py-1 text-center text-[10px] font-bold text-slate-900",
+                    isMe ? "bg-sky-100" : "",
+                  ].join(" ")}
+                >
                   {grandTotal > 0 ? grandTotal : ""}
                 </div>
               ) : null}
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function PrivateCardSection({
+  title,
+  holes,
+  scores,
+  totalLabel,
+  showGrandTotal,
+}: {
+  title: string;
+  holes: HoleNumber[];
+  scores: HoleScores;
+  totalLabel: string;
+  showGrandTotal: boolean;
+}) {
+  const gridCols = showGrandTotal
+    ? "56px repeat(9,minmax(0,1fr)) 36px 36px"
+    : "56px repeat(9,minmax(0,1fr)) 36px";
+
+  const sectionTotal = sumScores(scores, holes);
+  const grandTotal = sumScores(scores, ALL_HOLES);
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-amber-300 bg-amber-50 shadow-sm">
+      <div className="border-b border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-bold tracking-[0.14em] text-amber-900">
+        {title}
+      </div>
+
+      <div className="w-full">
+        <div
+          className="grid items-center bg-amber-700 text-white"
+          style={{ gridTemplateColumns: gridCols }}
+        >
+          <div className="px-1 py-1 text-center text-[10px] font-bold">HOY</div>
+          {holes.map((hole) => (
+            <div
+              key={`priv-${title}-hole-${hole}`}
+              className="py-1 text-center text-[10px] font-bold"
+            >
+              {hole}
+            </div>
+          ))}
+          <div className="py-1 text-center text-[10px] font-bold">{totalLabel}</div>
+          {showGrandTotal ? (
+            <div className="py-1 text-center text-[10px] font-bold">TOT</div>
+          ) : null}
+        </div>
+
+        <div
+          className="grid items-center border-b border-amber-300 bg-amber-100 text-amber-900"
+          style={{ gridTemplateColumns: gridCols }}
+        >
+          <div className="px-1 py-1 text-center text-[10px] font-bold">PAR</div>
+          {holes.map((hole) => (
+            <div
+              key={`priv-${title}-par-${hole}`}
+              className="py-1 text-center text-[10px] font-bold"
+            >
+              {PAR_BY_HOLE[hole]}
+            </div>
+          ))}
+          <div className="py-1 text-center text-[10px] font-bold">
+            {sumPar(holes)}
+          </div>
+          {showGrandTotal ? (
+            <div className="py-1 text-center text-[10px] font-bold">
+              {sumPar(ALL_HOLES)}
+            </div>
+          ) : null}
+        </div>
+
+        <div
+          className="grid items-center bg-amber-50"
+          style={{ gridTemplateColumns: gridCols }}
+        >
+          <div className="px-1 py-1 text-center text-[10px] font-bold text-amber-900">
+            MI
+          </div>
+          {holes.map((hole) => (
+            <div
+              key={`priv-${title}-score-${hole}`}
+              className="flex items-center justify-center py-1"
+            >
+              <ScoreCell
+                score={scores[hole]}
+                par={PAR_BY_HOLE[hole]}
+              />
+            </div>
+          ))}
+          <div className="py-1 text-center text-[10px] font-bold text-amber-900">
+            {sectionTotal > 0 ? sectionTotal : ""}
+          </div>
+          {showGrandTotal ? (
+            <div className="py-1 text-center text-[10px] font-bold text-amber-900">
+              {grandTotal > 0 ? grandTotal : ""}
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -509,9 +628,15 @@ const DEMO_PLAYERS: PlayerRow[] = [
   { id: "p6", name: "Tere Ruiz", scores: createEmptyScores() },
 ];
 
+/** Id especial para identificar la card "Mi Score" (tarjeta privada). */
+const ME_ID = "__me__";
+
 function MobileScoreEntryContent() {
   const searchParams = useSearchParams();
   const groupId = searchParams.get("group_id");
+  /** `?me=` y `?caddie=` traen los entry IDs identificados desde Telegram. */
+  const meParam = searchParams.get("me");
+  const caddieParam = searchParams.get("caddie");
 
   const [tab, setTab] = useState<"anotar" | "tarjeta" | "firmar">("anotar");
   const [currentHole, setCurrentHole] = useState<HoleNumber>(1);
@@ -527,6 +652,27 @@ function MobileScoreEntryContent() {
   const [draftFresh, setDraftFresh] = useState<boolean>(false);
   const [signPlayerId, setSignPlayerId] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<Record<string, string | null>>({});
+
+  // === Estado de identidad / tarjeta privada / testigos ===
+  /** Entry ID del jugador visitante (si lo trae el link). */
+  const [myEntryId, setMyEntryId] = useState<string | null>(null);
+  /** Scores privados del jugador (sólo él y su caddie los ven aquí). */
+  const [myPrivateScores, setMyPrivateScores] = useState<HoleScores>(() =>
+    createEmptyScores()
+  );
+  /** Entry ID del jugador a quien atestiguo (yo soy su testigo). */
+  const [witnessTargetEntryId, setWitnessTargetEntryId] = useState<string | null>(null);
+  /** Nombre legible del jugador a quien atestiguo. */
+  const [witnessTargetName, setWitnessTargetName] = useState<string | null>(null);
+  /** Nombre legible de MI testigo. */
+  const [myWitnessName, setMyWitnessName] = useState<string | null>(null);
+  /** Cuántos cambios tengo pendientes por aprobar (en celdas del jugador que atestiguo). */
+  const [pendingForMeCount, setPendingForMeCount] = useState<number>(0);
+  /**
+   * Visibilidad de "Mi Score" + banner de testigo en la pestaña Tarjeta.
+   * Persiste por jugador en localStorage para sobrevivir cambios de pestaña.
+   */
+  const [showMyCard, setShowMyCard] = useState<boolean>(true);
 
   const playerRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const activePlayerIdRef = useRef<string | null>(null);
@@ -545,30 +691,91 @@ function MobileScoreEntryContent() {
     const gid = groupId?.trim() ?? "";
     if (!gid) return;
     const groupIdCapture = gid;
+    const meTrim = meParam?.trim() ?? "";
+    const caddieTrim = caddieParam?.trim() ?? "";
 
     async function pull() {
       if (savingRef.current) return;
       try {
-        const res = await fetch(
-          `/api/captura/group?group_id=${encodeURIComponent(groupIdCapture)}`,
-          { cache: "no-store" }
-        );
+        const qs = new URLSearchParams({ group_id: groupIdCapture });
+        if (meTrim) qs.set("me", meTrim);
+        if (caddieTrim) qs.set("caddie", caddieTrim);
+        const res = await fetch(`/api/captura/group?${qs.toString()}`, {
+          cache: "no-store",
+        });
         const json = (await res.json()) as {
           ok?: boolean;
           data?: {
+            myEntryId?: string | null;
+            caddieForEntryIds?: string[];
+            witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
             players: Array<{
               entryId: string;
               name: string;
               scores: PlayerRow["scores"];
+              pending?: Partial<Record<HoleNumber, boolean>>;
+              privateScores?: PlayerRow["scores"];
             }>;
           };
         };
         if (!json.ok || !json.data?.players) return;
         setGroupLoading(false);
+
+        const data = json.data;
+        const myId = data.myEntryId ?? null;
+        setMyEntryId(myId);
+
+        // Mapa de testigos: yo atestiguo a alguien si soy su witness.
+        let targetEid: string | null = null;
+        let myWitnessEid: string | null = null;
+        if (myId && Array.isArray(data.witnesses)) {
+          for (const w of data.witnesses) {
+            if (w.witnessEntryId === myId) targetEid = w.entryId;
+            if (w.entryId === myId) myWitnessEid = w.witnessEntryId;
+          }
+        }
+        setWitnessTargetEntryId(targetEid);
+
+        const targetPlayer = targetEid
+          ? data.players.find((p) => p.entryId === targetEid) ?? null
+          : null;
+        setWitnessTargetName(targetPlayer?.name ?? null);
+
+        const myWitnessPlayer = myWitnessEid
+          ? data.players.find((p) => p.entryId === myWitnessEid) ?? null
+          : null;
+        setMyWitnessName(myWitnessPlayer?.name ?? null);
+
+        // Pendientes que yo debo aprobar
+        let pCount = 0;
+        if (targetPlayer?.pending) {
+          for (const v of Object.values(targetPlayer.pending)) {
+            if (v) pCount += 1;
+          }
+        }
+        setPendingForMeCount(pCount);
+
+        // Scores privados del jugador identificado
+        if (myId) {
+          const mePlayer = data.players.find((p) => p.entryId === myId);
+          if (mePlayer?.privateScores) {
+            const incoming = mePlayer.privateScores;
+            const editingMe = activePlayerIdRef.current === ME_ID;
+            const editingHole = currentHoleRef.current;
+            setMyPrivateScores((prev) => {
+              const next: HoleScores = { ...incoming };
+              if (editingMe && prev[editingHole] != null) {
+                next[editingHole] = prev[editingHole];
+              }
+              return next;
+            });
+          }
+        }
+
         const editingId = activePlayerIdRef.current;
         const editingHole = currentHoleRef.current;
         setPlayers((prevPlayers) =>
-          json.data!.players.map((p) => {
+          data.players.map((p) => {
             const prev = prevPlayers.find((x) => x.id === p.entryId);
             const scores = { ...p.scores };
             if (
@@ -589,12 +796,42 @@ function MobileScoreEntryContent() {
     void pull();
     const id = window.setInterval(pull, 2000);
     return () => window.clearInterval(id);
-  }, [groupId?.trim()]);
+  }, [groupId?.trim(), meParam?.trim(), caddieParam?.trim()]);
 
-  const activePlayer = useMemo(
-    () => players.find((p) => p.id === activePlayerId) ?? null,
-    [players, activePlayerId]
-  );
+  // Carga inicial del toggle "Mi Score" desde localStorage.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const gid = groupId?.trim() ?? "";
+    if (!gid || !meParam?.trim()) return;
+    const key = `mobile:show-my-card:${gid}:${meParam.trim()}`;
+    try {
+      const v = window.localStorage.getItem(key);
+      if (v === "0") setShowMyCard(false);
+      else if (v === "1") setShowMyCard(true);
+    } catch {
+      // ignore
+    }
+  }, [groupId, meParam]);
+
+  // Persiste el toggle.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const gid = groupId?.trim() ?? "";
+    if (!gid || !meParam?.trim()) return;
+    const key = `mobile:show-my-card:${gid}:${meParam.trim()}`;
+    try {
+      window.localStorage.setItem(key, showMyCard ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [showMyCard, groupId, meParam]);
+
+  const activePlayer = useMemo<PlayerRow | null>(() => {
+    if (activePlayerId === ME_ID) {
+      return { id: ME_ID, name: "Mi Score", scores: myPrivateScores };
+    }
+    return players.find((p) => p.id === activePlayerId) ?? null;
+  }, [players, activePlayerId, myPrivateScores]);
 
   const signPlayer = useMemo(
     () => players.find((p) => p.id === signPlayerId) ?? null,
@@ -611,6 +848,29 @@ function MobileScoreEntryContent() {
 
   function setHoleScore(playerId: string, hole: HoleNumber, value: number | null) {
     const strokes = value === null ? null : Math.max(1, value);
+
+    // Score privado del jugador identificado (tabla amber "Mi Score").
+    if (playerId === ME_ID) {
+      setMyPrivateScores((cur) => ({ ...cur, [hole]: strokes }));
+      if (!groupId || !myEntryId) return;
+      savingRef.current = true;
+      void fetch("/api/captura/private-score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: groupId,
+          entry_id: myEntryId,
+          hole,
+          strokes,
+          me: myEntryId,
+          caddie: caddieParam?.trim() ?? "",
+        }),
+      }).finally(() => {
+        savingRef.current = false;
+      });
+      return;
+    }
+
     setPlayers((current) =>
       current.map((player) =>
         player.id === playerId
@@ -627,6 +887,20 @@ function MobileScoreEntryContent() {
 
     if (!groupId) return;
 
+    // Determinar modo: si yo soy el testigo del jugador y la celda está
+    // pendiente, este guardado es una aprobación. Si no, es modificación.
+    const isApproveTarget =
+      witnessTargetEntryId != null && witnessTargetEntryId === playerId;
+    const mode: "modify" | "approve" =
+      isApproveTarget && pendingForMeCount > 0 ? "approve" : "modify";
+    const role = isApproveTarget && mode === "approve"
+      ? "witness"
+      : meParam?.trim()
+        ? "player"
+        : caddieParam?.trim()
+          ? "caddie"
+          : null;
+
     savingRef.current = true;
     void fetch("/api/captura/score", {
       method: "POST",
@@ -636,6 +910,8 @@ function MobileScoreEntryContent() {
         entry_id: playerId,
         hole,
         strokes,
+        mode,
+        role,
       }),
     }).finally(() => {
       savingRef.current = false;
@@ -643,8 +919,13 @@ function MobileScoreEntryContent() {
   }
 
   function selectPlayer(playerId: string) {
-    const player = players.find((p) => p.id === playerId);
-    const existing = player?.scores[currentHole];
+    let existing: number | null | undefined;
+    if (playerId === ME_ID) {
+      existing = myPrivateScores[currentHole];
+    } else {
+      const player = players.find((p) => p.id === playerId);
+      existing = player?.scores[currentHole];
+    }
     setActivePlayerId(playerId);
     setDraftScore(existing ? String(existing) : "");
     // Si abre con un valor previo, el primer dígito que escriba lo reemplaza
@@ -850,6 +1131,7 @@ function MobileScoreEntryContent() {
                 {players.map((player) => {
                   const isActive = player.id === activePlayerId;
                   const currentHoleScore = getPlayerHoleScore(player, currentHole);
+                  const isMe = myEntryId != null && player.id === myEntryId;
 
                   return (
                     <div
@@ -861,7 +1143,9 @@ function MobileScoreEntryContent() {
                         "rounded-xl border px-3 py-2 shadow-sm",
                         isActive
                           ? "border-blue-500 bg-blue-50"
-                          : "border-slate-200 bg-white",
+                          : isMe
+                            ? "border-sky-300 bg-sky-50"
+                            : "border-slate-200 bg-white",
                       ].join(" ")}
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -909,6 +1193,72 @@ function MobileScoreEntryContent() {
                     </div>
                   );
                 })}
+
+                {/*
+                  Card "MI SCORE" — sólo visible si el visitante está
+                  identificado como jugador. Score privado: lo guarda
+                  contra /api/captura/private-score.
+                */}
+                {myEntryId ? (() => {
+                  const isActive = activePlayerId === ME_ID;
+                  const currentHoleScore = myPrivateScores[currentHole];
+                  return (
+                    <div
+                      key="me-private"
+                      ref={(el) => {
+                        playerRefs.current[ME_ID] = el;
+                      }}
+                      className={[
+                        "rounded-xl border-2 px-3 py-2 shadow-sm",
+                        isActive
+                          ? "border-amber-600 bg-amber-100"
+                          : "border-amber-400 bg-amber-50",
+                      ].join(" ")}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0 truncate text-[15px] font-semibold text-amber-900">
+                          MI SCORE (privado)
+                        </div>
+                        <div className="text-xs text-amber-800">
+                          {currentHoleScore ?? "-"}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => selectPlayer(ME_ID)}
+                          className="flex h-11 w-[62px] shrink-0 items-center justify-center rounded-lg border border-amber-700 bg-amber-100 text-2xl font-bold text-amber-950"
+                        >
+                          {currentHoleScore ?? ""}
+                        </button>
+
+                        <div className="flex flex-1 gap-1">
+                          {[
+                            { label: "Birdie", value: PAR_BY_HOLE[currentHole] - 1 },
+                            { label: "Par", value: PAR_BY_HOLE[currentHole] },
+                            { label: "Bogey", value: PAR_BY_HOLE[currentHole] + 1 },
+                            { label: "Doble", value: PAR_BY_HOLE[currentHole] + 2 },
+                          ].map((btn) => (
+                            <button
+                              key={`me-${btn.label}`}
+                              type="button"
+                              onClick={() => handlePreset(ME_ID, btn.value)}
+                              className={[
+                                "h-11 flex-1 rounded-lg border text-[10px] font-semibold",
+                                currentHoleScore === btn.value
+                                  ? "border-amber-700 bg-amber-300 text-amber-950"
+                                  : "border-amber-400 bg-white text-amber-900",
+                              ].join(" ")}
+                            >
+                              {btn.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : null}
               </section>
             </main>
 
@@ -984,6 +1334,47 @@ function MobileScoreEntryContent() {
 
         {tab === "tarjeta" && (
           <main className="flex-1 space-y-2 p-2">
+            {/* Banner de testigo + toggle Mi Score (sólo visible si está identificado el jugador). */}
+            {myEntryId ? (
+              <section className="rounded-xl bg-white px-3 py-2 shadow-sm text-[11px]">
+                {showMyCard && witnessTargetName ? (
+                  <div
+                    className={[
+                      "rounded-md border px-2 py-1",
+                      pendingForMeCount > 0
+                        ? "border-red-400 bg-red-50 text-red-900"
+                        : "border-emerald-400 bg-emerald-50 text-emerald-900",
+                    ].join(" ")}
+                  >
+                    Eres testigo de <b>{witnessTargetName}</b>.{" "}
+                    {pendingForMeCount > 0
+                      ? `Hay ${pendingForMeCount} cambio${pendingForMeCount === 1 ? "" : "s"} por aprobar (celdas rojas).`
+                      : "Sin cambios pendientes por aprobar."}
+                  </div>
+                ) : null}
+                {showMyCard && myWitnessName ? (
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    Tu testigo: {myWitnessName}
+                  </div>
+                ) : null}
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowMyCard((v) => !v)}
+                    className={[
+                      "inline-flex rounded-lg border px-3 py-1.5 text-[11px] font-semibold",
+                      showMyCard
+                        ? "border-amber-400 bg-amber-100 text-amber-900"
+                        : "border-slate-300 bg-white text-slate-900",
+                    ].join(" ")}
+                    aria-pressed={showMyCard}
+                  >
+                    {showMyCard ? "Ocultar Mi Score" : "Mostrar Mi Score"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
             <section className="rounded-xl bg-white px-2 py-2 shadow-sm">
               <div className="mb-2 flex items-center justify-between">
                 <div>
@@ -1007,6 +1398,7 @@ function MobileScoreEntryContent() {
                   players={players}
                   totalLabel="IN"
                   showGrandTotal={false}
+                  highlightPlayerId={myEntryId}
                 />
 
                 <CompactCardSection
@@ -1015,9 +1407,43 @@ function MobileScoreEntryContent() {
                   players={players}
                   totalLabel="OUT"
                   showGrandTotal
+                  highlightPlayerId={myEntryId}
                 />
               </div>
             </section>
+
+            {/* Sección "MI SCORE" — tarjeta privada del jugador. */}
+            {myEntryId && showMyCard ? (
+              <section className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-2 shadow-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-bold text-amber-900">
+                      MI SCORE
+                    </div>
+                    <div className="text-[10px] text-amber-800">
+                      Tarjeta privada · sólo la ven tú y tu caddie
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <PrivateCardSection
+                    title="FRONT 9"
+                    holes={HOLES_FRONT}
+                    scores={myPrivateScores}
+                    totalLabel="IN"
+                    showGrandTotal={false}
+                  />
+                  <PrivateCardSection
+                    title="BACK 9"
+                    holes={HOLES_BACK}
+                    scores={myPrivateScores}
+                    totalLabel="OUT"
+                    showGrandTotal
+                  />
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-2 rounded-xl bg-white p-3 shadow-sm">
               <div className="text-sm font-bold text-slate-900">
