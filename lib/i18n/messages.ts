@@ -561,6 +561,48 @@ const es = {
     filtersHint: "Filtra asignaciones por torneo y ronda",
     assignHeading: "ASIGNAR CADDIE POR RONDA",
     assignments: "ASIGNACIONES",
+    telegramLink: {
+      title: "Telegram del caddie",
+      migrationWarning:
+        "Falta migración en Supabase: columnas telegram_user_id y telegram_chat_id en caddies. Ejecuta la migración 20260527160000_caddies_telegram_link.sql.",
+      statusLinked: "Telegram vinculado (user ID guardado).",
+      statusNotLinked: "Aún no hay Telegram vinculado.",
+      step1Title: "1. Abrir el bot en Telegram",
+      step1BodyConfigured:
+        "El caddie debe abrir el bot, pulsar «Iniciar» y escribir HOLA.",
+      step1BodyNotConfigured:
+        "Configura NEXT_PUBLIC_TELEGRAM_BOT_USERNAME en el servidor.",
+      openBotLink: "Abrir bot en Telegram",
+      botUsernameLabel: "Bot del torneo",
+      copyBotUsername: "Copiar @usuario",
+      copied: "Copiado",
+      step2Title: "2. Obtener el ID si el bot no lo reconoce",
+      step2Body:
+        "Pide que escriba HOLA o ID al bot. El bot responderá con un número entre líneas ━━━━. Abajo aparecen los últimos que escribieron sin vincular.",
+      pendingLinksTitle: "Últimos mensajes al bot (sin vincular)",
+      pendingLinksHint:
+        "Si el caddie ya escribió HOLA, busca su nombre y pulsa «Usar este ID».",
+      pendingLinksEmpty:
+        "Nadie sin vincular ha escrito al bot recientemente.",
+      pendingLinksUseId: "Usar este ID",
+      step3Title: "3. Guardar ID en la ficha",
+      step3Body:
+        "Guarda el ID para que el bot lo identifique y pueda recibir links de captura por grupo.",
+      formTitle: "Registrar ID en la ficha del caddie",
+      fieldUserId: "Telegram user ID (solo números)",
+      fieldChatId: "Chat ID (opcional)",
+      fieldChatHint:
+        "Suele coincidir con el user id en chats privados; déjalo vacío si no lo necesitas.",
+      btnSave: "Guardar vínculo",
+      btnClear: "Quitar vínculo Telegram",
+      verifyTitle: "Verificar enlace",
+      verifyBody:
+        "Envía un mensaje de prueba al Telegram del caddie.",
+      btnVerify: "Enviar verificación por Telegram",
+      savedBanner: "Vínculo guardado correctamente.",
+      verifiedBanner: "Mensaje de verificación enviado.",
+      editTelegram: "Vincular Telegram",
+    },
   },
   tournamentHoles: {
     title: "Hoyos del torneo",
@@ -2179,6 +2221,46 @@ const en: Messages = {
     filtersHint: "Filter assignments by tournament and round",
     assignHeading: "ASSIGN CADDIE BY ROUND",
     assignments: "ASSIGNMENTS",
+    telegramLink: {
+      title: "Caddie Telegram",
+      migrationWarning:
+        "Missing Supabase migration: telegram_user_id and telegram_chat_id on caddies. Run 20260527160000_caddies_telegram_link.sql.",
+      statusLinked: "Telegram linked (user ID saved).",
+      statusNotLinked: "Telegram not linked yet.",
+      step1Title: "1. Open the bot in Telegram",
+      step1BodyConfigured:
+        "The caddie should open the bot, tap Start, and write HOLA.",
+      step1BodyNotConfigured:
+        "Set NEXT_PUBLIC_TELEGRAM_BOT_USERNAME on the server.",
+      openBotLink: "Open bot in Telegram",
+      botUsernameLabel: "Tournament bot",
+      copyBotUsername: "Copy @username",
+      copied: "Copied",
+      step2Title: "2. Get the ID if the bot does not recognize them",
+      step2Body:
+        "Ask them to write HOLA or ID to the bot. The bot replies with a number between ━━━━ lines. Unlinked recent writers appear below.",
+      pendingLinksTitle: "Recent bot messages (unlinked)",
+      pendingLinksHint:
+        "If the caddie already wrote HOLA, find their name and tap «Use this ID».",
+      pendingLinksEmpty: "No unlinked users have messaged the bot recently.",
+      pendingLinksUseId: "Use this ID",
+      step3Title: "3. Save ID on profile",
+      step3Body:
+        "Save the ID so the bot can identify them and receive group capture links.",
+      formTitle: "Register ID on caddie profile",
+      fieldUserId: "Telegram user ID (digits only)",
+      fieldChatId: "Chat ID (optional)",
+      fieldChatHint:
+        "Usually matches user id in private chats; leave empty if unsure.",
+      btnSave: "Save link",
+      btnClear: "Remove Telegram link",
+      verifyTitle: "Verify link",
+      verifyBody: "Send a test message to the caddie's Telegram.",
+      btnVerify: "Send verification via Telegram",
+      savedBanner: "Link saved successfully.",
+      verifiedBanner: "Verification message sent.",
+      editTelegram: "Link Telegram",
+    },
   },
   tournamentHoles: {
     title: "Tournament holes",
