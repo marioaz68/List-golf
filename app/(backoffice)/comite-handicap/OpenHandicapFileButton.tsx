@@ -1,7 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { handicapReportApiPath } from "@/lib/player-files/handicapReportApiPath";
+import { usePathname, useSearchParams } from "next/navigation";
 
 type Props = {
   playerId: string;
@@ -9,52 +8,28 @@ type Props = {
   compact?: boolean;
 };
 
-function subscribeViewport(cb: () => void) {
-  const mq = window.matchMedia("(max-width: 767px), (pointer: coarse)");
-  const onChange = () => cb();
-  mq.addEventListener("change", onChange);
-  window.addEventListener("resize", onChange);
-  return () => {
-    mq.removeEventListener("change", onChange);
-    window.removeEventListener("resize", onChange);
-  };
-}
-
-function getIsMobileViewport() {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(max-width: 767px), (pointer: coarse)").matches
-  );
-}
-
 /**
- * Enlace directo al reporte GHIN (no server action + window.open).
- * En móvil Safari bloquea popups abiertos después de async; un <a href>
- * con redirect en /api/... funciona al primer toque. En móvil abrimos en la
- * misma pestaña; en escritorio, nueva pestaña.
+ * Enlace al visor del reporte GHIN. El visor incluye barra superior +
+ * inferior con botón de cerrar para volver al flujo de votación.
  */
 export default function OpenHandicapFileButton({
   playerId,
   hasFile,
   compact = false,
 }: Props) {
-  const isMobile = useSyncExternalStore(
-    subscribeViewport,
-    getIsMobileViewport,
-    () => false
-  );
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   if (!hasFile) return null;
 
-  const href = handicapReportApiPath(playerId);
+  const search = searchParams?.toString();
+  const currentUrl = search ? `${pathname}?${search}` : pathname;
+  const href = `/handicap-report/${encodeURIComponent(playerId)}?return=${encodeURIComponent(currentUrl)}`;
 
   return (
     <div className={compact ? "shrink-0" : "w-full"}>
       <a
         href={href}
-        {...(isMobile
-          ? {}
-          : { target: "_blank", rel: "noopener noreferrer" })}
         onClick={(e) => {
           e.stopPropagation();
         }}
