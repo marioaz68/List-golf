@@ -20,6 +20,7 @@ import {
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
 import ExportCommitteePromptButton from "./ExportCommitteePromptButton";
+import MonthlyDbUpdateButton from "./MonthlyDbUpdateButton";
 import CommitteeReviewBadge from "./CommitteeReviewBadge";
 
 type RoundSignature = {
@@ -694,6 +695,8 @@ ${res.witness_url}`;
             tournamentId={tournamentId}
             flaggedCount={flaggedCount}
           />
+
+          <MonthlyDbUpdateButton />
         </div>
         <p className="mt-1 w-full text-[10px] leading-snug text-gray-500">
           {te.roundBallLegend}
