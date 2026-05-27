@@ -1471,11 +1471,13 @@ const es = {
       applyAllBtn: "Aplicar HI a todos",
       bulkBarTitle: "Aplicar HI del comité al torneo",
       bulkBarHint:
-        "Marca las filas que quieras incluir, ajusta el redondeo y presiona «Aplicar» para actualizar el HI del torneo de uno o de todos a la vez.",
+        "Todos los jugadores del comité aparecen aquí. Sin votos del comité el redondeo inicia en 0 y puedes editarlo manualmente antes de aplicar el HI.",
       bulkBarSelected: "seleccionados",
       bulkBarApplying: "Aplicando…",
-      bulkBarSelectAll: "Seleccionar todos con votos",
+      bulkBarSelectAll: "Seleccionar todos",
       bulkBarClear: "Quitar todo",
+      manualAdjNoVotesHint:
+        "Sin votos del comité: ajuste manual (inicia en 0).",
       noVotesYet: "—",
       noLiveVotes: "Sin votos vivos",
       ghinTitle: "GHIN del jugador",
@@ -2995,11 +2997,13 @@ const en: Messages = {
       applyAllBtn: "Apply HI to all",
       bulkBarTitle: "Apply committee HI to the tournament",
       bulkBarHint:
-        "Check the rows you want to include, tweak the rounding and press «Apply» to update the tournament HI one by one or all at once.",
+        "Every committee player is listed here. With no committee votes the rounded adjustment starts at 0 and you can edit it manually before applying HI.",
       bulkBarSelected: "selected",
       bulkBarApplying: "Applying…",
-      bulkBarSelectAll: "Select all with votes",
+      bulkBarSelectAll: "Select all",
       bulkBarClear: "Clear all",
+      manualAdjNoVotesHint:
+        "No committee votes: manual adjustment (starts at 0).",
       noVotesYet: "—",
       noLiveVotes: "No live votes",
       ghinTitle: "Player GHIN",
