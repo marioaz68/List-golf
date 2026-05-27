@@ -42,6 +42,13 @@ function Section({
   savingKey: string | null;
   onCellTap: (entryId: string, hole: HoleNumber) => void;
 }) {
+  const isHoleComplete = (hole: HoleNumber) =>
+    players.length > 0 &&
+    players.every((p) => {
+      const v = (scoresByEntry[p.entryId] ?? p.scores)[hole];
+      return v != null;
+    });
+
   return (
     <div className="rounded-lg bg-white p-2 shadow-sm">
       <div className="mb-1 text-[11px] font-bold tracking-[0.04em] text-slate-500">
@@ -52,11 +59,25 @@ function Section({
           <thead>
             <tr className="bg-[#0d2747] text-white">
               <th className="w-10 px-1 py-1 text-left font-bold">H</th>
-              {holes.map((hole) => (
-                <th key={hole} className="px-0 py-1 text-center font-bold">
-                  {hole}
-                </th>
-              ))}
+              {holes.map((hole) => {
+                const done = isHoleComplete(hole);
+                return (
+                  <th
+                    key={hole}
+                    className="relative px-0 py-1 text-center font-bold"
+                  >
+                    <div className="leading-none">{hole}</div>
+                    {done ? (
+                      <span
+                        aria-label="Hoyo completo"
+                        className="absolute right-0 top-0 inline-flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 text-[7px] font-black leading-none text-white shadow-sm"
+                      >
+                        ✓
+                      </span>
+                    ) : null}
+                  </th>
+                );
+              })}
               <th className="w-8 px-0 py-1 text-center font-bold">TOT</th>
             </tr>
           </thead>
