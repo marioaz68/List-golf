@@ -211,7 +211,6 @@ function buildMessage(args: {
   startingHole: number | null;
   teeTime: string | null;
   tournamentName: string | null;
-  url: string;
   greeting: string;
 }): string {
   const lines: string[] = [];
@@ -227,8 +226,7 @@ function buildMessage(args: {
     "Cualquiera del grupo (jugador o caddie) puede capturar y todos verán los cambios en tiempo real."
   );
   lines.push("");
-  lines.push("Captura de tarjeta:");
-  lines.push(args.url);
+  lines.push("Toca el botón para abrir la tarjeta:");
   return lines.join("\n");
 }
 
@@ -259,10 +257,15 @@ export async function sendCaptureLinkToGroupAction(
         startingHole: data.startingHole,
         teeTime: data.teeTime,
         tournamentName: data.tournamentName,
-        url,
         greeting: r.greeting,
       });
-      const res = await sendTelegramMessage({ chatId: r.chatId, text });
+      const buttonLabel = `📝 Capturar Grupo ${data.groupNo ?? ""}`.trim();
+      const res = await sendTelegramMessage({
+        chatId: r.chatId,
+        text,
+        buttons: [[{ text: buttonLabel, url }]],
+        disablePreview: true,
+      });
       if (res.ok) sent += 1;
       else failed += 1;
     }
