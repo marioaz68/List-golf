@@ -36,14 +36,14 @@ type Props = {
   t: HandicapCommitteeT;
 };
 
-function roundToHalf(value: number): number {
-  return Math.round(value * 2) / 2;
+function roundToTenth(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
-/** Limita un ajuste a [-5, 0] redondeado a paso 0.5. */
+/** Limita un ajuste a [-5, 0] redondeado a paso 0.1. */
 function clampAdjustment(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  const rounded = roundToHalf(value);
+  const rounded = roundToTenth(value);
   if (rounded > 0) return 0;
   if (rounded < -5) return -5;
   return rounded;
@@ -354,8 +354,8 @@ export default function AdminAggregateTable({
                         type="number"
                         min={-5}
                         max={0}
-                        step={0.5}
-                        value={adj}
+                        step={0.1}
+                        value={Number(adj.toFixed(1))}
                         disabled={anyDisabled}
                         onChange={(ev) =>
                           updateAdjustment(r.entry_id, Number(ev.target.value))
