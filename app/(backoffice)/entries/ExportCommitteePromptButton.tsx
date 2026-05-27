@@ -77,13 +77,20 @@ export default function ExportCommitteePromptButton({
     setFeedback(null);
     startTransition(async () => {
       try {
-        const { markdown, filename, count } =
+        const { markdown, filename, count, missingGhinPlayers } =
           await exportCommitteePromptMarkdown(tournamentId);
         if (count === 0) {
           alert(
             "No hay jugadores marcados para revisión en este torneo.\n\nUsa «→ Comité HI» en cada inscrito primero."
           );
           return;
+        }
+        if (missingGhinPlayers.length > 0) {
+          const lista = missingGhinPlayers.map((n) => `• ${n}`).join("\n");
+          const ok = window.confirm(
+            `${missingGhinPlayers.length} jugador(es) marcados NO tienen GHIN en su alta (Jugadores → editar → campo GHIN):\n\n${lista}\n\nEl Word saldrá con SIN_GHIN para esos nombres.\n\n¿Exportar de todos modos?`
+          );
+          if (!ok) return;
         }
         const wordFilename = filename.replace(/\.md$/i, ".doc");
         downloadWordDoc(wordFilename, markdown);

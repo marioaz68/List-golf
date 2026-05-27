@@ -1994,6 +1994,10 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
   const generatedAt = new Date();
   const tournamentName = (tournament?.name as string | null) ?? "Torneo";
 
+  const missingGhinPlayers = players
+    .filter((p) => !(p.ghin ?? "").trim())
+    .map((p) => p.fullName.trim() || "Sin nombre");
+
   return {
     markdown: buildClaudePromptMarkdown({
       tournamentName,
@@ -2002,5 +2006,6 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     }),
     filename: buildPromptDownloadFilename(tournamentName, generatedAt),
     count: players.length,
+    missingGhinPlayers,
   };
 }

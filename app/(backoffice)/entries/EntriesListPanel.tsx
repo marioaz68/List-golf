@@ -98,6 +98,31 @@ type Entry = {
   } | null;
 };
 
+function playerGhinChip(ghin: string | null | undefined, flagged?: boolean) {
+  const v = (ghin ?? "").trim();
+  if (v) {
+    return (
+      <span
+        className="shrink-0 rounded border border-slate-300 bg-slate-100 px-1 py-0.5 font-mono text-[9px] font-bold tabular-nums text-slate-700"
+        title="GHIN del jugador"
+      >
+        {v}
+      </span>
+    );
+  }
+  if (flagged) {
+    return (
+      <span
+        className="shrink-0 rounded border border-amber-500 bg-amber-50 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-900"
+        title="Falta GHIN en Jugadores → editar jugador"
+      >
+        Sin GHIN
+      </span>
+    );
+  }
+  return null;
+}
+
 function badgeClass(status: string | null) {
   switch ((status ?? "").toLowerCase()) {
     case "confirmed":
@@ -729,6 +754,10 @@ ${res.witness_url}`;
                       {e.player_number ?? "—"}
                     </span>
                     <span className="min-w-0 truncate">{fullName}</span>
+                    {playerGhinChip(
+                      e.players?.ghin_number,
+                      e.flagged_for_committee
+                    )}
                     {e.flagged_for_committee ? (
                       <CommitteeReviewBadge
                         reason={e.flagged_committee_reason}
@@ -815,8 +844,12 @@ ${res.witness_url}`;
                   </td>
 
                   <td className="px-1 py-1">
-                    <span className="inline-flex max-w-[220px] flex-wrap items-center gap-1">
+                    <span className="inline-flex max-w-[260px] flex-wrap items-center gap-1">
                       <span className="truncate">{fullName}</span>
+                      {playerGhinChip(
+                        e.players?.ghin_number,
+                        e.flagged_for_committee
+                      )}
                       {e.flagged_for_committee ? (
                         <CommitteeReviewBadge
                           reason={e.flagged_committee_reason}
