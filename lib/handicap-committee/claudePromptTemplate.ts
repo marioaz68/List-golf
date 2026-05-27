@@ -1,10 +1,17 @@
 /**
  * Plantilla del instructivo para pedir reportes HTML a Claude.
- * Actualiza este archivo cuando cambie el instructivo en Obsidian.
- * Placeholder: [GHINS_AQUI] → lista GHIN + nombre de jugadores marcados.
+ * Actualiza este archivo cuando cambie el instructivo en Obsidian
+ * (Handicaps CCQ / 09 - Instructivo para pedir reportes de jugador.md).
+ *
+ * Placeholders dentro del prompt:
+ *   [JUGADORES_AQUI]      → líneas "GHIN | Nombre | HI del Torneo"
+ *   {{TOURNAMENT_NAME}}   → nombre del torneo
+ *   {{GENERATED_AT}}      → fecha-hora de generación
+ *   {{PLAYER_COUNT}}      → cantidad de jugadores marcados
+ *   {{PLAYER_TABLE_ROWS}} → filas de la tabla resumen
  */
 
-export const CLAUDE_PROMPT_PLACEHOLDER = "[GHINS_AQUI]";
+export const CLAUDE_PROMPT_PLACEHOLDER = "[JUGADORES_AQUI]";
 
 export const CLAUDE_PROMPT_TEMPLATE = `# Instructivo para pedir reportes individuales de jugador
 
@@ -12,14 +19,32 @@ export const CLAUDE_PROMPT_TEMPLATE = `# Instructivo para pedir reportes individ
 > Fecha: {{GENERATED_AT}}
 > Jugadores en revisión de comité: {{PLAYER_COUNT}}
 
+Copia este texto completo y pégalo en una conversación nueva con Claude. La lista de GHIN + nombre + HI del torneo ya viene poblada abajo.
+
 ---
 
 ## 📋 PROMPT PARA COPIAR Y PEGAR
 
 \`\`\`
-Necesito generar reportes individuales en HTML para los siguientes jugadores:
+Necesito generar reportes individuales en HTML para los siguientes jugadores
+del torneo: {{TOURNAMENT_NAME}}
 
-GHINs: ${CLAUDE_PROMPT_PLACEHOLDER}
+Formato por cada jugador: GHIN | Nombre | HI del Torneo
+
+Lista:
+
+${CLAUDE_PROMPT_PLACEHOLDER}
+
+Ejemplo del formato:
+
+584513 | Mario Álvarez Zerecero | 1.9
+11126992 | Gabriela Osornio Alvarez | 23.3
+591602 | Alejandra Olvera Septien | 7.6
+
+IMPORTANTE: el "HI del Torneo" es el HI fijo asignado al jugador para ese
+torneo específico (el que aparece en el tablero oficial / Excel del Comité),
+NO el HI de alta actual de GHIN. Este es el HI de referencia contra el cual
+se compara el HI Solo Torneos para determinar si requiere revisión.
 
 Por favor:
 
@@ -47,15 +72,20 @@ Por favor:
 5. CADA REPORTE debe incluir:
 
    📊 DATOS BÁSICOS (4 tarjetas arriba):
-   - HI Tablero (oficial GHIN)
+   - HI del TORNEO (el que viene en la lista — referencia fija)
    - HI Solo Torneos (WHS mejores 8 de 20)
-   - CH del Campo 100% (con tee y slope)
-   - H 80% para Match Play
+   - CH del Campo 100% (calculado usando HI del Torneo, con tee y slope)
+   - H 80% para Match Play (calculado a partir del CH 100%)
+
+   NOTA: el HI Tablero oficial GHIN se ignora — usa SIEMPRE el HI del
+   torneo que viene en la lista. Si no viene HI del torneo en la lista,
+   pídeselo al usuario antes de proceder.
 
    🎯 CUADRO DE VEREDICTO Y AJUSTE:
+   - Diferencia = HI del Torneo − HI Solo Torneos
    - Caso clasificado: NORMAL / REVISAR / BANDERA / INVERSO
    - Umbral Match Play: diferencia >1 stroke ya entra a revisión
-   - Ajuste sugerido en strokes
+   - Ajuste sugerido en strokes (sobre el HI del torneo)
    - HI final recomendado para el torneo
    - Vocabulario suavizado (sin "trampa", "sandbagger", "BANDERA ROJA")
 
@@ -67,7 +97,7 @@ Por favor:
    - Scroll horizontal en móvil
    - Puntos rojos = cada torneo
    - Verdes = las 8 mejores (las que cuentan para HI Solo Torneos)
-   - Línea naranja punteada = HI Tablero
+   - Línea naranja punteada = HI del TORNEO (referencia fija)
    - Línea verde punteada = HI Solo Torneos
 
    ⛳ GRÁFICA 3: Promedio BRUTO por Hoyo 2026 (barras coloreadas vs par)
@@ -110,6 +140,19 @@ Por favor:
      crea un chart "fantasma" con un dataset transparente que solo
      renderea el eje Y con la escala correcta
    - Debajo de cada gráfica un texto "← desliza para ver toda la gráfica →"
+   - BOTÓN TOGGLE de ZOOM en cada gráfica:
+     * Cada chart-section tiene un botón "📱 Ajustar" en la esquina
+       superior derecha del título
+     * Al hacer click: alterna clase \`.compact\` en el \`.chart-wrap\`
+       - Modo expandido (default): gráfica con scroll horizontal, ancho 1400/1800
+       - Modo ajustado (compact): chart-inner con \`min-width: 100% !important\`
+         y overflow-x: hidden — la gráfica se ajusta al ancho del móvil
+     * El icono y label cambian dinámicamente:
+       - Modo expandido: 📱 + "Ajustar"
+       - Modo compact: 🔍 + "Expandir"
+     * En compact, el texto "← desliza" se oculta automáticamente
+     * Función JS toggleZoom(btn) dispara también window.dispatchEvent('resize')
+       para que Chart.js redibuje al nuevo ancho
 
 7. Archivos AUTOCONTENIDOS:
    - Todos los datos del jugador embebidos en el HTML
@@ -131,8 +174,8 @@ mismo jugador. Sin ffill, los reportes salen incompletos.
 
 ## 👥 Jugadores marcados para revisión ({{PLAYER_COUNT}})
 
-| # | GHIN | Nombre | Motivo |
-|---|------|--------|--------|
+| # | GHIN | Nombre | HI Torneo | Motivo |
+|---|------|--------|-----------|--------|
 {{PLAYER_TABLE_ROWS}}
 
 ---
@@ -144,19 +187,22 @@ Al recibir tu petición, Claude debe:
 - Aplicar ffill al cargar los archivos Hole by Hole
 - Verificar que cada jugador tenga al menos 1 ronda de torneo (si no, avisar)
 - Calcular HI Solo Torneos con mejores 8 de últimas 20
-- Tomar el HI Tablero del campo \`hi_roster\` en \`buro_data.json\`
-- Usar slopes correctos según tee (Rojas / Blancas / Azules / Doradas / Negras)
-- Calcular CH del Campo (100%) usando HI × (Slope/113) + (CR − Par)
+- USAR EL HI DEL TORNEO que viene en la lista del usuario, NO el hi_roster de buro_data.json. Si no viene HI del torneo, pedirlo.
+- El HI del torneo es la referencia FIJA — todos los cálculos y comparaciones se hacen contra este valor, no contra el HI oficial
+- Usar slopes correctos según tee (Rojas/Blancas/Azules/Doradas/Negras)
+- Calcular CH del Campo (100%) usando HI_torneo × (Slope/113) + (CR − Par)
 - Calcular H 80% Match Play = round(CH 100% × 0.80)
 - Pasar \`h_80\` al \`data_json\` para que la gráfica 4 (NETO) lo use
 - Distribuir strokes por hoyo: base = floor(H80/18), extra = H80%18 en SI más bajos
-- Generar la diferencia HI Tab − HI Tor para clasificar caso
+- Generar la diferencia (HI Torneo − HI Solo Torneos) para clasificar caso
 - Aplicar vocabulario suavizado (sin "sandbagger", etc.)
+- La línea naranja de la gráfica 2 = HI del Torneo (no el HI oficial)
 - Verificar que las 4 gráficas se rendericen correctamente
 - Confirmar que la línea del par esté ENCIMA de las barras (gráficas 3 y 4)
 - Confirmar scroll horizontal en cada gráfica (wide / extrawide)
 - Confirmar EJE Y FIJO a la izquierda — al deslizar el contenido, los valores numéricos del eje Y permanecen visibles
 - Verificar que \`yMin\` / \`yMax\` sean idénticos entre el canvas de eje Y y el canvas principal (escalas alineadas)
+- Verificar BOTÓN TOGGLE 📱/🔍 en cada gráfica funciona: alterna entre ancho expandido (con scroll) y ajustado a pantalla
 - Sincronizar archivos a CEREBRO GALLO Y a la carpeta de proyecto
 
 ---
@@ -182,30 +228,41 @@ export type FlaggedPlayerForPrompt = {
   ghin: string | null;
   fullName: string;
   reason: string | null;
+  /** HI asignado al jugador para este torneo (handicap_index de la inscripción). */
+  hiTorneo: number | null;
 };
 
-export function formatGhinLine(p: FlaggedPlayerForPrompt): string {
-  const ghin = (p.ghin ?? "").trim() || "SIN_GHIN";
-  const name = p.fullName.trim() || "Sin nombre";
-  return `${ghin} — ${name}`;
+function formatHi(hi: number | null | undefined): string {
+  if (hi == null || !Number.isFinite(hi)) return "—";
+  return hi.toFixed(1);
 }
 
-/** Línea compacta para el bloque GHINs: del prompt (copiar/pegar en Claude). */
-export function formatGhinListForPrompt(players: FlaggedPlayerForPrompt[]): string {
+export function formatPlayerLine(p: FlaggedPlayerForPrompt): string {
+  const ghin = (p.ghin ?? "").trim() || "SIN_GHIN";
+  const name = p.fullName.trim() || "Sin nombre";
+  const hi = formatHi(p.hiTorneo);
+  return `${ghin} | ${name} | ${hi}`;
+}
+
+/** Bloque GHIN | Nombre | HI del Torneo para el prompt (una línea por jugador). */
+export function formatPlayerListForPrompt(
+  players: FlaggedPlayerForPrompt[]
+): string {
   if (players.length === 0) return "(ningún jugador marcado)";
-  return players.map(formatGhinLine).join(", ");
+  return players.map(formatPlayerLine).join("\n");
 }
 
 export function formatPlayerTableRows(players: FlaggedPlayerForPrompt[]): string {
   if (players.length === 0) {
-    return "| — | — | — | — |";
+    return "| — | — | — | — | — |";
   }
   return players
     .map((p, i) => {
       const ghin = (p.ghin ?? "").trim() || "—";
       const name = p.fullName.trim() || "—";
+      const hi = formatHi(p.hiTorneo);
       const reason = (p.reason ?? "").trim() || "—";
-      return `| ${i + 1} | ${ghin} | ${name} | ${reason} |`;
+      return `| ${i + 1} | ${ghin} | ${name} | ${hi} | ${reason} |`;
     })
     .join("\n");
 }
@@ -222,13 +279,13 @@ export function buildClaudePromptMarkdown(params: {
       timeStyle: "short",
     }) ?? new Date().toLocaleString("es-MX");
 
-  const ghinBlock = formatGhinListForPrompt(players);
+  const playersBlock = formatPlayerListForPrompt(players);
 
   return CLAUDE_PROMPT_TEMPLATE.replace(/\{\{TOURNAMENT_NAME\}\}/g, tournamentName)
     .replace(/\{\{GENERATED_AT\}\}/g, generatedAt)
     .replace(/\{\{PLAYER_COUNT\}\}/g, String(players.length))
     .replace(/\{\{PLAYER_TABLE_ROWS\}\}/g, formatPlayerTableRows(players))
-    .replace(CLAUDE_PROMPT_PLACEHOLDER, ghinBlock);
+    .replace(CLAUDE_PROMPT_PLACEHOLDER, playersBlock);
 }
 
 export function slugifyForFilename(name: string): string {
