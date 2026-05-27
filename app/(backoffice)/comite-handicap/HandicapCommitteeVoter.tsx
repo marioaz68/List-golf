@@ -255,15 +255,15 @@ export default function HandicapCommitteeVoter({
             </span>
           </div>
           <p className="mt-1 px-1 text-[10px] leading-tight text-slate-600 sm:px-0 sm:text-xs">
-            Toca un jugador para ver la distribución de votos. Abstenciones =
-            voto vivo 0. Anónimo.
+            Toca el nombre del jugador (subrayado azul) para ver la distribución
+            voto por voto y las abstenciones. Anónimo.
           </p>
           <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full table-fixed text-left text-[11px] sm:text-sm">
               <colgroup>
-                <col className="w-[34%] sm:w-auto" />
+                <col className="w-[36%] sm:w-auto" />
                 <col className="w-[10%] sm:w-auto" />
-                <col className="w-[14%] sm:w-auto" />
+                <col className="w-[12%] sm:w-auto" />
                 <col className="w-[10%] sm:w-auto" />
                 <col className="w-[12%] sm:w-auto" />
                 <col className="w-[10%] sm:w-auto" />
@@ -272,32 +272,49 @@ export default function HandicapCommitteeVoter({
               <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 sm:text-xs">
                 <tr>
                   <th className="px-1 py-1.5 sm:px-3 sm:py-2">Jugador</th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="Handicap Index actual del torneo"
+                  >
                     HI
                   </th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
-                    Vivos/tot
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="Votos emitidos (incluye abstenciones)"
+                  >
+                    Votos
                   </th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
-                    Abst
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="Vivos / total contando abstenciones como 0"
+                  >
+                    Vivos
                   </th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="Promedio recortado del ajuste"
+                  >
                     Prom
                   </th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="HI sugerido = HI actual + Promedio"
+                  >
                     HI sug
                   </th>
-                  <th className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
-                    No j.
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title="Votos de «No permitir jugar este torneo»"
+                  >
+                    Vetos
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((e) => {
                   const s = summaryByEntry.get(e.entry_id);
-                  const totalNumeric = s?.n_votes ?? 0;
                   const nAbst = s?.n_abstained ?? 0;
-                  const totalVotes = totalNumeric + nAbst;
+                  const totalVotes = (s?.n_votes ?? 0) + nAbst;
                   const liveIncAbst = (s?.n_live ?? 0) + nAbst;
                   const isExpanded = expandedResultId === e.entry_id;
                   const chips = s?.chips ?? [];
@@ -318,12 +335,12 @@ export default function HandicapCommitteeVoter({
                         <td className="px-1 py-1.5 font-medium sm:px-3 sm:py-2">
                           <div className="flex items-start gap-1">
                             <span
-                              className="text-[9px] text-slate-400 sm:text-[10px]"
+                              className="text-[9px] text-blue-600 sm:text-[10px]"
                               aria-hidden="true"
                             >
                               {isExpanded ? "▾" : "▸"}
                             </span>
-                            <span className="leading-tight">
+                            <span className="text-blue-700 underline decoration-blue-500 decoration-dotted underline-offset-2 leading-tight">
                               {e.player_name}
                             </span>
                           </div>
@@ -331,33 +348,29 @@ export default function HandicapCommitteeVoter({
                         <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
                           {e.handicap_index ?? "—"}
                         </td>
-                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
-                          {totalVotes > 0 ||
-                          (s?.n_avg_denominator != null &&
-                            s.n_avg_denominator > 0) ? (
-                            <div className="flex flex-col gap-0">
-                              <span
-                                className="inline-block rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]"
-                                title="Vivos (incluye abst. como 0) / total"
-                              >
-                                {liveIncAbst}/{totalVotes}
-                              </span>
-                              {(s?.n_avg_denominator ?? 0) > 0 ? (
-                                <span className="text-[9px] text-slate-500 sm:text-[10px]">
-                                  ÷{s?.n_avg_denominator}
-                                </span>
-                              ) : null}
-                            </div>
+                        <td
+                          className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
+                          title="Total de votos emitidos (numéricos + abstenciones)"
+                        >
+                          {totalVotes > 0 ? (
+                            <span className="inline-block rounded bg-slate-900 px-1.5 py-0.5 text-[11px] font-bold text-white">
+                              {totalVotes}
+                            </span>
                           ) : (
                             <span className="text-[10px] text-slate-400">
                               —
                             </span>
                           )}
                         </td>
-                        <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
-                          {nAbst > 0 ? (
-                            <span className="inline-block rounded border border-amber-400 bg-amber-50 px-1 text-[10px] font-semibold text-amber-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]">
-                              {nAbst}
+                        <td
+                          className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
+                          title="Vivos (incluye abst. como 0) / suman para el promedio"
+                        >
+                          {totalVotes > 0 ||
+                          (s?.n_avg_denominator != null &&
+                            s.n_avg_denominator > 0) ? (
+                            <span className="inline-block rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]">
+                              {liveIncAbst}
                             </span>
                           ) : (
                             <span className="text-[10px] text-slate-400">
@@ -373,7 +386,10 @@ export default function HandicapCommitteeVoter({
                         <td className="px-1 py-1.5 text-center font-bold tabular-nums text-emerald-800 sm:px-3 sm:py-2 sm:text-left sm:font-semibold">
                           {s?.suggested_hi ?? "—"}
                         </td>
-                        <td className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left">
+                        <td
+                          className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                          title="Votos de «No permitir jugar este torneo»"
+                        >
                           {(s?.n_disqualify ?? 0) > 0 ? (
                             <span
                               className={[
@@ -383,8 +399,7 @@ export default function HandicapCommitteeVoter({
                                   : "bg-rose-100 text-rose-800",
                               ].join(" ")}
                             >
-                              {s?.n_disqualify}
-                              {s?.disqualified ? " ⊘" : ""}
+                              ⊘ {s?.n_disqualify}
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -472,6 +487,14 @@ export default function HandicapCommitteeVoter({
                 })}
               </tbody>
             </table>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[10px] leading-tight text-slate-600 sm:text-[11px]">
+            <span><b>HI</b> = Handicap Index actual</span>
+            <span><b>Votos</b> = emitidos en total</span>
+            <span><b>Vivos</b> = que cuentan al promedio (incluye abst. como 0)</span>
+            <span><b>Prom</b> = promedio recortado</span>
+            <span><b>HI sug</b> = HI + Prom</span>
+            <span><b>⊘ Vetos</b> = votos de «No permitir jugar»</span>
           </div>
         </section>
       ) : null}
