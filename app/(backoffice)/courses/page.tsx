@@ -45,7 +45,21 @@ type CourseTeeSet = {
   name: string | null;
   color: string | null;
   sort_order: number | null;
+  gender_default?: string | null;
+  slope_men?: number | null;
+  slope_women?: number | null;
+  course_rating_men?: number | null;
+  course_rating_women?: number | null;
+  par?: number | null;
+  yardage?: number | null;
 };
+
+const TEE_SET_SELECT_WHS =
+  "id,code,name,color,sort_order,gender_default,slope_men,slope_women,course_rating_men,course_rating_women,par,yardage";
+
+function numInputValue(v: number | null | undefined) {
+  return v != null && Number.isFinite(Number(v)) ? String(v) : "";
+}
 
 function normalizeCode(v: unknown) {
   return String(v ?? "").trim().toUpperCase();
@@ -106,6 +120,7 @@ export default async function CoursesPage(props: {
   let course: Course | null = null;
   let holes: Hole[] = [];
   let teeSets: CourseTeeSet[] = [];
+  let whsColumnsAvailable = true;
 
   if (effectiveCourseId) {
     course =
@@ -119,13 +134,33 @@ export default async function CoursesPage(props: {
 
     holes = (holesData ?? []) as Hole[];
 
-    const { data: teeSetsData } = await supabase
+    const teeSetsWhsRes = await supabase
       .from("course_tee_sets")
-      .select("id,code,name,color,sort_order")
+      .select(TEE_SET_SELECT_WHS)
       .eq("course_id", effectiveCourseId)
       .order("sort_order", { ascending: true });
 
-    teeSets = (teeSetsData ?? []) as CourseTeeSet[];
+    if (
+      teeSetsWhsRes.error &&
+      (teeSetsWhsRes.error.message.includes("slope_men") ||
+        teeSetsWhsRes.error.message.includes("course_rating"))
+    ) {
+      whsColumnsAvailable = false;
+      const teeSetsBasicRes = await supabase
+        .from("course_tee_sets")
+        .select("id,code,name,color,sort_order")
+        .eq("course_id", effectiveCourseId)
+        .order("sort_order", { ascending: true });
+      if (teeSetsBasicRes.error) {
+        throw new Error(teeSetsBasicRes.error.message);
+      }
+      teeSets = (teeSetsBasicRes.data ?? []) as CourseTeeSet[];
+    } else {
+      if (teeSetsWhsRes.error) {
+        throw new Error(teeSetsWhsRes.error.message);
+      }
+      teeSets = (teeSetsWhsRes.data ?? []) as CourseTeeSet[];
+    }
   }
 
   const teeSetRows =
@@ -495,17 +530,25 @@ export default async function CoursesPage(props: {
           <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[11px] font-semibold uppercase text-gray-700">
-                Salidas base del campo — {course.name}
+                {co.teeSetsSection} — {course.name}
               </div>
 
-              <div className="text-[11px] text-gray-500">
-                Si aquí capturas bien las salidas, luego el setup del torneo ya no
-                debería pedir recapturarlas.
-              </div>
+              <div className="text-[11px] text-gray-500">{co.teeSetsHint}</div>
             </div>
+
+            {!whsColumnsAvailable ? (
+              <div className="rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+                {co.whsColumnsMissing}
+              </div>
+            ) : null}
 
             <form action={saveCourseTeeSets} className="space-y-3">
               <input type="hidden" name="course_id" value={course.id} />
+              <input
+                type="hidden"
+                name="tee_row_count"
+                value={String(teeSetRows.length)}
+              />
               <input
                 type="hidden"
                 name="delete_ids_json"
@@ -515,80 +558,165 @@ export default async function CoursesPage(props: {
                 type="hidden"
                 name="rows_json"
                 value={JSON.stringify(
-                  teeSetRows.map((r, i) => ({
-                    id: r.id,
-                    code: normalizeCode(r.code),
-                    name: String(r.name ?? "").trim(),
-                    color: String(r.color ?? "").trim(),
-                    sort_order: i + 1,
-                  }))
+                  teeSetRows.map((r) => ({ id: r.id }))
                 )}
               />
 
               <div style={backofficeTableStickyScroll}>
-                <table className="w-full border-collapse text-[11px]">
+                <table className="min-w-[920px] w-full border-collapse text-[11px]">
                   <thead className={twStickyTheadGray50}>
                     <tr>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
-                        ORDEN
+                        {co.thOrder}
                       </th>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
-                        CODE
+                        {co.thCode}
                       </th>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
-                        NOMBRE
+                        {co.thName}
                       </th>
                       <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
-                        COLOR
+                        {co.thColor}
+                      </th>
+                      <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                        {co.thGender}
+                      </th>
+                      <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                        {co.thRatingMen}
+                      </th>
+                      <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                        {co.thSlopeMen}
+                      </th>
+                      <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                        {co.thRatingWomen}
+                      </th>
+                      <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                        {co.thSlopeWomen}
                       </th>
                     </tr>
                   </thead>
 
                   <tbody className="bg-white text-black">
-                    {teeSetRows.map((r, i) => (
-                      <tr key={r.id || i}>
-                        <td className="border border-gray-300 px-1.5 py-[3px]">
-                          {i + 1}
-                        </td>
+                    {teeSetRows.map((r, i) => {
+                      const row = i + 1;
+                      const gender = String(r.gender_default ?? "")
+                        .trim()
+                        .toUpperCase();
+                      return (
+                        <tr key={r.id || i}>
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            {row}
+                          </td>
 
-                        <td className="border border-gray-300 px-1.5 py-[3px]">
-                          <input
-                            name={`tee_code_${i + 1}`}
-                            defaultValue={normalizeCode(r.code)}
-                            className="h-6 w-full rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
-                          />
-                        </td>
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_code_${row}`}
+                              defaultValue={normalizeCode(r.code)}
+                              className="h-6 w-full min-w-[52px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
+                            />
+                          </td>
 
-                        <td className="border border-gray-300 px-1.5 py-[3px]">
-                          <input
-                            name={`tee_name_${i + 1}`}
-                            defaultValue={r.name ?? ""}
-                            className="h-6 w-full rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
-                          />
-                        </td>
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_name_${row}`}
+                              defaultValue={r.name ?? ""}
+                              className="h-6 w-full min-w-[88px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
+                            />
+                          </td>
 
-                        <td className="border border-gray-300 px-1.5 py-[3px]">
-                          <input
-                            name={`tee_color_${i + 1}`}
-                            defaultValue={r.color ?? ""}
-                            className="h-6 w-full rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_color_${row}`}
+                              defaultValue={r.color ?? ""}
+                              className="h-6 w-full min-w-[64px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
+                            />
+                          </td>
+
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <select
+                              name={`tee_gender_${row}`}
+                              defaultValue={gender}
+                              className="h-6 w-full min-w-[56px] rounded border border-gray-300 bg-white px-1 text-[11px] text-black"
+                              disabled={!whsColumnsAvailable}
+                            >
+                              <option value="">{co.genderEmpty}</option>
+                              <option value="M">{co.genderM}</option>
+                              <option value="F">{co.genderF}</option>
+                              <option value="X">{co.genderX}</option>
+                            </select>
+                          </td>
+
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_rating_men_${row}`}
+                              type="number"
+                              step="0.1"
+                              min={50}
+                              max={90}
+                              defaultValue={numInputValue(r.course_rating_men)}
+                              placeholder="73.2"
+                              disabled={!whsColumnsAvailable}
+                              className="h-6 w-full min-w-[56px] rounded border border-gray-300 bg-white px-1 text-[11px] tabular-nums text-black"
+                            />
+                          </td>
+
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_slope_men_${row}`}
+                              type="number"
+                              step="1"
+                              min={55}
+                              max={155}
+                              defaultValue={numInputValue(r.slope_men)}
+                              placeholder="138"
+                              disabled={!whsColumnsAvailable}
+                              className="h-6 w-full min-w-[52px] rounded border border-gray-300 bg-white px-1 text-[11px] tabular-nums text-black"
+                            />
+                          </td>
+
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_rating_women_${row}`}
+                              type="number"
+                              step="0.1"
+                              min={50}
+                              max={90}
+                              defaultValue={numInputValue(
+                                r.course_rating_women
+                              )}
+                              placeholder="71.5"
+                              disabled={!whsColumnsAvailable}
+                              className="h-6 w-full min-w-[56px] rounded border border-gray-300 bg-white px-1 text-[11px] tabular-nums text-black"
+                            />
+                          </td>
+
+                          <td className="border border-gray-300 px-1.5 py-[3px]">
+                            <input
+                              name={`tee_slope_women_${row}`}
+                              type="number"
+                              step="1"
+                              min={55}
+                              max={155}
+                              defaultValue={numInputValue(r.slope_women)}
+                              placeholder="136"
+                              disabled={!whsColumnsAvailable}
+                              className="h-6 w-full min-w-[52px] rounded border border-gray-300 bg-white px-1 text-[11px] tabular-nums text-black"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
-              <div className="rounded border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
-                Esta versión deja unas salidas base estándar para capturar el campo
-                completo. Si luego quieres agregar slope, rating y yardajes por salida,
-                el siguiente paso sería ampliar esta tabla.
-              </div>
-
               <div>
-                <button className="h-7 rounded bg-gray-800 px-4 text-[11px] text-white">
-                  Guardar salidas base
+                <button
+                  type="submit"
+                  disabled={!whsColumnsAvailable}
+                  className="h-7 rounded bg-gray-800 px-4 text-[11px] text-white disabled:opacity-50"
+                >
+                  {co.saveTeeSets}
                 </button>
               </div>
             </form>
