@@ -231,7 +231,8 @@ export default async function CapturaTelegramPage(props: {
     }
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "";
+  // Dejamos que buildGroupCaptureUrl resuelva la base: ignora localhost en server
+  // y cae a VERCEL_PROJECT_PRODUCTION_URL / www.listgolf.club si NEXT_PUBLIC_APP_URL apunta a localhost.
 
   const groupRows: GroupRow[] = groups.map((g) => {
     const gMembers = members.filter((m) => m.group_id === g.id);
@@ -284,7 +285,6 @@ export default async function CapturaTelegramPage(props: {
       tournamentId,
       roundId: round.id,
       groupId: g.id,
-      base: baseUrl || undefined,
     });
 
     return {
