@@ -1,8 +1,37 @@
+const PRODUCTION_FALLBACK = "https://www.listgolf.club";
+
+function normalizeBase(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().replace(/\/$/, "");
+  if (!trimmed) return null;
+  // Ignorar valores localhost / 127.0.0.1 / 0.0.0.0 cuando estamos en server o build de Vercel.
+  if (
+    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/i.test(trimmed)
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
 function appBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
+  const explicit = normalizeBase(process.env.NEXT_PUBLIC_APP_URL);
+  if (explicit) return explicit;
+
+  // Vercel auto-set: dominio de producción (sin protocolo) si está disponible.
+  const prodDomain = normalizeBase(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null
   );
+  if (prodDomain) return prodDomain;
+
+  // En preview: usar URL del deployment.
+  const vercelUrl = normalizeBase(
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null
+  );
+  if (vercelUrl) return vercelUrl;
+
+  return PRODUCTION_FALLBACK;
 }
 
 /**
@@ -25,7 +54,7 @@ export function buildGroupCaptureUrl(params: {
   groupId: string;
   base?: string;
 }): string {
-  const base = (params.base ?? appBaseUrl()).replace(/\/$/, "");
+  const base = normalizeBase(params.base) ?? appBaseUrl();
   const sp = new URLSearchParams();
   sp.set("group_id", params.groupId);
   if (params.tournamentId) sp.set("tournament_id", params.tournamentId);
