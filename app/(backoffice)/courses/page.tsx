@@ -117,6 +117,45 @@ export default async function CoursesPage(props: {
   const effectiveCourseId =
     courseId || (courseRows.length > 0 ? courseRows[0].id : "");
 
+  type TeeWhsSummary = {
+    course_id: string;
+    course_rating_men: number | null;
+    slope_men: number | null;
+    course_rating_women: number | null;
+    slope_women: number | null;
+  };
+
+  let teeSummaries: TeeWhsSummary[] = [];
+  if (courseRows.length > 0) {
+    const courseIds = courseRows.map((c) => c.id);
+    const summaryRes = await supabase
+      .from("course_tee_sets")
+      .select(
+        "course_id,course_rating_men,slope_men,course_rating_women,slope_women"
+      )
+      .in("course_id", courseIds);
+    if (!summaryRes.error) {
+      teeSummaries = (summaryRes.data ?? []) as TeeWhsSummary[];
+    }
+  }
+
+  const courseWhs = new Map<
+    string,
+    { tees: number; withWhs: number }
+  >();
+  for (const row of teeSummaries) {
+    const prev = courseWhs.get(row.course_id) ?? { tees: 0, withWhs: 0 };
+    const hasAny =
+      row.course_rating_men != null ||
+      row.slope_men != null ||
+      row.course_rating_women != null ||
+      row.slope_women != null;
+    courseWhs.set(row.course_id, {
+      tees: prev.tees + 1,
+      withWhs: prev.withWhs + (hasAny ? 1 : 0),
+    });
+  }
+
   let course: Course | null = null;
   let holes: Hole[] = [];
   let teeSets: CourseTeeSet[] = [];
@@ -240,6 +279,113 @@ export default async function CoursesPage(props: {
           </button>
         </form>
       </div>
+
+      <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-[11px] font-semibold uppercase text-gray-700">
+            {co.coursesListTitle} ({courseRows.length})
+          </div>
+          <div className="text-[11px] text-gray-500">{co.coursesListHint}</div>
+        </div>
+
+        {courseRows.length === 0 ? (
+          <div className="rounded border border-gray-200 bg-gray-50 p-3 text-[11px] text-gray-600">
+            {co.coursesEmpty}
+          </div>
+        ) : (
+          <div style={backofficeTableStickyScroll}>
+            <table className="w-full border-collapse text-[11px]">
+              <thead className={twStickyTheadGray50}>
+                <tr>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                    {co.thClub}
+                  </th>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                    {co.thCourse}
+                  </th>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-left font-semibold">
+                    {co.shortNameLabel}
+                  </th>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold">
+                    {co.thTees}
+                  </th>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-center font-semibold">
+                    {co.thWhsStatus}
+                  </th>
+                  <th className="border border-gray-300 px-1.5 py-[3px] text-right font-semibold">
+                    {co.thAction}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white text-black">
+                {courseRows.map((c) => {
+                  const summary =
+                    courseWhs.get(c.id) ?? { tees: 0, withWhs: 0 };
+                  const isSelected = c.id === effectiveCourseId;
+                  const whsState: "complete" | "partial" | "empty" =
+                    summary.tees > 0 && summary.withWhs >= summary.tees
+                      ? "complete"
+                      : summary.withWhs > 0
+                        ? "partial"
+                        : "empty";
+                  const whsLabel =
+                    whsState === "complete"
+                      ? co.whsComplete
+                      : whsState === "partial"
+                        ? co.whsPartial
+                        : co.whsEmpty;
+                  const whsClass =
+                    whsState === "complete"
+                      ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                      : whsState === "partial"
+                        ? "bg-amber-100 text-amber-900 border-amber-300"
+                        : "bg-rose-100 text-rose-900 border-rose-300";
+                  return (
+                    <tr
+                      key={c.id}
+                      className={isSelected ? "bg-sky-50" : undefined}
+                    >
+                      <td className="border border-gray-300 px-1.5 py-[3px]">
+                        {c.club_name ?? "—"}
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px] font-medium">
+                        {c.name}
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px]">
+                        {c.short_name ?? "—"}
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px] text-center tabular-nums">
+                        {summary.withWhs} / {summary.tees}
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px] text-center">
+                        <span
+                          className={`inline-flex rounded-full border px-2 py-[1px] text-[10px] font-semibold ${whsClass}`}
+                        >
+                          {whsLabel}
+                        </span>
+                      </td>
+                      <td className="border border-gray-300 px-1.5 py-[3px] text-right">
+                        {isSelected ? (
+                          <span className="inline-flex rounded border border-sky-300 bg-sky-100 px-2 py-[1px] text-[10px] font-semibold text-sky-900">
+                            {co.btnSelected}
+                          </span>
+                        ) : (
+                          <a
+                            href={`/courses?course_id=${c.id}#course-detail`}
+                            className="inline-flex rounded bg-gray-800 px-2 py-[2px] text-[10px] font-semibold text-white hover:bg-gray-700"
+                          >
+                            {co.btnOpen}
+                          </a>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
         <div className="text-[11px] font-semibold uppercase text-gray-700">
@@ -371,7 +517,10 @@ export default async function CoursesPage(props: {
 
       {course && (
         <>
-          <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+          <section
+            id="course-detail"
+            className="space-y-3 rounded-lg border border-gray-200 bg-white p-4 scroll-mt-4"
+          >
             <div className="text-[11px] font-semibold uppercase text-gray-700">
               Datos del campo seleccionado
             </div>
