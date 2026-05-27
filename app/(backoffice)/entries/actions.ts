@@ -1970,15 +1970,22 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     throw new Error(eErr.message);
   }
 
+  type RawPlayer = {
+    ghin_number?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  };
+
   const players: FlaggedPlayerForPrompt[] = (rows ?? []).map((row) => {
-    const p = row.players as {
-      ghin_number?: string | null;
-      first_name?: string | null;
-      last_name?: string | null;
-    } | null;
-    const fullName = [p?.first_name, p?.last_name].filter(Boolean).join(" ").trim();
+    const raw = (row as { players?: RawPlayer | RawPlayer[] | null }).players;
+    const p: RawPlayer | null = Array.isArray(raw) ? (raw[0] ?? null) : (raw ?? null);
+    const fullName = [p?.first_name, p?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const ghinRaw = p?.ghin_number != null ? String(p.ghin_number).trim() : "";
     return {
-      ghin: p?.ghin_number ?? null,
+      ghin: ghinRaw ? ghinRaw : null,
       fullName,
       reason: (row.flagged_committee_reason as string | null) ?? null,
     };
