@@ -1878,3 +1878,42 @@ export async function deliverTelegramKit(formData: FormData) {
 export async function updateEntryCategoryInline(formData: FormData) {
   return updateEntryCategory(formData);
 }
+
+export async function toggleEntryCommitteeFlag(formData: FormData) {
+  const tournament_id = reqStr(formData, "tournament_id");
+  const entry_id = reqStr(formData, "entry_id");
+  const flag = String(formData.get("flag") ?? "true") === "true";
+  const reason = optStr(formData, "reason");
+
+  await requireTournamentAccess({
+    tournamentId: tournament_id,
+    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const admin = await createAdminClient();
+  const { error } = await admin
+    .from("tournament_entries")
+    .update({
+      flagged_for_committee: flag,
+      flagged_committee_reason: flag ? reason : null,
+      flagged_committee_at: flag ? new Date().toISOString() : null,
+      flagged_committee_by: flag ? user?.id ?? null : null,
+    })
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id);
+
+  if (error) {
+    redirect(
+      `/entries?tournament_id=${tournament_id}&err=${encodeURIComponent(error.message)}`
+    );
+  }
+
+  revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
+  redirect(`/entries?tournament_id=${tournament_id}&committee_flag=1`);
+}

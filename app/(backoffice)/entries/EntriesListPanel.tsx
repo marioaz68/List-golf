@@ -6,6 +6,7 @@ import {
   deleteEntry,
   disqualifyEntry,
   restoreEntry,
+  toggleEntryCommitteeFlag,
   withdrawEntry,
 } from "./actions";
 import PlayerRowActions from "@/components/PlayerRowActions";
@@ -62,6 +63,8 @@ type Entry = {
   player_number: number | null;
   handicap_index: number | null;
   status: string | null;
+  flagged_for_committee?: boolean;
+  flagged_committee_reason?: string | null;
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
   round_signatures?: RoundSignature[] | null;
@@ -233,6 +236,54 @@ function EntryRowActions({
 
   const wrap = (node: ReactNode, slotClass: string) =>
     compact ? node : <div className={slotClass}>{node}</div>;
+
+  const isFlagged = Boolean(entry.flagged_for_committee);
+
+  const committeeFlagForm = (
+    <form
+      action={toggleEntryCommitteeFlag}
+      className={compact ? "shrink-0" : "w-full"}
+      onSubmit={(event) => {
+        if (isFlagged) return;
+        const reason = window.prompt(
+          "Motivo para enviar al comité (opcional):",
+          ""
+        );
+        if (reason === null) {
+          event.preventDefault();
+          return;
+        }
+        const input = event.currentTarget.querySelector(
+          'input[name="reason"]'
+        ) as HTMLInputElement | null;
+        if (input) input.value = reason;
+      }}
+    >
+      <input type="hidden" name="tournament_id" value={tournamentId} />
+      <input type="hidden" name="entry_id" value={entry.id} />
+      <input
+        type="hidden"
+        name="flag"
+        value={isFlagged ? "false" : "true"}
+      />
+      <input type="hidden" name="reason" value="" />
+      <SubmitButton
+        pendingText="…"
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} ${isFlagged ? "border-rose-800 bg-rose-700" : "border-violet-800 bg-violet-700"}`
+            : `h-7 w-full rounded border text-[11px] font-bold text-white ${isFlagged ? "border-rose-800 bg-rose-700" : "border-violet-800 bg-violet-700"}`
+        }
+        pendingClassName={
+          compact
+            ? `${MOBILE_ACTION_BTN} cursor-wait opacity-70`
+            : "h-7 w-full cursor-wait rounded border opacity-70 text-[11px] font-bold text-white"
+        }
+      >
+        {isFlagged ? "Quitar comité" : "→ Comité HI"}
+      </SubmitButton>
+    </form>
+  );
 
   const telegramBtn = (
     <Link
@@ -452,6 +503,7 @@ function EntryRowActions({
       }
     >
       {wrap(telegramBtn, SLOT_MD)}
+      {wrap(committeeFlagForm, SLOT_MD)}
       {wrap(signaturesBtn, SLOT_MD)}
       {wrap(deleteForm, SLOT_MD)}
       {wrap(withdrawRestoreForm, SLOT_SM)}
