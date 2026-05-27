@@ -145,6 +145,27 @@ export default function HandicapCommitteeVoter({
   const [tab, setTab] = useState<VoteTab>(defaultTab);
   const [expandedResultId, setExpandedResultId] = useState<string | null>(null);
 
+  // Al regresar del visor del reporte, la URL trae #entry-<id>. Si el
+  // jugador está en "Calificados" (ya voté), tenemos que cambiar a esa
+  // pestaña antes de que la carta se monte para que el scroll funcione.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#entry-")) return;
+    const targetId = hash.slice("#entry-".length);
+    if (!targetId) return;
+
+    const isInVoted = voteByEntry.has(targetId);
+    const isInEntries = entries.some((e) => e.entry_id === targetId);
+    if (!isInEntries) return;
+
+    if (isInVoted && tab !== "voted") {
+      setTab("voted");
+    } else if (!isInVoted && tab !== "pending" && committeeOpen) {
+      setTab("pending");
+    }
+  }, [voteByEntry, entries, tab, committeeOpen]);
+
   const canVote = committeeOpen && isPresent;
 
   return (
@@ -665,18 +686,26 @@ function PlayerVoteCard({
   const articleRef = useRef<HTMLElement | null>(null);
 
   // Si esta carta es la del hash actual (regreso desde el visor de reporte),
-  // la abrimos y la centramos en pantalla.
+  // la abrimos y la centramos en pantalla. Esperamos a que el navegador
+  // termine su scroll-restoration y a que el contenido expandido se
+  // renderee antes de tomar el control del scroll.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.hash !== `#${articleId}`) return;
     setOpen(true);
+    let raf = 0;
     const t = window.setTimeout(() => {
-      articleRef.current?.scrollIntoView({
-        block: "center",
-        behavior: "smooth",
+      raf = window.requestAnimationFrame(() => {
+        articleRef.current?.scrollIntoView({
+          block: "center",
+          behavior: "smooth",
+        });
       });
-    }, 80);
-    return () => window.clearTimeout(t);
+    }, 250);
+    return () => {
+      window.clearTimeout(t);
+      if (raf) window.cancelAnimationFrame(raf);
+    };
   }, [articleId]);
 
   const lockedByClosing = !committeeOpen;
