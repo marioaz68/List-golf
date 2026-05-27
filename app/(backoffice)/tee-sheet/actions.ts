@@ -902,10 +902,10 @@ function buildBalancedChunks<T>(list: T[], preferredSize: number) {
   const size = preferredSize === 5 ? 5 : 4;
 
   if (total === 0) return [];
+
+  // 1–2 jugadores: devolver un único grupo "corto" para que el comité lo mueva por DnD.
   if (total < 3) {
-    throw new Error(
-      `No se puede generar una categoría con ${total} jugador(es). Para evitar grupos de 1 o 2, mueve esos jugadores de categoría o ajusta la planeación.`
-    );
+    return [list.slice()];
   }
 
   const minGroups = Math.ceil(total / size);
@@ -927,9 +927,13 @@ function buildBalancedChunks<T>(list: T[], preferredSize: number) {
     }
   }
 
-  throw new Error(
-    `No se encontró una distribución válida para ${total} jugadores con grupos de ${size}. Ajusta a 4/5 o mueve jugadores antes de generar.`
-  );
+  // Fallback: si no encontramos distribución 3..size limpia, devolver bloques del tamaño preferido
+  // y permitir que el último grupo quede corto (1 o 2). El usuario lo ajusta luego en DnD.
+  const fallback: T[][] = [];
+  for (let i = 0; i < total; i += size) {
+    fallback.push(list.slice(i, i + size));
+  }
+  return fallback;
 }
 
 function assignShotgunSlotsByCategoryOrder(
