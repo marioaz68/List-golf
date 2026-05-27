@@ -81,6 +81,50 @@ function redirectToTeeSheet(params: {
   redirect(`/tee-sheet?${qs.toString()}`);
 }
 
+function isNextRedirectError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const digest = (err as { digest?: unknown }).digest;
+  if (typeof digest !== "string") return false;
+  return digest.startsWith("NEXT_REDIRECT") || digest === "NEXT_NOT_FOUND";
+}
+
+function pickBackParamsFromFormData(fd: FormData) {
+  const tournament_id = String(fd.get("tournament_id") ?? "").trim();
+  const round_id = String(fd.get("round_id") ?? "").trim();
+  const rawSize = String(fd.get("group_size") ?? "4").trim();
+  const sizeNum = Number(rawSize);
+  const group_size =
+    Number.isFinite(sizeNum) && sizeNum >= 2 && sizeNum <= 8
+      ? Math.trunc(sizeNum)
+      : 4;
+  const catRaw = String(fd.get("cat") ?? "").trim();
+  const cat = catRaw && catRaw !== "ALL" ? catRaw : null;
+  return { tournament_id, round_id, group_size, cat };
+}
+
+/**
+ * Convierte excepciones del server action en `redirect(/tee-sheet?err=...)`
+ * para que la UI muestre el error sin tumbar la página.
+ */
+function withTeeSheetErrorRedirect(
+  fn: (formData: FormData) => Promise<unknown>
+): (formData: FormData) => Promise<void> {
+  return async (formData: FormData) => {
+    try {
+      await fn(formData);
+    } catch (err) {
+      if (isNextRedirectError(err)) throw err;
+      console.error("[tee-sheet action]", err);
+      const back = pickBackParamsFromFormData(formData);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error al ejecutar la acción.";
+      redirectToTeeSheet({ ...back, err: message });
+    }
+  };
+}
+
 async function teeSheetDataClient() {
   const admin = tryCreateAdminClient();
   if (!admin) {
@@ -501,7 +545,7 @@ async function recalcStartsForRound(supabase: any, round_id: string) {
   }
 }
 
-export async function clearGroups(formData: FormData) {
+async function _clearGroups(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
@@ -555,7 +599,7 @@ export async function updateGroup(formData: FormData) {
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
 }
 
-export async function recalculateTeeTimes(formData: FormData) {
+async function _recalculateTeeTimes(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
@@ -942,7 +986,7 @@ function assignShotgunSlotsByCategoryOrder(
   return out;
 }
 
-export async function saveCategoryPlanOrder(formData: FormData) {
+async function _saveCategoryPlanOrder(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
@@ -970,7 +1014,7 @@ export async function saveCategoryPlanOrder(formData: FormData) {
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
 }
 
-export async function confirmStartingOrder(formData: FormData) {
+async function _confirmStartingOrder(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
   const group_size = reqGroupSize(formData);
@@ -1063,7 +1107,7 @@ export async function confirmStartingOrder(formData: FormData) {
   redirectToTeeSheet({ ...back, ok: "starting_order_confirmed" });
 }
 
-export async function reopenStartingOrder(formData: FormData) {
+async function _reopenStartingOrder(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
   const round_id = reqStr(formData, "round_id");
   const group_size = reqGroupSize(formData);
@@ -1130,7 +1174,7 @@ export async function reopenStartingOrder(formData: FormData) {
   redirectToTeeSheet({ ...back, ok: "starting_order_reopened" });
 }
 
-export async function generateMatchPlayTeeSheet(formData: FormData) {
+async function _generateMatchPlayTeeSheet(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
@@ -1498,7 +1542,7 @@ export async function generateMatchPlayTeeSheet(formData: FormData) {
   });
 }
 
-export async function generateGroupsByCategory(formData: FormData) {
+async function _generateGroupsByCategory(formData: FormData) {
   const supabase = await createClient();
 
   const tournament_id = reqStr(formData, "tournament_id");
@@ -1933,3 +1977,15 @@ export async function generateGroupsByCategory(formData: FormData) {
   revalidatePath("/tee-sheet");
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
 }
+
+export const clearGroups = withTeeSheetErrorRedirect(_clearGroups);
+export const recalculateTeeTimes = withTeeSheetErrorRedirect(_recalculateTeeTimes);
+export const saveCategoryPlanOrder = withTeeSheetErrorRedirect(_saveCategoryPlanOrder);
+export const confirmStartingOrder = withTeeSheetErrorRedirect(_confirmStartingOrder);
+export const reopenStartingOrder = withTeeSheetErrorRedirect(_reopenStartingOrder);
+export const generateMatchPlayTeeSheet = withTeeSheetErrorRedirect(
+  _generateMatchPlayTeeSheet
+);
+export const generateGroupsByCategory = withTeeSheetErrorRedirect(
+  _generateGroupsByCategory
+);
