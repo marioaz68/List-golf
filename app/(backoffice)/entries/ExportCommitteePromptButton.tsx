@@ -24,18 +24,17 @@ export default function ExportCommitteePromptButton({
   const [feedback, setFeedback] = useState<string | null>(null);
 
   function handleExport() {
-    if (flaggedCount === 0) {
-      alert(
-        "No hay jugadores marcados para revisión.\n\nUsa el botón «→ Comité HI» en cada inscrito que quieras incluir."
-      );
-      return;
-    }
-
     setFeedback(null);
     startTransition(async () => {
       try {
-        const { markdown, filename } =
+        const { markdown, filename, count } =
           await exportCommitteePromptMarkdown(tournamentId);
+        if (count === 0) {
+          alert(
+            "No hay jugadores marcados para revisión en este torneo.\n\nUsa «→ Comité HI» en cada inscrito primero."
+          );
+          return;
+        }
         downloadMarkdown(filename, markdown);
         try {
           await navigator.clipboard.writeText(markdown);
