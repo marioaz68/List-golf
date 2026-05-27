@@ -497,21 +497,26 @@ function HoleDots({
   );
 }
 
+const DEMO_PLAYERS: PlayerRow[] = [
+  { id: "p1", name: "Cecilia Mosti", scores: createEmptyScores() },
+  { id: "p2", name: "Chapo Álvarez", scores: createEmptyScores() },
+  { id: "p3", name: "Eduardo Urbiola", scores: createEmptyScores() },
+  { id: "p4", name: "Gabi Sánchez", scores: createEmptyScores() },
+  { id: "p5", name: "Gallo Torres", scores: createEmptyScores() },
+  { id: "p6", name: "Tere Ruiz", scores: createEmptyScores() },
+];
+
 function MobileScoreEntryContent() {
   const searchParams = useSearchParams();
   const groupId = searchParams.get("group_id");
 
   const [tab, setTab] = useState<"anotar" | "tarjeta" | "firmar">("anotar");
-  const [currentHole, setCurrentHole] = useState<HoleNumber>(18);
+  const [currentHole, setCurrentHole] = useState<HoleNumber>(1);
 
-  const [players, setPlayers] = useState<PlayerRow[]>([
-    { id: "p1", name: "Cecilia Mosti", scores: createEmptyScores() },
-    { id: "p2", name: "Chapo Álvarez", scores: createEmptyScores() },
-    { id: "p3", name: "Eduardo Urbiola", scores: createEmptyScores() },
-    { id: "p4", name: "Gabi Sánchez", scores: createEmptyScores() },
-    { id: "p5", name: "Gallo Torres", scores: createEmptyScores() },
-    { id: "p6", name: "Tere Ruiz", scores: createEmptyScores() },
-  ]);
+  const [players, setPlayers] = useState<PlayerRow[]>(
+    groupId ? [] : DEMO_PLAYERS
+  );
+  const [groupLoading, setGroupLoading] = useState(Boolean(groupId));
 
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [draftScore, setDraftScore] = useState<string>("");
@@ -519,6 +524,67 @@ function MobileScoreEntryContent() {
   const [signatures, setSignatures] = useState<Record<string, string | null>>({});
 
   const playerRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const activePlayerIdRef = useRef<string | null>(null);
+  const currentHoleRef = useRef<HoleNumber>(1);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    activePlayerIdRef.current = activePlayerId;
+  }, [activePlayerId]);
+
+  useEffect(() => {
+    currentHoleRef.current = currentHole;
+  }, [currentHole]);
+
+  useEffect(() => {
+    const gid = groupId?.trim() ?? "";
+    if (!gid) return;
+    const groupIdCapture = gid;
+
+    async function pull() {
+      if (savingRef.current) return;
+      try {
+        const res = await fetch(
+          `/api/captura/group?group_id=${encodeURIComponent(groupIdCapture)}`,
+          { cache: "no-store" }
+        );
+        const json = (await res.json()) as {
+          ok?: boolean;
+          data?: {
+            players: Array<{
+              entryId: string;
+              name: string;
+              scores: PlayerRow["scores"];
+            }>;
+          };
+        };
+        if (!json.ok || !json.data?.players) return;
+        setGroupLoading(false);
+        const editingId = activePlayerIdRef.current;
+        const editingHole = currentHoleRef.current;
+        setPlayers((prevPlayers) =>
+          json.data!.players.map((p) => {
+            const prev = prevPlayers.find((x) => x.id === p.entryId);
+            const scores = { ...p.scores };
+            if (
+              prev &&
+              editingId === p.entryId &&
+              prev.scores[editingHole] != null
+            ) {
+              scores[editingHole] = prev.scores[editingHole];
+            }
+            return { id: p.entryId, name: p.name, scores };
+          })
+        );
+      } catch {
+        setGroupLoading(false);
+      }
+    }
+
+    void pull();
+    const id = window.setInterval(pull, 2000);
+    return () => window.clearInterval(id);
+  }, [groupId?.trim()]);
 
   const activePlayer = useMemo(
     () => players.find((p) => p.id === activePlayerId) ?? null,
@@ -539,6 +605,7 @@ function MobileScoreEntryContent() {
   }
 
   function setHoleScore(playerId: string, hole: HoleNumber, value: number | null) {
+    const strokes = value === null ? null : Math.max(1, value);
     setPlayers((current) =>
       current.map((player) =>
         player.id === playerId
@@ -546,12 +613,28 @@ function MobileScoreEntryContent() {
               ...player,
               scores: {
                 ...player.scores,
-                [hole]: value === null ? null : Math.max(1, value),
+                [hole]: strokes,
               },
             }
           : player
       )
     );
+
+    if (!groupId) return;
+
+    savingRef.current = true;
+    void fetch("/api/captura/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        group_id: groupId,
+        entry_id: playerId,
+        hole,
+        strokes,
+      }),
+    }).finally(() => {
+      savingRef.current = false;
+    });
   }
 
   function selectPlayer(playerId: string) {
@@ -719,7 +802,11 @@ function MobileScoreEntryContent() {
                   Par {PAR_BY_HOLE[currentHole]}
                 </div>
                 <div className="text-[11px] text-slate-500">
-                  Grupo: {groupId || "Sin group_id"}
+                  {groupId
+                    ? groupLoading
+                      ? "Cargando grupo…"
+                      : `Grupo vinculado · ${players.length} jugadores`
+                    : "Modo demo (sin group_id)"}
                 </div>
 
                 <div className="mt-3">

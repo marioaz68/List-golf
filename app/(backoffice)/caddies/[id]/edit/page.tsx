@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
+import { isMissingCaddieTelegramColumnsError } from "@/lib/caddies/telegramColumns";
+import { getTelegramBotUrl, getTelegramBotUsername } from "@/lib/telegram/sendMessage";
 import { updateCaddieAction } from "./actions";
+import CaddieTelegramPanel, {
+  type CaddiePendingLinkRow,
+} from "./CaddieTelegramPanel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -173,21 +181,48 @@ function displayClubName(c: ClubRow) {
 
 export default async function EditCaddiePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const actionError =
+    typeof sp.err === "string" ? decodeURIComponent(sp.err.trim()) : "";
+  const saved = sp.saved === "1";
+  const verified = sp.verified === "1";
+
+  const locale = await getLocale();
+  const tgCopy = messages[locale].caddies.telegramLink;
+
   const supabase = await createClient();
+  const admin = createAdminClient();
+
+  const caddieSelectWithTg =
+    "id, first_name, last_name, nickname, phone, telegram, whatsapp_phone, whatsapp_phone_e164, email, club_id, level, notes, is_active, telegram_user_id, telegram_chat_id";
+  const caddieSelectBasic =
+    "id, first_name, last_name, nickname, phone, telegram, whatsapp_phone, whatsapp_phone_e164, email, club_id, level, notes, is_active";
+
+  let columnsAvailable = true;
+  let caddieRes = await admin
+    .from("caddies")
+    .select(caddieSelectWithTg)
+    .eq("id", id)
+    .single();
+
+  if (caddieRes.error && isMissingCaddieTelegramColumnsError(caddieRes.error.message)) {
+    columnsAvailable = false;
+    caddieRes = await admin
+      .from("caddies")
+      .select(caddieSelectBasic)
+      .eq("id", id)
+      .single();
+  }
 
   const [{ data: caddieData, error: caddieError }, { data: clubsData, error: clubsError }] =
     await Promise.all([
-      supabase
-        .from("caddies")
-        .select(
-          "id, first_name, last_name, nickname, phone, telegram, whatsapp_phone, whatsapp_phone_e164, email, club_id, level, notes, is_active"
-        )
-        .eq("id", id)
-        .single(),
+      Promise.resolve(caddieRes),
       supabase
         .from("clubs")
         .select("id, name, short_name, is_active")
@@ -212,6 +247,32 @@ export default async function EditCaddiePage({
   if (!caddie) {
     notFound();
   }
+
+  const caddieRow = caddie as CaddieRow & {
+    telegram_user_id?: string | null;
+    telegram_chat_id?: string | null;
+  };
+  const caddieName =
+    [caddieRow.first_name, caddieRow.last_name].filter(Boolean).join(" ").trim() ||
+    "Caddie";
+  const telegramUserId = String(caddieRow.telegram_user_id ?? "").trim();
+  const telegramChatId = String(caddieRow.telegram_chat_id ?? "").trim();
+  const linked = Boolean(telegramUserId);
+
+  let pendingLinks: CaddiePendingLinkRow[] = [];
+  if (columnsAvailable) {
+    const { data: pendingRows } = await admin
+      .from("telegram_pending_links")
+      .select(
+        "telegram_user_id, telegram_chat_id, first_name, last_name, username, last_seen_at"
+      )
+      .order("last_seen_at", { ascending: false })
+      .limit(12);
+    pendingLinks = (pendingRows ?? []) as CaddiePendingLinkRow[];
+  }
+
+  const botUser = getTelegramBotUsername();
+  const botUrl = getTelegramBotUrl();
 
   return (
     <div style={pageWrap}>
@@ -430,6 +491,35 @@ export default async function EditCaddiePage({
           </div>
         </form>
       </div>
+
+      {saved ? (
+        <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          {tgCopy.savedBanner}
+        </div>
+      ) : null}
+      {verified ? (
+        <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+          {tgCopy.verifiedBanner}
+        </div>
+      ) : null}
+      {actionError ? (
+        <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          {actionError}
+        </div>
+      ) : null}
+
+      <CaddieTelegramPanel
+        tg={tgCopy}
+        caddieId={caddie.id}
+        caddieName={caddieName}
+        botUser={botUser}
+        botUrl={botUrl}
+        linked={linked}
+        columnsAvailable={columnsAvailable}
+        telegramUserId={telegramUserId}
+        telegramChatId={telegramChatId}
+        pendingLinks={pendingLinks}
+      />
     </div>
   );
 }
