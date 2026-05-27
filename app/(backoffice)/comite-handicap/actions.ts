@@ -221,14 +221,20 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
     .from("handicap_committee_votes")
     .select("adjustment, abstained")
     .eq("committee_id", committee.id)
-    .eq("entry_id", entry_id)
-    .eq("abstained", false);
+    .eq("entry_id", entry_id);
 
-  const adjustments = (voteRows ?? [])
-    .map((v: any) =>
-      v.adjustment != null ? Number(v.adjustment) : Number.NaN
-    )
-    .filter((n) => Number.isFinite(n));
+  let n_abstained = 0;
+  const adjustments: number[] = [];
+  for (const row of voteRows ?? []) {
+    if ((row as { abstained?: boolean }).abstained) {
+      n_abstained += 1;
+      continue;
+    }
+    const adj = (row as { adjustment?: unknown }).adjustment;
+    if (adj == null) continue;
+    const n = Number(adj);
+    if (Number.isFinite(n)) adjustments.push(n);
+  }
 
   if (adjustments.length === 0) {
     redirectWith(tournament_id, {
@@ -241,10 +247,15 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
   const trim = trimmedAverage(
     adjustments,
     Number(committee.trim_low ?? 0),
-    Number(committee.trim_high ?? 0)
+    Number(committee.trim_high ?? 0),
+    n_abstained
   );
   const avg = trim.avg;
-  if (avg == null || !Number.isFinite(avg) || trim.liveCount < 1) {
+  if (
+    avg == null ||
+    !Number.isFinite(avg) ||
+    trim.averageDenominator < 1
+  ) {
     redirectWith(tournament_id, {
       err: "El recorte deja menos de un voto vivo; ajusta los parámetros.",
       tab: "admin",
@@ -501,7 +512,12 @@ async function archiveCommitteeSession(params: {
       n_abs: 0,
       n_dq: 0,
     };
-    const trim = trimmedAverage(slot.adj, trimLow, trimHigh);
+    const trim = trimmedAverage(
+      slot.adj,
+      trimLow,
+      trimHigh,
+      slot.n_abs
+    );
     const player = e.player_id ? playerById.get(String(e.player_id)) : null;
     const cat = e.category_id ? categoryById.get(String(e.category_id)) : null;
     const playerLabel = player

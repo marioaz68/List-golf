@@ -21,22 +21,91 @@ export function clampAdjustment(raw: number) {
  * descartan: los `trimLow` más bajos y los `trimHigh` más altos.
  * Si la cantidad de votos vivos no es suficiente, se conservan al menos 1.
  */
-export type TrimmedAverage = {
-  values: { value: number; trimmed: boolean; reason: "low" | "high" | null }[];
-  avg: number | null;
-  liveCount: number;
+export type TrimmedAverageChip = {
+  value: number;
+  trimmed: boolean;
+  reason: "low" | "high" | null;
 };
 
+export type TrimmedAverage = {
+  values: TrimmedAverageChip[];
+  avg: number | null;
+  /** Votos numéricos que sobreviven al recorte (sin contar abstenciones). */
+  liveCount: number;
+  /**
+   * Abstenciones que entran al promedio como 0 (suman al denominador).
+   */
+  liveAbstainedAsZero: number;
+  /** Denominador del promedio: liveCount + liveAbstainedAsZero */
+  averageDenominator: number;
+};
+
+/**
+ * Chip de distribución de votos. Incluye abstenciones como votos vivos con
+ * valor 0 ("estoy de acuerdo con el HI, no necesita ajuste"). Se usan en los
+ * reportes (live, voter y archivo) para que las abstenciones se vean como
+ * que sí cuentan.
+ */
+export type DistributionChip = TrimmedAverageChip & { abstained: boolean };
+
+/**
+ * Convierte la salida de `trimmedAverage` (que separa abstenciones) en una
+ * lista única de chips. Las abstenciones se agregan como entradas con
+ * `value = 0`, `trimmed = false` y `abstained = true`. Nunca se descartan
+ * porque cuentan como "vivas" en el denominador.
+ */
+export function distributionChips(
+  values: TrimmedAverageChip[] | null | undefined,
+  liveAbstainedAsZero: number = 0
+): DistributionChip[] {
+  const chips: DistributionChip[] = (values ?? []).map((v) => ({
+    ...v,
+    abstained: false,
+  }));
+  const n = Math.max(0, Math.trunc(liveAbstainedAsZero));
+  for (let i = 0; i < n; i += 1) {
+    chips.push({ value: 0, trimmed: false, reason: null, abstained: true });
+  }
+  return chips;
+}
+
+/**
+ * Calcula promedio recortado.
+ *
+ * - `rawValues`: ajustes numéricos (votos con calificación).
+ * - `trimLow` / `trimHigh`: cuántos valores extremos descartar.
+ * - `liveAbstainedAsZero`: opcional. Si se proporciona, las abstenciones
+ *   "vivas" se cuentan como votos con valor 0 en el cálculo del promedio
+ *   (suman al denominador pero no al numerador). No se incluyen como chips
+ *   en `values` porque no son ajustes numéricos.
+ */
 export function trimmedAverage(
   rawValues: number[],
   trimLow: number,
-  trimHigh: number
+  trimHigh: number,
+  liveAbstainedAsZero: number = 0
 ): TrimmedAverage {
   const valid = rawValues
     .filter((v) => Number.isFinite(v))
     .map((v) => Number(v));
+  const abstZero = Math.max(0, Math.trunc(liveAbstainedAsZero));
   if (valid.length === 0) {
-    return { values: [], avg: null, liveCount: 0 };
+    if (abstZero > 0) {
+      return {
+        values: [],
+        avg: 0,
+        liveCount: 0,
+        liveAbstainedAsZero: abstZero,
+        averageDenominator: abstZero,
+      };
+    }
+    return {
+      values: [],
+      avg: null,
+      liveCount: 0,
+      liveAbstainedAsZero: 0,
+      averageDenominator: 0,
+    };
   }
 
   const sortedAsc = [...valid].sort((a, b) => a - b);
@@ -91,11 +160,16 @@ export function trimmedAverage(
     return { value: v, trimmed: false as const, reason: null as null };
   });
 
-  const avg = liveCount > 0 ? liveSum / liveCount : null;
+  const numericLiveCount = liveCount;
+  const averageDenominator = numericLiveCount + abstZero;
+  const avg =
+    averageDenominator > 0 ? liveSum / averageDenominator : null;
 
   return {
     values: tagged,
     avg,
-    liveCount,
+    liveCount: numericLiveCount,
+    liveAbstainedAsZero: abstZero,
+    averageDenominator,
   };
 }
