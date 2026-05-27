@@ -631,14 +631,36 @@ const DEMO_PLAYERS: PlayerRow[] = [
 /** Id especial para identificar la card "Mi Score" (tarjeta privada). */
 const ME_ID = "__me__";
 
+function buildCapturaTarjetaPath(
+  gid: string,
+  me: string | null | undefined,
+  caddie: string | null | undefined
+) {
+  const sp = new URLSearchParams({ group_id: gid });
+  const meT = me?.trim();
+  const caddieT = caddie?.trim();
+  if (meT) sp.set("me", meT);
+  if (caddieT) sp.set("caddie", caddieT);
+  return `/captura/tarjeta?${sp.toString()}`;
+}
+
 function MobileScoreEntryContent() {
   const searchParams = useSearchParams();
   const groupId = searchParams.get("group_id");
   /** `?me=` y `?caddie=` traen los entry IDs identificados desde Telegram. */
   const meParam = searchParams.get("me");
   const caddieParam = searchParams.get("caddie");
+  const meFromUrl = meParam?.trim() || null;
+  const caddieFromUrl = caddieParam?.trim() || null;
+  const tabParam = searchParams.get("tab");
+  const isIdentified = Boolean(meFromUrl || caddieFromUrl);
 
-  const [tab, setTab] = useState<"anotar" | "tarjeta" | "firmar">("anotar");
+  const [tab, setTab] = useState<"anotar" | "tarjeta" | "firmar">(() => {
+    if (tabParam === "anotar" || tabParam === "firmar" || tabParam === "tarjeta") {
+      return tabParam;
+    }
+    return isIdentified ? "tarjeta" : "anotar";
+  });
   const [currentHole, setCurrentHole] = useState<HoleNumber>(1);
 
   const [players, setPlayers] = useState<PlayerRow[]>(
@@ -654,8 +676,8 @@ function MobileScoreEntryContent() {
   const [signatures, setSignatures] = useState<Record<string, string | null>>({});
 
   // === Estado de identidad / tarjeta privada / testigos ===
-  /** Entry ID del jugador visitante (si lo trae el link). */
-  const [myEntryId, setMyEntryId] = useState<string | null>(null);
+  /** Entry ID del jugador visitante (URL primero; API lo confirma después). */
+  const [myEntryId, setMyEntryId] = useState<string | null>(meFromUrl);
   /** Scores privados del jugador (sólo él y su caddie los ven aquí). */
   const [myPrivateScores, setMyPrivateScores] = useState<HoleScores>(() =>
     createEmptyScores()
@@ -670,14 +692,19 @@ function MobileScoreEntryContent() {
   const [pendingForMeCount, setPendingForMeCount] = useState<number>(0);
   /**
    * Visibilidad de "Mi Score" + banner de testigo en la pestaña Tarjeta.
-   * Persiste por jugador en localStorage para sobrevivir cambios de pestaña.
+   * Se oculta al volver desde Anotar; el botón toggle siempre queda visible.
    */
   const [showMyCard, setShowMyCard] = useState<boolean>(true);
+  /** true tras salir de Tarjeta hacia Anotar (para ocultar Mi Score al regresar). */
+  const leftTarjetaForAnotarRef = useRef(false);
 
   const playerRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const activePlayerIdRef = useRef<string | null>(null);
   const currentHoleRef = useRef<HoleNumber>(1);
   const savingRef = useRef(false);
+
+  /** Jugador identificado: API o parámetro ?me= en la URL. */
+  const viewerEntryId = myEntryId ?? meFromUrl;
 
   useEffect(() => {
     activePlayerIdRef.current = activePlayerId;
@@ -798,34 +825,6 @@ function MobileScoreEntryContent() {
     return () => window.clearInterval(id);
   }, [groupId?.trim(), meParam?.trim(), caddieParam?.trim()]);
 
-  // Carga inicial del toggle "Mi Score" desde localStorage.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const gid = groupId?.trim() ?? "";
-    if (!gid || !meParam?.trim()) return;
-    const key = `mobile:show-my-card:${gid}:${meParam.trim()}`;
-    try {
-      const v = window.localStorage.getItem(key);
-      if (v === "0") setShowMyCard(false);
-      else if (v === "1") setShowMyCard(true);
-    } catch {
-      // ignore
-    }
-  }, [groupId, meParam]);
-
-  // Persiste el toggle.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const gid = groupId?.trim() ?? "";
-    if (!gid || !meParam?.trim()) return;
-    const key = `mobile:show-my-card:${gid}:${meParam.trim()}`;
-    try {
-      window.localStorage.setItem(key, showMyCard ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  }, [showMyCard, groupId, meParam]);
-
   const activePlayer = useMemo<PlayerRow | null>(() => {
     if (activePlayerId === ME_ID) {
       return { id: ME_ID, name: "Mi Score", scores: myPrivateScores };
@@ -852,18 +851,19 @@ function MobileScoreEntryContent() {
     // Score privado del jugador identificado (tabla amber "Mi Score").
     if (playerId === ME_ID) {
       setMyPrivateScores((cur) => ({ ...cur, [hole]: strokes }));
-      if (!groupId || !myEntryId) return;
+      const entryForPrivate = viewerEntryId;
+      if (!groupId || !entryForPrivate) return;
       savingRef.current = true;
       void fetch("/api/captura/private-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           group_id: groupId,
-          entry_id: myEntryId,
+          entry_id: entryForPrivate,
           hole,
           strokes,
-          me: myEntryId,
-          caddie: caddieParam?.trim() ?? "",
+          me: entryForPrivate,
+          caddie: caddieFromUrl ?? "",
         }),
       }).finally(() => {
         savingRef.current = false;
@@ -1046,7 +1046,13 @@ function MobileScoreEntryContent() {
         <div className="flex border-b bg-white">
           <button
             type="button"
-            onClick={() => setTab("anotar")}
+            onClick={() => {
+              if (tab === "tarjeta") leftTarjetaForAnotarRef.current = true;
+              setTab("anotar");
+              setActivePlayerId(null);
+              setDraftScore("");
+              setDraftFresh(false);
+            }}
             className={[
               "flex-1 py-2 text-sm font-semibold",
               tab === "anotar"
@@ -1060,6 +1066,11 @@ function MobileScoreEntryContent() {
           <button
             type="button"
             onClick={() => {
+              if (leftTarjetaForAnotarRef.current) {
+                setShowMyCard(false);
+              } else {
+                setShowMyCard(true);
+              }
               setTab("tarjeta");
               setActivePlayerId(null);
               setDraftScore("");
@@ -1119,7 +1130,11 @@ function MobileScoreEntryContent() {
 
                 <div className="mt-3">
                   <a
-                    href={groupId ? `/captura/tarjeta?group_id=${groupId}` : "/captura/tarjeta"}
+                    href={
+                      groupId
+                        ? buildCapturaTarjetaPath(groupId, meFromUrl, caddieFromUrl)
+                        : "/captura/tarjeta"
+                    }
                     className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm"
                   >
                     Ver tarjeta completa
@@ -1131,7 +1146,8 @@ function MobileScoreEntryContent() {
                 {players.map((player) => {
                   const isActive = player.id === activePlayerId;
                   const currentHoleScore = getPlayerHoleScore(player, currentHole);
-                  const isMe = myEntryId != null && player.id === myEntryId;
+                  const isMe =
+                    viewerEntryId != null && player.id === viewerEntryId;
 
                   return (
                     <div
@@ -1199,7 +1215,7 @@ function MobileScoreEntryContent() {
                   identificado como jugador. Score privado: lo guarda
                   contra /api/captura/private-score.
                 */}
-                {myEntryId ? (() => {
+                {viewerEntryId ? (() => {
                   const isActive = activePlayerId === ME_ID;
                   const currentHoleScore = myPrivateScores[currentHole];
                   return (
@@ -1335,7 +1351,7 @@ function MobileScoreEntryContent() {
         {tab === "tarjeta" && (
           <main className="flex-1 space-y-2 p-2">
             {/* Banner de testigo + toggle Mi Score (sólo visible si está identificado el jugador). */}
-            {myEntryId ? (
+            {viewerEntryId ? (
               <section className="rounded-xl bg-white px-3 py-2 shadow-sm text-[11px]">
                 {showMyCard && witnessTargetName ? (
                   <div
@@ -1398,7 +1414,7 @@ function MobileScoreEntryContent() {
                   players={players}
                   totalLabel="IN"
                   showGrandTotal={false}
-                  highlightPlayerId={myEntryId}
+                  highlightPlayerId={viewerEntryId}
                 />
 
                 <CompactCardSection
@@ -1407,13 +1423,13 @@ function MobileScoreEntryContent() {
                   players={players}
                   totalLabel="OUT"
                   showGrandTotal
-                  highlightPlayerId={myEntryId}
+                  highlightPlayerId={viewerEntryId}
                 />
               </div>
             </section>
 
             {/* Sección "MI SCORE" — tarjeta privada del jugador. */}
-            {myEntryId && showMyCard ? (
+            {viewerEntryId && showMyCard ? (
               <section className="rounded-xl border border-amber-300 bg-amber-50 px-2 py-2 shadow-sm">
                 <div className="mb-2 flex items-center justify-between">
                   <div>

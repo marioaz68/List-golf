@@ -309,11 +309,7 @@ export default function TarjetaCaptureClient({
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [syncHint, setSyncHint] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  /**
-   * Visibilidad del bloque "Mi Tarjeta" + banner del testigo.
-   * Por defecto visible en el primer render; se persiste por jugador en
-   * `localStorage` para que se respete entre navegaciones (Anotar → Tarjeta).
-   */
+  /** Visibilidad del bloque "Mi Tarjeta" + banner del testigo (toggle manual). */
   const [showMyCard, setShowMyCard] = useState<boolean>(true);
   const activeCellRef = useRef<ActiveCell | null>(null);
   const savingRef = useRef(false);
@@ -321,30 +317,6 @@ export default function TarjetaCaptureClient({
   useEffect(() => {
     activeCellRef.current = activeCell;
   }, [activeCell]);
-
-  // Carga inicial del toggle desde localStorage (si existe).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = `tarjeta:show-my-card:${initial.groupId}:${initial.myEntryId ?? "anon"}`;
-    try {
-      const v = window.localStorage.getItem(key);
-      if (v === "0") setShowMyCard(false);
-      else if (v === "1") setShowMyCard(true);
-    } catch {
-      // ignore
-    }
-  }, [initial.groupId, initial.myEntryId]);
-
-  // Persiste el toggle cuando cambie.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const key = `tarjeta:show-my-card:${initial.groupId}:${initial.myEntryId ?? "anon"}`;
-    try {
-      window.localStorage.setItem(key, showMyCard ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  }, [showMyCard, initial.groupId, initial.myEntryId]);
 
   // Listas y mapas derivados
   const witnessAssignmentMap = useMemo(() => {
@@ -672,6 +644,7 @@ export default function TarjetaCaptureClient({
       const caddie = params.get("caddie")?.trim();
       if (caddie) sp.set("caddie", caddie);
     }
+    sp.set("tab", "anotar");
     // Ruta pública (sin login) — espejo del módulo backoffice.
     return `/captura/mobile?${sp.toString()}`;
   }, [meta.groupId, meta.myEntryId]);
