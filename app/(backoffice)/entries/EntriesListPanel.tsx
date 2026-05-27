@@ -19,6 +19,8 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
+import ExportCommitteePromptButton from "./ExportCommitteePromptButton";
+import CommitteeReviewBadge from "./CommitteeReviewBadge";
 
 type RoundSignature = {
   round_no: number;
@@ -567,6 +569,11 @@ export default function EntriesListPanel({
     );
   }, [entries, locale]);
 
+  const flaggedCount = useMemo(
+    () => entries.filter((e) => e.flagged_for_committee).length,
+    [entries]
+  );
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
 
@@ -682,6 +689,11 @@ ${res.witness_url}`;
           <div className="text-[10px] text-gray-600">
             {filtered.length}/{entries.length}
           </div>
+
+          <ExportCommitteePromptButton
+            tournamentId={tournamentId}
+            flaggedCount={flaggedCount}
+          />
         </div>
         <p className="mt-1 w-full text-[10px] leading-snug text-gray-500">
           {te.roundBallLegend}
@@ -709,11 +721,17 @@ ${res.witness_url}`;
             <li key={e.id} className="px-1 py-2">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] font-semibold leading-snug text-gray-900">
-                    <span className="mr-1.5 tabular-nums text-gray-700">
+                  <p className="flex flex-wrap items-center gap-1 text-[12px] font-semibold leading-snug text-gray-900">
+                    <span className="tabular-nums text-gray-700">
                       {e.player_number ?? "—"}
                     </span>
-                    {fullName}
+                    <span className="min-w-0 truncate">{fullName}</span>
+                    {e.flagged_for_committee ? (
+                      <CommitteeReviewBadge
+                        reason={e.flagged_committee_reason}
+                        compact
+                      />
+                    ) : null}
                   </p>
                   <p className="mt-0.5 truncate text-[10px] text-gray-600">
                     {e.players?.club_label ?? "—"} · {te.thHcp}{" "}
@@ -793,7 +811,16 @@ ${res.witness_url}`;
                     {e.player_number ?? "-"}
                   </td>
 
-                  <td className="px-1 py-1">{fullName}</td>
+                  <td className="px-1 py-1">
+                    <span className="inline-flex max-w-[220px] flex-wrap items-center gap-1">
+                      <span className="truncate">{fullName}</span>
+                      {e.flagged_for_committee ? (
+                        <CommitteeReviewBadge
+                          reason={e.flagged_committee_reason}
+                        />
+                      ) : null}
+                    </span>
+                  </td>
 
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
 
