@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 
 type Props = {
@@ -48,14 +47,14 @@ export default async function HandicapReportViewerPage({
             </p>
           ) : null}
         </div>
-        <Link
+        <a
           href={back}
           aria-label="Cerrar y volver"
           className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 text-sm font-bold text-white no-underline hover:bg-white/20 active:bg-white/30"
         >
           <span aria-hidden>✕</span>
           <span className="hidden sm:inline">Cerrar</span>
-        </Link>
+        </a>
       </header>
 
       <main className="min-h-0 flex-1 overflow-hidden bg-white">
@@ -71,13 +70,13 @@ export default async function HandicapReportViewerPage({
         className="border-t border-slate-700 bg-slate-800 px-3 py-2 text-white"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
-        <Link
+        <a
           href={back}
           className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/30 bg-emerald-600 px-4 text-sm font-bold text-white no-underline shadow-sm hover:bg-emerald-700 active:bg-emerald-800"
         >
           <span aria-hidden>✕</span>
           Cerrar y volver a votar
-        </Link>
+        </a>
       </footer>
     </div>
   );

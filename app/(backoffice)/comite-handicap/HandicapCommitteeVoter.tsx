@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useMemo, useState, useTransition } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   HANDICAP_ADJUSTMENT_MAX,
   HANDICAP_ADJUSTMENT_MIN,
@@ -654,6 +661,24 @@ function PlayerVoteCard({
   const [justSaved, setJustSaved] = useState(false);
   const [open, setOpen] = useState(!collapsedByDefault);
 
+  const articleId = `entry-${entry.entry_id}`;
+  const articleRef = useRef<HTMLElement | null>(null);
+
+  // Si esta carta es la del hash actual (regreso desde el visor de reporte),
+  // la abrimos y la centramos en pantalla.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash !== `#${articleId}`) return;
+    setOpen(true);
+    const t = window.setTimeout(() => {
+      articleRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [articleId]);
+
   const lockedByClosing = !committeeOpen;
 
   async function handleSave() {
@@ -690,8 +715,10 @@ function PlayerVoteCard({
 
   return (
     <article
+      ref={articleRef}
+      id={articleId}
       className={[
-        "rounded-lg border shadow-sm",
+        "scroll-mt-20 rounded-lg border shadow-sm",
         flagged
           ? "border-rose-400 bg-rose-50/50 text-slate-900 ring-1 ring-rose-200"
           : saved
@@ -814,6 +841,7 @@ function PlayerVoteCard({
         <div className="mb-2">
           <OpenHandicapFileButton
             playerId={entry.player_id}
+            entryId={entry.entry_id}
             hasFile={Boolean(entry.has_handicap_file)}
             compact={false}
           />
