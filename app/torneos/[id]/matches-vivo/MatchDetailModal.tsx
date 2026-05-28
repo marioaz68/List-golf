@@ -246,7 +246,7 @@ export default function MatchDetailModal({
           {detail ? (
             <section>
               <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                Marcador hoyo por hoyo
+                Diferencial acumulado por hoyo
               </h3>
               <PointsChart
                 holes={detail.holes}
@@ -330,53 +330,45 @@ function PointsChart({
   bottomLabel: string;
 }) {
   const width = 720;
-  const height = 200;
-  const padL = 32;
-  const padR = 10;
-  const padT = 14;
-  const padB = 24;
+  const height = 220;
+  const padL = 36;
+  const padR = 12;
+  const padT = 18;
+  const padB = 28;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
-  // Sólo hoyos con score, empezando en 0.
   const played = holes.filter((h) => h.has_score);
-  const maxY = Math.max(
-    2,
-    ...played.map((h) =>
-      Math.max(
-        Number(h.top_cum ?? 0),
-        Number(h.bottom_cum ?? 0)
-      )
-    )
+  const diffs = played.map(
+    (h) => Number(h.top_cum ?? 0) - Number(h.bottom_cum ?? 0)
   );
+  const maxAbs = Math.max(2, ...diffs.map((d) => Math.abs(d)));
 
-  function xFor(hole: number): number {
-    return padL + (innerW * hole) / holesInMatch;
+  const slotW = innerW / holesInMatch;
+  const barW = Math.max(8, Math.min(28, slotW * 0.7));
+
+  function xCenter(hole: number): number {
+    return padL + slotW * (hole - 0.5);
   }
   function yFor(val: number): number {
-    return padT + innerH - (innerH * val) / maxY;
+    return padT + innerH / 2 - (innerH / 2) * (val / maxAbs);
   }
+  const yZero = yFor(0);
 
-  const topPath = [
-    `M ${xFor(0)} ${yFor(0)}`,
-    ...played.map((h) => `L ${xFor(h.hole_no)} ${yFor(Number(h.top_cum ?? 0))}`),
-  ].join(" ");
-  const bottomPath = [
-    `M ${xFor(0)} ${yFor(0)}`,
-    ...played.map((h) => `L ${xFor(h.hole_no)} ${yFor(Number(h.bottom_cum ?? 0))}`),
-  ].join(" ");
-
-  // Cuadrícula horizontal.
+  const tickStep = Math.max(1, Math.ceil(maxAbs / 3));
   const yTicks: number[] = [];
-  for (let v = 0; v <= maxY; v += Math.max(1, Math.ceil(maxY / 4))) {
-    yTicks.push(v);
+  for (let v = -maxAbs; v <= maxAbs; v += tickStep) yTicks.push(v);
+  if (!yTicks.includes(0)) yTicks.push(0);
+
+  function fmt(v: number): string {
+    if (v === 0) return "AS";
+    const s = Number.isInteger(v) ? String(Math.abs(v)) : Math.abs(v).toFixed(1);
+    return (v > 0 ? "+" : "−") + s;
   }
-  if (yTicks[yTicks.length - 1] !== maxY) yTicks.push(maxY);
 
   return (
     <div className="rounded-lg border border-white/10 bg-[#0a1220] p-2">
       <svg viewBox={`0 0 ${width} ${height}`} className="block w-full">
-        {/* Ejes / grid */}
         {yTicks.map((v) => (
           <g key={v}>
             <line
@@ -384,34 +376,38 @@ function PointsChart({
               x2={width - padR}
               y1={yFor(v)}
               y2={yFor(v)}
-              stroke="rgba(255,255,255,0.08)"
-              strokeDasharray="2 3"
+              stroke={
+                v === 0 ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.08)"
+              }
+              strokeDasharray={v === 0 ? "0" : "2 3"}
             />
             <text
               x={padL - 6}
               y={yFor(v) + 3}
               fontSize={9}
               textAnchor="end"
-              fill="rgba(148,163,184,0.85)"
+              fill={
+                v === 0 ? "rgba(226,232,240,0.85)" : "rgba(148,163,184,0.85)"
+              }
             >
-              {v}
+              {fmt(v)}
             </text>
           </g>
         ))}
-        {/* Hoyo ticks */}
+
         {Array.from({ length: holesInMatch }, (_, i) => i + 1).map((h) => (
           <g key={h}>
             <line
-              x1={xFor(h)}
-              x2={xFor(h)}
+              x1={xCenter(h)}
+              x2={xCenter(h)}
               y1={padT + innerH}
               y2={padT + innerH + 3}
               stroke="rgba(148,163,184,0.6)"
             />
             {h % 3 === 0 || h === 1 || h === holesInMatch ? (
               <text
-                x={xFor(h)}
-                y={padT + innerH + 14}
+                x={xCenter(h)}
+                y={padT + innerH + 16}
                 fontSize={9}
                 textAnchor="middle"
                 fill="rgba(148,163,184,0.85)"
@@ -422,38 +418,48 @@ function PointsChart({
           </g>
         ))}
 
-        {/* Líneas */}
         {played.length > 0 ? (
-          <>
-            <path
-              d={topPath}
-              fill="none"
-              stroke="rgb(34,211,238)"
-              strokeWidth={2.2}
-            />
-            <path
-              d={bottomPath}
-              fill="none"
-              stroke="rgb(232,121,249)"
-              strokeWidth={2.2}
-            />
-            {played.map((h) => (
-              <g key={`pts-${h.hole_no}`}>
-                <circle
-                  cx={xFor(h.hole_no)}
-                  cy={yFor(Number(h.top_cum ?? 0))}
-                  r={2.8}
-                  fill="rgb(34,211,238)"
+          played.map((h) => {
+            const diff =
+              Number(h.top_cum ?? 0) - Number(h.bottom_cum ?? 0);
+            const cx = xCenter(h.hole_no);
+            const yV = yFor(diff);
+            const barTop = Math.min(yZero, yV);
+            const barH = Math.max(0.5, Math.abs(yV - yZero));
+            const color =
+              diff > 0
+                ? "rgb(34,211,238)"
+                : diff < 0
+                  ? "rgb(232,121,249)"
+                  : "rgba(148,163,184,0.6)";
+            const labelY =
+              diff >= 0 ? barTop - 4 : barTop + barH + 10;
+            return (
+              <g key={`bar-${h.hole_no}`}>
+                <rect
+                  x={cx - barW / 2}
+                  y={barTop}
+                  width={barW}
+                  height={barH}
+                  rx={2}
+                  fill={color}
+                  opacity={diff === 0 ? 0.5 : 0.9}
                 />
-                <circle
-                  cx={xFor(h.hole_no)}
-                  cy={yFor(Number(h.bottom_cum ?? 0))}
-                  r={2.8}
-                  fill="rgb(232,121,249)"
-                />
+                {diff !== 0 ? (
+                  <text
+                    x={cx}
+                    y={labelY}
+                    fontSize={9}
+                    textAnchor="middle"
+                    fill={color}
+                    fontWeight={700}
+                  >
+                    {fmt(diff)}
+                  </text>
+                ) : null}
               </g>
-            ))}
-          </>
+            );
+          })
         ) : (
           <text
             x={padL + innerW / 2}
@@ -469,11 +475,13 @@ function PointsChart({
 
       <div className="mt-1 flex flex-wrap items-center justify-center gap-3 text-[10px] text-slate-300">
         <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-3 rounded-sm bg-cyan-400" /> {topLabel}
+          <span className="h-2 w-3 rounded-sm bg-cyan-400" /> {topLabel} arriba
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="h-2 w-3 rounded-sm bg-fuchsia-400" /> {bottomLabel}
+          <span className="h-2 w-3 rounded-sm bg-fuchsia-400" /> {bottomLabel}{" "}
+          arriba
         </span>
+        <span className="text-slate-500">Línea AS = empate acumulado</span>
       </div>
     </div>
   );
