@@ -28,6 +28,7 @@ type HoleDetail = {
     nets: { top_a: number; top_b: number; bottom_a: number; bottom_b: number };
   } | null;
   stroke_index: number | null;
+  par: number | null;
 };
 
 type MatchDetail = {
@@ -507,6 +508,8 @@ function HoleTable({
   const bA = bottomPlayers[0]?.label ?? "—";
   const bB = bottomPlayers[1]?.label ?? "—";
 
+  const hasPar = holes.some((h) => h.par != null);
+
   function strokeOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
     switch (who) {
       case "tA":
@@ -518,6 +521,22 @@ function HoleTable({
       case "bB":
         return h.bottom_player_b_strokes;
     }
+  }
+
+  /** Devuelve "low" (bola baja de la pareja) o "high" (bola alta) para
+   *  cada jugador en cada hoyo, usando `breakdown.nets` cuando hay tarjeta
+   *  capturada. Empate dentro de la pareja → A queda como low, B como high
+   *  (mismo criterio que `pairLowHighStrokes`). */
+  function role(
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): "low" | "high" | null {
+    if (!h.breakdown) return null;
+    const { nets } = h.breakdown;
+    if (who === "tA") return nets.top_a <= nets.top_b ? "low" : "high";
+    if (who === "tB") return nets.top_b < nets.top_a ? "low" : "high";
+    if (who === "bA") return nets.bottom_a <= nets.bottom_b ? "low" : "high";
+    return nets.bottom_b < nets.bottom_a ? "low" : "high";
   }
 
   function sumStrokes(
@@ -575,13 +594,98 @@ function HoleTable({
   const stickyName =
     "sticky left-0 z-10 border-b border-r border-white/10 bg-[#0a1220] px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[6px_0_12px_-4px_rgba(0,0,0,0.45)]";
   const holeTh =
-    "w-[22px] min-w-[22px] border-b border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-50 sm:w-6";
+    "w-[24px] min-w-[24px] border-b border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-50 sm:w-7";
   const subTh =
     "w-[30px] min-w-[28px] border-b border-l border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-200 sm:w-[34px]";
   const cellTd =
-    "w-[22px] min-w-[22px] border-b border-white/10 px-0 py-0.5 text-center text-[10px] sm:w-6";
+    "w-[24px] min-w-[24px] border-b border-white/10 px-0 py-0.5 text-center text-[10px] sm:w-7";
   const subTd =
     "w-[30px] min-w-[28px] border-b border-l border-white/10 px-0 py-0.5 text-center text-[10px] font-semibold sm:w-[34px]";
+
+  /** Marcador del bruto: rojo con círculo cuando es bajo par, azul/cuadro
+   *  cuando es arriba de par; plano cuando es par o no hay par. */
+  function StrokeMark({
+    strokes,
+    par,
+  }: {
+    strokes: number | null;
+    par: number | null;
+  }) {
+    if (strokes == null)
+      return <span className="text-slate-500">—</span>;
+    if (par == null)
+      return <span className="text-white">{strokes}</span>;
+    const diff = Number(strokes) - Number(par);
+    if (diff <= -2) {
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-full border-2 border-rose-400 bg-rose-500/15"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-[3px] block rounded-full border border-rose-300/90"
+          />
+          <span className="relative z-10 text-[10px] font-bold text-rose-50">
+            {strokes}
+          </span>
+        </span>
+      );
+    }
+    if (diff === -1) {
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-full border border-rose-400 bg-rose-500/15"
+          />
+          <span className="relative z-10 text-[10px] font-bold text-rose-100">
+            {strokes}
+          </span>
+        </span>
+      );
+    }
+    if (diff === 1) {
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-sm border border-sky-300/90 bg-sky-500/10"
+          />
+          <span className="relative z-10 text-[10px] font-bold text-sky-100">
+            {strokes}
+          </span>
+        </span>
+      );
+    }
+    if (diff >= 2) {
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-sm border-2 border-sky-300/90 bg-sky-500/15"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-[3px] block rounded-sm border border-sky-200/80"
+          />
+          <span className="relative z-10 text-[10px] font-bold text-sky-50">
+            {strokes}
+          </span>
+        </span>
+      );
+    }
+    return <span className="text-white">{strokes}</span>;
+  }
+
+  /** Tint de fondo según rol: amarillo = bola baja de la pareja, azul
+   *  marino = bola alta. Se aplica encima del stripe. */
+  function roleTint(r: "low" | "high" | null): string {
+    if (r === "low") return "bg-amber-400/20";
+    if (r === "high") return "bg-indigo-700/30";
+    return "";
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#0a1220]">
@@ -605,6 +709,55 @@ function HoleTable({
           </tr>
         </thead>
         <tbody>
+          {hasPar ? (
+            <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
+              <td
+                className={`${stickyName} bg-emerald-950 border-l-2 border-l-emerald-500/50`}
+              >
+                Par
+              </td>
+              {Array.from({ length: 9 }, (_, i) => (
+                <td
+                  key={`par-${i + 1}`}
+                  className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold`}
+                >
+                  {holes[i]?.par ?? "—"}
+                </td>
+              ))}
+              <td className={`${subTd} bg-emerald-950/80`}>
+                {holes
+                  .slice(0, 9)
+                  .every((h) => h.par != null)
+                  ? holes
+                      .slice(0, 9)
+                      .reduce((acc, h) => acc + Number(h.par ?? 0), 0)
+                  : "—"}
+              </td>
+              {Array.from({ length: 9 }, (_, i) => (
+                <td
+                  key={`par-${i + 10}`}
+                  className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold`}
+                >
+                  {holes[i + 9]?.par ?? "—"}
+                </td>
+              ))}
+              <td className={`${subTd} bg-emerald-950/80`}>
+                {holes
+                  .slice(9, 18)
+                  .every((h) => h.par != null)
+                  ? holes
+                      .slice(9, 18)
+                      .reduce((acc, h) => acc + Number(h.par ?? 0), 0)
+                  : "—"}
+              </td>
+              <td className={`${subTd} bg-emerald-950/80`}>
+                {holes.every((h) => h.par != null)
+                  ? holes.reduce((acc, h) => acc + Number(h.par ?? 0), 0)
+                  : "—"}
+              </td>
+            </tr>
+          ) : null}
+
           {playerRows.map((p, idx) => {
             const stripe =
               idx % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
@@ -620,23 +773,31 @@ function HoleTable({
                 <td className={`${stickyName} ${stripe} ${accent}`}>
                   <span className="truncate">{p.name}</span>
                 </td>
-                {Array.from({ length: 9 }, (_, i) => (
-                  <td
-                    key={`c-${p.key}-${i + 1}`}
-                    className={`${cellTd} ${stripe}`}
-                  >
-                    {fmtStroke(strokeOf(holes[i]!, p.key))}
-                  </td>
-                ))}
+                {Array.from({ length: 9 }, (_, i) => {
+                  const h = holes[i]!;
+                  const r = role(h, p.key);
+                  return (
+                    <td
+                      key={`c-${p.key}-${i + 1}`}
+                      className={`${cellTd} ${stripe} ${roleTint(r)}`}
+                    >
+                      <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
+                    </td>
+                  );
+                })}
                 <td className={`${subTd} ${stripe}`}>{fmtStroke(out)}</td>
-                {Array.from({ length: 9 }, (_, i) => (
-                  <td
-                    key={`c-${p.key}-${i + 10}`}
-                    className={`${cellTd} ${stripe}`}
-                  >
-                    {fmtStroke(strokeOf(holes[i + 9]!, p.key))}
-                  </td>
-                ))}
+                {Array.from({ length: 9 }, (_, i) => {
+                  const h = holes[i + 9]!;
+                  const r = role(h, p.key);
+                  return (
+                    <td
+                      key={`c-${p.key}-${i + 10}`}
+                      className={`${cellTd} ${stripe} ${roleTint(r)}`}
+                    >
+                      <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
+                    </td>
+                  );
+                })}
                 <td className={`${subTd} ${stripe}`}>{fmtStroke(inn)}</td>
                 <td className={`${subTd} ${stripe} text-white`}>
                   {fmtStroke(tot)}
@@ -697,14 +858,35 @@ function HoleTable({
           })()}
         </tbody>
       </table>
-      <p className="border-t border-white/10 px-2 py-1 text-[9px] text-slate-400">
-        Diferencial = puntos acumulados de{" "}
-        <span className="text-cyan-300">{topLabel}</span> menos{" "}
-        <span className="text-fuchsia-300">{bottomLabel}</span>. Positivo = va
-        arriba <span className="text-cyan-300">{topLabel}</span>; negativo = va
-        arriba <span className="text-fuchsia-300">{bottomLabel}</span>; AS =
-        empate acumulado.
-      </p>
+      <div className="space-y-1 border-t border-white/10 px-2 py-1.5 text-[9px] text-slate-400">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-rose-400 bg-rose-500/15" />
+            Bajo par (eagle/birdie)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-flex h-3 w-3 items-center justify-center rounded-sm border border-sky-300/90 bg-sky-500/10" />
+            Arriba de par (bogey+)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded-sm bg-amber-400/40" />
+            Bola baja de la pareja
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded-sm bg-indigo-700/60" />
+            Bola alta de la pareja
+          </span>
+        </div>
+        <p>
+          Diferencial = puntos acumulados de{" "}
+          <span className="text-cyan-300">{topLabel}</span> menos{" "}
+          <span className="text-fuchsia-300">{bottomLabel}</span>. Positivo =
+          va arriba <span className="text-cyan-300">{topLabel}</span>; negativo
+          = va arriba{" "}
+          <span className="text-fuchsia-300">{bottomLabel}</span>; AS = empate
+          acumulado.
+        </p>
+      </div>
     </div>
   );
 }

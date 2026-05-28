@@ -32,6 +32,7 @@ export type PublicMatchDetailHole = {
     nets: { top_a: number; top_b: number; bottom_a: number; bottom_b: number };
   } | null;
   stroke_index: number | null;
+  par: number | null;
 };
 
 export type PublicMatchDetailPayload = {
@@ -139,17 +140,22 @@ export async function loadDerivedMatchDetail(
 
   const { data: tholes } = await admin
     .from("tournament_holes")
-    .select("hole_number, handicap_index")
+    .select("hole_number, handicap_index, par")
     .eq("tournament_id", tournamentId)
     .order("hole_number", { ascending: true });
 
   const strokeIndexByHole: StrokeIndexByHole = new Map();
+  const parByHole = new Map<number, number>();
   for (const row of (tholes ?? []) as Array<{
     hole_number: number;
     handicap_index: number | null;
+    par: number | null;
   }>) {
     if (row.handicap_index != null && Number.isFinite(Number(row.handicap_index))) {
       strokeIndexByHole.set(row.hole_number, Number(row.handicap_index));
+    }
+    if (row.par != null && Number.isFinite(Number(row.par))) {
+      parByHole.set(row.hole_number, Number(row.par));
     }
   }
 
@@ -314,6 +320,7 @@ export async function loadDerivedMatchDetail(
         bottom_player_b_strokes: bottom_b,
         breakdown: null,
         stroke_index: strokeIndexByHole.get(h) ?? null,
+        par: parByHole.get(h) ?? null,
       });
       continue;
     }
@@ -345,6 +352,7 @@ export async function loadDerivedMatchDetail(
         bottom_player_b_strokes: bottom_b,
         breakdown: null,
         stroke_index: strokeIndexByHole.get(h) ?? null,
+        par: parByHole.get(h) ?? null,
       });
       continue;
     }
@@ -366,6 +374,7 @@ export async function loadDerivedMatchDetail(
       bottom_player_b_strokes: bottom_b,
       breakdown: res.breakdown,
       stroke_index: strokeIndexByHole.get(h) ?? null,
+      par: parByHole.get(h) ?? null,
     });
   }
 
