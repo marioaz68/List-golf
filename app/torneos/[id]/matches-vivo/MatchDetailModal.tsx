@@ -270,6 +270,7 @@ export default function MatchDetailModal({
                 bottomPlayers={bottomPlayers}
                 topLabel={topName}
                 bottomLabel={bottomName}
+                allowancePct={detail.allowance_pct}
               />
             </section>
           ) : null}
@@ -496,17 +497,33 @@ function HoleTable({
   bottomPlayers,
   topLabel,
   bottomLabel,
+  allowancePct,
 }: {
   holes: HoleDetail[];
   topPlayers: PlayerInfo[];
   bottomPlayers: PlayerInfo[];
   topLabel: string;
   bottomLabel: string;
+  allowancePct: number;
 }) {
   const tA = topPlayers[0]?.label ?? "—";
   const tB = topPlayers[1]?.label ?? "—";
   const bA = bottomPlayers[0]?.label ?? "—";
   const bB = bottomPlayers[1]?.label ?? "—";
+
+  /** PH del torneo al % de allowance (ej. 80%). Si la entry ya guardó PH
+   *  oficial vía WHS, se respeta; si no, se calcula desde HI × %. */
+  function tournamentPh(p: PlayerInfo | undefined): number | null {
+    if (!p) return null;
+    if (p.ph != null && Number.isFinite(Number(p.ph))) return Number(p.ph);
+    if (!Number.isFinite(Number(p.hi))) return null;
+    return Math.round((Number(p.hi) * allowancePct) / 100);
+  }
+
+  const tAph = tournamentPh(topPlayers[0]);
+  const tBph = tournamentPh(topPlayers[1]);
+  const bAph = tournamentPh(bottomPlayers[0]);
+  const bBph = tournamentPh(bottomPlayers[1]);
 
   const hasPar = holes.some((h) => h.par != null);
 
@@ -620,11 +637,12 @@ function HoleTable({
     key: "tA" | "tB" | "bA" | "bB";
     name: string;
     team: "top" | "bottom";
+    ph: number | null;
   }> = [
-    { key: "tA", name: tA, team: "top" },
-    { key: "tB", name: tB, team: "top" },
-    { key: "bA", name: bA, team: "bottom" },
-    { key: "bB", name: bB, team: "bottom" },
+    { key: "tA", name: tA, team: "top", ph: tAph },
+    { key: "tB", name: tB, team: "top", ph: tBph },
+    { key: "bA", name: bA, team: "bottom", ph: bAph },
+    { key: "bB", name: bB, team: "bottom", ph: bBph },
   ];
 
   const stickyName =
@@ -832,7 +850,17 @@ function HoleTable({
             return (
               <tr key={`row-${p.key}`} className={`${stripe}`}>
                 <td className={`${stickyName} ${stripe} ${accent}`}>
-                  <span className="truncate">{p.name}</span>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="truncate">{p.name}</span>
+                    {p.ph != null ? (
+                      <span
+                        className="shrink-0 rounded bg-amber-500/20 px-1 py-px text-[8px] font-bold leading-none text-amber-200"
+                        title={`Handicap del torneo al ${allowancePct}%`}
+                      >
+                        PH {p.ph}
+                      </span>
+                    ) : null}
+                  </div>
                 </td>
                 {Array.from({ length: 9 }, (_, i) => {
                   const h = holes[i]!;
