@@ -1274,6 +1274,8 @@ function MobileScoreEntryContent() {
                   {liveLeaderboardUrl ? (
                     <a
                       href={liveLeaderboardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex h-10 items-center justify-center rounded-lg border border-emerald-400 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 shadow-sm"
                     >
                       Resultados en vivo
@@ -1534,6 +1536,8 @@ function MobileScoreEntryContent() {
                   {liveLeaderboardUrl ? (
                     <a
                       href={liveLeaderboardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
                     >
                       Resultados en vivo
@@ -1571,6 +1575,8 @@ function MobileScoreEntryContent() {
                   {liveLeaderboardUrl && !viewerEntryId ? (
                     <a
                       href={liveLeaderboardUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
                     >
                       Resultados en vivo

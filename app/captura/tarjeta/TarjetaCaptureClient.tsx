@@ -803,12 +803,14 @@ export default function TarjetaCaptureClient({
                   Anotar por hoyo
                 </Link>
                 {liveLeaderboardUrl ? (
-                  <Link
+                  <a
                     href={liveLeaderboardUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
                   >
                     Resultados en vivo
-                  </Link>
+                  </a>
                 ) : null}
                 {privateEntryIds.length > 0 ? (
                   <button
