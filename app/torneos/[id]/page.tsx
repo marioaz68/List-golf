@@ -36,6 +36,7 @@ import {
   type PublicPrizeRuleRow,
 } from "@/lib/leaderboard/filterPublicPrizeRules";
 import { parseLeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
+import AutoRefresh from "@/components/public/AutoRefresh";
 import PublicLeaderboardWithSearch from "./components/PublicLeaderboardWithSearch";
 import PublicCategoryCompetitionInfo from "./components/PublicCategoryCompetitionInfo";
 import PublicPrizesPanel from "./components/PublicPrizesPanel";
@@ -1381,6 +1382,7 @@ export default async function PublicTournamentPage({
     <div
       className={`bg-[#08111f] text-white ${isEmbed ? "min-h-0" : "min-h-screen"}`}
     >
+      <AutoRefresh intervalMs={10000} />
       {isEmbed && fromAdmin ? (
         <div className="sticky top-0 z-50 border-b border-white/10 bg-[#08111f]/95 px-3 py-2.5 backdrop-blur-sm sm:px-4">
           <Link
