@@ -152,8 +152,15 @@ export async function loadGroupCapture(
 
   const { data: entryRows } = await supabase
     .from("tournament_entries")
-    .select("id, player_id")
+    .select("id, player_id, category_id")
     .in("id", entryIds);
+
+  const categoryByEntry = new Map<string, string | null>(
+    (entryRows ?? []).map((row) => [
+      safeString(row.id),
+      safeString(row.category_id) || null,
+    ])
+  );
 
   const playerIds = (entryRows ?? [])
     .map((row) => safeString(row.player_id))
@@ -285,6 +292,7 @@ export async function loadGroupCapture(
       privateScores: includePrivate
         ? privateScoresByEntry[entryId] ?? createEmptyScores()
         : undefined,
+      categoryId: categoryByEntry.get(entryId) ?? null,
     });
   }
 
