@@ -314,8 +314,12 @@ export default function MatchesLiveGrid({
       <MatchDetailModal
         open={!!detail}
         onClose={() => setDetail(null)}
+        tournamentId={tournamentId}
         matchId={detail?.match.id ?? null}
-        isDerived={!!derivedFromPairings || (detail?.match.id?.startsWith("derived-") ?? false)}
+        isDerived={
+          !!derivedFromPairings ||
+          (detail?.match.id?.startsWith("derived-") ?? false)
+        }
         topTeam={detail?.topTeam ?? null}
         bottomTeam={detail?.bottomTeam ?? null}
         roundLabel={detail?.label}
