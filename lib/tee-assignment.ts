@@ -37,19 +37,20 @@ function calculateAge(birthYear: number | null) {
 }
 
 function matchRule(player: Player, rule: Rule) {
-
   const age = calculateAge(player.birth_year);
 
   if (rule.gender && rule.gender !== player.gender) {
     return false;
   }
 
-  if (rule.age_min !== null && age !== null && age < rule.age_min) {
-    return false;
+  // Si la regla exige edad y no sabemos la edad del jugador, NO aplica.
+  // Antes esta verificación dejaba pasar la regla (semánticamente
+  // incorrecto: un jugador sin birth_year terminaba en salidas seniors).
+  if (rule.age_min !== null) {
+    if (age === null || age < rule.age_min) return false;
   }
-
-  if (rule.age_max !== null && age !== null && age > rule.age_max) {
-    return false;
+  if (rule.age_max !== null) {
+    if (age === null || age > rule.age_max) return false;
   }
 
   if (

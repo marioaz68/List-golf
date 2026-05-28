@@ -9,6 +9,8 @@ import {
 
 export type CourseTeeForHandicap = {
   code: string | null;
+  name?: string | null;
+  color?: string | null;
   slope_men: number | null;
   slope_women: number | null;
   course_rating_men: number | null;
@@ -19,6 +21,8 @@ export type CourseTeeForHandicap = {
 export type TournamentTeeSetLite = {
   id: string;
   code: string | null;
+  name?: string | null;
+  color?: string | null;
 };
 
 export type TournamentHandicapContext = {
@@ -26,7 +30,12 @@ export type TournamentHandicapContext = {
   categoryTeeRules: Rule[];
   /** category_id → % de reglas de competencia (ej. 80). */
   allowancePctByCategory: Map<string, number>;
+  /** course_tee_sets indexados por code normalizado. */
   courseTeesByCode: Map<string, CourseTeeForHandicap>;
+  /** course_tee_sets indexados por nombre normalizado (sin acentos, sin paréntesis). */
+  courseTeesByNameNorm?: Map<string, CourseTeeForHandicap>;
+  /** course_tee_sets indexados por color normalizado. */
+  courseTeesByColor?: Map<string, CourseTeeForHandicap>;
   /** Fallback match play: salida M/F global del torneo. */
   matchplayFallback?: {
     allowance_pct: number;
@@ -53,6 +62,40 @@ function normalizeTeeCode(code: string | null | undefined): string {
   return String(code ?? "")
     .trim()
     .toUpperCase();
+}
+
+/** Normaliza el nombre/color para matchear entre `tee_sets` del torneo y `course_tee_sets`. */
+export function normalizeTeeName(s: string | null | undefined): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9 ]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function findCourseTee(
+  ctx: TournamentHandicapContext,
+  tee: TournamentTeeSetLite
+): CourseTeeForHandicap | null {
+  const code = normalizeTeeCode(tee.code);
+  if (code) {
+    const hit = ctx.courseTeesByCode.get(code);
+    if (hit) return hit;
+  }
+  const nameNorm = normalizeTeeName(tee.name ?? tee.code ?? null);
+  if (nameNorm && ctx.courseTeesByNameNorm) {
+    const hit = ctx.courseTeesByNameNorm.get(nameNorm);
+    if (hit) return hit;
+  }
+  const colorNorm = normalizeTeeName(tee.color ?? null);
+  if (colorNorm && ctx.courseTeesByColor) {
+    const hit = ctx.courseTeesByColor.get(colorNorm);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function whsFromCourseTee(
@@ -119,17 +162,24 @@ function resolveWhsTeeForEntry(
   const teeSetsForAssign = ctx.tournamentTeeSets.map((t) => ({
     id: t.id,
     code: t.code ?? "",
-    name: t.code ?? "",
+    name: t.name ?? t.code ?? "",
   }));
 
   const assigned = assignTeeSet(player, ctx.categoryTeeRules, teeSetsForAssign);
   if (assigned) {
     const tournamentTee = teeSetById.get(assigned.id);
-    const code = normalizeTeeCode(tournamentTee?.code);
-    const courseTee = code ? ctx.courseTeesByCode.get(code) : undefined;
-    if (courseTee) {
-      const tee = whsFromCourseTee(courseTee, gender);
-      if (tee) return { tee, allowance_pct, tee_code: code };
+    if (tournamentTee) {
+      const courseTee = findCourseTee(ctx, tournamentTee);
+      if (courseTee) {
+        const tee = whsFromCourseTee(courseTee, gender);
+        if (tee) {
+          return {
+            tee,
+            allowance_pct,
+            tee_code: normalizeTeeCode(tournamentTee.code) || (tournamentTee.name ?? null),
+          };
+        }
+      }
     }
   }
 

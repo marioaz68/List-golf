@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { listAccessibleTournaments } from "@/lib/auth/listAccessibleTournaments";
 import HandicapsByCategoryReport from "./HandicapsByCategoryReport";
+import { recomputeReportHandicaps } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,11 @@ export default async function ReportsPage(props: {
 
   const tournament = list.find((t) => t.id === effectiveId);
 
+  const hcapStatus =
+    typeof sp.hcap_status === "string" ? sp.hcap_status.trim() : "";
+  const hcapMessage =
+    typeof sp.hcap_message === "string" ? sp.hcap_message.trim() : "";
+
   return (
     <div className="space-y-3 p-2 md:p-3">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
@@ -128,7 +134,38 @@ export default async function ReportsPage(props: {
       ) : null}
 
       {tab === "handicaps" ? (
-        <HandicapsByCategoryReport tournamentId={effectiveId} />
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#0f172a] px-3 py-2">
+            <div className="text-[11px] text-slate-300">
+              <span className="font-semibold text-white">Persistencia.</span>{" "}
+              El reporte calcula CH/PH en vivo. Si quieres que la leaderboard y
+              la vista pública usen los mismos valores, guárdalos en BD.
+            </div>
+            <form action={recomputeReportHandicaps}>
+              <input type="hidden" name="tournament_id" value={effectiveId} />
+              <button
+                type="submit"
+                className="rounded border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/30"
+              >
+                Recalcular y guardar CH/PH
+              </button>
+            </form>
+          </div>
+
+          {hcapMessage ? (
+            <p
+              className={`rounded-md border px-3 py-1.5 text-[11px] ${
+                hcapStatus === "ok"
+                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                  : "border-amber-400/40 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {hcapMessage}
+            </p>
+          ) : null}
+
+          <HandicapsByCategoryReport tournamentId={effectiveId} />
+        </>
       ) : null}
     </div>
   );
