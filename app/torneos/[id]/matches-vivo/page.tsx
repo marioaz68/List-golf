@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
+import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import type { TournamentSettings } from "@/types/tournament";
 import MatchesLiveGrid from "./MatchesLiveGrid";
 
@@ -64,9 +65,9 @@ export default async function PublicMatchesLivePage(props: {
     .limit(1)
     .maybeSingle();
 
-  const bracketSize =
+  let bracketSize =
     (bracket?.config_json as { bracket_size?: number } | null)?.bracket_size ?? 0;
-  const roundCount =
+  let roundCount =
     bracketSize >= 2 ? roundCountForBracketSize(bracketSize) : 0;
 
   let initialMatches: Array<{
@@ -87,6 +88,8 @@ export default async function PublicMatchesLivePage(props: {
     bottom_points: number | null;
     match_status_after: string | null;
   }> = [];
+  let bracketIdForGrid: string | null = bracket?.id ?? null;
+  let derivedFromPairings = false;
 
   if (bracket?.id) {
     const { data: matchesRaw } = await supabase
@@ -109,6 +112,20 @@ export default async function PublicMatchesLivePage(props: {
     }
   }
 
+  // Fallback: si aún no hay bracket oficial pero ya hay salidas (pairings)
+  // armadas con equipos asignados, mostramos los matches del día a 0-0
+  // para que la página pública refleje los partidos en curso/próximos.
+  if (initialMatches.length === 0) {
+    const derived = await derivePairingGroupMatches(supabase, tournamentId);
+    if (derived.matches.length > 0) {
+      initialMatches = derived.matches.map((m) => ({ ...m }));
+      bracketSize = derived.bracketSize;
+      roundCount = derived.roundCount;
+      bracketIdForGrid = `derived-${tournamentId}`;
+      derivedFromPairings = true;
+    }
+  }
+
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
       <MatchesLiveGrid
@@ -117,10 +134,11 @@ export default async function PublicMatchesLivePage(props: {
         teams={teamsData.teams}
         initialMatches={initialMatches}
         initialHoles={initialHoles}
-        bracketId={bracket?.id ?? null}
+        bracketId={bracketIdForGrid}
         bracketSize={bracketSize}
         roundCount={roundCount}
         holesPerMatch={holesPerMatch}
+        derivedFromPairings={derivedFromPairings}
       />
     </main>
   );

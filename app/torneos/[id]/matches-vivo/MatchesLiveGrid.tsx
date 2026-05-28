@@ -38,6 +38,8 @@ type Props = {
   bracketSize: number;
   roundCount: number;
   holesPerMatch: number;
+  /** Cuando los matches vienen de pairing_groups (no del bracket oficial). */
+  derivedFromPairings?: boolean;
 };
 
 /** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
@@ -75,14 +77,15 @@ export default function MatchesLiveGrid({
   bracketSize,
   roundCount,
   holesPerMatch,
+  derivedFromPairings = false,
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
   const [holes, setHoles] = useState<HoleRow[]>(initialHoles);
 
-  // Realtime: matches del bracket
+  // Realtime: matches del bracket (sólo si es un bracket oficial real).
   useEffect(() => {
-    if (!tournamentId || !bracketId) return;
+    if (!tournamentId || !bracketId || derivedFromPairings) return;
     const supabase = createClient();
     const ch = supabase
       .channel(`mp-public-mlist-${tournamentId}`)
@@ -110,11 +113,11 @@ export default function MatchesLiveGrid({
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [tournamentId, bracketId]);
+  }, [tournamentId, bracketId, derivedFromPairings]);
 
-  // Realtime: hoyos (live scoring)
+  // Realtime: hoyos (live scoring) — sólo cuando hay bracket real.
   useEffect(() => {
-    if (!tournamentId || !bracketId || matches.length === 0) return;
+    if (!tournamentId || !bracketId || derivedFromPairings || matches.length === 0) return;
     const supabase = createClient();
     const matchIds = matches.map((m) => m.id);
     const ch = supabase
@@ -142,7 +145,7 @@ export default function MatchesLiveGrid({
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [tournamentId, bracketId, matches]);
+  }, [tournamentId, bracketId, matches, derivedFromPairings]);
 
   const teamById = useMemo(
     () => new Map(teams.map((t) => [t.id, t])),
@@ -213,6 +216,11 @@ export default function MatchesLiveGrid({
           <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
             {tournamentName}
           </h1>
+          {derivedFromPairings ? (
+            <p className="mt-1 text-[11px] text-amber-200">
+              Matches programados desde las salidas. El cuadro oficial aún no se publica.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <Stat label="Partidos" value={String(totals.total)} />
@@ -305,6 +313,7 @@ function MatchCard({
   const isBye = match.status === "bye";
   const isLive = match.status === "in_progress";
   const isDone = match.status === "completed";
+  const isScheduled = !isBye && !isLive && !isDone;
 
   const topPts = holes.reduce(
     (acc, h) => acc + (h.top_points != null ? Number(h.top_points) : 0),
@@ -323,6 +332,19 @@ function MatchCard({
   const winnerId = match.winner_pair_id ?? null;
   const topWin = !!winnerId && topTeam?.id === winnerId;
   const bottomWin = !!winnerId && bottomTeam?.id === winnerId;
+
+  // Programados con ambos equipos asignados → mostrar 0-0 (aún no inicia).
+  const showZeroForScheduled = isScheduled && !!topTeam && !!bottomTeam;
+  const topPtsDisplay: number | null = isLive || isDone
+    ? topPts
+    : showZeroForScheduled
+      ? 0
+      : null;
+  const bottomPtsDisplay: number | null = isLive || isDone
+    ? bottomPts
+    : showZeroForScheduled
+      ? 0
+      : null;
 
   return (
     <article
@@ -362,7 +384,7 @@ function MatchCard({
 
       <Side
         team={topTeam}
-        pts={isLive || isDone ? topPts : null}
+        pts={topPtsDisplay}
         isWinner={topWin}
         isAhead={isLive && topAhead}
       />
@@ -371,7 +393,7 @@ function MatchCard({
       </div>
       <Side
         team={bottomTeam}
-        pts={isLive || isDone ? bottomPts : null}
+        pts={bottomPtsDisplay}
         isWinner={bottomWin}
         isAhead={isLive && bottomAhead}
       />
