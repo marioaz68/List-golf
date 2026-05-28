@@ -506,12 +506,18 @@ export default function TarjetaCaptureClient({
       }));
     }
 
-    const role: "player" | "caddie" | "witness" | null = mode === "approve"
-      ? "witness"
-      : meta.myEntryId
-        ? "player"
-        : meta.caddieForEntryIds.length > 0
-          ? "caddie"
+    // Determinar mi rol respecto al jugador objetivo:
+    // jugador, caddie del jugador, testigo del jugador o ninguno.
+    const iAmThePlayer = meta.myEntryId === entryId;
+    const iAmTheirCaddie = (meta.caddieForEntryIds ?? []).includes(entryId);
+    const iAmTheirWitness =
+      witnessTargetForMe != null && witnessTargetForMe === entryId;
+    const role: "player" | "caddie" | "witness" | null = iAmThePlayer
+      ? "player"
+      : iAmTheirCaddie
+        ? "caddie"
+        : iAmTheirWitness
+          ? "witness"
           : null;
 
     try {
@@ -599,18 +605,32 @@ export default function TarjetaCaptureClient({
     }
   }
 
+  /**
+   * "Autoridad" del jugador objetivo:
+   *  - el propio jugador,
+   *  - su caddie,
+   *  - su testigo.
+   * Cuando la autoridad captura un score NO se marca rojo (mode=approve).
+   * Cualquier otra persona del grupo deja la celda en rojo si la celda
+   * ya tenía valor antes (mode=modify).
+   */
+  function publicSaveMode(entryId: string): "modify" | "approve" {
+    const iAmThePlayer = meta.myEntryId === entryId;
+    const iAmTheirCaddie = (meta.caddieForEntryIds ?? []).includes(entryId);
+    const iAmTheirWitness =
+      witnessTargetForMe != null && witnessTargetForMe === entryId;
+    return iAmThePlayer || iAmTheirCaddie || iAmTheirWitness
+      ? "approve"
+      : "modify";
+  }
+
   function pickScore(strokes: number | null) {
     if (!activeCell) return;
     const { entryId, hole, table } = activeCell;
     if (table === "private") {
       void persistPrivateScore(entryId, hole, strokes);
     } else {
-      const isApproveTarget =
-        witnessTargetForMe != null && witnessTargetForMe === entryId;
-      const wasPending = Boolean(pendingByEntry[entryId]?.[hole]);
-      const mode: "modify" | "approve" =
-        isApproveTarget && wasPending ? "approve" : "modify";
-      void persistPublicScore(entryId, hole, strokes, mode);
+      void persistPublicScore(entryId, hole, strokes, publicSaveMode(entryId));
     }
     closeKeypad();
   }
@@ -637,12 +657,12 @@ export default function TarjetaCaptureClient({
       if (table === "private") {
         void persistPrivateScore(entryId, hole, numeric);
       } else {
-        const isApproveTarget =
-          witnessTargetForMe != null && witnessTargetForMe === entryId;
-        const wasPending = Boolean(pendingByEntry[entryId]?.[hole]);
-        const mode: "modify" | "approve" =
-          isApproveTarget && wasPending ? "approve" : "modify";
-        void persistPublicScore(entryId, hole, numeric, mode);
+        void persistPublicScore(
+          entryId,
+          hole,
+          numeric,
+          publicSaveMode(entryId)
+        );
       }
     }
     closeKeypad();
