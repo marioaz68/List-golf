@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
@@ -153,6 +154,54 @@ export default function MatchesLiveGrid({
       supabase.removeChannel(ch);
     };
   }, [tournamentId, bracketId, matches, derivedFromPairings]);
+
+  // Realtime para matches derivados: cuando se captura/edita stroke play
+  // (hole_scores), pedimos al servidor que vuelva a derivar los matches
+  // del torneo. Usamos debounce para no recargar en cada hoyo individual.
+  const router = useRouter();
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!tournamentId || !derivedFromPairings) return;
+    const supabase = createClient();
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = setTimeout(() => {
+        refreshTimerRef.current = null;
+        if (typeof document !== "undefined" && document.hidden) return;
+        router.refresh();
+      }, 1200);
+    };
+    const ch = supabase
+      .channel(`mp-public-strokes-${tournamentId}`)
+      .on(
+        "postgres_changes" as never,
+        {
+          event: "*",
+          schema: "public",
+          table: "hole_scores",
+        },
+        scheduleRefresh
+      )
+      .on(
+        "postgres_changes" as never,
+        {
+          event: "*",
+          schema: "public",
+          table: "round_scores",
+        },
+        scheduleRefresh
+      )
+      .subscribe();
+    return () => {
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+      supabase.removeChannel(ch);
+    };
+  }, [tournamentId, derivedFromPairings, router]);
 
   const teamById = useMemo(
     () => new Map(teams.map((t) => [t.id, t])),
@@ -346,9 +395,8 @@ function MatchCard({
   onOpen?: () => void;
 }) {
   const isBye = match.status === "bye";
-  const isLive = match.status === "in_progress";
   const isDone = match.status === "completed";
-  const isScheduled = !isBye && !isLive && !isDone;
+  const isScheduled = !isBye && match.status !== "in_progress" && !isDone;
 
   const topPts = holes.reduce(
     (acc, h) => acc + (h.top_points != null ? Number(h.top_points) : 0),
@@ -376,18 +424,26 @@ function MatchCard({
   const topWin = !!winnerId && topTeam?.id === winnerId;
   const bottomWin = !!winnerId && bottomTeam?.id === winnerId;
 
-  // Programados con ambos equipos asignados → mostrar 0-0 (aún no inicia).
-  const showZeroForScheduled = isScheduled && !!topTeam && !!bottomTeam;
-  const topPtsDisplay: number | null = isLive || isDone
-    ? topPts
-    : showZeroForScheduled
-      ? 0
-      : null;
-  const bottomPtsDisplay: number | null = isLive || isDone
-    ? bottomPts
-    : showZeroForScheduled
-      ? 0
-      : null;
+  // Si hay hoyos capturados (live scoring real o derivado desde tarjetas),
+  // mostramos los puntos aunque el match esté en `scheduled` (los derivados
+  // siempre vienen así porque aún no hay bracket oficial publicado).
+  const hasCapturedHoles = lastHolePlayed > 0;
+  const isLive =
+    match.status === "in_progress" || (isScheduled && hasCapturedHoles);
+  const showZeroForScheduled =
+    isScheduled && !hasCapturedHoles && !!topTeam && !!bottomTeam;
+  const topPtsDisplay: number | null =
+    isLive || isDone || hasCapturedHoles
+      ? topPts
+      : showZeroForScheduled
+        ? 0
+        : null;
+  const bottomPtsDisplay: number | null =
+    isLive || isDone || hasCapturedHoles
+      ? bottomPts
+      : showZeroForScheduled
+        ? 0
+        : null;
 
   const clickable = !!onOpen && !isBye;
 
