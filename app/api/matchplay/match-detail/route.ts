@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { loadMatchForScoring } from "@/lib/matchplay/loadMatchForScoring";
+import {
+  isDerivedMatchId,
+  loadDerivedMatchDetail,
+} from "@/lib/matchplay/loadDerivedMatchDetail";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -7,17 +11,15 @@ export const dynamic = "force-dynamic";
 /**
  * Detalle público de un match (live + breakdown por hoyo).
  *
- * GET /api/matchplay/match-detail?match_id=<uuid>
+ * GET /api/matchplay/match-detail?match_id=<uuid|derived-...>&tournament_id=<uuid>
  *
- * Devuelve la info necesaria para renderizar el modal de detalle:
- *  - 4 jugadores con HI y PH (course/playing handicap)
- *  - Por cada hoyo: stroke index, gross + net por jugador, puntos low/high,
- *    puntos del hoyo y status acumulado.
- *  - Acumulado por hoyo para graficar.
+ * - match_id UUID: match oficial en `matchplay_matches`.
+ * - match_id derived-*: match desde salidas + hole_scores (requiere tournament_id).
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const matchId = (url.searchParams.get("match_id") ?? "").trim();
+  const tournamentId = (url.searchParams.get("tournament_id") ?? "").trim();
 
   if (!matchId) {
     return NextResponse.json(
@@ -26,8 +28,40 @@ export async function GET(req: Request) {
     );
   }
 
-  // Verificación de torneo público.
   const admin = createAdminClient();
+
+  if (isDerivedMatchId(matchId)) {
+    if (!tournamentId) {
+      return NextResponse.json(
+        { ok: false, error: "tournament_id requerido para match derivado" },
+        { status: 400 }
+      );
+    }
+
+    const { data: tournament } = await admin
+      .from("tournaments")
+      .select("is_public")
+      .eq("id", tournamentId)
+      .maybeSingle();
+
+    if (!tournament || tournament.is_public === false) {
+      return NextResponse.json(
+        { ok: false, error: "no disponible" },
+        { status: 404 }
+      );
+    }
+
+    const derived = await loadDerivedMatchDetail(admin, tournamentId, matchId);
+    if (!derived) {
+      return NextResponse.json(
+        { ok: false, error: "match derivado no encontrado" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, match: derived });
+  }
+
   const { data: mp } = await admin
     .from("matchplay_matches")
     .select("tournament_id")
@@ -62,7 +96,6 @@ export async function GET(req: Request) {
     );
   }
 
-  // Línea por hoyo + acumulado de puntos para la gráfica.
   let topAcc = 0;
   let bottomAcc = 0;
   const lineByHole = match.holes.map((h) => {

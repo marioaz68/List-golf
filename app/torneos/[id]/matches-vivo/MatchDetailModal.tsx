@@ -52,8 +52,9 @@ type MatchDetail = {
 type Props = {
   open: boolean;
   onClose: () => void;
+  tournamentId: string;
   matchId: string | null;
-  /** true cuando es un match derivado de pairings (sin scoring real). */
+  /** true cuando es un match derivado de pairings (scoring desde hole_scores). */
   isDerived: boolean;
   topTeam: MatchPlayTeamRow | null;
   bottomTeam: MatchPlayTeamRow | null;
@@ -75,6 +76,7 @@ function fmtPh(n: number | null | undefined): string {
 export default function MatchDetailModal({
   open,
   onClose,
+  tournamentId,
   matchId,
   isDerived,
   topTeam,
@@ -93,7 +95,7 @@ export default function MatchDetailModal({
       setError(null);
       return;
     }
-    if (isDerived || !matchId) {
+    if (!matchId) {
       setDetail(null);
       setLoading(false);
       setError(null);
@@ -102,7 +104,11 @@ export default function MatchDetailModal({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/matchplay/match-detail?match_id=${encodeURIComponent(matchId)}`)
+    const params = new URLSearchParams({
+      match_id: matchId,
+      tournament_id: tournamentId,
+    });
+    fetch(`/api/matchplay/match-detail?${params.toString()}`)
       .then(async (r) => {
         const j = (await r.json().catch(() => null)) as
           | { ok: true; match: MatchDetail }
@@ -126,7 +132,7 @@ export default function MatchDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [open, matchId, isDerived]);
+  }, [open, matchId, tournamentId, isDerived]);
 
   if (!open) return null;
 
@@ -184,16 +190,17 @@ export default function MatchDetailModal({
                 {detail.result_text}
               </p>
             ) : null}
-            {!isDerived && detail ? (
+            {detail ? (
               <p className="mt-0.5 text-[11px] text-slate-400">
                 {detail.last_hole_played > 0
                   ? `Va en hoyo ${detail.last_hole_played} de ${detail.holes_in_match} · Allowance ${detail.allowance_pct}%`
                   : `Aún no inicia · Allowance ${detail.allowance_pct}%`}
-              </p>
-            ) : null}
-            {isDerived ? (
-              <p className="mt-0.5 text-[11px] text-amber-200">
-                Match programado. El detalle de scoring aparecerá cuando se publique el cuadro y empiece la captura.
+                {isDerived ? (
+                  <span className="text-amber-200">
+                    {" "}
+                    · Calculado desde captura de tarjetas
+                  </span>
+                ) : null}
               </p>
             ) : null}
           </div>
