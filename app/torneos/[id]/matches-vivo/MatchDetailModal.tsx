@@ -555,6 +555,42 @@ function HoleTable({
     return any ? total : null;
   }
 
+  function sumPar(from: number, to: number): number | null {
+    let total = 0;
+    for (let h = from; h <= to; h++) {
+      const p = holes[h - 1]?.par;
+      if (p == null) return null;
+      total += Number(p);
+    }
+    return total;
+  }
+
+  /** Total a par para el rango (bruto − par). Si falta par o algún
+   *  bruto del jugador en el rango, devuelve null. */
+  function strokesToPar(
+    who: "tA" | "tB" | "bA" | "bB",
+    from: number,
+    to: number
+  ): number | null {
+    const s = sumStrokes(who, from, to);
+    const p = sumPar(from, to);
+    if (s == null || p == null) return null;
+    return s - p;
+  }
+
+  function fmtToPar(n: number | null): string {
+    if (n == null) return "—";
+    if (n === 0) return "E";
+    return (n > 0 ? "+" : "−") + Math.abs(n);
+  }
+
+  function toParTone(n: number | null): string {
+    if (n == null) return "text-slate-500";
+    if (n < 0) return "text-rose-200";
+    if (n > 0) return "text-sky-200";
+    return "text-emerald-200";
+  }
+
   function diffAt(holeNo: number): number | null {
     const h = holes[holeNo - 1];
     if (!h || !h.has_score) return null;
@@ -698,14 +734,35 @@ function HoleTable({
                 {i + 1}
               </th>
             ))}
-            <th className={subTh}>OUT</th>
+            <th className={subTh}>
+              OUT
+              {hasPar ? (
+                <span className="block text-[7px] font-normal text-cyan-300/70">
+                  vs par
+                </span>
+              ) : null}
+            </th>
             {Array.from({ length: 9 }, (_, i) => (
               <th key={`hh-${i + 10}`} className={holeTh}>
                 {i + 10}
               </th>
             ))}
-            <th className={subTh}>IN</th>
-            <th className={subTh}>TOT</th>
+            <th className={subTh}>
+              IN
+              {hasPar ? (
+                <span className="block text-[7px] font-normal text-cyan-300/70">
+                  vs par
+                </span>
+              ) : null}
+            </th>
+            <th className={subTh}>
+              TOT
+              {hasPar ? (
+                <span className="block text-[7px] font-normal text-cyan-300/70">
+                  vs par
+                </span>
+              ) : null}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -765,9 +822,13 @@ function HoleTable({
               p.team === "top"
                 ? "border-l-2 border-l-cyan-500/40"
                 : "border-l-2 border-l-fuchsia-500/40";
-            const out = sumStrokes(p.key, 1, 9);
-            const inn = sumStrokes(p.key, 10, 18);
-            const tot = out != null && inn != null ? out + inn : null;
+            const outStr = sumStrokes(p.key, 1, 9);
+            const innStr = sumStrokes(p.key, 10, 18);
+            const totStr =
+              outStr != null && innStr != null ? outStr + innStr : null;
+            const outTp = hasPar ? strokesToPar(p.key, 1, 9) : null;
+            const innTp = hasPar ? strokesToPar(p.key, 10, 18) : null;
+            const totTp = hasPar ? strokesToPar(p.key, 1, 18) : null;
             return (
               <tr key={`row-${p.key}`} className={`${stripe}`}>
                 <td className={`${stickyName} ${stripe} ${accent}`}>
@@ -785,7 +846,9 @@ function HoleTable({
                     </td>
                   );
                 })}
-                <td className={`${subTd} ${stripe}`}>{fmtStroke(out)}</td>
+                <td className={`${subTd} ${stripe} ${hasPar ? toParTone(outTp) : ""}`}>
+                  {hasPar ? fmtToPar(outTp) : fmtStroke(outStr)}
+                </td>
                 {Array.from({ length: 9 }, (_, i) => {
                   const h = holes[i + 9]!;
                   const r = role(h, p.key);
@@ -798,9 +861,18 @@ function HoleTable({
                     </td>
                   );
                 })}
-                <td className={`${subTd} ${stripe}`}>{fmtStroke(inn)}</td>
-                <td className={`${subTd} ${stripe} text-white`}>
-                  {fmtStroke(tot)}
+                <td className={`${subTd} ${stripe} ${hasPar ? toParTone(innTp) : ""}`}>
+                  {hasPar ? fmtToPar(innTp) : fmtStroke(innStr)}
+                </td>
+                <td
+                  className={`${subTd} ${stripe} font-bold ${
+                    hasPar ? toParTone(totTp) : "text-white"
+                  }`}
+                  title={
+                    totStr != null && hasPar ? `bruto ${totStr}` : undefined
+                  }
+                >
+                  {hasPar ? fmtToPar(totTp) : fmtStroke(totStr)}
                 </td>
               </tr>
             );
@@ -877,6 +949,14 @@ function HoleTable({
             Bola alta de la pareja
           </span>
         </div>
+        {hasPar ? (
+          <p>
+            OUT / IN / TOT muestran el resultado <strong>bruto vs par</strong>{" "}
+            (+5, E, −2) para comparar a los 4 jugadores sin sus ventajas de
+            hándicap. La ventaja del match (bola baja / alta) sólo aplica a
+            los puntos de la pareja.
+          </p>
+        ) : null}
         <p>
           Diferencial = puntos acumulados de{" "}
           <span className="text-cyan-300">{topLabel}</span> menos{" "}
