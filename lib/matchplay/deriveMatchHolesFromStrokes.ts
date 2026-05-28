@@ -167,7 +167,6 @@ export async function deriveMatchHolesFromStrokes(
     hole_number: number | null;
     hole_no: number | null;
     strokes: number | null;
-    score: number | null;
   };
 
   const playerIds = Array.from(
@@ -194,7 +193,7 @@ export async function deriveMatchHolesFromStrokes(
   if (roundScoreIds.length > 0) {
     const { data: hsRaw } = await admin
       .from("hole_scores")
-      .select("round_score_id, hole_number, hole_no, strokes, score")
+      .select("round_score_id, hole_number, hole_no, strokes")
       .in("round_score_id", roundScoreIds);
     holeScores = (hsRaw ?? []) as HoleScoreRow[];
   }
@@ -204,7 +203,7 @@ export async function deriveMatchHolesFromStrokes(
   for (const hs of holeScores) {
     const holeNo = hs.hole_number ?? hs.hole_no;
     if (holeNo == null) continue;
-    const g = hs.strokes ?? hs.score;
+    const g = hs.strokes;
     if (g == null) continue;
     const m = grossByRsHole.get(hs.round_score_id) ?? new Map<number, number>();
     m.set(Number(holeNo), Number(g));
