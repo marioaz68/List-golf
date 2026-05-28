@@ -700,6 +700,31 @@ export default function TarjetaCaptureClient({
     return `/captura/mobile?${sp.toString()}`;
   }, [meta.groupId, meta.myEntryId]);
 
+  /**
+   * Link a resultados en vivo (página pública del torneo). Si el visitante
+   * es jugador (?me=...) intenta ir directo a su categoría; si es caddie
+   * usa la categoría del primer jugador que supervisa; si no, no se
+   * agrega category_id (mostrará la pestaña por defecto).
+   */
+  const liveLeaderboardUrl = useMemo(() => {
+    const tid = meta.tournamentId?.trim();
+    if (!tid) return null;
+    let preferredEntryId: string | null = null;
+    if (meta.myEntryId) preferredEntryId = meta.myEntryId;
+    else if (meta.caddieForEntryIds.length > 0) {
+      preferredEntryId = meta.caddieForEntryIds[0] ?? null;
+    }
+    const targetPlayer = preferredEntryId
+      ? meta.players.find((p) => p.entryId === preferredEntryId) ?? null
+      : null;
+    const categoryId = targetPlayer?.categoryId ?? null;
+    const sp = new URLSearchParams();
+    if (categoryId) sp.set("category_id", categoryId);
+    sp.set("view", "live");
+    const qs = sp.toString();
+    return `/torneos/${tid}${qs ? `?${qs}` : ""}`;
+  }, [meta.tournamentId, meta.myEntryId, meta.caddieForEntryIds, meta.players]);
+
   // Cantidad de pendientes que ME tocan aprobar
   const pendingForMeCount = useMemo(() => {
     if (!witnessTargetForMe) return 0;
@@ -777,6 +802,14 @@ export default function TarjetaCaptureClient({
                 >
                   Anotar por hoyo
                 </Link>
+                {liveLeaderboardUrl ? (
+                  <Link
+                    href={liveLeaderboardUrl}
+                    className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
+                  >
+                    Resultados en vivo
+                  </Link>
+                ) : null}
                 {privateEntryIds.length > 0 ? (
                   <button
                     type="button"

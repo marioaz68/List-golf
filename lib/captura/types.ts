@@ -31,6 +31,8 @@ export type GroupCapturePlayer = {
   /** Score privado del jugador ("Mi Tarjeta"). Solo se incluye si el cliente
    *  está autorizado para verla (?me=entryId del propio jugador o caddie). */
   privateScores?: HoleScores;
+  /** Categoría del jugador (para deep-link a resultados en vivo). */
+  categoryId?: string | null;
 };
 
 export type WitnessAssignmentPayload = {

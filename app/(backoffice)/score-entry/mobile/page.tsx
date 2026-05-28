@@ -716,6 +716,10 @@ function MobileScoreEntryContent() {
   const [caddieForEntryIds, setCaddieForEntryIds] = useState<string[]>([]);
   /** Mapa entryId (jugador) -> witnessEntryId (su testigo). */
   const [witnessesMap, setWitnessesMap] = useState<Record<string, string>>({});
+  /** Mapa entryId (jugador) -> category_id (para link a resultados en vivo). */
+  const [categoryByEntry, setCategoryByEntry] = useState<Record<string, string | null>>({});
+  /** Tournament ID del grupo (para link a la página pública). */
+  const [tournamentId, setTournamentId] = useState<string | null>(null);
   /** Entry ID del jugador a quien atestiguo (yo soy su testigo). */
   const [witnessTargetEntryId, setWitnessTargetEntryId] = useState<string | null>(null);
   /** Nombre legible del jugador a quien atestiguo. */
@@ -767,6 +771,7 @@ function MobileScoreEntryContent() {
         const json = (await res.json()) as {
           ok?: boolean;
           data?: {
+            tournamentId?: string | null;
             myEntryId?: string | null;
             caddieForEntryIds?: string[];
             witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
@@ -776,6 +781,7 @@ function MobileScoreEntryContent() {
               scores: PlayerRow["scores"];
               pending?: Partial<Record<HoleNumber, boolean>>;
               privateScores?: PlayerRow["scores"];
+              categoryId?: string | null;
             }>;
           };
         };
@@ -785,9 +791,13 @@ function MobileScoreEntryContent() {
         const data = json.data;
         const myId = data.myEntryId ?? (meTrim || null);
         setMyEntryId(myId);
+        setTournamentId(data.tournamentId ?? null);
         setCaddieForEntryIds(
           Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
         );
+        const catMap: Record<string, string | null> = {};
+        for (const p of data.players) catMap[p.entryId] = p.categoryId ?? null;
+        setCategoryByEntry(catMap);
 
         // Mapa de testigos: yo atestiguo a alguien si soy su witness.
         let targetEid: string | null = null;
@@ -881,6 +891,26 @@ function MobileScoreEntryContent() {
     () => players.find((p) => p.id === signPlayerId) ?? null,
     [players, signPlayerId]
   );
+
+  /**
+   * Link a resultados en vivo del torneo, filtrado a la categoría del
+   * jugador identificado (o del primer jugador supervisado si es caddie).
+   */
+  const liveLeaderboardUrl = useMemo(() => {
+    if (!tournamentId) return null;
+    let preferredEntryId: string | null = null;
+    if (viewerEntryId) preferredEntryId = viewerEntryId;
+    else if (caddieForEntryIds.length > 0) {
+      preferredEntryId = caddieForEntryIds[0] ?? null;
+    }
+    const categoryId = preferredEntryId
+      ? categoryByEntry[preferredEntryId] ?? null
+      : null;
+    const sp = new URLSearchParams();
+    if (categoryId) sp.set("category_id", categoryId);
+    sp.set("view", "live");
+    return `/torneos/${tournamentId}?${sp.toString()}`;
+  }, [tournamentId, viewerEntryId, caddieForEntryIds, categoryByEntry]);
 
   function isHoleComplete(hole: HoleNumber) {
     return players.every((player) => player.scores[hole] !== null);
@@ -1230,7 +1260,7 @@ function MobileScoreEntryContent() {
                     : "Modo demo (sin group_id)"}
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                   <a
                     href={
                       groupId
@@ -1241,6 +1271,14 @@ function MobileScoreEntryContent() {
                   >
                     Ver tarjeta completa
                   </a>
+                  {liveLeaderboardUrl ? (
+                    <a
+                      href={liveLeaderboardUrl}
+                      className="inline-flex h-10 items-center justify-center rounded-lg border border-emerald-400 bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 shadow-sm"
+                    >
+                      Resultados en vivo
+                    </a>
+                  ) : null}
                 </div>
               </section>
 
@@ -1492,7 +1530,15 @@ function MobileScoreEntryContent() {
                     Tu testigo: {myWitnessName}
                   </div>
                 ) : null}
-                <div className="mt-2 flex justify-end">
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                  {liveLeaderboardUrl ? (
+                    <a
+                      href={liveLeaderboardUrl}
+                      className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
+                    >
+                      Resultados en vivo
+                    </a>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setShowMyCard((v) => !v)}
@@ -1511,8 +1557,8 @@ function MobileScoreEntryContent() {
             ) : null}
 
             <section className="rounded-xl bg-white px-2 py-2 shadow-sm">
-              <div className="mb-2 flex items-center justify-between">
-                <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
                   <div className="text-sm font-bold text-slate-900">
                     Tarjeta completa
                   </div>
@@ -1521,8 +1567,18 @@ function MobileScoreEntryContent() {
                   </div>
                 </div>
 
-                <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
-                  Firmas {signedCount}/{players.length}
+                <div className="flex items-center gap-2">
+                  {liveLeaderboardUrl && !viewerEntryId ? (
+                    <a
+                      href={liveLeaderboardUrl}
+                      className="inline-flex rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-900"
+                    >
+                      Resultados en vivo
+                    </a>
+                  ) : null}
+                  <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-700">
+                    Firmas {signedCount}/{players.length}
+                  </div>
                 </div>
               </div>
 
