@@ -336,6 +336,7 @@ function CompactCardSection({
   totalLabel,
   showGrandTotal,
   highlightPlayerId,
+  witnessTargetPlayerId,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -344,6 +345,8 @@ function CompactCardSection({
   showGrandTotal: boolean;
   /** Si se proporciona, esa fila se pinta en azul cielo (jugador identificado). */
   highlightPlayerId?: string | null;
+  /** Si se proporciona, esa fila se pinta en ámbar (mi jugador a atestiguar). */
+  witnessTargetPlayerId?: string | null;
 }) {
   const gridCols = showGrandTotal
     ? "56px repeat(9,minmax(0,1fr)) 36px 36px"
@@ -430,13 +433,27 @@ function CompactCardSection({
           const grandTotal = sumScores(player.scores, ALL_HOLES);
           const isMe =
             highlightPlayerId != null && player.id === highlightPlayerId;
+          const isWitnessTarget =
+            !isMe &&
+            witnessTargetPlayerId != null &&
+            player.id === witnessTargetPlayerId;
+          const rowBg = isMe
+            ? "bg-sky-50"
+            : isWitnessTarget
+              ? "bg-amber-50"
+              : "bg-white";
+          const totalBg = isMe
+            ? "bg-sky-100"
+            : isWitnessTarget
+              ? "bg-amber-100"
+              : "";
 
           return (
             <div
               key={`${title}-player-${player.id}`}
               className={[
                 "grid items-center border-b border-slate-200 last:border-b-0",
-                isMe ? "bg-sky-50" : "bg-white",
+                rowBg,
               ].join(" ")}
               style={{ gridTemplateColumns: gridCols }}
             >
@@ -462,7 +479,7 @@ function CompactCardSection({
               <div
                 className={[
                   "py-1 text-center text-[10px] font-bold text-slate-900",
-                  isMe ? "bg-sky-100" : "",
+                  totalBg,
                 ].join(" ")}
               >
                 {sectionTotal > 0 ? sectionTotal : ""}
@@ -472,7 +489,7 @@ function CompactCardSection({
                 <div
                   className={[
                     "py-1 text-center text-[10px] font-bold text-slate-900",
-                    isMe ? "bg-sky-100" : "",
+                    totalBg,
                   ].join(" ")}
                 >
                   {grandTotal > 0 ? grandTotal : ""}
@@ -1207,6 +1224,10 @@ function MobileScoreEntryContent() {
                   const currentHoleScore = getPlayerHoleScore(player, currentHole);
                   const isMe =
                     viewerEntryId != null && player.id === viewerEntryId;
+                  const isWitnessTarget =
+                    !isMe &&
+                    witnessTargetEntryId != null &&
+                    player.id === witnessTargetEntryId;
                   const isPendingHole = Boolean(player.pending?.[currentHole]);
 
                   return (
@@ -1221,12 +1242,19 @@ function MobileScoreEntryContent() {
                           ? "border-blue-500 bg-blue-50"
                           : isMe
                             ? "border-sky-300 bg-sky-50"
-                            : "border-slate-200 bg-white",
+                            : isWitnessTarget
+                              ? "border-amber-400 bg-amber-50"
+                              : "border-slate-200 bg-white",
                       ].join(" ")}
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="min-w-0 truncate text-[15px] font-semibold">
-                          {player.name}
+                        <div className="min-w-0 flex flex-1 items-center gap-1 truncate text-[15px] font-semibold">
+                          <span className="truncate">{player.name}</span>
+                          {isWitnessTarget ? (
+                            <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-900">
+                              Testigo
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="text-xs text-slate-500">
@@ -1480,6 +1508,7 @@ function MobileScoreEntryContent() {
                   totalLabel="IN"
                   showGrandTotal={false}
                   highlightPlayerId={viewerEntryId}
+                  witnessTargetPlayerId={witnessTargetEntryId}
                 />
 
                 <CompactCardSection
@@ -1489,6 +1518,7 @@ function MobileScoreEntryContent() {
                   totalLabel="OUT"
                   showGrandTotal
                   highlightPlayerId={viewerEntryId}
+                  witnessTargetPlayerId={witnessTargetEntryId}
                 />
               </div>
             </section>
