@@ -14,8 +14,6 @@ export type OfficialCategoryCloseLabels = {
   captureCta: string;
 };
 
-const PENDING_LIST_MAX = 10;
-
 export default function OfficialCategoryClosePanel({
   cards,
   labels,
@@ -31,8 +29,10 @@ export default function OfficialCategoryClosePanel({
     <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => {
         const isComplete = card.pending === 0;
+        // Permitimos expandir la lista siempre que existan jugadores
+        // pendientes — sin tope artificial.
         const canListPending =
-          card.pending > 0 && card.pending <= PENDING_LIST_MAX;
+          card.pending > 0 && card.pendingPlayers.length > 0;
         const isExpanded = expandedCode === card.categoryCode;
 
         const pillText = isComplete
@@ -59,7 +59,7 @@ export default function OfficialCategoryClosePanel({
             )}
 
             {canListPending && isExpanded ? (
-              <ul className="mt-1.5 max-h-40 space-y-0.5 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-1.5">
+              <ul className="mt-1.5 max-h-72 space-y-0.5 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-1.5">
                 <li className="px-1.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/40">
                   {labels.pendingHeading}
                 </li>
