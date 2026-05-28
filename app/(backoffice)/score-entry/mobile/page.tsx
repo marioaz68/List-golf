@@ -29,6 +29,8 @@ type PlayerRow = {
   id: string;
   name: string;
   scores: HoleScores;
+  /** Celdas con cambio pendiente de aprobación del testigo. */
+  pending?: Partial<Record<HoleNumber, boolean>>;
 };
 
 const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -152,12 +154,22 @@ function getScoreCellClass(score: number | null, par: number) {
 function ScoreCell({
   score,
   par,
+  isPending,
 }: {
   score: number | null;
   par: number;
+  isPending?: boolean;
 }) {
   if (score === null) {
     return <span className="inline-flex h-6 w-6 items-center justify-center" />;
+  }
+
+  if (isPending) {
+    return (
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+        {score}
+      </span>
+    );
   }
 
   return <span className={getScoreCellClass(score, par)}>{score}</span>;
@@ -442,6 +454,7 @@ function CompactCardSection({
                   <ScoreCell
                     score={player.scores[hole]}
                     par={PAR_BY_HOLE[hole]}
+                    isPending={Boolean(player.pending?.[hole])}
                   />
                 </div>
               ))}
@@ -749,7 +762,7 @@ function MobileScoreEntryContent() {
         setGroupLoading(false);
 
         const data = json.data;
-        const myId = data.myEntryId ?? null;
+        const myId = data.myEntryId ?? (meTrim || null);
         setMyEntryId(myId);
 
         // Mapa de testigos: yo atestiguo a alguien si soy su witness.
@@ -812,7 +825,12 @@ function MobileScoreEntryContent() {
             ) {
               scores[editingHole] = prev.scores[editingHole];
             }
-            return { id: p.entryId, name: p.name, scores };
+            return {
+              id: p.entryId,
+              name: p.name,
+              scores,
+              pending: { ...(p.pending ?? {}) },
+            };
           })
         );
       } catch {
@@ -887,19 +905,43 @@ function MobileScoreEntryContent() {
 
     if (!groupId) return;
 
-    // Determinar modo: si yo soy el testigo del jugador y la celda está
-    // pendiente, este guardado es una aprobación. Si no, es modificación.
+    const targetPlayer = players.find((p) => p.id === playerId);
+    const holeWasPending = Boolean(targetPlayer?.pending?.[hole]);
     const isApproveTarget =
       witnessTargetEntryId != null && witnessTargetEntryId === playerId;
     const mode: "modify" | "approve" =
-      isApproveTarget && pendingForMeCount > 0 ? "approve" : "modify";
-    const role = isApproveTarget && mode === "approve"
-      ? "witness"
-      : meParam?.trim()
-        ? "player"
-        : caddieParam?.trim()
-          ? "caddie"
-          : null;
+      isApproveTarget && holeWasPending ? "approve" : "modify";
+    const role =
+      mode === "approve"
+        ? "witness"
+        : meParam?.trim()
+          ? "player"
+          : caddieParam?.trim()
+            ? "caddie"
+            : null;
+
+    // Optimista: modificación a celda con valor previo → rojo; aprobar → limpia.
+    if (mode === "approve") {
+      setPlayers((current) =>
+        current.map((player) => {
+          if (player.id !== playerId) return player;
+          const nextPending = { ...(player.pending ?? {}) };
+          delete nextPending[hole];
+          return { ...player, pending: nextPending };
+        })
+      );
+    } else if (targetPlayer?.scores[hole] != null && strokes != null) {
+      setPlayers((current) =>
+        current.map((player) =>
+          player.id === playerId
+            ? {
+                ...player,
+                pending: { ...(player.pending ?? {}), [hole]: true },
+              }
+            : player
+        )
+      );
+    }
 
     savingRef.current = true;
     void fetch("/api/captura/score", {
@@ -913,9 +955,26 @@ function MobileScoreEntryContent() {
         mode,
         role,
       }),
-    }).finally(() => {
-      savingRef.current = false;
-    });
+    })
+      .then(async (res) => {
+        const json = (await res.json()) as {
+          ok?: boolean;
+          pendingWitness?: boolean;
+        };
+        if (!json.ok || typeof json.pendingWitness !== "boolean") return;
+        setPlayers((current) =>
+          current.map((player) => {
+            if (player.id !== playerId) return player;
+            const nextPending = { ...(player.pending ?? {}) };
+            if (json.pendingWitness) nextPending[hole] = true;
+            else delete nextPending[hole];
+            return { ...player, pending: nextPending };
+          })
+        );
+      })
+      .finally(() => {
+        savingRef.current = false;
+      });
   }
 
   function selectPlayer(playerId: string) {
@@ -1148,6 +1207,7 @@ function MobileScoreEntryContent() {
                   const currentHoleScore = getPlayerHoleScore(player, currentHole);
                   const isMe =
                     viewerEntryId != null && player.id === viewerEntryId;
+                  const isPendingHole = Boolean(player.pending?.[currentHole]);
 
                   return (
                     <div
@@ -1178,7 +1238,12 @@ function MobileScoreEntryContent() {
                         <button
                           type="button"
                           onClick={() => selectPlayer(player.id)}
-                          className="flex h-11 w-[62px] shrink-0 items-center justify-center rounded-lg border border-red-500 bg-red-50 text-2xl font-bold text-black"
+                          className={[
+                            "flex h-11 w-[62px] shrink-0 items-center justify-center rounded-lg border text-2xl font-bold",
+                            isPendingHole
+                              ? "border-red-700 bg-red-500 text-white"
+                              : "border-red-500 bg-red-50 text-black",
+                          ].join(" ")}
                         >
                           {currentHoleScore ?? ""}
                         </button>

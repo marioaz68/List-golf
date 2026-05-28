@@ -14,6 +14,38 @@ function safeString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+type ExistingHoleRow = {
+  id: string;
+  strokes: number | null;
+  pending_witness?: boolean | null;
+  hole_no?: number | null;
+  hole_number?: number | null;
+};
+
+/** Busca fila de hoyo por round_score_id (hole_number o hole_no legacy). */
+async function findExistingHoleRow(
+  admin: SupabaseClient,
+  roundScoreId: string,
+  hole: HoleNumber
+): Promise<ExistingHoleRow | null> {
+  const { data: rows } = await admin
+    .from("hole_scores")
+    .select("id, strokes, pending_witness, hole_no, hole_number")
+    .eq("round_score_id", roundScoreId);
+
+  for (const row of rows ?? []) {
+    const r = row as ExistingHoleRow;
+    const h =
+      typeof r.hole_number === "number"
+        ? r.hole_number
+        : typeof r.hole_no === "number"
+          ? r.hole_no
+          : null;
+    if (h === hole) return r;
+  }
+  return null;
+}
+
 /** Guarda o borra un score de un hoyo para un entry en la ronda del grupo. */
 export async function saveGroupHoleScore(
   admin: SupabaseClient,
@@ -108,12 +140,7 @@ export async function saveGroupHoleScore(
     roundScoreId = String(inserted.id);
   }
 
-  const { data: existingHole } = await admin
-    .from("hole_scores")
-    .select("id, strokes, pending_witness")
-    .eq("round_score_id", roundScoreId)
-    .eq("hole_number", hole)
-    .maybeSingle();
+  const existingHole = await findExistingHoleRow(admin, roundScoreId, hole);
 
   const mode = params.mode ?? "modify";
   const actorRole = params.actorRole ?? null;
@@ -125,22 +152,16 @@ export async function saveGroupHoleScore(
     }
   } else if (existingHole?.id) {
     const previousStrokes =
-      typeof (existingHole as { strokes?: number | null }).strokes === "number"
-        ? ((existingHole as { strokes: number }).strokes as number)
-        : null;
-    const wasPending = Boolean(
-      (existingHole as { pending_witness?: boolean }).pending_witness
-    );
+      typeof existingHole.strokes === "number" ? existingHole.strokes : null;
 
     if (mode === "approve") {
+      // Testigo confirma: limpia rojo (mismo score o distinto).
       pendingWitness = false;
-    } else if (
-      previousStrokes != null &&
-      previousStrokes !== params.strokes
-    ) {
+    } else if (previousStrokes != null) {
+      // Ya había valor: cualquier recaptura marca pendiente de testigo.
       pendingWitness = true;
     } else {
-      pendingWitness = wasPending;
+      pendingWitness = false;
     }
 
     const { error: upErr } = await admin

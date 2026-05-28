@@ -478,6 +478,9 @@ export default function TarjetaCaptureClient({
     savingRef.current = true;
     setSaveError(null);
 
+    const hadPreviousScore =
+      (scoresByEntry[entryId]?.[hole] ?? null) != null;
+
     // Optimistic update
     setScoresByEntry((prev) => ({
       ...prev,
@@ -492,6 +495,11 @@ export default function TarjetaCaptureClient({
         delete cur[hole];
         return { ...prev, [entryId]: cur };
       });
+    } else if (mode === "modify" && strokes != null && hadPreviousScore) {
+      setPendingByEntry((prev) => ({
+        ...prev,
+        [entryId]: { ...(prev[entryId] ?? {}), [hole]: true },
+      }));
     }
 
     const role: "player" | "caddie" | "witness" | null = mode === "approve"
