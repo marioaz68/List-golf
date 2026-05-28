@@ -1,6 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "next/navigation";
 
 type HoleNumber =
@@ -123,6 +130,16 @@ function getShortName(name: string) {
 
 function sumScores(scores: HoleScores, holes: HoleNumber[]) {
   return holes.reduce((acc, hole) => acc + (scores[hole] ?? 0), 0);
+}
+
+function getInitials(name: string): string {
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function sumPar(holes: HoleNumber[]) {
@@ -720,6 +737,14 @@ function MobileScoreEntryContent() {
   const [categoryByEntry, setCategoryByEntry] = useState<Record<string, string | null>>({});
   /** Tournament ID del grupo (para link a la página pública). */
   const [tournamentId, setTournamentId] = useState<string | null>(null);
+  /** Firmas de tarjeta por entry (player + witness). */
+  type CardSig = {
+    signedByPlayerAt: string | null;
+    signedByWitnessAt: string | null;
+  };
+  const [signaturesByEntry, setSignaturesByEntry] = useState<Record<string, CardSig>>({});
+  const [signingFor, setSigningFor] = useState<string | null>(null);
+  const [signError, setSignError] = useState<string | null>(null);
   /** Entry ID del jugador a quien atestiguo (yo soy su testigo). */
   const [witnessTargetEntryId, setWitnessTargetEntryId] = useState<string | null>(null);
   /** Nombre legible del jugador a quien atestiguo. */
@@ -782,6 +807,11 @@ function MobileScoreEntryContent() {
               pending?: Partial<Record<HoleNumber, boolean>>;
               privateScores?: PlayerRow["scores"];
               categoryId?: string | null;
+              signatures?: {
+                signedByPlayerAt: string | null;
+                signedByWitnessAt: string | null;
+                signedByWitnessEntryId: string | null;
+              };
             }>;
           };
         };
@@ -796,8 +826,16 @@ function MobileScoreEntryContent() {
           Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
         );
         const catMap: Record<string, string | null> = {};
-        for (const p of data.players) catMap[p.entryId] = p.categoryId ?? null;
+        const sigMap: Record<string, CardSig> = {};
+        for (const p of data.players) {
+          catMap[p.entryId] = p.categoryId ?? null;
+          sigMap[p.entryId] = {
+            signedByPlayerAt: p.signatures?.signedByPlayerAt ?? null,
+            signedByWitnessAt: p.signatures?.signedByWitnessAt ?? null,
+          };
+        }
         setCategoryByEntry(catMap);
+        setSignaturesByEntry(sigMap);
 
         // Mapa de testigos: yo atestiguo a alguien si soy su witness.
         let targetEid: string | null = null;
@@ -891,6 +929,79 @@ function MobileScoreEntryContent() {
     () => players.find((p) => p.id === signPlayerId) ?? null,
     [players, signPlayerId]
   );
+
+  const isCardComplete = useCallback(
+    (entryId: string | null) => {
+      if (!entryId) return false;
+      const player = players.find((p) => p.id === entryId);
+      if (!player) return false;
+      return ALL_HOLES.every((h) => player.scores[h] != null);
+    },
+    [players]
+  );
+
+  const myCardComplete = isCardComplete(viewerEntryId);
+  const witnessCardComplete = isCardComplete(witnessTargetEntryId);
+  const mySig = viewerEntryId ? signaturesByEntry[viewerEntryId] : null;
+  const witnessSig = witnessTargetEntryId
+    ? signaturesByEntry[witnessTargetEntryId]
+    : null;
+  const myCardFullySigned = Boolean(
+    mySig?.signedByPlayerAt && mySig?.signedByWitnessAt
+  );
+  const witnessCardFullySigned = Boolean(
+    witnessSig?.signedByPlayerAt && witnessSig?.signedByWitnessAt
+  );
+  const myInitials = viewerEntryId
+    ? getInitials(players.find((p) => p.id === viewerEntryId)?.name ?? "")
+    : "";
+  const witnessTargetInitials = witnessTargetEntryId
+    ? getInitials(
+        players.find((p) => p.id === witnessTargetEntryId)?.name ?? ""
+      )
+    : "";
+
+  async function signCard(
+    targetEntryId: string,
+    role: "player" | "witness"
+  ) {
+    if (!viewerEntryId || !groupId) return;
+    setSigningFor(`${targetEntryId}:${role}`);
+    setSignError(null);
+    try {
+      const res = await fetch("/api/captura/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: groupId,
+          entry_id: targetEntryId,
+          role,
+          me: viewerEntryId,
+        }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        signedByPlayerAt?: string | null;
+        signedByWitnessAt?: string | null;
+      };
+      if (!json.ok) {
+        setSignError(json.error ?? "No se pudo firmar.");
+        return;
+      }
+      setSignaturesByEntry((prev) => ({
+        ...prev,
+        [targetEntryId]: {
+          signedByPlayerAt: json.signedByPlayerAt ?? null,
+          signedByWitnessAt: json.signedByWitnessAt ?? null,
+        },
+      }));
+    } catch {
+      setSignError("Error de red al firmar.");
+    } finally {
+      setSigningFor(null);
+    }
+  }
 
   /**
    * Link a resultados en vivo del torneo, filtrado a la categoría del
@@ -1557,6 +1668,66 @@ function MobileScoreEntryContent() {
                     {showMyCard ? "Ocultar Mi Score" : "Mostrar Mi Score"}
                   </button>
                 </div>
+
+                {/* Botones de firma (mis iniciales / testigo) + banner. */}
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  {myCardComplete ? (
+                    mySig?.signedByPlayerAt ? (
+                      <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
+                        ✓ Firmado: {myInitials}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          viewerEntryId && signCard(viewerEntryId, "player")
+                        }
+                        disabled={signingFor === `${viewerEntryId}:player`}
+                        className="inline-flex rounded-lg border border-sky-500 bg-sky-100 px-3 py-1.5 text-[11px] font-bold text-sky-900 disabled:opacity-60"
+                      >
+                        Firmar: {myInitials}
+                      </button>
+                    )
+                  ) : null}
+
+                  {witnessTargetEntryId && witnessCardComplete ? (
+                    witnessSig?.signedByWitnessAt ? (
+                      <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
+                        ✓ Testigo: {witnessTargetInitials}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          signCard(witnessTargetEntryId, "witness")
+                        }
+                        disabled={
+                          signingFor === `${witnessTargetEntryId}:witness`
+                        }
+                        className="inline-flex rounded-lg border border-amber-500 bg-amber-100 px-3 py-1.5 text-[11px] font-bold text-amber-900 disabled:opacity-60"
+                      >
+                        Testigo: {witnessTargetInitials}
+                      </button>
+                    )
+                  ) : null}
+                </div>
+
+                {signError ? (
+                  <div className="mt-1 rounded-md border border-red-400 bg-red-50 px-2 py-1 text-[10px] text-red-900">
+                    {signError}
+                  </div>
+                ) : null}
+
+                {myCardFullySigned ? (
+                  <div className="mt-2 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
+                    ✓ TU TARJETA ESTÁ ENTREGADA Y FIRMADA
+                  </div>
+                ) : null}
+                {witnessTargetEntryId && witnessCardFullySigned ? (
+                  <div className="mt-1 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
+                    ✓ Tarjeta de {witnessTargetName} · entregada y firmada
+                  </div>
+                ) : null}
               </section>
             ) : null}
 

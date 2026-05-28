@@ -9,11 +9,40 @@ import {
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
 import type {
+  CardSignaturePayload,
   GroupCapturePayload,
   GroupCapturePlayer,
   HoleNumber,
   HoleScores,
 } from "@/lib/captura/types";
+
+type SignaturesByEntry = Record<string, CardSignaturePayload>;
+
+function signaturesFromPlayers(
+  players: GroupCapturePlayer[]
+): SignaturesByEntry {
+  const map: SignaturesByEntry = {};
+  for (const p of players) {
+    map[p.entryId] = {
+      signedByPlayerAt: p.signatures?.signedByPlayerAt ?? null,
+      signedByWitnessAt: p.signatures?.signedByWitnessAt ?? null,
+      signedByWitnessEntryId: p.signatures?.signedByWitnessEntryId ?? null,
+    };
+  }
+  return map;
+}
+
+const ALL_HOLES_NUMS: HoleNumber[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+];
+
+function isCardComplete(scores: HoleScores | undefined): boolean {
+  if (!scores) return false;
+  for (const h of ALL_HOLES_NUMS) {
+    if (scores[h] == null) return false;
+  }
+  return true;
+}
 
 type TableKind = "public" | "private";
 type ActiveCell = { entryId: string; hole: HoleNumber; table: TableKind };
@@ -307,6 +336,9 @@ export default function TarjetaCaptureClient({
   const [privateScoresByEntry, setPrivateScoresByEntry] = useState<ScoresByEntry>(
     () => privateScoresFromPlayers(initial.players)
   );
+  const [signaturesByEntry, setSignaturesByEntry] = useState<SignaturesByEntry>(
+    () => signaturesFromPlayers(initial.players)
+  );
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [draftScore, setDraftScore] = useState<string>("");
   const [draftFresh, setDraftFresh] = useState<boolean>(false);
@@ -315,6 +347,7 @@ export default function TarjetaCaptureClient({
   const [saveError, setSaveError] = useState<string | null>(null);
   /** Visibilidad del bloque "Mi Tarjeta" + banner del testigo (toggle manual). */
   const [showMyCard, setShowMyCard] = useState<boolean>(true);
+  const [signingFor, setSigningFor] = useState<string | null>(null);
   const activeCellRef = useRef<ActiveCell | null>(null);
   const savingRef = useRef(false);
 
@@ -409,6 +442,9 @@ export default function TarjetaCaptureClient({
       });
 
       setPendingByEntry(() => remotePending);
+
+      const remoteSignatures = signaturesFromPlayers(json.data.players);
+      setSignaturesByEntry(remoteSignatures);
 
       setPrivateScoresByEntry((prev) => {
         const next: ScoresByEntry = { ...prev };
@@ -739,6 +775,78 @@ export default function TarjetaCaptureClient({
     ? playersById.get(myWitnessEntryId) ?? null
     : null;
 
+  /** ¿La tarjeta del jugador identificado (yo) está llena (18 hoyos)? */
+  const myCardComplete = useMemo(() => {
+    if (!meta.myEntryId) return false;
+    return isCardComplete(scoresByEntry[meta.myEntryId]);
+  }, [meta.myEntryId, scoresByEntry]);
+
+  /** ¿La tarjeta del jugador al que atestiguo está llena? */
+  const witnessCardComplete = useMemo(() => {
+    if (!witnessTargetForMe) return false;
+    return isCardComplete(scoresByEntry[witnessTargetForMe]);
+  }, [witnessTargetForMe, scoresByEntry]);
+
+  const mySignatures = meta.myEntryId
+    ? signaturesByEntry[meta.myEntryId] ?? null
+    : null;
+  const witnessSignatures = witnessTargetForMe
+    ? signaturesByEntry[witnessTargetForMe] ?? null
+    : null;
+
+  /** Notificación "tarjeta entregada y firmada" para una tarjeta dada. */
+  function cardFullySigned(entryId: string | null): boolean {
+    if (!entryId) return false;
+    const s = signaturesByEntry[entryId];
+    return Boolean(s?.signedByPlayerAt && s?.signedByWitnessAt);
+  }
+
+  const myCardFullySigned = cardFullySigned(meta.myEntryId);
+  const witnessCardFullySigned = cardFullySigned(witnessTargetForMe);
+
+  async function signCard(targetEntryId: string, role: "player" | "witness") {
+    if (!meta.myEntryId) return;
+    const key = `${targetEntryId}:${role}`;
+    setSigningFor(key);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/captura/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: meta.groupId,
+          entry_id: targetEntryId,
+          role,
+          me: meta.myEntryId,
+        }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        signedByPlayerAt?: string | null;
+        signedByWitnessAt?: string | null;
+        signedByWitnessEntryId?: string | null;
+      };
+      if (!json.ok) {
+        setSaveError(json.error ?? "No se pudo firmar la tarjeta.");
+        return;
+      }
+      // Optimista
+      setSignaturesByEntry((prev) => ({
+        ...prev,
+        [targetEntryId]: {
+          signedByPlayerAt: json.signedByPlayerAt ?? null,
+          signedByWitnessAt: json.signedByWitnessAt ?? null,
+          signedByWitnessEntryId: json.signedByWitnessEntryId ?? null,
+        },
+      }));
+    } catch {
+      setSaveError("Error de red al firmar.");
+    } finally {
+      setSigningFor(null);
+    }
+  }
+
   return (
     <div className="w-full bg-slate-100">
       <div className="flex w-full justify-center bg-slate-100">
@@ -795,6 +903,63 @@ export default function TarjetaCaptureClient({
                 Toca un score para anotar. Si modificas un score con valor,
                 queda en rojo hasta que el testigo del jugador lo confirme.
               </p>
+
+              {/* Firmas: mis iniciales + testigo del jugador que me toca. */}
+              {meta.myEntryId ? (
+                <div className="mt-2 flex flex-wrap justify-center gap-2">
+                  {myCardComplete ? (
+                    mySignatures?.signedByPlayerAt ? (
+                      <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
+                        ✓ Firmado: {playersById.get(meta.myEntryId)?.initials}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => signCard(meta.myEntryId!, "player")}
+                        disabled={signingFor === `${meta.myEntryId}:player`}
+                        className="inline-flex rounded-lg border border-sky-500 bg-sky-100 px-3 py-1.5 text-[11px] font-bold text-sky-900 disabled:opacity-60"
+                      >
+                        Firmar: {playersById.get(meta.myEntryId)?.initials}
+                      </button>
+                    )
+                  ) : null}
+
+                  {witnessTargetForMe && witnessCardComplete ? (
+                    witnessSignatures?.signedByWitnessAt ? (
+                      <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
+                        ✓ Testigo:{" "}
+                        {playersById.get(witnessTargetForMe)?.initials}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          signCard(witnessTargetForMe, "witness")
+                        }
+                        disabled={signingFor === `${witnessTargetForMe}:witness`}
+                        className="inline-flex rounded-lg border border-amber-500 bg-amber-100 px-3 py-1.5 text-[11px] font-bold text-amber-900 disabled:opacity-60"
+                      >
+                        Testigo:{" "}
+                        {playersById.get(witnessTargetForMe)?.initials}
+                      </button>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Notificaciones "tarjeta entregada y firmada". */}
+              {myCardFullySigned ? (
+                <div className="mt-2 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
+                  ✓ TU TARJETA ESTÁ ENTREGADA Y FIRMADA
+                </div>
+              ) : null}
+              {witnessTargetForMe && witnessCardFullySigned ? (
+                <div className="mt-1 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
+                  ✓ Tarjeta de {playersById.get(witnessTargetForMe)?.name} ·
+                  entregada y firmada
+                </div>
+              ) : null}
+
               <div className="mt-2 flex flex-wrap justify-center gap-2">
                 <Link
                   href={mobileUrl}

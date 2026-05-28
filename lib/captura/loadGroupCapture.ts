@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { ensureGroupWitnesses } from "./witnesses";
 import { loadPrivateScoresForGroup } from "./privateScores";
+import { loadCardSignaturesForGroup } from "./cardSignatures";
 
 export const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -232,6 +233,13 @@ export async function loadGroupCapture(
     entryIds
   );
 
+  // Firmas de tarjeta por entry.
+  const signaturesByEntry = await loadCardSignaturesForGroup(
+    supabase,
+    gid,
+    entryIds
+  );
+
   // Identidad del visitante (me=entry_id o caddie=caddie_id).
   const meEntryIdRaw = String(options.meEntryId ?? "").trim();
   const meEntryId = entryIds.includes(meEntryIdRaw) ? meEntryIdRaw : null;
@@ -293,6 +301,14 @@ export async function loadGroupCapture(
         ? privateScoresByEntry[entryId] ?? createEmptyScores()
         : undefined,
       categoryId: categoryByEntry.get(entryId) ?? null,
+      signatures: {
+        signedByPlayerAt:
+          signaturesByEntry[entryId]?.signedByPlayerAt ?? null,
+        signedByWitnessAt:
+          signaturesByEntry[entryId]?.signedByWitnessAt ?? null,
+        signedByWitnessEntryId:
+          signaturesByEntry[entryId]?.signedByWitnessEntryId ?? null,
+      },
     });
   }
 

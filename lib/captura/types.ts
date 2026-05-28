@@ -20,6 +20,12 @@ export type HoleNumber =
 
 export type HoleScores = Record<HoleNumber, number | null>;
 
+export type CardSignaturePayload = {
+  signedByPlayerAt: string | null;
+  signedByWitnessAt: string | null;
+  signedByWitnessEntryId: string | null;
+};
+
 export type GroupCapturePlayer = {
   entryId: string;
   playerId: string;
@@ -33,6 +39,8 @@ export type GroupCapturePlayer = {
   privateScores?: HoleScores;
   /** Categoría del jugador (para deep-link a resultados en vivo). */
   categoryId?: string | null;
+  /** Firmas de la tarjeta (jugador + testigo). */
+  signatures?: CardSignaturePayload;
 };
 
 export type WitnessAssignmentPayload = {
