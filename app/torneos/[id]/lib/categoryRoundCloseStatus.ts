@@ -1,8 +1,12 @@
 import {
-  isEntryRoundClosed,
+  isEntryRoundClosedForCategory,
   type LockedScorecardLookups,
 } from "@/lib/leaderboard/lockedScorecards";
-import { isCountableEntryStatus } from "@/lib/rounds/categoryRoundGate";
+import {
+  getRoundForCategory,
+  isCountableEntryStatus,
+  type RoundForGate,
+} from "@/lib/rounds/categoryRoundGate";
 import { nameOfPlayer } from "./utils";
 import type { RoundRow, ValidTournamentEntry } from "./types";
 
@@ -44,9 +48,11 @@ export function buildCategoryRoundCloseCards(
   entries: ValidTournamentEntry[],
   selectedRound: RoundRow | null,
   lockedLookups: LockedScorecardLookups,
-  tournamentId: string
+  tournamentId: string,
+  allRounds: RoundForGate[] = []
 ): CategoryRoundCloseCard[] {
-  if (!selectedRound?.id) return [];
+  if (!selectedRound?.id || !Number.isFinite(selectedRound.round_no)) return [];
+  const roundNo = selectedRound.round_no;
 
   const byCategory = new Map<
     string,
@@ -78,9 +84,17 @@ export function buildCategoryRoundCloseCards(
     const bucket = byCategory.get(categoryCode)!;
     bucket.total += 1;
 
-    const closed = isEntryRoundClosed(
+    const entryRound = getRoundForCategory(
+      allRounds,
+      roundNo,
+      entry.category_id
+    );
+
+    const closed = isEntryRoundClosedForCategory(
       entry.id,
-      selectedRound,
+      entry.category_id,
+      roundNo,
+      allRounds,
       lockedLookups
     );
 
@@ -97,7 +111,7 @@ export function buildCategoryRoundCloseCards(
       playerNumber: entry.player_number,
       scoreEntryHref: buildScoreEntryHref({
         tournamentId,
-        roundId: selectedRound.id,
+        roundId: entryRound?.id ?? selectedRound.id,
         playerNumber: entry.player_number,
         name,
       }),

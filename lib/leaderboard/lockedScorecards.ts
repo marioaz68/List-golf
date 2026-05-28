@@ -1,3 +1,5 @@
+import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
+
 /** Filas scorecards con tarjeta cerrada (locked_at). */
 export type LockedScorecardRow = {
   entry_id: string;
@@ -52,6 +54,19 @@ export function isEntryRoundClosed(
   lookups: LockedScorecardLookups
 ): boolean {
   return lookups.exact.has(`${entryId}_${round.id}`);
+}
+
+/** Cierre para un inscrito usando la fila `rounds` de SU categoría (multi-categoría). */
+export function isEntryRoundClosedForCategory(
+  entryId: string,
+  entryCategoryId: string | null,
+  roundNo: number,
+  rounds: Array<{ id: string; round_no: number; category_id?: string | null }>,
+  lookups: LockedScorecardLookups
+): boolean {
+  const round = getRoundForCategory(rounds, roundNo, entryCategoryId);
+  if (!round?.id) return false;
+  return isEntryRoundClosed(entryId, round, lookups);
 }
 
 export function entryHasAnyClosedRound(
