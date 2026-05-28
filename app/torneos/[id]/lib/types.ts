@@ -16,6 +16,8 @@ export type EntryPlayer = {
   last_name: string | null;
   club: string | null;
   club_id: string | null;
+  gender?: string | null;
+  birth_year?: number | null;
   handicap_index?: number | null;
   handicap_torneo?: number | null;
   clubs: ClubRef | ClubRef[] | null;
@@ -34,6 +36,9 @@ export type TournamentEntryJoinRow = {
   category_id: string | null;
   status: string | null;
   handicap_index?: number | null;
+  course_handicap?: number | null;
+  playing_handicap?: number | null;
+  playing_handicap_override?: number | null;
   player: EntryPlayer | EntryPlayer[] | null;
   category: EntryCategory | EntryCategory[] | null;
 };
@@ -45,6 +50,9 @@ export type ValidTournamentEntry = {
   category_id: string | null;
   status: string | null;
   handicap_index: number | null;
+  course_handicap: number | null;
+  playing_handicap: number | null;
+  playing_handicap_override: number | null;
   player: EntryPlayer;
   category: EntryCategory | null;
 };

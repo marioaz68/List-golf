@@ -4,6 +4,10 @@ import {
   isDerivedMatchId,
   loadDerivedMatchDetail,
 } from "@/lib/matchplay/loadDerivedMatchDetail";
+import {
+  isLowHighMatchDecidedAt,
+  formatLowHighDecisionResult,
+} from "@/lib/matchplay/scoring/lowHigh";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -112,9 +116,10 @@ export async function GET(req: Request) {
 
   let topAcc = 0;
   let bottomAcc = 0;
+  let decidedAtHole: number | null = null;
   const lineByHole = match.holes.map((h) => {
-    const tp = Number(h.top_points ?? 0);
-    const bp = Number(h.bottom_points ?? 0);
+    const tpRaw = Number(h.top_points ?? 0);
+    const bpRaw = Number(h.bottom_points ?? 0);
     const hasScore =
       h.top_points != null ||
       h.bottom_points != null ||
@@ -122,31 +127,67 @@ export async function GET(req: Request) {
       h.top_player_b_strokes != null ||
       h.bottom_player_a_strokes != null ||
       h.bottom_player_b_strokes != null;
-    if (hasScore) {
+
+    const afterDecision = decidedAtHole != null;
+    // Si el match ya está decidido, los hoyos posteriores no aportan
+    // puntos al match (se siguen capturando para stroke play).
+    const tp = afterDecision ? 0 : tpRaw;
+    const bp = afterDecision ? 0 : bpRaw;
+    if (hasScore && !afterDecision) {
       topAcc += tp;
       bottomAcc += bp;
     }
-    return {
+
+    const row = {
       hole_no: h.hole_no,
       has_score: hasScore,
       top_points: hasScore ? tp : null,
       bottom_points: hasScore ? bp : null,
       top_cum: hasScore ? topAcc : null,
       bottom_cum: hasScore ? bottomAcc : null,
-      match_status_after: h.match_status_after,
+      match_status_after: afterDecision
+        ? `Decidido en H${decidedAtHole}`
+        : h.match_status_after,
       top_player_a_strokes: h.top_player_a_strokes,
       top_player_b_strokes: h.top_player_b_strokes,
       bottom_player_a_strokes: h.bottom_player_a_strokes,
       bottom_player_b_strokes: h.bottom_player_b_strokes,
-      breakdown: h.detail_json?.breakdown ?? null,
+      breakdown: afterDecision ? null : h.detail_json?.breakdown ?? null,
       stroke_index: match.stroke_index_by_hole.get(h.hole_no) ?? null,
       par: parByHole.get(h.hole_no) ?? null,
+      after_decision: afterDecision,
     };
+
+    if (hasScore && !afterDecision) {
+      const winner = isLowHighMatchDecidedAt({
+        top_total: topAcc,
+        bottom_total: bottomAcc,
+        hole_no: h.hole_no,
+        holes_in_match: match.holes_in_match,
+      });
+      if (winner) decidedAtHole = h.hole_no;
+    }
+
+    return row;
   });
 
   const lastHolePlayed = lineByHole
     .filter((h) => h.has_score)
     .reduce((max, h) => Math.max(max, h.hole_no), 0);
+
+  let finalResultText = match.result_text;
+  let finalStatus: string = match.status;
+  if (decidedAtHole != null) {
+    const winnerLabel = topAcc > bottomAcc ? match.top_label : match.bottom_label;
+    finalResultText = formatLowHighDecisionResult({
+      winner_label: winnerLabel,
+      top_total: topAcc,
+      bottom_total: bottomAcc,
+      decided_at_hole: decidedAtHole,
+      holes_in_match: match.holes_in_match,
+    });
+    finalStatus = "completed";
+  }
 
   return NextResponse.json({
     ok: true,
@@ -154,8 +195,8 @@ export async function GET(req: Request) {
       id: match.id,
       round_no: match.round_no,
       position_no: match.position_no,
-      status: match.status,
-      result_text: match.result_text,
+      status: finalStatus,
+      result_text: finalResultText,
       top_label: match.top_label,
       bottom_label: match.bottom_label,
       top_players: match.top_players,
@@ -166,6 +207,7 @@ export async function GET(req: Request) {
       last_hole_played: lastHolePlayed,
       top_total: topAcc,
       bottom_total: bottomAcc,
+      decided_at_hole: decidedAtHole,
       holes: lineByHole,
     },
   });

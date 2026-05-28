@@ -398,6 +398,17 @@ function MatchCard({
   const isDone = match.status === "completed";
   const isScheduled = !isBye && match.status !== "in_progress" && !isDone;
 
+  // Si el match terminó temprano (decidido por marcador), el result_text
+  // viene como "5–0 en H14 · 4 hoyos por jugar"; lo usamos para mostrar
+  // el hoyo de decisión en el badge en lugar de la cuenta de hoyos.
+  const decidedAtHole: number | null = (() => {
+    if (!isDone || !match.result_text) return null;
+    const m = match.result_text.match(/H(\d{1,2})/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) && n > 0 && n <= holesPerMatch ? n : null;
+  })();
+
   const topPts = holes.reduce(
     (acc, h) => acc + (h.top_points != null ? Number(h.top_points) : 0),
     0
@@ -485,7 +496,9 @@ function MatchCard({
           </span>
         ) : isDone ? (
           <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-200">
-            ✓ FINAL · {holesPlayed}/{holesPerMatch} hoyos
+            {decidedAtHole != null
+              ? `✓ FINAL · decidido en H${decidedAtHole}`
+              : `✓ FINAL · ${holesPlayed}/${holesPerMatch} hoyos`}
           </span>
         ) : isBye ? (
           <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">

@@ -129,19 +129,49 @@ export default async function PublicMatchesLivePage(props: {
       bracketIdForGrid = `derived-${tournamentId}`;
       derivedFromPairings = true;
 
-      const derivedHoles = await deriveMatchHolesFromStrokes(
+      const derivedResult = await deriveMatchHolesFromStrokes(
         supabase,
         tournamentId,
         derived.matches
       );
-      if (derivedHoles.length > 0) {
-        initialHoles = derivedHoles.map((h) => ({
+      if (derivedResult.holes.length > 0) {
+        initialHoles = derivedResult.holes.map((h) => ({
           match_id: h.match_id,
           hole_no: h.hole_no,
           top_points: h.top_points,
           bottom_points: h.bottom_points,
           match_status_after: h.match_status_after,
         }));
+      }
+
+      // Match decidido por marcador: promovemos el estado a "completed"
+      // y poblamos winner_pair_id + result_text para que la grilla y el
+      // modal lo reflejen sin esperar al cierre formal del comité.
+      if (derivedResult.decisions.size > 0) {
+        initialMatches = initialMatches.map((m) => {
+          const dec = derivedResult.decisions.get(m.id);
+          if (!dec) return m;
+          const winnerPairId =
+            dec.winner === "top" ? m.top_pair_id : m.bottom_pair_id;
+          const remaining = Math.max(
+            0,
+            holesPerMatch - dec.decided_at_hole
+          );
+          const hi = Math.max(dec.top_total, dec.bottom_total);
+          const lo = Math.min(dec.top_total, dec.bottom_total);
+          const fmt = (n: number) =>
+            Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+          const tail =
+            remaining === 0
+              ? ""
+              : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+          return {
+            ...m,
+            status: "completed",
+            winner_pair_id: winnerPairId,
+            result_text: `${fmt(hi)}–${fmt(lo)} en H${dec.decided_at_hole}${tail}`,
+          };
+        });
       }
     }
   }

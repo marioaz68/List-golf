@@ -12,6 +12,24 @@ export function playingHandicap(
   return Math.round((hcp * pct) / 100);
 }
 
+/**
+ * PH para netos: si ya hay PH del torneo (CH×% competencia vía WHS), úsalo tal cual.
+ * Si no, fallback legacy HI×% (incompleto; falta slope/rating del campo).
+ */
+export function effectivePlayingHandicapForScoring(
+  storedPlayingHandicap: number | null | undefined,
+  handicapIndexFallback: number | null | undefined,
+  competitionPercentage: number
+): number {
+  if (
+    storedPlayingHandicap != null &&
+    Number.isFinite(Number(storedPlayingHandicap))
+  ) {
+    return Math.round(Number(storedPlayingHandicap));
+  }
+  return playingHandicap(handicapIndexFallback, competitionPercentage);
+}
+
 /** Golpes recibidos en un hoyo según PH y stroke index (WHS simplificado). */
 export function strokesReceivedOnHole(
   playingHcp: number,

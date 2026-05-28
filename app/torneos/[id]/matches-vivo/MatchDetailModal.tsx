@@ -29,6 +29,9 @@ type HoleDetail = {
   } | null;
   stroke_index: number | null;
   par: number | null;
+  /** true cuando el hoyo se jugó después de que el match ya estaba
+   *  matemáticamente decidido (no contribuye a puntos del match). */
+  after_decision?: boolean;
 };
 
 type MatchDetail = {
@@ -47,6 +50,8 @@ type MatchDetail = {
   last_hole_played: number;
   top_total: number;
   bottom_total: number;
+  /** Hoyo en el que el match quedó matemáticamente decidido (null si llegó al 18). */
+  decided_at_hole?: number | null;
   holes: HoleDetail[];
 };
 
@@ -193,9 +198,20 @@ export default function MatchDetailModal({
             ) : null}
             {detail ? (
               <p className="mt-0.5 text-[11px] text-slate-400">
-                {detail.last_hole_played > 0
-                  ? `Va en hoyo ${detail.last_hole_played} de ${detail.holes_in_match} · Allowance ${detail.allowance_pct}%`
-                  : `Aún no inicia · Allowance ${detail.allowance_pct}%`}
+                {detail.decided_at_hole != null ? (
+                  <span className="font-semibold text-emerald-300">
+                    Match decidido en hoyo {detail.decided_at_hole} de {detail.holes_in_match}
+                  </span>
+                ) : detail.last_hole_played > 0 ? (
+                  `Va en hoyo ${detail.last_hole_played} de ${detail.holes_in_match} · Allowance ${detail.allowance_pct}%`
+                ) : (
+                  `Aún no inicia · Allowance ${detail.allowance_pct}%`
+                )}
+                {detail.decided_at_hole != null ? (
+                  <span className="text-slate-400">
+                    {" "}· Allowance {detail.allowance_pct}%
+                  </span>
+                ) : null}
                 {isDerived ? (
                   <span className="text-amber-200">
                     {" "}
@@ -254,6 +270,7 @@ export default function MatchDetailModal({
                 holesInMatch={detail.holes_in_match}
                 topLabel={topName}
                 bottomLabel={bottomName}
+                decidedAtHole={detail.decided_at_hole ?? null}
               />
             </section>
           ) : null}
@@ -271,6 +288,7 @@ export default function MatchDetailModal({
                 topLabel={topName}
                 bottomLabel={bottomName}
                 allowancePct={detail.allowance_pct}
+                decidedAtHole={detail.decided_at_hole ?? null}
               />
             </section>
           ) : null}
@@ -327,11 +345,13 @@ function PointsChart({
   holesInMatch,
   topLabel,
   bottomLabel,
+  decidedAtHole = null,
 }: {
   holes: HoleDetail[];
   holesInMatch: number;
   topLabel: string;
   bottomLabel: string;
+  decidedAtHole?: number | null;
 }) {
   const width = 720;
   const height = 220;
@@ -422,6 +442,36 @@ function PointsChart({
           </g>
         ))}
 
+        {decidedAtHole != null && decidedAtHole < holesInMatch ? (
+          <g>
+            {/* Banda gris semitransparente sobre hoyos después de la decisión */}
+            <rect
+              x={xCenter(decidedAtHole) + slotW / 2}
+              y={padT}
+              width={Math.max(0, padL + innerW - (xCenter(decidedAtHole) + slotW / 2))}
+              height={innerH}
+              fill="rgba(148,163,184,0.07)"
+            />
+            <line
+              x1={xCenter(decidedAtHole) + slotW / 2}
+              x2={xCenter(decidedAtHole) + slotW / 2}
+              y1={padT}
+              y2={padT + innerH}
+              stroke="rgba(52,211,153,0.55)"
+              strokeDasharray="4 3"
+            />
+            <text
+              x={xCenter(decidedAtHole) + slotW / 2 + 4}
+              y={padT + 10}
+              fontSize={9}
+              fill="rgba(52,211,153,0.85)"
+              fontWeight={700}
+            >
+              Decidido en H{decidedAtHole}
+            </text>
+          </g>
+        ) : null}
+
         {played.length > 0 ? (
           played.map((h) => {
             const diff =
@@ -430,6 +480,7 @@ function PointsChart({
             const yV = yFor(diff);
             const barTop = Math.min(yZero, yV);
             const barH = Math.max(0.5, Math.abs(yV - yZero));
+            const isAfter = h.after_decision === true;
             const color =
               diff > 0
                 ? "rgb(34,211,238)"
@@ -447,9 +498,9 @@ function PointsChart({
                   height={barH}
                   rx={2}
                   fill={color}
-                  opacity={diff === 0 ? 0.5 : 0.9}
+                  opacity={isAfter ? 0.25 : diff === 0 ? 0.5 : 0.9}
                 />
-                {diff !== 0 ? (
+                {diff !== 0 && !isAfter ? (
                   <text
                     x={cx}
                     y={labelY}
@@ -486,6 +537,12 @@ function PointsChart({
           arriba
         </span>
         <span className="text-slate-500">Línea AS = empate acumulado</span>
+        {decidedAtHole != null ? (
+          <span className="inline-flex items-center gap-1 text-emerald-300">
+            <span className="inline-block h-3 w-3 border-l-2 border-dashed border-emerald-400" />
+            Match decidido en H{decidedAtHole}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -498,6 +555,7 @@ function HoleTable({
   topLabel,
   bottomLabel,
   allowancePct,
+  decidedAtHole = null,
 }: {
   holes: HoleDetail[];
   topPlayers: PlayerInfo[];
@@ -505,19 +563,18 @@ function HoleTable({
   topLabel: string;
   bottomLabel: string;
   allowancePct: number;
+  decidedAtHole?: number | null;
 }) {
   const tA = topPlayers[0]?.label ?? "—";
   const tB = topPlayers[1]?.label ?? "—";
   const bA = bottomPlayers[0]?.label ?? "—";
   const bB = bottomPlayers[1]?.label ?? "—";
 
-  /** PH del torneo al % de allowance (ej. 80%). Si la entry ya guardó PH
-   *  oficial vía WHS, se respeta; si no, se calcula desde HI × %. */
+  /** PH del torneo (CH del campo × % competencia). No usar HI×% directo. */
   function tournamentPh(p: PlayerInfo | undefined): number | null {
     if (!p) return null;
     if (p.ph != null && Number.isFinite(Number(p.ph))) return Number(p.ph);
-    if (!Number.isFinite(Number(p.hi))) return null;
-    return Math.round((Number(p.hi) * allowancePct) / 100);
+    return null;
   }
 
   const tAph = tournamentPh(topPlayers[0]);
@@ -741,8 +798,22 @@ function HoleTable({
     return "";
   }
 
+  /** Marca visual para hoyos jugados después de la decisión del match
+   *  (los strokes se siguen capturando pero no aportan puntos). */
+  function decisionTint(holeNo: number): string {
+    if (decidedAtHole == null || holeNo <= decidedAtHole) return "";
+    return "bg-slate-500/10 opacity-60";
+  }
+
   return (
     <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#0a1220]">
+      {decidedAtHole != null ? (
+        <div className="flex items-center gap-2 border-b border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-200">
+          <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          Match decidido en H{decidedAtHole}. Los hoyos posteriores se siguen
+          capturando para stroke play, pero no aportan puntos al match.
+        </div>
+      ) : null}
       <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
@@ -868,7 +939,7 @@ function HoleTable({
                   return (
                     <td
                       key={`c-${p.key}-${i + 1}`}
-                      className={`${cellTd} ${stripe} ${roleTint(r)}`}
+                      className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 1)}`}
                     >
                       <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
                     </td>
@@ -883,7 +954,7 @@ function HoleTable({
                   return (
                     <td
                       key={`c-${p.key}-${i + 10}`}
-                      className={`${cellTd} ${stripe} ${roleTint(r)}`}
+                      className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 10)}`}
                     >
                       <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
                     </td>
@@ -927,7 +998,7 @@ function HoleTable({
                   return (
                     <td
                       key={`d-${i + 1}`}
-                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)}`}
+                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)} ${decisionTint(i + 1)}`}
                     >
                       {fmtDiff(d)}
                     </td>
@@ -941,7 +1012,7 @@ function HoleTable({
                   return (
                     <td
                       key={`d-${i + 10}`}
-                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)}`}
+                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)} ${decisionTint(i + 10)}`}
                     >
                       {fmtDiff(d)}
                     </td>

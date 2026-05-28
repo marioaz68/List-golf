@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   scoreLowHighHole,
+  isLowHighMatchDecidedAt,
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
 import { effectiveEntryHi } from "./entryHi";
@@ -12,6 +13,13 @@ import type {
   MatchPlayPairFormat,
 } from "./types";
 import type { DerivedMatchRow } from "./derivePairingGroupMatches";
+
+export type DerivedMatchDecision = {
+  decided_at_hole: number;
+  winner: "top" | "bottom";
+  top_total: number;
+  bottom_total: number;
+};
 
 /**
  * Para cada match derivado (formato Bola Baja + Alta) calcula los puntos
@@ -34,11 +42,21 @@ export type DerivedHoleResultRow = {
   match_status_after: string | null;
 };
 
+export type DerivedMatchHolesResult = {
+  holes: DerivedHoleResultRow[];
+  /** Match decidido matemáticamente antes del hoyo 18: clave = match_id. */
+  decisions: Map<string, DerivedMatchDecision>;
+};
+
 export async function deriveMatchHolesFromStrokes(
   admin: SupabaseClient,
   tournamentId: string,
   matches: DerivedMatchRow[]
-): Promise<DerivedHoleResultRow[]> {
+): Promise<DerivedMatchHolesResult> {
+  const emptyResult: DerivedMatchHolesResult = {
+    holes: [],
+    decisions: new Map(),
+  };
   const playable = matches.filter(
     (m) =>
       m.status === "scheduled" &&
@@ -48,7 +66,7 @@ export async function deriveMatchHolesFromStrokes(
       m.bottom_b_entry_id &&
       m.round_id
   );
-  if (playable.length === 0) return [];
+  if (playable.length === 0) return emptyResult;
 
   // Reglas de match play del torneo (allowance + WHS opcional).
   const { data: rules } = await admin
@@ -60,7 +78,7 @@ export async function deriveMatchHolesFromStrokes(
     .maybeSingle();
 
   const pair_format = (rules?.pair_format ?? "fourball") as MatchPlayPairFormat;
-  if (pair_format !== "low_high") return [];
+  if (pair_format !== "low_high") return emptyResult;
 
   const allowance_pct = resolveMatchHandicapPct({
     match_type: (rules?.match_type ?? "pairs") as MatchPlayMatchType,
@@ -222,6 +240,7 @@ export async function deriveMatchHolesFromStrokes(
   }
 
   const out: DerivedHoleResultRow[] = [];
+  const decisions = new Map<string, DerivedMatchDecision>();
 
   for (const m of playable) {
     const eTopA = entryById.get(m.top_a_entry_id!);
@@ -245,6 +264,7 @@ export async function deriveMatchHolesFromStrokes(
 
     let topTotal = 0;
     let bottomTotal = 0;
+    let decidedAtHole: number | null = null;
 
     for (let h = 1; h <= holes_in_match; h++) {
       const top_a = grossForEntryHole(m.top_a_entry_id!, m.round_id, h);
@@ -253,6 +273,21 @@ export async function deriveMatchHolesFromStrokes(
       const bottom_b = grossForEntryHole(m.bottom_b_entry_id!, m.round_id, h);
 
       if (top_a == null || top_b == null || bottom_a == null || bottom_b == null) {
+        continue;
+      }
+
+      // Match ya decidido por marcador: los hoyos siguientes ya no
+      // contribuyen a los puntos del match (aunque la tarjeta se siga
+      // capturando para stroke play). Registramos la fila con 0 pts
+      // para que el UI muestre que el hoyo se jugó "fuera de match".
+      if (decidedAtHole != null) {
+        out.push({
+          match_id: m.id,
+          hole_no: h,
+          top_points: 0,
+          bottom_points: 0,
+          match_status_after: `Decidido en H${decidedAtHole}`,
+        });
         continue;
       }
 
@@ -281,8 +316,24 @@ export async function deriveMatchHolesFromStrokes(
         bottom_points: res.bottom_points,
         match_status_after: res.match_status_after,
       });
+
+      const winner = isLowHighMatchDecidedAt({
+        top_total: topTotal,
+        bottom_total: bottomTotal,
+        hole_no: h,
+        holes_in_match,
+      });
+      if (winner) {
+        decidedAtHole = h;
+        decisions.set(m.id, {
+          decided_at_hole: h,
+          winner,
+          top_total: topTotal,
+          bottom_total: bottomTotal,
+        });
+      }
     }
   }
 
-  return out;
+  return { holes: out, decisions };
 }

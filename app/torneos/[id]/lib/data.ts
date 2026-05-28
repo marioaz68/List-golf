@@ -84,12 +84,17 @@ const ENTRY_SELECT = `
   category_id,
   status,
   handicap_index,
+  course_handicap,
+  playing_handicap,
+  playing_handicap_override,
   player:players (
     id,
     first_name,
     last_name,
     club,
     club_id,
+    gender,
+    birth_year,
     handicap_index,
     handicap_torneo,
     clubs:clubs (

@@ -245,3 +245,53 @@ export function decideLowHighWinner(
   if (topTotal === bottomTotal && topTotal > 0) return "halved";
   return null;
 }
+
+/**
+ * Match terminado por marcador: cada hoyo pareja-vs-pareja en formato
+ * Bola Baja + Bola Alta entrega como máximo 2 puntos (1 para la pareja
+ * que gana low + 1 para la que gana high). Por lo tanto, si tras el
+ * hoyo `holeNo` la diferencia de puntos es estrictamente mayor que los
+ * puntos máximos que quedan por jugar (`(holesInMatch - holeNo) * 2`),
+ * el match está matemáticamente decidido y no hay que jugar los hoyos
+ * restantes. Equivale a "X-Y, M hoyos restantes" en match play clásico.
+ *
+ * - Devuelve "top"/"bottom" si quedó decidido en ese hoyo.
+ * - Devuelve null si aún hay manera de igualar (incluye dormie exacto).
+ */
+export function isLowHighMatchDecidedAt(params: {
+  top_total: number;
+  bottom_total: number;
+  hole_no: number;
+  holes_in_match: number;
+}): "top" | "bottom" | null {
+  const { top_total, bottom_total, hole_no, holes_in_match } = params;
+  const remaining = Math.max(0, holes_in_match - hole_no);
+  const maxRemaining = remaining * 2;
+  const diff = top_total - bottom_total;
+  if (Math.abs(diff) > maxRemaining) {
+    return diff > 0 ? "top" : "bottom";
+  }
+  return null;
+}
+
+/**
+ * Texto tipo "5–0 a falta de 4 hoyos" para mostrar al usuario el
+ * resultado de un match concedido por marcador.
+ */
+export function formatLowHighDecisionResult(params: {
+  winner_label: string;
+  top_total: number;
+  bottom_total: number;
+  decided_at_hole: number;
+  holes_in_match: number;
+}): string {
+  const { winner_label, top_total, bottom_total, decided_at_hole, holes_in_match } = params;
+  const hi = Math.max(top_total, bottom_total);
+  const lo = Math.min(top_total, bottom_total);
+  const remaining = Math.max(0, holes_in_match - decided_at_hole);
+  const tail =
+    remaining === 0
+      ? ""
+      : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+  return `${winner_label} gana ${formatPts(hi)}–${formatPts(lo)} en H${decided_at_hole}${tail}`;
+}

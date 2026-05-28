@@ -40,6 +40,9 @@ export type WhsComputeResult = {
     par: number;
     allowance_pct: number;
     computed_at: string;
+    source?: string;
+    tee_code?: string | null;
+    category_id?: string | null;
   };
 };
 

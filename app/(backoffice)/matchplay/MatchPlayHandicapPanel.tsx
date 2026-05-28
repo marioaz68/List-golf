@@ -193,14 +193,18 @@ export default function MatchPlayHandicapPanel({
             Handicaps WHS / GHIN (match play)
           </h2>
           <p className="mt-1 max-w-2xl text-[11px] text-slate-400">
-            Calcula automáticamente Course Handicap{" "}
+            Por inscrito: categoría (HI) → salida del campo según{" "}
+            <span className="text-slate-300">reglas salida/categoría</span> →
+            Course Handicap{" "}
             <span className="text-slate-300">
               (HI × Slope/113 + CR − Par)
             </span>{" "}
-            y Playing Handicap{" "}
-            <span className="text-slate-300">(CH × % allowance)</span> en el
-            orden oficial WHS. Aplica a partidos del cuadro principal y a
-            consolación.
+            → Playing Handicap{" "}
+            <span className="text-slate-300">
+              (CH × % de reglas de competencia)
+            </span>
+            . Los valores de abajo son respaldo si el torneo no tiene salidas
+            por categoría configuradas.
           </p>
         </div>
       </header>
