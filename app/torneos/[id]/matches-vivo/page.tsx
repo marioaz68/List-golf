@@ -5,6 +5,7 @@ import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
+import AutoRefresh from "@/components/public/AutoRefresh";
 import type { TournamentSettings } from "@/types/tournament";
 import MatchesLiveGrid from "./MatchesLiveGrid";
 
@@ -128,6 +129,7 @@ export default async function PublicMatchesLivePage(props: {
 
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
+      <AutoRefresh intervalMs={10000} />
       <MatchesLiveGrid
         tournamentId={tournamentId}
         tournamentName={tournament.name ?? "Torneo"}

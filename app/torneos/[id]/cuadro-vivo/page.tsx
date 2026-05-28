@@ -8,6 +8,7 @@ import type {
   MatchPlayConvocatoriaConfig,
   MatchPlayPrizeShare,
 } from "@/lib/matchplay/types";
+import AutoRefresh from "@/components/public/AutoRefresh";
 import LiveBracketView, { type TeeRuleLite, type TeeSetLite } from "./LiveBracketView";
 
 export const dynamic = "force-dynamic";
@@ -203,6 +204,7 @@ export default async function PublicLiveBracketPage(props: {
 
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
+      <AutoRefresh intervalMs={10000} />
       <LiveBracketView
         tournamentId={tournamentId}
         tournamentName={tournament.name ?? "Torneo"}
