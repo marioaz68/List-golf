@@ -5,11 +5,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
-import {
-  computeWhsHandicap,
-  pickTeeForGender,
-  type WhsTeeData,
-} from "@/lib/handicap/whs";
+import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
 
 function reqStr(fd: FormData, key: string): string {
   const v = String(fd.get(key) ?? "").trim();
@@ -134,95 +130,7 @@ async function recomputeMatchplayHandicapsInternal(
   tournament_id: string
 ): Promise<RecomputeResult> {
   const admin = createAdminClient();
-
-  const { data: rules } = await admin
-    .from("tournament_matchplay_rules")
-    .select(
-      "handicap_allowance_pct, whs_slope_men, whs_slope_women, whs_course_rating_men, whs_course_rating_women, whs_par_men, whs_par_women"
-    )
-    .eq("tournament_id", tournament_id)
-    .maybeSingle();
-
-  if (!rules) {
-    return { total: 0, updated: 0, skipped_no_tee: 0, kept_override: 0 };
-  }
-
-  const allowance_pct = Number(rules.handicap_allowance_pct ?? 100);
-
-  const tee_men: Partial<WhsTeeData> | null = rules.whs_slope_men != null
-    ? {
-        slope: Number(rules.whs_slope_men),
-        course_rating: Number(rules.whs_course_rating_men ?? 0),
-        par: Number(rules.whs_par_men ?? 0),
-      }
-    : null;
-
-  const tee_women: Partial<WhsTeeData> | null = rules.whs_slope_women != null
-    ? {
-        slope: Number(rules.whs_slope_women),
-        course_rating: Number(rules.whs_course_rating_women ?? 0),
-        par: Number(rules.whs_par_women ?? 0),
-      }
-    : null;
-
-  const { data: entries } = await admin
-    .from("tournament_entries")
-    .select(
-      "id, handicap_index, playing_handicap_override, players:players(gender, handicap_torneo, handicap_index)"
-    )
-    .eq("tournament_id", tournament_id)
-    .neq("status", "cancelled");
-
-  let updated = 0;
-  let skipped_no_tee = 0;
-  let kept_override = 0;
-  const total = entries?.length ?? 0;
-
-  for (const e of entries ?? []) {
-    const player: any = Array.isArray((e as any).players)
-      ? (e as any).players[0]
-      : (e as any).players;
-    const gender = (player?.gender ?? "X").toString().toUpperCase() as
-      | "M"
-      | "F"
-      | "X";
-
-    const hiFromEntry = (e as any).handicap_index;
-    const hi = hiFromEntry != null
-      ? Number(hiFromEntry)
-      : Number(player?.handicap_torneo ?? player?.handicap_index ?? 0);
-
-    const tee = pickTeeForGender({ gender, men: tee_men, women: tee_women });
-    if (!tee) {
-      skipped_no_tee++;
-      continue;
-    }
-
-    const calc = computeWhsHandicap({
-      hi,
-      slope: tee.slope,
-      course_rating: tee.course_rating,
-      par: tee.par,
-      allowance_pct,
-    });
-
-    const override = (e as any).playing_handicap_override;
-    const finalPh = override != null ? Number(override) : calc.playing_handicap;
-    if (override != null) kept_override++;
-
-    const { error: upErr } = await admin
-      .from("tournament_entries")
-      .update({
-        course_handicap: calc.course_handicap,
-        playing_handicap: finalPh,
-        handicap_calc_meta: calc.meta,
-      })
-      .eq("id", (e as any).id);
-
-    if (!upErr) updated++;
-  }
-
-  return { total, updated, skipped_no_tee, kept_override };
+  return recomputeTournamentHandicaps(admin, tournament_id);
 }
 
 export async function setEntryPlayingHandicapOverride(formData: FormData) {

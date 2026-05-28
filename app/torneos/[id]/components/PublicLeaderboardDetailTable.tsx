@@ -6,11 +6,8 @@ import {
   isStablefordCategory,
   type CategoryCompetitionRule,
 } from "@/lib/leaderboard/categoryCompetitionRules";
-import {
-  playingHandicap,
-  scoreRoundDetail,
-  type StrokeIndexByHole,
-} from "@/lib/leaderboard/competitionScoring";
+import { scoreRoundDetail, type StrokeIndexByHole } from "@/lib/leaderboard/competitionScoring";
+import { effectivePlayingHandicapForScoring } from "@/lib/leaderboard/handicapStrokes";
 import { scoringFormatLabel } from "@/lib/leaderboard/competitionDisplay";
 import {
   parseLeaderboardViewOverride,
@@ -297,7 +294,11 @@ function netTotalColumnForDetail(
       secondary: "—",
     };
   }
-  const ph = playingHandicap(handicapIndex, rule.handicap_percentage);
+  const ph = effectivePlayingHandicapForScoring(
+    handicapIndex,
+    handicapIndex,
+    rule.handicap_percentage
+  );
   return {
     primary: formatScore(Number(gross) - ph),
     secondary: formatScore(gross),

@@ -77,6 +77,8 @@ import {
   fetchHoleScoresForRoundScores,
   fetchRoundScoresForPublicLeaderboard,
 } from "./lib/data";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { effectivePlayingHandicapForEntry } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
 import type {
   Tournament,
@@ -759,14 +761,48 @@ export default async function PublicTournamentPage({
     }
   }
 
+  const handicapClient = adminSupabase ?? supabase;
+  let tournamentHandicapCtx = null;
+  try {
+    tournamentHandicapCtx = await loadTournamentHandicapContext(
+      handicapClient,
+      typedTournament.id
+    );
+  } catch (err) {
+    console.error("[public-tournament] handicap context:", err);
+  }
+
+  /** PH efectivo por jugador (CH del campo × % reglas de competencia). */
   const handicapByPlayerId = new Map<string, number | null>();
   for (const entry of allEntries) {
-    const hcp =
+    const hi =
       entry.handicap_index ??
       entry.player.handicap_torneo ??
       entry.player.handicap_index ??
       null;
-    handicapByPlayerId.set(entry.player_id, hcp != null ? Number(hcp) : null);
+    const ph = tournamentHandicapCtx
+      ? effectivePlayingHandicapForEntry(
+          {
+            id: entry.id,
+            player_id: entry.player_id,
+            category_id: entry.category_id,
+            handicap_index: entry.handicap_index,
+            playing_handicap: entry.playing_handicap,
+            playing_handicap_override: entry.playing_handicap_override,
+            player: {
+              gender: entry.player.gender ?? null,
+              birth_year: entry.player.birth_year ?? null,
+              handicap_index: entry.player.handicap_index,
+              handicap_torneo: entry.player.handicap_torneo,
+            },
+          },
+          tournamentHandicapCtx
+        )
+      : entry.playing_handicap_override ?? entry.playing_handicap;
+    handicapByPlayerId.set(
+      entry.player_id,
+      ph != null ? Number(ph) : hi != null ? Number(hi) : null
+    );
   }
 
   const handicapsByPlayerId = Object.fromEntries(handicapByPlayerId);

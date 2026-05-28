@@ -62,6 +62,20 @@ export function toValidEntry(
       ? Number(entryHcp)
       : null;
 
+  const courseHcp =
+    row.course_handicap != null && Number.isFinite(Number(row.course_handicap))
+      ? Number(row.course_handicap)
+      : null;
+  const playingHcp =
+    row.playing_handicap != null && Number.isFinite(Number(row.playing_handicap))
+      ? Number(row.playing_handicap)
+      : null;
+  const phOverride =
+    row.playing_handicap_override != null &&
+    Number.isFinite(Number(row.playing_handicap_override))
+      ? Number(row.playing_handicap_override)
+      : null;
+
   return {
     id: row.id,
     player_id: row.player_id,
@@ -72,6 +86,9 @@ export function toValidEntry(
     category_id: row.category_id,
     status: row.status ?? null,
     handicap_index: hcpNum,
+    course_handicap: courseHcp,
+    playing_handicap: playingHcp,
+    playing_handicap_override: phOverride,
     player,
     category: normalizeCategory(row.category),
   };

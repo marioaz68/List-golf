@@ -41,7 +41,7 @@ export function applyCompetitionRules({
     const rule = competitionRuleForCategory(rulesMap, row.category_id);
     if (!rule) return row;
 
-    const hcp = handicapByPlayerId.get(row.player_id) ?? null;
+    const storedPh = handicapByPlayerId.get(row.player_id) ?? null;
     const detailsForCum =
       !includeIncompleteRounds && lockedLookups && roundsForLock
         ? detailsForPublicCumulative(
@@ -55,10 +55,11 @@ export function applyCompetitionRules({
     const cum = cumulativeLeaderboardValue(
       detailsForCum,
       rule,
-      hcp,
+      storedPh,
       maxRoundNo,
       strokeIndexByHole,
-      leaderboardViewOverride
+      leaderboardViewOverride,
+      null
     );
 
     return {

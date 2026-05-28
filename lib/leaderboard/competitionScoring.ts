@@ -6,13 +6,13 @@ import {
   type LeaderboardViewOverride,
 } from "./leaderboardViewOverride";
 import {
-  playingHandicap,
+  effectivePlayingHandicapForScoring,
   strokeIndexForHole,
   strokesReceivedOnHole,
   type StrokeIndexByHole,
 } from "./handicapStrokes";
 
-export { playingHandicap, type StrokeIndexByHole };
+export { effectivePlayingHandicapForScoring, type StrokeIndexByHole };
 
 export function stablefordPoints(netStrokes: number, par: number): number {
   const diff = netStrokes - par;
@@ -28,8 +28,10 @@ export function stablefordPoints(netStrokes: number, par: number): number {
 export function scoreRoundDetail(
   detail: RoundDetail,
   rule: CategoryCompetitionRule,
-  handicapIndex: number | null | undefined,
-  strokeIndexByHole?: StrokeIndexByHole
+  /** PH del torneo (CH × % competencia). Si null, se intenta HI × %. */
+  storedPlayingHandicap: number | null | undefined,
+  strokeIndexByHole?: StrokeIndexByHole,
+  handicapIndexFallback?: number | null | undefined
 ): {
   gross: number | null;
   toPar: number | null;
@@ -68,7 +70,11 @@ export function scoreRoundDetail(
   let netStrokesPlayed = 0;
   let hasNetLine = false;
 
-  const ph = playingHandicap(handicapIndex, catRule.handicap_percentage);
+  const ph = effectivePlayingHandicapForScoring(
+    storedPlayingHandicap,
+    handicapIndexFallback,
+    catRule.handicap_percentage
+  );
   const useNetStableford = isStablefordCategory(catRule);
   const useNetStrokes =
     useNetStableford ||
@@ -129,10 +135,11 @@ export function scoreRoundDetail(
 export function cumulativeLeaderboardValue(
   details: RoundDetail[],
   rule: CategoryCompetitionRule,
-  handicapIndex: number | null | undefined,
+  storedPlayingHandicap: number | null | undefined,
   maxRoundNo: number | null,
   strokeIndexByHole?: StrokeIndexByHole,
-  leaderboardViewOverride?: LeaderboardViewOverride | null
+  leaderboardViewOverride?: LeaderboardViewOverride | null,
+  handicapIndexFallback?: number | null | undefined
 ): {
   sortValue: number | null;
   displayToPar: number | null;
@@ -165,8 +172,9 @@ export function cumulativeLeaderboardValue(
     const scored = scoreRoundDetail(
       detail,
       catRule,
-      handicapIndex,
-      strokeIndexByHole
+      storedPlayingHandicap,
+      strokeIndexByHole,
+      handicapIndexFallback
     );
     if (scored.gross != null) {
       totalGross += scored.gross;

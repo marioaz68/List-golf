@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   scoreLowHighHole,
+  isLowHighMatchDecidedAt,
+  formatLowHighDecisionResult,
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
 import { effectiveEntryHi, formatPlayerName } from "./entryHi";
@@ -33,6 +35,9 @@ export type PublicMatchDetailHole = {
   } | null;
   stroke_index: number | null;
   par: number | null;
+  /** true cuando el hoyo se jugó después de que el match ya estaba
+   *  matemáticamente decidido (no contribuye a puntos del match). */
+  after_decision: boolean;
 };
 
 export type PublicMatchDetailPayload = {
@@ -51,6 +56,8 @@ export type PublicMatchDetailPayload = {
   last_hole_played: number;
   top_total: number;
   bottom_total: number;
+  /** Si el match fue decidido por marcador antes del último hoyo. */
+  decided_at_hole: number | null;
   holes: PublicMatchDetailHole[];
   derived_from_strokes: true;
 };
@@ -294,6 +301,7 @@ export async function loadDerivedMatchDetail(
 
   let topAcc = 0;
   let bottomAcc = 0;
+  let decidedAtHole: number | null = null;
   const holes: PublicMatchDetailHole[] = [];
 
   for (let h = 1; h <= holes_in_match; h++) {
@@ -321,6 +329,31 @@ export async function loadDerivedMatchDetail(
         breakdown: null,
         stroke_index: strokeIndexByHole.get(h) ?? null,
         par: parByHole.get(h) ?? null,
+        after_decision: decidedAtHole != null,
+      });
+      continue;
+    }
+
+    // Match decidido: ya no aportan puntos al match aunque se capturen
+    // las tarjetas del hoyo (stroke play). Mostramos `top_points/bottom_points = 0`
+    // y mantenemos los acumulados.
+    if (decidedAtHole != null) {
+      holes.push({
+        hole_no: h,
+        has_score: true,
+        top_points: 0,
+        bottom_points: 0,
+        top_cum: topAcc,
+        bottom_cum: bottomAcc,
+        match_status_after: `Decidido en H${decidedAtHole}`,
+        top_player_a_strokes: top_a,
+        top_player_b_strokes: top_b,
+        bottom_player_a_strokes: bottom_a,
+        bottom_player_b_strokes: bottom_b,
+        breakdown: null,
+        stroke_index: strokeIndexByHole.get(h) ?? null,
+        par: parByHole.get(h) ?? null,
+        after_decision: true,
       });
       continue;
     }
@@ -353,6 +386,7 @@ export async function loadDerivedMatchDetail(
         breakdown: null,
         stroke_index: strokeIndexByHole.get(h) ?? null,
         par: parByHole.get(h) ?? null,
+        after_decision: false,
       });
       continue;
     }
@@ -375,7 +409,18 @@ export async function loadDerivedMatchDetail(
       breakdown: res.breakdown,
       stroke_index: strokeIndexByHole.get(h) ?? null,
       par: parByHole.get(h) ?? null,
+      after_decision: false,
     });
+
+    const decisionWinner = isLowHighMatchDecidedAt({
+      top_total: topAcc,
+      bottom_total: bottomAcc,
+      hole_no: h,
+      holes_in_match,
+    });
+    if (decisionWinner) {
+      decidedAtHole = h;
+    }
   }
 
   const last_hole_played = holes
@@ -393,17 +438,29 @@ export async function loadDerivedMatchDetail(
   ] as PublicMatchDetailPayload["bottom_players"];
 
   let result_text: string | null = null;
-  if (last_hole_played >= holes_in_match) {
+  let status: string = last_hole_played > 0 ? "in_progress" : "scheduled";
+  if (decidedAtHole != null) {
+    const winnerLabel = topAcc > bottomAcc ? top_label : bottom_label;
+    result_text = formatLowHighDecisionResult({
+      winner_label: winnerLabel,
+      top_total: topAcc,
+      bottom_total: bottomAcc,
+      decided_at_hole: decidedAtHole,
+      holes_in_match,
+    });
+    status = "completed";
+  } else if (last_hole_played >= holes_in_match) {
     if (topAcc > bottomAcc) result_text = `${top_label} gana`;
     else if (bottomAcc > topAcc) result_text = `${bottom_label} gana`;
     else if (topAcc === bottomAcc && topAcc > 0) result_text = "Empate";
+    if (result_text) status = "completed";
   }
 
   return {
     id: match.id,
     round_no: match.round_no,
     position_no: match.position_no,
-    status: last_hole_played > 0 ? "in_progress" : "scheduled",
+    status,
     result_text,
     top_label,
     bottom_label,
@@ -415,6 +472,7 @@ export async function loadDerivedMatchDetail(
     last_hole_played,
     top_total: topAcc,
     bottom_total: bottomAcc,
+    decided_at_hole: decidedAtHole,
     holes,
     derived_from_strokes: true,
   };
