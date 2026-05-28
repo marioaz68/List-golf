@@ -96,6 +96,20 @@ export async function GET(req: Request) {
     );
   }
 
+  const { data: parRows } = await admin
+    .from("tournament_holes")
+    .select("hole_number, par")
+    .eq("tournament_id", match.tournament_id);
+  const parByHole = new Map<number, number>();
+  for (const r of (parRows ?? []) as Array<{
+    hole_number: number;
+    par: number | null;
+  }>) {
+    if (r.par != null && Number.isFinite(Number(r.par))) {
+      parByHole.set(r.hole_number, Number(r.par));
+    }
+  }
+
   let topAcc = 0;
   let bottomAcc = 0;
   const lineByHole = match.holes.map((h) => {
@@ -126,6 +140,7 @@ export async function GET(req: Request) {
       bottom_player_b_strokes: h.bottom_player_b_strokes,
       breakdown: h.detail_json?.breakdown ?? null,
       stroke_index: match.stroke_index_by_hole.get(h.hole_no) ?? null,
+      par: parByHole.get(h.hole_no) ?? null,
     };
   });
 
