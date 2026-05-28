@@ -257,16 +257,18 @@ export default function MatchDetailModal({
             </section>
           ) : null}
 
-          {/* Tabla de hoyos */}
+          {/* Tabla de hoyos: scorecard horizontal estilo "resultados en vivo" */}
           {detail ? (
             <section>
               <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                Detalle por hoyo
+                Tarjeta del match (brutos)
               </h3>
               <HoleTable
                 holes={detail.holes}
                 topPlayers={topPlayers}
                 bottomPlayers={bottomPlayers}
+                topLabel={topName}
+                bottomLabel={bottomName}
               />
             </section>
           ) : null}
@@ -491,101 +493,218 @@ function HoleTable({
   holes,
   topPlayers,
   bottomPlayers,
+  topLabel,
+  bottomLabel,
 }: {
   holes: HoleDetail[];
   topPlayers: PlayerInfo[];
   bottomPlayers: PlayerInfo[];
+  topLabel: string;
+  bottomLabel: string;
 }) {
-  const tA = topPlayers[0]?.label ?? "Top A";
-  const tB = topPlayers[1]?.label ?? "Top B";
-  const bA = bottomPlayers[0]?.label ?? "Bot A";
-  const bB = bottomPlayers[1]?.label ?? "Bot B";
+  const tA = topPlayers[0]?.label ?? "—";
+  const tB = topPlayers[1]?.label ?? "—";
+  const bA = bottomPlayers[0]?.label ?? "—";
+  const bB = bottomPlayers[1]?.label ?? "—";
+
+  function strokeOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
+    switch (who) {
+      case "tA":
+        return h.top_player_a_strokes;
+      case "tB":
+        return h.top_player_b_strokes;
+      case "bA":
+        return h.bottom_player_a_strokes;
+      case "bB":
+        return h.bottom_player_b_strokes;
+    }
+  }
+
+  function sumStrokes(
+    who: "tA" | "tB" | "bA" | "bB",
+    from: number,
+    to: number
+  ): number | null {
+    let total = 0;
+    let any = false;
+    for (let h = from; h <= to; h++) {
+      const v = strokeOf(holes[h - 1]!, who);
+      if (v == null) return null;
+      total += Number(v);
+      any = true;
+    }
+    return any ? total : null;
+  }
+
+  function diffAt(holeNo: number): number | null {
+    const h = holes[holeNo - 1];
+    if (!h || !h.has_score) return null;
+    return Number(h.top_cum ?? 0) - Number(h.bottom_cum ?? 0);
+  }
+
+  function fmtStroke(n: number | null): string {
+    if (n == null) return "—";
+    return String(n);
+  }
+
+  function fmtDiff(n: number | null): string {
+    if (n == null) return "—";
+    if (n === 0) return "AS";
+    const v = Number.isInteger(n) ? String(Math.abs(n)) : Math.abs(n).toFixed(1);
+    return (n > 0 ? "+" : "−") + v;
+  }
+
+  function diffTone(n: number | null): string {
+    if (n == null) return "text-slate-500";
+    if (n > 0) return "text-cyan-200";
+    if (n < 0) return "text-fuchsia-200";
+    return "text-slate-300";
+  }
+
+  const playerRows: Array<{
+    key: "tA" | "tB" | "bA" | "bB";
+    name: string;
+    team: "top" | "bottom";
+  }> = [
+    { key: "tA", name: tA, team: "top" },
+    { key: "tB", name: tB, team: "top" },
+    { key: "bA", name: bA, team: "bottom" },
+    { key: "bB", name: bB, team: "bottom" },
+  ];
+
+  const stickyName =
+    "sticky left-0 z-10 border-b border-r border-white/10 bg-[#0a1220] px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[6px_0_12px_-4px_rgba(0,0,0,0.45)]";
+  const holeTh =
+    "w-[22px] min-w-[22px] border-b border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-50 sm:w-6";
+  const subTh =
+    "w-[30px] min-w-[28px] border-b border-l border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-200 sm:w-[34px]";
+  const cellTd =
+    "w-[22px] min-w-[22px] border-b border-white/10 px-0 py-0.5 text-center text-[10px] sm:w-6";
+  const subTd =
+    "w-[30px] min-w-[28px] border-b border-l border-white/10 px-0 py-0.5 text-center text-[10px] font-semibold sm:w-[34px]";
 
   return (
     <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#0a1220]">
-      <table className="min-w-full text-[11px]">
-        <thead className="bg-white/5 text-slate-300">
-          <tr>
-            <th className="px-2 py-1.5 text-center">H</th>
-            <th className="px-2 py-1.5 text-center" title="Stroke index">SI</th>
-            <th className="px-2 py-1.5 text-center" title="Bruto / Neto" colSpan={2}>
-              {tA}
-            </th>
-            <th className="px-2 py-1.5 text-center" colSpan={2}>{tB}</th>
-            <th className="px-2 py-1.5 text-center" colSpan={2}>{bA}</th>
-            <th className="px-2 py-1.5 text-center" colSpan={2}>{bB}</th>
-            <th className="px-2 py-1.5 text-center text-cyan-200">Pts Top</th>
-            <th className="px-2 py-1.5 text-center text-fuchsia-200">Pts Bot</th>
-            <th className="px-2 py-1.5 text-left">Acumulado</th>
-          </tr>
-          <tr className="text-[9px] text-slate-500">
-            <th />
-            <th />
-            <th className="px-1 text-center">Br</th>
-            <th className="px-1 text-center">Net</th>
-            <th className="px-1 text-center">Br</th>
-            <th className="px-1 text-center">Net</th>
-            <th className="px-1 text-center">Br</th>
-            <th className="px-1 text-center">Net</th>
-            <th className="px-1 text-center">Br</th>
-            <th className="px-1 text-center">Net</th>
-            <th />
-            <th />
-            <th />
+      <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
+        <thead>
+          <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
+            <th className={`${stickyName} z-20 bg-cyan-950`}>Jugador</th>
+            {Array.from({ length: 9 }, (_, i) => (
+              <th key={`hh-${i + 1}`} className={holeTh}>
+                {i + 1}
+              </th>
+            ))}
+            <th className={subTh}>OUT</th>
+            {Array.from({ length: 9 }, (_, i) => (
+              <th key={`hh-${i + 10}`} className={holeTh}>
+                {i + 10}
+              </th>
+            ))}
+            <th className={subTh}>IN</th>
+            <th className={subTh}>TOT</th>
           </tr>
         </thead>
         <tbody>
-          {holes.map((h) => (
-            <tr
-              key={h.hole_no}
-              className={
-                h.has_score ? "border-t border-white/5" : "border-t border-white/5 text-slate-500"
-              }
-            >
-              <td className="px-2 py-1 text-center font-bold">{h.hole_no}</td>
-              <td className="px-2 py-1 text-center text-slate-400">
-                {h.stroke_index ?? "—"}
-              </td>
-              {/* TopA */}
-              <td className="px-1 text-center">{h.top_player_a_strokes ?? "—"}</td>
-              <td className="px-1 text-center text-slate-300">
-                {h.breakdown ? formatNet(h.breakdown.nets.top_a) : "—"}
-              </td>
-              {/* TopB */}
-              <td className="px-1 text-center">{h.top_player_b_strokes ?? "—"}</td>
-              <td className="px-1 text-center text-slate-300">
-                {h.breakdown ? formatNet(h.breakdown.nets.top_b) : "—"}
-              </td>
-              {/* BotA */}
-              <td className="px-1 text-center">{h.bottom_player_a_strokes ?? "—"}</td>
-              <td className="px-1 text-center text-slate-300">
-                {h.breakdown ? formatNet(h.breakdown.nets.bottom_a) : "—"}
-              </td>
-              {/* BotB */}
-              <td className="px-1 text-center">{h.bottom_player_b_strokes ?? "—"}</td>
-              <td className="px-1 text-center text-slate-300">
-                {h.breakdown ? formatNet(h.breakdown.nets.bottom_b) : "—"}
-              </td>
-              <td className="px-2 py-1 text-center font-bold text-cyan-200">
-                {fmtPts(h.top_points)}
-              </td>
-              <td className="px-2 py-1 text-center font-bold text-fuchsia-200">
-                {fmtPts(h.bottom_points)}
-              </td>
-              <td className="px-2 py-1 text-[10px] text-slate-300">
-                {h.has_score
-                  ? `${fmtPts(h.top_cum)}–${fmtPts(h.bottom_cum)}`
-                  : "—"}
-              </td>
-            </tr>
-          ))}
+          {playerRows.map((p, idx) => {
+            const stripe =
+              idx % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+            const accent =
+              p.team === "top"
+                ? "border-l-2 border-l-cyan-500/40"
+                : "border-l-2 border-l-fuchsia-500/40";
+            const out = sumStrokes(p.key, 1, 9);
+            const inn = sumStrokes(p.key, 10, 18);
+            const tot = out != null && inn != null ? out + inn : null;
+            return (
+              <tr key={`row-${p.key}`} className={`${stripe}`}>
+                <td className={`${stickyName} ${stripe} ${accent}`}>
+                  <span className="truncate">{p.name}</span>
+                </td>
+                {Array.from({ length: 9 }, (_, i) => (
+                  <td
+                    key={`c-${p.key}-${i + 1}`}
+                    className={`${cellTd} ${stripe}`}
+                  >
+                    {fmtStroke(strokeOf(holes[i]!, p.key))}
+                  </td>
+                ))}
+                <td className={`${subTd} ${stripe}`}>{fmtStroke(out)}</td>
+                {Array.from({ length: 9 }, (_, i) => (
+                  <td
+                    key={`c-${p.key}-${i + 10}`}
+                    className={`${cellTd} ${stripe}`}
+                  >
+                    {fmtStroke(strokeOf(holes[i + 9]!, p.key))}
+                  </td>
+                ))}
+                <td className={`${subTd} ${stripe}`}>{fmtStroke(inn)}</td>
+                <td className={`${subTd} ${stripe} text-white`}>
+                  {fmtStroke(tot)}
+                </td>
+              </tr>
+            );
+          })}
+
+          {(() => {
+            const stripe = "bg-[#091624]";
+            const d9 = diffAt(9);
+            const d18 = diffAt(18);
+            const dIn =
+              d9 != null && d18 != null ? d18 - d9 : null;
+            return (
+              <tr className={`border-t-2 border-cyan-500/30 ${stripe}`}>
+                <td
+                  className={`${stickyName} ${stripe} border-l-2 border-l-amber-400/60`}
+                >
+                  <span className="block text-amber-200">Diferencial</span>
+                  <span className="block text-[8px] font-normal text-slate-400">
+                    {topLabel} − {bottomLabel}
+                  </span>
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const d = diffAt(i + 1);
+                  return (
+                    <td
+                      key={`d-${i + 1}`}
+                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)}`}
+                    >
+                      {fmtDiff(d)}
+                    </td>
+                  );
+                })}
+                <td className={`${subTd} ${stripe} ${diffTone(d9)}`}>
+                  {fmtDiff(d9)}
+                </td>
+                {Array.from({ length: 9 }, (_, i) => {
+                  const d = diffAt(i + 10);
+                  return (
+                    <td
+                      key={`d-${i + 10}`}
+                      className={`${cellTd} ${stripe} font-bold ${diffTone(d)}`}
+                    >
+                      {fmtDiff(d)}
+                    </td>
+                  );
+                })}
+                <td className={`${subTd} ${stripe} ${diffTone(dIn)}`}>
+                  {fmtDiff(dIn)}
+                </td>
+                <td className={`${subTd} ${stripe} ${diffTone(d18)}`}>
+                  {fmtDiff(d18)}
+                </td>
+              </tr>
+            );
+          })()}
         </tbody>
       </table>
+      <p className="border-t border-white/10 px-2 py-1 text-[9px] text-slate-400">
+        Diferencial = puntos acumulados de{" "}
+        <span className="text-cyan-300">{topLabel}</span> menos{" "}
+        <span className="text-fuchsia-300">{bottomLabel}</span>. Positivo = va
+        arriba <span className="text-cyan-300">{topLabel}</span>; negativo = va
+        arriba <span className="text-fuchsia-300">{bottomLabel}</span>; AS =
+        empate acumulado.
+      </p>
     </div>
   );
-}
-
-function formatNet(n: number): string {
-  if (!Number.isFinite(n)) return "—";
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
