@@ -5,7 +5,7 @@ import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   buildLockedScorecardLookups,
-  isEntryRoundClosed,
+  isEntryRoundClosedForCategory,
 } from "@/lib/leaderboard/lockedScorecards";
 import { fetchLockedScorecardsForTournament } from "@/lib/leaderboard/fetchLockedScorecards";
 import FavoritesView from "@/components/public/FavoritesView";
@@ -853,7 +853,8 @@ export default async function PublicTournamentPage({
     allEntries,
     selectedRound,
     lockedLookups,
-    typedTournament.id
+    typedTournament.id,
+    roundsForLock
   );
 
   const selectedRoundNo = selectedRound?.round_no ?? 1;
@@ -1004,9 +1005,15 @@ export default async function PublicTournamentPage({
       : activeCutLineForUi(publicCutLines, selectedCategoryId || null);
 
     officialLeaderboard =
-      selectedRound?.id != null
+      selectedRound?.round_no != null
         ? leaderboard.filter((row) =>
-            isEntryRoundClosed(row.entry_id, selectedRound, lockedLookups)
+            isEntryRoundClosedForCategory(
+              row.entry_id,
+              row.category_id,
+              selectedRound.round_no,
+              roundsForLock,
+              lockedLookups
+            )
           )
         : leaderboard;
     } catch (err) {
