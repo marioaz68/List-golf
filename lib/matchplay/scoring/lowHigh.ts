@@ -46,6 +46,51 @@ export function relativePhInMatch(
 }
 
 /**
+ * Distribución de ventajas tipo "Bola Baja + Bola Alta" pareja vs pareja.
+ *
+ * Reglas (orden de los PHs: [topA, topB, bottomA, bottomB]):
+ *  - Dentro de cada pareja se identifica al "bajo" y al "alto" por PH
+ *    (menor PH = bajo; empate ⇒ el A queda como bajo).
+ *  - Bajo de Top vs Bajo de Bottom: el de mayor PH recibe (alta − baja)
+ *    golpes, repartidos por stroke index. El otro recibe 0.
+ *  - Alto de Top vs Alto de Bottom: igual.
+ *
+ * Devuelve los golpes que recibe cada jugador en el mismo orden de entrada.
+ * Cada jugador sólo recibe golpes de su "carril" (bajo vs bajo, o alto vs
+ * alto); nunca se duplica.
+ */
+export function pairLowHighStrokes(
+  ph: [number, number, number, number]
+): [number, number, number, number] {
+  const [phTopA, phTopB, phBotA, phBotB] = ph;
+
+  const topAIsLow = phTopA <= phTopB;
+  const bottomAIsLow = phBotA <= phBotB;
+
+  const topLowPh = Math.min(phTopA, phTopB);
+  const topHighPh = Math.max(phTopA, phTopB);
+  const botLowPh = Math.min(phBotA, phBotB);
+  const botHighPh = Math.max(phBotA, phBotB);
+
+  // Carril bajo: la pareja con mayor "bajo" recibe la diferencia.
+  const lowMin = Math.min(topLowPh, botLowPh);
+  const topLowReceived = Math.max(0, topLowPh - lowMin);
+  const botLowReceived = Math.max(0, botLowPh - lowMin);
+
+  // Carril alto: la pareja con mayor "alto" recibe la diferencia.
+  const highMin = Math.min(topHighPh, botHighPh);
+  const topHighReceived = Math.max(0, topHighPh - highMin);
+  const botHighReceived = Math.max(0, botHighPh - highMin);
+
+  return [
+    topAIsLow ? topLowReceived : topHighReceived,
+    topAIsLow ? topHighReceived : topLowReceived,
+    bottomAIsLow ? botLowReceived : botHighReceived,
+    bottomAIsLow ? botHighReceived : botLowReceived,
+  ];
+}
+
+/**
  * Fallback (sin slope/rating): se aplica solo % al HI. Solo se usa si no hay
  * PH almacenado en `tournament_entries`. Para el cálculo correcto WHS
  * usar `lib/handicap/whs.ts` y guardar el PH en la entry.
@@ -128,7 +173,7 @@ export function scoreLowHighHole(params: {
     if (stored != null && Number.isFinite(stored)) return Number(stored);
     return courseHandicapFromHi(hi[i], allowance_pct);
   }) as [number, number, number, number];
-  const [rTopA, rTopB, rBotA, rBotB] = relativePhInMatch(ph);
+  const [rTopA, rTopB, rBotA, rBotB] = pairLowHighStrokes(ph);
 
   const nets: LowHighPlayerNet = {
     top_a: netOnHole(g.top_a, rTopA, hole_no, strokeIndexByHole),
