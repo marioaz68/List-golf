@@ -176,3 +176,122 @@ export async function saveCardSignature(
     signedByWitnessEntryId,
   };
 }
+
+export type LockScorecardResult =
+  | { ok: true; locked: boolean; reason?: string }
+  | { ok: false; error: string };
+
+/**
+ * Cierra automáticamente la tarjeta (`scorecards.locked_at`) cuando:
+ *  - Las dos firmas (jugador + testigo) están presentes para este entry.
+ *  - Los 18 hoyos tienen score capturado en `hole_scores`.
+ *
+ * Una vez cerrada, la fila entra a la clasificación oficial (los procesos
+ * de leaderboard ya consultan `scorecards.locked_at`).
+ *
+ * Idempotente: si la tarjeta ya estaba cerrada, no la sobreescribe.
+ */
+export async function lockScorecardIfSignedAndComplete(
+  admin: SupabaseClient,
+  params: { groupId: string; entryId: string }
+): Promise<LockScorecardResult> {
+  const gid = params.groupId.trim();
+  const eid = params.entryId.trim();
+  if (!gid || !eid) return { ok: false, error: "Parámetros incompletos." };
+
+  // 1) Firmas presentes.
+  const { data: sig } = await admin
+    .from("card_signatures")
+    .select("signed_by_player_at, signed_by_witness_at")
+    .eq("group_id", gid)
+    .eq("entry_id", eid)
+    .maybeSingle();
+  if (!sig?.signed_by_player_at || !sig?.signed_by_witness_at) {
+    return { ok: true, locked: false, reason: "missing_signatures" };
+  }
+
+  // 2) Round + tournament del grupo.
+  const { data: groupRow } = await admin
+    .from("pairing_groups")
+    .select("round_id")
+    .eq("id", gid)
+    .maybeSingle();
+  const roundId = String(groupRow?.round_id ?? "").trim();
+  if (!roundId) return { ok: true, locked: false, reason: "no_round_id" };
+
+  const { data: roundRow } = await admin
+    .from("rounds")
+    .select("id, tournament_id")
+    .eq("id", roundId)
+    .maybeSingle();
+  const tournamentId = String(roundRow?.tournament_id ?? "").trim();
+  if (!tournamentId) {
+    return { ok: true, locked: false, reason: "no_tournament_id" };
+  }
+
+  // 3) Verificar 18 hoyos capturados.
+  const { data: holes } = await admin
+    .from("hole_scores")
+    .select("hole_number, hole_no, strokes, round_id")
+    .eq("entry_id", eid)
+    .eq("round_id", roundId);
+
+  const seen = new Set<number>();
+  for (const row of (holes ?? []) as Array<{
+    hole_number?: number | null;
+    hole_no?: number | null;
+    strokes?: number | null;
+  }>) {
+    if (row.strokes == null) continue;
+    const h =
+      typeof row.hole_number === "number"
+        ? row.hole_number
+        : typeof row.hole_no === "number"
+          ? row.hole_no
+          : null;
+    if (h != null && h >= 1 && h <= 18) seen.add(h);
+  }
+  if (seen.size < 18) {
+    return { ok: true, locked: false, reason: "card_incomplete" };
+  }
+
+  // 4) Upsert / lock de la tarjeta.
+  const nowIso = new Date().toISOString();
+  const { data: existing } = await admin
+    .from("scorecards")
+    .select("id, locked_at")
+    .eq("entry_id", eid)
+    .eq("round_id", roundId)
+    .maybeSingle();
+
+  if (existing?.id) {
+    if (existing.locked_at) {
+      return { ok: true, locked: false, reason: "already_locked" };
+    }
+    const { error } = await admin
+      .from("scorecards")
+      .update({
+        status: "locked",
+        locked_at: nowIso,
+        player_signed_at: sig.signed_by_player_at,
+        witness_signed_at: sig.signed_by_witness_at,
+        updated_at: nowIso,
+      })
+      .eq("id", existing.id);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, locked: true };
+  }
+
+  const { error } = await admin.from("scorecards").insert({
+    tournament_id: tournamentId,
+    round_id: roundId,
+    entry_id: eid,
+    status: "locked",
+    locked_at: nowIso,
+    player_signed_at: sig.signed_by_player_at,
+    witness_signed_at: sig.signed_by_witness_at,
+    updated_at: nowIso,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, locked: true };
+}
