@@ -187,7 +187,11 @@ function PublicSection({
                   <td
                     className={[
                       "px-0 py-1 text-center font-bold text-slate-900",
-                      isMe ? "bg-sky-100" : "",
+                      isMe
+                        ? "bg-sky-100"
+                        : isMyWitnessTarget
+                          ? "bg-amber-100"
+                          : "",
                     ].join(" ")}
                   >
                     {total > 0 ? total : ""}
