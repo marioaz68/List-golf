@@ -18,6 +18,13 @@ export type DerivedMatchRow = {
   winner_pair_id: string | null;
   status: "scheduled" | "bye";
   result_text: string | null;
+  /** round_id del torneo para joinear con hole_scores stroke play. */
+  round_id: string;
+  /** entry_ids de los 4 jugadores del match (cuando hay 2 teams). */
+  top_a_entry_id: string | null;
+  top_b_entry_id: string | null;
+  bottom_a_entry_id: string | null;
+  bottom_b_entry_id: string | null;
 };
 
 export type DerivedMatchesResult = {
@@ -93,6 +100,10 @@ export async function derivePairingGroupMatches(
     .eq("is_active", true);
 
   const entryToTeam = new Map<string, string>();
+  const teamEntries = new Map<
+    string,
+    { a: string | null; b: string | null }
+  >();
   for (const t of (teamsRaw ?? []) as Array<{
     id: string;
     player_a_entry_id: string | null;
@@ -100,6 +111,10 @@ export async function derivePairingGroupMatches(
   }>) {
     if (t.player_a_entry_id) entryToTeam.set(t.player_a_entry_id, t.id);
     if (t.player_b_entry_id) entryToTeam.set(t.player_b_entry_id, t.id);
+    teamEntries.set(t.id, {
+      a: t.player_a_entry_id ?? null,
+      b: t.player_b_entry_id ?? null,
+    });
   }
   if (entryToTeam.size === 0) return empty;
 
@@ -144,6 +159,8 @@ export async function derivePairingGroupMatches(
 
     for (const m of matchesInRound) {
       const isBye = !m.top || !m.bottom;
+      const topEntries = m.top ? teamEntries.get(m.top) : null;
+      const bottomEntries = m.bottom ? teamEntries.get(m.bottom) : null;
       matches.push({
         id: `derived-${round.id}-g${m.pos}`,
         bracket_id: `derived-${tournamentId}`,
@@ -154,6 +171,11 @@ export async function derivePairingGroupMatches(
         winner_pair_id: isBye ? m.top ?? m.bottom : null,
         status: isBye ? "bye" : "scheduled",
         result_text: isBye ? "BYE" : null,
+        round_id: round.id,
+        top_a_entry_id: topEntries?.a ?? null,
+        top_b_entry_id: topEntries?.b ?? null,
+        bottom_a_entry_id: bottomEntries?.a ?? null,
+        bottom_b_entry_id: bottomEntries?.b ?? null,
       });
     }
   }

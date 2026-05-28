@@ -5,6 +5,7 @@ import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
+import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import AutoRefresh from "@/components/public/AutoRefresh";
 import type { TournamentSettings } from "@/types/tournament";
 import MatchesLiveGrid from "./MatchesLiveGrid";
@@ -116,6 +117,9 @@ export default async function PublicMatchesLivePage(props: {
   // Fallback: si aún no hay bracket oficial pero ya hay salidas (pairings)
   // armadas con equipos asignados, mostramos los matches del día a 0-0
   // para que la página pública refleje los partidos en curso/próximos.
+  // Además, si ya se están capturando hole_scores brutos (stroke play),
+  // derivamos los puntos low/high del match en tiempo real desde ahí
+  // para que matches-vivo se mueva aunque no exista bracket oficial.
   if (initialMatches.length === 0) {
     const derived = await derivePairingGroupMatches(supabase, tournamentId);
     if (derived.matches.length > 0) {
@@ -124,6 +128,21 @@ export default async function PublicMatchesLivePage(props: {
       roundCount = derived.roundCount;
       bracketIdForGrid = `derived-${tournamentId}`;
       derivedFromPairings = true;
+
+      const derivedHoles = await deriveMatchHolesFromStrokes(
+        supabase,
+        tournamentId,
+        derived.matches
+      );
+      if (derivedHoles.length > 0) {
+        initialHoles = derivedHoles.map((h) => ({
+          match_id: h.match_id,
+          hole_no: h.hole_no,
+          top_points: h.top_points,
+          bottom_points: h.bottom_points,
+          match_status_after: h.match_status_after,
+        }));
+      }
     }
   }
 
