@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Rule } from "@/lib/tee-assignment";
 import {
+  normalizeTeeName,
   type CourseTeeForHandicap,
   type TournamentHandicapContext,
 } from "@/lib/handicap/resolveTournamentEntryHandicap";
@@ -33,7 +34,7 @@ export async function loadTournamentHandicapContext(
   ] = await Promise.all([
     admin
       .from("tee_sets")
-      .select("id, code")
+      .select("id, code, name, color")
       .eq("tournament_id", tournamentId),
     admin
       .from("category_tee_rules")
@@ -51,7 +52,7 @@ export async function loadTournamentHandicapContext(
       ? admin
           .from("course_tee_sets")
           .select(
-            "code, slope_men, slope_women, course_rating_men, course_rating_women, par"
+            "code, name, color, slope_men, slope_women, course_rating_men, course_rating_women, par"
           )
           .eq("course_id", courseId)
       : Promise.resolve({ data: [], error: null }),
@@ -73,10 +74,16 @@ export async function loadTournamentHandicapContext(
   }
 
   const courseTeesByCode = new Map<string, CourseTeeForHandicap>();
-  for (const row of courseTeesRes.data ?? []) {
-    const code = normalizeTeeCode((row as { code: string | null }).code);
-    if (!code) continue;
-    courseTeesByCode.set(code, row as CourseTeeForHandicap);
+  const courseTeesByNameNorm = new Map<string, CourseTeeForHandicap>();
+  const courseTeesByColor = new Map<string, CourseTeeForHandicap>();
+  for (const raw of courseTeesRes.data ?? []) {
+    const row = raw as CourseTeeForHandicap;
+    const code = normalizeTeeCode(row.code);
+    if (code) courseTeesByCode.set(code, row);
+    const nameNorm = normalizeTeeName(row.name ?? row.code ?? null);
+    if (nameNorm) courseTeesByNameNorm.set(nameNorm, row);
+    const colorNorm = normalizeTeeName(row.color ?? null);
+    if (colorNorm) courseTeesByColor.set(colorNorm, row);
   }
 
   const categoryTeeRules: Rule[] = (rulesRes.data ?? []).map((r) => ({
@@ -126,10 +133,14 @@ export async function loadTournamentHandicapContext(
     tournamentTeeSets: (teeSetsRes.data ?? []).map((t) => ({
       id: (t as { id: string }).id,
       code: (t as { code: string | null }).code,
+      name: (t as { name?: string | null }).name ?? null,
+      color: (t as { color?: string | null }).color ?? null,
     })),
     categoryTeeRules,
     allowancePctByCategory,
     courseTeesByCode,
+    courseTeesByNameNorm,
+    courseTeesByColor,
     matchplayFallback,
   };
 }
