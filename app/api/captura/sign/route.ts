@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { saveCardSignature } from "@/lib/captura/cardSignatures";
+import {
+  lockScorecardIfSignedAndComplete,
+  saveCardSignature,
+} from "@/lib/captura/cardSignatures";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +101,19 @@ export async function POST(req: Request) {
     if (!result.ok) {
       return NextResponse.json(result, { status: 400 });
     }
-    return NextResponse.json(result);
+
+    // Si ya quedaron ambas firmas + 18 hoyos, cerrar la tarjeta
+    // automáticamente para que aparezca en clasificación oficial.
+    let scorecardLocked = false;
+    if (result.signedByPlayerAt && result.signedByWitnessAt) {
+      const lockRes = await lockScorecardIfSignedAndComplete(admin, {
+        groupId,
+        entryId,
+      });
+      if (lockRes.ok) scorecardLocked = lockRes.locked;
+    }
+
+    return NextResponse.json({ ...result, scorecardLocked });
   } catch (err) {
     return NextResponse.json(
       {
