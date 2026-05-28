@@ -7,6 +7,7 @@ import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import { roundLabel } from "@/lib/matchplay/bracketUtils";
+import MatchDetailModal from "./MatchDetailModal";
 
 type MatchRow = {
   id: string;
@@ -82,6 +83,12 @@ export default function MatchesLiveGrid({
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
   const [holes, setHoles] = useState<HoleRow[]>(initialHoles);
+  const [detail, setDetail] = useState<{
+    match: MatchRow;
+    topTeam: MatchPlayTeamRow | null;
+    bottomTeam: MatchPlayTeamRow | null;
+    label: string;
+  } | null>(null);
 
   // Realtime: matches del bracket (sólo si es un bracket oficial real).
   useEffect(() => {
@@ -253,20 +260,30 @@ export default function MatchesLiveGrid({
               </p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {round.matches.map((m) => (
-                  <MatchCard
-                    key={m.id}
-                    match={m}
-                    topTeam={m.top_pair_id ? teamById.get(m.top_pair_id) ?? null : null}
-                    bottomTeam={
-                      m.bottom_pair_id
-                        ? teamById.get(m.bottom_pair_id) ?? null
-                        : null
-                    }
-                    holes={holesByMatch.get(m.id) ?? []}
-                    holesPerMatch={holesPerMatch}
-                  />
-                ))}
+                {round.matches.map((m) => {
+                  const topTeam = m.top_pair_id ? teamById.get(m.top_pair_id) ?? null : null;
+                  const bottomTeam = m.bottom_pair_id
+                    ? teamById.get(m.bottom_pair_id) ?? null
+                    : null;
+                  return (
+                    <MatchCard
+                      key={m.id}
+                      match={m}
+                      topTeam={topTeam}
+                      bottomTeam={bottomTeam}
+                      holes={holesByMatch.get(m.id) ?? []}
+                      holesPerMatch={holesPerMatch}
+                      onOpen={() =>
+                        setDetail({
+                          match: m,
+                          topTeam,
+                          bottomTeam,
+                          label: round.label,
+                        })
+                      }
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -293,6 +310,18 @@ export default function MatchesLiveGrid({
           ← Página del torneo
         </Link>
       </div>
+
+      <MatchDetailModal
+        open={!!detail}
+        onClose={() => setDetail(null)}
+        matchId={detail?.match.id ?? null}
+        isDerived={!!derivedFromPairings || (detail?.match.id?.startsWith("derived-") ?? false)}
+        topTeam={detail?.topTeam ?? null}
+        bottomTeam={detail?.bottomTeam ?? null}
+        roundLabel={detail?.label}
+        positionNo={detail?.match.position_no ?? 0}
+        holesPerMatch={holesPerMatch}
+      />
     </div>
   );
 }
@@ -303,12 +332,14 @@ function MatchCard({
   bottomTeam,
   holes,
   holesPerMatch,
+  onOpen,
 }: {
   match: MatchRow;
   topTeam: MatchPlayTeamRow | null;
   bottomTeam: MatchPlayTeamRow | null;
   holes: HoleRow[];
   holesPerMatch: number;
+  onOpen?: () => void;
 }) {
   const isBye = match.status === "bye";
   const isLive = match.status === "in_progress";
@@ -326,6 +357,14 @@ function MatchCard({
   const holesPlayed = holes.filter(
     (h) => h.top_points != null || h.bottom_points != null
   ).length;
+  const lastHolePlayed = holes.reduce(
+    (m, h) =>
+      h.top_points != null || h.bottom_points != null
+        ? Math.max(m, h.hole_no)
+        : m,
+    0
+  );
+  const nextHole = Math.min(holesPerMatch, lastHolePlayed + 1);
   const topAhead = topPts > bottomPts;
   const bottomAhead = bottomPts > topPts;
 
@@ -346,9 +385,26 @@ function MatchCard({
       ? 0
       : null;
 
+  const clickable = !!onOpen && !isBye;
+
   return (
     <article
-      className={`rounded-xl border p-3 text-[12px] ${
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onOpen : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpen?.();
+              }
+            }
+          : undefined
+      }
+      className={`rounded-xl border p-3 text-[12px] transition ${
+        clickable ? "cursor-pointer hover:border-cyan-400/50 hover:bg-cyan-950/10" : ""
+      } ${
         isBye
           ? "border-slate-700/40 bg-slate-900/40 text-slate-500"
           : isDone
@@ -358,26 +414,31 @@ function MatchCard({
               : "border-white/10 bg-[#0c1728]"
       }`}
     >
-      <div className="mb-1.5 flex items-center justify-between text-[9px] uppercase tracking-wider">
+      <div className="mb-1.5 flex items-center justify-between gap-1 text-[9px] uppercase tracking-wider">
         <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-400">
           R{match.round_no} · M{match.position_no}
         </span>
         {isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2 py-0.5 font-bold text-cyan-200">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
-            EN JUEGO · H{holesPlayed}/{holesPerMatch}
+            EN JUEGO · va en H{Math.max(lastHolePlayed, 1)}/{holesPerMatch}
           </span>
         ) : isDone ? (
           <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-200">
-            ✓ FINAL
+            ✓ FINAL · {holesPlayed}/{holesPerMatch} hoyos
           </span>
         ) : isBye ? (
           <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">
             BYE
           </span>
+        ) : lastHolePlayed > 0 ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 font-bold text-amber-200">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+            Va en H{lastHolePlayed}/{holesPerMatch}
+          </span>
         ) : (
           <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">
-            Programado
+            Programado · sale H{nextHole}
           </span>
         )}
       </div>
@@ -401,6 +462,12 @@ function MatchCard({
       {match.result_text ? (
         <p className="mt-2 text-center text-[10px] font-bold text-emerald-300">
           {match.result_text}
+        </p>
+      ) : null}
+
+      {clickable ? (
+        <p className="mt-2 text-center text-[10px] text-cyan-300/80">
+          Tocar para ver detalle hoyo por hoyo →
         </p>
       ) : null}
     </article>
