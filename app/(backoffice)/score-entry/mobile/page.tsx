@@ -714,6 +714,8 @@ function MobileScoreEntryContent() {
   );
   /** Entry IDs cuyos scores puedo modificar como caddie (lista del API). */
   const [caddieForEntryIds, setCaddieForEntryIds] = useState<string[]>([]);
+  /** Mapa entryId (jugador) -> witnessEntryId (su testigo). */
+  const [witnessesMap, setWitnessesMap] = useState<Record<string, string>>({});
   /** Entry ID del jugador a quien atestiguo (yo soy su testigo). */
   const [witnessTargetEntryId, setWitnessTargetEntryId] = useState<string | null>(null);
   /** Nombre legible del jugador a quien atestiguo. */
@@ -790,12 +792,15 @@ function MobileScoreEntryContent() {
         // Mapa de testigos: yo atestiguo a alguien si soy su witness.
         let targetEid: string | null = null;
         let myWitnessEid: string | null = null;
-        if (myId && Array.isArray(data.witnesses)) {
+        const witMap: Record<string, string> = {};
+        if (Array.isArray(data.witnesses)) {
           for (const w of data.witnesses) {
-            if (w.witnessEntryId === myId) targetEid = w.entryId;
-            if (w.entryId === myId) myWitnessEid = w.witnessEntryId;
+            witMap[w.entryId] = w.witnessEntryId;
+            if (myId && w.witnessEntryId === myId) targetEid = w.entryId;
+            if (myId && w.entryId === myId) myWitnessEid = w.witnessEntryId;
           }
         }
+        setWitnessesMap(witMap);
         setWitnessTargetEntryId(targetEid);
 
         const targetPlayer = targetEid
@@ -928,17 +933,25 @@ function MobileScoreEntryContent() {
     if (!groupId) return;
 
     const targetPlayer = players.find((p) => p.id === playerId);
-    // "Autoridad" del jugador objetivo:
-    //  - el propio jugador (yo soy ese entry)
-    //  - su caddie (entry asignado a mi caddie_id)
-    //  - su testigo (mi entry es testigo del objetivo)
-    // Cualquier captura de la autoridad NO marca rojo (modo approve).
-    // El resto sí marca rojo si la celda ya tenía valor.
+    // "Autoridad" del jugador objetivo P (no marca rojo):
+    //  - P (yo soy ese entry)
+    //  - el caddie de P (P en mi lista caddieForEntryIds)
+    //  - el testigo de P (mi entry === witness asignado a P)
+    //  - el caddie del testigo de P (testigo de P está en mi caddieForEntryIds)
+    // Cualquier otro miembro del grupo deja la celda en rojo si la
+    // celda ya tenía valor.
     const iAmThePlayer = viewerEntryId === playerId;
     const iAmTheirCaddie = caddieForEntryIds.includes(playerId);
     const iAmTheirWitness =
       witnessTargetEntryId != null && witnessTargetEntryId === playerId;
-    const isAuthoritative = iAmThePlayer || iAmTheirCaddie || iAmTheirWitness;
+    const witnessOfTarget = witnessesMap[playerId] ?? null;
+    const iAmTheWitnessCaddie =
+      witnessOfTarget != null && caddieForEntryIds.includes(witnessOfTarget);
+    const isAuthoritative =
+      iAmThePlayer ||
+      iAmTheirCaddie ||
+      iAmTheirWitness ||
+      iAmTheWitnessCaddie;
     const mode: "modify" | "approve" = isAuthoritative ? "approve" : "modify";
     const role: "player" | "caddie" | "witness" | null = iAmThePlayer
       ? "player"
@@ -946,7 +959,9 @@ function MobileScoreEntryContent() {
         ? "caddie"
         : iAmTheirWitness
           ? "witness"
-          : null;
+          : iAmTheWitnessCaddie
+            ? "caddie"
+            : null;
 
     // Optimista: modificación a celda con valor previo → rojo; aprobar → limpia.
     if (mode === "approve") {

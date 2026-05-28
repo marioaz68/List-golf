@@ -506,19 +506,27 @@ export default function TarjetaCaptureClient({
       }));
     }
 
-    // Determinar mi rol respecto al jugador objetivo:
-    // jugador, caddie del jugador, testigo del jugador o ninguno.
+    // Determinar mi rol respecto al jugador objetivo P:
+    // jugador, caddie de P, testigo de P, caddie del testigo o ninguno.
+    const caddieForEntries = meta.caddieForEntryIds ?? [];
     const iAmThePlayer = meta.myEntryId === entryId;
-    const iAmTheirCaddie = (meta.caddieForEntryIds ?? []).includes(entryId);
+    const iAmTheirCaddie = caddieForEntries.includes(entryId);
     const iAmTheirWitness =
       witnessTargetForMe != null && witnessTargetForMe === entryId;
+    const witnessOfTarget = (meta.witnesses ?? []).find(
+      (w) => w.entryId === entryId
+    )?.witnessEntryId;
+    const iAmTheWitnessCaddie =
+      witnessOfTarget != null && caddieForEntries.includes(witnessOfTarget);
     const role: "player" | "caddie" | "witness" | null = iAmThePlayer
       ? "player"
       : iAmTheirCaddie
         ? "caddie"
         : iAmTheirWitness
           ? "witness"
-          : null;
+          : iAmTheWitnessCaddie
+            ? "caddie"
+            : null;
 
     try {
       const res = await fetch("/api/captura/score", {
@@ -606,20 +614,31 @@ export default function TarjetaCaptureClient({
   }
 
   /**
-   * "Autoridad" del jugador objetivo:
-   *  - el propio jugador,
-   *  - su caddie,
-   *  - su testigo.
-   * Cuando la autoridad captura un score NO se marca rojo (mode=approve).
+   * "Autoridad" del jugador objetivo P (no marca rojo):
+   *  - el propio jugador P,
+   *  - su caddie (asignado a P),
+   *  - su testigo W,
+   *  - el caddie de W (acttúa de parte del testigo).
    * Cualquier otra persona del grupo deja la celda en rojo si la celda
    * ya tenía valor antes (mode=modify).
    */
   function publicSaveMode(entryId: string): "modify" | "approve" {
+    const caddieForEntries = meta.caddieForEntryIds ?? [];
     const iAmThePlayer = meta.myEntryId === entryId;
-    const iAmTheirCaddie = (meta.caddieForEntryIds ?? []).includes(entryId);
+    const iAmTheirCaddie = caddieForEntries.includes(entryId);
     const iAmTheirWitness =
       witnessTargetForMe != null && witnessTargetForMe === entryId;
-    return iAmThePlayer || iAmTheirCaddie || iAmTheirWitness
+    // Testigo del jugador objetivo P (entry de W).
+    const witnessOfTarget = (meta.witnesses ?? []).find(
+      (w) => w.entryId === entryId
+    )?.witnessEntryId;
+    const iAmTheWitnessCaddie =
+      witnessOfTarget != null && caddieForEntries.includes(witnessOfTarget);
+
+    return iAmThePlayer ||
+      iAmTheirCaddie ||
+      iAmTheirWitness ||
+      iAmTheWitnessCaddie
       ? "approve"
       : "modify";
   }
