@@ -712,6 +712,8 @@ function MobileScoreEntryContent() {
   const [myPrivateScores, setMyPrivateScores] = useState<HoleScores>(() =>
     createEmptyScores()
   );
+  /** Entry IDs cuyos scores puedo modificar como caddie (lista del API). */
+  const [caddieForEntryIds, setCaddieForEntryIds] = useState<string[]>([]);
   /** Entry ID del jugador a quien atestiguo (yo soy su testigo). */
   const [witnessTargetEntryId, setWitnessTargetEntryId] = useState<string | null>(null);
   /** Nombre legible del jugador a quien atestiguo. */
@@ -781,6 +783,9 @@ function MobileScoreEntryContent() {
         const data = json.data;
         const myId = data.myEntryId ?? (meTrim || null);
         setMyEntryId(myId);
+        setCaddieForEntryIds(
+          Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
+        );
 
         // Mapa de testigos: yo atestiguo a alguien si soy su witness.
         let targetEid: string | null = null;
@@ -923,19 +928,25 @@ function MobileScoreEntryContent() {
     if (!groupId) return;
 
     const targetPlayer = players.find((p) => p.id === playerId);
-    const holeWasPending = Boolean(targetPlayer?.pending?.[hole]);
-    const isApproveTarget =
+    // "Autoridad" del jugador objetivo:
+    //  - el propio jugador (yo soy ese entry)
+    //  - su caddie (entry asignado a mi caddie_id)
+    //  - su testigo (mi entry es testigo del objetivo)
+    // Cualquier captura de la autoridad NO marca rojo (modo approve).
+    // El resto sí marca rojo si la celda ya tenía valor.
+    const iAmThePlayer = viewerEntryId === playerId;
+    const iAmTheirCaddie = caddieForEntryIds.includes(playerId);
+    const iAmTheirWitness =
       witnessTargetEntryId != null && witnessTargetEntryId === playerId;
-    const mode: "modify" | "approve" =
-      isApproveTarget && holeWasPending ? "approve" : "modify";
-    const role =
-      mode === "approve"
-        ? "witness"
-        : meParam?.trim()
-          ? "player"
-          : caddieParam?.trim()
-            ? "caddie"
-            : null;
+    const isAuthoritative = iAmThePlayer || iAmTheirCaddie || iAmTheirWitness;
+    const mode: "modify" | "approve" = isAuthoritative ? "approve" : "modify";
+    const role: "player" | "caddie" | "witness" | null = iAmThePlayer
+      ? "player"
+      : iAmTheirCaddie
+        ? "caddie"
+        : iAmTheirWitness
+          ? "witness"
+          : null;
 
     // Optimista: modificación a celda con valor previo → rojo; aprobar → limpia.
     if (mode === "approve") {
