@@ -1243,6 +1243,99 @@ export async function updateEntryHandicap(formData: FormData) {
   return { ok: true };
 }
 
+/**
+ * Edita el HI de la inscripción in-line (desde la tabla de inscritos) y
+ * recalcula automáticamente CH/PH del torneo con WHS.
+ *
+ * No re-categoriza al jugador: si la categoría debiera cambiar, hay que
+ * usar el editor completo del jugador. Eso evita errores de capacidad en
+ * un cambio rápido desde la lista.
+ */
+export async function updateEntryHandicapIndexInline(formData: FormData) {
+  const { resolveTournamentEntryHandicap } = await import(
+    "@/lib/handicap/resolveTournamentEntryHandicap"
+  );
+  const { loadTournamentHandicapContext } = await import(
+    "@/lib/handicap/loadTournamentHandicapContext"
+  );
+
+  const admin = await createAdminClient();
+
+  const id = reqStr(formData, "id");
+  const tournament_id = reqStr(formData, "tournament_id");
+  const hi = optNum(formData, "handicap_index");
+  if (hi === null) throw new Error("handicap_index requerido");
+
+  await ensureEntriesAccess(tournament_id);
+
+  const { data: entryRow, error: entryErr } = await admin
+    .from("tournament_entries")
+    .select(
+      `
+      id,
+      player_id,
+      category_id,
+      playing_handicap_override,
+      players:players ( gender, birth_year )
+    `
+    )
+    .eq("id", id)
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (entryErr) throw new Error(entryErr.message);
+  if (!entryRow) throw new Error("Inscripción no encontrada");
+
+  const ctx = await loadTournamentHandicapContext(admin, tournament_id);
+
+  const calc = ctx
+    ? resolveTournamentEntryHandicap(
+        {
+          id: entryRow.id,
+          player_id: entryRow.player_id,
+          category_id: entryRow.category_id,
+          handicap_index: hi,
+          playing_handicap_override:
+            entryRow.playing_handicap_override ?? null,
+          player: {
+            gender:
+              (entryRow.players as { gender?: string | null } | null)
+                ?.gender ?? null,
+            birth_year:
+              (entryRow.players as { birth_year?: number | null } | null)
+                ?.birth_year ?? null,
+            handicap_index: hi,
+          },
+        },
+        ctx
+      )
+    : null;
+
+  const update: Record<string, number | null> = {
+    handicap_index: hi,
+  };
+  if (calc && entryRow.playing_handicap_override == null) {
+    update.course_handicap = calc.course_handicap;
+    update.playing_handicap = calc.playing_handicap;
+  }
+
+  const { error: updErr } = await admin
+    .from("tournament_entries")
+    .update(update)
+    .eq("id", id)
+    .eq("tournament_id", tournament_id);
+  if (updErr) throw new Error(updErr.message);
+
+  revalidatePath("/entries");
+  revalidatePath("/players");
+
+  return {
+    ok: true,
+    course_handicap: calc?.course_handicap ?? null,
+    playing_handicap: calc?.playing_handicap ?? null,
+  };
+}
+
 export async function autoCategorizeEntries(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
