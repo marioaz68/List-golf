@@ -883,10 +883,10 @@ function HoleTable({
     );
   }
 
-  /** Bola baja = fondo suave; bola alta = azul marino (puntos del match). */
+  /** Bola baja = verde (mejor neto de la pareja); bola alta = naranja (segundo neto). */
   function roleTint(r: "low" | "high" | null): string {
-    if (r === "low") return "bg-cyan-500/10";
-    if (r === "high") return "bg-indigo-700/30";
+    if (r === "low") return "bg-emerald-500/30";
+    if (r === "high") return "bg-orange-600/35";
     return "";
   }
 
@@ -903,9 +903,10 @@ function HoleTable({
         <span>
           <span className="font-semibold text-amber-300">Amarillo</span> = neto
           con golpe de ventaja ·{" "}
-          <span className="font-semibold text-indigo-300">Azul</span> = bola alta
-          · <span className="font-semibold text-cyan-300/90">Celeste</span> =
-          bola baja
+          <span className="font-semibold text-emerald-300">Verde</span> = bola
+          baja (mejor neto de la pareja) ·{" "}
+          <span className="font-semibold text-orange-300">Naranja</span> = bola
+          alta (segundo neto de la pareja)
         </span>
       </div>
       {decidedAtHole != null ? (
@@ -1166,16 +1167,16 @@ function HoleTable({
             Arriba de par (bogey+)
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-sm bg-cyan-500/30" />
-            Bola baja de la pareja
+            <span className="inline-block h-3 w-3 rounded-sm bg-emerald-500/60" />
+            Bola baja (mejor neto)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-3 w-3 rounded-sm bg-orange-600/70" />
+            Bola alta (segundo neto)
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="font-bold text-amber-300">5</span>
             Neto con ventaja (amarillo)
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-sm bg-indigo-700/60" />
-            Bola alta de la pareja
           </span>
         </div>
         {hasPar ? (
