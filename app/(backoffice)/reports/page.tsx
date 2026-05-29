@@ -76,7 +76,7 @@ export default async function ReportsPage(props: {
 
   return (
     <div className="space-y-3 p-2 md:p-3">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
+      <header className="flex flex-wrap items-baseline justify-between gap-2 print:hidden">
         <div>
           <h1 className="text-lg font-bold leading-none text-white">
             Reportes
@@ -112,7 +112,7 @@ export default async function ReportsPage(props: {
       </header>
 
       {REPORT_TABS.length > 1 ? (
-        <nav className="flex flex-wrap gap-1 border-b border-white/10 pb-1">
+        <nav className="flex flex-wrap gap-1 border-b border-white/10 pb-1 print:hidden">
           {REPORT_TABS.map((t) => {
             const isActive = t.id === tab;
             const href = `/reports?tournament_id=${effectiveId}&tab=${t.id}`;
@@ -135,7 +135,7 @@ export default async function ReportsPage(props: {
 
       {tab === "handicaps" ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#0f172a] px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#0f172a] px-3 py-2 print:hidden">
             <div className="text-[11px] text-slate-300">
               <span className="font-semibold text-white">Persistencia.</span>{" "}
               El reporte calcula CH/PH en vivo. Si quieres que la leaderboard y
@@ -154,7 +154,7 @@ export default async function ReportsPage(props: {
 
           {hcapMessage ? (
             <p
-              className={`rounded-md border px-3 py-1.5 text-[11px] ${
+              className={`rounded-md border px-3 py-1.5 text-[11px] print:hidden ${
                 hcapStatus === "ok"
                   ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
                   : "border-amber-400/40 bg-amber-500/10 text-amber-200"
@@ -164,7 +164,10 @@ export default async function ReportsPage(props: {
             </p>
           ) : null}
 
-          <HandicapsByCategoryReport tournamentId={effectiveId} />
+          <HandicapsByCategoryReport
+            tournamentId={effectiveId}
+            tournamentName={tournament?.name ?? "Torneo"}
+          />
         </>
       ) : null}
     </div>

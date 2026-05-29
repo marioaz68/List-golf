@@ -160,3 +160,89 @@ select:focus {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Impresión: cuando una página tiene .report-printable, ocultar todo lo demás
+   y forzar tema claro/legible para PDF/papel. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .report-printable,
+  .report-printable * {
+    visibility: visible;
+  }
+
+  .report-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  /* Forzar fondos claros en el reporte */
+  .report-printable [class*="bg-["],
+  .report-printable [class*="bg-slate"],
+  .report-printable [class*="bg-gray"],
+  .report-printable [class*="bg-emerald"],
+  .report-printable [class*="bg-blue"] {
+    background: #ffffff !important;
+  }
+
+  .report-printable .border,
+  .report-printable [class*="border-"] {
+    border-color: #d1d5db !important;
+  }
+
+  .report-printable thead {
+    background: #f3f4f6 !important;
+  }
+
+  .report-printable section,
+  .report-printable table {
+    page-break-inside: auto;
+  }
+
+  .report-printable tr,
+  .report-printable section header {
+    page-break-inside: avoid;
+  }
+
+  .report-printable section {
+    break-inside: avoid-page;
+    margin-bottom: 8mm;
+  }
+
+  .report-printable [class*="text-white"],
+  .report-printable [class*="text-slate"],
+  .report-printable [class*="text-gray"] {
+    color: #111827 !important;
+  }
+
+  .report-printable [class*="text-emerald"] {
+    color: #047857 !important;
+  }
+
+  .report-printable [class*="text-amber"] {
+    color: #b45309 !important;
+  }
+
+  .report-printable [class*="text-blue"] {
+    color: #1d4ed8 !important;
+  }
+}

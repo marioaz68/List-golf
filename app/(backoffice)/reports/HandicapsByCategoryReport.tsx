@@ -44,8 +44,10 @@ type RawTeeSet = {
 
 export default async function HandicapsByCategoryReport({
   tournamentId,
+  tournamentName,
 }: {
   tournamentId: string;
+  tournamentName?: string;
 }) {
   // Defensa en profundidad: el page ya filtra por accesibles, pero
   // re-validamos aquí en caso de que se inserte el componente en otro lado.
@@ -232,5 +234,10 @@ export default async function HandicapsByCategoryReport({
     })
     .filter((c) => c.rows.length > 0);
 
-  return <HandicapsByCategoryClient categories={clientCategories} />;
+  return (
+    <HandicapsByCategoryClient
+      categories={clientCategories}
+      tournamentName={tournamentName ?? "Torneo"}
+    />
+  );
 }
