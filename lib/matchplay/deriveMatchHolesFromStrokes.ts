@@ -4,7 +4,11 @@ import {
   isLowHighMatchDecidedAt,
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
-import { effectiveEntryHi } from "./entryHi";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import {
+  effectivePhForMatchEntry,
+  hiForMatchEntry,
+} from "@/lib/matchplay/resolveEntryPhForMatch";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import type {
@@ -123,16 +127,19 @@ export async function deriveMatchHolesFromStrokes(
     )
   );
 
+  const handicapCtx = await loadTournamentHandicapContext(admin, tournamentId);
+
   const { data: entriesRaw } = await admin
     .from("tournament_entries")
     .select(
-      "id, player_id, handicap_index, playing_handicap, course_handicap, playing_handicap_override, players:players(handicap_index, handicap_torneo, gender)"
+      "id, player_id, category_id, handicap_index, playing_handicap, course_handicap, playing_handicap_override, players:players(handicap_index, handicap_torneo, gender, birth_year)"
     )
     .in("id", allEntryIds);
 
   type EntryRow = {
     id: string;
     player_id: string;
+    category_id: string | null;
     handicap_index: number | null;
     playing_handicap: number | null;
     course_handicap: number | null;
@@ -141,10 +148,12 @@ export async function deriveMatchHolesFromStrokes(
       handicap_index: number | null;
       handicap_torneo: number | null;
       gender: string | null;
+      birth_year: number | null;
     } | Array<{
       handicap_index: number | null;
       handicap_torneo: number | null;
       gender: string | null;
+      birth_year: number | null;
     }> | null;
   };
 
@@ -154,21 +163,38 @@ export async function deriveMatchHolesFromStrokes(
   >();
   for (const e of (entriesRaw ?? []) as EntryRow[]) {
     const p = Array.isArray(e.players) ? e.players[0] : e.players;
-    const phEffective =
-      e.playing_handicap_override != null
-        ? Number(e.playing_handicap_override)
-        : e.playing_handicap != null
-          ? Number(e.playing_handicap)
-          : null;
+    const phEffective = effectivePhForMatchEntry(
+      {
+        id: e.id,
+        player_id: e.player_id,
+        category_id: e.category_id,
+        handicap_index: e.handicap_index,
+        playing_handicap: e.playing_handicap,
+        playing_handicap_override: e.playing_handicap_override,
+        player: p
+          ? {
+              gender: p.gender,
+              birth_year: p.birth_year,
+              handicap_index: p.handicap_index,
+              handicap_torneo: p.handicap_torneo,
+            }
+          : null,
+      },
+      handicapCtx
+    );
     entryById.set(e.id, {
       player_id: e.player_id,
-      hi: effectiveEntryHi({
-        handicap_index: e.handicap_index ?? null,
-        player: {
-          handicap_index: p?.handicap_index ?? null,
-          handicap_torneo: p?.handicap_torneo ?? null,
-        },
-      } as Parameters<typeof effectiveEntryHi>[0]),
+      hi: hiForMatchEntry({
+        id: e.id,
+        player_id: e.player_id,
+        handicap_index: e.handicap_index,
+        player: p
+          ? {
+              handicap_index: p.handicap_index,
+              handicap_torneo: p.handicap_torneo,
+            }
+          : null,
+      }),
       ph: phEffective,
     });
   }

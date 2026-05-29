@@ -23,6 +23,8 @@ export type LowHighHoleBreakdown = {
   top: { low: number; high: number; low_pts: number; high_pts: number };
   bottom: { low: number; high: number; low_pts: number; high_pts: number };
   nets: LowHighPlayerNet;
+  /** Golpes recibidos en este hoyo (match play bola baja/alta). */
+  strokes_received: LowHighPlayerNet;
 };
 
 export type LowHighHoleResult = {
@@ -174,12 +176,19 @@ export function scoreLowHighHole(params: {
     return courseHandicapFromHi(hi[i], allowance_pct);
   }) as [number, number, number, number];
   const [rTopA, rTopB, rBotA, rBotB] = pairLowHighStrokes(ph);
+  const si = strokeIndexForHole(hole_no, strokeIndexByHole);
+  const strokes_received: LowHighPlayerNet = {
+    top_a: strokesReceivedOnHole(rTopA, si),
+    top_b: strokesReceivedOnHole(rTopB, si),
+    bottom_a: strokesReceivedOnHole(rBotA, si),
+    bottom_b: strokesReceivedOnHole(rBotB, si),
+  };
 
   const nets: LowHighPlayerNet = {
-    top_a: netOnHole(g.top_a, rTopA, hole_no, strokeIndexByHole),
-    top_b: netOnHole(g.top_b, rTopB, hole_no, strokeIndexByHole),
-    bottom_a: netOnHole(g.bottom_a, rBotA, hole_no, strokeIndexByHole),
-    bottom_b: netOnHole(g.bottom_b, rBotB, hole_no, strokeIndexByHole),
+    top_a: g.top_a - strokes_received.top_a,
+    top_b: g.top_b - strokes_received.top_b,
+    bottom_a: g.bottom_a - strokes_received.bottom_a,
+    bottom_b: g.bottom_b - strokes_received.bottom_b,
   };
 
   const topLow = Math.min(nets.top_a, nets.top_b);
@@ -214,6 +223,7 @@ export function scoreLowHighHole(params: {
         high_pts: highCmp.bottom,
       },
       nets,
+      strokes_received,
     },
     match_status_after: formatLowHighMatchStatus(
       top_total,

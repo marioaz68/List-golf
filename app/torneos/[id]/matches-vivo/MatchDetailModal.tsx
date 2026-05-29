@@ -26,6 +26,12 @@ type HoleDetail = {
     top: { low: number; high: number; low_pts: number; high_pts: number };
     bottom: { low: number; high: number; low_pts: number; high_pts: number };
     nets: { top_a: number; top_b: number; bottom_a: number; bottom_b: number };
+    strokes_received?: {
+      top_a: number;
+      top_b: number;
+      bottom_a: number;
+      bottom_b: number;
+    };
   } | null;
   stroke_index: number | null;
   par: number | null;
@@ -584,7 +590,7 @@ function HoleTable({
 
   const hasPar = holes.some((h) => h.par != null);
 
-  function strokeOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
+  function grossOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
     switch (who) {
       case "tA":
         return h.top_player_a_strokes;
@@ -594,6 +600,42 @@ function HoleTable({
         return h.bottom_player_a_strokes;
       case "bB":
         return h.bottom_player_b_strokes;
+    }
+  }
+
+  /** Neto usado para el match (bruto − ventajas del hoyo). */
+  function netOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
+    const nets = h.breakdown?.nets;
+    if (nets) {
+      switch (who) {
+        case "tA":
+          return nets.top_a;
+        case "tB":
+          return nets.top_b;
+        case "bA":
+          return nets.bottom_a;
+        case "bB":
+          return nets.bottom_b;
+      }
+    }
+    return grossOf(h, who);
+  }
+
+  function strokesReceivedOnHole(
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): number {
+    const sr = h.breakdown?.strokes_received;
+    if (!sr) return 0;
+    switch (who) {
+      case "tA":
+        return sr.top_a;
+      case "tB":
+        return sr.top_b;
+      case "bA":
+        return sr.bottom_a;
+      case "bB":
+        return sr.bottom_b;
     }
   }
 
@@ -613,7 +655,7 @@ function HoleTable({
     return nets.bottom_b < nets.bottom_a ? "low" : "high";
   }
 
-  function sumStrokes(
+  function sumNet(
     who: "tA" | "tB" | "bA" | "bB",
     from: number,
     to: number
@@ -621,7 +663,7 @@ function HoleTable({
     let total = 0;
     let any = false;
     for (let h = from; h <= to; h++) {
-      const v = strokeOf(holes[h - 1]!, who);
+      const v = netOf(holes[h - 1]!, who);
       if (v == null) return null;
       total += Number(v);
       any = true;
@@ -641,12 +683,12 @@ function HoleTable({
 
   /** Total a par para el rango (bruto − par). Si falta par o algún
    *  bruto del jugador en el rango, devuelve null. */
-  function strokesToPar(
+  function netToPar(
     who: "tA" | "tB" | "bA" | "bB",
     from: number,
     to: number
   ): number | null {
-    const s = sumStrokes(who, from, to);
+    const s = sumNet(who, from, to);
     const p = sumPar(from, to);
     if (s == null || p == null) return null;
     return s - p;
@@ -713,19 +755,39 @@ function HoleTable({
   const subTd =
     "w-[30px] min-w-[28px] border-b border-l border-white/10 px-0 py-0.5 text-center text-[10px] font-semibold sm:w-[34px]";
 
-  /** Marcador del bruto: rojo con círculo cuando es bajo par, azul/cuadro
-   *  cuando es arriba de par; plano cuando es par o no hay par. */
+  /** Marcador del neto: círculos/cuadros vs par; amarillo si recibió golpe de ventaja. */
   function StrokeMark({
     strokes,
     par,
+    handicapReceived = 0,
+    gross,
   }: {
     strokes: number | null;
     par: number | null;
+    handicapReceived?: number;
+    gross?: number | null;
   }) {
     if (strokes == null)
       return <span className="text-slate-500">—</span>;
+
+    const withHandicap = handicapReceived > 0;
+    const scoreClass = withHandicap
+      ? "text-amber-300 font-bold"
+      : "text-white";
+
+    const title =
+      gross != null && withHandicap
+        ? `Bruto ${gross} · neto ${strokes} (−${handicapReceived} ventaja)`
+        : gross != null
+          ? `Bruto ${gross} · neto ${strokes}`
+          : undefined;
+
     if (par == null)
-      return <span className="text-white">{strokes}</span>;
+      return (
+        <span className={scoreClass} title={title}>
+          {strokes}
+        </span>
+      );
     const diff = Number(strokes) - Number(par);
     if (diff <= -2) {
       return (
@@ -738,7 +800,7 @@ function HoleTable({
             aria-hidden
             className="pointer-events-none absolute inset-[3px] block rounded-full border border-rose-300/90"
           />
-          <span className="relative z-10 text-[10px] font-bold text-rose-50">
+          <span className={`relative z-10 text-[10px] font-bold ${scoreClass}`} title={title}>
             {strokes}
           </span>
         </span>
@@ -751,7 +813,7 @@ function HoleTable({
             aria-hidden
             className="pointer-events-none absolute inset-0 block rounded-full border border-rose-400 bg-rose-500/15"
           />
-          <span className="relative z-10 text-[10px] font-bold text-rose-100">
+          <span className={`relative z-10 text-[10px] font-bold ${scoreClass}`} title={title}>
             {strokes}
           </span>
         </span>
@@ -764,7 +826,7 @@ function HoleTable({
             aria-hidden
             className="pointer-events-none absolute inset-0 block rounded-sm border border-sky-300/90 bg-sky-500/10"
           />
-          <span className="relative z-10 text-[10px] font-bold text-sky-100">
+          <span className={`relative z-10 text-[10px] font-bold ${scoreClass}`} title={title}>
             {strokes}
           </span>
         </span>
@@ -781,19 +843,22 @@ function HoleTable({
             aria-hidden
             className="pointer-events-none absolute inset-[3px] block rounded-sm border border-sky-200/80"
           />
-          <span className="relative z-10 text-[10px] font-bold text-sky-50">
+          <span className={`relative z-10 text-[10px] font-bold ${scoreClass}`} title={title}>
             {strokes}
           </span>
         </span>
       );
     }
-    return <span className="text-white">{strokes}</span>;
+    return (
+      <span className={scoreClass} title={title}>
+        {strokes}
+      </span>
+    );
   }
 
-  /** Tint de fondo según rol: amarillo = bola baja de la pareja, azul
-   *  marino = bola alta. Se aplica encima del stripe. */
+  /** Bola baja = fondo suave; bola alta = azul marino (puntos del match). */
   function roleTint(r: "low" | "high" | null): string {
-    if (r === "low") return "bg-amber-400/20";
+    if (r === "low") return "bg-cyan-500/10";
     if (r === "high") return "bg-indigo-700/30";
     return "";
   }
@@ -807,6 +872,15 @@ function HoleTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#0a1220]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-[#0a1220] px-3 py-1.5 text-[9px] text-slate-400">
+        <span>
+          <span className="font-semibold text-amber-300">Amarillo</span> = neto
+          con golpe de ventaja ·{" "}
+          <span className="font-semibold text-indigo-300">Azul</span> = bola alta
+          · <span className="font-semibold text-cyan-300/90">Celeste</span> =
+          bola baja
+        </span>
+      </div>
       {decidedAtHole != null ? (
         <div className="flex items-center gap-2 border-b border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-200">
           <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
@@ -827,7 +901,7 @@ function HoleTable({
               OUT
               {hasPar ? (
                 <span className="block text-[7px] font-normal text-cyan-300/70">
-                  vs par
+                  neto vs par
                 </span>
               ) : null}
             </th>
@@ -840,7 +914,7 @@ function HoleTable({
               IN
               {hasPar ? (
                 <span className="block text-[7px] font-normal text-cyan-300/70">
-                  vs par
+                  neto vs par
                 </span>
               ) : null}
             </th>
@@ -848,7 +922,7 @@ function HoleTable({
               TOT
               {hasPar ? (
                 <span className="block text-[7px] font-normal text-cyan-300/70">
-                  vs par
+                  neto vs par
                 </span>
               ) : null}
             </th>
@@ -911,13 +985,13 @@ function HoleTable({
               p.team === "top"
                 ? "border-l-2 border-l-cyan-500/40"
                 : "border-l-2 border-l-fuchsia-500/40";
-            const outStr = sumStrokes(p.key, 1, 9);
-            const innStr = sumStrokes(p.key, 10, 18);
+            const outStr = sumNet(p.key, 1, 9);
+            const innStr = sumNet(p.key, 10, 18);
             const totStr =
               outStr != null && innStr != null ? outStr + innStr : null;
-            const outTp = hasPar ? strokesToPar(p.key, 1, 9) : null;
-            const innTp = hasPar ? strokesToPar(p.key, 10, 18) : null;
-            const totTp = hasPar ? strokesToPar(p.key, 1, 18) : null;
+            const outTp = hasPar ? netToPar(p.key, 1, 9) : null;
+            const innTp = hasPar ? netToPar(p.key, 10, 18) : null;
+            const totTp = hasPar ? netToPar(p.key, 1, 18) : null;
             return (
               <tr key={`row-${p.key}`} className={`${stripe}`}>
                 <td className={`${stickyName} ${stripe} ${accent}`}>
@@ -941,7 +1015,12 @@ function HoleTable({
                       key={`c-${p.key}-${i + 1}`}
                       className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 1)}`}
                     >
-                      <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
+                      <StrokeMark
+                        strokes={netOf(h, p.key)}
+                        par={h.par}
+                        handicapReceived={strokesReceivedOnHole(h, p.key)}
+                        gross={grossOf(h, p.key)}
+                      />
                     </td>
                   );
                 })}
@@ -956,7 +1035,12 @@ function HoleTable({
                       key={`c-${p.key}-${i + 10}`}
                       className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 10)}`}
                     >
-                      <StrokeMark strokes={strokeOf(h, p.key)} par={h.par} />
+                      <StrokeMark
+                        strokes={netOf(h, p.key)}
+                        par={h.par}
+                        handicapReceived={strokesReceivedOnHole(h, p.key)}
+                        gross={grossOf(h, p.key)}
+                      />
                     </td>
                   );
                 })}
@@ -968,7 +1052,7 @@ function HoleTable({
                     hasPar ? toParTone(totTp) : "text-white"
                   }`}
                   title={
-                    totStr != null && hasPar ? `bruto ${totStr}` : undefined
+                    totStr != null && hasPar ? `neto acumulado ${totStr}` : undefined
                   }
                 >
                   {hasPar ? fmtToPar(totTp) : fmtStroke(totStr)}
@@ -1040,8 +1124,12 @@ function HoleTable({
             Arriba de par (bogey+)
           </span>
           <span className="inline-flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded-sm bg-amber-400/40" />
+            <span className="inline-block h-3 w-3 rounded-sm bg-cyan-500/30" />
             Bola baja de la pareja
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="font-bold text-amber-300">5</span>
+            Neto con ventaja (amarillo)
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded-sm bg-indigo-700/60" />
@@ -1050,10 +1138,10 @@ function HoleTable({
         </div>
         {hasPar ? (
           <p>
-            OUT / IN / TOT muestran el resultado <strong>bruto vs par</strong>{" "}
-            (+5, E, −2) para comparar a los 4 jugadores sin sus ventajas de
-            hándicap. La ventaja del match (bola baja / alta) sólo aplica a
-            los puntos de la pareja.
+            Cada hoyo muestra el <strong>neto</strong> (bruto menos ventajas del
+            match). OUT / IN / TOT = <strong>neto vs par</strong> (+5, E, −2).
+            Número en <strong className="text-amber-300">amarillo</strong> =
+            recibió golpe de ventaja en ese hoyo.
           </p>
         ) : null}
         <p>
