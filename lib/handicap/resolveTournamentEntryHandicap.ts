@@ -1,4 +1,8 @@
-import { assignTeeSet, type Player, type Rule } from "@/lib/tee-assignment";
+import {
+  assignTeeSetWithMeta,
+  type Player,
+  type Rule,
+} from "@/lib/tee-assignment";
 import { effectiveEntryHi } from "@/lib/matchplay/entryHi";
 import {
   computeWhsHandicap,
@@ -121,10 +125,22 @@ function whsFromCourseTee(
   return pickTeeForGender({ gender, men, women });
 }
 
+type ResolvedTee = {
+  tee: WhsTeeData;
+  allowance_pct: number;
+  tee_code: string | null;
+  /** HI efectivo a usar para WHS. Si la regla del torneo tiene un tope
+   *  (handicap_max) y el HI del jugador lo rebasa, aquí viene capado al
+   *  máximo a jugar. */
+  effective_hi: number;
+  /** Razón del capeo si aplica. */
+  hi_cap_source: "rule_max" | "rule_min" | null;
+};
+
 function resolveWhsTeeForEntry(
   entry: EntryForHandicap,
   ctx: TournamentHandicapContext
-): { tee: WhsTeeData; allowance_pct: number; tee_code: string | null } | null {
+): ResolvedTee | null {
   const hi = effectiveEntryHi(entry);
   const gender = (entry.player?.gender ?? "X").toString().toUpperCase() as
     | "M"
@@ -146,7 +162,14 @@ function resolveWhsTeeForEntry(
       men: ctx.matchplayFallback?.men ?? null,
       women: ctx.matchplayFallback?.women ?? null,
     });
-    if (tee) return { tee, allowance_pct, tee_code: null };
+    if (tee)
+      return {
+        tee,
+        allowance_pct,
+        tee_code: null,
+        effective_hi: hi,
+        hi_cap_source: null,
+      };
     return null;
   }
 
@@ -165,18 +188,42 @@ function resolveWhsTeeForEntry(
     name: t.name ?? t.code ?? "",
   }));
 
-  const assigned = assignTeeSet(player, ctx.categoryTeeRules, teeSetsForAssign);
+  const assigned = assignTeeSetWithMeta(
+    player,
+    ctx.categoryTeeRules,
+    teeSetsForAssign
+  );
   if (assigned) {
-    const tournamentTee = teeSetById.get(assigned.id);
+    const tournamentTee = teeSetById.get(assigned.tee.id);
     if (tournamentTee) {
       const courseTee = findCourseTee(ctx, tournamentTee);
       if (courseTee) {
         const tee = whsFromCourseTee(courseTee, gender);
         if (tee) {
+          // Aplicar tope a jugar: si la regla tiene handicap_max/min y el
+          // jugador está fuera del rango (extrapolated), capar el HI al
+          // límite indicado por el torneo.
+          let effective_hi = hi;
+          let hi_cap_source: ResolvedTee["hi_cap_source"] = null;
+          if (assigned.match === "extrapolated") {
+            const max = assigned.rule.handicap_max;
+            const min = assigned.rule.handicap_min;
+            if (max != null && hi > max) {
+              effective_hi = Number(max);
+              hi_cap_source = "rule_max";
+            } else if (min != null && hi < min) {
+              effective_hi = Number(min);
+              hi_cap_source = "rule_min";
+            }
+          }
           return {
             tee,
             allowance_pct,
-            tee_code: normalizeTeeCode(tournamentTee.code) || (tournamentTee.name ?? null),
+            tee_code:
+              normalizeTeeCode(tournamentTee.code) ||
+              (tournamentTee.name ?? null),
+            effective_hi,
+            hi_cap_source,
           };
         }
       }
@@ -186,7 +233,14 @@ function resolveWhsTeeForEntry(
   const fbMen = ctx.matchplayFallback?.men ?? null;
   const fbWomen = ctx.matchplayFallback?.women ?? null;
   const tee = pickTeeForGender({ gender, men: fbMen, women: fbWomen });
-  if (tee) return { tee, allowance_pct, tee_code: null };
+  if (tee)
+    return {
+      tee,
+      allowance_pct,
+      tee_code: null,
+      effective_hi: hi,
+      hi_cap_source: null,
+    };
 
   return null;
 }
@@ -222,9 +276,10 @@ export function resolveTournamentEntryHandicap(
   const resolved = resolveWhsTeeForEntry(entry, ctx);
   if (!resolved) return null;
 
-  const hi = effectiveEntryHi(entry);
+  const realHi = effectiveEntryHi(entry);
+  const hiForCalc = resolved.effective_hi;
   const calc = computeWhsHandicap({
-    hi,
+    hi: hiForCalc,
     slope: resolved.tee.slope,
     course_rating: resolved.tee.course_rating,
     par: resolved.tee.par,
@@ -235,9 +290,15 @@ export function resolveTournamentEntryHandicap(
     ...calc,
     meta: {
       ...calc.meta,
+      hi: realHi,
       tee_code: resolved.tee_code,
       category_id: entry.category_id,
-      source: "category_tee_whs",
+      source:
+        resolved.hi_cap_source != null
+          ? "category_tee_whs_capped"
+          : "category_tee_whs",
+      hi_cap_applied: resolved.hi_cap_source != null ? hiForCalc : null,
+      hi_cap_source: resolved.hi_cap_source,
     },
   };
 }
