@@ -71,6 +71,7 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
         const ws = wb.addWorksheet(sheetName || "Categoria");
         ws.columns = [
           { header: "#", key: "n", width: 4 },
+          { header: "GHIN", key: "ghin", width: 12 },
           { header: "Nombre", key: "name", width: 32 },
           { header: "Sexo", key: "gender", width: 6 },
           { header: "HI", key: "hi", width: 7 },
@@ -87,6 +88,7 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
         cat.rows.forEach((r, idx) => {
           ws.addRow({
             n: idx + 1,
+            ghin: r.ghin ?? "",
             name: r.name,
             gender: r.gender,
             hi: r.hi != null && Number.isFinite(r.hi) ? Number(r.hi) : null,
