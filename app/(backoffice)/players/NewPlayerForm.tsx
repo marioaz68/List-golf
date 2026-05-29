@@ -285,6 +285,12 @@ export default function NewPlayerForm({
   const [usingExistingPlayerId, setUsingExistingPlayerId] = useState<string | null>(null);
   const [selectedExistingPlayerId, setSelectedExistingPlayerId] = useState<string | null>(null);
 
+  const [previewHc, setPreviewHc] = useState<number | null>(null);
+  const [previewPh, setPreviewPh] = useState<number | null>(null);
+  const [previewAllowance, setPreviewAllowance] = useState<number | null>(null);
+  const [previewHiCap, setPreviewHiCap] = useState<number | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const clubBoxRef = useRef<HTMLDivElement | null>(null);
   const initialsInputNameRef = useRef(`lg_c_${Date.now()}`);
   const handicapIndexInputNameRef = useRef(`lg_d_${Date.now()}`);
@@ -481,6 +487,81 @@ export default function NewPlayerForm({
 
     return () => clearTimeout(timer);
   }, [firstName, lastName, phone, email, ghinNumber, selectedExistingPlayerId]);
+
+  useEffect(() => {
+    if (!returnTournament) {
+      setPreviewHc(null);
+      setPreviewPh(null);
+      setPreviewAllowance(null);
+      setPreviewHiCap(null);
+      return;
+    }
+    const hiNum = Number(handicapIndex.replace(",", "."));
+    if (!handicapIndex.trim() || !Number.isFinite(hiNum)) {
+      setPreviewHc(null);
+      setPreviewPh(null);
+      setPreviewAllowance(null);
+      setPreviewHiCap(null);
+      return;
+    }
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      setPreviewLoading(true);
+      try {
+        const res = await fetch("/api/handicap/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tournament_id: returnTournament,
+            player_id: selectedExistingPlayerId,
+            hi: hiNum,
+            gender,
+            birth_year: birthYear.trim() ? Number(birthYear) : null,
+          }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          setPreviewHc(null);
+          setPreviewPh(null);
+          setPreviewAllowance(null);
+          setPreviewHiCap(null);
+          return;
+        }
+        const json = (await res.json()) as {
+          ok: boolean;
+          course_handicap: number | null;
+          playing_handicap: number | null;
+          allowance_pct: number | null;
+          hi_cap_applied: number | null;
+        };
+        setPreviewHc(json.course_handicap);
+        setPreviewPh(json.playing_handicap);
+        setPreviewAllowance(json.allowance_pct);
+        setPreviewHiCap(json.hi_cap_applied);
+      } catch (err) {
+        if ((err as Error)?.name !== "AbortError") {
+          setPreviewHc(null);
+          setPreviewPh(null);
+          setPreviewAllowance(null);
+          setPreviewHiCap(null);
+        }
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 320);
+
+    return () => {
+      ctrl.abort();
+      clearTimeout(timer);
+    };
+  }, [
+    returnTournament,
+    handicapIndex,
+    gender,
+    birthYear,
+    selectedExistingPlayerId,
+  ]);
 
   const selectClub = (selected: ClubOption) => {
     setClub(selected.name);
@@ -705,8 +786,14 @@ export default function NewPlayerForm({
     if (!firstName.trim()) return setMsg("Falta el nombre.");
     if (!lastName.trim()) return setMsg("Falta el apellido.");
 
-    const hi = toNumberOrNull(handicapIndex);
-    const ht = toNumberOrNull(handicapTorneo);
+    const hiRaw = toNumberOrNull(handicapIndex);
+    if (hiRaw === "NaN") {
+      return setMsg("handicap_index debe ser número (ej. -1.2, 0, 12.5).");
+    }
+    const hi: number | null = hiRaw;
+    // handicap_torneo se mantiene sincronizado con HI (HC y PH son
+    // informativos, calculados por WHS para cada torneo).
+    const ht: number | null = hi;
     const by = toIntOrNull(birthYear);
     const cleanInitials = normalizeInitials(initials);
 
@@ -721,24 +808,12 @@ export default function NewPlayerForm({
       return setMsg("Iniciales debe tener entre 2 y 6 letras.");
     }
 
-    if (hi === "NaN") {
-      return setMsg("handicap_index debe ser número (ej. -1.2, 0, 12.5).");
-    }
-
-    if (ht === "NaN") {
-      return setMsg("handicap_torneo debe ser número (ej. -1, 0, 10).");
-    }
-
     if (by === "NaN") {
       return setMsg("Año nacimiento debe ser número entero (ej. 1978).");
     }
 
     if (typeof hi === "number" && (hi < -10 || hi > 54)) {
       return setMsg("handicap_index fuera de rango razonable (-10 a 54).");
-    }
-
-    if (typeof ht === "number" && (ht < -10 || ht > 54)) {
-      return setMsg("handicap_torneo fuera de rango razonable (-10 a 54).");
     }
 
     if (typeof by === "number" && (by < 1900 || by > 2100)) {
@@ -1138,7 +1213,26 @@ export default function NewPlayerForm({
         </label>
 
         <label style={labelStyle}>
-          Handicap Index
+          <span>
+            Handicap Index (HI){" "}
+            <span
+              style={{
+                display: "inline-block",
+                marginLeft: 4,
+                padding: "1px 5px",
+                borderRadius: 999,
+                background: "#dbeafe",
+                color: "#1d4ed8",
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                textTransform: "uppercase",
+              }}
+              title="Define la categoría en cada torneo."
+            >
+              define categoría
+            </span>
+          </span>
           <input
             type="search"
             enterKeyHint="done"
@@ -1148,20 +1242,127 @@ export default function NewPlayerForm({
             onChange={(e) => setHandicapIndex(e.target.value)}
             placeholder="Ej. -1.2, 0, 12.5"
             style={fieldStyle}
+            title="Único campo editable. Define la categoría."
           />
         </label>
 
         <label style={labelStyle}>
-          Handicap Torneo
+          <span>
+            Course Handicap (HC){" "}
+            <span
+              style={{
+                display: "inline-block",
+                marginLeft: 4,
+                padding: "1px 5px",
+                borderRadius: 999,
+                background: "#f3f4f6",
+                color: "#374151",
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                textTransform: "uppercase",
+              }}
+              title="Handicap del campo según la salida del torneo. Se calcula al inscribir y cambia con cada torneo."
+            >
+              referencia campo
+            </span>
+          </span>
           <input
-            type="search"
-            enterKeyHint="done"
-            name={handicapTorneoInputNameRef.current}
-            {...antiSafariInputProps}
-            value={handicapTorneo}
-            onChange={(e) => setHandicapTorneo(e.target.value)}
-            placeholder="Ej. -1, 0, 10"
-            style={fieldStyle}
+            type="text"
+            readOnly
+            disabled
+            tabIndex={-1}
+            value={
+              !returnTournament
+                ? "— (depende del torneo)"
+                : previewLoading
+                  ? "calculando…"
+                  : previewHc != null
+                    ? String(Math.round(Number(previewHc)))
+                    : "—"
+            }
+            style={{
+              ...fieldStyle,
+              background: "#f3f4f6",
+              color: "#374151",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              textAlign: "right",
+              cursor: "not-allowed",
+            }}
+            title={
+              returnTournament
+                ? "HC = HI × Slope/113 + (CR − Par) con la salida que la regla del torneo asigna al jugador."
+                : "El HC depende del campo del torneo. Se calcula al inscribir al jugador en un torneo."
+            }
+          />
+          {previewHiCap != null && returnTournament ? (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 600,
+                color: "#b45309",
+              }}
+              title={`HI ${handicapIndex} fue capado al máximo a jugar del torneo (${previewHiCap}).`}
+            >
+              HI capado a {Number(previewHiCap).toFixed(1)} (máx torneo)
+            </span>
+          ) : null}
+        </label>
+
+        <label style={labelStyle}>
+          <span>
+            Playing Handicap (PH){" "}
+            <span
+              style={{
+                display: "inline-block",
+                marginLeft: 4,
+                padding: "1px 5px",
+                borderRadius: 999,
+                background: "#d1fae5",
+                color: "#047857",
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                textTransform: "uppercase",
+              }}
+              title="Handicap del torneo: HC × % de reglas de competencia. Es el handicap con el que el jugador compite."
+            >
+              handicap del torneo
+            </span>
+          </span>
+          <input
+            type="text"
+            readOnly
+            disabled
+            tabIndex={-1}
+            value={
+              !returnTournament
+                ? "— (depende del torneo)"
+                : previewLoading
+                  ? "calculando…"
+                  : previewPh != null
+                    ? String(Math.round(Number(previewPh))) +
+                      (previewAllowance != null
+                        ? `  · ${previewAllowance}%`
+                        : "")
+                    : "—"
+            }
+            style={{
+              ...fieldStyle,
+              background: "#f3f4f6",
+              color: "#047857",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              textAlign: "right",
+              cursor: "not-allowed",
+              fontWeight: 700,
+            }}
+            title={
+              returnTournament
+                ? previewAllowance != null
+                  ? `PH del torneo: HC × ${previewAllowance}% (regla de competencia).`
+                  : "PH del torneo: HC × % de reglas de competencia."
+                : "El PH depende del torneo. Se calcula al inscribir al jugador."
+            }
           />
         </label>
 
