@@ -86,6 +86,7 @@ export async function assignCaddieAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/caddies");
+  revalidatePath("/entries");
   if (redirect_to) {
     // Asignación desde Inscritos / búsqueda directa — regresamos al
     // contexto original sin pasar por la tabla completa de caddies.
@@ -114,6 +115,7 @@ export async function deleteCaddieAssignmentAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/caddies");
+  revalidatePath("/entries");
   redirectBack(tournament_id, round_id);
 }
 

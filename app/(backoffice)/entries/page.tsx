@@ -160,6 +160,7 @@ type EntryRow = {
   tee_set_id_override?: string | null;
   tee_set_id_assigned?: string | null;
   caddie_summary?: {
+    hasCaddie: boolean;
     totalRounds: number;
     roundsWithCaddie: number;
     label: string | null;
@@ -785,7 +786,11 @@ export default async function EntriesPage({
     }
 
     // ── Asignaciones de caddies del torneo ──────────────────────────────
+    // Usamos service role: caddie_assignments tiene RLS activo sin
+    // políticas para el cliente del usuario → la consulta devolvía vacío
+    // y todos los botones salían rojos aunque sí hubiera asignación.
     type CaddieSummary = {
+      hasCaddie: boolean;
       totalRounds: number;
       roundsWithCaddie: number;
       label: string | null;
@@ -799,7 +804,8 @@ export default async function EntriesPage({
         totalRoundsByCategory.set(cid, (totalRoundsByCategory.get(cid) ?? 0) + 1);
       }
       try {
-        const { data: caRaw, error: caErr } = await supabase
+        const adminForCaddies = createAdminClient();
+        const { data: caRaw, error: caErr } = await adminForCaddies
           .from("caddie_assignments")
           .select(
             `id, entry_id, round_id, caddie_id, is_active,
@@ -807,8 +813,15 @@ export default async function EntriesPage({
           )
           .eq("tournament_id", selectedTournamentId)
           .eq("is_active", true)
-          .in("entry_id", entryIds.length ? entryIds : ["00000000-0000-0000-0000-000000000000"]);
-        if (!caErr) {
+          .in(
+            "entry_id",
+            entryIds.length
+              ? entryIds
+              : ["00000000-0000-0000-0000-000000000000"]
+          );
+        if (caErr) {
+          console.error("[entries] caddie_assignments:", caErr.message);
+        } else {
           type CARow = {
             entry_id: string;
             round_id: string | null;
@@ -820,7 +833,11 @@ export default async function EntriesPage({
                   first_name: string | null;
                   last_name: string | null;
                 }
-              | { id: string; first_name: string | null; last_name: string | null }[]
+              | {
+                  id: string;
+                  first_name: string | null;
+                  last_name: string | null;
+                }[]
               | null;
           };
           const byEntry = new Map<
@@ -831,7 +848,7 @@ export default async function EntriesPage({
             }
           >();
           for (const row of (caRaw ?? []) as unknown as CARow[]) {
-            if (!row.entry_id) continue;
+            if (!row.entry_id || !row.caddie_id) continue;
             const bag = byEntry.get(row.entry_id) ?? {
               roundIds: new Set<string>(),
               caddies: new Map<string, string>(),
@@ -845,6 +862,8 @@ export default async function EntriesPage({
                   .filter(Boolean)
                   .join(" ") || "Caddie";
               bag.caddies.set(c.id, name);
+            } else {
+              bag.caddies.set(row.caddie_id, "Caddie");
             }
             byEntry.set(row.entry_id, bag);
           }
@@ -859,15 +878,17 @@ export default async function EntriesPage({
                 ? names[0]
                 : `${names[0]} +${names.length - 1}`
               : null;
+            const roundsWithCaddie = bag?.roundIds.size ?? 0;
             caddieSummaryByEntry.set(e.id, {
+              hasCaddie: Boolean(bag && bag.caddies.size > 0),
               totalRounds: totalForCat,
-              roundsWithCaddie: bag?.roundIds.size ?? 0,
+              roundsWithCaddie,
               label,
             });
           }
         }
-      } catch {
-        // Si la tabla aún no existe en algún entorno, seguimos sin pintar el chip.
+      } catch (err) {
+        console.error("[entries] caddie summary:", err);
       }
     }
 
