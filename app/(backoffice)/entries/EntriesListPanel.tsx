@@ -62,6 +62,15 @@ function kitButtonLabel(
   return base;
 }
 
+type CaddieAssignmentSummary = {
+  /** Total de rondas del torneo donde tiene sentido asignar caddie (>0). */
+  totalRounds: number;
+  /** Rondas con al menos un caddie activo asignado. */
+  roundsWithCaddie: number;
+  /** Etiqueta resumida (ej. "Carlos M. · R1,R2"). */
+  label: string | null;
+};
+
 type Entry = {
   id: string;
   player_id: string;
@@ -80,6 +89,7 @@ type Entry = {
   round_signatures?: RoundSignature[] | null;
   tee_set_id_assigned?: string | null;
   tee_set_id_override?: string | null;
+  caddie_summary?: CaddieAssignmentSummary | null;
   players: {
     id: string;
     first_name: string | null;
@@ -345,6 +355,43 @@ function EntryRowActions({
    * para listar los grupos), pero este shortcut evita tener que buscar
    * al jugador entre torneos.
    */
+  const caddieSummary = entry.caddie_summary ?? null;
+  const caddieState: "none" | "partial" | "full" = (() => {
+    if (!caddieSummary || caddieSummary.totalRounds === 0) {
+      return caddieSummary && caddieSummary.roundsWithCaddie > 0
+        ? "full"
+        : "none";
+    }
+    if (caddieSummary.roundsWithCaddie === 0) return "none";
+    if (caddieSummary.roundsWithCaddie >= caddieSummary.totalRounds)
+      return "full";
+    return "partial";
+  })();
+  const caddieColors: Record<typeof caddieState, string> = {
+    none: "border-red-800 bg-red-600 hover:bg-red-700",
+    partial: "border-amber-700 bg-amber-500 hover:bg-amber-600",
+    full: "border-emerald-800 bg-emerald-600 hover:bg-emerald-700",
+  };
+  const caddieIcon =
+    caddieState === "none" ? "✕" : caddieState === "full" ? "✓" : "◐";
+  const caddieTitle = (() => {
+    if (!caddieSummary || caddieSummary.totalRounds === 0) {
+      return caddieState === "none"
+        ? "Sin caddie asignado. Click para asignar uno."
+        : `Caddie asignado: ${caddieSummary?.label ?? ""}`;
+    }
+    if (caddieState === "none") {
+      return `Sin caddie asignado en ninguna ronda (0/${caddieSummary.totalRounds}). Click para asignar.`;
+    }
+    if (caddieState === "partial") {
+      return `Caddie asignado en ${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds} rondas${
+        caddieSummary.label ? ` — ${caddieSummary.label}` : ""
+      }. Click para revisar.`;
+    }
+    return `Caddie asignado en todas las rondas (${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds})${
+      caddieSummary.label ? ` — ${caddieSummary.label}` : ""
+    }.`;
+  })();
   const caddieBtn = (
     <Link
       href={`/caddies/asignar?entry_id=${encodeURIComponent(
@@ -352,13 +399,14 @@ function EntryRowActions({
       )}&tournament_id=${encodeURIComponent(tournamentId)}&back=${encodeURIComponent(
         `/entries?tournament_id=${tournamentId}`
       )}`}
-      title="Buscar y asignar caddie al jugador en este torneo"
+      title={caddieTitle}
       className={
         compact
-          ? `${MOBILE_ACTION_BTN} border-teal-900 bg-teal-700 hover:bg-teal-800`
-          : "inline-flex h-7 w-full items-center justify-center rounded border border-teal-900 bg-teal-700 text-[11px] font-bold text-white hover:bg-teal-800"
+          ? `${MOBILE_ACTION_BTN} ${caddieColors[caddieState]}`
+          : `inline-flex h-7 w-full items-center justify-center rounded border text-[11px] font-bold text-white ${caddieColors[caddieState]}`
       }
     >
+      <span className="mr-0.5">{caddieIcon}</span>
       Caddie
     </Link>
   );
