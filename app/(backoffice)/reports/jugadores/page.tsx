@@ -31,10 +31,10 @@ type RawPlayer = {
   clubs: RawClub | RawClub[] | null;
 };
 
-function clubLabel(c: RawClub | null | undefined): string {
-  if (!c) return "Sin club";
+function clubLabel(c: RawClub | null | undefined, hasClubId: boolean): string {
+  if (!c) return hasClubId ? "Club sin nombre" : "Sin club";
   const v = (c.short_name ?? c.name ?? "").trim();
-  return v || "Sin club";
+  return v || "Club sin nombre";
 }
 
 function firstClub(
@@ -100,7 +100,7 @@ export default async function PlayersReportPage(props: {
   for (const p of players) {
     const c = firstClub(p.clubs);
     const cid = c?.id ?? "__no_club__";
-    const label = c ? clubLabel(c) : "Sin club";
+    const label = clubLabel(c, !!p.club_id);
     if (!labelByClubId.has(cid)) labelByClubId.set(cid, label);
 
     const row: PlayersReportRow = {

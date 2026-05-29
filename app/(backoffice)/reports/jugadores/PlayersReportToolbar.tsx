@@ -14,6 +14,7 @@ import ExcelExportNameDialog, {
 } from "@/components/reports/ExcelExportNameDialog";
 import {
   resolveExcelFileName,
+  uniqueExcelSheetName,
   type ExcelNameMode,
 } from "@/lib/reports/excelFileName";
 import type { PlayersReportGroup } from "./PlayersReportClient";
@@ -55,13 +56,11 @@ export default function PlayersReportToolbar({ title, groups }: Props) {
       const wb = new ExcelJS.Workbook();
       wb.creator = "Golf Torneo";
       wb.created = new Date();
+      const usedSheetNames = new Set<string>();
 
       for (const g of groups) {
-        const sheetName = (g.label || "Club")
-          .toString()
-          .slice(0, 31)
-          .replace(/[\\/?*\[\]:]/g, "_");
-        const ws = wb.addWorksheet(sheetName || "Club");
+        const sheetName = uniqueExcelSheetName(g.label, usedSheetNames, "Club");
+        const ws = wb.addWorksheet(sheetName);
         ws.columns = [
           { header: "#", key: "n", width: 4 },
           { header: "GHIN", key: "ghin", width: 12 },

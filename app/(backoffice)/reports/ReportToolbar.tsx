@@ -14,6 +14,7 @@ import ExcelExportNameDialog, {
 } from "@/components/reports/ExcelExportNameDialog";
 import {
   resolveExcelFileName,
+  uniqueExcelSheetName,
   type ExcelNameMode,
 } from "@/lib/reports/excelFileName";
 import type { HandicapReportCategory } from "./HandicapsByCategoryClient";
@@ -59,13 +60,16 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
       const wb = new ExcelJS.Workbook();
       wb.creator = "Golf Torneo";
       wb.created = new Date();
+      const usedSheetNames = new Set<string>();
 
       for (const cat of categories) {
-        const sheetName = (cat.code ?? cat.name ?? "Categoria")
-          .toString()
-          .slice(0, 31)
-          .replace(/[\\/?*\[\]:]/g, "_");
-        const ws = wb.addWorksheet(sheetName || "Categoria");
+        const raw = (cat.code ?? cat.name ?? "Categoria").toString();
+        const sheetName = uniqueExcelSheetName(
+          raw,
+          usedSheetNames,
+          "Categoria"
+        );
+        const ws = wb.addWorksheet(sheetName);
         ws.columns = [
           { header: "#", key: "n", width: 4 },
           { header: "GHIN", key: "ghin", width: 12 },

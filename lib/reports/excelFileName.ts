@@ -52,3 +52,38 @@ export function resolveExcelFileName(
   const seq = nextExcelSequence(base);
   return `${base}_${seq}.xlsx`;
 }
+
+const EXCEL_SHEET_INVALID = /[\\/?*[\]:]/g;
+
+/** Sanitiza y garantiza nombre único de hoja Excel (máx. 31 caracteres). */
+export function uniqueExcelSheetName(
+  raw: string,
+  used: Set<string>,
+  fallback = "Hoja"
+): string {
+  const base = (raw || fallback)
+    .toString()
+    .replace(EXCEL_SHEET_INVALID, "_")
+    .trim()
+    .slice(0, 31) || fallback;
+
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+
+  let n = 2;
+  while (n < 1000) {
+    const suffix = `_${n}`;
+    const candidate = `${base.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`;
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      return candidate;
+    }
+    n++;
+  }
+
+  const fallbackName = `${fallback}_${Date.now()}`.slice(0, 31);
+  used.add(fallbackName);
+  return fallbackName;
+}
