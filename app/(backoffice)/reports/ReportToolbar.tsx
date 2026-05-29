@@ -30,201 +30,235 @@ function safeFileName(s: string): string {
     .slice(0, 80);
 }
 
-function buildTextSummary(
+/** Mensaje corto de cabecera (sin volcar el reporte completo). */
+function buildShortMessage(
   tournamentName: string,
   categories: HandicapReportCategory[]
 ): string {
-  const lines: string[] = [];
-  lines.push(`Reporte de Handicaps — ${tournamentName}`);
-  lines.push(`Generado: ${new Date().toLocaleString("es-MX")}`);
-  lines.push("");
-  for (const cat of categories) {
-    const label = cat.code ? `${cat.code} · ${cat.name ?? ""}` : cat.name ?? "—";
-    lines.push(`▸ ${label} (${cat.rows.length} inscritos)`);
-    cat.rows.forEach((r, i) => {
-      const tee = r.tee?.code ?? r.tee?.name ?? "—";
-      const ph = ROUND(r.ph) || "—";
-      const hc = ROUND(r.ch) || "—";
-      const allowance =
-        r.allowance_pct != null ? ` (${r.allowance_pct}%)` : "";
-      lines.push(
-        `  ${i + 1}. ${r.name} · HI ${HI_FMT(r.hi)} · HC ${hc} · PH ${ph}${allowance} · ${tee}`
-      );
-    });
-    lines.push("");
-  }
-  return lines.join("\n");
+  const totalRows = categories.reduce((acc, c) => acc + c.rows.length, 0);
+  return [
+    `Reporte de Handicaps — ${tournamentName}`,
+    `${totalRows} inscritos · ${categories.length} categorías`,
+    `Generado: ${new Date().toLocaleString("es-MX")}`,
+    "",
+    "Adjunto el archivo con el detalle.",
+  ].join("\n");
 }
 
 export default function ReportToolbar({ tournamentName, categories }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-
-  const totalRows = categories.reduce((acc, c) => acc + c.rows.length, 0);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function handlePrint() {
     setError(null);
+    setNotice(null);
     window.print();
+  }
+
+  async function generateExcel(): Promise<string | null> {
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "Golf Torneo";
+      wb.created = new Date();
+
+      for (const cat of categories) {
+        const sheetName = (cat.code ?? cat.name ?? "Categoria")
+          .toString()
+          .slice(0, 31)
+          .replace(/[\\/?*\[\]:]/g, "_");
+        const ws = wb.addWorksheet(sheetName || "Categoria");
+        ws.columns = [
+          { header: "#", key: "n", width: 4 },
+          { header: "Nombre", key: "name", width: 32 },
+          { header: "Sexo", key: "gender", width: 6 },
+          { header: "HI", key: "hi", width: 7 },
+          { header: "HC", key: "hc", width: 6 },
+          { header: "PH", key: "ph", width: 6 },
+          { header: "%", key: "pct", width: 6 },
+          { header: "Salida", key: "tee", width: 14 },
+          { header: "Override", key: "ovr", width: 9 },
+        ];
+        ws.getRow(1).font = { bold: true };
+        ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
+        ws.views = [{ state: "frozen", ySplit: 1 }];
+
+        cat.rows.forEach((r, idx) => {
+          ws.addRow({
+            n: idx + 1,
+            name: r.name,
+            gender: r.gender,
+            hi: r.hi != null && Number.isFinite(r.hi) ? Number(r.hi) : null,
+            hc: r.ch,
+            ph: r.ph,
+            pct: r.allowance_pct,
+            tee: r.tee?.code ?? r.tee?.name ?? "",
+            ovr: r.is_override ? "Sí" : "",
+          });
+        });
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const fileName = `${safeFileName(`Handicaps_${tournamentName}`)}.xlsx`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return fileName;
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? `No se pudo generar Excel: ${err.message}`
+          : "No se pudo generar Excel."
+      );
+      return null;
+    }
   }
 
   function handleExcel() {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
-      try {
-        const ExcelJS = (await import("exceljs")).default;
-        const wb = new ExcelJS.Workbook();
-        wb.creator = "Golf Torneo";
-        wb.created = new Date();
-
-        for (const cat of categories) {
-          const sheetName = (
-            cat.code ??
-            cat.name ??
-            "Categoria"
-          )
-            .toString()
-            .slice(0, 31)
-            .replace(/[\\/?*\[\]:]/g, "_");
-          const ws = wb.addWorksheet(sheetName || "Categoria");
-          ws.columns = [
-            { header: "#", key: "n", width: 4 },
-            { header: "Nombre", key: "name", width: 32 },
-            { header: "Sexo", key: "gender", width: 6 },
-            { header: "HI", key: "hi", width: 7 },
-            { header: "HC", key: "hc", width: 6 },
-            { header: "PH", key: "ph", width: 6 },
-            { header: "%", key: "pct", width: 6 },
-            { header: "Salida", key: "tee", width: 14 },
-            { header: "Override", key: "ovr", width: 9 },
-          ];
-          ws.getRow(1).font = { bold: true };
-          ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
-          ws.views = [{ state: "frozen", ySplit: 1 }];
-
-          cat.rows.forEach((r, idx) => {
-            ws.addRow({
-              n: idx + 1,
-              name: r.name,
-              gender: r.gender,
-              hi: r.hi != null && Number.isFinite(r.hi) ? Number(r.hi) : null,
-              hc: r.ch,
-              ph: r.ph,
-              pct: r.allowance_pct,
-              tee: r.tee?.code ?? r.tee?.name ?? "",
-              ovr: r.is_override ? "Sí" : "",
-            });
-          });
-        }
-
-        const buffer = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buffer], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${safeFileName(`Handicaps_${tournamentName}`)}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? `No se pudo generar Excel: ${err.message}`
-            : "No se pudo generar Excel."
-        );
+      const fileName = await generateExcel();
+      if (fileName) {
+        setNotice(`Excel descargado: ${fileName}`);
       }
     });
   }
 
+  /**
+   * Comparte por WhatsApp. Manual:
+   *   1. Descarga el Excel.
+   *   2. Abre wa.me con un mensaje corto.
+   *   3. El usuario adjunta el archivo descargado manualmente desde
+   *      WhatsApp Web/móvil.
+   */
   function handleWhatsApp() {
     setError(null);
-    const summary = buildTextSummary(tournamentName, categories);
-    const text =
-      summary.length > 3500
-        ? `Reporte de Handicaps — ${tournamentName} (${totalRows} inscritos).\nDescarga el detalle desde el sistema.`
-        : summary;
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    setNotice(null);
+    startTransition(async () => {
+      const fileName = await generateExcel();
+      if (!fileName) return;
+
+      const text = buildShortMessage(tournamentName, categories);
+      const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+      setNotice(
+        `Excel descargado (${fileName}). Adjúntalo manualmente en WhatsApp.`
+      );
+    });
   }
 
+  /**
+   * Comparte por correo. Manual:
+   *   1. Descarga el Excel.
+   *   2. Abre el cliente de correo con asunto y cuerpo corto.
+   *   3. El usuario adjunta el archivo descargado manualmente desde el
+   *      cliente de correo.
+   */
   function handleEmail() {
     setError(null);
-    const subject = `Reporte de Handicaps — ${tournamentName}`;
-    const body = buildTextSummary(tournamentName, categories);
-    const url = `mailto:?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-    window.location.href = url;
+    setNotice(null);
+    startTransition(async () => {
+      const fileName = await generateExcel();
+      if (!fileName) return;
+
+      const subject = `Reporte de Handicaps — ${tournamentName}`;
+      const body = buildShortMessage(tournamentName, categories);
+      const url = `mailto:?subject=${encodeURIComponent(
+        subject
+      )}&body=${encodeURIComponent(body)}`;
+      window.location.href = url;
+      setNotice(
+        `Excel descargado (${fileName}). Adjúntalo manualmente en el correo.`
+      );
+    });
   }
 
   const btnClass =
     "inline-flex h-8 items-center gap-1.5 rounded border border-white/15 bg-[#1f2937] px-2.5 text-[11px] font-semibold text-white hover:bg-[#2a3447] disabled:cursor-not-allowed disabled:opacity-60 print:hidden";
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 print:hidden">
-      <button
-        type="button"
-        onClick={handlePrint}
-        className={btnClass}
-        title="Imprimir reporte"
-      >
-        <Printer className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Imprimir</span>
-      </button>
+    <div className="flex flex-col items-end gap-1 print:hidden">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={handlePrint}
+          className={btnClass}
+          title="Imprimir reporte"
+        >
+          <Printer className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Imprimir</span>
+        </button>
 
-      <button
-        type="button"
-        onClick={handlePrint}
-        className={btnClass}
-        title="Guardar como PDF (usa el diálogo de impresión → Destino: Guardar como PDF)"
-      >
-        <FileText className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">PDF</span>
-      </button>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className={btnClass}
+          title="Guardar como PDF (usa el diálogo de impresión → Destino: Guardar como PDF)"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">PDF</span>
+        </button>
 
-      <button
-        type="button"
-        onClick={handleExcel}
-        disabled={pending}
-        className={btnClass}
-        title="Descargar reporte en Excel (.xlsx)"
-      >
-        <FileSpreadsheet className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">
-          {pending ? "Generando…" : "Excel"}
-        </span>
-      </button>
+        <button
+          type="button"
+          onClick={handleExcel}
+          disabled={pending}
+          className={btnClass}
+          title="Descargar reporte en Excel (.xlsx)"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">
+            {pending ? "Generando…" : "Excel"}
+          </span>
+        </button>
 
-      <button
-        type="button"
-        onClick={handleWhatsApp}
-        className={btnClass}
-        title="Compartir resumen por WhatsApp"
-      >
-        <MessageCircle className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">WhatsApp</span>
-      </button>
+        <button
+          type="button"
+          onClick={handleWhatsApp}
+          disabled={pending}
+          className={btnClass}
+          title="Descarga el Excel y abre WhatsApp. Adjunta el archivo manualmente."
+        >
+          <MessageCircle className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">WhatsApp</span>
+        </button>
 
-      <button
-        type="button"
-        onClick={handleEmail}
-        className={btnClass}
-        title="Enviar resumen por correo"
-      >
-        <Mail className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Email</span>
-      </button>
+        <button
+          type="button"
+          onClick={handleEmail}
+          disabled={pending}
+          className={btnClass}
+          title="Descarga el Excel y abre tu cliente de correo. Adjunta el archivo manualmente."
+        >
+          <Mail className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Email</span>
+        </button>
+      </div>
 
       {error ? (
-        <span
-          className="text-[10px] font-semibold text-red-300"
-          title={error}
+        <p
+          className="max-w-xs text-right text-[10px] font-semibold text-red-300"
           role="alert"
         >
-          !
-        </span>
+          {error}
+        </p>
+      ) : notice ? (
+        <p
+          className="max-w-xs text-right text-[10px] text-amber-200"
+          role="status"
+        >
+          {notice}
+        </p>
       ) : null}
     </div>
   );
