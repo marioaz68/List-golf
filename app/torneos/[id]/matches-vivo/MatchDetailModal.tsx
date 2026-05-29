@@ -640,8 +640,10 @@ function PlayoffTable({
   return (
     <div className="overflow-x-auto rounded-lg border border-amber-400/30 bg-[#13100a]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-400/20 bg-[#13100a] px-3 py-1.5 text-[9px] text-amber-200/80">
-        Desempate en hoyos 1-9 (mismo SI). Muerte súbita: el primer hoyo con
-        ventaja para una pareja cierra el match.
+        Desempate en hoyos 1-9. Se respetan las mismas ventajas que la ronda
+        normal (mismo stroke index por hoyo), por lo que los altos reciben
+        golpe en los mismos hoyos. Muerte súbita: el primer hoyo donde una
+        pareja saque ventaja en puntos cierra el match.
       </div>
       <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
         <thead>
@@ -654,8 +656,8 @@ function PlayoffTable({
               return (
                 <th key={`ph-h-${h.hole_no}`} className={holeTh}>
                   <span className="block leading-none">H{p}</span>
-                  <span className="block text-[7px] font-normal text-amber-300/60">
-                    SI {h.stroke_index ?? "—"}
+                  <span className="block text-[8px] font-normal text-amber-300/80">
+                    hoyo {p}
                   </span>
                 </th>
               );
@@ -663,6 +665,31 @@ function PlayoffTable({
           </tr>
         </thead>
         <tbody>
+          {holes.some((h) => h.stroke_index != null) ? (
+            <tr className="bg-gradient-to-r from-amber-950/80 via-amber-900/60 to-amber-950/80 text-amber-100">
+              <td
+                className={`${stickyName} border-l-2 border-l-amber-500/40`}
+                style={{ backgroundColor: "#2a1d04" }}
+              >
+                <span className="block leading-none">Vent</span>
+                <span className="block text-[8px] font-normal text-amber-300/70">
+                  stroke index
+                </span>
+              </td>
+              {holes.map((h) => {
+                const p = h.playoff_hole ?? h.hole_no - 18;
+                return (
+                  <td
+                    key={`ph-si-${h.hole_no}`}
+                    className={`${cellTd} bg-amber-950/40 text-[10px] font-semibold`}
+                    title={`Desempate H${p} (hoyo físico ${p}) · Ventaja ${h.stroke_index ?? "—"}`}
+                  >
+                    {h.stroke_index ?? "—"}
+                  </td>
+                );
+              })}
+            </tr>
+          ) : null}
           {holes.some((h) => h.par != null) ? (
             <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
               <td
@@ -1066,6 +1093,7 @@ function HoleTable({
   const bBph = tournamentPh(bottomPlayers[1]);
 
   const hasPar = holes.some((h) => h.par != null);
+  const hasSI = holes.some((h) => h.stroke_index != null);
 
   function grossOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
     switch (who) {
@@ -1359,12 +1387,15 @@ function HoleTable({
     <div className="overflow-x-auto rounded-lg border border-white/10 bg-[#0a1220]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-[#0a1220] px-3 py-1.5 text-[9px] text-slate-400">
         <span>
-          <span className="font-semibold text-amber-300">Amarillo</span> = neto
-          con golpe de ventaja ·{" "}
-          <span className="font-semibold text-emerald-300">Verde</span> = bola
-          baja (mejor neto de la pareja) ·{" "}
-          <span className="font-semibold text-orange-300">Naranja</span> = bola
-          alta (segundo neto de la pareja)
+          <span className="font-semibold text-amber-300">Vent</span> = ventaja
+          del hoyo (stroke index, 1 = más difícil). Los altos reciben golpe
+          empezando por SI 1 ·{" "}
+          <span className="font-semibold text-amber-300">Amarillo</span> =
+          neto con golpe de ventaja recibido ·{" "}
+          <span className="font-semibold text-emerald-300">Verde</span> =
+          bola baja (mejor neto de la pareja) ·{" "}
+          <span className="font-semibold text-orange-300">Naranja</span> =
+          bola alta (segundo neto de la pareja)
         </span>
       </div>
       {decidedAtHole != null ? (
@@ -1467,6 +1498,45 @@ function HoleTable({
                   ? holes.reduce((acc, h) => acc + Number(h.par ?? 0), 0)
                   : "—"}
               </td>
+            </tr>
+          ) : null}
+
+          {/* Fila Ventaja (stroke index): muestra qué tan difícil es cada
+              hoyo. Los altos reciben golpe en los hoyos con SI más bajos
+              (1 = más difícil). En el desempate (P1-P9) las ventajas se
+              reciben en los mismos hoyos físicos. */}
+          {hasSI ? (
+            <tr className="bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-amber-950/70 text-amber-100">
+              <td
+                className={`${stickyName} border-l-2 border-l-amber-500/40`}
+                style={{ backgroundColor: "#2a1d04" }}
+              >
+                <span className="block leading-none">Vent</span>
+                <span className="block text-[8px] font-normal text-amber-300/70">
+                  stroke index
+                </span>
+              </td>
+              {Array.from({ length: 9 }, (_, i) => (
+                <td
+                  key={`si-${i + 1}`}
+                  className={`${cellTd} bg-amber-950/30 text-[10px] font-semibold`}
+                  title={`Hoyo ${i + 1} · Ventaja ${holes[i]?.stroke_index ?? "—"}`}
+                >
+                  {holes[i]?.stroke_index ?? "—"}
+                </td>
+              ))}
+              <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
+              {Array.from({ length: 9 }, (_, i) => (
+                <td
+                  key={`si-${i + 10}`}
+                  className={`${cellTd} bg-amber-950/30 text-[10px] font-semibold`}
+                  title={`Hoyo ${i + 10} · Ventaja ${holes[i + 9]?.stroke_index ?? "—"}`}
+                >
+                  {holes[i + 9]?.stroke_index ?? "—"}
+                </td>
+              ))}
+              <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
+              <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
             </tr>
           ) : null}
 
