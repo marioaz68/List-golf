@@ -354,7 +354,7 @@ export default function MatchDetailModal({
             </section>
           ) : null}
 
-          {/* Pagador (loser) tras AS al 18 — incluye desempate decidido */}
+          {/* Banner ganador/perdedor tras AS al 18 — incluye desempate decidido */}
           {detail && detail.via_playoff && detail.decided_at_hole != null ? (
             <PayerBanner
               topLabel={topName}
@@ -394,7 +394,7 @@ function PayerBanner({
         <span className="text-[12px] font-bold text-emerald-200">{winner}</span>
         <span className="text-slate-500">·</span>
         <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-200">
-          ✕ Pagador
+          ✕ Pierde
         </span>
         <span className="text-[12px] font-bold text-rose-200">{loser}</span>
       </div>
