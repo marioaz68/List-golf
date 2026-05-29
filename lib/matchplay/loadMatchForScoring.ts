@@ -2,6 +2,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { loadMatchPlayTeamsData } from "./loadMatchPlayTeamsData";
 import { effectiveEntryHi } from "./entryHi";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { effectivePhForMatchEntry } from "@/lib/matchplay/resolveEntryPhForMatch";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import type { MatchPlayEntryRow } from "./teamTypes";
 import type {
@@ -102,6 +104,10 @@ export async function loadMatchForScoring(
 
   const teamsData = await loadMatchPlayTeamsData(match.tournament_id);
   const teamById = new Map(teamsData.teams.map((t) => [t.id, t]));
+  const handicapCtx = await loadTournamentHandicapContext(
+    supabase,
+    match.tournament_id
+  );
 
   const top = match.top_pair_id ? teamById.get(match.top_pair_id) : null;
   const bottom = match.bottom_pair_id ? teamById.get(match.bottom_pair_id) : null;
@@ -114,7 +120,22 @@ export async function loadMatchForScoring(
     return {
       label: `${entry.player.first_name ?? ""} ${entry.player.last_name ?? ""}`.trim() || fallbackLabel,
       hi: effectiveEntryHi(entry),
-      ph: entry.playing_handicap != null ? Number(entry.playing_handicap) : null,
+      ph: effectivePhForMatchEntry(
+        {
+          id: entry.id,
+          player_id: entry.player_id,
+          category_id: entry.category_id,
+          handicap_index: entry.handicap_index,
+          playing_handicap: entry.playing_handicap,
+          playing_handicap_override: entry.playing_handicap_override,
+          player: {
+            gender: entry.player.gender,
+            handicap_index: entry.player.handicap_index,
+            handicap_torneo: null,
+          },
+        },
+        handicapCtx
+      ),
     };
   }
 

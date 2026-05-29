@@ -5,9 +5,14 @@ import {
   formatLowHighDecisionResult,
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
-import { effectiveEntryHi, formatPlayerName } from "./entryHi";
+import { formatPlayerName } from "./entryHi";
 import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import {
+  effectivePhForMatchEntry,
+  hiForMatchEntry,
+} from "@/lib/matchplay/resolveEntryPhForMatch";
 import type {
   MatchPlayHandicapAllowance,
   MatchPlayMatchType,
@@ -32,6 +37,12 @@ export type PublicMatchDetailHole = {
     top: { low: number; high: number; low_pts: number; high_pts: number };
     bottom: { low: number; high: number; low_pts: number; high_pts: number };
     nets: { top_a: number; top_b: number; bottom_a: number; bottom_b: number };
+    strokes_received?: {
+      top_a: number;
+      top_b: number;
+      bottom_a: number;
+      bottom_b: number;
+    };
   } | null;
   stroke_index: number | null;
   par: number | null;
@@ -173,16 +184,19 @@ export async function loadDerivedMatchDetail(
     match.bottom_b_entry_id,
   ];
 
+  const handicapCtx = await loadTournamentHandicapContext(admin, tournamentId);
+
   const { data: entriesRaw } = await admin
     .from("tournament_entries")
     .select(
-      "id, player_id, handicap_index, playing_handicap, course_handicap, playing_handicap_override, players:players(first_name, last_name, handicap_index, handicap_torneo)"
+      "id, player_id, category_id, handicap_index, playing_handicap, course_handicap, playing_handicap_override, players:players(first_name, last_name, handicap_index, handicap_torneo, gender, birth_year)"
     )
     .in("id", entryIds);
 
   type EntryRow = {
     id: string;
     player_id: string;
+    category_id: string | null;
     handicap_index: number | null;
     playing_handicap: number | null;
     course_handicap: number | null;
@@ -193,12 +207,16 @@ export async function loadDerivedMatchDetail(
           last_name: string | null;
           handicap_index: number | null;
           handicap_torneo: number | null;
+          gender: string | null;
+          birth_year: number | null;
         }
       | Array<{
           first_name: string | null;
           last_name: string | null;
           handicap_index: number | null;
           handicap_torneo: number | null;
+          gender: string | null;
+          birth_year: number | null;
         }>
       | null;
   };
@@ -210,24 +228,41 @@ export async function loadDerivedMatchDetail(
 
   for (const e of (entriesRaw ?? []) as EntryRow[]) {
     const p = Array.isArray(e.players) ? e.players[0] : e.players;
-    const phEffective =
-      e.playing_handicap_override != null
-        ? Number(e.playing_handicap_override)
-        : e.playing_handicap != null
-          ? Number(e.playing_handicap)
-          : null;
+    const phEffective = effectivePhForMatchEntry(
+      {
+        id: e.id,
+        player_id: e.player_id,
+        category_id: e.category_id,
+        handicap_index: e.handicap_index,
+        playing_handicap: e.playing_handicap,
+        playing_handicap_override: e.playing_handicap_override,
+        player: p
+          ? {
+              gender: p.gender,
+              birth_year: p.birth_year,
+              handicap_index: p.handicap_index,
+              handicap_torneo: p.handicap_torneo,
+            }
+          : null,
+      },
+      handicapCtx
+    );
     entryById.set(e.id, {
       player_id: e.player_id,
       label: formatPlayerName({
         first_name: p?.first_name ?? null,
         last_name: p?.last_name ?? null,
       }),
-      hi: effectiveEntryHi({
+      hi: hiForMatchEntry({
+        id: e.id,
+        player_id: e.player_id,
         handicap_index: e.handicap_index,
-        player: {
-          handicap_index: p?.handicap_index ?? null,
-          handicap_torneo: p?.handicap_torneo ?? null,
-        },
+        player: p
+          ? {
+              handicap_index: p.handicap_index,
+              handicap_torneo: p.handicap_torneo,
+            }
+          : null,
       }),
       ph: phEffective,
     });
