@@ -85,6 +85,25 @@ function fmtPh(n: number | null | undefined): string {
   return String(Math.round(Number(n)));
 }
 
+/**
+ * Para el scorecard horizontal — elimina el segundo apellido (y el segundo
+ * nombre si existe) para que la columna fija de nombres entre cómoda en
+ * pantallas móviles.
+ *   "Paulina Septién Lomeli"            → "Paulina Septién"
+ *   "Adriana Guadalupe Alvarez Lopez"   → "Adriana Alvarez"
+ *   "Mario Arturo Urquiza Vargas"       → "Mario Urquiza"
+ */
+function shortPlayerLabel(label: string): string {
+  if (!label) return "—";
+  const parts = label
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length <= 2) return label.trim();
+  if (parts.length === 3) return `${parts[0]} ${parts[1]}`;
+  return `${parts[0]} ${parts[parts.length - 2]}`;
+}
+
 export default function MatchDetailModal({
   open,
   onClose,
@@ -571,10 +590,10 @@ function HoleTable({
   allowancePct: number;
   decidedAtHole?: number | null;
 }) {
-  const tA = topPlayers[0]?.label ?? "—";
-  const tB = topPlayers[1]?.label ?? "—";
-  const bA = bottomPlayers[0]?.label ?? "—";
-  const bB = bottomPlayers[1]?.label ?? "—";
+  const tA = shortPlayerLabel(topPlayers[0]?.label ?? "—");
+  const tB = shortPlayerLabel(topPlayers[1]?.label ?? "—");
+  const bA = shortPlayerLabel(bottomPlayers[0]?.label ?? "—");
+  const bB = shortPlayerLabel(bottomPlayers[1]?.label ?? "—");
 
   /** PH del torneo (CH del campo × % competencia). No usar HI×% directo. */
   function tournamentPh(p: PlayerInfo | undefined): number | null {
@@ -744,8 +763,16 @@ function HoleTable({
     { key: "bB", name: bB, team: "bottom", ph: bBph },
   ];
 
+  /**
+   * Columna fija de nombre. En móvil el usuario hace scroll horizontal
+   * para ver todos los hoyos: la columna fija debe quedar ENCIMA del
+   * contenido que pasa por debajo, no transparentarse. Por eso usamos
+   * `z-30` y aplicamos el color de fondo vía `style` (no como clase
+   * Tailwind), para que ninguna otra clase arbitraria pueda ganar la
+   * disputa de CSS.
+   */
   const stickyName =
-    "sticky left-0 z-10 border-b border-r border-white/10 bg-[#0a1220] px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[6px_0_12px_-4px_rgba(0,0,0,0.45)]";
+    "sticky left-0 z-30 border-b border-r border-white/10 px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[6px_0_12px_-4px_rgba(0,0,0,0.55)] w-[120px] min-w-[120px] max-w-[140px]";
   const holeTh =
     "w-[24px] min-w-[24px] border-b border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-cyan-50 sm:w-7";
   const subTh =
@@ -891,7 +918,12 @@ function HoleTable({
       <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
-            <th className={`${stickyName} z-20 bg-cyan-950`}>Jugador</th>
+            <th
+              className={stickyName}
+              style={{ backgroundColor: "#083344" }}
+            >
+              Jugador
+            </th>
             {Array.from({ length: 9 }, (_, i) => (
               <th key={`hh-${i + 1}`} className={holeTh}>
                 {i + 1}
@@ -932,7 +964,8 @@ function HoleTable({
           {hasPar ? (
             <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
               <td
-                className={`${stickyName} bg-emerald-950 border-l-2 border-l-emerald-500/50`}
+                className={`${stickyName} border-l-2 border-l-emerald-500/50`}
+                style={{ backgroundColor: "#022c22" }}
               >
                 Par
               </td>
@@ -981,6 +1014,7 @@ function HoleTable({
           {playerRows.map((p, idx) => {
             const stripe =
               idx % 2 === 0 ? "bg-[#0c1928]" : "bg-[#0b1728]";
+            const stripeHex = idx % 2 === 0 ? "#0c1928" : "#0b1728";
             const accent =
               p.team === "top"
                 ? "border-l-2 border-l-cyan-500/40"
@@ -994,9 +1028,14 @@ function HoleTable({
             const totTp = hasPar ? netToPar(p.key, 1, 18) : null;
             return (
               <tr key={`row-${p.key}`} className={`${stripe}`}>
-                <td className={`${stickyName} ${stripe} ${accent}`}>
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="truncate">{p.name}</span>
+                <td
+                  className={`${stickyName} ${accent}`}
+                  style={{ backgroundColor: stripeHex }}
+                >
+                  <div className="flex items-center gap-1 truncate">
+                    <span className="truncate" title={p.name}>
+                      {p.name}
+                    </span>
                     {p.ph != null ? (
                       <span
                         className="shrink-0 rounded bg-amber-500/20 px-1 py-px text-[8px] font-bold leading-none text-amber-200"
@@ -1063,6 +1102,7 @@ function HoleTable({
 
           {(() => {
             const stripe = "bg-[#091624]";
+            const stripeHex = "#091624";
             const d9 = diffAt(9);
             const d18 = diffAt(18);
             const dIn =
@@ -1070,11 +1110,13 @@ function HoleTable({
             return (
               <tr className={`border-t-2 border-cyan-500/30 ${stripe}`}>
                 <td
-                  className={`${stickyName} ${stripe} border-l-2 border-l-amber-400/60`}
+                  className={`${stickyName} border-l-2 border-l-amber-400/60`}
+                  style={{ backgroundColor: stripeHex }}
                 >
                   <span className="block text-amber-200">Diferencial</span>
                   <span className="block text-[8px] font-normal text-slate-400">
-                    {topLabel} − {bottomLabel}
+                    {shortPlayerLabel(topLabel)} −{" "}
+                    {shortPlayerLabel(bottomLabel)}
                   </span>
                 </td>
                 {Array.from({ length: 9 }, (_, i) => {
