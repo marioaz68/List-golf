@@ -144,47 +144,82 @@ export default async function PublicMatchesLivePage(props: {
         }));
       }
 
-      // Match decidido por marcador: promovemos el estado a "completed"
-      // y poblamos winner_pair_id + result_text para que la grilla y el
-      // modal lo reflejen sin esperar al cierre formal del comité.
-      if (derivedResult.decisions.size > 0) {
-        initialMatches = initialMatches.map((m) => {
-          const dec = derivedResult.decisions.get(m.id);
-          if (!dec) return m;
+      // Formato de result_text para cada match. Funciona tanto para
+      // matches decididos como para los que están en juego, mostrando
+      // siempre: "H{hoyo} · {lead} arriba · {puntos por jugar}".
+      // Reglas (Bola Baja + Bola Alta):
+      //  · cada hoyo entrega máx. 2 puntos (1 bola baja + 1 bola alta).
+      //  · hoyo halved = 0 puntos para ambas parejas.
+      const fmtN = (n: number) =>
+        Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+
+      function buildResultText(matchId: string): string | null {
+        const dec = derivedResult.decisions.get(matchId);
+        const summary = derivedResult.summaries.get(matchId);
+        if (!summary) return null;
+
+        // Decidido en muerte súbita (desempate 1-9 físicos).
+        if (dec?.via_playoff && dec.playoff_hole != null) {
+          const lead = Math.abs(dec.top_total - dec.bottom_total);
+          return `Desempate H${dec.playoff_hole} · ${fmtN(lead)} arriba`;
+        }
+
+        // Decidido por marcador antes (o exactamente al) 18.
+        if (dec) {
+          const lead = Math.abs(dec.top_total - dec.bottom_total);
+          const holesRemaining = Math.max(0, holesPerMatch - dec.decided_at_hole);
+          const pointsRemaining = holesRemaining * 2;
+          const tail =
+            pointsRemaining === 0 ? "" : ` · ${pointsRemaining} por jugar`;
+          if (lead === 0) {
+            return `H${dec.decided_at_hole} · AS${tail}`;
+          }
+          return `H${dec.decided_at_hole} · ${fmtN(lead)} arriba${tail}`;
+        }
+
+        // AS al 18 pendiente de desempate.
+        if (summary.needs_playoff) {
+          return `H18 · AS · desempate pendiente`;
+        }
+
+        // En juego: necesitamos el último hoyo capturado.
+        const matchHoles = derivedResult.holes.filter(
+          (h) => h.match_id === matchId
+        );
+        const played = matchHoles.filter(
+          (h) =>
+            (h.top_points != null || h.bottom_points != null) && h.hole_no <= 18
+        );
+        if (played.length === 0) return null;
+        const lastHole = played.reduce(
+          (max, h) => Math.max(max, h.hole_no),
+          0
+        );
+        const lead = Math.abs(summary.top_total - summary.bottom_total);
+        const pointsRemaining = Math.max(0, 18 - lastHole) * 2;
+        const tail = pointsRemaining === 0 ? "" : ` · ${pointsRemaining} por jugar`;
+        if (lead === 0) return `H${lastHole} · AS${tail}`;
+        return `H${lastHole} · ${fmtN(lead)} arriba${tail}`;
+      }
+
+      initialMatches = initialMatches.map((m) => {
+        const dec = derivedResult.decisions.get(m.id);
+        const resultText = buildResultText(m.id);
+        if (dec) {
           const winnerPairId =
             dec.winner === "top" ? m.top_pair_id : m.bottom_pair_id;
-          const fmt = (n: number) =>
-            Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
-          let resultText: string;
-          if (dec.via_playoff && dec.playoff_hole != null) {
-            // Decidido en muerte súbita (hoyos 19-27 = 1-9 físicos).
-            const hi = Math.max(dec.top_total, dec.bottom_total);
-            const lo = Math.min(dec.top_total, dec.bottom_total);
-            resultText = `${fmt(hi)}–${fmt(lo)} · Desempate H${dec.playoff_hole}`;
-          } else {
-            // En Bola Baja + Bola Alta cada hoyo otorga máx. 2 puntos, por lo
-            // que los "puntos por jugar" al cierre = hoyos restantes × 2.
-            const holesRemaining = Math.max(
-              0,
-              holesPerMatch - dec.decided_at_hole
-            );
-            const pointsRemaining = holesRemaining * 2;
-            const hi = Math.max(dec.top_total, dec.bottom_total);
-            const lo = Math.min(dec.top_total, dec.bottom_total);
-            const tail =
-              pointsRemaining === 0
-                ? ""
-                : ` · ${pointsRemaining} ${pointsRemaining === 1 ? "punto" : "puntos"} por jugar`;
-            resultText = `${fmt(hi)}–${fmt(lo)} en H${dec.decided_at_hole}${tail}`;
-          }
           return {
             ...m,
             status: "completed",
             winner_pair_id: winnerPairId,
             result_text: resultText,
           };
-        });
-      }
+        }
+        if (resultText != null) {
+          return { ...m, result_text: resultText };
+        }
+        return m;
+      });
     }
   }
 
