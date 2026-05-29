@@ -20,6 +20,10 @@ export type DerivedMatchRow = {
   result_text: string | null;
   /** round_id del torneo para joinear con hole_scores stroke play. */
   round_id: string;
+  /** pairing_group_id origen del match — útil para cerrar el match. */
+  group_id: string;
+  /** group_no original del pairing_group (o null si no se asignó). */
+  group_no: number | null;
   /** entry_ids de los 4 jugadores del match (cuando hay 2 teams). */
   top_a_entry_id: string | null;
   top_b_entry_id: string | null;
@@ -141,7 +145,13 @@ export async function derivePairingGroupMatches(
       .filter((g) => g.round_id === round.id)
       .sort((a, b) => (a.group_no ?? 0) - (b.group_no ?? 0));
 
-    const matchesInRound: Array<{ top: string | null; bottom: string | null; pos: number }> = [];
+    const matchesInRound: Array<{
+      top: string | null;
+      bottom: string | null;
+      pos: number;
+      groupId: string;
+      groupNo: number | null;
+    }> = [];
     let pos = 0;
     for (const g of groupsOfRound) {
       const teamsIds = teamsByGroup.get(g.id) ?? [];
@@ -151,6 +161,8 @@ export async function derivePairingGroupMatches(
         top: teamsIds[0] ?? null,
         bottom: teamsIds[1] ?? null,
         pos: g.group_no ?? pos,
+        groupId: g.id,
+        groupNo: g.group_no ?? null,
       });
     }
 
@@ -172,6 +184,8 @@ export async function derivePairingGroupMatches(
         status: isBye ? "bye" : "scheduled",
         result_text: isBye ? "BYE" : null,
         round_id: round.id,
+        group_id: m.groupId,
+        group_no: m.groupNo,
         top_a_entry_id: topEntries?.a ?? null,
         top_b_entry_id: topEntries?.b ?? null,
         bottom_a_entry_id: bottomEntries?.a ?? null,

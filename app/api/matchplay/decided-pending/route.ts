@@ -45,8 +45,11 @@ export async function GET(req: Request) {
 
   try {
     const admin = createAdminClient();
-    const matches = await listDecidedPendingMatches(admin, tournamentId);
-    return NextResponse.json({ ok: true, matches });
+    const { matches, diagnostics } = await listDecidedPendingMatches(
+      admin,
+      tournamentId
+    );
+    return NextResponse.json({ ok: true, matches, diagnostics });
   } catch (err) {
     return NextResponse.json(
       {
