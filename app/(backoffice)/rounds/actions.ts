@@ -106,6 +106,21 @@ async function ensureAccess(tournament_id: string) {
   });
 }
 
+export type RoundFormState = { ok: true } | { ok: false; message: string };
+
+export const roundFormInitialState: RoundFormState = { ok: true };
+
+function isNextRedirectError(error: unknown): boolean {
+  const digest =
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: string }).digest === "string"
+      ? (error as { digest: string }).digest
+      : "";
+  return digest.startsWith("NEXT_REDIRECT");
+}
+
 export async function createRound(formData: FormData) {
   const supabase = createAdminClient();
 
@@ -141,7 +156,7 @@ export async function createRound(formData: FormData) {
       error.message.includes("uq_rounds_tournament_round_category_wave")
     ) {
       throw new Error(
-        "Ya existe una ronda para esa categoría, número de ronda y turno."
+        "Ya existe una ronda para esa categoría, número de ronda y turno. Revisa el calendario de abajo o elige otra fecha/ronda/turno."
       );
     }
 
@@ -150,6 +165,22 @@ export async function createRound(formData: FormData) {
 
   revalidatePath("/rounds");
   redirect(`/rounds?tournament_id=${tournament_id}`);
+}
+
+/** Wrapper para useActionState: errores visibles; redirect sigue funcionando. */
+export async function createRoundFormAction(
+  _prev: RoundFormState,
+  formData: FormData
+): Promise<RoundFormState> {
+  try {
+    await createRound(formData);
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    const message =
+      error instanceof Error ? error.message : "No se pudo crear la ronda.";
+    return { ok: false, message };
+  }
+  return roundFormInitialState;
 }
 
 export async function updateRound(formData: FormData) {

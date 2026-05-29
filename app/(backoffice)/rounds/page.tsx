@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
-import { createRound, updateRound, deleteRound } from "./actions";
+import { updateRound, deleteRound } from "./actions";
 import SubmitButton from "@/components/ui/SubmitButton";
+import CreateRoundDayForm from "./CreateRoundDayForm";
 import HeaderBar from "@/components/ui/HeaderBar";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
@@ -202,8 +203,6 @@ const labelClass =
 const cardClass =
   "space-y-2 rounded-lg border border-gray-300 bg-white/95 p-2.5 shadow-sm";
 const fieldWrapClass = "grid gap-1 min-w-[150px]";
-const newRoundGridClass =
-  "grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[90px_145px_110px_130px_115px_115px_auto] xl:items-end";
 
 function HeaderBlock({
   title,
@@ -490,11 +489,13 @@ export default async function RoundsPage(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.04em] leading-none text-gray-700">
-              Nuevo día de juego
+              Agregar ronda(s) nueva(s)
             </div>
             <div className="mt-1 text-[11px] leading-snug text-gray-500">
-              Selecciona la fecha, ronda, horario y todas las categorías que
-              juegan ese día. Se creará un registro por categoría.
+              Crea registros en el calendario del torneo (fecha + número de
+              ronda + turno). Si marcas varias categorías, se crea una fila por
+              cada una con el mismo horario. El calendario de abajo no crea
+              nada nuevo: solo muestra y permite editar lo que ya existe.
             </div>
           </div>
         </div>
@@ -506,152 +507,13 @@ export default async function RoundsPage(props: {
           </div>
         ) : null}
 
-        <form action={createRound} className={newRoundGridClass}>
-          <input
-            type="hidden"
-            name="tournament_id"
-            value={effectiveTournamentId}
-          />
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="round_date">
-              Fecha / día
-            </label>
-            <input
-              id="round_date"
-              name="round_date"
-              type="date"
-              className={fieldClass}
-              required
-            />
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="round_no">
-              Ronda
-            </label>
-            <input
-              id="round_no"
-              name="round_no"
-              type="number"
-              min="1"
-              placeholder="Ronda #"
-              className={fieldClass}
-              required
-            />
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="wave">
-              Turno
-            </label>
-            <select
-              id="wave"
-              name="wave"
-              defaultValue="AM"
-              className={fieldClass}
-              required
-            >
-              <option value="AM">AM</option>
-              <option value="PM">PM</option>
-            </select>
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="start_type">
-              Tipo salida
-            </label>
-            <select
-              id="start_type"
-              name="start_type"
-              defaultValue="tee_time"
-              className={fieldClass}
-            >
-              <option value="tee_time">Tee time</option>
-              <option value="shotgun">Shotgun</option>
-            </select>
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="start_time">
-              Hora inicio
-            </label>
-            <select
-              id="start_time"
-              name="start_time"
-              defaultValue="07:30"
-              className={fieldClass}
-            >
-              <option value="">Sin hora</option>
-              {timeOptions.map((time) => (
-                <option key={time} value={time}>
-                  {time}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="interval_minutes">
-              Intervalo
-            </label>
-            <select
-              id="interval_minutes"
-              name="interval_minutes"
-              defaultValue="8"
-              className={fieldClass}
-            >
-              <option value="">Sin intervalo</option>
-              <option value="7">7 min</option>
-              <option value="8">8 min</option>
-              <option value="9">9 min</option>
-              <option value="10">10 min</option>
-              <option value="12">12 min</option>
-            </select>
-          </div>
-
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="group_size">
-              Grupo
-            </label>
-            <select
-              id="group_size"
-              name="group_size"
-              defaultValue="4"
-              className={fieldClass}
-            >
-              <option value="3">3 jug.</option>
-              <option value="4">4 jug.</option>
-            </select>
-          </div>
-
-          <div className="col-span-full">
-            <label className={labelClass}>Categorías que juegan ese día</label>
-
-            <div className="mt-1 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-              {categories.map((c) => (
-                <label
-                  key={c.id}
-                  className="flex cursor-pointer items-center gap-2 rounded border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] text-black"
-                >
-                  <input
-                    type="checkbox"
-                    name="category_ids"
-                    value={c.id}
-                    className="h-3 w-3"
-                  />
-                  <span>{categoryLabel(c)}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-end">
-            <SubmitButton pendingText="Creando..." disabled={categories.length === 0}>
-              Crear día
-            </SubmitButton>
-          </div>
-        </form>
+        <CreateRoundDayForm
+          tournamentId={effectiveTournamentId}
+          categories={categories.map((c) => ({
+            id: c.id,
+            label: categoryLabel(c),
+          }))}
+        />
       </section>
 
       <section className={cardClass}>
