@@ -35,7 +35,7 @@ import type { LockedScorecardLookups } from "@/lib/leaderboard/lockedScorecards"
 import type { RoundLike } from "@/lib/leaderboard/roundCategoryMatch";
 import type { PublicDetailTableLabels } from "@/app/torneos/[id]/lib/publicDetailTableLabels";
 import type { LeaderboardViewOverride } from "@/lib/leaderboard/leaderboardViewOverride";
-import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
+import { entryHandicapCardFromRow } from "@/lib/leaderboard/perHoleCompetition";
 import {
   favoritePlayerMove,
   favoritePlayerStanding,
@@ -638,17 +638,10 @@ export default function FavoritesView({
                           row={row}
                           labels={rowDetailLabels}
                           closeHref={detailToggleHref}
-                          handicapSummary={
-                            usesGrossHoleByHoleDetail(
-                              rowRule,
-                              leaderboardViewOverride
-                            )
-                              ? null
-                              : formatPlayingHandicapSummary(
-                                  handicapMap.get(row.player_id) ?? null,
-                                  rowRule.handicap_percentage
-                                )
-                          }
+                          handicapSummary={entryHandicapCardFromRow(
+                            row,
+                            handicapMap.get(row.player_id) ?? null
+                          )}
                         />
                         <PublicLeaderboardDetailTable
                           row={row}

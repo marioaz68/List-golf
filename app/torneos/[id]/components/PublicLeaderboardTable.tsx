@@ -13,7 +13,7 @@ import {
   mainTotalColumnHeader,
   secondaryTotalColumnHeader,
 } from "@/lib/leaderboard/competitionDisplay";
-import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
+import { entryHandicapCardFromRow } from "@/lib/leaderboard/perHoleCompetition";
 import {
   buildCompetitionRulesMap,
   buildHandicapMap,
@@ -404,17 +404,10 @@ export default function PublicLeaderboardTable({
                             row={row}
                             labels={rowDetailLabels}
                             closeHref={detailToggleHref}
-                            handicapSummary={
-                              usesGrossHoleByHoleDetail(
-                                rowRule,
-                                leaderboardViewOverride
-                              )
-                                ? null
-                                : formatPlayingHandicapSummary(
-                                    handicapMap.get(row.player_id) ?? null,
-                                    rowRule.handicap_percentage
-                                  )
-                            }
+                            handicapSummary={entryHandicapCardFromRow(
+                              row,
+                              handicapMap.get(row.player_id) ?? null
+                            )}
                           />
                           <PublicLeaderboardDetailTable
                             row={row}

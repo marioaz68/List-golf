@@ -73,3 +73,56 @@ export function formatPlayingHandicapSummary(
   if (idx == null) return `PH ${ph}`;
   return `HCP ${idx} · PH ${ph} (${handicapPercentage}%)`;
 }
+
+export type EntryHandicapCardInput = {
+  handicap_index?: number | null;
+  course_handicap?: number | null;
+  playing_handicap?: number | null;
+  playing_handicap_override?: number | null;
+};
+
+function fmtHi(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
+
+/** Carnet del jugador: HI (variable) + HC/PH fijos del torneo/campo. */
+export function formatEntryHandicapCard(
+  h: EntryHandicapCardInput
+): string | null {
+  const hi =
+    h.handicap_index != null && Number.isFinite(Number(h.handicap_index))
+      ? Number(h.handicap_index)
+      : null;
+  const ch =
+    h.course_handicap != null && Number.isFinite(Number(h.course_handicap))
+      ? Math.round(Number(h.course_handicap))
+      : null;
+  const ph =
+    h.playing_handicap != null && Number.isFinite(Number(h.playing_handicap))
+      ? Math.round(Number(h.playing_handicap))
+      : null;
+
+  if (hi == null && ch == null && ph == null) return null;
+
+  const parts: string[] = [];
+  if (hi != null) parts.push(`HI ${fmtHi(hi)}`);
+  if (ch != null) parts.push(`HC ${ch}`);
+  if (ph != null) {
+    parts.push(
+      `PH ${ph}${h.playing_handicap_override != null ? " (manual)" : ""}`
+    );
+  }
+  return parts.join(" · ");
+}
+
+export function entryHandicapCardFromRow(
+  row: EntryHandicapCardInput & { player_id?: string },
+  handicapIndexFallback?: number | null
+): string | null {
+  return formatEntryHandicapCard({
+    handicap_index: row.handicap_index ?? handicapIndexFallback ?? null,
+    course_handicap: row.course_handicap,
+    playing_handicap: row.playing_handicap,
+    playing_handicap_override: row.playing_handicap_override,
+  });
+}

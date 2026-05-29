@@ -23,6 +23,9 @@ import {
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 import { queryInChunks } from "@/lib/supabase/queryInChunks";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { resolveTournamentEntryHandicap } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -129,6 +132,10 @@ type EntryRowBase = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  course_handicap?: number | null;
+  playing_handicap?: number | null;
+  playing_handicap_override?: number | null;
+  playing_handicap_override_reason?: string | null;
   status: string | null;
   flagged_for_committee?: boolean | null;
   flagged_committee_reason?: string | null;
@@ -143,6 +150,10 @@ type EntryRow = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  course_handicap?: number | null;
+  playing_handicap?: number | null;
+  playing_handicap_override?: number | null;
+  playing_handicap_override_reason?: string | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -765,6 +776,11 @@ export default async function EntriesPage({
         player_id: e.player_id,
         player_number: e.player_number,
         handicap_index: e.handicap_index,
+        course_handicap: e.course_handicap ?? null,
+        playing_handicap: e.playing_handicap ?? null,
+        playing_handicap_override: e.playing_handicap_override ?? null,
+        playing_handicap_override_reason:
+          e.playing_handicap_override_reason ?? null,
         status: e.status,
         flagged_for_committee: Boolean(e.flagged_for_committee),
         flagged_committee_reason: e.flagged_committee_reason ?? null,
@@ -809,6 +825,44 @@ export default async function EntriesPage({
           : null,
       };
     });
+
+    if (entries.length > 0) {
+      const admin = createAdminClient();
+      const handicapCtx = await loadTournamentHandicapContext(
+        admin,
+        selectedTournamentId
+      );
+      entries = entries.map((e) => {
+        if (e.course_handicap != null && e.playing_handicap != null) return e;
+        const calc = resolveTournamentEntryHandicap(
+          {
+            id: e.id,
+            player_id: e.player_id,
+            category_id: e.categories?.id ?? null,
+            handicap_index: e.handicap_index,
+            playing_handicap_override: e.playing_handicap_override ?? null,
+            player: e.players
+              ? {
+                  gender: e.players.gender,
+                  birth_year: e.players.birth_year,
+                  handicap_index: e.players.handicap_index,
+                  handicap_torneo: e.players.handicap_torneo,
+                }
+              : null,
+          },
+          handicapCtx
+        );
+        if (!calc) return e;
+        return {
+          ...e,
+          course_handicap: e.course_handicap ?? calc.course_handicap,
+          playing_handicap:
+            e.playing_handicap_override != null
+              ? e.playing_handicap
+              : e.playing_handicap ?? calc.playing_handicap,
+        };
+      });
+    }
     } catch (err) {
       pageLoadError =
         err instanceof Error ? err.message : "Error al cargar inscritos";
