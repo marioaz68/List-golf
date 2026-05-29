@@ -47,6 +47,10 @@ export default function DecidedMatchesPanel({
   const [error, setError] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
   const [feedbacks, setFeedbacks] = useState<Record<string, Feedback>>({});
+  const [publishingBracket, setPublishingBracket] = useState(false);
+  const [publishFeedback, setPublishFeedback] = useState<
+    { kind: "ok" | "error"; text: string } | null
+  >(null);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -79,6 +83,50 @@ export default function DecidedMatchesPanel({
   useEffect(() => {
     loadList();
   }, [loadList]);
+
+  async function handlePublishBracket() {
+    if (publishingBracket) return;
+    const ok = window.confirm(
+      "¿Generar y publicar el cuadro del torneo ahora?\n\n" +
+        "Se crearán los cruces a partir de los equipos del match play y se publicará el bracket. " +
+        "Después podrás cerrar cada match decidido aquí mismo."
+    );
+    if (!ok) return;
+
+    setPublishingBracket(true);
+    setPublishFeedback(null);
+    try {
+      const res = await fetch(`/api/matchplay/auto-publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournament_id: tournamentId }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        error?: string;
+        teamCount?: number;
+        bracketSize?: number;
+        byeCount?: number;
+      };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      setPublishFeedback({
+        kind: "ok",
+        text: json.message ?? "Cuadro publicado.",
+      });
+      // Refrescar listado: ya con bracketPublished=true los botones aparecen.
+      await loadList();
+    } catch (err) {
+      setPublishFeedback({
+        kind: "error",
+        text: err instanceof Error ? err.message : "No se pudo publicar el cuadro.",
+      });
+    } finally {
+      setPublishingBracket(false);
+    }
+  }
 
   async function handleClose(match: ApiMatch) {
     const winnerLabel =
@@ -281,16 +329,39 @@ export default function DecidedMatchesPanel({
         <div className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs text-amber-900">
           <p className="font-semibold">⚠️ El cuadro de match play no se ha publicado.</p>
           <p className="mt-1">
-            Estas {matches.length} parejas ya tienen resultado matemático, pero para
-            poder <strong>cerrar el match y avanzar al ganador</strong> primero
-            necesitas publicar el bracket del torneo.
+            Estas {matches.length} parejas ya tienen resultado matemático. Publica
+            el cuadro ahora con un clic — se generan los cruces y, al cerrar cada
+            match, el ganador avanza automáticamente al siguiente cruce.
           </p>
-          <a
-            href="/matchplay"
-            className="mt-2 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
-          >
-            Ir a /matchplay para publicar bracket →
-          </a>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePublishBracket}
+              disabled={publishingBracket}
+              className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {publishingBracket
+                ? "Publicando…"
+                : "Generar y publicar bracket ahora"}
+            </button>
+            <a
+              href={`/matchplay?tournament_id=${encodeURIComponent(tournamentId)}`}
+              className="text-[11px] text-amber-700 underline hover:text-amber-900"
+            >
+              Abrir configuración avanzada
+            </a>
+          </div>
+          {publishFeedback ? (
+            <p
+              className={
+                publishFeedback.kind === "ok"
+                  ? "mt-2 rounded-md bg-emerald-100 px-2 py-1 text-[11px] text-emerald-800"
+                  : "mt-2 rounded-md bg-red-100 px-2 py-1 text-[11px] text-red-800"
+              }
+            >
+              {publishFeedback.text}
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="mt-1 text-xs text-emerald-800/80">
