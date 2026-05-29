@@ -1274,7 +1274,7 @@ export default function NewPlayerForm({
             tabIndex={-1}
             value={
               !returnTournament
-                ? "— (depende del torneo)"
+                ? "depende del torneo"
                 : previewLoading
                   ? "calculando…"
                   : previewHc != null
@@ -1284,9 +1284,13 @@ export default function NewPlayerForm({
             style={{
               ...fieldStyle,
               background: "#f3f4f6",
-              color: "#374151",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-              textAlign: "right",
+              color: !returnTournament ? "#9ca3af" : "#374151",
+              fontFamily: !returnTournament
+                ? "Arial, sans-serif"
+                : "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: !returnTournament ? 10 : 16,
+              fontStyle: !returnTournament ? "italic" : "normal",
+              textAlign: "center",
               cursor: "not-allowed",
             }}
             title={
@@ -1337,7 +1341,7 @@ export default function NewPlayerForm({
             tabIndex={-1}
             value={
               !returnTournament
-                ? "— (depende del torneo)"
+                ? "depende del torneo"
                 : previewLoading
                   ? "calculando…"
                   : previewPh != null
@@ -1350,11 +1354,15 @@ export default function NewPlayerForm({
             style={{
               ...fieldStyle,
               background: "#f3f4f6",
-              color: "#047857",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-              textAlign: "right",
+              color: !returnTournament ? "#9ca3af" : "#047857",
+              fontFamily: !returnTournament
+                ? "Arial, sans-serif"
+                : "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: !returnTournament ? 10 : 16,
+              fontStyle: !returnTournament ? "italic" : "normal",
+              textAlign: "center",
               cursor: "not-allowed",
-              fontWeight: 700,
+              fontWeight: !returnTournament ? 400 : 700,
             }}
             title={
               returnTournament
