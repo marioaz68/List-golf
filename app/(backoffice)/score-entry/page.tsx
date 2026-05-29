@@ -1287,26 +1287,38 @@ export default async function ScoreEntryPage(props: {
               <div className="flex flex-wrap items-start gap-3">
                 <div className="flex-1 min-w-[240px]">
                   <p className="text-sm font-bold text-emerald-900">
-                    Captura rápida del grupo (las 4 tarjetas)
+                    Captura del grupo (las 4 tarjetas)
                   </p>
                   <p className="mt-1 text-sm text-emerald-800">
                     {[player.first_name, player.last_name]
                       .filter(Boolean)
                       .join(" ")
                       .trim() || "Jugador"}{" "}
-                    juega en este grupo. Abre la tarjeta de grupo para
-                    capturar los scores de los 4 jugadores en una sola
-                    pantalla, con desempate (P1-P9) en caso de empate al 18.
+                    juega en este grupo. Elige cómo capturarlo: la
+                    <b> tarjeta completa</b> muestra el progreso del
+                    match hoyo por hoyo; la <b>captura rápida</b> usa el
+                    keypad por hoyo (más ágil en cancha). Ambas soportan
+                    el desempate (P1-P9) si terminan empatados al 18.
                   </p>
                 </div>
-                <Link
-                  href={`/captura/tarjeta?group_id=${matchPlayGroupId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
-                >
-                  Abrir captura del grupo →
-                </Link>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Link
+                    href={`/captura/tarjeta?group_id=${matchPlayGroupId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
+                  >
+                    Tarjeta completa →
+                  </Link>
+                  <Link
+                    href={`/captura/mobile?group_id=${matchPlayGroupId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-lg border-2 border-emerald-600 bg-white px-5 py-2.5 text-sm font-bold text-emerald-900 shadow-sm hover:bg-emerald-50"
+                  >
+                    Captura rápida →
+                  </Link>
+                </div>
               </div>
               <p className="mt-2 text-[11px] text-emerald-700">
                 Abajo se sigue mostrando la tarjeta individual del jugador
