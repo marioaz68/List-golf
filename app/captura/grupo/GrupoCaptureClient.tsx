@@ -332,6 +332,9 @@ function PlayerRow({
     const key = `${player.entryId}-${hole}`;
     setSavingKey(key);
     try {
+      const sp = new URLSearchParams(window.location.search);
+      const meId = sp.get("me")?.trim() || null;
+      const caddieIdParam = sp.get("caddie")?.trim() || null;
       const res = await fetch("/api/captura/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -342,6 +345,9 @@ function PlayerRow({
           strokes,
           picked_up: isPickedUp,
           mode: "modify",
+          me_entry_id: meId,
+          caddie_id: caddieIdParam,
+          role: caddieIdParam ? "caddie" : meId ? "player" : null,
         }),
       });
       if (res.ok) {

@@ -692,6 +692,9 @@ export default function TarjetaCaptureClient({
             : null;
 
     try {
+      const sp = new URLSearchParams(window.location.search);
+      const meId = sp.get("me")?.trim() || meta.myEntryId || null;
+      const caddieIdParam = sp.get("caddie")?.trim() || null;
       const res = await fetch("/api/captura/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -702,6 +705,8 @@ export default function TarjetaCaptureClient({
           strokes,
           mode,
           role,
+          me_entry_id: meId,
+          caddie_id: caddieIdParam,
         }),
       });
       const json = (await res.json()) as {
