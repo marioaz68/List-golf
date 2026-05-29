@@ -25,6 +25,7 @@ type RawEntry = {
     birth_year: number | null;
     handicap_index: number | null;
     handicap_torneo: number | null;
+    ghin_number: string | null;
   } | null;
 };
 
@@ -71,7 +72,7 @@ export default async function HandicapsByCategoryReport({
     supabase
       .from("tournament_entries")
       .select(
-        "id, player_id, category_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, status, player:players(first_name, last_name, gender, birth_year, handicap_index, handicap_torneo)"
+        "id, player_id, category_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, status, player:players(first_name, last_name, gender, birth_year, handicap_index, handicap_torneo, ghin_number)"
       )
       .eq("tournament_id", tournamentId)
       .neq("status", "cancelled"),
@@ -185,6 +186,7 @@ export default async function HandicapsByCategoryReport({
     const row: Row = {
       entry_id: e.id,
       name: formatPlayerName(e.player),
+      ghin: (e.player.ghin_number ?? "").trim() || null,
       gender: (e.player.gender ?? "—").toString().toUpperCase(),
       hi,
       hi_effective: capApplied,

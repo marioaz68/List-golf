@@ -6,6 +6,7 @@ import ReportToolbar from "./ReportToolbar";
 export type HandicapReportRow = {
   entry_id: string;
   name: string;
+  ghin?: string | null;
   gender: string;
   hi: number;
   hi_effective: number | null;
@@ -64,6 +65,7 @@ export default function HandicapsByCategoryClient({
           const haystack = normalize(
             [
               r.name,
+              r.ghin ?? "",
               r.gender,
               r.tee?.code ?? "",
               r.tee?.name ?? "",
@@ -121,7 +123,7 @@ export default function HandicapsByCategoryClient({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Nombre, salida, color, HI/CH/PH…"
+          placeholder="Nombre, GHIN, salida, color, HI/CH/PH…"
           className="h-7 min-w-[200px] flex-1 rounded border border-white/10 bg-[#0b1422] px-2 text-[12px] text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
         />
         {search ? (
@@ -160,6 +162,12 @@ export default function HandicapsByCategoryClient({
                   <thead className="bg-[#162032] text-[10px] uppercase tracking-wide text-slate-300">
                     <tr>
                       <th className="px-2 py-1.5 text-right w-[36px]">#</th>
+                      <th
+                        className="px-2 py-1.5 text-left w-[88px]"
+                        title="GHIN Number del jugador"
+                      >
+                        GHIN
+                      </th>
                       <th className="px-2 py-1.5">Nombre</th>
                       <th className="px-2 py-1.5 text-center w-[36px]">Sexo</th>
                       <th className="px-2 py-1.5 text-right w-[56px]">HI</th>
@@ -177,6 +185,11 @@ export default function HandicapsByCategoryClient({
                       >
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-400">
                           {idx + 1}
+                        </td>
+                        <td className="px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-300">
+                          {r.ghin ?? (
+                            <span className="text-slate-500 italic">—</span>
+                          )}
                         </td>
                         <td className="px-2 py-1.5 font-medium">{r.name}</td>
                         <td className="px-2 py-1.5 text-center text-slate-300">
