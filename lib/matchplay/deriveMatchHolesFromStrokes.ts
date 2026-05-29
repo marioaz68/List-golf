@@ -371,7 +371,16 @@ export async function deriveMatchHolesFromStrokes(
     // ─── Desempate (muerte súbita) ────────────────────────────────────
     // Si al hoyo 18 sigue empatado y hubo al menos un punto en juego,
     // se procede al desempate en los hoyos 1-9 (almacenados como 19-27).
-    // Cualquier hoyo donde una pareja gane ≥ 1 punto cierra el match.
+    //
+    // Regla de cierre (muerte súbita):
+    //   Cada hoyo sigue valiendo hasta 2 puntos (1 bola baja + 1 bola
+    //   alta). El match termina en el primer hoyo donde una pareja saque
+    //   ventaja neta de puntos (top_pts ≠ bottom_pts). Si ambas parejas
+    //   sacan el mismo número de puntos en ese hoyo (clásico: una gana
+    //   bola baja y la otra gana bola alta → 1-1), el hoyo queda
+    //   empatado y se sigue al siguiente. Si ambas sub-competencias se
+    //   reparten (halved-halved → 0.5+0.5 = 1 para cada pareja) también
+    //   queda empatado y se continúa.
     const isAllSquareAt18 =
       decidedAtHole == null &&
       holes_in_match === 18 &&
@@ -439,8 +448,10 @@ export async function deriveMatchHolesFromStrokes(
         });
 
         if (res.top_points !== res.bottom_points) {
-          // Muerte súbita: en cuanto una pareja gana al menos un punto,
-          // el match termina.
+          // Muerte súbita: en cuanto una pareja saque ventaja neta de
+          // puntos en el hoyo (p.ej. 2-0, 1.5-0.5, 1-0.5), el match
+          // termina. Si quedó 1-1 (split de subcompetencias) o 0-0,
+          // el hoyo está empatado y se sigue al próximo.
           decidedAtHole = storeHole;
           decisions.set(m.id, {
             decided_at_hole: storeHole,
