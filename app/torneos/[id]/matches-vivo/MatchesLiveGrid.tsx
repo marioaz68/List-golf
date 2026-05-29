@@ -444,30 +444,49 @@ function MatchCard({
 
   /**
    * Diferencial en tiempo real estilo match play:
-   *   pareja líder → "X UP", la otra → "X DN", empate → "AS".
+   *   - En juego:        "X UP" / "X DN" / "AS"
+   *   - Finalizado temprano (acabó por marcador): "X/Y" donde
+   *       X = diferencia con que ganó, Y = hoyos que quedaban por jugar.
+   *     Ej.: ganó 6 arriba con 4 hoyos por jugar → "6/4".
+   *   - Finalizado al 18: solo "X UP" / "X DN" / "AS".
    *
    * Si todavía no hay hoyos capturados (y el match no está finalizado),
-   * no mostramos badge: se sustituye por "—".
+   * no mostramos badge.
    */
   function fmtDiff(n: number): string {
     return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
   }
   const showDiffBadge = hasCapturedHoles || isDone;
   const diffAbs = Math.abs(topPts - bottomPts);
+
+  const endedEarly = isDone && decidedAtHole != null;
+  const holesLeftAtDecision = endedEarly
+    ? Math.max(0, holesPerMatch - (decidedAtHole as number))
+    : 0;
+
+  const winnerLabel: string =
+    endedEarly && holesLeftAtDecision > 0
+      ? `${fmtDiff(diffAbs)}/${holesLeftAtDecision}`
+      : `${fmtDiff(diffAbs)} UP`;
+  const loserLabel: string =
+    endedEarly && holesLeftAtDecision > 0
+      ? `${fmtDiff(diffAbs)}/${holesLeftAtDecision}`
+      : `${fmtDiff(diffAbs)} DN`;
+
   const topDiffLabel: string | null = !showDiffBadge
     ? null
     : topPts === bottomPts
       ? "AS"
       : topPts > bottomPts
-        ? `${fmtDiff(diffAbs)} UP`
-        : `${fmtDiff(diffAbs)} DN`;
+        ? winnerLabel
+        : loserLabel;
   const bottomDiffLabel: string | null = !showDiffBadge
     ? null
     : topPts === bottomPts
       ? "AS"
       : bottomPts > topPts
-        ? `${fmtDiff(diffAbs)} UP`
-        : `${fmtDiff(diffAbs)} DN`;
+        ? winnerLabel
+        : loserLabel;
 
   const clickable = !!onOpen && !isBye;
 
@@ -641,9 +660,11 @@ function Side({
           title={
             diffLabel === "AS"
               ? "All Square (empate acumulado)"
-              : diffLabel.endsWith("UP")
-                ? "Va arriba en el match (puntos acumulados)"
-                : "Va abajo en el match (puntos acumulados)"
+              : diffLabel.includes("/")
+                ? `Ganó ${diffLabel.split("/")[0]} arriba con ${diffLabel.split("/")[1]} hoyo(s) por jugar`
+                : diffLabel.endsWith("UP")
+                  ? "Va arriba en el match (puntos acumulados)"
+                  : "Va abajo en el match (puntos acumulados)"
           }
         >
           {diffLabel}
