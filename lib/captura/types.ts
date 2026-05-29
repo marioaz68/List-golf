@@ -48,6 +48,13 @@ export type WitnessAssignmentPayload = {
   witnessEntryId: string;
 };
 
+/** Match play: competencia del grupo ya decidida (p. ej. antes del 18). */
+export type GroupMatchPlayCapture = {
+  decidedAtHole: number;
+  resultText: string;
+  holesRequired: number;
+};
+
 export type GroupCapturePayload = {
   groupId: string;
   roundId: string;
@@ -64,4 +71,7 @@ export type GroupCapturePayload = {
   /** Si el visitante es caddie: lista de entry_ids cuyas tarjetas privadas
    *  puede leer/editar. */
   caddieForEntryIds: string[];
+  /** Si el torneo es match play y el partido del grupo ya terminó por
+   *  marcador, permite firmar sin completar los 18 hoyos. */
+  matchPlay?: GroupMatchPlayCapture | null;
 };

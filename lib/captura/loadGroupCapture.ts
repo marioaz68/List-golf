@@ -8,6 +8,7 @@ import type {
 import { ensureGroupWitnesses } from "./witnesses";
 import { loadPrivateScoresForGroup } from "./privateScores";
 import { loadCardSignaturesForGroup } from "./cardSignatures";
+import { loadGroupMatchPlayStatus } from "./matchPlayGroupDecision";
 
 export const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -312,6 +313,15 @@ export async function loadGroupCapture(
     });
   }
 
+  let matchPlay = null;
+  if (tournamentId) {
+    try {
+      matchPlay = await loadGroupMatchPlayStatus(supabase, gid);
+    } catch {
+      matchPlay = null;
+    }
+  }
+
   return {
     groupId: gid,
     roundId,
@@ -328,5 +338,6 @@ export async function loadGroupCapture(
     })),
     myEntryId: meEntryId,
     caddieForEntryIds,
+    matchPlay,
   };
 }
