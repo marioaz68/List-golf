@@ -179,6 +179,9 @@ export default async function PublicMatchesLivePage(props: {
 
         // AS al 18 pendiente de desempate.
         if (summary.needs_playoff) {
+          if (summary.playoff_pending_hole != null) {
+            return `Desempate P${summary.playoff_pending_hole} · faltan scores`;
+          }
           return `H18 · AS · desempate pendiente`;
         }
 

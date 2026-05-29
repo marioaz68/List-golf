@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useSearchParams } from "next/navigation";
+import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
 
 /**
  * Hoyos 1-18 = recorrido normal.
@@ -837,6 +838,7 @@ function MobileScoreEntryContent() {
     viaPlayoff?: boolean;
     playoffHole?: number;
     needsPlayoff?: boolean;
+    playoffPendingHole?: number;
   };
   const [matchPlayInfo, setMatchPlayInfo] = useState<GroupMatchPlay | null>(
     null
@@ -1007,6 +1009,19 @@ function MobileScoreEntryContent() {
     const id = window.setInterval(pull, 2000);
     return () => window.clearInterval(id);
   }, [groupId?.trim(), meParam?.trim(), caddieParam?.trim()]);
+
+  const playoffCapture = useMemo(
+    () =>
+      analyzePlayoffCapture(
+        matchPlayInfo,
+        players.map((p) => ({
+          entryId: p.id,
+          name: p.name,
+          scores: p.scores,
+        }))
+      ),
+    [matchPlayInfo, players]
+  );
 
   const activePlayer = useMemo<PlayerRow | null>(() => {
     if (activePlayerId === ME_ID) {
@@ -1373,14 +1388,7 @@ function MobileScoreEntryContent() {
               setDraftFresh(false);
             }}
             isHoleComplete={isHoleComplete}
-            showPlayoff={Boolean(
-              matchPlayInfo &&
-                (matchPlayInfo.needsPlayoff ||
-                  matchPlayInfo.viaPlayoff ||
-                  players.some((p) =>
-                    HOLES_PLAYOFF.some((h) => p.scores[h] != null)
-                  ))
-            )}
+            showPlayoff={playoffCapture.showPlayoffSection}
             decidedAtPlayoffHole={
               matchPlayInfo?.viaPlayoff
                 ? matchPlayInfo.playoffHole ?? null
@@ -1461,6 +1469,13 @@ function MobileScoreEntryContent() {
                 activePlayerId ? "pb-44" : "pb-4",
               ].join(" ")}
             >
+              {playoffCapture.orphanPlayoffScores ? (
+                <div className="rounded-md border border-amber-600 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-950">
+                  El match ya quedó decidido en la ronda normal (
+                  {matchPlayInfo?.resultText}). Los scores de desempate no
+                  cambian el resultado; puedes borrarlos o ignorarlos.
+                </div>
+              ) : null}
               {matchPlayInfo?.needsPlayoff ? (
                 <div className="rounded-md border border-amber-500 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-900">
                   Empate al 18 (AS). Procedan al desempate en muerte súbita
@@ -1470,6 +1485,14 @@ function MobileScoreEntryContent() {
                   puntos</b>; si quedan 1-1 (cada pareja se llevó una
                   sub-competencia) el hoyo está empatado y siguen al
                   próximo.
+                </div>
+              ) : null}
+              {playoffCapture.missingPlayerNames.length > 0 ? (
+                <div className="rounded-md border border-red-400 bg-red-50 px-2 py-1.5 text-center text-[11px] font-semibold text-red-900">
+                  Desempate P{playoffCapture.pendingPlayoffHole}: faltan los
+                  scores de{" "}
+                  {playoffCapture.missingPlayerNames.join(", ")}. Sin los 4
+                  scores no se suman puntos ni se cierra el match.
                 </div>
               ) : null}
               {matchPlayInfo &&
@@ -1909,17 +1932,7 @@ function MobileScoreEntryContent() {
                 {/* Tarjeta de desempate (muerte súbita): se muestra
                     cuando hay AS al 18 o ya hay algún hoyo capturado del
                     playoff. Las cabeceras muestran H1..H9. */}
-                {(() => {
-                  const showPlayoff = Boolean(
-                    matchPlayInfo &&
-                      (matchPlayInfo.needsPlayoff ||
-                        matchPlayInfo.viaPlayoff ||
-                        players.some((p) =>
-                          HOLES_PLAYOFF.some((h) => p.scores[h] != null)
-                        ))
-                  );
-                  if (!showPlayoff) return null;
-                  return (
+                {playoffCapture.showPlayoffSection ? (
                     <div className="rounded-xl border border-amber-300 bg-amber-50 p-1">
                       <div className="px-2 py-1 text-[10px] font-bold tracking-[0.14em] text-amber-900">
                         DESEMPATE · muerte súbita (hoyos 1-9)
@@ -1936,8 +1949,7 @@ function MobileScoreEntryContent() {
                         labelForHole={(h) => `H${(h as number) - 18}`}
                       />
                     </div>
-                  );
-                })()}
+                ) : null}
               </div>
             </section>
 

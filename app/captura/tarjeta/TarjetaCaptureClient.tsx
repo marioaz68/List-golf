@@ -9,6 +9,7 @@ import {
   HOLES_PLAYOFF,
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
+import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
 import type {
   CardSignaturePayload,
   GroupCapturePayload,
@@ -507,6 +508,19 @@ export default function TarjetaCaptureClient({
     }
     return map.size > 0 ? map : undefined;
   }, [meta.matchPlay?.progression]);
+
+  const playoffCapture = useMemo(
+    () =>
+      analyzePlayoffCapture(
+        meta.matchPlay,
+        meta.players.map((p) => ({
+          entryId: p.entryId,
+          name: p.name,
+          scores: scoresByEntry[p.entryId] ?? p.scores,
+        }))
+      ),
+    [meta.matchPlay, meta.players, scoresByEntry]
+  );
 
   const refresh = useCallback(async () => {
     if (savingRef.current) return;
@@ -1025,6 +1039,18 @@ export default function TarjetaCaptureClient({
                 queda en rojo hasta que el testigo del jugador lo confirme.
               </p>
 
+              {playoffCapture.orphanPlayoffScores ? (
+                <div className="mt-2 rounded-md border border-amber-600 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-950">
+                  El match ya quedó decidido ({meta.matchPlay?.resultText}). Los
+                  scores de desempate no cambian el resultado.
+                </div>
+              ) : null}
+              {playoffCapture.missingPlayerNames.length > 0 ? (
+                <div className="mt-2 rounded-md border border-red-400 bg-red-50 px-2 py-1.5 text-center text-[11px] font-semibold text-red-900">
+                  Desempate P{playoffCapture.pendingPlayoffHole}: faltan scores
+                  de {playoffCapture.missingPlayerNames.join(", ")}.
+                </div>
+              ) : null}
               {meta.matchPlay?.needsPlayoff ? (
                 <div className="mt-2 rounded-md border border-amber-500 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-900">
                   Empate al 18 (AS). Procedan al desempate en muerte súbita
@@ -1181,16 +1207,8 @@ export default function TarjetaCaptureClient({
                     competencia detectó AS al 18 o ya hay hoyos de
                     desempate capturados. Se etiquetan visualmente como
                     H1-H9 aunque internamente se guardan como 19-27. */}
-                {(() => {
-                  const showPlayoff =
-                    Boolean(meta.matchPlay?.needsPlayoff) ||
-                    Boolean(meta.matchPlay?.viaPlayoff) ||
-                    meta.players.some((p) =>
-                      HOLES_PLAYOFF.some(
-                        (h) => (scoresByEntry[p.entryId] ?? p.scores)[h] != null
-                      )
-                    );
-                  if (!showPlayoff) return null;
+                {playoffCapture.showPlayoffSection ? (
+                  (() => {
                   // Si ya se decidió, bloqueamos los hoyos posteriores al de
                   // decisión (los anteriores se mantienen visibles).
                   const decidedAt = meta.matchPlay?.decidedAtHole ?? null;
@@ -1219,7 +1237,8 @@ export default function TarjetaCaptureClient({
                       matchProgression={matchProgressionMap}
                     />
                   );
-                })()}
+                  })()
+                ) : null}
 
                 {showMyCard && privateEntryIds.map((eid) => {
                   const player = playersById.get(eid);

@@ -37,6 +37,8 @@ export type DerivedMatchSummary = {
   top_total: number;
   bottom_total: number;
   decided_at_hole_18: boolean;
+  /** Desempate iniciado pero falta al menos un score (1-9 físico). */
+  playoff_pending_hole?: number;
 };
 
 /**
@@ -387,6 +389,7 @@ export async function deriveMatchHolesFromStrokes(
       topTotal === bottomTotal;
     const playedAnyHole = topTotal + bottomTotal > 0;
     let needsPlayoff = isAllSquareAt18 && playedAnyHole;
+    let playoffPendingHole: number | undefined;
 
     if (needsPlayoff) {
       for (let p = 1; p <= 9; p++) {
@@ -419,6 +422,7 @@ export async function deriveMatchHolesFromStrokes(
           bottom_b == null
         ) {
           // Falta capturar este hoyo del playoff. Detenemos aquí.
+          playoffPendingHole = p;
           break;
         }
 
@@ -473,6 +477,7 @@ export async function deriveMatchHolesFromStrokes(
       bottom_total: bottomTotal,
       decided_at_hole_18:
         decidedAtHole != null && decidedAtHole <= 18,
+      playoff_pending_hole: playoffPendingHole,
     });
   }
 

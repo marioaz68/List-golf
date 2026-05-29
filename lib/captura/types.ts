@@ -95,6 +95,8 @@ export type GroupMatchPlayCapture = {
   playoffHole?: number;
   /** True si AS al 18 con desempate por jugar. */
   needsPlayoff?: boolean;
+  /** Desempate en curso: hoyo (1-9) con al menos un score faltante. */
+  playoffPendingHole?: number;
   /** Progresión del match hoyo por hoyo (solo hoyos capturados). */
   progression?: GroupMatchPlayProgressionRow[];
   /** Etiquetas opcionales de las parejas (para tooltip / leyenda). */
