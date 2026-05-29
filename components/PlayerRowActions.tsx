@@ -39,6 +39,10 @@ type PlayerRowActionsProps = {
   currentCategoryId?: string | null;
   entryId?: string;
   canDelete?: boolean;
+  /** CH/PH ya calculados para el torneo (informativos en el modal). */
+  entryCourseHandicap?: number | null;
+  entryPlayingHandicap?: number | null;
+  entryPlayingHandicapOverride?: number | null;
 };
 
 export default function PlayerRowActions({
@@ -48,6 +52,9 @@ export default function PlayerRowActions({
   currentCategoryId,
   entryId,
   canDelete = false,
+  entryCourseHandicap = null,
+  entryPlayingHandicap = null,
+  entryPlayingHandicapOverride = null,
 }: PlayerRowActionsProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -125,6 +132,9 @@ export default function PlayerRowActions({
         currentCategoryId={currentCategoryId}
         entryId={entryId}
         tournamentId={safeTournamentId}
+        entryCourseHandicap={entryCourseHandicap}
+        entryPlayingHandicap={entryPlayingHandicap}
+        entryPlayingHandicapOverride={entryPlayingHandicapOverride}
       />
     </>
   );

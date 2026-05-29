@@ -500,6 +500,9 @@ function EntryRowActions({
       entryId={entry.id}
       currentCategoryId={entry.categories?.id ?? null}
       categories={categories}
+      entryCourseHandicap={entry.course_handicap ?? null}
+      entryPlayingHandicap={entry.playing_handicap ?? null}
+      entryPlayingHandicapOverride={entry.playing_handicap_override ?? null}
       player={
         entry.players
           ? {

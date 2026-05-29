@@ -7,7 +7,7 @@ import { normalizePhoneToE164 } from "@/utils/phone";
 import { savePlayerAction } from "@/app/(backoffice)/players/actions";
 import {
   updateEntryCategory,
-  updateEntryHandicap,
+  updateEntryHandicapIndexInline,
 } from "@/app/(backoffice)/entries/actions";
 
 type ClubOption = {
@@ -135,6 +135,9 @@ export default function PlayerEditModal({
   tournamentId,
   entryId,
   currentCategoryId,
+  entryCourseHandicap = null,
+  entryPlayingHandicap = null,
+  entryPlayingHandicapOverride = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -143,6 +146,9 @@ export default function PlayerEditModal({
   tournamentId?: string;
   entryId?: string;
   currentCategoryId?: string | null;
+  entryCourseHandicap?: number | null;
+  entryPlayingHandicap?: number | null;
+  entryPlayingHandicapOverride?: number | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -175,7 +181,6 @@ export default function PlayerEditModal({
   const lastNameInputNameRef = useRef(`lg_l_${Date.now()}`);
   const initialsInputNameRef = useRef(`lg_m_${Date.now()}`);
   const handicapIndexInputNameRef = useRef(`lg_n_${Date.now()}`);
-  const handicapTorneoInputNameRef = useRef(`lg_o_${Date.now()}`);
   const birthYearInputNameRef = useRef(`lg_p_${Date.now()}`);
   const phoneInputNameRef = useRef(`lg_q_${Date.now()}`);
   const emailInputNameRef = useRef(`lg_r_${Date.now()}`);
@@ -213,7 +218,7 @@ export default function PlayerEditModal({
 
   const availableCategories = useMemo(() => {
     const playerGender = String(gender ?? "X").toUpperCase() as "M" | "F" | "X";
-    const handicapValue = Number((handicapTorneo || handicapIndex || "").replace(",", "."));
+    const handicapValue = Number((handicapIndex || handicapTorneo || "").replace(",", "."));
     const ranking =
       playerGender === "F"
         ? ["DA", "DB", "DC"]
@@ -529,7 +534,9 @@ export default function PlayerEditModal({
     }
 
     const hi = toNumberOrNull(handicapIndex);
-    const ht = toNumberOrNull(handicapTorneo);
+    // handicap_torneo se mantiene sincronizado con HI (HC y PH son
+    // informativos, calculados por WHS para el torneo).
+    const ht = hi;
     const cleanInitials = normalizeInitials(initials);
     const normalizedWhatsappPhone = phone.trim()
       ? normalizePhoneToE164(phone, "MX")
@@ -633,18 +640,12 @@ export default function PlayerEditModal({
         return;
       }
 
-      if (entryId && tournamentId) {
-        const tournamentHandicap = ht ?? hi;
-
-        if (tournamentHandicap !== null) {
-          const handicapForm = new FormData();
-          handicapForm.set("id", entryId);
-          handicapForm.set("tournament_id", tournamentId);
-          handicapForm.set("player_id", player.id);
-          handicapForm.set("handicap_index", String(tournamentHandicap));
-
-          await updateEntryHandicap(handicapForm);
-        }
+      if (entryId && tournamentId && hi !== null) {
+        const handicapForm = new FormData();
+        handicapForm.set("id", entryId);
+        handicapForm.set("tournament_id", tournamentId);
+        handicapForm.set("handicap_index", String(hi));
+        await updateEntryHandicapIndexInline(handicapForm);
       }
 
       if (selectedCategoryId && entryId && tournamentId) {
@@ -746,10 +747,10 @@ export default function PlayerEditModal({
             </label>
 
             <label style={labelStyle}>
-              Handicap Index
+              Handicap Index (HI)
               <input
-            type="search"
-            enterKeyHint="done"
+                type="search"
+                enterKeyHint="done"
                 name={handicapIndexInputNameRef.current}
                 {...antiSafariInputProps}
                 value={handicapIndex}
@@ -757,21 +758,67 @@ export default function PlayerEditModal({
                 placeholder="Ej. 12.4 o -1.2"
                 inputMode="decimal"
                 style={fieldStyle}
+                title="Único campo editable. CH y PH se recalculan al guardar."
+              />
+              <span style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}>
+                Único editable. CH y PH se recalculan al guardar.
+              </span>
+            </label>
+
+            <label style={labelStyle}>
+              Course Handicap (HC) · informativo
+              <input
+                type="text"
+                value={
+                  entryCourseHandicap != null
+                    ? String(Math.round(Number(entryCourseHandicap)))
+                    : "—"
+                }
+                readOnly
+                disabled
+                tabIndex={-1}
+                style={{
+                  ...fieldStyle,
+                  background: "#f3f4f6",
+                  color: "#374151",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  textAlign: "right",
+                  cursor: "not-allowed",
+                }}
+                title="HI × Slope/113 + (CR − Par) con la salida que la regla del torneo asigna al jugador."
               />
             </label>
 
             <label style={labelStyle}>
-              Handicap Torneo
+              Playing Handicap (PH) · informativo
               <input
-            type="search"
-            enterKeyHint="done"
-                name={handicapTorneoInputNameRef.current}
-                {...antiSafariInputProps}
-                value={handicapTorneo}
-                onChange={(e) => setHandicapTorneo(e.target.value)}
-                placeholder="Ej. 10"
-                inputMode="decimal"
-                style={fieldStyle}
+                type="text"
+                value={
+                  entryPlayingHandicap != null
+                    ? String(Math.round(Number(entryPlayingHandicap))) +
+                      (entryPlayingHandicapOverride != null ? "  (ovr)" : "")
+                    : "—"
+                }
+                readOnly
+                disabled
+                tabIndex={-1}
+                style={{
+                  ...fieldStyle,
+                  background: "#f3f4f6",
+                  color:
+                    entryPlayingHandicapOverride != null
+                      ? "#b45309"
+                      : "#047857",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  textAlign: "right",
+                  cursor: "not-allowed",
+                  fontWeight: 700,
+                }}
+                title={
+                  entryPlayingHandicapOverride != null
+                    ? "PH con override manual (desde panel match play)"
+                    : "PH del torneo: HC × % de reglas de competencia."
+                }
               />
             </label>
 
