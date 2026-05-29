@@ -1464,8 +1464,12 @@ function MobileScoreEntryContent() {
               {matchPlayInfo?.needsPlayoff ? (
                 <div className="rounded-md border border-amber-500 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-900">
                   Empate al 18 (AS). Procedan al desempate en muerte súbita
-                  (hoyos 1-9). En el primer hoyo donde una pareja saque al
-                  menos 1 punto, termina el match.
+                  (hoyos 1-9). Cada hoyo sigue valiendo hasta 2 puntos
+                  (1 bola baja + 1 bola alta). El match termina en el
+                  primer hoyo donde una pareja saque <b>ventaja en
+                  puntos</b>; si quedan 1-1 (cada pareja se llevó una
+                  sub-competencia) el hoyo está empatado y siguen al
+                  próximo.
                 </div>
               ) : null}
               {matchPlayInfo &&
