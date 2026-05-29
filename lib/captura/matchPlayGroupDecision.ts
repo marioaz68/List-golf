@@ -4,6 +4,7 @@ import {
   deriveMatchHolesFromStrokes,
   type DerivedMatchDecision,
 } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
+import type { GroupMatchPlayProgressionRow } from "@/lib/captura/types";
 
 export type GroupMatchPlayStatus = {
   /** Hoyo en que la competencia de match quedó matemáticamente decidida
@@ -20,7 +21,29 @@ export type GroupMatchPlayStatus = {
   playoffHole?: number;
   /** True si quedó AS al 18 y aún falta capturar el desempate. */
   needsPlayoff?: boolean;
+  /** Progresión del match hoyo por hoyo (puntos acumulados + label). */
+  progression?: GroupMatchPlayProgressionRow[];
+  /** Etiqueta corta de las parejas (top / bottom) para leyendas. */
+  topLabel?: string | null;
+  bottomLabel?: string | null;
 };
+
+function formatPts(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
+
+/**
+ * Etiqueta corta del estado del match tras un hoyo:
+ *  - "AS" cuando los acumulados son iguales,
+ *  - "T+N" / "B+N" indicando qué pareja va arriba (T=top, B=bottom)
+ *    y por cuántos puntos. N puede ser decimal (0.5 cuando una sub-
+ *    competencia del hoyo quedó halved).
+ */
+function buildProgressionLabel(top: number, bottom: number): string {
+  if (top === bottom) return "AS";
+  if (top > bottom) return `T+${formatPts(top - bottom)}`;
+  return `B+${formatPts(bottom - top)}`;
+}
 
 function formatDecisionLabel(decision: DerivedMatchDecision): string {
   const diffAbs = Math.abs(decision.top_total - decision.bottom_total);
@@ -93,13 +116,49 @@ export async function loadGroupMatchPlayStatus(
     return null;
   }
 
-  const { decisions, summaries } = await deriveMatchHolesFromStrokes(
+  const { decisions, summaries, holes } = await deriveMatchHolesFromStrokes(
     admin,
     tournamentId,
     [match]
   );
   const decision = decisions.get(matchId);
   const summary = summaries.get(matchId);
+
+  // ─── Construir progresión hoyo por hoyo ──────────────────────────────
+  // Sólo incluye hoyos del match (no `after_decision` extra que se sigan
+  // capturando como stroke play). Para cada hoyo: puntos acumulados +
+  // label "AS" / "T+N" / "B+N".
+  const matchHoles = holes
+    .filter((h) => h.match_id === matchId)
+    .sort((a, b) => a.hole_no - b.hole_no);
+  let topAcc = 0;
+  let bottomAcc = 0;
+  const progression: GroupMatchPlayProgressionRow[] = [];
+  for (const h of matchHoles) {
+    // Si los puntos son 0/0 en un hoyo posterior al cierre, igual lo
+    // omitimos del display (no aporta a la lectura del match).
+    if (
+      decision?.decided_at_hole != null &&
+      h.hole_no > decision.decided_at_hole &&
+      h.top_points === 0 &&
+      h.bottom_points === 0
+    ) {
+      continue;
+    }
+    topAcc += Number(h.top_points ?? 0);
+    bottomAcc += Number(h.bottom_points ?? 0);
+    progression.push({
+      hole_no: h.hole_no,
+      top_cum: topAcc,
+      bottom_cum: bottomAcc,
+      label: buildProgressionLabel(topAcc, bottomAcc),
+    });
+  }
+
+  // (DerivedMatchRow no incluye nombres de las parejas; el cliente las
+  //  rotula con los nombres de los jugadores del payload.)
+  const topLabel: string | null = null;
+  const bottomLabel: string | null = null;
 
   if (decision?.decided_at_hole) {
     return {
@@ -109,6 +168,9 @@ export async function loadGroupMatchPlayStatus(
       holesRequired: decision.decided_at_hole,
       viaPlayoff: decision.via_playoff,
       playoffHole: decision.playoff_hole,
+      progression,
+      topLabel,
+      bottomLabel,
     };
   }
 
@@ -118,6 +180,22 @@ export async function loadGroupMatchPlayStatus(
       resultText: "Empate al 18 — definiendo en desempate",
       holesRequired: 18,
       needsPlayoff: true,
+      progression,
+      topLabel,
+      bottomLabel,
+    };
+  }
+
+  // Match aún en curso (sin decisión ni desempate). Igualmente devolvemos
+  // la progresión para que el cliente pueda dibujar la fila.
+  if (progression.length > 0) {
+    return {
+      decidedAtHole: null,
+      resultText: progression[progression.length - 1]!.label,
+      holesRequired: 18,
+      progression,
+      topLabel,
+      bottomLabel,
     };
   }
 

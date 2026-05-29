@@ -97,6 +97,7 @@ function PublicSection({
   labelForHole,
   rowAccent,
   disabledHoles,
+  matchProgression,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -117,6 +118,13 @@ function PublicSection({
   rowAccent?: string;
   /** Hoyos que NO permiten editar (después de decidir el desempate). */
   disabledHoles?: Set<HoleNumber>;
+  /** Mapa hole_no → label "AS / T+1 / B+0.5". Si se proporciona,
+   *  añadimos una fila MATCH al final con el estado por hoyo. */
+  matchProgression?: Map<number, {
+    label: string;
+    top_cum: number;
+    bottom_cum: number;
+  }>;
 }) {
   const isHoleComplete = (hole: HoleNumber) =>
     players.length > 0 &&
@@ -258,6 +266,61 @@ function PublicSection({
                 </tr>
               );
             })}
+
+            {/* Fila MATCH: progresión del match hoyo por hoyo. Solo se
+                muestra si el grupo es match play (matchProgression
+                presente). Verde tenue como cabecera de pareja vs pareja. */}
+            {matchProgression && matchProgression.size > 0 ? (
+              <tr className="border-t-2 border-emerald-400 bg-emerald-50">
+                <td
+                  className="px-1 py-1.5 text-[10px] font-bold tracking-wide text-emerald-900"
+                  title="Estado del match tras cada hoyo (puntos acumulados). AS = empate · T+N = top arriba · B+N = bottom arriba"
+                >
+                  MATCH
+                </td>
+                {holes.map((hole) => {
+                  const row = matchProgression.get(hole);
+                  if (!row) {
+                    return (
+                      <td
+                        key={`mp-${title}-${hole}`}
+                        className="px-0 py-1.5 text-center text-[9px] text-slate-400"
+                      >
+                        —
+                      </td>
+                    );
+                  }
+                  const tint =
+                    row.label === "AS"
+                      ? "text-slate-700"
+                      : row.label.startsWith("T+")
+                        ? "text-cyan-700 font-bold"
+                        : "text-fuchsia-700 font-bold";
+                  return (
+                    <td
+                      key={`mp-${title}-${hole}`}
+                      className={[
+                        "px-0 py-1.5 text-center text-[9px] leading-none",
+                        tint,
+                      ].join(" ")}
+                      title={`${row.top_cum}–${row.bottom_cum} pts`}
+                    >
+                      {row.label}
+                    </td>
+                  );
+                })}
+                <td className="px-0 py-1.5 text-center text-[9px] text-slate-500">
+                  {(() => {
+                    const lastHole = [...holes]
+                      .reverse()
+                      .find((h) => matchProgression.has(h));
+                    if (lastHole == null) return "—";
+                    const last = matchProgression.get(lastHole)!;
+                    return `${last.top_cum}–${last.bottom_cum}`;
+                  })()}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -424,6 +487,26 @@ export default function TarjetaCaptureClient({
     if (!meta.myEntryId) return null;
     return witnessAssignmentMap.get(meta.myEntryId) ?? null;
   }, [meta.myEntryId, witnessAssignmentMap]);
+
+  /**
+   * Progresión del match hoyo por hoyo (match play). Mapa hole_no →
+   * { label, top_cum, bottom_cum } que se inyecta en cada PublicSection
+   * para dibujar la fila "MATCH" al pie de cada tramo.
+   */
+  const matchProgressionMap = useMemo(() => {
+    const map = new Map<
+      number,
+      { label: string; top_cum: number; bottom_cum: number }
+    >();
+    for (const row of meta.matchPlay?.progression ?? []) {
+      map.set(row.hole_no, {
+        label: row.label,
+        top_cum: row.top_cum,
+        bottom_cum: row.bottom_cum,
+      });
+    }
+    return map.size > 0 ? map : undefined;
+  }, [meta.matchPlay?.progression]);
 
   const refresh = useCallback(async () => {
     if (savingRef.current) return;
@@ -1078,6 +1161,7 @@ export default function TarjetaCaptureClient({
                   onCellTap={openCell}
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
+                  matchProgression={matchProgressionMap}
                 />
                 <PublicSection
                   title="BACK 9"
@@ -1090,6 +1174,7 @@ export default function TarjetaCaptureClient({
                   onCellTap={openCell}
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
+                  matchProgression={matchProgressionMap}
                 />
 
                 {/* Desempate (muerte súbita): se muestra solo si la
@@ -1131,6 +1216,7 @@ export default function TarjetaCaptureClient({
                       labelForHole={(h) => String(h - 18)}
                       rowAccent="text-amber-700"
                       disabledHoles={disabled}
+                      matchProgression={matchProgressionMap}
                     />
                   );
                 })()}

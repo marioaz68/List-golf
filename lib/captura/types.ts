@@ -72,6 +72,16 @@ export type WitnessAssignmentPayload = {
   witnessEntryId: string;
 };
 
+/** Progresión hoyo por hoyo del match (puntos acumulados después de cada
+ *  hoyo). Solo incluye hoyos que ya están capturados. */
+export type GroupMatchPlayProgressionRow = {
+  hole_no: number;
+  top_cum: number;
+  bottom_cum: number;
+  /** Texto corto del estado tras el hoyo: "AS", "T+1", "B+0.5", etc. */
+  label: string;
+};
+
 /** Match play: estado de la competencia del grupo (decidida o necesita desempate). */
 export type GroupMatchPlayCapture = {
   /** Hoyo donde se decidió (1-18 normal; 19-27 si desempate). null si AS al 18 pendiente. */
@@ -85,6 +95,11 @@ export type GroupMatchPlayCapture = {
   playoffHole?: number;
   /** True si AS al 18 con desempate por jugar. */
   needsPlayoff?: boolean;
+  /** Progresión del match hoyo por hoyo (solo hoyos capturados). */
+  progression?: GroupMatchPlayProgressionRow[];
+  /** Etiquetas opcionales de las parejas (para tooltip / leyenda). */
+  topLabel?: string | null;
+  bottomLabel?: string | null;
 };
 
 export type GroupCapturePayload = {
