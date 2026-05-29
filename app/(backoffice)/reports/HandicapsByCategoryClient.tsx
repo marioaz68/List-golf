@@ -81,11 +81,17 @@ export default function HandicapsByCategoryClient({
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-slate-400">
-        CH = HI × Slope/113 + (CR − Par) según la salida que la regla
-        salida/categoría le asigna en el campo. PH = CH × % de reglas de
-        competencia. Ordenado por handicap ascendente (menor arriba). Si el
-        HI del jugador rebasa el rango de la regla, se aplica el{" "}
+      <p className="text-[11px] leading-relaxed text-slate-400">
+        <span className="font-semibold text-blue-300">HI</span>: define la
+        categoría del jugador.{" "}
+        <span className="font-semibold text-slate-200">HC</span>: handicap
+        del campo (referencia) = HI × Slope/113 + (CR − Par) según la salida
+        que la regla salida/categoría le asigna.{" "}
+        <span className="font-semibold text-emerald-300">PH</span>: handicap
+        del torneo = HC × % de reglas de competencia. Es el handicap con el
+        que el jugador compite durante todo el torneo (si el torneo es con
+        handicap). Ordenado por handicap ascendente (menor arriba). Si el HI
+        del jugador rebasa el rango de la regla, se aplica el{" "}
         <span className="font-semibold text-amber-300">
           máximo a jugar del torneo
         </span>{" "}
