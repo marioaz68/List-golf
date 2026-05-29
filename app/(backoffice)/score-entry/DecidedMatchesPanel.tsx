@@ -7,7 +7,7 @@ type ApiMatch = {
   groupNo: number | null;
   roundId: string;
   roundNo: number;
-  matchplayMatchId: string;
+  matchplayMatchId: string | null;
   resultText: string;
   decidedAtHole: number;
   viaPlayoff: boolean;
@@ -27,6 +27,7 @@ type Feedback = {
 type Diagnostics = {
   pairFormat: string | null;
   bracketId: string | null;
+  bracketPublished: boolean;
   derivedMatchesCount: number;
   decisionsCount: number;
   realMatchesCount: number;
@@ -242,40 +243,85 @@ export default function DecidedMatchesPanel({
     );
   }
 
+  const bracketPublished = diagnostics?.bracketPublished !== false;
+
   return (
-    <section className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
+    <section
+      className={`mt-8 rounded-2xl border p-4 shadow-sm ${
+        bracketPublished
+          ? "border-emerald-200 bg-emerald-50/40"
+          : "border-amber-300 bg-amber-50/60"
+      }`}
+    >
       <header className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-emerald-900">
-          Matches terminados pendientes de cierre ({matches.length})
+        <h2
+          className={
+            bracketPublished
+              ? "text-base font-semibold text-emerald-900"
+              : "text-base font-semibold text-amber-900"
+          }
+        >
+          Matches terminados ({matches.length})
+          {bracketPublished ? " · pendientes de cierre" : " · pendientes de publicar bracket"}
         </h2>
         <button
           type="button"
           onClick={loadList}
-          className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+          className={
+            bracketPublished
+              ? "rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+              : "rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          }
         >
           Refrescar
         </button>
       </header>
 
-      <p className="mt-1 text-xs text-emerald-800/80">
-        Al cerrar un match, el ganador avanza en el cuadro. Si la pareja rival
-        de la siguiente ronda ya jugó, se asigna la nueva salida y se envía un
-        mensaje a jugadores y caddies por Telegram.
-      </p>
+      {!bracketPublished ? (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs text-amber-900">
+          <p className="font-semibold">⚠️ El cuadro de match play no se ha publicado.</p>
+          <p className="mt-1">
+            Estas {matches.length} parejas ya tienen resultado matemático, pero para
+            poder <strong>cerrar el match y avanzar al ganador</strong> primero
+            necesitas publicar el bracket del torneo.
+          </p>
+          <a
+            href="/matchplay"
+            className="mt-2 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+          >
+            Ir a /matchplay para publicar bracket →
+          </a>
+        </div>
+      ) : (
+        <p className="mt-1 text-xs text-emerald-800/80">
+          Al cerrar un match, el ganador avanza en el cuadro. Si la pareja rival
+          de la siguiente ronda ya jugó, se asigna la nueva salida y se envía un
+          mensaje a jugadores y caddies por Telegram.
+        </p>
+      )}
 
       <ul className="mt-3 space-y-3">
         {matches.map((m) => {
           const fb = feedbacks[m.groupId] ?? null;
           const isClosing = closingId === m.groupId;
           const winnerIsTop = m.winnerSide === "top";
+          const canClose = m.matchplayMatchId != null;
           return (
             <li
               key={m.groupId}
-              className="rounded-xl border border-emerald-200 bg-white p-3"
+              className={`rounded-xl border bg-white p-3 ${
+                canClose ? "border-emerald-200" : "border-amber-200"
+              }`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-emerald-700">
+                  <p
+                    className={
+                      canClose
+                        ? "text-xs font-semibold text-emerald-700"
+                        : "text-xs font-semibold text-amber-700"
+                    }
+                  >
                     R{m.roundNo} · G{m.groupNo ?? "?"} · {m.resultText}
                   </p>
                   <div className="mt-1 grid gap-1 text-sm md:grid-cols-2">
@@ -310,14 +356,23 @@ export default function DecidedMatchesPanel({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleClose(m)}
-                  disabled={isClosing}
-                  className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
-                >
-                  {isClosing ? "Cerrando…" : "Cerrar match y avanzar →"}
-                </button>
+                {canClose ? (
+                  <button
+                    type="button"
+                    onClick={() => handleClose(m)}
+                    disabled={isClosing}
+                    className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    {isClosing ? "Cerrando…" : "Cerrar match y avanzar →"}
+                  </button>
+                ) : (
+                  <span
+                    className="shrink-0 rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-800"
+                    title="Necesitas publicar el bracket antes de poder cerrar este match"
+                  >
+                    Publica el bracket primero
+                  </span>
+                )}
               </div>
 
               {fb ? (
