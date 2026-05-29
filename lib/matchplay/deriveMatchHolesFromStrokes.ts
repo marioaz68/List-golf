@@ -5,11 +5,11 @@ import {
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { loadCourseLayoutForTournament } from "./loadCourseLayout";
 import {
   effectivePhForMatchEntry,
   hiForMatchEntry,
 } from "@/lib/matchplay/resolveEntryPhForMatch";
-import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import type {
   MatchPlayHandicapAllowance,
@@ -98,21 +98,11 @@ export async function deriveMatchHolesFromStrokes(
   const holes_in_match = rules?.holes_per_match === 9 ? 9 : 18;
 
   // Stroke index por hoyo (campo handicap_index = SI del hoyo).
-  const { data: tholes } = await admin
-    .from("tournament_holes")
-    .select("hole_number, handicap_index")
-    .eq("tournament_id", tournamentId)
-    .order("hole_number", { ascending: true });
-
-  const strokeIndexByHole: StrokeIndexByHole = new Map();
-  for (const row of (tholes ?? []) as Array<{
-    hole_number: number;
-    handicap_index: number | null;
-  }>) {
-    if (row.handicap_index != null && Number.isFinite(Number(row.handicap_index))) {
-      strokeIndexByHole.set(row.hole_number, Number(row.handicap_index));
-    }
-  }
+  // Fallback automático a course_holes si tournament_holes no lo tiene.
+  const { strokeIndexByHole } = await loadCourseLayoutForTournament(
+    admin,
+    tournamentId
+  );
 
   // Cargar entries (HI + PH) y players (HI + handicap_torneo) para los 4
   // jugadores de cada match.
