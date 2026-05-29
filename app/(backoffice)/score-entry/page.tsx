@@ -1311,7 +1311,7 @@ export default async function ScoreEntryPage(props: {
                     Tarjeta completa →
                   </Link>
                   <Link
-                    href={`/captura/mobile?group_id=${matchPlayGroupId}`}
+                    href={`/captura/grupo?group_id=${matchPlayGroupId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center justify-center rounded-lg border-2 border-emerald-600 bg-white px-5 py-2.5 text-sm font-bold text-emerald-900 shadow-sm hover:bg-emerald-50"
