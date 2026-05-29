@@ -85,6 +85,130 @@ export async function assignCaddieAction(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  // ── Propagar el caddie al resto de rondas del torneo ─────────────
+  // Regla del comité: por defecto el mismo caddie trabaja con el
+  // jugador todo el torneo. Sólo rellenamos rondas donde el inscrito
+  // todavía no tiene caddie activo; no sobreescribimos asignaciones
+  // existentes (si un caddie ya está apartado a otro jugador en una
+  // ronda, también la saltamos).
+  try {
+    // 1. Categoría del inscrito (para filtrar rondas relevantes).
+    const { data: entryRow } = await supabase
+      .from("tournament_entries")
+      .select("category_id")
+      .eq("id", entry_id)
+      .maybeSingle();
+    const categoryId =
+      (entryRow as { category_id?: string | null } | null)?.category_id ??
+      null;
+
+    // 2. Todas las rondas del torneo (mismas que aparecen en el verificador).
+    const roundsQuery = supabase
+      .from("rounds")
+      .select("id, category_id, round_no")
+      .eq("tournament_id", tournament_id);
+    const { data: roundsRaw } = await roundsQuery;
+    type RoundLite = {
+      id: string;
+      category_id: string | null;
+      round_no: number | null;
+    };
+    const allRounds = (roundsRaw ?? []) as RoundLite[];
+    const eligibleRounds = allRounds.filter((r) => {
+      if (r.id === round_id) return false; // ya insertada
+      // Si la ronda no tiene categoría, aplica a todos los inscritos.
+      // Si tiene categoría, debe coincidir con la del jugador.
+      if (!r.category_id) return true;
+      return categoryId != null && r.category_id === categoryId;
+    });
+
+    if (eligibleRounds.length > 0) {
+      // 3. Buscar rondas donde el inscrito ya tiene caddie activo.
+      const eligibleIds = eligibleRounds.map((r) => r.id);
+      const { data: existingForEntry } = await supabase
+        .from("caddie_assignments")
+        .select("round_id, caddie_id")
+        .eq("tournament_id", tournament_id)
+        .eq("entry_id", entry_id)
+        .eq("is_active", true)
+        .in("round_id", eligibleIds);
+      const occupiedByEntry = new Set(
+        (existingForEntry ?? []).map((a) => String(a.round_id))
+      );
+
+      // 4. Rondas donde el caddie ya está asignado a otro jugador.
+      const { data: caddieElsewhere } = await supabase
+        .from("caddie_assignments")
+        .select("round_id, entry_id")
+        .eq("tournament_id", tournament_id)
+        .eq("caddie_id", caddie_id)
+        .eq("is_active", true)
+        .in("round_id", eligibleIds);
+      const blockedRoundsForCaddie = new Set(
+        (caddieElsewhere ?? [])
+          .filter((a) => a.entry_id !== entry_id)
+          .map((a) => String(a.round_id))
+      );
+
+      // 5. Mapeo de pairing_group para esas rondas (si el inscrito ya
+      //    está en un grupo, lo asociamos también; si no, queda null).
+      const targetRoundIds = eligibleIds.filter(
+        (rid) =>
+          !occupiedByEntry.has(rid) && !blockedRoundsForCaddie.has(rid)
+      );
+      const groupByRound = new Map<string, string | null>();
+      if (targetRoundIds.length > 0) {
+        const { data: pgmRows } = await supabase
+          .from("pairing_group_members")
+          .select(
+            `id, group_id,
+             pairing_groups!inner ( id, round_id )`
+          )
+          .eq("entry_id", entry_id);
+        type PgmRow = {
+          group_id: string;
+          pairing_groups:
+            | { id: string; round_id: string }
+            | { id: string; round_id: string }[]
+            | null;
+        };
+        for (const row of (pgmRows ?? []) as unknown as PgmRow[]) {
+          const pg = Array.isArray(row.pairing_groups)
+            ? row.pairing_groups[0]
+            : row.pairing_groups;
+          if (pg?.round_id) {
+            groupByRound.set(String(pg.round_id), String(row.group_id));
+          }
+        }
+      }
+
+      // 6. Insertar.
+      const insertRows = targetRoundIds.map((rid) => ({
+        tournament_id,
+        entry_id,
+        caddie_id,
+        round_id: rid,
+        pairing_group_id: groupByRound.get(rid) ?? null,
+        role: "marker",
+        is_active: true,
+      }));
+      if (insertRows.length > 0) {
+        const { error: bulkErr } = await supabase
+          .from("caddie_assignments")
+          .insert(insertRows);
+        if (bulkErr) {
+          console.warn(
+            "[caddies] no se pudo propagar caddie al resto de rondas:",
+            bulkErr.message
+          );
+        }
+      }
+    }
+  } catch (err) {
+    // No abortamos la asignación principal si algo falla al propagar.
+    console.warn("[caddies] error propagando caddie a otras rondas:", err);
+  }
+
   revalidatePath("/caddies");
   revalidatePath("/entries");
   if (redirect_to) {
