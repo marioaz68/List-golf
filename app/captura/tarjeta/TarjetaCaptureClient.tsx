@@ -6,6 +6,7 @@ import {
   getScoreClass,
   HOLES_BACK,
   HOLES_FRONT,
+  HOLES_PLAYOFF,
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
 import type {
@@ -92,6 +93,10 @@ function PublicSection({
   onCellTap,
   witnessEntryIdForMe,
   myEntryId,
+  toneClass = "bg-[#0d2747]",
+  labelForHole,
+  rowAccent,
+  disabledHoles,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -103,6 +108,15 @@ function PublicSection({
   onCellTap: (entryId: string, hole: HoleNumber, table: TableKind) => void;
   witnessEntryIdForMe: string | null;
   myEntryId: string | null;
+  /** Color del header (para distinguir el tramo de desempate). */
+  toneClass?: string;
+  /** Permite mostrar etiqueta distinta al número de hoyo guardado
+   *  (ej. en desempate guardamos 19-27 pero mostramos 1-9). */
+  labelForHole?: (hole: HoleNumber) => string;
+  /** Borde lateral del título (decorativo). */
+  rowAccent?: string;
+  /** Hoyos que NO permiten editar (después de decidir el desempate). */
+  disabledHoles?: Set<HoleNumber>;
 }) {
   const isHoleComplete = (hole: HoleNumber) =>
     players.length > 0 &&
@@ -113,13 +127,18 @@ function PublicSection({
 
   return (
     <div className="rounded-lg bg-white p-2 shadow-sm">
-      <div className="mb-1 text-[11px] font-bold tracking-[0.04em] text-slate-500">
+      <div
+        className={[
+          "mb-1 text-[11px] font-bold tracking-[0.04em] text-slate-500",
+          rowAccent ?? "",
+        ].join(" ")}
+      >
         {title}
       </div>
       <div className="overflow-hidden rounded">
         <table className="w-full table-fixed text-[10px]">
           <thead>
-            <tr className="bg-[#0d2747] text-white">
+            <tr className={`${toneClass} text-white`}>
               <th className="w-10 px-1 py-1 text-left font-bold">H</th>
               {holes.map((hole) => {
                 const done = isHoleComplete(hole);
@@ -128,7 +147,9 @@ function PublicSection({
                     key={hole}
                     className="relative px-0 py-1 text-center font-bold"
                   >
-                    <div className="leading-none">{hole}</div>
+                    <div className="leading-none">
+                      {labelForHole ? labelForHole(hole) : hole}
+                    </div>
                     {done ? (
                       <span
                         aria-label="Hoyo completo"
@@ -196,13 +217,16 @@ function PublicSection({
                     const key = `${player.entryId}-${hole}`;
                     const isSaving = savingKey === `pub:${key}`;
                     const isPending = pending[hole];
+                    const disabled = disabledHoles?.has(hole) ?? false;
                     return (
                       <td key={key} className="px-0 py-1 text-center">
                         <button
                           type="button"
-                          onClick={() =>
-                            onCellTap(player.entryId, hole, "public")
-                          }
+                          disabled={disabled}
+                          onClick={() => {
+                            if (disabled) return;
+                            onCellTap(player.entryId, hole, "public");
+                          }}
                           className={[
                             "inline-flex h-6 w-6 items-center justify-center text-[10px] font-bold",
                             getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
@@ -211,6 +235,7 @@ function PublicSection({
                               : "text-slate-900",
                             isActive ? "ring-2 ring-sky-500 ring-offset-1" : "",
                             isSaving ? "opacity-60" : "",
+                            disabled ? "cursor-not-allowed opacity-30" : "",
                           ].join(" ")}
                         >
                           {val ?? ""}
@@ -917,12 +942,21 @@ export default function TarjetaCaptureClient({
                 queda en rojo hasta que el testigo del jugador lo confirme.
               </p>
 
-              {meta.matchPlay ? (
+              {meta.matchPlay?.needsPlayoff ? (
+                <div className="mt-2 rounded-md border border-amber-500 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-900">
+                  Empate al 18 (AS). Procedan al desempate en muerte súbita
+                  (hoyos 1-9). En el primer hoyo donde una pareja gane al
+                  menos 1 punto, el match termina.
+                </div>
+              ) : null}
+              {meta.matchPlay && !meta.matchPlay.needsPlayoff && meta.matchPlay.decidedAtHole != null ? (
                 <div className="mt-2 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-semibold text-emerald-900">
                   Match decidido: {meta.matchPlay.resultText}. Puedes firmar
                   tu tarjeta con los hoyos jugados hasta el H
-                  {meta.matchPlay.decidedAtHole} (no hace falta completar el
-                  18).
+                  {meta.matchPlay.viaPlayoff && meta.matchPlay.playoffHole != null
+                    ? `${meta.matchPlay.playoffHole} del desempate`
+                    : meta.matchPlay.decidedAtHole}{" "}
+                  (no hace falta completar el 18).
                 </div>
               ) : null}
 
@@ -1053,6 +1087,49 @@ export default function TarjetaCaptureClient({
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
                 />
+
+                {/* Desempate (muerte súbita): se muestra solo si la
+                    competencia detectó AS al 18 o ya hay hoyos de
+                    desempate capturados. Se etiquetan visualmente como
+                    H1-H9 aunque internamente se guardan como 19-27. */}
+                {(() => {
+                  const showPlayoff =
+                    Boolean(meta.matchPlay?.needsPlayoff) ||
+                    Boolean(meta.matchPlay?.viaPlayoff) ||
+                    meta.players.some((p) =>
+                      HOLES_PLAYOFF.some(
+                        (h) => (scoresByEntry[p.entryId] ?? p.scores)[h] != null
+                      )
+                    );
+                  if (!showPlayoff) return null;
+                  // Si ya se decidió, bloqueamos los hoyos posteriores al de
+                  // decisión (los anteriores se mantienen visibles).
+                  const decidedAt = meta.matchPlay?.decidedAtHole ?? null;
+                  const disabled = new Set<HoleNumber>();
+                  if (decidedAt != null && decidedAt >= 19) {
+                    for (const h of HOLES_PLAYOFF) {
+                      if (h > decidedAt) disabled.add(h);
+                    }
+                  }
+                  return (
+                    <PublicSection
+                      title="DESEMPATE · muerte súbita (1-9)"
+                      holes={HOLES_PLAYOFF}
+                      players={meta.players}
+                      scoresByEntry={scoresByEntry}
+                      pendingByEntry={pendingByEntry}
+                      activeCell={activeCell}
+                      savingKey={savingKey}
+                      onCellTap={openCell}
+                      witnessEntryIdForMe={witnessTargetForMe}
+                      myEntryId={meta.myEntryId}
+                      toneClass="bg-amber-700"
+                      labelForHole={(h) => String(h - 18)}
+                      rowAccent="text-amber-700"
+                      disabledHoles={disabled}
+                    />
+                  );
+                })()}
 
                 {showMyCard && privateEntryIds.map((eid) => {
                   const player = playersById.get(eid);

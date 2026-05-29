@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ALL_HOLES } from "./loadGroupCapture";
+import { ALL_HOLES, HOLES_PLAYOFF } from "./loadGroupCapture";
 import type { HoleNumber, HoleScores } from "./types";
 
 export type PrivateHoleScoresByEntry = Record<string, HoleScores>;
 
 function emptyScores(): HoleScores {
   const s = {} as HoleScores;
-  for (const h of ALL_HOLES) s[h] = null;
+  for (const h of [...ALL_HOLES, ...HOLES_PLAYOFF]) s[h] = null;
   return s;
 }
 
@@ -34,7 +34,7 @@ export async function loadPrivateScoresForGroup(
   }>) {
     const eid = String(row.entry_id ?? "").trim();
     const hole = Number(row.hole_number);
-    if (!eid || !Number.isFinite(hole) || hole < 1 || hole > 18) continue;
+    if (!eid || !Number.isFinite(hole) || hole < 1 || hole > 27) continue;
     const scores = out[eid];
     if (!scores) continue;
     scores[hole as HoleNumber] =

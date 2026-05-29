@@ -12,9 +12,14 @@ import { loadGroupMatchPlayStatus } from "./matchPlayGroupDecision";
 
 export const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+/** Hoyos físicos 1-9 repetidos como tramo de desempate.
+ *  H19 ↔ H1, H20 ↔ H2, …, H27 ↔ H9. */
+export const HOLES_PLAYOFF: HoleNumber[] = [
+  19, 20, 21, 22, 23, 24, 25, 26, 27,
+];
 export const ALL_HOLES: HoleNumber[] = [...HOLES_FRONT, ...HOLES_BACK];
 
-export const PAR_BY_HOLE: Record<HoleNumber, number> = {
+const PAR_BASE: Record<number, number> = {
   1: 4,
   2: 4,
   3: 3,
@@ -35,13 +40,24 @@ export const PAR_BY_HOLE: Record<HoleNumber, number> = {
   18: 4,
 };
 
+export const PAR_BY_HOLE: Record<HoleNumber, number> = (() => {
+  const map: Record<HoleNumber, number> = {} as Record<HoleNumber, number>;
+  for (const h of [...HOLES_FRONT, ...HOLES_BACK]) {
+    map[h] = PAR_BASE[h]!;
+  }
+  for (const h of HOLES_PLAYOFF) {
+    map[h] = PAR_BASE[h - 18]!;
+  }
+  return map;
+})();
+
 function safeString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
 function createEmptyScores(): HoleScores {
   const s = {} as HoleScores;
-  for (const h of ALL_HOLES) s[h] = null;
+  for (const h of [...ALL_HOLES, ...HOLES_PLAYOFF]) s[h] = null;
   return s;
 }
 
@@ -66,7 +82,7 @@ function normalizeHoleNumber(row: {
   hole_number: number | null;
 }): HoleNumber | null {
   const raw = row.hole_no ?? row.hole_number;
-  if (!raw || raw < 1 || raw > 18) return null;
+  if (!raw || raw < 1 || raw > 27) return null;
   return raw as HoleNumber;
 }
 

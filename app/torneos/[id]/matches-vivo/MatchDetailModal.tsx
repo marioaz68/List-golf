@@ -38,6 +38,10 @@ type HoleDetail = {
   /** true cuando el hoyo se jugó después de que el match ya estaba
    *  matemáticamente decidido (no contribuye a puntos del match). */
   after_decision?: boolean;
+  /** True si el hoyo es del tramo de desempate (hole_no 19-27). */
+  is_playoff?: boolean;
+  /** Posición dentro del desempate (1-9). */
+  playoff_hole?: number;
 };
 
 type MatchDetail = {
@@ -56,8 +60,15 @@ type MatchDetail = {
   last_hole_played: number;
   top_total: number;
   bottom_total: number;
-  /** Hoyo en el que el match quedó matemáticamente decidido (null si llegó al 18). */
+  /** Hoyo en el que el match quedó matemáticamente decidido
+   *  (1-27 incluyendo desempate; null si llegó al 18 sin decidir). */
   decided_at_hole?: number | null;
+  /** Decisión vino del tramo de desempate (19-27 = 1-9 físicos). */
+  via_playoff?: boolean;
+  /** Hoyo del desempate (1-9) en el que se decidió. */
+  playoff_decided_hole?: number;
+  /** AS al 18 con puntos en juego — falta jugar el desempate. */
+  needs_playoff?: boolean;
   holes: HoleDetail[];
 };
 
@@ -307,18 +318,465 @@ export default function MatchDetailModal({
                 Tarjeta del match (brutos)
               </h3>
               <HoleTable
-                holes={detail.holes}
+                holes={detail.holes.filter((h) => h.hole_no <= 18)}
                 topPlayers={topPlayers}
                 bottomPlayers={bottomPlayers}
                 topLabel={topName}
                 bottomLabel={bottomName}
                 allowancePct={detail.allowance_pct}
-                decidedAtHole={detail.decided_at_hole ?? null}
+                decidedAtHole={
+                  detail.decided_at_hole != null && detail.decided_at_hole <= 18
+                    ? detail.decided_at_hole
+                    : null
+                }
               />
             </section>
           ) : null}
+
+          {/* Desempate: tabla compacta para los hoyos 1-9 jugados como playoff */}
+          {detail &&
+          (detail.needs_playoff ||
+            detail.holes.some((h) => h.hole_no > 18)) ? (
+            <section>
+              <h3 className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+                Desempate · muerte súbita
+              </h3>
+              <PlayoffTable
+                holes={detail.holes.filter((h) => h.hole_no > 18)}
+                topPlayers={topPlayers}
+                bottomPlayers={bottomPlayers}
+                topLabel={topName}
+                bottomLabel={bottomName}
+                allowancePct={detail.allowance_pct}
+                decidedAtPlayoffHole={detail.playoff_decided_hole ?? null}
+              />
+            </section>
+          ) : null}
+
+          {/* Pagador (loser) tras AS al 18 — incluye desempate decidido */}
+          {detail && detail.via_playoff && detail.decided_at_hole != null ? (
+            <PayerBanner
+              topLabel={topName}
+              bottomLabel={bottomName}
+              topPts={detail.top_total}
+              bottomPts={detail.bottom_total}
+              playoffHole={detail.playoff_decided_hole ?? null}
+            />
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PayerBanner({
+  topLabel,
+  bottomLabel,
+  topPts,
+  bottomPts,
+  playoffHole,
+}: {
+  topLabel: string;
+  bottomLabel: string;
+  topPts: number;
+  bottomPts: number;
+  playoffHole: number | null;
+}) {
+  const winner = topPts > bottomPts ? topLabel : bottomLabel;
+  const loser = topPts > bottomPts ? bottomLabel : topLabel;
+  return (
+    <div className="rounded-lg border border-amber-400/40 bg-gradient-to-r from-amber-950/60 via-amber-900/40 to-amber-950/60 p-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
+          ✓ Gana
+        </span>
+        <span className="text-[12px] font-bold text-emerald-200">{winner}</span>
+        <span className="text-slate-500">·</span>
+        <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-200">
+          ✕ Pagador
+        </span>
+        <span className="text-[12px] font-bold text-rose-200">{loser}</span>
+      </div>
+      <p className="mt-1 text-[10px] text-amber-200/80">
+        Tras AS al 18 se jugó desempate (muerte súbita). Decidido en H
+        {playoffHole ?? "?"} del playoff.
+      </p>
+    </div>
+  );
+}
+
+function PlayoffTable({
+  holes,
+  topPlayers,
+  bottomPlayers,
+  topLabel,
+  bottomLabel,
+  allowancePct,
+  decidedAtPlayoffHole = null,
+}: {
+  holes: HoleDetail[];
+  topPlayers: PlayerInfo[];
+  bottomPlayers: PlayerInfo[];
+  topLabel: string;
+  bottomLabel: string;
+  allowancePct: number;
+  decidedAtPlayoffHole?: number | null;
+}) {
+  // Si no hay ningún hoyo del desempate aún, mostramos placeholder.
+  if (holes.length === 0) {
+    return (
+      <div className="rounded-lg border border-amber-400/30 bg-[#1a1208] px-3 py-2 text-[11px] text-amber-200">
+        El match quedó empatado al 18. Captura el hoyo 1 del desempate para
+        determinar el resultado.
+      </div>
+    );
+  }
+
+  const tA = shortPlayerLabel(topPlayers[0]?.label ?? "—");
+  const tB = shortPlayerLabel(topPlayers[1]?.label ?? "—");
+  const bA = shortPlayerLabel(bottomPlayers[0]?.label ?? "—");
+  const bB = shortPlayerLabel(bottomPlayers[1]?.label ?? "—");
+
+  const tAph = topPlayers[0]?.ph ?? null;
+  const tBph = topPlayers[1]?.ph ?? null;
+  const bAph = bottomPlayers[0]?.ph ?? null;
+  const bBph = bottomPlayers[1]?.ph ?? null;
+
+  const grossOf = (
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): number | null => {
+    switch (who) {
+      case "tA":
+        return h.top_player_a_strokes;
+      case "tB":
+        return h.top_player_b_strokes;
+      case "bA":
+        return h.bottom_player_a_strokes;
+      case "bB":
+        return h.bottom_player_b_strokes;
+    }
+  };
+  const netOf = (
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): number | null => {
+    const nets = h.breakdown?.nets;
+    if (!nets) return grossOf(h, who);
+    switch (who) {
+      case "tA":
+        return nets.top_a;
+      case "tB":
+        return nets.top_b;
+      case "bA":
+        return nets.bottom_a;
+      case "bB":
+        return nets.bottom_b;
+    }
+  };
+  const strokesReceivedOnHole = (
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): number => {
+    const sr = h.breakdown?.strokes_received;
+    if (!sr) return 0;
+    switch (who) {
+      case "tA":
+        return sr.top_a;
+      case "tB":
+        return sr.top_b;
+      case "bA":
+        return sr.bottom_a;
+      case "bB":
+        return sr.bottom_b;
+    }
+  };
+  const role = (
+    h: HoleDetail,
+    who: "tA" | "tB" | "bA" | "bB"
+  ): "low" | "high" | null => {
+    if (!h.breakdown) return null;
+    const { nets } = h.breakdown;
+    if (who === "tA") return nets.top_a <= nets.top_b ? "low" : "high";
+    if (who === "tB") return nets.top_b < nets.top_a ? "low" : "high";
+    if (who === "bA") return nets.bottom_a <= nets.bottom_b ? "low" : "high";
+    return nets.bottom_b < nets.bottom_a ? "low" : "high";
+  };
+  const roleTint = (r: "low" | "high" | null): string => {
+    if (r === "low") return "bg-emerald-500/30";
+    if (r === "high") return "bg-orange-600/35";
+    return "";
+  };
+  const decisionTint = (playoffNo: number): string => {
+    if (decidedAtPlayoffHole == null || playoffNo <= decidedAtPlayoffHole)
+      return "";
+    return "bg-slate-500/10 opacity-60";
+  };
+
+  const StrokeMarkInline = ({
+    strokes,
+    par,
+    handicapReceived = 0,
+    gross,
+  }: {
+    strokes: number | null;
+    par: number | null;
+    handicapReceived?: number;
+    gross?: number | null;
+  }) => {
+    if (strokes == null) return <span className="text-slate-500">—</span>;
+    const withHandicap = handicapReceived > 0;
+    const scoreClass = withHandicap
+      ? "text-amber-300 font-bold"
+      : "text-white";
+    const title =
+      gross != null && withHandicap
+        ? `Bruto ${gross} · neto ${strokes} (−${handicapReceived} ventaja)`
+        : gross != null
+          ? `Bruto ${gross} · neto ${strokes}`
+          : undefined;
+    if (par == null)
+      return (
+        <span className={scoreClass} title={title}>
+          {strokes}
+        </span>
+      );
+    const diff = Number(strokes) - Number(par);
+    if (diff <= -2)
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-full border-2 border-rose-400 bg-rose-500/15"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-[3px] block rounded-full border border-rose-300/90"
+          />
+          <span
+            className={`relative z-10 text-[10px] font-bold ${scoreClass}`}
+            title={title}
+          >
+            {strokes}
+          </span>
+        </span>
+      );
+    if (diff === -1)
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-full border border-rose-400 bg-rose-500/15"
+          />
+          <span
+            className={`relative z-10 text-[10px] font-bold ${scoreClass}`}
+            title={title}
+          >
+            {strokes}
+          </span>
+        </span>
+      );
+    if (diff === 1)
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-sm border border-sky-300/90 bg-sky-500/10"
+          />
+          <span
+            className={`relative z-10 text-[10px] font-bold ${scoreClass}`}
+            title={title}
+          >
+            {strokes}
+          </span>
+        </span>
+      );
+    if (diff >= 2)
+      return (
+        <span className="relative inline-flex h-[20px] w-[20px] items-center justify-center">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 block rounded-sm border-2 border-sky-300/90 bg-sky-500/15"
+          />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-[3px] block rounded-sm border border-sky-200/80"
+          />
+          <span
+            className={`relative z-10 text-[10px] font-bold ${scoreClass}`}
+            title={title}
+          >
+            {strokes}
+          </span>
+        </span>
+      );
+    return (
+      <span className={scoreClass} title={title}>
+        {strokes}
+      </span>
+    );
+  };
+
+  const playerRows: Array<{
+    key: "tA" | "tB" | "bA" | "bB";
+    name: string;
+    team: "top" | "bottom";
+    ph: number | null;
+  }> = [
+    { key: "tA", name: tA, team: "top", ph: tAph },
+    { key: "tB", name: tB, team: "top", ph: tBph },
+    { key: "bA", name: bA, team: "bottom", ph: bAph },
+    { key: "bB", name: bB, team: "bottom", ph: bBph },
+  ];
+
+  const stickyName =
+    "sticky left-0 z-30 border-b border-r border-white/10 px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[6px_0_12px_-4px_rgba(0,0,0,0.55)] w-[120px] min-w-[120px] max-w-[140px]";
+  const holeTh =
+    "w-[28px] min-w-[28px] border-b border-white/10 px-0 py-0.5 text-center text-[9px] font-bold text-amber-50";
+  const cellTd =
+    "w-[28px] min-w-[28px] border-b border-white/10 px-0 py-0.5 text-center text-[10px]";
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-amber-400/30 bg-[#13100a]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-400/20 bg-[#13100a] px-3 py-1.5 text-[9px] text-amber-200/80">
+        Desempate en hoyos 1-9 (mismo SI). Muerte súbita: el primer hoyo con
+        ventaja para una pareja cierra el match.
+      </div>
+      <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
+        <thead>
+          <tr className="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 text-amber-50">
+            <th className={stickyName} style={{ backgroundColor: "#3d2a05" }}>
+              Jugador
+            </th>
+            {holes.map((h) => {
+              const p = h.playoff_hole ?? h.hole_no - 18;
+              return (
+                <th key={`ph-h-${h.hole_no}`} className={holeTh}>
+                  <span className="block leading-none">H{p}</span>
+                  <span className="block text-[7px] font-normal text-amber-300/60">
+                    SI {h.stroke_index ?? "—"}
+                  </span>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {holes.some((h) => h.par != null) ? (
+            <tr className="bg-gradient-to-r from-emerald-950 via-teal-900 to-emerald-950 text-emerald-100">
+              <td
+                className={`${stickyName} border-l-2 border-l-emerald-500/50`}
+                style={{ backgroundColor: "#022c22" }}
+              >
+                Par
+              </td>
+              {holes.map((h) => (
+                <td
+                  key={`ph-par-${h.hole_no}`}
+                  className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold`}
+                >
+                  {h.par ?? "—"}
+                </td>
+              ))}
+            </tr>
+          ) : null}
+          {playerRows.map((p, idx) => {
+            const stripe = idx % 2 === 0 ? "bg-[#1a140a]" : "bg-[#181208]";
+            const stripeHex = idx % 2 === 0 ? "#1a140a" : "#181208";
+            const accent =
+              p.team === "top"
+                ? "border-l-2 border-l-cyan-500/40"
+                : "border-l-2 border-l-fuchsia-500/40";
+            return (
+              <tr key={`ph-row-${p.key}`} className={stripe}>
+                <td
+                  className={`${stickyName} ${accent}`}
+                  style={{ backgroundColor: stripeHex }}
+                >
+                  <div className="flex items-center gap-1 truncate">
+                    <span className="truncate" title={p.name}>
+                      {p.name}
+                    </span>
+                    {p.ph != null ? (
+                      <span
+                        className="shrink-0 rounded bg-amber-500/20 px-1 py-px text-[8px] font-bold leading-none text-amber-200"
+                        title={`Handicap del torneo al ${allowancePct}%`}
+                      >
+                        PH {p.ph}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+                {holes.map((h) => {
+                  const r = role(h, p.key);
+                  const playoffNo = h.playoff_hole ?? h.hole_no - 18;
+                  return (
+                    <td
+                      key={`ph-c-${p.key}-${h.hole_no}`}
+                      className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(playoffNo)}`}
+                    >
+                      <StrokeMarkInline
+                        strokes={netOf(h, p.key)}
+                        par={h.par}
+                        handicapReceived={strokesReceivedOnHole(h, p.key)}
+                        gross={grossOf(h, p.key)}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+          {/* Diferencial del playoff */}
+          {(() => {
+            const stripe = "bg-[#10160c]";
+            return (
+              <tr className={`border-t-2 border-amber-500/30 ${stripe}`}>
+                <td
+                  className={`${stickyName} border-l-2 border-l-amber-400/60`}
+                  style={{ backgroundColor: "#0c1408" }}
+                >
+                  <span className="block text-amber-200">Puntos</span>
+                  <span className="block text-[8px] font-normal text-slate-400">
+                    {shortPlayerLabel(topLabel)} −{" "}
+                    {shortPlayerLabel(bottomLabel)}
+                  </span>
+                </td>
+                {holes.map((h) => {
+                  const d =
+                    h.top_points != null && h.bottom_points != null
+                      ? h.top_points - h.bottom_points
+                      : null;
+                  const tone =
+                    d == null
+                      ? "text-slate-500"
+                      : d > 0
+                        ? "text-cyan-200"
+                        : d < 0
+                          ? "text-fuchsia-200"
+                          : "text-slate-300";
+                  const txt =
+                    d == null
+                      ? "—"
+                      : d === 0
+                        ? "AS"
+                        : (d > 0 ? "+" : "−") +
+                          Math.abs(Number.isInteger(d) ? d : Number(d.toFixed(1)));
+                  return (
+                    <td
+                      key={`ph-d-${h.hole_no}`}
+                      className={`${cellTd} ${stripe} font-bold ${tone}`}
+                    >
+                      {txt}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })()}
+        </tbody>
+      </table>
     </div>
   );
 }

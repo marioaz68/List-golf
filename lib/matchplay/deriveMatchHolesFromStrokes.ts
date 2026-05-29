@@ -23,6 +23,20 @@ export type DerivedMatchDecision = {
   winner: "top" | "bottom";
   top_total: number;
   bottom_total: number;
+  /** Si la decisión sucedió en el tramo de desempate (hoyos 19-27). */
+  via_playoff?: boolean;
+  /** Hoyo dentro del playoff (1..9) — solo si `via_playoff` es true. */
+  playoff_hole?: number;
+};
+
+/** Estado del match al final del recorrido normal (hoyo 18). */
+export type DerivedMatchSummary = {
+  /** All-square al 18 con al menos 1 punto en juego → necesita desempate. */
+  needs_playoff: boolean;
+  /** Total acumulado top tras los 18 hoyos (incluye decididos antes). */
+  top_total: number;
+  bottom_total: number;
+  decided_at_hole_18: boolean;
 };
 
 /**
@@ -50,6 +64,8 @@ export type DerivedMatchHolesResult = {
   holes: DerivedHoleResultRow[];
   /** Match decidido matemáticamente antes del hoyo 18: clave = match_id. */
   decisions: Map<string, DerivedMatchDecision>;
+  /** Resumen por match (incluye flag de necesidad de desempate). */
+  summaries: Map<string, DerivedMatchSummary>;
 };
 
 export async function deriveMatchHolesFromStrokes(
@@ -60,6 +76,7 @@ export async function deriveMatchHolesFromStrokes(
   const emptyResult: DerivedMatchHolesResult = {
     holes: [],
     decisions: new Map(),
+    summaries: new Map(),
   };
   const playable = matches.filter(
     (m) =>
@@ -257,6 +274,7 @@ export async function deriveMatchHolesFromStrokes(
 
   const out: DerivedHoleResultRow[] = [];
   const decisions = new Map<string, DerivedMatchDecision>();
+  const summaries = new Map<string, DerivedMatchSummary>();
 
   for (const m of playable) {
     const eTopA = entryById.get(m.top_a_entry_id!);
@@ -349,7 +367,103 @@ export async function deriveMatchHolesFromStrokes(
         });
       }
     }
+
+    // ─── Desempate (muerte súbita) ────────────────────────────────────
+    // Si al hoyo 18 sigue empatado y hubo al menos un punto en juego,
+    // se procede al desempate en los hoyos 1-9 (almacenados como 19-27).
+    // Cualquier hoyo donde una pareja gane ≥ 1 punto cierra el match.
+    const isAllSquareAt18 =
+      decidedAtHole == null &&
+      holes_in_match === 18 &&
+      topTotal === bottomTotal;
+    const playedAnyHole = topTotal + bottomTotal > 0;
+    let needsPlayoff = isAllSquareAt18 && playedAnyHole;
+
+    if (needsPlayoff) {
+      for (let p = 1; p <= 9; p++) {
+        const physical = p; // hoyo físico que se vuelve a jugar
+        const storeHole = 18 + p; // 19..27 en hole_scores
+        const top_a = grossForEntryHole(
+          m.top_a_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const top_b = grossForEntryHole(
+          m.top_b_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const bottom_a = grossForEntryHole(
+          m.bottom_a_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const bottom_b = grossForEntryHole(
+          m.bottom_b_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        if (
+          top_a == null ||
+          top_b == null ||
+          bottom_a == null ||
+          bottom_b == null
+        ) {
+          // Falta capturar este hoyo del playoff. Detenemos aquí.
+          break;
+        }
+
+        const gross: LowHighPlayerGross = { top_a, top_b, bottom_a, bottom_b };
+        const res = scoreLowHighHole({
+          hole_no: storeHole, // usa playoffSourceHole → SI del hoyo físico p
+          gross,
+          hi,
+          allowance_pct,
+          playing_handicaps: phs,
+          strokeIndexByHole,
+          top_total_before: topTotal,
+          bottom_total_before: bottomTotal,
+          holes_in_match: 27,
+        });
+        if (!res) break;
+
+        topTotal += res.top_points;
+        bottomTotal += res.bottom_points;
+
+        out.push({
+          match_id: m.id,
+          hole_no: storeHole,
+          top_points: res.top_points,
+          bottom_points: res.bottom_points,
+          match_status_after: `Playoff H${p}`,
+        });
+
+        if (res.top_points !== res.bottom_points) {
+          // Muerte súbita: en cuanto una pareja gana al menos un punto,
+          // el match termina.
+          decidedAtHole = storeHole;
+          decisions.set(m.id, {
+            decided_at_hole: storeHole,
+            winner: res.top_points > res.bottom_points ? "top" : "bottom",
+            top_total: topTotal,
+            bottom_total: bottomTotal,
+            via_playoff: true,
+            playoff_hole: p,
+          });
+          needsPlayoff = false;
+          break;
+        }
+      }
+    }
+
+    summaries.set(m.id, {
+      needs_playoff: needsPlayoff,
+      top_total: topTotal,
+      bottom_total: bottomTotal,
+      decided_at_hole_18:
+        decidedAtHole != null && decidedAtHole <= 18,
+    });
   }
 
-  return { holes: out, decisions };
+  return { holes: out, decisions, summaries };
 }

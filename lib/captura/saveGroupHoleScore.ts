@@ -194,11 +194,21 @@ export async function saveGroupHoleScore(
 
   const { data: allHoles } = await admin
     .from("hole_scores")
-    .select("strokes")
+    .select("strokes, hole_no, hole_number")
     .eq("round_score_id", roundScoreId);
 
+  // El gross stroke play se calcula solo sobre los 18 hoyos normales.
+  // Los hoyos 19-27 son del desempate de match play y no deben sumarse al
+  // total de la ronda de stroke play.
   const gross =
     (allHoles ?? []).reduce((acc, row) => {
+      const h =
+        typeof (row as { hole_number?: number | null }).hole_number === "number"
+          ? (row as { hole_number?: number | null }).hole_number!
+          : typeof (row as { hole_no?: number | null }).hole_no === "number"
+            ? (row as { hole_no?: number | null }).hole_no!
+            : 0;
+      if (h < 1 || h > 18) return acc;
       const s = typeof row.strokes === "number" ? row.strokes : 0;
       return acc + s;
     }, 0) || null;
