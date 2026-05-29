@@ -22,6 +22,7 @@ import {
 import ExportCommitteePromptButton from "./ExportCommitteePromptButton";
 import MonthlyDbUpdateButton from "./MonthlyDbUpdateButton";
 import CommitteeReviewBadge from "./CommitteeReviewBadge";
+import EditableHiCell from "./EditableHiCell";
 
 type RoundSignature = {
   round_no: number;
@@ -855,19 +856,19 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">{te.thClub}</th>
               <th
                 className="px-1 py-1 text-right"
-                title="Handicap Index (variable según WHS)"
+                title="Handicap Index (editable). Al guardarlo, CH y PH se recalculan automáticamente para este torneo."
               >
-                HI
+                HI ✎
               </th>
               <th
                 className="px-1 py-1 text-right"
-                title="Course Handicap (fijo informativo: HI × Slope/113 + (CR − Par))"
+                title="Course Handicap (informativo): HI × Slope/113 + (CR − Par) usando la salida que la regla salida/categoría asigna en este torneo."
               >
                 HC
               </th>
               <th
                 className="px-1 py-1 text-right"
-                title="Playing Handicap (fijo informativo: HC × % allowance)"
+                title="Playing Handicap del torneo (regla aplicada): HC × % de reglas de competencia."
               >
                 PH
               </th>
@@ -912,13 +913,21 @@ ${res.witness_url}`;
 
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
 
-                  <td className="px-1 py-1 text-right tabular-nums font-mono">
-                    {e.handicap_index ?? "-"}
+                  <td className="px-1 py-1 text-right">
+                    <EditableHiCell
+                      entryId={e.id}
+                      tournamentId={tournamentId}
+                      initialHi={
+                        e.handicap_index != null
+                          ? Number(e.handicap_index)
+                          : null
+                      }
+                    />
                   </td>
 
                   <td
                     className="px-1 py-1 text-right tabular-nums font-mono text-slate-700"
-                    title="Course Handicap (fijo, calculado al guardar reglas WHS del torneo)"
+                    title="Course Handicap (informativo, HI × Slope/113 + (CR − Par) según la salida asignada)"
                   >
                     {e.course_handicap != null
                       ? Math.round(Number(e.course_handicap))
