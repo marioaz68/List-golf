@@ -18,6 +18,17 @@ function redirectBack(tournamentId: string, roundId: string) {
   redirect(qs ? `/caddies?${qs}` : "/caddies");
 }
 
+/** Validamos el `redirect_to` para evitar open-redirects: sólo rutas
+ *  internas (que arrancan con "/"). */
+function safeRedirectTo(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("/")) return null;
+  if (trimmed.startsWith("//")) return null;
+  return trimmed;
+}
+
 export async function assignCaddieAction(formData: FormData) {
   const supabase = createAdminClient();
 
@@ -26,6 +37,7 @@ export async function assignCaddieAction(formData: FormData) {
   const caddie_id = clean(formData.get("caddie_id"));
   const round_id = clean(formData.get("round_id"));
   const pairing_group_id = clean(formData.get("pairing_group_id"));
+  const redirect_to = safeRedirectTo(clean(formData.get("redirect_to")));
 
   if (!tournament_id || !entry_id || !caddie_id) {
     throw new Error("Datos incompletos");
@@ -74,6 +86,12 @@ export async function assignCaddieAction(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/caddies");
+  if (redirect_to) {
+    // Asignación desde Inscritos / búsqueda directa — regresamos al
+    // contexto original sin pasar por la tabla completa de caddies.
+    revalidatePath(redirect_to);
+    redirect(redirect_to);
+  }
   redirectBack(tournament_id, round_id);
 }
 
