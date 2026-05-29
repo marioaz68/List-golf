@@ -148,25 +148,44 @@ export async function autoPublishBracketFromPairings(
     };
   }
 
-  // 5. Parejas sin grupo R1 → BYE en R1 (un slot de partido con una sola pareja).
-  const byePairs = allPairs.filter((p) => !pairsUsedInGroups.has(p.id));
+  // 5. Parejas sin grupo R1 → BYE en R1 o play-in si no caben.
+  let byePairs = allPairs
+    .filter((p) => !pairsUsedInGroups.has(p.id))
+    .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
 
-  // 6. Tamaño del cuadro: caben todos los matches programados + BYEs en R1.
-  const slotsNeeded = groupedMatches.length + byePairs.length;
-  let bracketSize = bracketCapacity(Math.max(allPairs.length, slotsNeeded), 64);
-  let r1Matches = bracketSize / 2;
-  while (slotsNeeded > r1Matches && bracketSize < 64) {
-    bracketSize *= 2;
-    r1Matches = bracketSize / 2;
-  }
+  // 6. Cuadro estándar según equipos (24 → 32, 16 partidos R1).
+  const bracketSize = bracketCapacity(allPairs.length, 64);
+  const r1Matches = bracketSize / 2;
   const maxByeSlots = r1Matches - groupedMatches.length;
+
+  // Si hay más BYEs que plazas, el play-in cruza las 2 parejas de peor seed.
+  let playInMatch: GroupPair | null = null;
+  if (byePairs.length > maxByeSlots) {
+    const extra = byePairs.length - maxByeSlots;
+    if (extra !== 1) {
+      return {
+        ok: false,
+        error:
+          `Hay ${byePairs.length} parejas sin grupo R1; con cuadro ${bracketSize} ` +
+          `solo caben ${maxByeSlots} BYE + 1 play-in. Falta agrupar ${extra - 1} pareja(s) en R1.`,
+      };
+    }
+    const lowA = byePairs[byePairs.length - 2];
+    const lowB = byePairs[byePairs.length - 1];
+    playInMatch = {
+      groupNo: (groupedMatches.length + 1),
+      topPairId: lowA.id,
+      bottomPairId: lowB.id,
+    };
+    groupedMatches.push(playInMatch);
+    byePairs = byePairs.slice(0, -2);
+  }
 
   if (byePairs.length > maxByeSlots) {
     return {
       ok: false,
       error:
-        `Hay ${byePairs.length} parejas sin grupo R1 pero solo ${maxByeSlots} plazas BYE en R1 ` +
-        `(cuadro de ${bracketSize}). Agrupa más parejas en R1 o reduce equipos activos.`,
+        `Hay ${byePairs.length} parejas BYE pero solo ${maxByeSlots} plazas en R1 (cuadro ${bracketSize}).`,
     };
   }
 
@@ -253,8 +272,8 @@ export async function autoPublishBracketFromPairings(
     }
   }
 
-  // 9. Resolver BYEs propagando ganadores
-  function resolveBye(m: M) {
+  // 9. Solo avanzar ganadores BYE de R1 → R2 (sin cascada a R3/R4).
+  function markR1Bye(m: M) {
     const top = m.top_pair_id;
     const bottom = m.bottom_pair_id;
     if (top && !bottom) {
@@ -270,14 +289,14 @@ export async function autoPublishBracketFromPairings(
       m.result_text = "Vacío";
     }
   }
-  for (let r = 1; r < roundCount; r++) {
-    const current = roundMatches[r];
-    const next = roundMatches[r + 1];
-    if (!next) continue;
-    for (let p = 0; p < current.length; p++) {
-      const m = current[p];
+  for (const m of r1) markR1Bye(m);
+
+  const r2 = roundMatches[2];
+  if (r2) {
+    for (let p = 0; p < r1.length; p++) {
+      const m = r1[p];
       if (!m.winner_pair_id) continue;
-      const nextMatch = next[Math.floor(p / 2)];
+      const nextMatch = r2[Math.floor(p / 2)];
       if (!nextMatch) continue;
       if (p % 2 === 0) {
         nextMatch.top_pair_id = m.winner_pair_id;
@@ -285,7 +304,6 @@ export async function autoPublishBracketFromPairings(
         nextMatch.bottom_pair_id = m.winner_pair_id;
       }
     }
-    for (const nm of next) resolveBye(nm);
   }
 
   // 10. Limpiar bracket anterior si existe
@@ -304,9 +322,8 @@ export async function autoPublishBracketFromPairings(
   }
 
   // 11. Insertar bracket + matches
-  const teamCount = pairsUsedInGroups.size + byePairs.length;
-  const byeCount =
-    byePairs.length + Math.max(0, r1Matches - slotsNeeded);
+  const teamCount = allPairs.length;
+  const byeCount = byePairs.length;
 
   const { data: bracket, error: bErr } = await admin
     .from("matchplay_brackets")
@@ -397,6 +414,10 @@ export async function autoPublishBracketFromPairings(
     bracketSize,
     byeCount,
     pairedMatchesR1: groupedMatches.length,
-    message: `Bracket regenerado: ${groupedMatches.length} matches en R1 desde grupos del calendario, ${byePairs.length} parejas con BYE en R1. Tamaño ${bracketSize}.`,
+    message:
+      `Bracket regenerado (${bracketSize}): ${groupedMatches.length} partidos R1 ` +
+      `(${groupedMatches.length - (playInMatch ? 1 : 0)} grupos` +
+      (playInMatch ? " + 1 play-in" : "") +
+      `), ${byePairs.length} BYE en R1.`,
   };
 }

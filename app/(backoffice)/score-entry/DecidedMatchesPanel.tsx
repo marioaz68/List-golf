@@ -53,6 +53,7 @@ export default function DecidedMatchesPanel({
   >(null);
   const [regeneratingFromPairings, setRegeneratingFromPairings] = useState(false);
   const [repairingFromR1, setRepairingFromR1] = useState(false);
+  const [runningTestCycle, setRunningTestCycle] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -221,6 +222,49 @@ export default function DecidedMatchesPanel({
       });
     } finally {
       setRepairingFromR1(false);
+    }
+  }
+
+  async function handleRunTestCycle() {
+    if (runningTestCycle) return;
+    const ok = window.confirm(
+      "¿Ejecutar ciclo de PRUEBA completo?\n\n" +
+        "Regenera el cuadro desde R1, cierra R1 con scores capturados, " +
+        "simula el play-in si falta, y completa todas las rondas hasta campeón " +
+        "(ganador = mejor seed en cada cruce).\n\n" +
+        "Solo para torneos de prueba."
+    );
+    if (!ok) return;
+    setRunningTestCycle(true);
+    setPublishFeedback(null);
+    try {
+      const res = await fetch(`/api/matchplay/run-test-cycle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournament_id: tournamentId }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        error?: string;
+        championPairId?: string;
+      };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      setPublishFeedback({
+        kind: "ok",
+        text: json.message ?? "Ciclo de prueba completado.",
+      });
+      await loadList();
+    } catch (err) {
+      setPublishFeedback({
+        kind: "error",
+        text:
+          err instanceof Error ? err.message : "Error en ciclo de prueba.",
+      });
+    } finally {
+      setRunningTestCycle(false);
     }
   }
 
@@ -547,13 +591,29 @@ export default function DecidedMatchesPanel({
                   disabled={
                     regeneratingFromPairings ||
                     repairingFromR1 ||
-                    publishingBracket
+                    publishingBracket ||
+                    runningTestCycle
                   }
                   className="rounded-md border border-emerald-400 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {regeneratingFromPairings
                     ? "Re-armando…"
                     : "Solo re-armar (sin cerrar)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRunTestCycle}
+                  disabled={
+                    runningTestCycle ||
+                    repairingFromR1 ||
+                    regeneratingFromPairings ||
+                    publishingBracket
+                  }
+                  className="rounded-md border border-violet-400 bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-900 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {runningTestCycle
+                    ? "Ejecutando prueba…"
+                    : "Prueba: ciclo completo → campeón"}
                 </button>
               </div>
               {publishFeedback ? (
