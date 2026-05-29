@@ -151,22 +151,36 @@ function buildRoundDayGroups(rounds: Round[]) {
   }));
 }
 
-function buildRoundChecks(categories: Category[], rounds: Round[]) {
-  const requiredRounds = [1, 2, 3];
-
+function buildRoundChecks(
+  categories: Category[],
+  rounds: Round[]
+): {
+  requiredRounds: number[];
+  checks: CategoryRoundCheck[];
+  orphanRounds: number;
+} {
   const roundsByCategory = new Map<string, Set<number>>();
+  const allRoundNos = new Set<number>();
+  let orphanRounds = 0;
 
   for (const round of rounds) {
-    if (!round.category_id) continue;
+    if (!Number.isFinite(round.round_no) || round.round_no < 1) continue;
+    allRoundNos.add(round.round_no);
+
+    if (!round.category_id) {
+      orphanRounds += 1;
+      continue;
+    }
 
     if (!roundsByCategory.has(round.category_id)) {
       roundsByCategory.set(round.category_id, new Set<number>());
     }
-
     roundsByCategory.get(round.category_id)!.add(round.round_no);
   }
 
-  return categories.map<CategoryRoundCheck>((category) => {
+  const requiredRounds = Array.from(allRoundNos).sort((a, b) => a - b);
+
+  const checks = categories.map<CategoryRoundCheck>((category) => {
     const configuredRounds = Array.from(
       roundsByCategory.get(category.id) ?? new Set<number>()
     )
@@ -181,9 +195,11 @@ function buildRoundChecks(categories: Category[], rounds: Round[]) {
       category,
       configuredRounds,
       missingRounds,
-      isComplete: missingRounds.length === 0,
+      isComplete: requiredRounds.length > 0 && missingRounds.length === 0,
     };
   });
+
+  return { requiredRounds, checks, orphanRounds };
 }
 
 const primaryButtonClass =
@@ -357,11 +373,21 @@ export default async function RoundsPage(props: {
   }));
 
   const roundDayGroups = buildRoundDayGroups(rounds);
-  const roundChecks = buildRoundChecks(categories, rounds);
+  const roundCheckInfo = buildRoundChecks(categories, rounds);
+  const roundChecks = roundCheckInfo.checks;
+  const requiredRounds = roundCheckInfo.requiredRounds;
+  const orphanRounds = roundCheckInfo.orphanRounds;
   const completeChecks = roundChecks.filter((check) => check.isComplete);
   const incompleteChecks = roundChecks.filter((check) => !check.isComplete);
+  const hasRequiredRounds = requiredRounds.length > 0;
   const isCalendarComplete =
-    categories.length > 0 && incompleteChecks.length === 0;
+    categories.length > 0 &&
+    hasRequiredRounds &&
+    incompleteChecks.length === 0 &&
+    orphanRounds === 0;
+  const requiredRoundsLabel = hasRequiredRounds
+    ? requiredRounds.join(", ")
+    : "—";
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -418,15 +444,27 @@ export default async function RoundsPage(props: {
               Verificador de rondas
             </div>
             <div className="mt-1 text-[11px] leading-snug text-gray-500">
-              Valida que cada categoría activa tenga configuradas las rondas 1,
-              2 y 3. El día y turno pueden ser distintos.
+              Compara las rondas detectadas en el calendario contra cada
+              categoría activa. Si una categoría no juega todas las rondas del
+              torneo, la marca aquí. Día y turno pueden variar.
             </div>
           </div>
 
-          <button type="button" className={primaryButtonClass}>
-            Verificar rondas
-          </button>
+          <div className="rounded-full border border-gray-300 bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-700">
+            {hasRequiredRounds
+              ? `Rondas del torneo: ${requiredRoundsLabel}`
+              : "Aún no hay rondas"}
+          </div>
         </div>
+
+        {orphanRounds > 0 ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+            ⚠️ Hay {orphanRounds} ronda{orphanRounds === 1 ? "" : "s"} sin
+            categoría asignada. No cuentan para ninguna categoría. Edítalas en
+            la tabla de abajo o bórralas y vuelve a crearlas marcando la
+            categoría.
+          </div>
+        ) : null}
 
         <div
           className={
@@ -435,15 +473,21 @@ export default async function RoundsPage(props: {
               : "rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-800"
           }
         >
-          {isCalendarComplete ? (
+          {!hasRequiredRounds ? (
+            <span>
+              ⓘ Todavía no hay rondas creadas para este torneo. Usa el formulario
+              de abajo para agregarlas.
+            </span>
+          ) : isCalendarComplete ? (
             <span>
               ✅ Calendario completo: {completeChecks.length}/
-              {categories.length} categorías tienen rondas 1, 2 y 3.
+              {categories.length} categorías tienen las rondas {requiredRoundsLabel}.
             </span>
           ) : (
             <span>
               ⚠️ Faltan rondas: {completeChecks.length}/{categories.length}{" "}
-              categorías completas. Revisa las categorías marcadas abajo.
+              categorías completas. Cada categoría debe tener las rondas{" "}
+              {requiredRoundsLabel}.
             </span>
           )}
         </div>
@@ -463,7 +507,7 @@ export default async function RoundsPage(props: {
                   {check.isComplete ? "✅" : "⚠️"} {categoryLabel(check.category)}
                 </span>
                 <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold">
-                  {check.configuredRounds.length}/3
+                  {check.configuredRounds.length}/{requiredRounds.length || "—"}
                 </span>
               </div>
 
