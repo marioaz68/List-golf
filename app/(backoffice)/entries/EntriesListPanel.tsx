@@ -198,7 +198,7 @@ const BTN_BASE =
 const SLOT_SM = "shrink-0 md:w-[72px]";
 const SLOT_MD = "shrink-0 md:w-[84px]";
 const SLOT_EDIT = "shrink-0 md:w-[110px]";
-const ACTIONS_COL = "min-w-0 md:min-w-[648px] md:w-[648px]";
+const ACTIONS_COL = "min-w-0 md:min-w-[740px] md:w-[740px]";
 
 const MOBILE_ACTION_BTN =
   "inline-flex h-8 shrink-0 items-center justify-center rounded border px-2 text-[10px] font-bold leading-none text-white whitespace-nowrap disabled:opacity-50";
@@ -332,6 +332,29 @@ function EntryRowActions({
       }
     >
       {kitButtonLabel(te.btnTelegramKit, entry)}
+    </Link>
+  );
+
+  /**
+   * Enlace directo al módulo /caddies con el torneo pre-seleccionado y
+   * un anchor a la fila del jugador. La página /caddies sigue siendo el
+   * lugar donde se asigna realmente el caddie (requiere también ronda
+   * para listar los grupos), pero este shortcut evita tener que buscar
+   * al jugador entre torneos.
+   */
+  const caddieBtn = (
+    <Link
+      href={`/caddies?tournament_id=${encodeURIComponent(
+        tournamentId
+      )}#assignment-${entry.id}`}
+      title="Asignar caddie al jugador en este torneo"
+      className={
+        compact
+          ? `${MOBILE_ACTION_BTN} border-teal-900 bg-teal-700 hover:bg-teal-800`
+          : "inline-flex h-7 w-full items-center justify-center rounded border border-teal-900 bg-teal-700 text-[11px] font-bold text-white hover:bg-teal-800"
+      }
+    >
+      Caddie
     </Link>
   );
 
@@ -541,6 +564,7 @@ function EntryRowActions({
       }
     >
       {wrap(telegramBtn, SLOT_MD)}
+      {wrap(caddieBtn, SLOT_MD)}
       {wrap(committeeFlagForm, SLOT_MD)}
       {wrap(signaturesBtn, SLOT_MD)}
       {wrap(deleteForm, SLOT_MD)}
