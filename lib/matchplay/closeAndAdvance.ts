@@ -160,38 +160,28 @@ export async function closeMatchAndAdvanceForGroup(
   const topPairId = derivedMatch.top_pair_id;
   const bottomPairId = derivedMatch.bottom_pair_id;
 
-  // 5) Encontrar el match real (matchplay_matches) por (bracket, parejas).
-  //    Aceptamos cualquier orden top/bottom. Primero buscamos en la ronda
-  //    actual del calendario; si no aparece (típico cuando el bracket se
-  //    sembró por subasta/HI y las parejas se cruzan en otra ronda),
-  //    buscamos en cualquier ronda del bracket.
-  const { data: allBracketMatches } = await admin
+  // 5) Encontrar el match real SOLO en la misma ronda del calendario.
+  //    Nunca cerrar un cruce de otra ronda del bracket (evita marcar R3
+  //    cuando el grupo es de R1).
+  const { data: candidateMatches } = await admin
     .from("matchplay_matches")
     .select(
       "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, next_match_id"
     )
-    .eq("bracket_id", bracketId);
+    .eq("bracket_id", bracketId)
+    .eq("round_no", currentRoundNo);
 
-  const matchPredicate = (m: {
-    top_pair_id: string | null;
-    bottom_pair_id: string | null;
-  }) =>
-    (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
-    (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId);
-
-  let realMatch = (allBracketMatches ?? []).find(
-    (m) => Number(m.round_no) === currentRoundNo && matchPredicate(m)
+  const realMatch = (candidateMatches ?? []).find(
+    (m) =>
+      (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
+      (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
   );
-  if (!realMatch) {
-    realMatch = (allBracketMatches ?? []).find(matchPredicate);
-  }
   if (!realMatch) {
     return {
       ok: false,
       error:
-        "El cuadro no enfrenta a estas 2 parejas en ninguna ronda. " +
-        "El cuadro fue sembrado por subasta/HI y los enfrentamientos no coinciden con los grupos del calendario. " +
-        "Usa el botón “Re-armar bracket según grupos R1” para regenerar el cuadro alineado al calendario.",
+        `No hay partido en R${currentRoundNo} del cuadro con estas dos parejas. ` +
+        "Usa “Reparar cuadro y cerrar R1” para regenerar el bracket desde los grupos del calendario.",
     };
   }
   const matchplayMatchId = String(realMatch.id);
