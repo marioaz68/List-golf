@@ -138,6 +138,7 @@ export default function PlayerEditModal({
   entryCourseHandicap = null,
   entryPlayingHandicap = null,
   entryPlayingHandicapOverride = null,
+  entryAllowancePct = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -149,6 +150,7 @@ export default function PlayerEditModal({
   entryCourseHandicap?: number | null;
   entryPlayingHandicap?: number | null;
   entryPlayingHandicapOverride?: number | null;
+  entryAllowancePct?: number | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -791,35 +793,51 @@ export default function PlayerEditModal({
 
             <label style={labelStyle}>
               Playing Handicap (PH) · informativo
-              <input
-                type="text"
-                value={
+              {(() => {
+                const phStr =
                   entryPlayingHandicap != null
-                    ? String(Math.round(Number(entryPlayingHandicap))) +
-                      (entryPlayingHandicapOverride != null ? "  (ovr)" : "")
-                    : "—"
-                }
-                readOnly
-                disabled
-                tabIndex={-1}
-                style={{
-                  ...fieldStyle,
-                  background: "#f3f4f6",
-                  color:
-                    entryPlayingHandicapOverride != null
-                      ? "#b45309"
-                      : "#047857",
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                  textAlign: "right",
-                  cursor: "not-allowed",
-                  fontWeight: 700,
-                }}
-                title={
-                  entryPlayingHandicapOverride != null
-                    ? "PH con override manual (desde panel match play)"
-                    : "PH del torneo: HC × % de reglas de competencia."
-                }
-              />
+                    ? String(Math.round(Number(entryPlayingHandicap)))
+                    : "—";
+                const isOverride = entryPlayingHandicapOverride != null;
+                const allowanceSuffix = isOverride
+                  ? "  (ovr)"
+                  : entryAllowancePct != null
+                    ? `  · ${entryAllowancePct}%`
+                    : "";
+                const tooltip = isOverride
+                  ? "PH con override manual (desde panel match play)"
+                  : entryAllowancePct != null
+                    ? `PH del torneo: HC × ${entryAllowancePct}% (regla de competencia).`
+                    : "PH del torneo: HC × % de reglas de competencia.";
+                return (
+                  <input
+                    type="text"
+                    value={phStr + allowanceSuffix}
+                    readOnly
+                    disabled
+                    tabIndex={-1}
+                    style={{
+                      ...fieldStyle,
+                      background: "#f3f4f6",
+                      color: isOverride ? "#b45309" : "#047857",
+                      fontFamily:
+                        "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      textAlign: "right",
+                      cursor: "not-allowed",
+                      fontWeight: 700,
+                    }}
+                    title={tooltip}
+                  />
+                );
+              })()}
+              {entryAllowancePct != null &&
+              entryPlayingHandicapOverride == null ? (
+                <span
+                  style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}
+                >
+                  Regla aplicada: {entryAllowancePct}% sobre HC.
+                </span>
+              ) : null}
             </label>
 
             <label style={labelStyle}>
