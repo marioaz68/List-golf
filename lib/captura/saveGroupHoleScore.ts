@@ -1,6 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HoleNumber } from "./types";
 
+export type ScoreActorRole =
+  | "player"
+  | "caddie"
+  | "witness"
+  | "admin"
+  | "system";
+
+export type ScoreActor = {
+  role: ScoreActorRole | null;
+  /** entry_id si capturó un jugador (URL ?me=). */
+  entryId?: string | null;
+  /** caddie_id si capturó un caddie (URL ?caddie=). */
+  caddieId?: string | null;
+  /** user_id del backoffice si la acción se hizo autenticado. */
+  userId?: string | null;
+  /** Texto humano para mostrar en bitácora (nombre del jugador/caddie/admin). */
+  label?: string | null;
+  /** Origen del request: telegram_player|telegram_caddie|telegram_witness|backoffice|public|unknown */
+  source?: string | null;
+};
+
 export type SaveHoleScoreResult =
   | {
       ok: true;
@@ -66,7 +87,9 @@ export async function saveGroupHoleScore(
      */
     mode?: "modify" | "approve";
     /** Quién está capturando (sirve para auditoría/lectura futura). */
-    actorRole?: "player" | "caddie" | "witness" | "admin" | null;
+    actorRole?: ScoreActorRole | null;
+    /** Identidad completa del actor para bitácora. */
+    actor?: ScoreActor | null;
   }
 ): Promise<SaveHoleScoreResult> {
   const groupId = params.groupId.trim();
@@ -151,15 +174,38 @@ export async function saveGroupHoleScore(
   }
 
   const existingHole = await findExistingHoleRow(admin, roundScoreId, hole);
+  const prevStrokes =
+    typeof existingHole?.strokes === "number" ? existingHole.strokes : null;
+  const prevPending = Boolean(existingHole?.pending_witness);
+  // picked_up no se devolvió en findExistingHoleRow; lo leemos puntualmente.
+  let prevPickedUp = false;
+  if (existingHole?.id) {
+    const { data: existingFull } = await admin
+      .from("hole_scores")
+      .select("picked_up")
+      .eq("id", existingHole.id)
+      .maybeSingle();
+    prevPickedUp = Boolean(
+      (existingFull as { picked_up?: boolean | null } | null)?.picked_up
+    );
+  }
 
   const mode = params.mode ?? "modify";
-  const actorRole = params.actorRole ?? null;
+  const actor = params.actor ?? null;
+  const actorRole: ScoreActorRole | null =
+    actor?.role ?? params.actorRole ?? null;
   let pendingWitness = false;
+  let auditAction: "create" | "update" | "delete" | null = null;
+  let newPickedUpForAudit = pickedUp;
+  let newStrokesForAudit: number | null = strokesValue;
 
   if (strokesValue == null && !pickedUp) {
     // Borrar (score vacío y sin marca de levantó).
     if (existingHole?.id) {
       await admin.from("hole_scores").delete().eq("id", existingHole.id);
+      auditAction = "delete";
+      newStrokesForAudit = null;
+      newPickedUpForAudit = false;
     }
   } else if (existingHole?.id) {
     const previousStrokes =
@@ -190,6 +236,7 @@ export async function saveGroupHoleScore(
       })
       .eq("id", existingHole.id);
     if (upErr) return { ok: false, error: upErr.message };
+    auditAction = "update";
   } else {
     // Inserción nueva: la primera captura nunca queda pendiente.
     const { error: insErr } = await admin.from("hole_scores").insert({
@@ -203,6 +250,7 @@ export async function saveGroupHoleScore(
       pending_witness: false,
     });
     if (insErr) return { ok: false, error: insErr.message };
+    auditAction = "create";
   }
 
   const { data: allHoles } = await admin
@@ -230,6 +278,41 @@ export async function saveGroupHoleScore(
     .from("round_scores")
     .update({ gross_score: gross })
     .eq("id", roundScoreId);
+
+  // ── Bitácora ────────────────────────────────────────────────────────
+  if (auditAction) {
+    try {
+      const payload = {
+        round_id: roundId,
+        entry_id: entryId,
+        hole_no: hole,
+        action: auditAction,
+        old_strokes: prevStrokes,
+        new_strokes: auditAction === "delete" ? null : newStrokesForAudit,
+        old_picked_up: prevPickedUp,
+        new_picked_up:
+          auditAction === "delete" ? false : newPickedUpForAudit,
+        old_pending_witness: prevPending,
+        new_pending_witness: auditAction === "delete" ? false : pendingWitness,
+        actor_role: actorRole,
+        actor_entry_id: actor?.entryId ?? null,
+        actor_caddie_id: actor?.caddieId ?? null,
+        actor_user_id: actor?.userId ?? null,
+        actor_label: actor?.label ?? null,
+        source: actor?.source ?? null,
+      };
+      // No bloqueamos la respuesta si la bitácora falla (p. ej. migración pendiente
+      // en un entorno viejo). Solo loggeamos.
+      const { error: auditErr } = await admin
+        .from("hole_score_audit")
+        .insert(payload);
+      if (auditErr) {
+        console.warn("[hole_score_audit] no se pudo escribir bitácora:", auditErr.message);
+      }
+    } catch (e) {
+      console.warn("[hole_score_audit] error inesperado:", e);
+    }
+  }
 
   return {
     ok: true,

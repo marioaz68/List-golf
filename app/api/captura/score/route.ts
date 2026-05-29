@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
 import { saveGroupHoleScore } from "@/lib/captura/saveGroupHoleScore";
+import { resolveScoreActor } from "@/lib/captura/resolveActor";
 import type { HoleNumber } from "@/lib/captura/types";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +77,28 @@ export async function POST(req: Request) {
 
   try {
     const admin = createAdminClient();
+
+    // Resolver actor para bitácora. No bloqueamos si falla.
+    let actor: Awaited<ReturnType<typeof resolveScoreActor>> | null = null;
+    try {
+      const referer = req.headers.get("referer");
+      let sessionUserId: string | null = null;
+      try {
+        const supa = await createClient();
+        const { data } = await supa.auth.getUser();
+        sessionUserId = data.user?.id ?? null;
+      } catch {
+        // sin sesión (captura pública desde Telegram): ok
+      }
+      actor = await resolveScoreActor(admin, {
+        body: o,
+        referer,
+        sessionUserId,
+      });
+    } catch {
+      actor = null;
+    }
+
     const result = await saveGroupHoleScore(admin, {
       groupId,
       entryId,
@@ -83,6 +107,7 @@ export async function POST(req: Request) {
       pickedUp,
       mode,
       actorRole,
+      actor,
     });
     if (!result.ok) {
       return NextResponse.json(result, { status: 400 });

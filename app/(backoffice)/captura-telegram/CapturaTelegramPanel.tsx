@@ -7,6 +7,7 @@ import {
   sendCaptureLinkToAllGroupsAction,
   type SendResult,
 } from "./actions";
+import AuditCaptureModal from "./AuditCaptureModal";
 
 export type MemberRow = {
   id: string;
@@ -79,6 +80,7 @@ export default function CapturaTelegramPanel(props: {
   const tt = t.capturaTelegram;
   const [copied, setCopied] = useState<string | null>(null);
   const [qrGroupId, setQrGroupId] = useState<string | null>(null);
+  const [auditGroupId, setAuditGroupId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [bulkFeedback, setBulkFeedback] = useState<{
     kind: "ok" | "warn" | "error";
@@ -291,6 +293,14 @@ export default function CapturaTelegramPanel(props: {
                       >
                         {busyGroupId === g.id ? tt.btnSending : tt.btnSend}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuditGroupId(g.id)}
+                        title="Ver auditoría de captura del grupo"
+                        className="rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                      >
+                        🔍 Auditoría
+                      </button>
                     </div>
                     {fb ? (
                       <div
@@ -365,6 +375,16 @@ export default function CapturaTelegramPanel(props: {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {auditGroupId ? (
+        <AuditCaptureModal
+          groupId={auditGroupId}
+          groupNo={
+            props.groups.find((gg) => gg.id === auditGroupId)?.groupNo ?? null
+          }
+          onClose={() => setAuditGroupId(null)}
+        />
       ) : null}
     </div>
   );
