@@ -202,14 +202,17 @@ export async function listDecidedPendingMatches(
     // Buscar match real correspondiente (puede no existir si el bracket
     // aún no se publicó). En ese caso lo mostramos como "preview" con
     // matchplayMatchId=null y la UI ofrecerá un CTA para publicar.
+    const calendarRoundNo =
+      roundNoById.get(derivedMatch.round_id) ?? derivedMatch.round_no;
     const realMatch =
       realMatches.length > 0
         ? realMatches.find(
             (m) =>
-              (m.top_pair_id === topPairId &&
+              Number(m.round_no) === calendarRoundNo &&
+              ((m.top_pair_id === topPairId &&
                 m.bottom_pair_id === bottomPairId) ||
-              (m.top_pair_id === bottomPairId &&
-                m.bottom_pair_id === topPairId)
+                (m.top_pair_id === bottomPairId &&
+                  m.bottom_pair_id === topPairId))
           )
         : null;
     if (realMatch) {

@@ -52,6 +52,7 @@ export default function DecidedMatchesPanel({
     { kind: "ok" | "error"; text: string } | null
   >(null);
   const [regeneratingFromPairings, setRegeneratingFromPairings] = useState(false);
+  const [repairingFromR1, setRepairingFromR1] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -174,6 +175,52 @@ export default function DecidedMatchesPanel({
       });
     } finally {
       setRegeneratingFromPairings(false);
+    }
+  }
+
+  async function handleRepairFromR1() {
+    if (repairingFromR1) return;
+    const ok = window.confirm(
+      "¿Reparar el cuadro y cerrar todos los matches de R1?\n\n" +
+        "• Borra el cuadro actual (incluye cruces incorrectos en R3).\n" +
+        "• Lo regenera desde los 7 grupos de R1 del calendario.\n" +
+        "• Cierra automáticamente cada match de R1 ya decidido y avanza ganadores a R2.\n" +
+        "• No crea salidas de R2 hasta que ambas parejas del cruce estén listas.\n\n" +
+        "Usa esto si cerraste matches pero el bracket no avanzó a segunda ronda."
+    );
+    if (!ok) return;
+
+    setRepairingFromR1(true);
+    setPublishFeedback(null);
+    try {
+      const res = await fetch(`/api/matchplay/repair-from-r1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournament_id: tournamentId }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        error?: string;
+        closedCount?: number;
+        errors?: string[];
+      };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      setPublishFeedback({
+        kind: "ok",
+        text: json.message ?? "Cuadro reparado.",
+      });
+      await loadList();
+    } catch (err) {
+      setPublishFeedback({
+        kind: "error",
+        text:
+          err instanceof Error ? err.message : "No se pudo reparar el cuadro.",
+      });
+    } finally {
+      setRepairingFromR1(false);
     }
   }
 
@@ -302,6 +349,45 @@ export default function DecidedMatchesPanel({
           {diagnostics?.reason ??
             "No hay matches matemáticamente decididos sin cerrar. Los matches que terminen automáticamente aparecerán aquí."}
         </p>
+        {diagnostics?.bracketPublished &&
+        diagnostics.alreadyCompleted > 0 &&
+        (!matches || matches.length === 0) ? (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="font-semibold">
+              ¿El cuadro no muestra ganadores en R2?
+            </p>
+            <p className="mt-1">
+              Si los matches aparecen cerrados aquí pero en /matchplay nadie
+              avanzó a segunda ronda (o hay cruces en R3 sin jugar), repara el
+              cuadro desde los grupos R1:
+            </p>
+            <button
+              type="button"
+              onClick={handleRepairFromR1}
+              disabled={
+                repairingFromR1 ||
+                publishingBracket ||
+                regeneratingFromPairings
+              }
+              className="mt-2 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {repairingFromR1
+                ? "Reparando…"
+                : "Reparar cuadro y cerrar R1"}
+            </button>
+            {publishFeedback ? (
+              <p
+                className={
+                  publishFeedback.kind === "ok"
+                    ? "mt-2 rounded-md bg-emerald-100 px-2 py-1 text-[11px] text-emerald-800"
+                    : "mt-2 rounded-md bg-red-100 px-2 py-1 text-[11px] text-red-800"
+                }
+              >
+                {publishFeedback.text}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {diagnostics ? (
           <details className="mt-2 text-[11px] text-slate-500">
             <summary className="cursor-pointer hover:text-slate-700">
@@ -440,16 +526,36 @@ export default function DecidedMatchesPanel({
                 jugaron R1 aparecen como BYE (o cruzadas en rondas tardías),
                 puedes re-armarlo usando los grupos del calendario:
               </p>
-              <button
-                type="button"
-                onClick={handleRegenerateFromPairings}
-                disabled={regeneratingFromPairings}
-                className="rounded-md border border-emerald-400 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {regeneratingFromPairings
-                  ? "Re-armando…"
-                  : "Re-armar bracket según grupos R1"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleRepairFromR1}
+                  disabled={
+                    repairingFromR1 ||
+                    regeneratingFromPairings ||
+                    publishingBracket
+                  }
+                  className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {repairingFromR1
+                    ? "Reparando…"
+                    : "Reparar cuadro y cerrar R1"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegenerateFromPairings}
+                  disabled={
+                    regeneratingFromPairings ||
+                    repairingFromR1 ||
+                    publishingBracket
+                  }
+                  className="rounded-md border border-emerald-400 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {regeneratingFromPairings
+                    ? "Re-armando…"
+                    : "Solo re-armar (sin cerrar)"}
+                </button>
+              </div>
               {publishFeedback ? (
                 <p
                   className={
