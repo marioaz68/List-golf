@@ -51,6 +51,7 @@ export default function DecidedMatchesPanel({
   const [publishFeedback, setPublishFeedback] = useState<
     { kind: "ok" | "error"; text: string } | null
   >(null);
+  const [regeneratingFromPairings, setRegeneratingFromPairings] = useState(false);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -125,6 +126,54 @@ export default function DecidedMatchesPanel({
       });
     } finally {
       setPublishingBracket(false);
+    }
+  }
+
+  async function handleRegenerateFromPairings() {
+    if (regeneratingFromPairings) return;
+    const ok = window.confirm(
+      "¿Re-armar el cuadro usando los grupos del calendario R1?\n\n" +
+        "Esto BORRA el cuadro actual y crea uno nuevo donde cada grupo de R1 (2 parejas) " +
+        "es un match R1 del cuadro. Las parejas activas sin grupo R1 quedan como BYE en R1.\n\n" +
+        "Úsalo cuando el cuadro generado por subasta/HI no refleja los enfrentamientos reales " +
+        "(por ejemplo, parejas que jugaron R1 aparecen como BYE en el bracket)."
+    );
+    if (!ok) return;
+
+    setRegeneratingFromPairings(true);
+    setPublishFeedback(null);
+    try {
+      const res = await fetch(`/api/matchplay/auto-publish-from-pairings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournament_id: tournamentId }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        error?: string;
+        pairedMatchesR1?: number;
+        bracketSize?: number;
+        byeCount?: number;
+      };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
+      }
+      setPublishFeedback({
+        kind: "ok",
+        text: json.message ?? "Cuadro re-armado desde grupos R1.",
+      });
+      await loadList();
+    } catch (err) {
+      setPublishFeedback({
+        kind: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "No se pudo re-armar el cuadro.",
+      });
+    } finally {
+      setRegeneratingFromPairings(false);
     }
   }
 
@@ -337,12 +386,23 @@ export default function DecidedMatchesPanel({
             <button
               type="button"
               onClick={handlePublishBracket}
-              disabled={publishingBracket}
+              disabled={publishingBracket || regeneratingFromPairings}
               className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {publishingBracket
                 ? "Publicando…"
-                : "Generar y publicar bracket ahora"}
+                : "Generar y publicar bracket (auction/HI)"}
+            </button>
+            <button
+              type="button"
+              onClick={handleRegenerateFromPairings}
+              disabled={publishingBracket || regeneratingFromPairings}
+              className="rounded-md border border-amber-500 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              title="Cada grupo R1 del calendario = un match R1 del cuadro"
+            >
+              {regeneratingFromPairings
+                ? "Re-armando…"
+                : "Re-armar según grupos R1"}
             </button>
             <a
               href={`/matchplay?tournament_id=${encodeURIComponent(tournamentId)}`}
@@ -364,11 +424,46 @@ export default function DecidedMatchesPanel({
           ) : null}
         </div>
       ) : (
-        <p className="mt-1 text-xs text-emerald-800/80">
-          Al cerrar un match, el ganador avanza en el cuadro. Si la pareja rival
-          de la siguiente ronda ya jugó, se asigna la nueva salida y se envía un
-          mensaje a jugadores y caddies por Telegram.
-        </p>
+        <div className="mt-1 space-y-2">
+          <p className="text-xs text-emerald-800/80">
+            Al cerrar un match, el ganador avanza en el cuadro. Si la pareja rival
+            de la siguiente ronda ya jugó, se asigna la nueva salida y se envía un
+            mensaje a jugadores y caddies por Telegram.
+          </p>
+          <details className="rounded-md border border-emerald-200 bg-white/60 px-2 py-1 text-[11px] text-emerald-800/80">
+            <summary className="cursor-pointer font-medium hover:text-emerald-900">
+              ¿El cuadro no refleja los enfrentamientos reales?
+            </summary>
+            <div className="mt-2 space-y-2">
+              <p>
+                Si el cuadro fue sembrado por subasta/HI y las parejas que
+                jugaron R1 aparecen como BYE (o cruzadas en rondas tardías),
+                puedes re-armarlo usando los grupos del calendario:
+              </p>
+              <button
+                type="button"
+                onClick={handleRegenerateFromPairings}
+                disabled={regeneratingFromPairings}
+                className="rounded-md border border-emerald-400 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {regeneratingFromPairings
+                  ? "Re-armando…"
+                  : "Re-armar bracket según grupos R1"}
+              </button>
+              {publishFeedback ? (
+                <p
+                  className={
+                    publishFeedback.kind === "ok"
+                      ? "rounded-md bg-emerald-100 px-2 py-1 text-[11px] text-emerald-800"
+                      : "rounded-md bg-red-100 px-2 py-1 text-[11px] text-red-800"
+                  }
+                >
+                  {publishFeedback.text}
+                </p>
+              ) : null}
+            </div>
+          </details>
+        </div>
       )}
 
       <ul className="mt-3 space-y-3">
