@@ -436,25 +436,38 @@ function MatchCard({
   const bottomWin = !!winnerId && bottomTeam?.id === winnerId;
 
   // Si hay hoyos capturados (live scoring real o derivado desde tarjetas),
-  // mostramos los puntos aunque el match esté en `scheduled` (los derivados
-  // siempre vienen así porque aún no hay bracket oficial publicado).
+  // mostramos el diferencial aunque el match esté en `scheduled` (los
+  // derivados siempre vienen así porque aún no hay bracket oficial).
   const hasCapturedHoles = lastHolePlayed > 0;
   const isLive =
     match.status === "in_progress" || (isScheduled && hasCapturedHoles);
-  const showZeroForScheduled =
-    isScheduled && !hasCapturedHoles && !!topTeam && !!bottomTeam;
-  const topPtsDisplay: number | null =
-    isLive || isDone || hasCapturedHoles
-      ? topPts
-      : showZeroForScheduled
-        ? 0
-        : null;
-  const bottomPtsDisplay: number | null =
-    isLive || isDone || hasCapturedHoles
-      ? bottomPts
-      : showZeroForScheduled
-        ? 0
-        : null;
+
+  /**
+   * Diferencial en tiempo real estilo match play:
+   *   pareja líder → "X UP", la otra → "X DN", empate → "AS".
+   *
+   * Si todavía no hay hoyos capturados (y el match no está finalizado),
+   * no mostramos badge: se sustituye por "—".
+   */
+  function fmtDiff(n: number): string {
+    return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+  }
+  const showDiffBadge = hasCapturedHoles || isDone;
+  const diffAbs = Math.abs(topPts - bottomPts);
+  const topDiffLabel: string | null = !showDiffBadge
+    ? null
+    : topPts === bottomPts
+      ? "AS"
+      : topPts > bottomPts
+        ? `${fmtDiff(diffAbs)} UP`
+        : `${fmtDiff(diffAbs)} DN`;
+  const bottomDiffLabel: string | null = !showDiffBadge
+    ? null
+    : topPts === bottomPts
+      ? "AS"
+      : bottomPts > topPts
+        ? `${fmtDiff(diffAbs)} UP`
+        : `${fmtDiff(diffAbs)} DN`;
 
   const clickable = !!onOpen && !isBye;
 
@@ -518,7 +531,7 @@ function MatchCard({
 
       <Side
         team={topTeam}
-        pts={topPtsDisplay}
+        diffLabel={topDiffLabel}
         isWinner={topWin}
         isAhead={isLive && topAhead}
       />
@@ -527,7 +540,7 @@ function MatchCard({
       </div>
       <Side
         team={bottomTeam}
-        pts={bottomPtsDisplay}
+        diffLabel={bottomDiffLabel}
         isWinner={bottomWin}
         isAhead={isLive && bottomAhead}
       />
@@ -549,12 +562,16 @@ function MatchCard({
 
 function Side({
   team,
-  pts,
+  diffLabel,
   isWinner,
   isAhead,
 }: {
   team: MatchPlayTeamRow | null;
-  pts: number | null;
+  /**
+   * Diferencial match play formateado ("5 UP", "5 DN", "AS"). `null` si
+   * todavía no hay hoyos capturados.
+   */
+  diffLabel: string | null;
   isWinner: boolean;
   isAhead: boolean;
 }) {
@@ -610,17 +627,26 @@ function Side({
           <div className="text-[12px] italic text-slate-500">Por definir</div>
         )}
       </div>
-      {pts !== null ? (
+      {diffLabel !== null ? (
         <span
-          className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-[14px] font-extrabold ${
+          className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-[12px] font-extrabold tracking-tight ${
             isWinner
               ? "bg-emerald-500/30 text-emerald-100"
               : isAhead
                 ? "bg-cyan-500/30 text-cyan-100"
-                : "bg-white/10 text-slate-200"
+                : diffLabel === "AS"
+                  ? "bg-amber-500/20 text-amber-200"
+                  : "bg-white/10 text-slate-300"
           }`}
+          title={
+            diffLabel === "AS"
+              ? "All Square (empate acumulado)"
+              : diffLabel.endsWith("UP")
+                ? "Va arriba en el match (puntos acumulados)"
+                : "Va abajo en el match (puntos acumulados)"
+          }
         >
-          {Number.isInteger(pts) ? pts : pts.toFixed(1).replace(/\.0$/, "")}
+          {diffLabel}
         </span>
       ) : null}
     </div>
