@@ -17,6 +17,7 @@ type RawEntry = {
   course_handicap: number | null;
   playing_handicap: number | null;
   playing_handicap_override: number | null;
+  tee_set_id_override: string | null;
   status: string | null;
   player: {
     first_name: string | null;
@@ -72,7 +73,7 @@ export default async function HandicapsByCategoryReport({
     supabase
       .from("tournament_entries")
       .select(
-        "id, player_id, category_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, status, player:players(first_name, last_name, gender, birth_year, handicap_index, handicap_torneo, ghin_number)"
+        "id, player_id, category_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, tee_set_id_override, status, player:players(first_name, last_name, gender, birth_year, handicap_index, handicap_torneo, ghin_number)"
       )
       .eq("tournament_id", tournamentId)
       .neq("status", "cancelled"),
@@ -133,7 +134,19 @@ export default async function HandicapsByCategoryReport({
     const isOverride = e.playing_handicap_override != null;
 
     let tee: Row["tee"] = null;
-    if (e.category_id) {
+
+    // Si hay override manual de salida, úsala (no afecta HC/PH del reporte).
+    if (e.tee_set_id_override) {
+      const ts = teeSetById.get(e.tee_set_id_override);
+      if (ts) {
+        tee = {
+          code: ts.code,
+          name: ts.name,
+          color: ts.color,
+        };
+      }
+    }
+    if (!tee && e.category_id) {
       const player: Player = {
         id: e.player_id,
         gender: (e.player.gender ?? "X").toString().toUpperCase() as

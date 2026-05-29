@@ -26,6 +26,7 @@ import { queryInChunks } from "@/lib/supabase/queryInChunks";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
 import { resolveTournamentEntryHandicap } from "@/lib/handicap/resolveTournamentEntryHandicap";
+import { assignTeeSetWithMeta } from "@/lib/tee-assignment";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -136,6 +137,7 @@ type EntryRowBase = {
   playing_handicap?: number | null;
   playing_handicap_override?: number | null;
   playing_handicap_override_reason?: string | null;
+  tee_set_id_override?: string | null;
   status: string | null;
   flagged_for_committee?: boolean | null;
   flagged_committee_reason?: string | null;
@@ -155,6 +157,8 @@ type EntryRow = {
   playing_handicap?: number | null;
   playing_handicap_override?: number | null;
   playing_handicap_override_reason?: string | null;
+  tee_set_id_override?: string | null;
+  tee_set_id_assigned?: string | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -644,6 +648,12 @@ export default async function EntriesPage({
   }));
 
   let entries: EntryRow[] = [];
+  let tournamentTeeSets: Array<{
+    id: string;
+    code: string | null;
+    name: string | null;
+    color: string | null;
+  }> = [];
 
   if (selectedTournamentId && !pageLoadError) {
     try {
@@ -783,6 +793,8 @@ export default async function EntriesPage({
         playing_handicap_override: e.playing_handicap_override ?? null,
         playing_handicap_override_reason:
           e.playing_handicap_override_reason ?? null,
+        tee_set_id_override: e.tee_set_id_override ?? null,
+        tee_set_id_assigned: null,
         status: e.status,
         flagged_for_committee: Boolean(e.flagged_for_committee),
         flagged_committee_reason: e.flagged_committee_reason ?? null,
@@ -834,6 +846,17 @@ export default async function EntriesPage({
         admin,
         selectedTournamentId
       );
+      tournamentTeeSets = handicapCtx.tournamentTeeSets.map((t) => ({
+        id: t.id,
+        code: t.code ?? null,
+        name: t.name ?? null,
+        color: t.color ?? null,
+      }));
+      const teeSetsForAssign = handicapCtx.tournamentTeeSets.map((t) => ({
+        id: t.id,
+        code: t.code ?? "",
+        name: t.name ?? t.code ?? "",
+      }));
       entries = entries.map((e) => {
         const categoryId = e.categories?.id ?? null;
         const allowanceFromRule =
@@ -845,8 +868,31 @@ export default async function EntriesPage({
           handicapCtx.matchplayFallback?.allowance_pct ??
           null;
 
+        // Calcular salida que ASIGNARÍA la regla (independiente del override).
+        let tee_set_id_assigned: string | null = null;
+        if (categoryId && e.players) {
+          const gender = (e.players.gender ?? "X") as "M" | "F" | "X";
+          const hi = Number(
+            e.handicap_index ?? e.players.handicap_index ?? 0
+          );
+          if (Number.isFinite(hi)) {
+            const assigned = assignTeeSetWithMeta(
+              {
+                id: e.player_id,
+                gender,
+                handicap_index: hi,
+                birth_year: e.players.birth_year ?? null,
+                category_id: categoryId,
+              },
+              handicapCtx.categoryTeeRules,
+              teeSetsForAssign
+            );
+            tee_set_id_assigned = assigned?.tee.id ?? null;
+          }
+        }
+
         if (e.course_handicap != null && e.playing_handicap != null) {
-          return { ...e, allowance_pct_applied };
+          return { ...e, allowance_pct_applied, tee_set_id_assigned };
         }
         const calc = resolveTournamentEntryHandicap(
           {
@@ -866,7 +912,7 @@ export default async function EntriesPage({
           },
           handicapCtx
         );
-        if (!calc) return { ...e, allowance_pct_applied };
+        if (!calc) return { ...e, allowance_pct_applied, tee_set_id_assigned };
         return {
           ...e,
           course_handicap: e.course_handicap ?? calc.course_handicap,
@@ -875,6 +921,7 @@ export default async function EntriesPage({
               ? e.playing_handicap
               : e.playing_handicap ?? calc.playing_handicap,
           allowance_pct_applied,
+          tee_set_id_assigned,
         };
       });
     }
@@ -1127,6 +1174,7 @@ export default async function EntriesPage({
               categories={categories}
               matchPlayPairs={matchPlayPairsEnabled}
               partnerByEntryId={Object.fromEntries(partnerByEntryId)}
+              teeSets={tournamentTeeSets}
             />
           ) : null}
 
