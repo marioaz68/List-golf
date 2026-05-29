@@ -3,6 +3,7 @@ import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { loadMatchPlayTeamsData } from "./loadMatchPlayTeamsData";
 import { effectiveEntryHi } from "./entryHi";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { loadCourseLayoutForTournament } from "./loadCourseLayout";
 import { effectivePhForMatchEntry } from "@/lib/matchplay/resolveEntryPhForMatch";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import type { MatchPlayEntryRow } from "./teamTypes";
@@ -60,21 +61,6 @@ export type MatchForScoring = {
   stroke_index_by_hole: StrokeIndexByHole;
   holes: MatchHoleScoreRow[];
 };
-
-function buildStrokeIndex(
-  rows: Array<{ hole_number: number; handicap_index: number | null }>
-): StrokeIndexByHole {
-  const map: StrokeIndexByHole = new Map();
-  for (const row of rows) {
-    if (
-      row.handicap_index != null &&
-      Number.isFinite(Number(row.handicap_index))
-    ) {
-      map.set(row.hole_number, Number(row.handicap_index));
-    }
-  }
-  return map;
-}
 
 export async function loadMatchForScoring(
   matchId: string
@@ -149,11 +135,10 @@ export async function loadMatchForScoring(
     entryToScoringPlayer(bottom?.player_b ?? null, "Jugador B"),
   ];
 
-  const { data: tholes } = await supabase
-    .from("tournament_holes")
-    .select("hole_number, handicap_index")
-    .eq("tournament_id", match.tournament_id)
-    .order("hole_number", { ascending: true });
+  const { strokeIndexByHole } = await loadCourseLayoutForTournament(
+    supabase,
+    match.tournament_id
+  );
 
   const { data: holeRows } = await supabase
     .from("matchplay_hole_results")
@@ -232,12 +217,7 @@ export async function loadMatchForScoring(
     pair_format,
     allowance_pct,
     holes_in_match: holesInMatch,
-    stroke_index_by_hole: buildStrokeIndex(
-      (tholes ?? []).map((h) => ({
-        hole_number: h.hole_number,
-        handicap_index: h.handicap_index,
-      }))
-    ),
+    stroke_index_by_hole: strokeIndexByHole,
     holes,
   };
 }

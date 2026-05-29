@@ -6,9 +6,9 @@ import {
   type LowHighPlayerGross,
 } from "./scoring/lowHigh";
 import { formatPlayerName } from "./entryHi";
-import type { StrokeIndexByHole } from "@/lib/leaderboard/handicapStrokes";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { loadCourseLayoutForTournament } from "./loadCourseLayout";
 import {
   effectivePhForMatchEntry,
   hiForMatchEntry,
@@ -156,26 +156,10 @@ export async function loadDerivedMatchDetail(
 
   const holes_in_match = rules?.holes_per_match === 9 ? 9 : 18;
 
-  const { data: tholes } = await admin
-    .from("tournament_holes")
-    .select("hole_number, handicap_index, par")
-    .eq("tournament_id", tournamentId)
-    .order("hole_number", { ascending: true });
-
-  const strokeIndexByHole: StrokeIndexByHole = new Map();
-  const parByHole = new Map<number, number>();
-  for (const row of (tholes ?? []) as Array<{
-    hole_number: number;
-    handicap_index: number | null;
-    par: number | null;
-  }>) {
-    if (row.handicap_index != null && Number.isFinite(Number(row.handicap_index))) {
-      strokeIndexByHole.set(row.hole_number, Number(row.handicap_index));
-    }
-    if (row.par != null && Number.isFinite(Number(row.par))) {
-      parByHole.set(row.hole_number, Number(row.par));
-    }
-  }
+  const { strokeIndexByHole, parByHole } = await loadCourseLayoutForTournament(
+    admin,
+    tournamentId
+  );
 
   const entryIds = [
     match.top_a_entry_id,

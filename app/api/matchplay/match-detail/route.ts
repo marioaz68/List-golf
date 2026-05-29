@@ -8,6 +8,7 @@ import {
   isLowHighMatchDecidedAt,
   formatLowHighDecisionResult,
 } from "@/lib/matchplay/scoring/lowHigh";
+import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -100,19 +101,10 @@ export async function GET(req: Request) {
     );
   }
 
-  const { data: parRows } = await admin
-    .from("tournament_holes")
-    .select("hole_number, par")
-    .eq("tournament_id", match.tournament_id);
-  const parByHole = new Map<number, number>();
-  for (const r of (parRows ?? []) as Array<{
-    hole_number: number;
-    par: number | null;
-  }>) {
-    if (r.par != null && Number.isFinite(Number(r.par))) {
-      parByHole.set(r.hole_number, Number(r.par));
-    }
-  }
+  const { parByHole } = await loadCourseLayoutForTournament(
+    admin,
+    match.tournament_id
+  );
 
   let topAcc = 0;
   let bottomAcc = 0;
