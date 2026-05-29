@@ -749,7 +749,26 @@ export default function PlayerEditModal({
             </label>
 
             <label style={labelStyle}>
-              Handicap Index (HI)
+              <span>
+                Handicap Index (HI){" "}
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginLeft: 4,
+                    padding: "1px 6px",
+                    borderRadius: 999,
+                    background: "#dbeafe",
+                    color: "#1d4ed8",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                    textTransform: "uppercase",
+                  }}
+                  title="El HI define en qué categoría queda inscrito el jugador (rango de la categoría)."
+                >
+                  define categoría
+                </span>
+              </span>
               <input
                 type="search"
                 enterKeyHint="done"
@@ -760,15 +779,35 @@ export default function PlayerEditModal({
                 placeholder="Ej. 12.4 o -1.2"
                 inputMode="decimal"
                 style={fieldStyle}
-                title="Único campo editable. CH y PH se recalculan al guardar."
+                title="HI: handicap WHS del jugador. Define la categoría del torneo. Es el único campo editable; CH y PH se recalculan al guardar."
               />
               <span style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}>
-                Único editable. CH y PH se recalculan al guardar.
+                Editable. Determina la categoría del jugador. CH y PH se
+                recalculan al guardar.
               </span>
             </label>
 
             <label style={labelStyle}>
-              Course Handicap (HC) · informativo
+              <span>
+                Course Handicap (HC){" "}
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginLeft: 4,
+                    padding: "1px 6px",
+                    borderRadius: 999,
+                    background: "#f3f4f6",
+                    color: "#374151",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                    textTransform: "uppercase",
+                  }}
+                  title="Handicap del campo según la salida. Es informativo: el torneo se juega con PH."
+                >
+                  referencia campo
+                </span>
+              </span>
               <input
                 type="text"
                 value={
@@ -787,12 +826,31 @@ export default function PlayerEditModal({
                   textAlign: "right",
                   cursor: "not-allowed",
                 }}
-                title="HI × Slope/113 + (CR − Par) con la salida que la regla del torneo asigna al jugador."
+                title="HC = HI × Slope/113 + (CR − Par) con la salida asignada. Sólo referencia; el torneo se juega con PH."
               />
             </label>
 
             <label style={labelStyle}>
-              Playing Handicap (PH) · informativo
+              <span>
+                Playing Handicap (PH){" "}
+                <span
+                  style={{
+                    display: "inline-block",
+                    marginLeft: 4,
+                    padding: "1px 6px",
+                    borderRadius: 999,
+                    background: "#d1fae5",
+                    color: "#047857",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: "0.02em",
+                    textTransform: "uppercase",
+                  }}
+                  title="Handicap con el que el jugador compite durante todo el torneo (si el torneo es con handicap)."
+                >
+                  handicap del torneo
+                </span>
+              </span>
               {(() => {
                 const phStr =
                   entryPlayingHandicap != null
@@ -805,10 +863,10 @@ export default function PlayerEditModal({
                     ? `  · ${entryAllowancePct}%`
                     : "";
                 const tooltip = isOverride
-                  ? "PH con override manual (desde panel match play)"
+                  ? "PH con override manual (desde panel match play). Es el handicap que se usa durante el torneo."
                   : entryAllowancePct != null
-                    ? `PH del torneo: HC × ${entryAllowancePct}% (regla de competencia).`
-                    : "PH del torneo: HC × % de reglas de competencia.";
+                    ? `PH del torneo: HC × ${entryAllowancePct}% (regla de competencia). Es el handicap que se usa durante todo el torneo.`
+                    : "PH del torneo: HC × % de reglas de competencia. Es el handicap que se usa durante el torneo.";
                 return (
                   <input
                     type="text"
@@ -830,14 +888,13 @@ export default function PlayerEditModal({
                   />
                 );
               })()}
-              {entryAllowancePct != null &&
-              entryPlayingHandicapOverride == null ? (
-                <span
-                  style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}
-                >
-                  Regla aplicada: {entryAllowancePct}% sobre HC.
-                </span>
-              ) : null}
+              <span style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}>
+                Handicap con el que el jugador compite todo el torneo.
+                {entryAllowancePct != null &&
+                entryPlayingHandicapOverride == null ? (
+                  <> Regla aplicada: {entryAllowancePct}% sobre HC.</>
+                ) : null}
+              </span>
             </label>
 
             <label style={labelStyle}>

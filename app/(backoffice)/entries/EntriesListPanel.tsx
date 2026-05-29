@@ -861,19 +861,19 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">{te.thClub}</th>
               <th
                 className="px-1 py-1 text-right"
-                title="Handicap Index (editable). Al guardarlo, CH y PH se recalculan automáticamente para este torneo."
+                title="Handicap Index (HI, editable). DEFINE LA CATEGORÍA en la que queda inscrito el jugador. Al guardarlo, CH y PH se recalculan automáticamente."
               >
                 HI ✎
               </th>
               <th
                 className="px-1 py-1 text-right"
-                title="Course Handicap (informativo): HI × Slope/113 + (CR − Par) usando la salida que la regla salida/categoría asigna en este torneo."
+                title="Course Handicap (HC, referencia del campo): HI × Slope/113 + (CR − Par) usando la salida que la regla salida/categoría asigna en este torneo."
               >
                 HC
               </th>
               <th
                 className="px-1 py-1 text-right"
-                title="Playing Handicap del torneo (regla aplicada): HC × % de reglas de competencia."
+                title="Playing Handicap (PH) — HANDICAP DEL TORNEO. Es el handicap con el que el jugador compite todo el torneo (si es con handicap). PH = HC × % de la regla de competencia."
               >
                 PH
               </th>
