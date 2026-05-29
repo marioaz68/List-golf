@@ -28,6 +28,12 @@ export type GroupMatchPlayStatus = {
   /** Etiqueta corta de las parejas (top / bottom) para leyendas. */
   topLabel?: string | null;
   bottomLabel?: string | null;
+  /** `matchplay_matches.id` (cuadro oficial) si las parejas del grupo
+   *  coinciden con un match real publicado. null si el torneo todavía
+   *  no tiene cuadro publicado o el match no se encuentra. */
+  matchplayMatchId?: string | null;
+  /** True si el match ya está marcado como `completed` en DB. */
+  matchplayCompleted?: boolean;
 };
 
 function formatPts(n: number): string {
@@ -118,6 +124,37 @@ export async function loadGroupMatchPlayStatus(
     return null;
   }
 
+  // Buscar match real en matchplay_matches para poder cerrarlo/avanzarlo.
+  let matchplayMatchId: string | null = null;
+  let matchplayCompleted = false;
+  if (match.top_pair_id && match.bottom_pair_id) {
+    const { data: bracketRow } = await admin
+      .from("matchplay_brackets")
+      .select("id")
+      .eq("tournament_id", tournamentId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (bracketRow?.id) {
+      const { data: candidates } = await admin
+        .from("matchplay_matches")
+        .select("id, top_pair_id, bottom_pair_id, status, round_no")
+        .eq("bracket_id", bracketRow.id)
+        .eq("round_no", match.round_no);
+      const real = (candidates ?? []).find(
+        (m) =>
+          (m.top_pair_id === match.top_pair_id &&
+            m.bottom_pair_id === match.bottom_pair_id) ||
+          (m.top_pair_id === match.bottom_pair_id &&
+            m.bottom_pair_id === match.top_pair_id)
+      );
+      if (real) {
+        matchplayMatchId = String(real.id);
+        matchplayCompleted = real.status === "completed";
+      }
+    }
+  }
+
   const { decisions, summaries, holes } = await deriveMatchHolesFromStrokes(
     admin,
     tournamentId,
@@ -173,6 +210,8 @@ export async function loadGroupMatchPlayStatus(
       progression,
       topLabel,
       bottomLabel,
+      matchplayMatchId,
+      matchplayCompleted,
     };
   }
 
@@ -190,6 +229,8 @@ export async function loadGroupMatchPlayStatus(
       progression,
       topLabel,
       bottomLabel,
+      matchplayMatchId,
+      matchplayCompleted,
     };
   }
 
@@ -203,6 +244,8 @@ export async function loadGroupMatchPlayStatus(
       progression,
       topLabel,
       bottomLabel,
+      matchplayMatchId,
+      matchplayCompleted,
     };
   }
 
