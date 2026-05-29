@@ -549,7 +549,14 @@ export default async function CaddiesPage({
     ? roundsAll.filter((r) => r.tournament_id === selectedTournamentId)
     : roundsAll;
 
-  const selectedRoundId = rounds.some((r) => r.id === roundId) ? roundId : "";
+  // Si el usuario entró por shortcut desde Inscritos (sólo viene
+  // tournament_id) escogemos la primera ronda del torneo automáticamente
+  // para que la tabla de asignación aparezca de una vez.
+  const selectedRoundId = rounds.some((r) => r.id === roundId)
+    ? roundId
+    : selectedTournamentId && !roundId && rounds.length > 0
+      ? rounds[0]!.id
+      : "";
 
   const assignments = assignmentsAll.filter((a) => {
     if (selectedTournamentId && a.tournament_id !== selectedTournamentId) return false;
@@ -643,6 +650,19 @@ export default async function CaddiesPage({
 
   return (
     <div style={pageWrap}>
+      {/* Resalta la fila apuntada por el ancla (#assignment-<entryId>) por
+          unos segundos cuando se navega desde Inscritos. */}
+      <style>{`
+        tr[id^="assignment-"]:target {
+          background-color: #fef3c7;
+          animation: caddie-row-highlight 2.4s ease-out 1;
+        }
+        @keyframes caddie-row-highlight {
+          0%   { background-color: #fde68a; }
+          70%  { background-color: #fef3c7; }
+          100% { background-color: transparent; }
+        }
+      `}</style>
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
@@ -804,7 +824,11 @@ export default async function CaddiesPage({
                     });
 
                   return (
-                    <tr key={`${row.entry.id}_${row.group.id}`}>
+                    <tr
+                      key={`${row.entry.id}_${row.group.id}`}
+                      id={`assignment-${row.entry.id}`}
+                      style={{ scrollMarginTop: 80 }}
+                    >
                       <td style={tdStyle}>{displayEntryPlayerName(row.entry)}</td>
                       <td style={tdStyle}>{row.entry.player_number ?? "—"}</td>
                       <td style={tdStyle}>{displayEntryCategory(row.entry)}</td>
