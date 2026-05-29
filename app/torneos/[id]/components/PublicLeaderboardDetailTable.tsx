@@ -14,7 +14,7 @@ import {
   usesGrossHoleByHoleDetail,
   type LeaderboardViewOverride,
 } from "@/lib/leaderboard/leaderboardViewOverride";
-import { formatPlayingHandicapSummary } from "@/lib/leaderboard/perHoleCompetition";
+import { entryHandicapCardFromRow } from "@/lib/leaderboard/perHoleCompetition";
 import PublicLeaderboardHoleAuditRows, {
   showHoleAuditForRule,
 } from "./PublicLeaderboardHoleAuditRows";
@@ -408,9 +408,7 @@ export default function PublicLeaderboardDetailTable({
       ? getPriorGrossRoundRowsForNetView(allWithScores, maxRoundNo)
       : [];
 
-  const handicapSummary = usesGrossDetail
-    ? null
-    : formatPlayingHandicapSummary(handicapIndex, rule.handicap_percentage);
+  const handicapSummary = entryHandicapCardFromRow(row, handicapIndex);
 
   const baseRound =
     displayDetails.find((detail) =>
@@ -459,23 +457,21 @@ export default function PublicLeaderboardDetailTable({
 
   return (
     <div className="mt-1.5 inline-block w-max min-w-0 max-w-full rounded-xl border border-white/10 bg-[#08111f] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      {!usesGrossDetail ? (
-        <div className="flex min-w-0 items-center gap-1.5 border-b border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] font-semibold text-slate-300 sm:text-[10px]">
-          <ClubLogoThumb
-            clubId={row.club_id}
-            size={20}
-            title={row.club_label ?? undefined}
-          />
-          <div className="min-w-0 truncate">
-            {row.player_code}
-            {row.club_label ? ` · ${row.club_label}` : ""}
-            {row.category_code ? ` · ${row.category_code}` : ""}
-            {` · ${scoringFormatLabel(rule, viewOverride)}`}
-            {handicapSummary ? ` · ${handicapSummary}` : ""}
-            {row.is_disqualified ? ` · DQ` : ""}
-          </div>
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] font-semibold text-slate-300 sm:text-[10px]">
+        <ClubLogoThumb
+          clubId={row.club_id}
+          size={20}
+          title={row.club_label ?? undefined}
+        />
+        <div className="min-w-0 truncate">
+          {row.player_code}
+          {row.club_label ? ` · ${row.club_label}` : ""}
+          {row.category_code ? ` · ${row.category_code}` : ""}
+          {` · ${scoringFormatLabel(rule, viewOverride)}`}
+          {handicapSummary ? ` · ${handicapSummary}` : ""}
+          {row.is_disqualified ? ` · DQ` : ""}
         </div>
-      ) : null}
+      </div>
 
       <table
         className={`w-max min-w-full ${tableMinW} border-separate border-spacing-0 text-[9px] text-white sm:text-[10px]`}

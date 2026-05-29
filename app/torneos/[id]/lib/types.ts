@@ -167,6 +167,13 @@ export type LeaderboardRow = {
   category_code: string | null;
   entry_status: string | null;
   is_disqualified: boolean;
+  /** Handicap Index del jugador en este torneo (variable). */
+  handicap_index: number | null;
+  /** Course Handicap fijo informativo (HI × Slope/113 + (CR − Par)). */
+  course_handicap: number | null;
+  /** Playing Handicap fijo informativo (CH × % allowance) o override manual. */
+  playing_handicap: number | null;
+  playing_handicap_override?: number | null;
   total_to_par: number | null;
   selected_round_to_par: number | null;
   total_gross: number | null;

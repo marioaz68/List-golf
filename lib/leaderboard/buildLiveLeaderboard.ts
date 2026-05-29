@@ -355,6 +355,10 @@ export function buildLiveLeaderboard({
       category_code: entry.category?.code ?? null,
       entry_status: entry.status ?? null,
       is_disqualified: rowIsDQ,
+      handicap_index: entry.handicap_index ?? null,
+      course_handicap: entry.course_handicap ?? null,
+      playing_handicap: entry.playing_handicap ?? null,
+      playing_handicap_override: entry.playing_handicap_override ?? null,
       total_to_par: totalToParOrNull,
       selected_round_to_par: selectedRoundDetail?.is_dq
         ? null

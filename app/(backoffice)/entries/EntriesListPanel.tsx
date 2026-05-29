@@ -65,6 +65,10 @@ type Entry = {
   player_id: string;
   player_number: number | null;
   handicap_index: number | null;
+  course_handicap?: number | null;
+  playing_handicap?: number | null;
+  playing_handicap_override?: number | null;
+  playing_handicap_override_reason?: string | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -766,8 +770,39 @@ ${res.witness_url}`;
                     ) : null}
                   </p>
                   <p className="mt-0.5 truncate text-[10px] text-gray-600">
-                    {e.players?.club_label ?? "—"} · {te.thHcp}{" "}
-                    {e.handicap_index ?? "—"} · {categoryLabel}
+                    {e.players?.club_label ?? "—"} · HI{" "}
+                    <span className="font-mono">{e.handicap_index ?? "—"}</span>
+                    {e.course_handicap != null ? (
+                      <>
+                        {" "}
+                        · HC{" "}
+                        <span className="font-mono text-slate-700">
+                          {Math.round(Number(e.course_handicap))}
+                        </span>
+                      </>
+                    ) : null}
+                    {e.playing_handicap != null ? (
+                      <>
+                        {" "}
+                        · PH{" "}
+                        <span
+                          className={`font-mono font-semibold ${
+                            e.playing_handicap_override != null
+                              ? "text-amber-700"
+                              : "text-emerald-700"
+                          }`}
+                        >
+                          {Math.round(Number(e.playing_handicap))}
+                        </span>
+                        {e.playing_handicap_override != null ? (
+                          <span className="ml-0.5 text-[8px] uppercase text-amber-700">
+                            ovr
+                          </span>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {" · "}
+                    {categoryLabel}
                   </p>
                   {matchPlayPairs ? (
                     <p className="mt-0.5 truncate text-[10px] text-emerald-700">
@@ -812,13 +847,30 @@ ${res.witness_url}`;
           border: "1px solid rgb(209 213 219)",
         }}
       >
-        <table className="min-w-[1320px] w-max whitespace-nowrap text-[11px]">
+        <table className="min-w-[1400px] w-max whitespace-nowrap text-[11px]">
           <thead className={twStickyTheadGray50}>
             <tr>
               <th className="px-1 py-1 text-left">{te.thNumber}</th>
               <th className="px-1 py-1 text-left">{te.thPlayer}</th>
               <th className="px-1 py-1 text-left">{te.thClub}</th>
-              <th className="px-1 py-1 text-left">{te.thHcp}</th>
+              <th
+                className="px-1 py-1 text-right"
+                title="Handicap Index (variable según WHS)"
+              >
+                HI
+              </th>
+              <th
+                className="px-1 py-1 text-right"
+                title="Course Handicap (fijo informativo: HI × Slope/113 + (CR − Par))"
+              >
+                HC
+              </th>
+              <th
+                className="px-1 py-1 text-right"
+                title="Playing Handicap (fijo informativo: HC × % allowance)"
+              >
+                PH
+              </th>
               <th className="px-1 py-1 text-left">{te.thCat}</th>
               {matchPlayPairs ? (
                 <th className="px-1 py-1 text-left">Pareja</th>
@@ -860,7 +912,44 @@ ${res.witness_url}`;
 
                   <td className="px-1 py-1">{e.players?.club_label ?? "-"}</td>
 
-                  <td className="px-1 py-1">{e.handicap_index ?? "-"}</td>
+                  <td className="px-1 py-1 text-right tabular-nums font-mono">
+                    {e.handicap_index ?? "-"}
+                  </td>
+
+                  <td
+                    className="px-1 py-1 text-right tabular-nums font-mono text-slate-700"
+                    title="Course Handicap (fijo, calculado al guardar reglas WHS del torneo)"
+                  >
+                    {e.course_handicap != null
+                      ? Math.round(Number(e.course_handicap))
+                      : "—"}
+                  </td>
+
+                  <td
+                    className={`px-1 py-1 text-right tabular-nums font-mono font-semibold ${
+                      e.playing_handicap_override != null
+                        ? "text-amber-700"
+                        : "text-emerald-700"
+                    }`}
+                    title={
+                      e.playing_handicap_override != null
+                        ? `Playing Handicap (override manual${
+                            e.playing_handicap_override_reason
+                              ? `: ${e.playing_handicap_override_reason}`
+                              : ""
+                          })`
+                        : "Playing Handicap (fijo, HC × % allowance del torneo)"
+                    }
+                  >
+                    {e.playing_handicap != null
+                      ? Math.round(Number(e.playing_handicap))
+                      : "—"}
+                    {e.playing_handicap_override != null ? (
+                      <span className="ml-0.5 text-[8px] uppercase text-amber-700">
+                        ovr
+                      </span>
+                    ) : null}
+                  </td>
 
                   <td className="px-1 py-1">
                     <span className="inline-flex h-6 max-w-[190px] items-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium text-gray-800">
@@ -916,7 +1005,10 @@ ${res.witness_url}`;
 
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={matchPlayPairs ? 9 : 8} className="p-2 text-gray-600">
+                <td
+                  colSpan={matchPlayPairs ? 11 : 10}
+                  className="p-2 text-gray-600"
+                >
                   {te.noResults}
                 </td>
               </tr>
