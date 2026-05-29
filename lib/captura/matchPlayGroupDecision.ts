@@ -27,12 +27,13 @@ function formatDecisionLabel(decision: DerivedMatchDecision): string {
     return `Desempate · decidido en H${decision.playoff_hole}`;
   }
   const diffAbs = Math.abs(decision.top_total - decision.bottom_total);
-  const holesLeft = Math.max(0, 18 - decision.decided_at_hole);
+  // Cada hoyo otorga máximo 2 puntos en Bola Baja + Bola Alta.
+  const pointsLeft = Math.max(0, 18 - decision.decided_at_hole) * 2;
   const lead = Number.isInteger(diffAbs)
     ? String(diffAbs)
     : diffAbs.toFixed(1).replace(/\.0$/, "");
-  if (holesLeft > 0) {
-    return `${lead}/${holesLeft} · decidido en H${decision.decided_at_hole}`;
+  if (pointsLeft > 0) {
+    return `${lead}/${pointsLeft} · decidido en H${decision.decided_at_hole}`;
   }
   return `Decidido en H${decision.decided_at_hole}`;
 }

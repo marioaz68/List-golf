@@ -162,13 +162,19 @@ export default async function PublicMatchesLivePage(props: {
             const lo = Math.min(dec.top_total, dec.bottom_total);
             resultText = `${fmt(hi)}–${fmt(lo)} · Desempate H${dec.playoff_hole}`;
           } else {
-            const remaining = Math.max(0, holesPerMatch - dec.decided_at_hole);
+            // En Bola Baja + Bola Alta cada hoyo otorga máx. 2 puntos, por lo
+            // que los "puntos por jugar" al cierre = hoyos restantes × 2.
+            const holesRemaining = Math.max(
+              0,
+              holesPerMatch - dec.decided_at_hole
+            );
+            const pointsRemaining = holesRemaining * 2;
             const hi = Math.max(dec.top_total, dec.bottom_total);
             const lo = Math.min(dec.top_total, dec.bottom_total);
             const tail =
-              remaining === 0
+              pointsRemaining === 0
                 ? ""
-                : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+                : ` · ${pointsRemaining} ${pointsRemaining === 1 ? "punto" : "puntos"} por jugar`;
             resultText = `${fmt(hi)}–${fmt(lo)} en H${dec.decided_at_hole}${tail}`;
           }
           return {
