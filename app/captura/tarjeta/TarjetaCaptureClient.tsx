@@ -12,6 +12,7 @@ import type {
   CardSignaturePayload,
   GroupCapturePayload,
   GroupCapturePlayer,
+  GroupMatchPlayCapture,
   HoleNumber,
   HoleScores,
 } from "@/lib/captura/types";
@@ -32,14 +33,18 @@ function signaturesFromPlayers(
   return map;
 }
 
-const ALL_HOLES_NUMS: HoleNumber[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
-];
-
-function isCardComplete(scores: HoleScores | undefined): boolean {
+/** Tarjeta lista para firmar: 18 hoyos o hasta el hoyo de decisión en match play. */
+function isCardReadyForSigning(
+  scores: HoleScores | undefined,
+  pending: Partial<Record<HoleNumber, boolean>> | undefined,
+  matchPlay: GroupMatchPlayCapture | null | undefined
+): boolean {
   if (!scores) return false;
-  for (const h of ALL_HOLES_NUMS) {
-    if (scores[h] == null) return false;
+  const holesRequired = matchPlay?.holesRequired ?? 18;
+  for (let h = 1; h <= holesRequired; h++) {
+    const hole = h as HoleNumber;
+    if (scores[hole] == null) return false;
+    if (pending?.[hole]) return false;
   }
   return true;
 }
@@ -778,14 +783,22 @@ export default function TarjetaCaptureClient({
   /** ¿La tarjeta del jugador identificado (yo) está llena (18 hoyos)? */
   const myCardComplete = useMemo(() => {
     if (!meta.myEntryId) return false;
-    return isCardComplete(scoresByEntry[meta.myEntryId]);
-  }, [meta.myEntryId, scoresByEntry]);
+    return isCardReadyForSigning(
+      scoresByEntry[meta.myEntryId],
+      pendingByEntry[meta.myEntryId],
+      meta.matchPlay
+    );
+  }, [meta.myEntryId, meta.matchPlay, scoresByEntry, pendingByEntry]);
 
-  /** ¿La tarjeta del jugador al que atestiguo está llena? */
+  /** ¿La tarjeta del jugador al que atestiguo está lista para firmar? */
   const witnessCardComplete = useMemo(() => {
     if (!witnessTargetForMe) return false;
-    return isCardComplete(scoresByEntry[witnessTargetForMe]);
-  }, [witnessTargetForMe, scoresByEntry]);
+    return isCardReadyForSigning(
+      scoresByEntry[witnessTargetForMe],
+      pendingByEntry[witnessTargetForMe],
+      meta.matchPlay
+    );
+  }, [witnessTargetForMe, meta.matchPlay, scoresByEntry, pendingByEntry]);
 
   const mySignatures = meta.myEntryId
     ? signaturesByEntry[meta.myEntryId] ?? null
@@ -903,6 +916,15 @@ export default function TarjetaCaptureClient({
                 Toca un score para anotar. Si modificas un score con valor,
                 queda en rojo hasta que el testigo del jugador lo confirme.
               </p>
+
+              {meta.matchPlay ? (
+                <div className="mt-2 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-semibold text-emerald-900">
+                  Match decidido: {meta.matchPlay.resultText}. Puedes firmar
+                  tu tarjeta con los hoyos jugados hasta el H
+                  {meta.matchPlay.decidedAtHole} (no hace falta completar el
+                  18).
+                </div>
+              ) : null}
 
               {/* Firmas: mis iniciales + testigo del jugador que me toca. */}
               {meta.myEntryId ? (

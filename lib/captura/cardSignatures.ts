@@ -193,7 +193,13 @@ export type LockScorecardResult =
  */
 export async function lockScorecardIfSignedAndComplete(
   admin: SupabaseClient,
-  params: { groupId: string; entryId: string }
+  params: {
+    groupId: string;
+    entryId: string;
+    /** Hoyos mínimos capturados para cerrar (18 por defecto; match play
+     *  decidido antes del 18 usa el hoyo de decisión). */
+    holesRequired?: number;
+  }
 ): Promise<LockScorecardResult> {
   const gid = params.groupId.trim();
   const eid = params.entryId.trim();
@@ -251,8 +257,14 @@ export async function lockScorecardIfSignedAndComplete(
           : null;
     if (h != null && h >= 1 && h <= 18) seen.add(h);
   }
-  if (seen.size < 18) {
-    return { ok: true, locked: false, reason: "card_incomplete" };
+  const holesRequired = Math.min(
+    18,
+    Math.max(1, params.holesRequired ?? 18)
+  );
+  for (let h = 1; h <= holesRequired; h++) {
+    if (!seen.has(h)) {
+      return { ok: true, locked: false, reason: "card_incomplete" };
+    }
   }
 
   // 4) Upsert / lock de la tarjeta.

@@ -4,6 +4,7 @@ import {
   lockScorecardIfSignedAndComplete,
   saveCardSignature,
 } from "@/lib/captura/cardSignatures";
+import { loadGroupMatchPlayStatus } from "@/lib/captura/matchPlayGroupDecision";
 
 export const dynamic = "force-dynamic";
 
@@ -102,13 +103,16 @@ export async function POST(req: Request) {
       return NextResponse.json(result, { status: 400 });
     }
 
-    // Si ya quedaron ambas firmas + 18 hoyos, cerrar la tarjeta
-    // automáticamente para que aparezca en clasificación oficial.
+    // Si ya quedaron ambas firmas + hoyos requeridos, cerrar la tarjeta
+    // automáticamente (18 hoyos, o hasta el hoyo de decisión en match play).
     let scorecardLocked = false;
     if (result.signedByPlayerAt && result.signedByWitnessAt) {
+      const matchPlay = await loadGroupMatchPlayStatus(admin, groupId);
+      const holesRequired = matchPlay?.holesRequired ?? 18;
       const lockRes = await lockScorecardIfSignedAndComplete(admin, {
         groupId,
         entryId,
+        holesRequired,
       });
       if (lockRes.ok) scorecardLocked = lockRes.locked;
     }
