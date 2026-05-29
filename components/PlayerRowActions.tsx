@@ -43,6 +43,8 @@ type PlayerRowActionsProps = {
   entryCourseHandicap?: number | null;
   entryPlayingHandicap?: number | null;
   entryPlayingHandicapOverride?: number | null;
+  /** % de la regla de competencia aplicada al PH (ej. 80, 100). */
+  entryAllowancePct?: number | null;
 };
 
 export default function PlayerRowActions({
@@ -55,6 +57,7 @@ export default function PlayerRowActions({
   entryCourseHandicap = null,
   entryPlayingHandicap = null,
   entryPlayingHandicapOverride = null,
+  entryAllowancePct = null,
 }: PlayerRowActionsProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -135,6 +138,7 @@ export default function PlayerRowActions({
         entryCourseHandicap={entryCourseHandicap}
         entryPlayingHandicap={entryPlayingHandicap}
         entryPlayingHandicapOverride={entryPlayingHandicapOverride}
+        entryAllowancePct={entryAllowancePct}
       />
     </>
   );

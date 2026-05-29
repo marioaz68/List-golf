@@ -70,6 +70,7 @@ type Entry = {
   playing_handicap?: number | null;
   playing_handicap_override?: number | null;
   playing_handicap_override_reason?: string | null;
+  allowance_pct_applied?: number | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -503,6 +504,7 @@ function EntryRowActions({
       entryCourseHandicap={entry.course_handicap ?? null}
       entryPlayingHandicap={entry.playing_handicap ?? null}
       entryPlayingHandicapOverride={entry.playing_handicap_override ?? null}
+      entryAllowancePct={entry.allowance_pct_applied ?? null}
       player={
         entry.players
           ? {

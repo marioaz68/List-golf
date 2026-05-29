@@ -141,6 +141,7 @@ type EntryRowBase = {
   flagged_committee_reason?: string | null;
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
+  allowance_pct_applied?: number | null;
   players: EntryPlayerRaw | EntryPlayerRaw[] | null;
   categories: EntryCategoryRaw | EntryCategoryRaw[] | null;
 };
@@ -159,6 +160,7 @@ type EntryRow = {
   flagged_committee_reason?: string | null;
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
+  allowance_pct_applied?: number | null;
   round_signatures: RoundSignature[];
   players: {
     id: string;
@@ -833,12 +835,24 @@ export default async function EntriesPage({
         selectedTournamentId
       );
       entries = entries.map((e) => {
-        if (e.course_handicap != null && e.playing_handicap != null) return e;
+        const categoryId = e.categories?.id ?? null;
+        const allowanceFromRule =
+          categoryId != null
+            ? handicapCtx.allowancePctByCategory.get(categoryId) ?? null
+            : null;
+        const allowance_pct_applied =
+          allowanceFromRule ??
+          handicapCtx.matchplayFallback?.allowance_pct ??
+          null;
+
+        if (e.course_handicap != null && e.playing_handicap != null) {
+          return { ...e, allowance_pct_applied };
+        }
         const calc = resolveTournamentEntryHandicap(
           {
             id: e.id,
             player_id: e.player_id,
-            category_id: e.categories?.id ?? null,
+            category_id: categoryId,
             handicap_index: e.handicap_index,
             playing_handicap_override: e.playing_handicap_override ?? null,
             player: e.players
@@ -852,7 +866,7 @@ export default async function EntriesPage({
           },
           handicapCtx
         );
-        if (!calc) return e;
+        if (!calc) return { ...e, allowance_pct_applied };
         return {
           ...e,
           course_handicap: e.course_handicap ?? calc.course_handicap,
@@ -860,6 +874,7 @@ export default async function EntriesPage({
             e.playing_handicap_override != null
               ? e.playing_handicap
               : e.playing_handicap ?? calc.playing_handicap,
+          allowance_pct_applied,
         };
       });
     }
