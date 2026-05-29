@@ -5,6 +5,7 @@ import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFro
 export type DecidedPendingDiagnostics = {
   pairFormat: string | null;
   bracketId: string | null;
+  bracketPublished: boolean;
   derivedMatchesCount: number;
   decisionsCount: number;
   realMatchesCount: number;
@@ -19,8 +20,8 @@ export type DecidedPendingMatch = {
   groupNo: number | null;
   roundId: string;
   roundNo: number;
-  /** ID real del match en `matchplay_matches`. */
-  matchplayMatchId: string;
+  /** ID real del match en `matchplay_matches`. Null si el bracket no se publicó aún. */
+  matchplayMatchId: string | null;
   /** Texto descriptivo de cuál pareja ganó ("AS 6 UP", "Decidido en H16", etc.). */
   resultText: string;
   decidedAtHole: number;
@@ -59,6 +60,7 @@ export async function listDecidedPendingMatches(
   const diagnostics: DecidedPendingDiagnostics = {
     pairFormat: null,
     bracketId: null,
+    bracketPublished: false,
     derivedMatchesCount: 0,
     decisionsCount: 0,
     realMatchesCount: 0,
@@ -87,7 +89,7 @@ export async function listDecidedPendingMatches(
     return { matches: [], diagnostics };
   }
 
-  // 2) Bracket publicado
+  // 2) Bracket publicado (puede no existir todavía; no bloqueamos el listado)
   const { data: bracket } = await admin
     .from("matchplay_brackets")
     .select("id, status")
@@ -96,11 +98,7 @@ export async function listDecidedPendingMatches(
     .limit(1)
     .maybeSingle();
   diagnostics.bracketId = bracket?.id ? String(bracket.id) : null;
-  if (!bracket?.id) {
-    diagnostics.reason =
-      "Falta publicar el cuadro (matchplay_brackets). Ve a /matchplay y publica el bracket.";
-    return { matches: [], diagnostics };
-  }
+  diagnostics.bracketPublished = Boolean(bracket?.id);
 
   // 3) Derivar matches por pairing_groups + decisiones
   const derived = await derivePairingGroupMatches(admin, tournamentId);
@@ -117,13 +115,7 @@ export async function listDecidedPendingMatches(
   );
   diagnostics.decisionsCount = decisions.size;
 
-  // 4) Cargar matches reales del bracket
-  const { data: realMatchesRaw } = await admin
-    .from("matchplay_matches")
-    .select(
-      "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status"
-    )
-    .eq("bracket_id", bracket.id);
+  // 4) Cargar matches reales del bracket (solo si existe)
   type RealMatch = {
     id: string;
     bracket_id: string;
@@ -134,7 +126,16 @@ export async function listDecidedPendingMatches(
     winner_pair_id: string | null;
     status: string | null;
   };
-  const realMatches = (realMatchesRaw ?? []) as RealMatch[];
+  let realMatches: RealMatch[] = [];
+  if (bracket?.id) {
+    const { data: realMatchesRaw } = await admin
+      .from("matchplay_matches")
+      .select(
+        "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status"
+      )
+      .eq("bracket_id", bracket.id);
+    realMatches = (realMatchesRaw ?? []) as RealMatch[];
+  }
   diagnostics.realMatchesCount = realMatches.length;
 
   // 5) Cargar nombres de jugadores para los entries que aparecen
@@ -198,16 +199,27 @@ export async function listDecidedPendingMatches(
     const groupNo = derivedMatch.group_no;
     if (!groupId) continue;
 
-    // Buscar match real correspondiente.
-    const realMatch = realMatches.find(
-      (m) =>
-        (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
-        (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
-    );
-    if (!realMatch) continue;
-    diagnostics.matchedRealMatches += 1;
-    if (realMatch.status === "completed") {
-      diagnostics.alreadyCompleted += 1;
+    // Buscar match real correspondiente (puede no existir si el bracket
+    // aún no se publicó). En ese caso lo mostramos como "preview" con
+    // matchplayMatchId=null y la UI ofrecerá un CTA para publicar.
+    const realMatch =
+      realMatches.length > 0
+        ? realMatches.find(
+            (m) =>
+              (m.top_pair_id === topPairId &&
+                m.bottom_pair_id === bottomPairId) ||
+              (m.top_pair_id === bottomPairId &&
+                m.bottom_pair_id === topPairId)
+          )
+        : null;
+    if (realMatch) {
+      diagnostics.matchedRealMatches += 1;
+      if (realMatch.status === "completed") {
+        diagnostics.alreadyCompleted += 1;
+        continue;
+      }
+    } else if (bracket?.id) {
+      // Bracket existe pero estas parejas no aparecen en él: omitimos.
       continue;
     }
 
@@ -249,7 +261,7 @@ export async function listDecidedPendingMatches(
       groupNo,
       roundId: derivedMatch.round_id,
       roundNo: roundNoById.get(derivedMatch.round_id) ?? derivedMatch.round_no,
-      matchplayMatchId: String(realMatch.id),
+      matchplayMatchId: realMatch ? String(realMatch.id) : null,
       resultText,
       decidedAtHole: decision.decided_at_hole,
       viaPlayoff: Boolean(decision.via_playoff),
@@ -280,12 +292,18 @@ export async function listDecidedPendingMatches(
     if (diagnostics.decisionsCount === 0) {
       diagnostics.reason =
         "Ningún match está matemáticamente decidido todavía. Sigue capturando scores.";
-    } else if (diagnostics.matchedRealMatches === 0) {
+    } else if (
+      diagnostics.bracketPublished &&
+      diagnostics.matchedRealMatches === 0
+    ) {
       diagnostics.reason =
         "Los matches del calendario no se corresponden con el cuadro publicado. Revisa que las parejas en /matchplay coincidan con las del pairing.";
     } else if (diagnostics.alreadyCompleted > 0) {
       diagnostics.reason = `Todos los matches decididos (${diagnostics.alreadyCompleted}) ya están cerrados.`;
     }
+  } else if (!diagnostics.bracketPublished) {
+    diagnostics.reason =
+      "Estos matches ya están decididos pero el cuadro no se ha publicado. Publica el bracket en /matchplay para poder cerrarlos y avanzar al ganador.";
   }
 
   return { matches: pending, diagnostics };
