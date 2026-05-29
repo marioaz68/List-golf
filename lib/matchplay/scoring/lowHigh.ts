@@ -120,9 +120,10 @@ function netOnHole(
 
 /**
  * En match play (Bola Baja + Bola Alta) cada sub-competencia (bola baja
- * y bola alta) entrega 1 punto al ganador o 0 si el hoyo queda halved
- * ("compartido"). No usamos `0.5 – 0.5` en empates: el hoyo no aporta
- * puntos a ninguno de los lados (regla clásica de match play).
+ * y bola alta) entrega 1 punto al ganador, 0 al perdedor y, si quedan
+ * empatadas, se reparte como `0.5 – 0.5`. De esta manera el marcador
+ * sigue creciendo en hoyos repartidos y el "puntos arriba" del match
+ * refleja realmente lo que aportó cada pareja en cada hoyo.
  */
 function pointsFromComparison(
   topValue: number,
@@ -130,7 +131,7 @@ function pointsFromComparison(
 ): { top: number; bottom: number } {
   if (topValue < bottomValue) return { top: 1, bottom: 0 };
   if (bottomValue < topValue) return { top: 0, bottom: 1 };
-  return { top: 0, bottom: 0 };
+  return { top: 0.5, bottom: 0.5 };
 }
 
 function formatPts(n: number): string {
