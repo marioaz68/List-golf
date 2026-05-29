@@ -292,8 +292,10 @@ export function isLowHighMatchDecidedAt(params: {
 }
 
 /**
- * Texto tipo "5–0 a falta de 4 hoyos" para mostrar al usuario el
- * resultado de un match concedido por marcador.
+ * Texto tipo "5–0 a falta de 8 puntos" para mostrar al usuario el
+ * resultado de un match concedido por marcador. En Bola Baja + Bola
+ * Alta cada hoyo otorga máximo 2 puntos (1 bola baja + 1 bola alta),
+ * por lo que los puntos por jugar = hoyos restantes × 2.
  */
 export function formatLowHighDecisionResult(params: {
   winner_label: string;
@@ -305,10 +307,11 @@ export function formatLowHighDecisionResult(params: {
   const { winner_label, top_total, bottom_total, decided_at_hole, holes_in_match } = params;
   const hi = Math.max(top_total, bottom_total);
   const lo = Math.min(top_total, bottom_total);
-  const remaining = Math.max(0, holes_in_match - decided_at_hole);
+  const holesRemaining = Math.max(0, holes_in_match - decided_at_hole);
+  const pointsRemaining = holesRemaining * 2;
   const tail =
-    remaining === 0
+    pointsRemaining === 0
       ? ""
-      : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+      : ` · ${pointsRemaining} ${pointsRemaining === 1 ? "punto" : "puntos"} por jugar`;
   return `${winner_label} gana ${formatPts(hi)}–${formatPts(lo)} en H${decided_at_hole}${tail}`;
 }
