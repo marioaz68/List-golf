@@ -89,7 +89,15 @@ export default async function ReportsPage(props: {
           </p>
         </div>
 
-        <form method="GET" action="/reports" className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="/reports/jugadores"
+            className="rounded border border-white/15 bg-[#1f2937] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#2a3447]"
+            title="Reporte de todos los jugadores dados de alta en el sistema (no público)"
+          >
+            Jugadores del sistema →
+          </a>
+          <form method="GET" action="/reports" className="flex flex-wrap gap-2">
           <input type="hidden" name="tab" value={tab} />
           <select
             name="tournament_id"
@@ -108,7 +116,8 @@ export default async function ReportsPage(props: {
           >
             Cambiar torneo
           </button>
-        </form>
+          </form>
+        </div>
       </header>
 
       {REPORT_TABS.length > 1 ? (

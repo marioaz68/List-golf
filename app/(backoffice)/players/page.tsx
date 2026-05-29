@@ -562,6 +562,13 @@ export default async function PlayersPage(props: {
             <a href="/players/handicap-files" style={buttonStyle}>
               Archivos GHIN
             </a>
+            <a
+              href="/reports/jugadores"
+              style={buttonStyle}
+              title="Reporte de todos los jugadores del sistema con impresión, PDF, Excel, WhatsApp y Email"
+            >
+              Reporte jugadores
+            </a>
           </div>
         </div>
       </header>
