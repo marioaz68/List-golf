@@ -106,9 +106,7 @@ async function ensureAccess(tournament_id: string) {
   });
 }
 
-export type RoundFormState = { ok: true } | { ok: false; message: string };
-
-export const roundFormInitialState: RoundFormState = { ok: true };
+type RoundFormState = { ok: true } | { ok: false; message: string };
 
 function isNextRedirectError(error: unknown): boolean {
   const digest =
@@ -180,7 +178,7 @@ export async function createRoundFormAction(
       error instanceof Error ? error.message : "No se pudo crear la ronda.";
     return { ok: false, message };
   }
-  return roundFormInitialState;
+  return { ok: true };
 }
 
 export async function updateRound(formData: FormData) {

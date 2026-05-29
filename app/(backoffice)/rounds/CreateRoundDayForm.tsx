@@ -2,11 +2,11 @@
 
 import { useActionState, useMemo, useState } from "react";
 import SubmitButton from "@/components/ui/SubmitButton";
-import {
-  createRoundFormAction,
-  roundFormInitialState,
-  type RoundFormState,
-} from "./actions";
+import { createRoundFormAction } from "./actions";
+
+type RoundFormState = { ok: true } | { ok: false; message: string };
+
+const roundFormInitialState: RoundFormState = { ok: true };
 
 type CategoryOption = {
   id: string;
