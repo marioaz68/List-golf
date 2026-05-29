@@ -63,11 +63,13 @@ function kitButtonLabel(
 }
 
 type CaddieAssignmentSummary = {
+  /** Al menos una asignación activa de caddie en este torneo. */
+  hasCaddie: boolean;
   /** Total de rondas del torneo donde tiene sentido asignar caddie (>0). */
   totalRounds: number;
   /** Rondas con al menos un caddie activo asignado. */
   roundsWithCaddie: number;
-  /** Etiqueta resumida (ej. "Carlos M. · R1,R2"). */
+  /** Etiqueta resumida (ej. "Carlos M."). */
   label: string | null;
 };
 
@@ -356,41 +358,28 @@ function EntryRowActions({
    * al jugador entre torneos.
    */
   const caddieSummary = entry.caddie_summary ?? null;
-  const caddieState: "none" | "partial" | "full" = (() => {
-    if (!caddieSummary || caddieSummary.totalRounds === 0) {
-      return caddieSummary && caddieSummary.roundsWithCaddie > 0
-        ? "full"
-        : "none";
-    }
-    if (caddieSummary.roundsWithCaddie === 0) return "none";
-    if (caddieSummary.roundsWithCaddie >= caddieSummary.totalRounds)
-      return "full";
-    return "partial";
-  })();
-  const caddieColors: Record<typeof caddieState, string> = {
+  const hasCaddie = Boolean(caddieSummary?.hasCaddie);
+  const caddieState: "none" | "assigned" = hasCaddie ? "assigned" : "none";
+  const caddieColors = {
     none: "border-red-800 bg-red-600 hover:bg-red-700",
-    partial: "border-amber-700 bg-amber-500 hover:bg-amber-600",
-    full: "border-emerald-800 bg-emerald-600 hover:bg-emerald-700",
+    assigned: "border-emerald-800 bg-emerald-600 hover:bg-emerald-700",
   };
-  const caddieIcon =
-    caddieState === "none" ? "✕" : caddieState === "full" ? "✓" : "◐";
+  const caddieIcon = hasCaddie ? "✓" : "✕";
   const caddieTitle = (() => {
-    if (!caddieSummary || caddieSummary.totalRounds === 0) {
-      return caddieState === "none"
-        ? "Sin caddie asignado. Click para asignar uno."
-        : `Caddie asignado: ${caddieSummary?.label ?? ""}`;
+    if (!hasCaddie) {
+      return caddieSummary && caddieSummary.totalRounds > 0
+        ? `Sin caddie asignado (0/${caddieSummary.totalRounds} rondas). Click para asignar.`
+        : "Sin caddie asignado. Click para asignar uno.";
     }
-    if (caddieState === "none") {
-      return `Sin caddie asignado en ninguna ronda (0/${caddieSummary.totalRounds}). Click para asignar.`;
+    const who = caddieSummary?.label ? ` — ${caddieSummary.label}` : "";
+    if (
+      caddieSummary &&
+      caddieSummary.totalRounds > 0 &&
+      caddieSummary.roundsWithCaddie < caddieSummary.totalRounds
+    ) {
+      return `Caddie asignado${who} · ${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds} rondas. Click para revisar o completar.`;
     }
-    if (caddieState === "partial") {
-      return `Caddie asignado en ${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds} rondas${
-        caddieSummary.label ? ` — ${caddieSummary.label}` : ""
-      }. Click para revisar.`;
-    }
-    return `Caddie asignado en todas las rondas (${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds})${
-      caddieSummary.label ? ` — ${caddieSummary.label}` : ""
-    }.`;
+    return `Caddie asignado${who}. Click para revisar.`;
   })();
   const caddieBtn = (
     <Link
