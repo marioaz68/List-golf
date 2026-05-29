@@ -23,6 +23,7 @@ import ExportCommitteePromptButton from "./ExportCommitteePromptButton";
 import MonthlyDbUpdateButton from "./MonthlyDbUpdateButton";
 import CommitteeReviewBadge from "./CommitteeReviewBadge";
 import EditableHiCell from "./EditableHiCell";
+import EditableTeeSetCell, { type TeeSetOption } from "./EditableTeeSetCell";
 
 type RoundSignature = {
   round_no: number;
@@ -77,6 +78,8 @@ type Entry = {
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
   round_signatures?: RoundSignature[] | null;
+  tee_set_id_assigned?: string | null;
+  tee_set_id_override?: string | null;
   players: {
     id: string;
     first_name: string | null;
@@ -598,12 +601,14 @@ export default function EntriesListPanel({
   categories,
   matchPlayPairs = false,
   partnerByEntryId = {},
+  teeSets = [],
 }: {
   entries: Entry[];
   tournamentId: string;
   categories: Category[];
   matchPlayPairs?: boolean;
   partnerByEntryId?: Record<string, PartnerInfo>;
+  teeSets?: TeeSetOption[];
 }) {
   const { t, locale } = useAppLocale();
   const te = t.entries.list;
@@ -904,6 +909,12 @@ ${res.witness_url}`;
                 PH
               </th>
               <th className="px-1 py-1 text-left">{te.thCat}</th>
+              <th
+                className="px-1 py-1 text-left"
+                title="Salida (color de tee). Por defecto la calcula la regla de categoría. El comité puede cambiarla manualmente; el cambio NO afecta HC ni PH."
+              >
+                Salida
+              </th>
               {matchPlayPairs ? (
                 <th className="px-1 py-1 text-left">Pareja</th>
               ) : null}
@@ -998,6 +1009,16 @@ ${res.witness_url}`;
                         {e.categories?.name ?? "-"}
                       </span>
                     </span>
+                  </td>
+
+                  <td className="px-1 py-1">
+                    <EditableTeeSetCell
+                      entryId={e.id}
+                      tournamentId={tournamentId}
+                      teeSets={teeSets}
+                      assignedTeeSetId={e.tee_set_id_assigned ?? null}
+                      overrideTeeSetId={e.tee_set_id_override ?? null}
+                    />
                   </td>
 
                   {matchPlayPairs ? (

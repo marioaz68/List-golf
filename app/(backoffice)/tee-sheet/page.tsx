@@ -415,6 +415,7 @@ async function TeeSheetPageInner(props: {
             tournament_entries (
               handicap_index,
               category_id,
+              tee_set_id_override,
               players (
                 first_name,
                 last_name,
@@ -494,7 +495,13 @@ async function TeeSheetPageInner(props: {
     handicap_index: number | null;
     category_id: string | null;
     birth_year: number | null;
+    tee_set_id_override?: string | null;
   }): { color: string | null; name: string | null } {
+    // Override manual del comité tiene prioridad absoluta.
+    if (p.tee_set_id_override) {
+      const tee = teeSetById.get(p.tee_set_id_override);
+      if (tee) return { color: tee.color ?? null, name: tee.name ?? null };
+    }
     if (!p.category_id) return { color: null, name: null };
     const age =
       p.birth_year && p.birth_year > 0
@@ -545,6 +552,9 @@ for (const row of membersRaw) {
     handicap_index: te?.handicap_index ?? null,
     category_id: te?.category_id ?? null,
     birth_year: player?.birth_year ?? null,
+    tee_set_id_override:
+      (te as { tee_set_id_override?: string | null } | null)
+        ?.tee_set_id_override ?? null,
   });
 
   const item: MemberUI = {

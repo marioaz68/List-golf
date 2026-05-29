@@ -37,6 +37,16 @@ export function isMissingColumnError(error: {
   return error.code === "42703";
 }
 
+/** Supabase/Postgres cuando falta la columna tee_set_id_override (migración nueva). */
+export function isMissingTeeOverrideColumnError(error: {
+  message?: string;
+  code?: string;
+} | null) {
+  if (!error) return false;
+  const msg = String(error.message ?? "").toLowerCase();
+  return msg.includes("tee_set_id_override");
+}
+
 const PLAYERS_FRAGMENT = `
   players:players (
     id,
@@ -78,6 +88,7 @@ const BASE_NO_KIT_NO_FLAG = `
   playing_handicap,
   playing_handicap_override,
   playing_handicap_override_reason,
+  tee_set_id_override,
   status,
 `;
 
@@ -90,6 +101,7 @@ const BASE_NO_KIT_WITH_FLAG = `
   playing_handicap,
   playing_handicap_override,
   playing_handicap_override_reason,
+  tee_set_id_override,
   flagged_for_committee,
   flagged_committee_reason,
   status,
@@ -104,6 +116,7 @@ const BASE_WITH_KIT_NO_FLAG = `
   playing_handicap,
   playing_handicap_override,
   playing_handicap_override_reason,
+  tee_set_id_override,
   status,
   telegram_kit_sent_at,
   telegram_kit_received_at,
@@ -118,6 +131,7 @@ const BASE_WITH_KIT_WITH_FLAG = `
   playing_handicap,
   playing_handicap_override,
   playing_handicap_override_reason,
+  tee_set_id_override,
   flagged_for_committee,
   flagged_committee_reason,
   status,

@@ -2127,3 +2127,67 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     missingHiPlayers,
   };
 }
+
+/**
+ * Cambia manualmente la salida (tee set) asignada a un jugador inscrito.
+ *
+ * Esta operación NO recalcula HC ni PH: la salida override solo se usa
+ * para mostrar al jugador y a su grupo (pairing/tee-sheet/kit). Si se
+ * pasa `tee_set_id` vacío/null, se limpia el override y vuelve a usar la
+ * salida calculada por las reglas de categoría.
+ */
+export async function updateEntryTeeSetOverrideAction(formData: FormData) {
+  const entryId = reqStr(formData, "entry_id");
+  const tournamentId = reqStr(formData, "tournament_id");
+  const rawTeeId = String(formData.get("tee_set_id") ?? "").trim();
+  const reason = optStr(formData, "reason");
+
+  await requireTournamentAccess({ tournamentId });
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const admin = await createAdminClient();
+
+  // Validar entry pertenece al torneo y, si se pidió un tee, que pertenezca al mismo torneo.
+  const { data: entry, error: eErr } = await admin
+    .from("tournament_entries")
+    .select("id, tournament_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (eErr) throw new Error(eErr.message);
+  if (!entry || String(entry.tournament_id) !== tournamentId) {
+    throw new Error("Inscrito no pertenece a este torneo.");
+  }
+
+  let teeSetId: string | null = null;
+  if (rawTeeId) {
+    const { data: tee, error: tErr } = await admin
+      .from("tee_sets")
+      .select("id, tournament_id")
+      .eq("id", rawTeeId)
+      .maybeSingle();
+    if (tErr) throw new Error(tErr.message);
+    if (!tee || String(tee.tournament_id) !== tournamentId) {
+      throw new Error("La salida no pertenece a este torneo.");
+    }
+    teeSetId = String(tee.id);
+  }
+
+  const { error: upErr } = await admin
+    .from("tournament_entries")
+    .update({
+      tee_set_id_override: teeSetId,
+      tee_set_override_at: teeSetId ? new Date().toISOString() : null,
+      tee_set_override_by: teeSetId ? user?.id ?? null : null,
+      tee_set_override_reason: teeSetId ? reason : null,
+    })
+    .eq("id", entryId);
+  if (upErr) throw new Error(upErr.message);
+
+  revalidatePath(`/entries`);
+  revalidatePath(`/tournaments/${tournamentId}`);
+  revalidatePath(`/tee-sheet`);
+
+  return { ok: true, entryId, teeSetId };
+}
