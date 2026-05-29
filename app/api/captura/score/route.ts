@@ -28,6 +28,13 @@ export async function POST(req: Request) {
   const entryId = String(o.entry_id ?? "").trim();
   const hole = parseHole(o.hole);
   const strokesRaw = o.strokes;
+  // Match play: el jugador no terminó el hoyo (levantó). Se acepta como
+  // valor especial — `strokes` puede venir null o "X"/"x".
+  const pickedUp =
+    o.picked_up === true ||
+    o.pickedUp === true ||
+    (typeof strokesRaw === "string" &&
+      strokesRaw.trim().toLowerCase() === "x");
   const rawMode = String(o.mode ?? "").trim().toLowerCase();
   const mode: "modify" | "approve" =
     rawMode === "approve" ? "approve" : "modify";
@@ -48,7 +55,12 @@ export async function POST(req: Request) {
   }
 
   let strokes: number | null;
-  if (strokesRaw === null || strokesRaw === "" || strokesRaw === undefined) {
+  if (
+    pickedUp ||
+    strokesRaw === null ||
+    strokesRaw === "" ||
+    strokesRaw === undefined
+  ) {
     strokes = null;
   } else {
     const n = Number(strokesRaw);
@@ -68,6 +80,7 @@ export async function POST(req: Request) {
       entryId,
       hole,
       strokes,
+      pickedUp,
       mode,
       actorRole,
     });

@@ -54,6 +54,9 @@ type PlayerRow = {
   scores: HoleScores;
   /** Celdas con cambio pendiente de aprobación del testigo. */
   pending?: Partial<Record<HoleNumber, boolean>>;
+  /** Match play: hoyos donde el jugador levantó (X). strokes queda en null
+   *  y pierde la bola alta automáticamente. */
+  pickedUp?: Partial<Record<HoleNumber, boolean>>;
 };
 
 const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -192,11 +195,24 @@ function ScoreCell({
   score,
   par,
   isPending,
+  pickedUp,
 }: {
   score: number | null;
   par: number;
   isPending?: boolean;
+  pickedUp?: boolean;
 }) {
+  if (pickedUp) {
+    return (
+      <span
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-[10px] font-extrabold text-amber-700"
+        title="No terminó el hoyo (pierde bola alta)"
+      >
+        X
+      </span>
+    );
+  }
+
   if (score === null) {
     return <span className="inline-flex h-6 w-6 items-center justify-center" />;
   }
@@ -518,6 +534,7 @@ function CompactCardSection({
                     score={player.scores[hole]}
                     par={PAR_BY_HOLE[hole]}
                     isPending={Boolean(player.pending?.[hole])}
+                    pickedUp={Boolean(player.pickedUp?.[hole])}
                   />
                 </div>
               ))}
@@ -896,6 +913,7 @@ function MobileScoreEntryContent() {
               name: string;
               scores: PlayerRow["scores"];
               pending?: Partial<Record<HoleNumber, boolean>>;
+              pickedUp?: Partial<Record<HoleNumber, boolean>>;
               privateScores?: PlayerRow["scores"];
               categoryId?: string | null;
               signatures?: {
@@ -997,6 +1015,7 @@ function MobileScoreEntryContent() {
               name: p.name,
               scores,
               pending: { ...(p.pending ?? {}) },
+              pickedUp: { ...(p.pickedUp ?? {}) },
             };
           })
         );
@@ -1040,7 +1059,9 @@ function MobileScoreEntryContent() {
       if (!entryId) return false;
       const player = players.find((p) => p.id === entryId);
       if (!player) return false;
-      return ALL_HOLES.every((h) => player.scores[h] != null);
+      return ALL_HOLES.every(
+        (h) => player.scores[h] != null || Boolean(player.pickedUp?.[h])
+      );
     },
     [players]
   );
@@ -1129,15 +1150,26 @@ function MobileScoreEntryContent() {
   }, [tournamentId, viewerEntryId, caddieForEntryIds, categoryByEntry]);
 
   function isHoleComplete(hole: HoleNumber) {
-    return players.every((player) => player.scores[hole] !== null);
+    // Match play: el hoyo se considera "completo" si todos los jugadores
+    // tienen score o levantaron (X).
+    return players.every(
+      (player) =>
+        player.scores[hole] !== null || Boolean(player.pickedUp?.[hole])
+    );
   }
 
   function getPlayerHoleScore(player: PlayerRow, hole: HoleNumber) {
     return player.scores[hole];
   }
 
-  function setHoleScore(playerId: string, hole: HoleNumber, value: number | null) {
-    const strokes = value === null ? null : Math.max(1, value);
+  function setHoleScore(
+    playerId: string,
+    hole: HoleNumber,
+    value: number | null,
+    options?: { pickedUp?: boolean }
+  ) {
+    const pickedUp = Boolean(options?.pickedUp);
+    const strokes = pickedUp ? null : value === null ? null : Math.max(1, value);
 
     // Score privado del jugador identificado (tabla amber "Mi Score").
     if (playerId === ME_ID) {
@@ -1163,17 +1195,20 @@ function MobileScoreEntryContent() {
     }
 
     setPlayers((current) =>
-      current.map((player) =>
-        player.id === playerId
-          ? {
-              ...player,
-              scores: {
-                ...player.scores,
-                [hole]: strokes,
-              },
-            }
-          : player
-      )
+      current.map((player) => {
+        if (player.id !== playerId) return player;
+        const nextPickedUp = { ...(player.pickedUp ?? {}) };
+        if (pickedUp) nextPickedUp[hole] = true;
+        else delete nextPickedUp[hole];
+        return {
+          ...player,
+          scores: {
+            ...player.scores,
+            [hole]: strokes,
+          },
+          pickedUp: nextPickedUp,
+        };
+      })
     );
 
     if (!groupId) return;
@@ -1241,6 +1276,7 @@ function MobileScoreEntryContent() {
         entry_id: playerId,
         hole,
         strokes,
+        picked_up: pickedUp,
         mode,
         role,
       }),
@@ -1333,6 +1369,17 @@ function MobileScoreEntryContent() {
 
   function handlePreset(playerId: string, value: number) {
     setHoleScore(playerId, currentHole, value);
+    setActivePlayerId(null);
+    setDraftScore("");
+    setDraftFresh(false);
+  }
+
+  /** Match play: el jugador levanta (no termina el hoyo). Pierde la
+   *  bola alta automáticamente. */
+  function handlePickUp() {
+    if (!activePlayerId) return;
+    if (activePlayerId === ME_ID) return; // sólo aplica a tarjetas de grupo
+    setHoleScore(activePlayerId, currentHole, null, { pickedUp: true });
     setActivePlayerId(null);
     setDraftScore("");
     setDraftFresh(false);
@@ -1736,13 +1783,24 @@ function MobileScoreEntryContent() {
                       C
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => handleNumber(0)}
-                      className="h-12 rounded-lg bg-slate-100 text-lg font-bold"
-                    >
-                      0
-                    </button>
+                    {matchPlayInfo && activePlayerId !== ME_ID ? (
+                      <button
+                        type="button"
+                        onClick={handlePickUp}
+                        title="No terminó el hoyo (pierde bola alta)"
+                        className="h-12 rounded-lg bg-amber-100 text-lg font-extrabold text-amber-700"
+                      >
+                        X
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleNumber(0)}
+                        className="h-12 rounded-lg bg-slate-100 text-lg font-bold"
+                      >
+                        0
+                      </button>
+                    )}
 
                     <button
                       type="button"

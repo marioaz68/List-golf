@@ -56,6 +56,9 @@ export type GroupCapturePlayer = {
   name: string;
   initials: string;
   scores: HoleScores;
+  /** Match play: el jugador no terminó el hoyo (levantó). strokes queda null
+   *  y para puntos cuenta como derrota automática de la bola alta. */
+  pickedUp?: Partial<Record<HoleNumber, boolean>>;
   /** Si la celda está en rojo: alguien modificó el score y se espera testigo. */
   pending: Partial<Record<HoleNumber, boolean>>;
   /** Score privado del jugador ("Mi Tarjeta"). Solo se incluye si el cliente

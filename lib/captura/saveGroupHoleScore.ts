@@ -7,6 +7,8 @@ export type SaveHoleScoreResult =
       strokes: number | null;
       /** True si la celda quedó marcada como pendiente de aprobación por el testigo. */
       pendingWitness?: boolean;
+      /** True si el jugador levantó (no terminó el hoyo) — solo match play. */
+      pickedUp?: boolean;
     }
   | { ok: false; error: string };
 
@@ -54,6 +56,9 @@ export async function saveGroupHoleScore(
     entryId: string;
     hole: HoleNumber;
     strokes: number | null;
+    /** Match play: el jugador no terminó el hoyo (levantó). Cuando es
+     *  true, `strokes` se ignora y se guarda `null`. */
+    pickedUp?: boolean;
     /**
      * Modo de la operación:
      *  - "modify"  : caddie/jugador captura/modifica (puede dejar la celda en rojo)
@@ -67,13 +72,18 @@ export async function saveGroupHoleScore(
   const groupId = params.groupId.trim();
   const entryId = params.entryId.trim();
   const hole = params.hole;
+  const pickedUp = Boolean(params.pickedUp);
 
   if (!groupId || !entryId) {
     return { ok: false, error: "Parámetros incompletos." };
   }
 
-  if (params.strokes != null) {
-    if (!Number.isFinite(params.strokes) || params.strokes < 1 || params.strokes > 15) {
+  // Si el jugador levantó (X), forzamos strokes=null y aceptamos el
+  // registro aunque no tengamos número.
+  const strokesValue = pickedUp ? null : params.strokes;
+
+  if (strokesValue != null) {
+    if (!Number.isFinite(strokesValue) || strokesValue < 1 || strokesValue > 15) {
       return { ok: false, error: "Score inválido (1–15)." };
     }
   }
@@ -146,7 +156,8 @@ export async function saveGroupHoleScore(
   const actorRole = params.actorRole ?? null;
   let pendingWitness = false;
 
-  if (params.strokes == null) {
+  if (strokesValue == null && !pickedUp) {
+    // Borrar (score vacío y sin marca de levantó).
     if (existingHole?.id) {
       await admin.from("hole_scores").delete().eq("id", existingHole.id);
     }
@@ -167,11 +178,12 @@ export async function saveGroupHoleScore(
     const { error: upErr } = await admin
       .from("hole_scores")
       .update({
-        strokes: params.strokes,
+        strokes: strokesValue,
         hole_no: hole,
         hole_number: hole,
         entry_id: entryId,
         round_id: roundId,
+        picked_up: pickedUp,
         pending_witness: pendingWitness,
         pending_at: pendingWitness ? new Date().toISOString() : null,
         pending_by_role: pendingWitness ? actorRole : null,
@@ -186,7 +198,8 @@ export async function saveGroupHoleScore(
       round_id: roundId,
       hole_no: hole,
       hole_number: hole,
-      strokes: params.strokes,
+      strokes: strokesValue,
+      picked_up: pickedUp,
       pending_witness: false,
     });
     if (insErr) return { ok: false, error: insErr.message };
@@ -218,5 +231,10 @@ export async function saveGroupHoleScore(
     .update({ gross_score: gross })
     .eq("id", roundScoreId);
 
-  return { ok: true, strokes: params.strokes, pendingWitness };
+  return {
+    ok: true,
+    strokes: strokesValue,
+    pendingWitness,
+    pickedUp,
+  };
 }
