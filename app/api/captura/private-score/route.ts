@@ -7,7 +7,8 @@ export const dynamic = "force-dynamic";
 
 function parseHole(raw: unknown): HoleNumber | null {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1 || n > 18) return null;
+  // 1-18: normales · 19-27: desempate.
+  if (!Number.isFinite(n) || n < 1 || n > 27) return null;
   return Math.trunc(n) as HoleNumber;
 }
 

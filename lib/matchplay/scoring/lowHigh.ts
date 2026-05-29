@@ -5,6 +5,12 @@ import {
   type StrokeIndexByHole,
 } from "@/lib/leaderboard/handicapStrokes";
 
+/** Hoyo de referencia para SI/par/ventajas: 19↔1, 20↔2, …, 27↔9. */
+export function playoffSourceHole(holeNo: number): number {
+  if (holeNo >= 19 && holeNo <= 27) return holeNo - 18;
+  return holeNo;
+}
+
 export type LowHighPlayerGross = {
   top_a: number | null;
   top_b: number | null;
@@ -176,7 +182,8 @@ export function scoreLowHighHole(params: {
     return courseHandicapFromHi(hi[i], allowance_pct);
   }) as [number, number, number, number];
   const [rTopA, rTopB, rBotA, rBotB] = pairLowHighStrokes(ph);
-  const si = strokeIndexForHole(hole_no, strokeIndexByHole);
+  // En desempate (19-27) las ventajas siguen el SI del hoyo físico 1-9.
+  const si = strokeIndexForHole(playoffSourceHole(hole_no), strokeIndexByHole);
   const strokes_received: LowHighPlayerNet = {
     top_a: strokesReceivedOnHole(rTopA, si),
     top_b: strokesReceivedOnHole(rTopB, si),

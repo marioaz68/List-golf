@@ -49,6 +49,10 @@ export type PublicMatchDetailHole = {
   /** true cuando el hoyo se jugó después de que el match ya estaba
    *  matemáticamente decidido (no contribuye a puntos del match). */
   after_decision: boolean;
+  /** True cuando es un hoyo de desempate (19-27, físicamente 1-9). */
+  is_playoff?: boolean;
+  /** Hoyo dentro del playoff (1..9), solo si `is_playoff`. */
+  playoff_hole?: number;
 };
 
 export type PublicMatchDetailPayload = {
@@ -67,8 +71,14 @@ export type PublicMatchDetailPayload = {
   last_hole_played: number;
   top_total: number;
   bottom_total: number;
-  /** Si el match fue decidido por marcador antes del último hoyo. */
+  /** Si el match fue decidido por marcador antes del último hoyo (1-27 incl. desempate). */
   decided_at_hole: number | null;
+  /** El match terminó por desempate (1-9 re-jugados). */
+  via_playoff?: boolean;
+  /** Hoyo dentro del desempate en que se decidió (1..9). */
+  playoff_decided_hole?: number;
+  /** Después del 18 quedó empatado y faltan hoyos del desempate. */
+  needs_playoff?: boolean;
   holes: PublicMatchDetailHole[];
   derived_from_strokes: true;
 };
@@ -442,6 +452,104 @@ export async function loadDerivedMatchDetail(
     }
   }
 
+  // ─── Desempate (sudden death) ──────────────────────────────────────
+  let viaPlayoff = false;
+  let playoffDecidedHole: number | undefined;
+  let needsPlayoff = false;
+
+  const playedAnyHole = topAcc + bottomAcc > 0;
+  if (
+    decidedAtHole == null &&
+    holes_in_match === 18 &&
+    topAcc === bottomAcc &&
+    playedAnyHole
+  ) {
+    needsPlayoff = true;
+    for (let p = 1; p <= 9; p++) {
+      const physical = p;
+      const storeHole = 18 + p;
+      const top_a = grossFor(match.top_a_entry_id, storeHole);
+      const top_b = grossFor(match.top_b_entry_id, storeHole);
+      const bottom_a = grossFor(match.bottom_a_entry_id, storeHole);
+      const bottom_b = grossFor(match.bottom_b_entry_id, storeHole);
+
+      const hasAll =
+        top_a != null && top_b != null && bottom_a != null && bottom_b != null;
+
+      const stroke_index =
+        strokeIndexByHole.get(physical) ?? null;
+      const par = parByHole.get(physical) ?? null;
+
+      if (!hasAll) {
+        holes.push({
+          hole_no: storeHole,
+          has_score: false,
+          top_points: null,
+          bottom_points: null,
+          top_cum: null,
+          bottom_cum: null,
+          match_status_after: null,
+          top_player_a_strokes: top_a,
+          top_player_b_strokes: top_b,
+          bottom_player_a_strokes: bottom_a,
+          bottom_player_b_strokes: bottom_b,
+          breakdown: null,
+          stroke_index,
+          par,
+          after_decision: false,
+          is_playoff: true,
+          playoff_hole: p,
+        });
+        break;
+      }
+
+      const res = scoreLowHighHole({
+        hole_no: storeHole,
+        gross: { top_a, top_b, bottom_a, bottom_b } as LowHighPlayerGross,
+        hi,
+        allowance_pct,
+        playing_handicaps: phs,
+        strokeIndexByHole,
+        top_total_before: topAcc,
+        bottom_total_before: bottomAcc,
+        holes_in_match: 27,
+      });
+
+      if (!res) break;
+
+      topAcc += res.top_points;
+      bottomAcc += res.bottom_points;
+
+      holes.push({
+        hole_no: storeHole,
+        has_score: true,
+        top_points: res.top_points,
+        bottom_points: res.bottom_points,
+        top_cum: topAcc,
+        bottom_cum: bottomAcc,
+        match_status_after: `Playoff H${p}`,
+        top_player_a_strokes: top_a,
+        top_player_b_strokes: top_b,
+        bottom_player_a_strokes: bottom_a,
+        bottom_player_b_strokes: bottom_b,
+        breakdown: res.breakdown,
+        stroke_index,
+        par,
+        after_decision: false,
+        is_playoff: true,
+        playoff_hole: p,
+      });
+
+      if (res.top_points !== res.bottom_points) {
+        decidedAtHole = storeHole;
+        viaPlayoff = true;
+        playoffDecidedHole = p;
+        needsPlayoff = false;
+        break;
+      }
+    }
+  }
+
   const last_hole_played = holes
     .filter((h) => h.has_score)
     .reduce((max, h) => Math.max(max, h.hole_no), 0);
@@ -460,14 +568,21 @@ export async function loadDerivedMatchDetail(
   let status: string = last_hole_played > 0 ? "in_progress" : "scheduled";
   if (decidedAtHole != null) {
     const winnerLabel = topAcc > bottomAcc ? top_label : bottom_label;
-    result_text = formatLowHighDecisionResult({
-      winner_label: winnerLabel,
-      top_total: topAcc,
-      bottom_total: bottomAcc,
-      decided_at_hole: decidedAtHole,
-      holes_in_match,
-    });
+    if (viaPlayoff && playoffDecidedHole != null) {
+      result_text = `${winnerLabel} gana en desempate (H${playoffDecidedHole})`;
+    } else {
+      result_text = formatLowHighDecisionResult({
+        winner_label: winnerLabel,
+        top_total: topAcc,
+        bottom_total: bottomAcc,
+        decided_at_hole: decidedAtHole,
+        holes_in_match,
+      });
+    }
     status = "completed";
+  } else if (needsPlayoff) {
+    result_text = "Empate al 18 — definiendo en desempate";
+    status = "in_progress";
   } else if (last_hole_played >= holes_in_match) {
     if (topAcc > bottomAcc) result_text = `${top_label} gana`;
     else if (bottomAcc > topAcc) result_text = `${bottom_label} gana`;
@@ -492,6 +607,9 @@ export async function loadDerivedMatchDetail(
     top_total: topAcc,
     bottom_total: bottomAcc,
     decided_at_hole: decidedAtHole,
+    via_playoff: viaPlayoff || undefined,
+    playoff_decided_hole: playoffDecidedHole,
+    needs_playoff: needsPlayoff || undefined,
     holes,
     derived_from_strokes: true,
   };

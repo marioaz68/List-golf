@@ -408,6 +408,15 @@ function MatchCard({
     const n = Number(m[1]);
     return Number.isFinite(n) && n > 0 && n <= holesPerMatch ? n : null;
   })();
+  /** Decidido en desempate (muerte súbita). El result_text trae el patrón
+   *  "Desempate H{1..9}". */
+  const playoffDecidedHole: number | null = (() => {
+    if (!isDone || !match.result_text) return null;
+    const m = match.result_text.match(/Desempate\s+H(\d)/i);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) && n >= 1 && n <= 9 ? n : null;
+  })();
 
   const topPts = holes.reduce(
     (acc, h) => acc + (h.top_points != null ? Number(h.top_points) : 0),
@@ -528,9 +537,11 @@ function MatchCard({
           </span>
         ) : isDone ? (
           <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-200">
-            {decidedAtHole != null
-              ? `✓ FINAL · decidido en H${decidedAtHole}`
-              : `✓ FINAL · ${holesPlayed}/${holesPerMatch} hoyos`}
+            {playoffDecidedHole != null
+              ? `✓ FINAL · Desempate H${playoffDecidedHole}`
+              : decidedAtHole != null
+                ? `✓ FINAL · decidido en H${decidedAtHole}`
+                : `✓ FINAL · ${holesPlayed}/${holesPerMatch} hoyos`}
           </span>
         ) : isBye ? (
           <span className="rounded-full bg-slate-700/30 px-2 py-0.5 text-slate-400">

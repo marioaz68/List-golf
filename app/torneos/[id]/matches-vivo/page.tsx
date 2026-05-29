@@ -153,23 +153,29 @@ export default async function PublicMatchesLivePage(props: {
           if (!dec) return m;
           const winnerPairId =
             dec.winner === "top" ? m.top_pair_id : m.bottom_pair_id;
-          const remaining = Math.max(
-            0,
-            holesPerMatch - dec.decided_at_hole
-          );
-          const hi = Math.max(dec.top_total, dec.bottom_total);
-          const lo = Math.min(dec.top_total, dec.bottom_total);
           const fmt = (n: number) =>
             Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
-          const tail =
-            remaining === 0
-              ? ""
-              : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+          let resultText: string;
+          if (dec.via_playoff && dec.playoff_hole != null) {
+            // Decidido en muerte súbita (hoyos 19-27 = 1-9 físicos).
+            const hi = Math.max(dec.top_total, dec.bottom_total);
+            const lo = Math.min(dec.top_total, dec.bottom_total);
+            resultText = `${fmt(hi)}–${fmt(lo)} · Desempate H${dec.playoff_hole}`;
+          } else {
+            const remaining = Math.max(0, holesPerMatch - dec.decided_at_hole);
+            const hi = Math.max(dec.top_total, dec.bottom_total);
+            const lo = Math.min(dec.top_total, dec.bottom_total);
+            const tail =
+              remaining === 0
+                ? ""
+                : ` · ${remaining} ${remaining === 1 ? "hoyo" : "hoyos"} por jugar`;
+            resultText = `${fmt(hi)}–${fmt(lo)} en H${dec.decided_at_hole}${tail}`;
+          }
           return {
             ...m,
             status: "completed",
             winner_pair_id: winnerPairId,
-            result_text: `${fmt(hi)}–${fmt(lo)} en H${dec.decided_at_hole}${tail}`,
+            result_text: resultText,
           };
         });
       }

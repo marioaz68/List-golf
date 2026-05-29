@@ -1,3 +1,6 @@
+/** Hoyos 1-18 corresponden al recorrido normal. Los hoyos 19-27 son la
+ *  repetición física de los hoyos 1-9 que se juega como desempate
+ *  (muerte súbita) cuando el match termina empatado al hoyo 18. */
 export type HoleNumber =
   | 1
   | 2
@@ -16,9 +19,30 @@ export type HoleNumber =
   | 15
   | 16
   | 17
-  | 18;
+  | 18
+  | 19
+  | 20
+  | 21
+  | 22
+  | 23
+  | 24
+  | 25
+  | 26
+  | 27;
 
 export type HoleScores = Record<HoleNumber, number | null>;
+
+/** Convierte un hoyo de desempate (19-27) en su hoyo equivalente del
+ *  recorrido normal (1-9). Devuelve el mismo número para 1-18. */
+export function playoffSourceHole(hole: number): number {
+  if (hole >= 19 && hole <= 27) return hole - 18;
+  return hole;
+}
+
+/** True si `hole` pertenece al tramo de desempate (19-27). */
+export function isPlayoffHole(hole: number): boolean {
+  return hole >= 19 && hole <= 27;
+}
 
 export type CardSignaturePayload = {
   signedByPlayerAt: string | null;
@@ -48,11 +72,19 @@ export type WitnessAssignmentPayload = {
   witnessEntryId: string;
 };
 
-/** Match play: competencia del grupo ya decidida (p. ej. antes del 18). */
+/** Match play: estado de la competencia del grupo (decidida o necesita desempate). */
 export type GroupMatchPlayCapture = {
-  decidedAtHole: number;
+  /** Hoyo donde se decidió (1-18 normal; 19-27 si desempate). null si AS al 18 pendiente. */
+  decidedAtHole: number | null;
   resultText: string;
+  /** Hoyos que deben estar completos para firmar (depende del estado actual). */
   holesRequired: number;
+  /** True si el match terminó en desempate. */
+  viaPlayoff?: boolean;
+  /** Posición del desempate (1-9) donde se cerró. */
+  playoffHole?: number;
+  /** True si AS al 18 con desempate por jugar. */
+  needsPlayoff?: boolean;
 };
 
 export type GroupCapturePayload = {
