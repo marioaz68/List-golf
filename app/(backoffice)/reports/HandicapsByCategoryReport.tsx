@@ -102,6 +102,9 @@ export default async function HandicapsByCategoryReport({
     name: string;
     gender: string;
     hi: number;
+    /** HI realmente usado para WHS (capado al máximo del torneo si aplica). */
+    hi_effective: number | null;
+    hi_cap_source: "rule_max" | "rule_min" | null;
     ch: number | null;
     ph: number | null;
     is_override: boolean;
@@ -185,11 +188,19 @@ export default async function HandicapsByCategoryReport({
           ? Number(e.playing_handicap)
           : null;
 
+    const capApplied =
+      calc?.meta?.hi_cap_applied != null
+        ? Number(calc.meta.hi_cap_applied)
+        : null;
+    const capSource = calc?.meta?.hi_cap_source ?? null;
+
     const row: Row = {
       entry_id: e.id,
       name: formatPlayerName(e.player),
       gender: (e.player.gender ?? "—").toString().toUpperCase(),
       hi,
+      hi_effective: capApplied,
+      hi_cap_source: capSource,
       ch,
       ph,
       is_override: isOverride,
@@ -232,7 +243,12 @@ export default async function HandicapsByCategoryReport({
       <p className="text-[11px] text-slate-400">
         CH = HI × Slope/113 + (CR − Par) según la salida que la regla
         salida/categoría le asigna en el campo. PH = CH × % de reglas de
-        competencia. Ordenado por handicap ascendente (menor arriba).
+        competencia. Ordenado por handicap ascendente (menor arriba). Si el
+        HI del jugador rebasa el rango de la regla, se aplica el{" "}
+        <span className="font-semibold text-amber-300">
+          máximo a jugar del torneo
+        </span>{" "}
+        (handicap_max) — se indica con flecha amarilla en la columna HI.
       </p>
 
       <div className="space-y-3">
@@ -282,8 +298,26 @@ export default async function HandicapsByCategoryReport({
                         <td className="px-2 py-1.5 text-center text-slate-300">
                           {r.gender}
                         </td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">
+                        <td
+                          className={`px-2 py-1.5 text-right tabular-nums ${
+                            r.hi_cap_source != null
+                              ? "text-amber-200"
+                              : "text-slate-100"
+                          }`}
+                          title={
+                            r.hi_cap_source != null && r.hi_effective != null
+                              ? `HI real ${hiFmt(r.hi)} — capado a ${hiFmt(
+                                  r.hi_effective
+                                )} (máximo del torneo en su categoría/salida).`
+                              : undefined
+                          }
+                        >
                           {hiFmt(r.hi)}
+                          {r.hi_cap_source != null && r.hi_effective != null ? (
+                            <span className="ml-1 text-[8px] uppercase text-amber-300">
+                              → {hiFmt(r.hi_effective)}
+                            </span>
+                          ) : null}
                         </td>
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-100">
                           {r.is_override ? "—" : numFmt(r.ch)}

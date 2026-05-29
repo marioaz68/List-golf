@@ -43,6 +43,10 @@ export type WhsComputeResult = {
     source?: string;
     tee_code?: string | null;
     category_id?: string | null;
+    /** HI capado al máximo a jugar (handicap_max) o al mínimo (handicap_min)
+     *  de la regla del torneo, cuando el HI real del jugador rebasa el rango. */
+    hi_cap_applied?: number | null;
+    hi_cap_source?: "rule_max" | "rule_min" | null;
   };
 };
 
