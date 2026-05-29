@@ -160,25 +160,38 @@ export async function closeMatchAndAdvanceForGroup(
   const topPairId = derivedMatch.top_pair_id;
   const bottomPairId = derivedMatch.bottom_pair_id;
 
-  // 5) Encontrar el match real (matchplay_matches) por (bracket, round_no,
-  //    parejas). Aceptamos cualquier orden top/bottom.
-  const { data: candidateMatches } = await admin
+  // 5) Encontrar el match real (matchplay_matches) por (bracket, parejas).
+  //    Aceptamos cualquier orden top/bottom. Primero buscamos en la ronda
+  //    actual del calendario; si no aparece (típico cuando el bracket se
+  //    sembró por subasta/HI y las parejas se cruzan en otra ronda),
+  //    buscamos en cualquier ronda del bracket.
+  const { data: allBracketMatches } = await admin
     .from("matchplay_matches")
     .select(
       "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, next_match_id"
     )
-    .eq("bracket_id", bracketId)
-    .eq("round_no", currentRoundNo);
+    .eq("bracket_id", bracketId);
 
-  const realMatch = (candidateMatches ?? []).find(
-    (m) =>
-      (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
-      (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
+  const matchPredicate = (m: {
+    top_pair_id: string | null;
+    bottom_pair_id: string | null;
+  }) =>
+    (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
+    (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId);
+
+  let realMatch = (allBracketMatches ?? []).find(
+    (m) => Number(m.round_no) === currentRoundNo && matchPredicate(m)
   );
+  if (!realMatch) {
+    realMatch = (allBracketMatches ?? []).find(matchPredicate);
+  }
   if (!realMatch) {
     return {
       ok: false,
-      error: `No se encontró el match del cuadro para R${currentRoundNo} con las parejas de este grupo.`,
+      error:
+        "El cuadro no enfrenta a estas 2 parejas en ninguna ronda. " +
+        "El cuadro fue sembrado por subasta/HI y los enfrentamientos no coinciden con los grupos del calendario. " +
+        "Usa el botón “Re-armar bracket según grupos R1” para regenerar el cuadro alineado al calendario.",
     };
   }
   const matchplayMatchId = String(realMatch.id);
