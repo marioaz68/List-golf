@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import ReportToolbar from "./ReportToolbar";
 
 export type HandicapReportRow = {
   entry_id: string;
@@ -38,8 +39,10 @@ function normalize(s: string): string {
 
 export default function HandicapsByCategoryClient({
   categories,
+  tournamentName = "Torneo",
 }: {
   categories: HandicapReportCategory[];
+  tournamentName?: string;
 }) {
   const [search, setSearch] = useState("");
 
@@ -80,25 +83,37 @@ export default function HandicapsByCategoryClient({
   }, [categories, search, totalRows]);
 
   return (
-    <div className="space-y-3">
-      <p className="text-[11px] leading-relaxed text-slate-400">
-        <span className="font-semibold text-blue-300">HI</span>: define la
-        categoría del jugador.{" "}
-        <span className="font-semibold text-slate-200">HC</span>: handicap
-        del campo (referencia) = HI × Slope/113 + (CR − Par) según la salida
-        que la regla salida/categoría le asigna.{" "}
-        <span className="font-semibold text-emerald-300">PH</span>: handicap
-        del torneo = HC × % de reglas de competencia. Es el handicap con el
-        que el jugador compite durante todo el torneo (si el torneo es con
-        handicap). Ordenado por handicap ascendente (menor arriba). Si el HI
-        del jugador rebasa el rango de la regla, se aplica el{" "}
-        <span className="font-semibold text-amber-300">
-          máximo a jugar del torneo
-        </span>{" "}
-        (handicap_max) — se indica con flecha amarilla en la columna HI.
-      </p>
+    <div className="report-printable space-y-3">
+      <div className="hidden print:block">
+        <h1 className="text-base font-bold text-black">
+          Reporte de Handicaps — {tournamentName}
+        </h1>
+        <p className="text-[10px] text-black">
+          Generado: {new Date().toLocaleString("es-MX")} · {filtered.shown} de{" "}
+          {totalRows} inscritos
+        </p>
+      </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <p className="flex-1 text-[11px] leading-relaxed text-slate-400">
+          <span className="font-semibold text-blue-300">HI</span>: define la
+          categoría.{" "}
+          <span className="font-semibold text-slate-200">HC</span>: handicap
+          del campo (referencia).{" "}
+          <span className="font-semibold text-emerald-300">PH</span>: handicap
+          del torneo. Si el HI rebasa el rango de la regla, se aplica el{" "}
+          <span className="font-semibold text-amber-300">
+            máximo a jugar del torneo
+          </span>
+          .
+        </p>
+        <ReportToolbar
+          tournamentName={tournamentName}
+          categories={filtered.cats}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1.5 print:hidden">
         <span className="text-[11px] uppercase tracking-wide text-slate-400">
           Buscar
         </span>
