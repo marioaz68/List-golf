@@ -114,6 +114,168 @@ function formatScore(strokes: number | null, pickedUp: boolean | null): string {
   return String(strokes);
 }
 
+function buildDemoData(realPlayers: PlayerRow[]): {
+  players: PlayerRow[];
+  entries: AuditEntry[];
+} {
+  // Si hay jugadores reales del grupo úsalos; si no, inventa 4.
+  const players: PlayerRow[] =
+    realPlayers.length > 0
+      ? realPlayers
+      : [
+          {
+            entryId: "demo-1",
+            position: 1,
+            playerNumber: 11,
+            name: "Mario Álvarez Z.",
+          },
+          {
+            entryId: "demo-2",
+            position: 2,
+            playerNumber: 12,
+            name: "Adriana Guadalupe López",
+          },
+          {
+            entryId: "demo-3",
+            position: 3,
+            playerNumber: 21,
+            name: "José Alberto Fernández",
+          },
+          {
+            entryId: "demo-4",
+            position: 4,
+            playerNumber: 22,
+            name: "Paulina Septien",
+          },
+        ];
+
+  const entries: AuditEntry[] = [];
+  const t0 = Date.now() - 1000 * 60 * 60 * 2;
+  let seq = 0;
+  const stamp = () => new Date(t0 + (seq++ * 1000 * 60)).toISOString();
+
+  const roles: AuditEntry["actor_role"][] = ["player", "caddie", "witness", "admin"];
+  const roleLabels: Record<string, string> = {
+    player: "(jugador)",
+    caddie: "Carlos Caddie",
+    witness: "Testigo Adversario",
+    admin: "Comité",
+  };
+  const sources: Record<string, string> = {
+    player: "telegram_player",
+    caddie: "telegram_caddie",
+    witness: "telegram_witness",
+    admin: "backoffice",
+  };
+
+  const baseScores: Record<string, number[]> = {};
+  for (const p of players) {
+    baseScores[p.entryId] = Array.from({ length: 18 }, (_, i) => {
+      const par = i % 3 === 0 ? 4 : i % 3 === 1 ? 3 : 5;
+      const dev = Math.floor(Math.random() * 3) - 1;
+      return Math.max(2, par + dev);
+    });
+  }
+
+  // Captura inicial para cada jugador/hoyo
+  players.forEach((p, pi) => {
+    const role = roles[pi % roles.length] ?? "player";
+    const label =
+      role === "player" ? p.name : roleLabels[role ?? "player"] ?? "Capturador";
+    for (let hole = 1; hole <= 18; hole++) {
+      const strokes = baseScores[p.entryId][hole - 1];
+      entries.push({
+        id: `e-${p.entryId}-${hole}-init`,
+        entry_id: p.entryId,
+        hole_no: hole,
+        action: "create",
+        old_strokes: null,
+        new_strokes: strokes,
+        old_picked_up: null,
+        new_picked_up: false,
+        actor_role: role,
+        actor_label: label,
+        source: sources[role ?? "player"] ?? null,
+        created_at: stamp(),
+      });
+    }
+  });
+
+  // Algunas modificaciones por testigos/admin
+  const tweaks: Array<{ pi: number; hole: number; role: AuditEntry["actor_role"] }> = [
+    { pi: 0, hole: 7, role: "witness" },
+    { pi: 1, hole: 12, role: "admin" },
+    { pi: 2, hole: 3, role: "witness" },
+    { pi: 3, hole: 15, role: "caddie" },
+    { pi: 0, hole: 18, role: "admin" },
+  ];
+  for (const tw of tweaks) {
+    const p = players[tw.pi];
+    if (!p) continue;
+    const prev = baseScores[p.entryId][tw.hole - 1];
+    const next = Math.max(2, prev + (Math.random() < 0.5 ? -1 : 1));
+    baseScores[p.entryId][tw.hole - 1] = next;
+    entries.push({
+      id: `e-${p.entryId}-${tw.hole}-mod`,
+      entry_id: p.entryId,
+      hole_no: tw.hole,
+      action: "update",
+      old_strokes: prev,
+      new_strokes: next,
+      old_picked_up: false,
+      new_picked_up: false,
+      actor_role: tw.role,
+      actor_label: roleLabels[tw.role ?? "player"] ?? "Capturador",
+      source: sources[tw.role ?? "player"] ?? null,
+      created_at: stamp(),
+    });
+  }
+
+  // Un picked-up (X)
+  {
+    const p = players[2];
+    if (p) {
+      entries.push({
+        id: `e-${p.entryId}-9-x`,
+        entry_id: p.entryId,
+        hole_no: 9,
+        action: "update",
+        old_strokes: baseScores[p.entryId][8],
+        new_strokes: null,
+        old_picked_up: false,
+        new_picked_up: true,
+        actor_role: "player",
+        actor_label: p.name,
+        source: "telegram_player",
+        created_at: stamp(),
+      });
+    }
+  }
+
+  // Hoyos de playoff
+  for (let h = 19; h <= 21; h++) {
+    players.forEach((p, pi) => {
+      entries.push({
+        id: `e-${p.entryId}-${h}-po`,
+        entry_id: p.entryId,
+        hole_no: h,
+        action: "create",
+        old_strokes: null,
+        new_strokes: 3 + Math.floor(Math.random() * 2),
+        old_picked_up: null,
+        new_picked_up: false,
+        actor_role: pi === 0 ? "caddie" : "player",
+        actor_label: pi === 0 ? "Carlos Caddie" : p.name,
+        source: pi === 0 ? "telegram_caddie" : "telegram_player",
+        created_at: stamp(),
+      });
+    });
+  }
+
+  entries.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return { players, entries };
+}
+
 export default function AuditCaptureModal({
   groupId,
   groupNo,
@@ -132,6 +294,11 @@ export default function AuditCaptureModal({
     entryId: string;
     hole: number;
   } | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+  const [realData, setRealData] = useState<{
+    players: PlayerRow[];
+    entries: AuditEntry[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,10 +314,18 @@ export default function AuditCaptureModal({
         setMissingTable(Boolean(json.missingAuditTable));
         setPlayers(json.players ?? []);
         setEntries(json.entries ?? []);
+        setRealData({
+          players: json.players ?? [],
+          entries: json.entries ?? [],
+        });
         return;
       }
       setPlayers(json.players ?? []);
       setEntries(json.entries ?? []);
+      setRealData({
+        players: json.players ?? [],
+        entries: json.entries ?? [],
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error de red");
     } finally {
@@ -161,6 +336,21 @@ export default function AuditCaptureModal({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Aplicar demo si está activo (sin escribir nada al backend)
+  useEffect(() => {
+    if (!realData) return;
+    if (demoMode) {
+      const demo = buildDemoData(realData.players);
+      setPlayers(demo.players);
+      setEntries(demo.entries);
+      setSelectedHole(null);
+    } else {
+      setPlayers(realData.players);
+      setEntries(realData.entries);
+      setSelectedHole(null);
+    }
+  }, [demoMode, realData]);
 
   // Indexar: entries × hole → AuditEntry[]
   const matrix = useMemo(() => {
@@ -221,11 +411,24 @@ export default function AuditCaptureModal({
               detalle.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDemoMode((v) => !v)}
+              title="Muestra cómo se verá la auditoría cuando empiecen a llegar capturas, usando datos de ejemplo. No escribe nada al servidor."
+              className={
+                demoMode
+                  ? "rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+                  : "rounded-md border border-amber-400 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+              }
+            >
+              {demoMode ? "🟡 Vista previa activa" : "👁️ Vista previa demo"}
+            </button>
             <button
               type="button"
               onClick={load}
-              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+              disabled={demoMode}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
               Refrescar
             </button>
@@ -262,6 +465,20 @@ export default function AuditCaptureModal({
 
           {!loading && !error ? (
             <>
+              {demoMode ? (
+                <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <p className="font-semibold">
+                    Vista previa con datos ficticios.
+                  </p>
+                  <p className="mt-0.5">
+                    Así se verá la auditoría cuando empiecen a llegar capturas
+                    reales: capturas iniciales (verde), modificaciones (ámbar),
+                    levantadas (X) y hoyos de playoff (P1, P2…). Apaga el
+                    botón para volver a los datos reales del grupo.
+                  </p>
+                </div>
+              ) : null}
+
               {/* Resumen */}
               <section className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 <div className="rounded border border-slate-200 bg-white p-2">
