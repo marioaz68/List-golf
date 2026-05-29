@@ -21,6 +21,8 @@ export type GroupMatchPlayStatus = {
   playoffHole?: number;
   /** True si quedó AS al 18 y aún falta capturar el desempate. */
   needsPlayoff?: boolean;
+  /** Desempate en curso: hoyo (1-9) con captura incompleta. */
+  playoffPendingHole?: number;
   /** Progresión del match hoyo por hoyo (puntos acumulados + label). */
   progression?: GroupMatchPlayProgressionRow[];
   /** Etiqueta corta de las parejas (top / bottom) para leyendas. */
@@ -175,11 +177,16 @@ export async function loadGroupMatchPlayStatus(
   }
 
   if (summary?.needs_playoff) {
+    const pending = summary.playoff_pending_hole;
     return {
       decidedAtHole: null,
-      resultText: "Empate al 18 — definiendo en desempate",
+      resultText:
+        pending != null
+          ? `Desempate P${pending} · faltan scores para calcular puntos`
+          : "Empate al 18 — definiendo en desempate",
       holesRequired: 18,
       needsPlayoff: true,
+      playoffPendingHole: pending,
       progression,
       topLabel,
       bottomLabel,

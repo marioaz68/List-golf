@@ -25,6 +25,7 @@ import {
   HOLES_PLAYOFF,
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
+import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
 import type {
   GroupCapturePayload,
   GroupCapturePlayer,
@@ -77,6 +78,19 @@ function sumPar(holes: HoleNumber[]): number {
   return holes.reduce((acc, h) => acc + (PAR_BY_HOLE[h] ?? 0), 0);
 }
 
+/**
+ * Celda de score con auto-guardado.
+ *
+ * Cada vez que el usuario teclea un dígito válido el valor se guarda
+ * automáticamente — no hace falta hacer blur ni dar Enter para que se
+ * persista. La lógica:
+ *  - Un dígito (1-9)  → se guarda al instante.
+ *  - Dos dígitos (10-15) → se guarda al instante con el nuevo valor.
+ *  - Limpia con Backspace/Delete → se manda `null` y queda en blanco.
+ *
+ * Para evitar mandar muchas requests al backend mientras el usuario
+ * sigue tecleando, se debouncea ~150 ms.
+ */
 function ScoreCell({
   value,
   par,
@@ -93,24 +107,66 @@ function ScoreCell({
   onCommit: (next: number | null) => void;
 }) {
   const [draft, setDraft] = useState<string>(value != null ? String(value) : "");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCommittedRef = useRef<number | null>(value);
 
   useEffect(() => {
+    lastCommittedRef.current = value;
     setDraft(value != null ? String(value) : "");
   }, [value]);
 
-  function commitDraft() {
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  function scheduleCommit(next: number | null) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (lastCommittedRef.current === next) return;
+      lastCommittedRef.current = next;
+      onCommit(next);
+    }, 150);
+  }
+
+  function flushCommit(next: number | null) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (lastCommittedRef.current === next) return;
+    lastCommittedRef.current = next;
+    onCommit(next);
+  }
+
+  function handleChange(raw: string) {
+    const cleaned = raw.replace(/[^0-9]/g, "").slice(0, 2);
+    setDraft(cleaned);
+    if (cleaned === "") {
+      scheduleCommit(null);
+      return;
+    }
+    const n = Number(cleaned);
+    if (!Number.isFinite(n) || n < 1 || n > 15) {
+      // Valor fuera de rango: descartamos sin guardar.
+      return;
+    }
+    scheduleCommit(Math.trunc(n));
+  }
+
+  function handleBlur() {
     const trimmed = draft.trim();
     if (trimmed === "") {
-      if (value !== null) onCommit(null);
+      flushCommit(null);
       return;
     }
     const n = Number(trimmed);
-    if (!Number.isFinite(n) || n < 1) {
+    if (!Number.isFinite(n) || n < 1 || n > 15) {
       setDraft(value != null ? String(value) : "");
       return;
     }
-    const next = Math.trunc(n);
-    if (next !== value) onCommit(next);
+    flushCommit(Math.trunc(n));
   }
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
@@ -140,8 +196,9 @@ function ScoreCell({
       value={draft}
       readOnly={disabled}
       disabled={disabled}
-      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
-      onBlur={commitDraft}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => handleChange(e.target.value)}
+      onBlur={handleBlur}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -524,12 +581,18 @@ export default function GrupoCaptureClient({
     return map;
   }, [meta.matchPlay?.progression]);
 
-  const showPlayoff =
-    Boolean(meta.matchPlay?.needsPlayoff) ||
-    Boolean(meta.matchPlay?.viaPlayoff) ||
-    meta.players.some((p) =>
-      HOLES_PLAYOFF.some((h) => (scoresByEntry[p.entryId] ?? p.scores)[h] != null)
-    );
+  const playoffCapture = useMemo(
+    () =>
+      analyzePlayoffCapture(
+        meta.matchPlay,
+        meta.players.map((p) => ({
+          entryId: p.entryId,
+          name: p.name,
+          scores: scoresByEntry[p.entryId] ?? p.scores,
+        }))
+      ),
+    [meta.matchPlay, meta.players, scoresByEntry]
+  );
 
   // Si ya se decidió en desempate, bloqueamos hoyos posteriores al de cierre.
   const decidedAt = meta.matchPlay?.decidedAtHole ?? null;
@@ -606,6 +669,22 @@ export default function GrupoCaptureClient({
           </div>
         ) : null}
 
+        {playoffCapture.orphanPlayoffScores ? (
+          <div className="rounded-md border border-amber-600 bg-amber-50 px-3 py-2 text-[12px] text-amber-950">
+            El match ya quedó decidido en la ronda normal (
+            {meta.matchPlay?.resultText}). Los hoyos de desempate capturados no
+            cambian el resultado.
+          </div>
+        ) : null}
+
+        {playoffCapture.missingPlayerNames.length > 0 ? (
+          <div className="rounded-md border border-red-400 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-900">
+            Desempate P{playoffCapture.pendingPlayoffHole}: faltan scores de{" "}
+            {playoffCapture.missingPlayerNames.join(", ")}. Sin los 4 jugadores
+            no se calculan puntos ni se cierra el match.
+          </div>
+        ) : null}
+
         {/* Tabla principal: 4 jugadores × 18 hoyos */}
         <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
           <div className={scrollClass}>
@@ -655,7 +734,7 @@ export default function GrupoCaptureClient({
         </div>
 
         {/* Desempate: solo si aplica */}
-        {showPlayoff ? (
+        {playoffCapture.showPlayoffSection ? (
           <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-2 shadow-sm">
             <div className="mb-2 px-1 text-[11px] font-bold tracking-wide text-amber-900">
               DESEMPATE · muerte súbita (hoyos 1-9 físicos)
