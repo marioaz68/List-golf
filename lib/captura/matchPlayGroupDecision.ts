@@ -23,19 +23,23 @@ export type GroupMatchPlayStatus = {
 };
 
 function formatDecisionLabel(decision: DerivedMatchDecision): string {
-  if (decision.via_playoff && decision.playoff_hole != null) {
-    return `Desempate · decidido en H${decision.playoff_hole}`;
-  }
   const diffAbs = Math.abs(decision.top_total - decision.bottom_total);
-  // Cada hoyo otorga máximo 2 puntos en Bola Baja + Bola Alta.
-  const pointsLeft = Math.max(0, 18 - decision.decided_at_hole) * 2;
   const lead = Number.isInteger(diffAbs)
     ? String(diffAbs)
     : diffAbs.toFixed(1).replace(/\.0$/, "");
-  if (pointsLeft > 0) {
-    return `${lead}/${pointsLeft} · decidido en H${decision.decided_at_hole}`;
+
+  if (decision.via_playoff && decision.playoff_hole != null) {
+    return `Desempate H${decision.playoff_hole} · ${lead} arriba`;
   }
-  return `Decidido en H${decision.decided_at_hole}`;
+
+  // Cada hoyo otorga máximo 2 puntos en Bola Baja + Bola Alta, así que
+  // los puntos por jugar al cierre = hoyos restantes × 2.
+  const pointsLeft = Math.max(0, 18 - decision.decided_at_hole) * 2;
+  const tail = pointsLeft > 0 ? ` · ${pointsLeft} por jugar` : "";
+  if (diffAbs === 0) {
+    return `H${decision.decided_at_hole} · AS${tail}`;
+  }
+  return `H${decision.decided_at_hole} · ${lead} arriba${tail}`;
 }
 
 /**

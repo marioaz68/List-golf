@@ -118,13 +118,19 @@ function netOnHole(
   return gross - received;
 }
 
+/**
+ * En match play (Bola Baja + Bola Alta) cada sub-competencia (bola baja
+ * y bola alta) entrega 1 punto al ganador o 0 si el hoyo queda halved
+ * ("compartido"). No usamos `0.5 – 0.5` en empates: el hoyo no aporta
+ * puntos a ninguno de los lados (regla clásica de match play).
+ */
 function pointsFromComparison(
   topValue: number,
   bottomValue: number
 ): { top: number; bottom: number } {
   if (topValue < bottomValue) return { top: 1, bottom: 0 };
   if (bottomValue < topValue) return { top: 0, bottom: 1 };
-  return { top: 0.5, bottom: 0.5 };
+  return { top: 0, bottom: 0 };
 }
 
 function formatPts(n: number): string {
@@ -292,7 +298,7 @@ export function isLowHighMatchDecidedAt(params: {
 }
 
 /**
- * Texto tipo "5–0 a falta de 8 puntos" para mostrar al usuario el
+ * Texto tipo "H16 · 6 arriba · 4 por jugar" para mostrar al usuario el
  * resultado de un match concedido por marcador. En Bola Baja + Bola
  * Alta cada hoyo otorga máximo 2 puntos (1 bola baja + 1 bola alta),
  * por lo que los puntos por jugar = hoyos restantes × 2.
@@ -304,14 +310,15 @@ export function formatLowHighDecisionResult(params: {
   decided_at_hole: number;
   holes_in_match: number;
 }): string {
-  const { winner_label, top_total, bottom_total, decided_at_hole, holes_in_match } = params;
-  const hi = Math.max(top_total, bottom_total);
-  const lo = Math.min(top_total, bottom_total);
+  const { winner_label, top_total, bottom_total, decided_at_hole, holes_in_match } =
+    params;
+  const lead = Math.abs(top_total - bottom_total);
   const holesRemaining = Math.max(0, holes_in_match - decided_at_hole);
   const pointsRemaining = holesRemaining * 2;
   const tail =
-    pointsRemaining === 0
-      ? ""
-      : ` · ${pointsRemaining} ${pointsRemaining === 1 ? "punto" : "puntos"} por jugar`;
-  return `${winner_label} gana ${formatPts(hi)}–${formatPts(lo)} en H${decided_at_hole}${tail}`;
+    pointsRemaining === 0 ? "" : ` · ${pointsRemaining} por jugar`;
+  if (lead === 0) {
+    return `H${decided_at_hole} · AS${tail}`;
+  }
+  return `${winner_label} · H${decided_at_hole} · ${formatPts(lead)} arriba${tail}`;
 }
