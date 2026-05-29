@@ -10,6 +10,12 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 
+/**
+ * Hoyos 1-18 = recorrido normal.
+ * Hoyos 19-27 = tramo de desempate (muerte súbita): se vuelven a jugar
+ * físicamente los hoyos 1-9 y se guardan en BD como hole_no 19..27.
+ * En la UI se muestran como H1..H9 con etiqueta "Desempate".
+ */
 type HoleNumber =
   | 1
   | 2
@@ -28,7 +34,16 @@ type HoleNumber =
   | 15
   | 16
   | 17
-  | 18;
+  | 18
+  | 19
+  | 20
+  | 21
+  | 22
+  | 23
+  | 24
+  | 25
+  | 26
+  | 27;
 
 type HoleScores = Record<HoleNumber, number | null>;
 
@@ -42,9 +57,12 @@ type PlayerRow = {
 
 const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+const HOLES_PLAYOFF: HoleNumber[] = [
+  19, 20, 21, 22, 23, 24, 25, 26, 27,
+];
 const ALL_HOLES: HoleNumber[] = [...HOLES_FRONT, ...HOLES_BACK];
 
-const PAR_BY_HOLE: Record<HoleNumber, number> = {
+const PAR_BASE: Record<number, number> = {
   1: 4,
   2: 4,
   3: 3,
@@ -65,7 +83,7 @@ const PAR_BY_HOLE: Record<HoleNumber, number> = {
   18: 4,
 };
 
-const HCP_BY_HOLE: Record<HoleNumber, number> = {
+const HCP_BASE: Record<number, number> = {
   1: 13,
   2: 1,
   3: 15,
@@ -86,27 +104,28 @@ const HCP_BY_HOLE: Record<HoleNumber, number> = {
   18: 4,
 };
 
+/** PAR/HCP para los hoyos 19-27 se reflejan desde los hoyos 1-9
+ *  porque físicamente se vuelven a jugar esos mismos hoyos. */
+const PAR_BY_HOLE: Record<HoleNumber, number> = (() => {
+  const map = {} as Record<HoleNumber, number>;
+  for (const h of [...HOLES_FRONT, ...HOLES_BACK]) map[h] = PAR_BASE[h]!;
+  for (const h of HOLES_PLAYOFF) map[h] = PAR_BASE[h - 18]!;
+  return map;
+})();
+
+const HCP_BY_HOLE: Record<HoleNumber, number> = (() => {
+  const map = {} as Record<HoleNumber, number>;
+  for (const h of [...HOLES_FRONT, ...HOLES_BACK]) map[h] = HCP_BASE[h]!;
+  for (const h of HOLES_PLAYOFF) map[h] = HCP_BASE[h - 18]!;
+  return map;
+})();
+
 function createEmptyScores(): HoleScores {
-  return {
-    1: null,
-    2: null,
-    3: null,
-    4: null,
-    5: null,
-    6: null,
-    7: null,
-    8: null,
-    9: null,
-    10: null,
-    11: null,
-    12: null,
-    13: null,
-    14: null,
-    15: null,
-    16: null,
-    17: null,
-    18: null,
-  };
+  const map = {} as HoleScores;
+  for (const h of [...HOLES_FRONT, ...HOLES_BACK, ...HOLES_PLAYOFF]) {
+    map[h] = null;
+  }
+  return map;
 }
 
 function getShortName(name: string) {
@@ -354,6 +373,8 @@ function CompactCardSection({
   showGrandTotal,
   highlightPlayerId,
   witnessTargetPlayerId,
+  headerToneClass,
+  labelForHole,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -364,6 +385,10 @@ function CompactCardSection({
   highlightPlayerId?: string | null;
   /** Si se proporciona, esa fila se pinta en ámbar (mi jugador a atestiguar). */
   witnessTargetPlayerId?: string | null;
+  /** Color de la barra superior (default azul oscuro). Usado por desempate. */
+  headerToneClass?: string;
+  /** Etiqueta personalizada por hoyo (usado por desempate: H1..H9). */
+  labelForHole?: (hole: HoleNumber) => string | number;
 }) {
   const gridCols = showGrandTotal
     ? "56px repeat(9,minmax(0,1fr)) 36px 36px"
@@ -377,7 +402,10 @@ function CompactCardSection({
 
       <div className="w-full">
         <div
-          className="grid items-center bg-[#0d2747] text-white"
+          className={[
+            "grid items-center text-white",
+            headerToneClass ?? "bg-[#0d2747]",
+          ].join(" ")}
           style={{ gridTemplateColumns: gridCols }}
         >
           <div className="px-1 py-1 text-center text-[10px] font-bold">HOY</div>
@@ -387,7 +415,7 @@ function CompactCardSection({
               key={`${title}-hole-${hole}`}
               className="py-1 text-center text-[10px] font-bold"
             >
-              {hole}
+              {labelForHole ? labelForHole(hole) : hole}
             </div>
           ))}
 
@@ -625,18 +653,23 @@ function HoleDots({
   currentHole,
   onSelectHole,
   isHoleComplete,
+  showPlayoff,
+  decidedAtPlayoffHole,
 }: {
   currentHole: HoleNumber;
   onSelectHole: (hole: HoleNumber) => void;
   isHoleComplete: (hole: HoleNumber) => boolean;
+  /** Si true, también renderiza los hoyos 19-27 (etiquetados P1-P9). */
+  showPlayoff?: boolean;
+  /** Hoyo de desempate donde se decidió (1..9); desactiva los siguientes. */
+  decidedAtPlayoffHole?: number | null;
 }) {
   return (
     <div className="border-b bg-white px-2 py-1">
-      <div className="flex gap-1 overflow-x-auto">
+      <div className="flex items-center gap-1 overflow-x-auto">
         {ALL_HOLES.map((hole) => {
           const isActive = hole === currentHole;
           const isDone = isHoleComplete(hole);
-
           return (
             <button
               key={`hole-dot-${hole}`}
@@ -661,6 +694,49 @@ function HoleDots({
             </button>
           );
         })}
+
+        {showPlayoff ? (
+          <>
+            <span className="mx-1 inline-block h-6 w-px bg-amber-300" />
+            {HOLES_PLAYOFF.map((hole) => {
+              const isActive = hole === currentHole;
+              const isDone = isHoleComplete(hole);
+              const playoffNo = hole - 18;
+              const disabled =
+                decidedAtPlayoffHole != null && playoffNo > decidedAtPlayoffHole;
+              return (
+                <button
+                  key={`hole-dot-${hole}`}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (disabled) return;
+                    onSelectHole(hole);
+                  }}
+                  className={[
+                    "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold sm:h-8 sm:w-8 md:h-6 md:w-6 md:text-[10px]",
+                    isActive
+                      ? "bg-amber-700 text-white"
+                      : disabled
+                        ? "bg-amber-100 text-amber-400 opacity-40"
+                        : "bg-amber-200 text-amber-900",
+                  ].join(" ")}
+                  title={`Desempate · hoyo ${playoffNo}`}
+                >
+                  P{playoffNo}
+                  {isDone ? (
+                    <span
+                      aria-label="Hoyo completo"
+                      className="absolute -right-1.5 -top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[12px] font-black leading-none text-white shadow-sm"
+                    >
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -753,6 +829,18 @@ function MobileScoreEntryContent() {
   const [myWitnessName, setMyWitnessName] = useState<string | null>(null);
   /** Cuántos cambios tengo pendientes por aprobar (en celdas del jugador que atestiguo). */
   const [pendingForMeCount, setPendingForMeCount] = useState<number>(0);
+  /** Estado de match play del grupo: AS al 18 → desempate; o ya decidido. */
+  type GroupMatchPlay = {
+    decidedAtHole: number | null;
+    resultText: string;
+    holesRequired: number;
+    viaPlayoff?: boolean;
+    playoffHole?: number;
+    needsPlayoff?: boolean;
+  };
+  const [matchPlayInfo, setMatchPlayInfo] = useState<GroupMatchPlay | null>(
+    null
+  );
   /**
    * Visibilidad de "Mi Score" + banner de testigo en la pestaña Tarjeta.
    * Se oculta al volver desde Anotar; el botón toggle siempre queda visible.
@@ -800,6 +888,7 @@ function MobileScoreEntryContent() {
             myEntryId?: string | null;
             caddieForEntryIds?: string[];
             witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
+            matchPlay?: GroupMatchPlay | null;
             players: Array<{
               entryId: string;
               name: string;
@@ -822,6 +911,7 @@ function MobileScoreEntryContent() {
         const myId = data.myEntryId ?? (meTrim || null);
         setMyEntryId(myId);
         setTournamentId(data.tournamentId ?? null);
+        setMatchPlayInfo(data.matchPlay ?? null);
         setCaddieForEntryIds(
           Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
         );
@@ -1283,6 +1373,19 @@ function MobileScoreEntryContent() {
               setDraftFresh(false);
             }}
             isHoleComplete={isHoleComplete}
+            showPlayoff={Boolean(
+              matchPlayInfo &&
+                (matchPlayInfo.needsPlayoff ||
+                  matchPlayInfo.viaPlayoff ||
+                  players.some((p) =>
+                    HOLES_PLAYOFF.some((h) => p.scores[h] != null)
+                  ))
+            )}
+            decidedAtPlayoffHole={
+              matchPlayInfo?.viaPlayoff
+                ? matchPlayInfo.playoffHole ?? null
+                : null
+            }
           />
         ) : null}
 
@@ -1358,8 +1461,27 @@ function MobileScoreEntryContent() {
                 activePlayerId ? "pb-44" : "pb-4",
               ].join(" ")}
             >
+              {matchPlayInfo?.needsPlayoff ? (
+                <div className="rounded-md border border-amber-500 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-900">
+                  Empate al 18 (AS). Procedan al desempate en muerte súbita
+                  (hoyos 1-9). En el primer hoyo donde una pareja saque al
+                  menos 1 punto, termina el match.
+                </div>
+              ) : null}
+              {matchPlayInfo &&
+              !matchPlayInfo.needsPlayoff &&
+              matchPlayInfo.decidedAtHole != null ? (
+                <div className="rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-semibold text-emerald-900">
+                  Match decidido: {matchPlayInfo.resultText}.
+                </div>
+              ) : null}
+
               <section className="rounded-xl bg-white px-3 py-3 text-center shadow-sm">
-                <div className="text-base font-bold">Hoyo {currentHole}</div>
+                <div className="text-base font-bold">
+                  {currentHole > 18
+                    ? `Desempate · Hoyo ${currentHole - 18}`
+                    : `Hoyo ${currentHole}`}
+                </div>
                 <div className="text-xs text-slate-600">
                   Par {PAR_BY_HOLE[currentHole]}
                 </div>
@@ -1779,6 +1901,39 @@ function MobileScoreEntryContent() {
                   highlightPlayerId={viewerEntryId}
                   witnessTargetPlayerId={witnessTargetEntryId}
                 />
+
+                {/* Tarjeta de desempate (muerte súbita): se muestra
+                    cuando hay AS al 18 o ya hay algún hoyo capturado del
+                    playoff. Las cabeceras muestran H1..H9. */}
+                {(() => {
+                  const showPlayoff = Boolean(
+                    matchPlayInfo &&
+                      (matchPlayInfo.needsPlayoff ||
+                        matchPlayInfo.viaPlayoff ||
+                        players.some((p) =>
+                          HOLES_PLAYOFF.some((h) => p.scores[h] != null)
+                        ))
+                  );
+                  if (!showPlayoff) return null;
+                  return (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-1">
+                      <div className="px-2 py-1 text-[10px] font-bold tracking-[0.14em] text-amber-900">
+                        DESEMPATE · muerte súbita (hoyos 1-9)
+                      </div>
+                      <CompactCardSection
+                        title="PLAYOFF"
+                        holes={HOLES_PLAYOFF}
+                        players={players}
+                        totalLabel="PO"
+                        showGrandTotal={false}
+                        highlightPlayerId={viewerEntryId}
+                        witnessTargetPlayerId={witnessTargetEntryId}
+                        headerToneClass="bg-amber-700"
+                        labelForHole={(h) => `H${(h as number) - 18}`}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             </section>
 
