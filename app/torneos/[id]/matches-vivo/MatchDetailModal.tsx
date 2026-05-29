@@ -389,12 +389,12 @@ function PayerBanner({
     <div className="rounded-lg border border-amber-400/40 bg-gradient-to-r from-amber-950/60 via-amber-900/40 to-amber-950/60 p-2.5">
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200">
-          ✓ Gana
+          ✓ Ganadores
         </span>
         <span className="text-[12px] font-bold text-emerald-200">{winner}</span>
         <span className="text-slate-500">·</span>
         <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-200">
-          ✕ Pierde
+          ✕ Perdedores
         </span>
         <span className="text-[12px] font-bold text-rose-200">{loser}</span>
       </div>
