@@ -83,7 +83,8 @@ export async function advanceWinnerInBracket(
     .eq("id", nextMatchId)
     .maybeSingle();
 
-  if (nextRow) {
+  // Solo cascada si el partido siguiente ya es BYE completo (no “esperando rival”).
+  if (nextRow && nextRow.status === "bye") {
     await resolveNextMatchBye(admin, nextRow);
   }
 
