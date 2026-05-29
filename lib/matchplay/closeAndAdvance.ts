@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
+import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
 
 /**
  * Cierra un match (formato Bola Baja + Alta) cuando ya está
@@ -31,6 +32,8 @@ export type CloseMatchResult =
       nextRoundId: string | null;
       nextGroupNo: number | null;
       nextTeeTime: string | null;
+      /** Conteo de notificaciones de Telegram enviadas al nuevo grupo. */
+      telegramNotified?: { sent: number; failed: number; skipped: number };
       message: string;
     }
   | { ok: false; error: string };
@@ -74,10 +77,17 @@ function formatResultText(
 
 export async function closeMatchAndAdvanceForGroup(
   admin: SupabaseClient,
-  params: { groupId: string }
+  params: {
+    groupId: string;
+    /** Si true (default) y la siguiente salida se crea automáticamente,
+     *  se envía un mensaje de Telegram a los 4 jugadores y a sus caddies
+     *  asignados con la nueva ronda + link a la tarjeta. Best-effort. */
+    notifyNextGroup?: boolean;
+  }
 ): Promise<CloseMatchResult> {
   const groupId = String(params.groupId ?? "").trim();
   if (!groupId) return { ok: false, error: "Falta group_id." };
+  const shouldNotify = params.notifyNextGroup !== false;
 
   // 1) Grupo + ronda + torneo
   const { data: groupRow } = await admin
@@ -264,9 +274,42 @@ export async function closeMatchAndAdvanceForGroup(
     }
   }
 
+  // 10) Notificar por Telegram al nuevo grupo (jugadores + caddies).
+  //     Best-effort: no rompemos el cierre si falla.
+  let telegramNotified: { sent: number; failed: number; skipped: number } | undefined;
+  if (shouldNotify && nextGroupCreated && nextRoundId) {
+    try {
+      telegramNotified = await notifyNextRoundGroupCreated(admin, {
+        tournamentId,
+        nextRoundId,
+        nextGroupNo,
+        nextTeeTime,
+        closedMatchResult: resultText,
+      });
+    } catch {
+      telegramNotified = { sent: 0, failed: 0, skipped: 0 };
+    }
+  }
+
   const advanceMessage = adv.advanced
     ? adv.message
     : "Sin partido siguiente (campeón) o BYE.";
+
+  const notifySuffix = telegramNotified
+    ? telegramNotified.sent > 0
+      ? ` ${telegramNotified.sent} notificacion(es) Telegram enviada(s)${
+          telegramNotified.failed > 0
+            ? `, ${telegramNotified.failed} fallaron`
+            : ""
+        }${
+          telegramNotified.skipped > 0
+            ? `, ${telegramNotified.skipped} sin chat ID`
+            : ""
+        }.`
+      : telegramNotified.skipped > 0 || telegramNotified.failed > 0
+        ? ` Sin destinatarios con Telegram vinculado.`
+        : ""
+    : "";
 
   return {
     ok: true,
@@ -279,8 +322,9 @@ export async function closeMatchAndAdvanceForGroup(
     nextRoundId,
     nextGroupNo,
     nextTeeTime,
+    telegramNotified,
     message: nextGroupCreated
-      ? `${advanceMessage} Salida creada (G${nextGroupNo} · ${nextTeeTime}).`
+      ? `${advanceMessage} Salida creada (G${nextGroupNo} · ${nextTeeTime}).${notifySuffix}`
       : advanceMessage,
   };
 }

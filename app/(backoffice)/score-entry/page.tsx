@@ -9,6 +9,7 @@ import {
 import ScoreEntryClient from "./ScoreEntryClient";
 import ScoreEntryModeTabs from "./ScoreEntryModeTabs";
 import ScoreEntryRoundCloseBanner from "./ScoreEntryRoundCloseBanner";
+import DecidedMatchesPanel from "./DecidedMatchesPanel";
 import {
   buildScoreEntryHref,
   parseScoreEntryMode,
@@ -1428,6 +1429,10 @@ export default async function ScoreEntryPage(props: {
             roundClosed={roundClosed}
             captureRoundNotice={captureRoundNotice || undefined}
           />
+        )}
+
+        {effectiveTournamentId && isMatchPlayTournament && (
+          <DecidedMatchesPanel tournamentId={effectiveTournamentId} />
         )}
       </div>
     </div>
