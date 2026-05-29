@@ -1,10 +1,6 @@
-"use server";
-
-import { createAdminClient } from "@/utils/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
-import { createRoundFromForm } from "@/lib/rounds/createRoundFromForm";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -38,13 +34,10 @@ function optInt(fd: FormData, key: string) {
 
 function reqStartType(fd: FormData) {
   let v = String(fd.get("start_type") ?? "").trim();
-
   if (v === "tee_times") v = "tee_time";
-
   if (v !== "tee_time" && v !== "shotgun") {
     throw new Error("start_type inválido");
   }
-
   return v as "tee_time" | "shotgun";
 }
 
@@ -67,47 +60,39 @@ function reqGroupSize(fd: FormData) {
 
 function normalizeTime(raw: string | null) {
   if (!raw) return null;
-
   const s = raw.toLowerCase().trim();
   if (!s) return null;
-
   const m = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!m) throw new Error("Hora inválida");
-
   const h = Number(m[1]);
   const min = Number(m[2]);
-
   if (h < 0 || h > 23 || min < 0 || min > 59) {
     throw new Error("Hora inválida");
   }
-
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
-async function ensureAccess(tournament_id: string) {
-  await requireTournamentAccess({
-    tournamentId: tournament_id,
-    allowedRoles: ["super_admin", "club_admin", "tournament_director"],
-  });
+function getCategoryIds(fd: FormData) {
+  const many = fd
+    .getAll("category_ids")
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean);
+  if (many.length > 0) {
+    return Array.from(new Set(many));
+  }
+  const single = String(fd.get("category_id") ?? "").trim();
+  if (single) return [single];
+  throw new Error("Selecciona al menos una categoría");
 }
 
-export async function createRound(formData: FormData) {
-  const tournament_id = String(formData.get("tournament_id") ?? "").trim();
-  if (!tournament_id) throw new Error("Falta tournament_id");
-  await ensureAccess(tournament_id);
-  const supabase = createAdminClient();
-  await createRoundFromForm(supabase, formData);
-}
-
-export async function updateRound(formData: FormData) {
-  const supabase = createAdminClient();
-
-  const id = reqStr(formData, "id");
+/** Inserta filas en `rounds` a partir del formulario de captura. */
+export async function createRoundFromForm(
+  supabase: SupabaseClient,
+  formData: FormData
+) {
   const tournament_id = reqStr(formData, "tournament_id");
-  await ensureAccess(tournament_id);
-
   const round_no = reqInt(formData, "round_no");
-  const category_id = optStr(formData, "category_id");
+  const category_ids = getCategoryIds(formData);
   const round_date = optStr(formData, "round_date");
   const wave = optWave(formData);
   const start_type = reqStartType(formData);
@@ -115,19 +100,19 @@ export async function updateRound(formData: FormData) {
   const interval_minutes = optInt(formData, "interval_minutes");
   const group_size = reqGroupSize(formData);
 
-  const { error } = await supabase
-    .from("rounds")
-    .update({
-      round_no,
-      category_id,
-      round_date,
-      wave,
-      start_type,
-      start_time,
-      interval_minutes,
-      group_size,
-    })
-    .eq("id", id);
+  const rows = category_ids.map((category_id) => ({
+    tournament_id,
+    round_no,
+    category_id,
+    round_date,
+    wave,
+    start_type,
+    start_time,
+    interval_minutes,
+    group_size,
+  }));
+
+  const { error } = await supabase.from("rounds").insert(rows);
 
   if (error) {
     if (
@@ -135,36 +120,12 @@ export async function updateRound(formData: FormData) {
       error.message.includes("uq_rounds_tournament_round_category_wave")
     ) {
       throw new Error(
-        "Ya existe una ronda para esa categoría, número de ronda y turno."
+        "Ya existe una ronda para esa categoría, número de ronda y turno. Revisa el calendario de abajo o elige otra fecha/ronda/turno."
       );
     }
-
     throw new Error(error.message);
   }
 
   revalidatePath("/rounds");
   redirect(`/rounds?tournament_id=${tournament_id}`);
-}
-
-export async function deleteRound(formData: FormData) {
-  const supabase = createAdminClient();
-
-  const id = reqStr(formData, "id");
-  const tournament_id = optStr(formData, "tournament_id");
-
-  if (tournament_id) {
-    await ensureAccess(tournament_id);
-  }
-
-  const { error } = await supabase.from("rounds").delete().eq("id", id);
-
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/rounds");
-
-  if (tournament_id) {
-    redirect(`/rounds?tournament_id=${tournament_id}`);
-  }
-
-  redirect("/rounds");
 }
