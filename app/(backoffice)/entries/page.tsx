@@ -159,6 +159,11 @@ type EntryRow = {
   playing_handicap_override_reason?: string | null;
   tee_set_id_override?: string | null;
   tee_set_id_assigned?: string | null;
+  caddie_summary?: {
+    totalRounds: number;
+    roundsWithCaddie: number;
+    label: string | null;
+  } | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -779,6 +784,93 @@ export default async function EntriesPage({
       );
     }
 
+    // ── Asignaciones de caddies del torneo ──────────────────────────────
+    type CaddieSummary = {
+      totalRounds: number;
+      roundsWithCaddie: number;
+      label: string | null;
+    };
+    const caddieSummaryByEntry = new Map<string, CaddieSummary>();
+    {
+      const totalRoundsByCategory = new Map<string | null, number>();
+      const allRoundsCount = rounds.length;
+      for (const r of rounds) {
+        const cid = r.category_id ?? null;
+        totalRoundsByCategory.set(cid, (totalRoundsByCategory.get(cid) ?? 0) + 1);
+      }
+      try {
+        const { data: caRaw, error: caErr } = await supabase
+          .from("caddie_assignments")
+          .select(
+            `id, entry_id, round_id, caddie_id, is_active,
+             caddies ( id, first_name, last_name )`
+          )
+          .eq("tournament_id", selectedTournamentId)
+          .eq("is_active", true)
+          .in("entry_id", entryIds.length ? entryIds : ["00000000-0000-0000-0000-000000000000"]);
+        if (!caErr) {
+          type CARow = {
+            entry_id: string;
+            round_id: string | null;
+            caddie_id: string | null;
+            is_active: boolean | null;
+            caddies:
+              | {
+                  id: string;
+                  first_name: string | null;
+                  last_name: string | null;
+                }
+              | { id: string; first_name: string | null; last_name: string | null }[]
+              | null;
+          };
+          const byEntry = new Map<
+            string,
+            {
+              roundIds: Set<string>;
+              caddies: Map<string, string>;
+            }
+          >();
+          for (const row of (caRaw ?? []) as unknown as CARow[]) {
+            if (!row.entry_id) continue;
+            const bag = byEntry.get(row.entry_id) ?? {
+              roundIds: new Set<string>(),
+              caddies: new Map<string, string>(),
+            };
+            if (row.round_id) bag.roundIds.add(row.round_id);
+            const c = Array.isArray(row.caddies) ? row.caddies[0] : row.caddies;
+            if (c?.id) {
+              const name =
+                [c.first_name, c.last_name]
+                  .map((s) => String(s ?? "").trim())
+                  .filter(Boolean)
+                  .join(" ") || "Caddie";
+              bag.caddies.set(c.id, name);
+            }
+            byEntry.set(row.entry_id, bag);
+          }
+          for (const e of entryRows) {
+            const cat = oneOrNull(e.categories);
+            const totalForCat =
+              totalRoundsByCategory.get(cat?.id ?? null) ?? allRoundsCount;
+            const bag = byEntry.get(e.id);
+            const names = bag ? Array.from(bag.caddies.values()) : [];
+            const label = names.length
+              ? names.length === 1
+                ? names[0]
+                : `${names[0]} +${names.length - 1}`
+              : null;
+            caddieSummaryByEntry.set(e.id, {
+              totalRounds: totalForCat,
+              roundsWithCaddie: bag?.roundIds.size ?? 0,
+              label,
+            });
+          }
+        }
+      } catch {
+        // Si la tabla aún no existe en algún entorno, seguimos sin pintar el chip.
+      }
+    }
+
     entries = entryRows.map((e) => {
       const player = oneOrNull(e.players);
       const category = oneOrNull(e.categories);
@@ -795,6 +887,7 @@ export default async function EntriesPage({
           e.playing_handicap_override_reason ?? null,
         tee_set_id_override: e.tee_set_id_override ?? null,
         tee_set_id_assigned: null,
+        caddie_summary: caddieSummaryByEntry.get(e.id) ?? null,
         status: e.status,
         flagged_for_committee: Boolean(e.flagged_for_committee),
         flagged_committee_reason: e.flagged_committee_reason ?? null,
