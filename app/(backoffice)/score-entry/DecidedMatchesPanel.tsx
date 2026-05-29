@@ -24,12 +24,24 @@ type Feedback = {
   text: string;
 };
 
+type Diagnostics = {
+  pairFormat: string | null;
+  bracketId: string | null;
+  derivedMatchesCount: number;
+  decisionsCount: number;
+  realMatchesCount: number;
+  matchedRealMatches: number;
+  alreadyCompleted: number;
+  reason: string | null;
+};
+
 export default function DecidedMatchesPanel({
   tournamentId,
 }: {
   tournamentId: string;
 }) {
   const [matches, setMatches] = useState<ApiMatch[] | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [closingId, setClosingId] = useState<string | null>(null);
@@ -48,12 +60,14 @@ export default function DecidedMatchesPanel({
       const json = (await res.json()) as {
         ok: boolean;
         matches?: ApiMatch[];
+        diagnostics?: Diagnostics;
         error?: string;
       };
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? `HTTP ${res.status}`);
       }
       setMatches(json.matches ?? []);
+      setDiagnostics(json.diagnostics ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error cargando matches.");
     } finally {
@@ -187,9 +201,43 @@ export default function DecidedMatchesPanel({
           </button>
         </header>
         <p className="mt-3 text-sm text-slate-500">
-          No hay matches matemáticamente decididos sin cerrar. Los matches que
-          terminen automáticamente aparecerán aquí.
+          {diagnostics?.reason ??
+            "No hay matches matemáticamente decididos sin cerrar. Los matches que terminen automáticamente aparecerán aquí."}
         </p>
+        {diagnostics ? (
+          <details className="mt-2 text-[11px] text-slate-500">
+            <summary className="cursor-pointer hover:text-slate-700">
+              Detalle técnico
+            </summary>
+            <ul className="mt-1 space-y-0.5 pl-4">
+              <li>
+                Formato de parejas: <code>{diagnostics.pairFormat ?? "—"}</code>
+              </li>
+              <li>
+                Bracket publicado:{" "}
+                <code>{diagnostics.bracketId ? "sí" : "no"}</code>
+              </li>
+              <li>
+                Matches derivados (pairings):{" "}
+                <code>{diagnostics.derivedMatchesCount}</code>
+              </li>
+              <li>
+                Decisiones calculadas: <code>{diagnostics.decisionsCount}</code>
+              </li>
+              <li>
+                Matches reales en el cuadro:{" "}
+                <code>{diagnostics.realMatchesCount}</code>
+              </li>
+              <li>
+                Cruzaron con pairing:{" "}
+                <code>{diagnostics.matchedRealMatches}</code>
+              </li>
+              <li>
+                Ya cerrados: <code>{diagnostics.alreadyCompleted}</code>
+              </li>
+            </ul>
+          </details>
+        ) : null}
       </section>
     );
   }

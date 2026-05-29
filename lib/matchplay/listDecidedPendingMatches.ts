@@ -2,6 +2,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 
+export type DecidedPendingDiagnostics = {
+  pairFormat: string | null;
+  bracketId: string | null;
+  derivedMatchesCount: number;
+  decisionsCount: number;
+  realMatchesCount: number;
+  matchedRealMatches: number;
+  alreadyCompleted: number;
+  reason: string | null;
+};
+
 export type DecidedPendingMatch = {
   /** group_id del pairing — se usa como input al endpoint /api/captura/close-match. */
   groupId: string;
@@ -41,8 +52,25 @@ export type DecidedPendingMatch = {
 export async function listDecidedPendingMatches(
   admin: SupabaseClient,
   tournamentId: string
-): Promise<DecidedPendingMatch[]> {
-  if (!tournamentId) return [];
+): Promise<{
+  matches: DecidedPendingMatch[];
+  diagnostics: DecidedPendingDiagnostics;
+}> {
+  const diagnostics: DecidedPendingDiagnostics = {
+    pairFormat: null,
+    bracketId: null,
+    derivedMatchesCount: 0,
+    decisionsCount: 0,
+    realMatchesCount: 0,
+    matchedRealMatches: 0,
+    alreadyCompleted: 0,
+    reason: null,
+  };
+
+  if (!tournamentId) {
+    diagnostics.reason = "Falta tournament_id.";
+    return { matches: [], diagnostics };
+  }
 
   // 1) Reglas — solo aplicamos a Bola Baja + Alta
   const { data: rulesRow } = await admin
@@ -50,7 +78,14 @@ export async function listDecidedPendingMatches(
     .select("pair_format")
     .eq("tournament_id", tournamentId)
     .maybeSingle();
-  if (rulesRow?.pair_format !== "low_high") return [];
+  const pairFormat = String(rulesRow?.pair_format ?? "").trim();
+  diagnostics.pairFormat = pairFormat || null;
+  if (pairFormat !== "low_high") {
+    diagnostics.reason = pairFormat
+      ? `El torneo usa pair_format='${pairFormat}'. El cierre automático solo aplica a Bola Baja + Alta.`
+      : "El torneo no tiene reglas de match play (tournament_matchplay_rules).";
+    return { matches: [], diagnostics };
+  }
 
   // 2) Bracket publicado
   const { data: bracket } = await admin
@@ -60,17 +95,27 @@ export async function listDecidedPendingMatches(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!bracket?.id) return [];
+  diagnostics.bracketId = bracket?.id ? String(bracket.id) : null;
+  if (!bracket?.id) {
+    diagnostics.reason =
+      "Falta publicar el cuadro (matchplay_brackets). Ve a /matchplay y publica el bracket.";
+    return { matches: [], diagnostics };
+  }
 
   // 3) Derivar matches por pairing_groups + decisiones
   const derived = await derivePairingGroupMatches(admin, tournamentId);
-  if (derived.matches.length === 0) return [];
+  diagnostics.derivedMatchesCount = derived.matches.length;
+  if (derived.matches.length === 0) {
+    diagnostics.reason = "No hay grupos de pairing con dos parejas asignadas.";
+    return { matches: [], diagnostics };
+  }
 
   const { decisions } = await deriveMatchHolesFromStrokes(
     admin,
     tournamentId,
     derived.matches
   );
+  diagnostics.decisionsCount = decisions.size;
 
   // 4) Cargar matches reales del bracket
   const { data: realMatchesRaw } = await admin
@@ -90,35 +135,9 @@ export async function listDecidedPendingMatches(
     status: string | null;
   };
   const realMatches = (realMatchesRaw ?? []) as RealMatch[];
+  diagnostics.realMatchesCount = realMatches.length;
 
-  // 5) Mapear group_id → derivedMatchId (para output)
-  //    El derived id ya tiene formato `derived-${roundId}-g${groupNo}`.
-  //    Cargar group rows para poder devolver group_id + tee_time.
-  const { data: groupsRaw } = await admin
-    .from("pairing_groups")
-    .select("id, round_id, group_no")
-    .in(
-      "round_id",
-      Array.from(new Set(derived.matches.map((m) => m.round_id)))
-    );
-  const groupByDerivedId = new Map<
-    string,
-    { groupId: string; groupNo: number | null }
-  >();
-  for (const g of (groupsRaw ?? []) as Array<{
-    id: string;
-    round_id: string;
-    group_no: number | null;
-  }>) {
-    const groupNo = g.group_no ?? null;
-    if (groupNo == null) continue;
-    groupByDerivedId.set(`derived-${g.round_id}-g${groupNo}`, {
-      groupId: g.id,
-      groupNo,
-    });
-  }
-
-  // 6) Cargar nombres de jugadores para los entries que aparecen
+  // 5) Cargar nombres de jugadores para los entries que aparecen
   const entryIds = new Set<string>();
   for (const m of derived.matches) {
     if (m.top_a_entry_id) entryIds.add(m.top_a_entry_id);
@@ -175,8 +194,9 @@ export async function listDecidedPendingMatches(
     const bottomPairId = derivedMatch.bottom_pair_id;
     if (!topPairId || !bottomPairId) continue;
 
-    const groupRef = groupByDerivedId.get(derivedMatch.id);
-    if (!groupRef) continue;
+    const groupId = derivedMatch.group_id;
+    const groupNo = derivedMatch.group_no;
+    if (!groupId) continue;
 
     // Buscar match real correspondiente.
     const realMatch = realMatches.find(
@@ -185,7 +205,11 @@ export async function listDecidedPendingMatches(
         (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
     );
     if (!realMatch) continue;
-    if (realMatch.status === "completed") continue;
+    diagnostics.matchedRealMatches += 1;
+    if (realMatch.status === "completed") {
+      diagnostics.alreadyCompleted += 1;
+      continue;
+    }
 
     const topNames = [
       derivedMatch.top_a_entry_id
@@ -221,8 +245,8 @@ export async function listDecidedPendingMatches(
     }
 
     pending.push({
-      groupId: groupRef.groupId,
-      groupNo: groupRef.groupNo,
+      groupId,
+      groupNo,
       roundId: derivedMatch.round_id,
       roundNo: roundNoById.get(derivedMatch.round_id) ?? derivedMatch.round_no,
       matchplayMatchId: String(realMatch.id),
@@ -252,5 +276,17 @@ export async function listDecidedPendingMatches(
     return (a.groupNo ?? 0) - (b.groupNo ?? 0);
   });
 
-  return pending;
+  if (pending.length === 0) {
+    if (diagnostics.decisionsCount === 0) {
+      diagnostics.reason =
+        "Ningún match está matemáticamente decidido todavía. Sigue capturando scores.";
+    } else if (diagnostics.matchedRealMatches === 0) {
+      diagnostics.reason =
+        "Los matches del calendario no se corresponden con el cuadro publicado. Revisa que las parejas en /matchplay coincidan con las del pairing.";
+    } else if (diagnostics.alreadyCompleted > 0) {
+      diagnostics.reason = `Todos los matches decididos (${diagnostics.alreadyCompleted}) ya están cerrados.`;
+    }
+  }
+
+  return { matches: pending, diagnostics };
 }
