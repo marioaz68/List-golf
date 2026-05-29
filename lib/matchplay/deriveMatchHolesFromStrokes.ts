@@ -242,36 +242,57 @@ export async function deriveMatchHolesFromStrokes(
   }
 
   const roundScoreIds = roundScores.map((rs) => rs.id);
-  let holeScores: HoleScoreRow[] = [];
+  let holeScores: (HoleScoreRow & { picked_up?: boolean | null })[] = [];
   if (roundScoreIds.length > 0) {
     const { data: hsRaw } = await admin
       .from("hole_scores")
-      .select("round_score_id, hole_number, hole_no, strokes")
+      .select("round_score_id, hole_number, hole_no, strokes, picked_up")
       .in("round_score_id", roundScoreIds);
-    holeScores = (hsRaw ?? []) as HoleScoreRow[];
+    holeScores = (hsRaw ?? []) as (HoleScoreRow & { picked_up?: boolean | null })[];
   }
 
-  // Mapa: round_score_id -> hole_no -> gross
-  const grossByRsHole = new Map<string, Map<number, number>>();
+  // Mapa: round_score_id -> hole_no -> { gross, pickedUp }
+  type HoleEntry = { gross: number | null; pickedUp: boolean };
+  const holesByRs = new Map<string, Map<number, HoleEntry>>();
   for (const hs of holeScores) {
     const holeNo = hs.hole_number ?? hs.hole_no;
     if (holeNo == null) continue;
-    const g = hs.strokes;
-    if (g == null) continue;
-    const m = grossByRsHole.get(hs.round_score_id) ?? new Map<number, number>();
-    m.set(Number(holeNo), Number(g));
-    grossByRsHole.set(hs.round_score_id, m);
+    const picked = Boolean(hs.picked_up);
+    const gross = hs.strokes != null ? Number(hs.strokes) : null;
+    if (gross == null && !picked) continue;
+    const m = holesByRs.get(hs.round_score_id) ?? new Map<number, HoleEntry>();
+    m.set(Number(holeNo), { gross, pickedUp: picked });
+    holesByRs.set(hs.round_score_id, m);
   }
 
-  function grossForEntryHole(entryId: string, roundId: string, holeNo: number): number | null {
+  function holeForEntry(
+    entryId: string,
+    roundId: string,
+    holeNo: number
+  ): HoleEntry | null {
     const e = entryById.get(entryId);
     if (!e) return null;
     const rsId = rsByPlayerRound.get(`${e.player_id}_${roundId}`);
     if (!rsId) return null;
-    const m = grossByRsHole.get(rsId);
+    const m = holesByRs.get(rsId);
     if (!m) return null;
-    const v = m.get(holeNo);
-    return v != null ? v : null;
+    return m.get(holeNo) ?? null;
+  }
+
+  function grossForEntryHole(
+    entryId: string,
+    roundId: string,
+    holeNo: number
+  ): number | null {
+    return holeForEntry(entryId, roundId, holeNo)?.gross ?? null;
+  }
+
+  function pickedUpForEntryHole(
+    entryId: string,
+    roundId: string,
+    holeNo: number
+  ): boolean {
+    return Boolean(holeForEntry(entryId, roundId, holeNo)?.pickedUp);
   }
 
   const out: DerivedHoleResultRow[] = [];
@@ -307,8 +328,20 @@ export async function deriveMatchHolesFromStrokes(
       const top_b = grossForEntryHole(m.top_b_entry_id!, m.round_id, h);
       const bottom_a = grossForEntryHole(m.bottom_a_entry_id!, m.round_id, h);
       const bottom_b = grossForEntryHole(m.bottom_b_entry_id!, m.round_id, h);
+      const puTopA = pickedUpForEntryHole(m.top_a_entry_id!, m.round_id, h);
+      const puTopB = pickedUpForEntryHole(m.top_b_entry_id!, m.round_id, h);
+      const puBotA = pickedUpForEntryHole(m.bottom_a_entry_id!, m.round_id, h);
+      const puBotB = pickedUpForEntryHole(m.bottom_b_entry_id!, m.round_id, h);
 
-      if (top_a == null || top_b == null || bottom_a == null || bottom_b == null) {
+      // Para calcular el hoyo necesitamos que cada jugador tenga score o
+      // bandera de "levantó". Si alguno todavía no tiene ninguno de los
+      // dos, saltamos el hoyo.
+      if (
+        (top_a == null && !puTopA) ||
+        (top_b == null && !puTopB) ||
+        (bottom_a == null && !puBotA) ||
+        (bottom_b == null && !puBotB)
+      ) {
         continue;
       }
 
@@ -339,6 +372,7 @@ export async function deriveMatchHolesFromStrokes(
         top_total_before: topTotal,
         bottom_total_before: bottomTotal,
         holes_in_match,
+        picked_up: [puTopA, puTopB, puBotA, puBotB],
       });
       if (!res) continue;
 
@@ -393,7 +427,6 @@ export async function deriveMatchHolesFromStrokes(
 
     if (needsPlayoff) {
       for (let p = 1; p <= 9; p++) {
-        const physical = p; // hoyo físico que se vuelve a jugar
         const storeHole = 18 + p; // 19..27 en hole_scores
         const top_a = grossForEntryHole(
           m.top_a_entry_id!,
@@ -415,11 +448,31 @@ export async function deriveMatchHolesFromStrokes(
           m.round_id,
           storeHole
         );
+        const puTopA = pickedUpForEntryHole(
+          m.top_a_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const puTopB = pickedUpForEntryHole(
+          m.top_b_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const puBotA = pickedUpForEntryHole(
+          m.bottom_a_entry_id!,
+          m.round_id,
+          storeHole
+        );
+        const puBotB = pickedUpForEntryHole(
+          m.bottom_b_entry_id!,
+          m.round_id,
+          storeHole
+        );
         if (
-          top_a == null ||
-          top_b == null ||
-          bottom_a == null ||
-          bottom_b == null
+          (top_a == null && !puTopA) ||
+          (top_b == null && !puTopB) ||
+          (bottom_a == null && !puBotA) ||
+          (bottom_b == null && !puBotB)
         ) {
           // Falta capturar este hoyo del playoff. Detenemos aquí.
           playoffPendingHole = p;
@@ -437,6 +490,7 @@ export async function deriveMatchHolesFromStrokes(
           top_total_before: topTotal,
           bottom_total_before: bottomTotal,
           holes_in_match: 27,
+          picked_up: [puTopA, puTopB, puBotA, puBotB],
         });
         if (!res) break;
 

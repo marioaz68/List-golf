@@ -35,6 +35,7 @@ import type {
 
 type ScoresByEntry = Record<string, HoleScores>;
 type PendingByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
+type PickedUpByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
 
 /** Ventajas (stroke index) por hoyo — fallback si la API no lo trae
  *  todavía. Aquí no las pintamos (el backoffice las muestra solo como
@@ -97,6 +98,8 @@ function ScoreCell({
   isPending,
   isSaving,
   disabled,
+  pickedUp,
+  allowPickup,
   onCommit,
 }: {
   value: number | null;
@@ -104,16 +107,27 @@ function ScoreCell({
   isPending: boolean;
   isSaving: boolean;
   disabled: boolean;
-  onCommit: (next: number | null) => void;
+  /** True si el jugador levantó (X). value debe ser null. */
+  pickedUp?: boolean;
+  /** Si true, se acepta "x"/"X" para marcar levantó. Sólo match play. */
+  allowPickup?: boolean;
+  onCommit: (next: number | null, options?: { pickedUp?: boolean }) => void;
 }) {
-  const [draft, setDraft] = useState<string>(value != null ? String(value) : "");
+  const initialDraft = pickedUp ? "X" : value != null ? String(value) : "";
+  const [draft, setDraft] = useState<string>(initialDraft);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastCommittedRef = useRef<number | null>(value);
+  const lastCommittedRef = useRef<{ strokes: number | null; pickedUp: boolean }>({
+    strokes: value,
+    pickedUp: Boolean(pickedUp),
+  });
 
   useEffect(() => {
-    lastCommittedRef.current = value;
-    setDraft(value != null ? String(value) : "");
-  }, [value]);
+    lastCommittedRef.current = {
+      strokes: value,
+      pickedUp: Boolean(pickedUp),
+    };
+    setDraft(pickedUp ? "X" : value != null ? String(value) : "");
+  }, [value, pickedUp]);
 
   useEffect(() => {
     return () => {
@@ -121,58 +135,93 @@ function ScoreCell({
     };
   }, []);
 
-  function scheduleCommit(next: number | null) {
+  function sameAsCommitted(
+    strokes: number | null,
+    isPicked: boolean
+  ): boolean {
+    return (
+      lastCommittedRef.current.strokes === strokes &&
+      lastCommittedRef.current.pickedUp === isPicked
+    );
+  }
+
+  function scheduleCommit(strokes: number | null, isPicked: boolean) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      if (lastCommittedRef.current === next) return;
-      lastCommittedRef.current = next;
-      onCommit(next);
+      if (sameAsCommitted(strokes, isPicked)) return;
+      lastCommittedRef.current = { strokes, pickedUp: isPicked };
+      onCommit(strokes, { pickedUp: isPicked });
     }, 150);
   }
 
-  function flushCommit(next: number | null) {
+  function flushCommit(strokes: number | null, isPicked: boolean) {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-    if (lastCommittedRef.current === next) return;
-    lastCommittedRef.current = next;
-    onCommit(next);
+    if (sameAsCommitted(strokes, isPicked)) return;
+    lastCommittedRef.current = { strokes, pickedUp: isPicked };
+    onCommit(strokes, { pickedUp: isPicked });
   }
 
   function handleChange(raw: string) {
-    const cleaned = raw.replace(/[^0-9]/g, "").slice(0, 2);
+    // Aceptamos sólo "x"/"X" (si está permitido) o dígitos. Cualquier
+    // otra cosa se descarta — nunca lanzamos error.
+    const trimmed = raw.trim();
+    if (
+      allowPickup &&
+      (trimmed === "x" || trimmed === "X" || trimmed === "xx" || trimmed === "XX")
+    ) {
+      setDraft("X");
+      scheduleCommit(null, true);
+      return;
+    }
+
+    const cleaned = trimmed.replace(/[^0-9]/g, "").slice(0, 2);
     setDraft(cleaned);
     if (cleaned === "") {
-      scheduleCommit(null);
+      scheduleCommit(null, false);
       return;
     }
     const n = Number(cleaned);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
-      // Valor fuera de rango: descartamos sin guardar.
+      // Valor fuera de rango: descartamos sin guardar (no error).
       return;
     }
-    scheduleCommit(Math.trunc(n));
+    scheduleCommit(Math.trunc(n), false);
   }
 
   function handleBlur() {
     const trimmed = draft.trim();
+    if (allowPickup && (trimmed === "x" || trimmed === "X")) {
+      flushCommit(null, true);
+      return;
+    }
     if (trimmed === "") {
-      flushCommit(null);
+      flushCommit(null, false);
       return;
     }
     const n = Number(trimmed);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
-      setDraft(value != null ? String(value) : "");
+      // Restauramos visualmente lo último confirmado.
+      setDraft(
+        lastCommittedRef.current.pickedUp
+          ? "X"
+          : lastCommittedRef.current.strokes != null
+            ? String(lastCommittedRef.current.strokes)
+            : ""
+      );
       return;
     }
-    flushCommit(Math.trunc(n));
+    flushCommit(Math.trunc(n), false);
   }
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
   const diff = value == null ? null : value - par;
   let frame = "border-gray-300 bg-white";
-  if (value != null) {
+  if (pickedUp) {
+    frame = "border-amber-500 bg-amber-50 text-amber-700";
+  } else if (value != null) {
     if (diff != null && diff <= -2) {
       frame =
         "border-rose-500 bg-white shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(244_63_94)] rounded-full";
@@ -185,17 +234,23 @@ function ScoreCell({
         "border-slate-800 bg-white shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(15_23_42)]";
     }
   }
-  const pendingClass = isPending ? "bg-red-500 text-white border-red-700" : "";
+  const pendingClass =
+    isPending && !pickedUp ? "bg-red-500 text-white border-red-700" : "";
   const savingClass = isSaving ? "opacity-60" : "";
 
   return (
     <input
       type="text"
-      inputMode="numeric"
-      pattern="[0-9]*"
+      inputMode={allowPickup ? "text" : "numeric"}
+      pattern={allowPickup ? "[0-9xX]*" : "[0-9]*"}
       value={draft}
       readOnly={disabled}
       disabled={disabled}
+      title={
+        allowPickup
+          ? "Score 1–15 o X para no terminó el hoyo (pierde bola alta)"
+          : undefined
+      }
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => handleChange(e.target.value)}
       onBlur={handleBlur}
@@ -220,6 +275,8 @@ function PlayerRow({
   player,
   scores,
   pending,
+  pickedUp,
+  allowPickup,
   holes,
   groupId,
   savingKey,
@@ -231,11 +288,19 @@ function PlayerRow({
   player: GroupCapturePlayer;
   scores: HoleScores;
   pending: Partial<Record<HoleNumber, boolean>>;
+  pickedUp?: Partial<Record<HoleNumber, boolean>>;
+  /** Si true, las celdas aceptan "X" para marcar levantó. */
+  allowPickup?: boolean;
   holes: HoleNumber[];
   groupId: string;
   savingKey: string | null;
   setSavingKey: (key: string | null) => void;
-  onScoreSaved: (entryId: string, hole: HoleNumber, strokes: number | null) => void;
+  onScoreSaved: (
+    entryId: string,
+    hole: HoleNumber,
+    strokes: number | null,
+    isPickedUp: boolean
+  ) => void;
   disabledHoles?: Set<HoleNumber>;
   highlight?: "me" | "witness" | null;
 }) {
@@ -259,7 +324,11 @@ function PlayerRow({
   const back9 = backHoles.length > 0 ? sumHoles(backHoles, scores) : 0;
   const total = front9 + back9;
 
-  async function saveScore(hole: HoleNumber, strokes: number | null) {
+  async function saveScore(
+    hole: HoleNumber,
+    strokes: number | null,
+    isPickedUp: boolean
+  ) {
     const key = `${player.entryId}-${hole}`;
     setSavingKey(key);
     try {
@@ -271,11 +340,12 @@ function PlayerRow({
           entry_id: player.entryId,
           hole,
           strokes,
+          picked_up: isPickedUp,
           mode: "modify",
         }),
       });
       if (res.ok) {
-        onScoreSaved(player.entryId, hole, strokes);
+        onScoreSaved(player.entryId, hole, strokes, isPickedUp);
       }
     } catch {
       // Silencioso: la siguiente sincronización del polling reflejará el estado real.
@@ -299,7 +369,11 @@ function PlayerRow({
             isPending={Boolean(pending[h])}
             isSaving={savingKey === `${player.entryId}-${h}`}
             disabled={disabledHoles?.has(h) ?? false}
-            onCommit={(next) => saveScore(h, next)}
+            pickedUp={Boolean(pickedUp?.[h])}
+            allowPickup={allowPickup}
+            onCommit={(next, opts) =>
+              saveScore(h, next, Boolean(opts?.pickedUp))
+            }
           />
         </td>
       ))}
@@ -314,7 +388,11 @@ function PlayerRow({
             isPending={Boolean(pending[h])}
             isSaving={savingKey === `${player.entryId}-${h}`}
             disabled={disabledHoles?.has(h) ?? false}
-            onCommit={(next) => saveScore(h, next)}
+            pickedUp={Boolean(pickedUp?.[h])}
+            allowPickup={allowPickup}
+            onCommit={(next, opts) =>
+              saveScore(h, next, Boolean(opts?.pickedUp))
+            }
           />
         </td>
       ))}
@@ -502,6 +580,11 @@ export default function GrupoCaptureClient({
       meta.players.map((p) => [p.entryId, { ...(p.pending ?? {}) }])
     )
   );
+  const [pickedUpByEntry, setPickedUpByEntry] = useState<PickedUpByEntry>(() =>
+    Object.fromEntries(
+      meta.players.map((p) => [p.entryId, { ...(p.pickedUp ?? {}) }])
+    )
+  );
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
@@ -537,6 +620,13 @@ export default function GrupoCaptureClient({
           }
           return next;
         });
+        setPickedUpByEntry((prev) => {
+          const next: PickedUpByEntry = { ...prev };
+          for (const p of data.players) {
+            next[p.entryId] = { ...(p.pickedUp ?? {}) };
+          }
+          return next;
+        });
       } catch {
         /* silencioso */
       }
@@ -547,15 +637,22 @@ export default function GrupoCaptureClient({
   function onScoreSaved(
     entryId: string,
     hole: HoleNumber,
-    strokes: number | null
+    strokes: number | null,
+    isPickedUp: boolean
   ) {
     setScoresByEntry((prev) => ({
       ...prev,
       [entryId]: {
         ...(prev[entryId] ?? {}),
-        [hole]: strokes,
+        [hole]: isPickedUp ? null : strokes,
       } as HoleScores,
     }));
+    setPickedUpByEntry((prev) => {
+      const cur = { ...(prev[entryId] ?? {}) };
+      if (isPickedUp) cur[hole] = true;
+      else delete cur[hole];
+      return { ...prev, [entryId]: cur };
+    });
   }
 
   const witnessTargetForMe = useMemo(() => {
@@ -708,6 +805,8 @@ export default function GrupoCaptureClient({
                       player={player}
                       scores={scoresByEntry[player.entryId] ?? player.scores}
                       pending={pendingByEntry[player.entryId] ?? {}}
+                      pickedUp={pickedUpByEntry[player.entryId] ?? {}}
+                      allowPickup={Boolean(meta.matchPlay)}
                       holes={[...HOLES_FRONT, ...HOLES_BACK] as HoleNumber[]}
                       groupId={meta.groupId}
                       savingKey={savingKey}
@@ -760,6 +859,8 @@ export default function GrupoCaptureClient({
                         player={player}
                         scores={scoresByEntry[player.entryId] ?? player.scores}
                         pending={pendingByEntry[player.entryId] ?? {}}
+                        pickedUp={pickedUpByEntry[player.entryId] ?? {}}
+                        allowPickup={Boolean(meta.matchPlay)}
                         holes={HOLES_PLAYOFF}
                         groupId={meta.groupId}
                         savingKey={savingKey}

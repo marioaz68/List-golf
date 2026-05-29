@@ -171,15 +171,24 @@ export function scoreLowHighHole(params: {
   top_total_before: number;
   bottom_total_before: number;
   holes_in_match: number;
+  /** Match play: jugadores que no terminaron el hoyo (levantaron / X).
+   *  Mismo orden que `gross`. Para esos, gross puede venir null y el net
+   *  se trata como infinito → pierden la bola alta automáticamente. */
+  picked_up?: [boolean, boolean, boolean, boolean];
 }): LowHighHoleResult | null {
   const { hole_no, gross, hi, allowance_pct, strokeIndexByHole, playing_handicaps } = params;
   const g = gross;
+  const pickedUp = params.picked_up ?? [false, false, false, false];
 
+  // Se acepta levantó (X) en cualquier jugador. Para calcular puntos
+  // sólo se requiere que los jugadores que NO levantaron tengan score.
+  // Si los 4 levantaron no hay nada que comparar.
+  const need = (val: number | null, picked: boolean) => picked || val != null;
   if (
-    g.top_a == null ||
-    g.top_b == null ||
-    g.bottom_a == null ||
-    g.bottom_b == null
+    !need(g.top_a, pickedUp[0]) ||
+    !need(g.top_b, pickedUp[1]) ||
+    !need(g.bottom_a, pickedUp[2]) ||
+    !need(g.bottom_b, pickedUp[3])
   ) {
     return null;
   }
@@ -198,11 +207,17 @@ export function scoreLowHighHole(params: {
     bottom_b: strokesReceivedOnHole(rBotB, si),
   };
 
+  // El jugador que levantó cuenta como infinito (peor net posible),
+  // así Math.max lo coloca en la bola alta y pierde automáticamente la
+  // sub-competencia frente a cualquier número.
+  const netOrInf = (g: number | null, sr: number, picked: boolean) =>
+    picked || g == null ? Number.POSITIVE_INFINITY : g - sr;
+
   const nets: LowHighPlayerNet = {
-    top_a: g.top_a - strokes_received.top_a,
-    top_b: g.top_b - strokes_received.top_b,
-    bottom_a: g.bottom_a - strokes_received.bottom_a,
-    bottom_b: g.bottom_b - strokes_received.bottom_b,
+    top_a: netOrInf(g.top_a, strokes_received.top_a, pickedUp[0]),
+    top_b: netOrInf(g.top_b, strokes_received.top_b, pickedUp[1]),
+    bottom_a: netOrInf(g.bottom_a, strokes_received.bottom_a, pickedUp[2]),
+    bottom_b: netOrInf(g.bottom_b, strokes_received.bottom_b, pickedUp[3]),
   };
 
   const topLow = Math.min(nets.top_a, nets.top_b);

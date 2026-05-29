@@ -298,10 +298,12 @@ export async function loadDerivedMatchDetail(
   const roundScoreIds = Array.from(rsByPlayer.values());
   const grossByRsHole = new Map<string, Map<number, number>>();
 
+  const pickedByRsHole = new Map<string, Map<number, boolean>>();
+
   if (roundScoreIds.length > 0) {
     const { data: hsRaw } = await admin
       .from("hole_scores")
-      .select("round_score_id, hole_number, hole_no, strokes")
+      .select("round_score_id, hole_number, hole_no, strokes, picked_up")
       .in("round_score_id", roundScoreIds);
 
     for (const hs of (hsRaw ?? []) as Array<{
@@ -309,14 +311,23 @@ export async function loadDerivedMatchDetail(
       hole_number: number | null;
       hole_no: number | null;
       strokes: number | null;
+      picked_up: boolean | null;
     }>) {
       const holeNo = hs.hole_number ?? hs.hole_no;
       if (holeNo == null) continue;
       const g = hs.strokes;
-      if (g == null) continue;
-      const m = grossByRsHole.get(hs.round_score_id) ?? new Map();
-      m.set(Number(holeNo), Number(g));
-      grossByRsHole.set(hs.round_score_id, m);
+      const picked = Boolean(hs.picked_up);
+      if (g == null && !picked) continue;
+      if (g != null) {
+        const m = grossByRsHole.get(hs.round_score_id) ?? new Map();
+        m.set(Number(holeNo), Number(g));
+        grossByRsHole.set(hs.round_score_id, m);
+      }
+      if (picked) {
+        const m = pickedByRsHole.get(hs.round_score_id) ?? new Map();
+        m.set(Number(holeNo), true);
+        pickedByRsHole.set(hs.round_score_id, m);
+      }
     }
   }
 
@@ -326,6 +337,14 @@ export async function loadDerivedMatchDetail(
     const rsId = rsByPlayer.get(e.player_id);
     if (!rsId) return null;
     return grossByRsHole.get(rsId)?.get(holeNo) ?? null;
+  }
+
+  function pickedUpFor(entryId: string, holeNo: number): boolean {
+    const e = entryById.get(entryId);
+    if (!e) return false;
+    const rsId = rsByPlayer.get(e.player_id);
+    if (!rsId) return false;
+    return Boolean(pickedByRsHole.get(rsId)?.get(holeNo));
   }
 
   let topAcc = 0;
@@ -338,9 +357,16 @@ export async function loadDerivedMatchDetail(
     const top_b = grossFor(match.top_b_entry_id, h);
     const bottom_a = grossFor(match.bottom_a_entry_id, h);
     const bottom_b = grossFor(match.bottom_b_entry_id, h);
+    const puTopA = pickedUpFor(match.top_a_entry_id, h);
+    const puTopB = pickedUpFor(match.top_b_entry_id, h);
+    const puBotA = pickedUpFor(match.bottom_a_entry_id, h);
+    const puBotB = pickedUpFor(match.bottom_b_entry_id, h);
 
     const hasAll =
-      top_a != null && top_b != null && bottom_a != null && bottom_b != null;
+      (top_a != null || puTopA) &&
+      (top_b != null || puTopB) &&
+      (bottom_a != null || puBotA) &&
+      (bottom_b != null || puBotB);
 
     if (!hasAll) {
       holes.push({
@@ -397,6 +423,7 @@ export async function loadDerivedMatchDetail(
       top_total_before: topAcc,
       bottom_total_before: bottomAcc,
       holes_in_match,
+      picked_up: [puTopA, puTopB, puBotA, puBotB],
     });
 
     if (!res) {
@@ -472,9 +499,16 @@ export async function loadDerivedMatchDetail(
       const top_b = grossFor(match.top_b_entry_id, storeHole);
       const bottom_a = grossFor(match.bottom_a_entry_id, storeHole);
       const bottom_b = grossFor(match.bottom_b_entry_id, storeHole);
+      const puTopA = pickedUpFor(match.top_a_entry_id, storeHole);
+      const puTopB = pickedUpFor(match.top_b_entry_id, storeHole);
+      const puBotA = pickedUpFor(match.bottom_a_entry_id, storeHole);
+      const puBotB = pickedUpFor(match.bottom_b_entry_id, storeHole);
 
       const hasAll =
-        top_a != null && top_b != null && bottom_a != null && bottom_b != null;
+        (top_a != null || puTopA) &&
+        (top_b != null || puTopB) &&
+        (bottom_a != null || puBotA) &&
+        (bottom_b != null || puBotB);
 
       const stroke_index =
         strokeIndexByHole.get(physical) ?? null;
@@ -513,6 +547,7 @@ export async function loadDerivedMatchDetail(
         top_total_before: topAcc,
         bottom_total_before: bottomAcc,
         holes_in_match: 27,
+        picked_up: [puTopA, puTopB, puBotA, puBotB],
       });
 
       if (!res) break;

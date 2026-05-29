@@ -192,7 +192,7 @@ export async function loadGroupCapture(
   const { data: scoreRows } = await supabase
     .from("hole_scores")
     .select(
-      "entry_id, hole_no, hole_number, strokes, pending_witness"
+      "entry_id, hole_no, hole_number, strokes, pending_witness, picked_up"
     )
     .eq("round_id", roundId)
     .in("entry_id", entryIds);
@@ -217,9 +217,14 @@ export async function loadGroupCapture(
     string,
     Partial<Record<HoleNumber, boolean>>
   >();
+  const pickedUpByEntryId = new Map<
+    string,
+    Partial<Record<HoleNumber, boolean>>
+  >();
   for (const entryId of entryIds) {
     scoresByEntryId.set(entryId, createEmptyScores());
     pendingByEntryId.set(entryId, {});
+    pickedUpByEntryId.set(entryId, {});
   }
 
   for (const row of scoreRows ?? []) {
@@ -232,10 +237,17 @@ export async function loadGroupCapture(
     const scores = scoresByEntryId.get(entryId);
     if (!scores) continue;
     scores[hole] = typeof row.strokes === "number" ? row.strokes : null;
-    const r = row as { pending_witness?: boolean | null };
+    const r = row as {
+      pending_witness?: boolean | null;
+      picked_up?: boolean | null;
+    };
     if (r.pending_witness) {
       const pendingMap = pendingByEntryId.get(entryId);
       if (pendingMap) pendingMap[hole] = true;
+    }
+    if (r.picked_up) {
+      const pickedMap = pickedUpByEntryId.get(entryId);
+      if (pickedMap) pickedMap[hole] = true;
     }
   }
 
@@ -314,6 +326,7 @@ export async function loadGroupCapture(
       initials: buildInitials(fullName, player.initials),
       scores: scoresByEntryId.get(entryId) ?? createEmptyScores(),
       pending: pendingByEntryId.get(entryId) ?? {},
+      pickedUp: pickedUpByEntryId.get(entryId) ?? {},
       privateScores: includePrivate
         ? privateScoresByEntry[entryId] ?? createEmptyScores()
         : undefined,
