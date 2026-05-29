@@ -362,6 +362,11 @@ export default async function ScoreEntryPage(props: {
     (tournamentIdsInSystem.length === 1 ? tournamentIdsInSystem[0]! : "");
 
   let canRepairCaptures = false;
+  /** Si el torneo está configurado como match play (tournament_matchplay_rules
+   *  existe), mostramos en la página un acceso directo a la captura del
+   *  grupo completo (las 4 tarjetas + desempate) cuando se identifica al
+   *  jugador. */
+  let isMatchPlayTournament = false;
 
   if (effectiveTournamentId) {
     await requireTournamentAccess({
@@ -405,6 +410,11 @@ export default async function ScoreEntryPage(props: {
   let matchedEntryForLinks: ValidEntryRow | null = null;
   let scoreEntryRoundLinks: ScoreEntryRoundLink[] = [];
   let captureClosedNeedsModify = false;
+  /** Si el torneo es match play y el jugador encontrado pertenece a un
+   *  pairing_group en la ronda activa, este es el ID del grupo. La UI usa
+   *  este valor para abrir la captura de las 4 tarjetas del grupo
+   *  (`/captura/tarjeta?group_id=…`), incluyendo soporte de desempate. */
+  let matchPlayGroupId: string | null = null;
   const roundCloseStatuses: ReturnType<typeof buildTournamentRoundCloseStatus>[] =
     [];
 
@@ -415,6 +425,13 @@ export default async function ScoreEntryPage(props: {
       .eq("id", effectiveTournamentId)
       .maybeSingle();
     tournamentSettings = tournamentRow?.settings ?? null;
+
+    const { data: mpRulesRow } = await supabase
+      .from("tournament_matchplay_rules")
+      .select("tournament_id, pair_format")
+      .eq("tournament_id", effectiveTournamentId)
+      .maybeSingle();
+    isMatchPlayTournament = Boolean(mpRulesRow);
 
     try {
       const gateCtxBanner = await loadCategoryRoundGateContext(
@@ -925,6 +942,42 @@ export default async function ScoreEntryPage(props: {
     }
   }
 
+  /**
+   * Match play: localiza el pairing_group del jugador para la ronda
+   * activa. Si lo encuentra, mostramos un acceso directo para capturar
+   * las 4 tarjetas del grupo a la vez (con soporte de desempate). Se hace
+   * con admin client porque la tabla puede tener RLS restrictiva para
+   * el usuario actual.
+   */
+  if (
+    isMatchPlayTournament &&
+    matchedEntryForLinks &&
+    scoringRoundId
+  ) {
+    try {
+      const admin = await createAdminClient();
+      const { data: groupsInRound } = await admin
+        .from("pairing_groups")
+        .select("id")
+        .eq("round_id", scoringRoundId);
+      const groupIds = (groupsInRound ?? [])
+        .map((g) => String(g.id ?? ""))
+        .filter(Boolean);
+      if (groupIds.length > 0) {
+        const { data: memberRow } = await admin
+          .from("pairing_group_members")
+          .select("group_id")
+          .eq("entry_id", matchedEntryForLinks.id)
+          .in("group_id", groupIds)
+          .maybeSingle();
+        const gid = String(memberRow?.group_id ?? "").trim();
+        if (gid) matchPlayGroupId = gid;
+      }
+    } catch (e) {
+      console.error("[score-entry] matchplay group lookup:", e);
+    }
+  }
+
   if (
     matchedEntryForLinks &&
     player &&
@@ -1205,6 +1258,76 @@ export default async function ScoreEntryPage(props: {
         {effectiveTournamentId && canRepairCaptures && (
           <RepairCapturesButton tournamentId={effectiveTournamentId} />
         )}
+
+        {/* Match play: aviso general (sin jugador todavía). */}
+        {effectiveTournamentId &&
+          isMatchPlayTournament &&
+          !player &&
+          !errorMsg && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p className="font-semibold">
+                Torneo de match play — captura por grupo disponible
+              </p>
+              <p className="mt-1 text-emerald-800">
+                Busca a cualquiera de los 4 jugadores del grupo y abriremos
+                la captura de las 4 tarjetas a la vez, con soporte para
+                hoyos de desempate (muerte súbita 1-9) si terminan empatados
+                al 18.
+              </p>
+            </div>
+          )}
+
+        {/* Match play: jugador encontrado → atajo a la captura del grupo
+            (las 4 tarjetas a la vez + desempate). */}
+        {effectiveTournamentId &&
+          isMatchPlayTournament &&
+          player &&
+          matchPlayGroupId && (
+            <div className="mt-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4 shadow-sm">
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="flex-1 min-w-[240px]">
+                  <p className="text-sm font-bold text-emerald-900">
+                    Captura rápida del grupo (las 4 tarjetas)
+                  </p>
+                  <p className="mt-1 text-sm text-emerald-800">
+                    {[player.first_name, player.last_name]
+                      .filter(Boolean)
+                      .join(" ")
+                      .trim() || "Jugador"}{" "}
+                    juega en este grupo. Abre la tarjeta de grupo para
+                    capturar los scores de los 4 jugadores en una sola
+                    pantalla, con desempate (P1-P9) en caso de empate al 18.
+                  </p>
+                </div>
+                <Link
+                  href={`/captura/tarjeta?group_id=${matchPlayGroupId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
+                >
+                  Abrir captura del grupo →
+                </Link>
+              </div>
+              <p className="mt-2 text-[11px] text-emerald-700">
+                Abajo se sigue mostrando la tarjeta individual del jugador
+                buscado por si necesitas corregir un hoyo en particular.
+              </p>
+            </div>
+          )}
+
+        {/* Match play: jugador encontrado pero no está en ningún grupo de
+            esta ronda. Probable: falta asignarlo al pairing. */}
+        {effectiveTournamentId &&
+          isMatchPlayTournament &&
+          player &&
+          !matchPlayGroupId &&
+          scoringRoundId && (
+            <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              Torneo de match play, pero este jugador no aparece en ningún
+              grupo (pairing) de la ronda activa. Verifica las parejas /
+              cuadro antes de capturar.
+            </div>
+          )}
 
         {effectiveTournamentId &&
           player &&
