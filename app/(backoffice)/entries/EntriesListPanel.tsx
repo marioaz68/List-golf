@@ -344,10 +344,12 @@ function EntryRowActions({
    */
   const caddieBtn = (
     <Link
-      href={`/caddies?tournament_id=${encodeURIComponent(
-        tournamentId
-      )}#assignment-${entry.id}`}
-      title="Asignar caddie al jugador en este torneo"
+      href={`/caddies/asignar?entry_id=${encodeURIComponent(
+        entry.id
+      )}&tournament_id=${encodeURIComponent(tournamentId)}&back=${encodeURIComponent(
+        `/entries?tournament_id=${tournamentId}`
+      )}`}
+      title="Buscar y asignar caddie al jugador en este torneo"
       className={
         compact
           ? `${MOBILE_ACTION_BTN} border-teal-900 bg-teal-700 hover:bg-teal-800`
