@@ -105,6 +105,11 @@ export type GroupMatchPlayCapture = {
   /** Etiquetas opcionales de las parejas (para tooltip / leyenda). */
   topLabel?: string | null;
   bottomLabel?: string | null;
+  /** `matchplay_matches.id` (cuadro oficial) si las parejas del grupo
+   *  coinciden con un match real publicado. null si no hay cuadro. */
+  matchplayMatchId?: string | null;
+  /** True si el match ya está marcado como `completed` en DB. */
+  matchplayCompleted?: boolean;
 };
 
 export type GroupCapturePayload = {

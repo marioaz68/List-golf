@@ -566,6 +566,102 @@ function MatchRow({
   );
 }
 
+function CloseMatchPrompt({
+  groupId,
+  resultText,
+  onClosed,
+  onError,
+}: {
+  groupId: string;
+  resultText: string;
+  onClosed: (message: string) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  async function doClose() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/captura/close-match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_id: groupId }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        message?: string;
+        error?: string;
+        nextGroupCreated?: boolean;
+        nextRoundId?: string | null;
+        nextGroupNo?: number | null;
+        nextTeeTime?: string | null;
+      };
+      if (!json.ok) {
+        onError(json.error ?? "No se pudo cerrar el match.");
+        return;
+      }
+      const parts: string[] = ["Match cerrado y ganador avanzado al cuadro."];
+      if (json.nextGroupCreated) {
+        parts.push(
+          `Siguiente salida creada: Grupo ${json.nextGroupNo}${
+            json.nextTeeTime ? ` · ${json.nextTeeTime}` : ""
+          }.`
+        );
+      } else if (json.message) {
+        parts.push(json.message);
+      }
+      onClosed(parts.join(" "));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Error de red.");
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div className="mt-2 rounded-md border border-emerald-300 bg-white px-2 py-2">
+        <div className="text-[11px] text-slate-800">
+          ¿Cerrar este match con resultado{" "}
+          <span className="font-bold">{resultText}</span>? El ganador pasará a
+          la siguiente ronda del cuadro y se generará automáticamente la
+          salida cuando la otra pareja del bracket esté lista.
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => doClose()}
+            disabled={busy}
+            className="rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {busy ? "Cerrando…" : "Sí, cerrar y avanzar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(false)}
+            disabled={busy}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setConfirming(true)}
+      className="mt-2 rounded-md bg-emerald-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-emerald-700"
+    >
+      Cerrar match y avanzar ganador →
+    </button>
+  );
+}
+
 export default function GrupoCaptureClient({
   initial,
 }: {
@@ -586,6 +682,10 @@ export default function GrupoCaptureClient({
     )
   );
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [closeFeedback, setCloseFeedback] = useState<{
+    kind: "ok" | "err";
+    message: string;
+  } | null>(null);
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
 
@@ -763,6 +863,42 @@ export default function GrupoCaptureClient({
                 </span>
               ) : null}
             </div>
+
+            {/* CTA de cierre + avance al cuadro */}
+            {meta.matchPlay.decidedAtHole != null &&
+            meta.matchPlay.matchplayMatchId &&
+            !meta.matchPlay.matchplayCompleted ? (
+              <CloseMatchPrompt
+                groupId={meta.groupId}
+                resultText={meta.matchPlay.resultText}
+                onClosed={(msg) => {
+                  setCloseFeedback({ kind: "ok", message: msg });
+                }}
+                onError={(msg) => {
+                  setCloseFeedback({ kind: "err", message: msg });
+                }}
+              />
+            ) : null}
+
+            {meta.matchPlay.matchplayCompleted ? (
+              <div className="mt-2 rounded border border-emerald-300 bg-white/60 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                ✓ Match cerrado en el cuadro. Ganador ya avanzó al siguiente
+                partido.
+              </div>
+            ) : null}
+
+            {closeFeedback ? (
+              <div
+                className={[
+                  "mt-2 rounded border px-2 py-1 text-[11px] font-semibold",
+                  closeFeedback.kind === "ok"
+                    ? "border-emerald-300 bg-white/60 text-emerald-700"
+                    : "border-red-300 bg-white/60 text-red-700",
+                ].join(" ")}
+              >
+                {closeFeedback.message}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
