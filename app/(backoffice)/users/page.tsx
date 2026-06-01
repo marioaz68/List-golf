@@ -24,6 +24,8 @@ type UserRow = {
   first_name: string | null;
   last_name: string | null;
   is_active: boolean | null;
+  telegram_username: string | null;
+  telegram_chat_id: string | null;
 };
 
 type ClubRoleRow = {
@@ -408,14 +410,18 @@ export default async function UsersPage({
 
   let profilesQuery = supabase
     .from("profiles")
-    .select("id, email, first_name, last_name, is_active")
+    .select(
+      "id, email, first_name, last_name, is_active, telegram_username, telegram_chat_id"
+    )
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
 
   if (visibleUserIds && visibleUserIds.length === 0) {
     profilesQuery = supabase
       .from("profiles")
-      .select("id, email, first_name, last_name, is_active")
+      .select(
+        "id, email, first_name, last_name, is_active, telegram_username, telegram_chat_id"
+      )
       .eq("id", "__none__");
   } else if (visibleUserIds) {
     profilesQuery = profilesQuery.in("id", visibleUserIds);
@@ -680,6 +686,25 @@ export default async function UsersPage({
                               placeholder="Apellidos"
                               style={inputStyle}
                             />
+
+                            <input
+                              name="telegram_username"
+                              defaultValue={u.telegram_username ?? ""}
+                              placeholder="Telegram (sin @)"
+                              style={inputStyle}
+                            />
+
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#64748b",
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              {u.telegram_chat_id
+                                ? `chat_id: ${u.telegram_chat_id}`
+                                : "chat_id: no vinculado (hará /start en el bot)"}
+                            </div>
 
                             <select
                               name="is_active"

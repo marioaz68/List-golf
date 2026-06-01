@@ -202,6 +202,23 @@ export default async function NewUserPage() {
             </div>
 
             <div style={fieldWrap}>
+              <label style={labelStyle} htmlFor="telegram_username">
+                Telegram (handle, sin @)
+              </label>
+              <input
+                id="telegram_username"
+                name="telegram_username"
+                type="text"
+                placeholder="ej. marioalvarez"
+                style={inputStyle}
+              />
+              <div style={helpTextStyle}>
+                Opcional. El chat_id numérico se llena automáticamente la primera
+                vez que el usuario haga /start en el bot de Telegram.
+              </div>
+            </div>
+
+            <div style={fieldWrap}>
               <label style={labelStyle} htmlFor="club_id">
                 Club
               </label>
@@ -222,18 +239,22 @@ export default async function NewUserPage() {
               <label style={labelStyle} htmlFor="role_id">
                 Rol por club
               </label>
-              <select id="role_id" name="role_id" defaultValue="" style={selectStyle}>
+              <select id="role_id" name="club_role_id" defaultValue="" style={selectStyle}>
                 <option value="">Sin asignar</option>
                 {typedRoles
                   .filter((role) => role.code !== "super_admin")
                   .map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.name}
+                      {role.code === "marshal"
+                        ? " · solo captura/scorecards"
+                        : ""}
                     </option>
                   ))}
               </select>
               <div style={helpTextStyle}>
-                El rol por club es opcional. El rol global de Super Admin se administra por separado.
+                El rol por club es opcional. El rol &quot;Marshal&quot; solo da
+                acceso a captura de tarjetas y revisión de scorecards.
               </div>
             </div>
 

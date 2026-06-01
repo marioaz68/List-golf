@@ -7,7 +7,8 @@ export type AppRole =
   | "caddie_manager"
   | "checkin"
   | "viewer"
-  | "handicap_committee";
+  | "handicap_committee"
+  | "marshal";
 
 export type AppModule =
   | "users"
@@ -53,6 +54,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "entries_operator",
     "caddie_manager",
     "viewer",
+    "marshal",
   ],
 
   "tournaments-setup": SETUP_ROLES,
@@ -86,6 +88,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "club_admin",
     "tournament_director",
     "score_capture",
+    "marshal",
   ],
 
   scorecards: [
@@ -93,6 +96,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "club_admin",
     "tournament_director",
     "score_capture",
+    "marshal",
   ],
 
   leaderboard: [
@@ -182,6 +186,7 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "checkin",
     "viewer",
     "handicap_committee",
+    "marshal",
   ];
 
   return valid.includes(role as AppRole) ? (role as AppRole) : null;

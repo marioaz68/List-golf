@@ -57,7 +57,8 @@ function buildUnlinkedTelegramReply(telegramUserId: string) {
     "",
     "Envía este número al comité (o pégalo tú mismo si tienes acceso).",
     "Si eres caddie, el comité te vincula desde Caddies.",
-    "Comandos: ID · HOLA · /start",
+    "Si eres marshal: envía /soy_marshal tu_email@dominio.com",
+    "Comandos: ID · HOLA · /start · /soy_marshal email",
     "",
     botLine,
     webHint,
@@ -145,6 +146,85 @@ export async function POST(req: Request) {
         username,
         lastMessage: text || command,
       });
+    } else if (
+      /^\/?soy_marshal(\s|$)/i.test((text || "").trim()) ||
+      /^\/?soymarshal(\s|$)/i.test((text || "").trim())
+    ) {
+      // Vinculación de marshal a su profile: "/soy_marshal email@dominio.com"
+      // El email debe existir en public.profiles y tener rol marshal asignado.
+      const match = (text || "").trim().match(/^\/?soy_?marshal\s+(\S+)/i);
+      const emailArg = match?.[1]?.trim().toLowerCase() || "";
+      if (!emailArg) {
+        replyText = [
+          "Para vincularte como Marshal envía:",
+          "",
+          "/soy_marshal tu_email@dominio.com",
+          "",
+          "Usa el mismo email con el que el comité te dio de alta.",
+        ].join("\n");
+      } else {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, email, first_name, last_name, is_active")
+          .eq("email", emailArg)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("TELEGRAM MARSHAL PROFILE LOOKUP:", profileError);
+          replyText = "Ocurrió un error buscando tu perfil.";
+        } else if (!profile) {
+          replyText = `No encontré el email ${emailArg} en List.golf. Pide al comité que te dé de alta primero.`;
+        } else if (profile.is_active === false) {
+          replyText = "Tu cuenta está inactiva. Contacta al comité.";
+        } else {
+          const { data: roleRows } = await supabase
+            .from("user_club_roles")
+            .select("roles:role_id(code), is_active")
+            .eq("user_id", profile.id)
+            .eq("is_active", true);
+
+          const isMarshal = (roleRows ?? []).some((r: any) => {
+            const role = Array.isArray(r.roles) ? r.roles[0] : r.roles;
+            return role?.code === "marshal";
+          });
+
+          if (!isMarshal) {
+            replyText =
+              "Tu cuenta existe pero no tiene rol Marshal asignado. Pide al comité que te lo asigne y vuelve a intentarlo.";
+          } else {
+            const updates: Record<string, unknown> = {
+              telegram_chat_id: chatId || userId,
+            };
+            if (username) updates.telegram_username = username;
+
+            const { error: updateError } = await supabase
+              .from("profiles")
+              .update(updates)
+              .eq("id", profile.id);
+
+            if (updateError) {
+              console.error("TELEGRAM MARSHAL UPDATE:", updateError);
+              replyText =
+                "No pude guardar tu chat_id. Intenta otra vez o avisa al comité.";
+            } else {
+              const name =
+                formatPlayerName(profile.first_name, profile.last_name) ||
+                emailArg;
+              replyText = [
+                `✅ Listo ${name}, estás vinculado como Marshal.`,
+                "",
+                "Recibirás aquí avisos de tarjetas pendientes y enlaces de captura.",
+                "",
+                "Para entrar a la web usa tu email y la contraseña que te dio el comité.",
+              ].join("\n");
+              await supabase
+                .from("telegram_pending_links")
+                .delete()
+                .eq("telegram_user_id", userId);
+            }
+          }
+        }
+      }
     } else {
       const { data: player, error: playerError } = await supabase
         .from("players")

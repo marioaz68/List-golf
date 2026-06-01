@@ -176,6 +176,10 @@ function canAssignClubRole(
   roleCode: string | null
 ) {
   if (actor.isSuperAdmin) return true;
+  // El club_admin puede dar de alta marshals en su propio club (5 usuarios
+  // máx. en la práctica, son personal operativo del club que ayuda a
+  // capturar tarjetas).
+  if (actor.allowedClubIds.size > 0 && roleCode === "marshal") return true;
   return false;
 }
 
@@ -190,12 +194,14 @@ function canAssignTournamentRole(
     "score_capture",
     "checkin",
     "viewer",
+    "marshal",
   ]);
 
   const allowedForTournamentDirector = new Set([
     "score_capture",
     "checkin",
     "viewer",
+    "marshal",
   ]);
 
   if (actor.allowedClubIds.size > 0) {
@@ -220,6 +226,10 @@ export async function createUserAction(formData: FormData) {
   const password = reqStr(formData, "password");
   const firstName = optStr(formData, "first_name");
   const lastName = optStr(formData, "last_name");
+  const telegramUsernameRaw = optStr(formData, "telegram_username");
+  const telegramUsername = telegramUsernameRaw
+    ? telegramUsernameRaw.replace(/^@+/, "").trim() || null
+    : null;
   const tournamentId = optStr(formData, "tournament_id");
   const explicitClubId = optStr(formData, "club_id");
   const clubRoleId = optStr(formData, "club_role_id");
@@ -307,6 +317,7 @@ export async function createUserAction(formData: FormData) {
     first_name: firstName,
     last_name: lastName,
     is_active: isActive,
+    telegram_username: telegramUsername,
   });
 
   if (profileError) {

@@ -294,6 +294,10 @@ export async function updateProfileAction(formData: FormData) {
 
   const firstName = optStr(formData, "first_name");
   const lastName = optStr(formData, "last_name");
+  const telegramUsernameRaw = optStr(formData, "telegram_username");
+  const telegramUsername = telegramUsernameRaw
+    ? telegramUsernameRaw.replace(/^@+/, "").trim() || null
+    : null;
   const isActive = String(formData.get("is_active") ?? "") === "true";
 
   const { error } = await supabase
@@ -302,6 +306,7 @@ export async function updateProfileAction(formData: FormData) {
       first_name: firstName,
       last_name: lastName,
       is_active: isActive,
+      telegram_username: telegramUsername,
     })
     .eq("id", profileId);
 
