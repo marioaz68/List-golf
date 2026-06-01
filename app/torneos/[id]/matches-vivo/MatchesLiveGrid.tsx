@@ -108,6 +108,12 @@ export default function MatchesLiveGrid({
 
   const strokeLive = derivedFromPairings || liveFromStrokeScores;
 
+  // Tick incremental que se aumenta cada vez que el grid refresca con
+  // datos válidos del backend. Lo pasamos al modal para que también
+  // recargue su detalle en el mismo ciclo y nunca se vean valores
+  // distintos entre el resumen y la pantalla de detalle.
+  const [liveTick, setLiveTick] = useState(0);
+
   const refreshFromStrokes = useMemo(() => {
     return () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -120,6 +126,7 @@ export default function MatchesLiveGrid({
           if (!data.ok) return;
           if (data.matches) setMatches(data.matches);
           if (data.holes) setHoles(data.holes);
+          setLiveTick((t) => t + 1);
         })
         .catch(() => {});
     };
@@ -486,6 +493,7 @@ export default function MatchesLiveGrid({
         roundLabel={detail?.label}
         positionNo={detail?.match.position_no ?? 0}
         holesPerMatch={holesPerMatch}
+        liveTick={liveTick}
       />
     </div>
   );

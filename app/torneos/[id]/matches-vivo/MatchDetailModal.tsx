@@ -85,6 +85,12 @@ type Props = {
   roundLabel?: string;
   positionNo: number;
   holesPerMatch: number;
+  /**
+   * Contador incrementado por el grid padre cada vez que recarga los
+   * matches en vivo. Nos sirve para refetchear el detalle en el mismo
+   * ciclo y no mostrar valores distintos entre resumen y detalle.
+   */
+  liveTick?: number;
 };
 
 function fmtPts(n: number | null): string {
@@ -127,6 +133,7 @@ export default function MatchDetailModal({
   roundLabel,
   positionNo,
   holesPerMatch,
+  liveTick = 0,
 }: Props) {
   const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -191,9 +198,21 @@ export default function MatchDetailModal({
     void fetchDetail({ showSpinner: true });
   }, [open, matchId, tournamentId, isDerived, fetchDetail]);
 
-  // Mientras el modal esté abierto: polling cada 4 s + realtime debounced
-  // sobre hole_scores / round_scores / matchplay_hole_results para que el
-  // detalle se actualice sin tener que cerrar y reabrir.
+  // El grid padre incrementa `liveTick` cada vez que termina una recarga
+  // exitosa de los matches. Cuando cambia, refetcheamos el detalle en el
+  // mismo ciclo para que resumen y detalle nunca muestren valores
+  // distintos del mismo match.
+  useEffect(() => {
+    if (!open || !matchId) return;
+    if (liveTick === 0) return;
+    void fetchDetail();
+  }, [liveTick, open, matchId, fetchDetail]);
+
+  // Respaldo: para matches oficiales (no derivados) suscribimos al
+  // realtime de `matchplay_hole_results` por si el grid no está polling
+  // (puede pasar si los matches no son strokeLive, p.ej. matchplay sin
+  // captura rápida). El modal y el grid siguen coherentes porque el
+  // tick del padre dispara también el refetch del detalle.
   useEffect(() => {
     if (!open || !matchId) return;
     const supabase = createClient();
@@ -206,24 +225,10 @@ export default function MatchDetailModal({
         debounceRef.id = null;
         if (typeof document !== "undefined" && document.hidden) return;
         void fetchDetail();
-      }, 800);
+      }, 600);
     };
-    const pollId = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      void fetchDetail();
-    }, 4000);
     const ch = supabase
       .channel(`mp-modal-${tournamentId}-${matchId}`)
-      .on(
-        "postgres_changes" as never,
-        { event: "*", schema: "public", table: "hole_scores" },
-        scheduleRefresh
-      )
-      .on(
-        "postgres_changes" as never,
-        { event: "*", schema: "public", table: "round_scores" },
-        scheduleRefresh
-      )
       .on(
         "postgres_changes" as never,
         { event: "*", schema: "public", table: "matchplay_hole_results" },
@@ -231,7 +236,6 @@ export default function MatchDetailModal({
       )
       .subscribe();
     return () => {
-      clearInterval(pollId);
       if (debounceRef.id != null) clearTimeout(debounceRef.id);
       supabase.removeChannel(ch);
     };
