@@ -52,11 +52,11 @@ function stickyLabelCell(bg: string) {
   return `sticky left-0 z-10 w-24 min-w-[96px] max-w-[140px] border-r border-gray-200 px-2 py-1 text-left text-[10px] font-semibold leading-tight shadow-[4px_0_8px_-2px_rgba(0,0,0,0.08)] ${bg}`;
 }
 const holeHeadCell =
-  "w-7 min-w-[28px] max-w-[32px] border-b border-gray-200 px-0 py-0.5 text-center font-semibold leading-none";
+  "w-8 min-w-[32px] max-w-[40px] border-b border-gray-200 px-0 py-0.5 text-center font-semibold leading-none";
 const holeMetaCell =
-  "w-7 min-w-[28px] max-w-[32px] border-b border-gray-200 px-0 py-0.5 text-center text-[9px] leading-none text-gray-700";
+  "w-8 min-w-[32px] max-w-[40px] border-b border-gray-200 px-0 py-0.5 text-center text-[9px] leading-none text-gray-700";
 const holeBodyCell =
-  "w-7 min-w-[28px] max-w-[32px] border-b border-gray-100 px-0 py-0.5 text-center align-middle text-[10px] leading-none";
+  "w-8 min-w-[32px] max-w-[40px] border-b border-gray-100 px-0 py-0.5 text-center align-middle text-[10px] leading-none";
 const totalHeadCell =
   "w-9 min-w-[36px] max-w-[44px] border-b border-gray-200 px-0.5 py-0.5 text-center text-[10px] font-semibold leading-none";
 const totalBodyCell =
@@ -157,11 +157,26 @@ function ScoreCell({
   });
 
   useEffect(() => {
-    lastCommittedRef.current = {
-      strokes: value,
-      pickedUp: Boolean(pickedUp),
-    };
-    setDraft(pickedUp ? "X" : value != null ? String(value) : "");
+    const picked = Boolean(pickedUp);
+    if (picked) {
+      lastCommittedRef.current = { strokes: null, pickedUp: true };
+      setDraft("X");
+      return;
+    }
+    if (value != null) {
+      lastCommittedRef.current = { strokes: value, pickedUp: false };
+      setDraft(String(value));
+      return;
+    }
+    // El padre aún no refleja el score (guardado async o polling). Si ya
+    // confirmamos localmente (p. ej. 10–15), no vaciar la casilla.
+    const lc = lastCommittedRef.current;
+    if (lc.strokes != null && !lc.pickedUp) {
+      setDraft(String(lc.strokes));
+      return;
+    }
+    lastCommittedRef.current = { strokes: null, pickedUp: false };
+    setDraft("");
   }, [value, pickedUp]);
 
   useEffect(() => {
@@ -351,7 +366,7 @@ function ScoreCell({
         }
       }}
       className={[
-        "mx-auto box-border h-7 w-7 min-w-[28px] max-w-[32px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold outline-none focus:ring-2 focus:ring-green-300",
+        "mx-auto box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold text-gray-900 outline-none focus:ring-2 focus:ring-green-300",
         frame,
         pendingClass,
         savingClass,
@@ -431,6 +446,8 @@ function PlayerRow({
   ) {
     const key = `${player.entryId}-${hole}`;
     setSavingKey(key);
+    // Optimistic: el número se ve al instante (sobre todo 10–15 de dos dígitos).
+    onScoreSaved(player.entryId, hole, strokes, isPickedUp);
     try {
       const sp = new URLSearchParams(window.location.search);
       const meId = sp.get("me")?.trim() || null;
