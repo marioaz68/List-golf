@@ -1097,7 +1097,15 @@ export default function GrupoCaptureClient({
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-[11px]">
-              <BackButton fallbackHref="/score-entry" />
+              <BackButton
+                fallbackHref={
+                  meta.tournamentId
+                    ? `/score-entry?tournament_id=${encodeURIComponent(
+                        meta.tournamentId
+                      )}`
+                    : "/score-entry"
+                }
+              />
               <Link
                 href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
