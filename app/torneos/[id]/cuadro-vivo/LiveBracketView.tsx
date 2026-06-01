@@ -798,14 +798,44 @@ function BracketMatchCell({
         ? "border-violet-400/50 bg-violet-950/35"
         : "border-cyan-400/50 bg-cyan-950/35";
 
+  const isTopOfPair = positionIdx % 2 === 0;
+  const lineColor = "bg-slate-400/40";
+
   return (
     <div
-      className="relative flex flex-col justify-center self-center px-1"
+      className="relative flex flex-col justify-center px-2"
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
       }}
     >
+      {/* Conectores estilo bracket */}
+      {!isFinal ? (
+        <>
+          <span
+            className={`pointer-events-none absolute right-0 top-1/2 h-px w-3 translate-x-full ${lineColor}`}
+            aria-hidden
+          />
+          {isTopOfPair ? (
+            <span
+              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-px ${lineColor}`}
+              aria-hidden
+            />
+          ) : (
+            <span
+              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-px ${lineColor}`}
+              aria-hidden
+            />
+          )}
+        </>
+      ) : null}
+      {round > 1 ? (
+        <span
+          className={`pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-x-full ${lineColor}`}
+          aria-hidden
+        />
+      ) : null}
+
       <div className={`rounded-lg border ${cellBox} px-2 py-1`}>
         <SidePill
           side="top"
