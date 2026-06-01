@@ -226,6 +226,85 @@ export default async function PublicMatchesLivePage(props: {
     }
   }
 
+  // Salidas (pairing_groups) → tee_time / group_no por cruce de parejas.
+  // Permite mostrar cada match con su hora de salida y detectar grupos
+  // retrasados en captura.
+  const matchSchedule: Record<
+    string,
+    { groupNo: number | null; teeTime: string | null; groupId: string }
+  > = {};
+  try {
+    const { data: roundsList } = await supabase
+      .from("rounds")
+      .select("id, round_no")
+      .eq("tournament_id", tournamentId);
+    const roundIds = (roundsList ?? []).map((r) => String(r.id));
+    if (roundIds.length > 0) {
+      const { data: pgs } = await supabase
+        .from("pairing_groups")
+        .select("id, round_id, group_no, tee_time")
+        .in("round_id", roundIds);
+      const pgIds = (pgs ?? []).map((p) => String(p.id));
+      if (pgIds.length > 0) {
+        const { data: members } = await supabase
+          .from("pairing_group_members")
+          .select("group_id, entry_id")
+          .in("group_id", pgIds);
+        const { data: pairTeams } = await supabase
+          .from("matchplay_pair_teams")
+          .select("id, player_a_entry_id, player_b_entry_id")
+          .eq("tournament_id", tournamentId)
+          .eq("is_active", true);
+        const entryToTeam = new Map<string, string>();
+        for (const t of pairTeams ?? []) {
+          if (t.player_a_entry_id)
+            entryToTeam.set(t.player_a_entry_id, String(t.id));
+          if (t.player_b_entry_id)
+            entryToTeam.set(t.player_b_entry_id, String(t.id));
+        }
+        const teamsByGroup = new Map<string, string[]>();
+        for (const m of members ?? []) {
+          const team = entryToTeam.get(m.entry_id);
+          if (!team) continue;
+          const cur = teamsByGroup.get(m.group_id) ?? [];
+          if (!cur.includes(team)) cur.push(team);
+          teamsByGroup.set(m.group_id, cur);
+        }
+        // Mapa: "sortedPairIds" → datos de la salida.
+        const scheduleByKey = new Map<
+          string,
+          { groupNo: number | null; teeTime: string | null; groupId: string }
+        >();
+        for (const p of pgs ?? []) {
+          const ids = (teamsByGroup.get(String(p.id)) ?? [])
+            .slice()
+            .sort()
+            .join("|");
+          if (!ids) continue;
+          const teeTime = p.tee_time
+            ? String(p.tee_time).slice(0, 5)
+            : null;
+          scheduleByKey.set(ids, {
+            groupNo: typeof p.group_no === "number" ? p.group_no : null,
+            teeTime,
+            groupId: String(p.id),
+          });
+        }
+        for (const m of initialMatches) {
+          const ids = [m.top_pair_id, m.bottom_pair_id]
+            .filter((x): x is string => !!x)
+            .sort()
+            .join("|");
+          if (!ids) continue;
+          const sched = scheduleByKey.get(ids);
+          if (sched) matchSchedule[m.id] = sched;
+        }
+      }
+    }
+  } catch {
+    // Si falla la carga de salidas, simplemente seguimos sin tee times.
+  }
+
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
       <AutoRefresh intervalMs={10000} />
@@ -240,6 +319,7 @@ export default async function PublicMatchesLivePage(props: {
         roundCount={roundCount}
         holesPerMatch={holesPerMatch}
         derivedFromPairings={derivedFromPairings}
+        matchSchedule={matchSchedule}
       />
     </main>
   );

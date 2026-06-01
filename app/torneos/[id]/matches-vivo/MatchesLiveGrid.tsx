@@ -30,6 +30,12 @@ type HoleRow = {
   match_status_after: string | null;
 };
 
+type MatchScheduleInfo = {
+  groupNo: number | null;
+  teeTime: string | null;
+  groupId: string;
+};
+
 type Props = {
   tournamentId: string;
   tournamentName: string;
@@ -42,6 +48,8 @@ type Props = {
   holesPerMatch: number;
   /** Cuando los matches vienen de pairing_groups (no del bracket oficial). */
   derivedFromPairings?: boolean;
+  /** Mapa match_id → datos de la salida (group_no, tee_time, group_id). */
+  matchSchedule?: Record<string, MatchScheduleInfo>;
 };
 
 /** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
@@ -80,6 +88,7 @@ export default function MatchesLiveGrid({
   roundCount,
   holesPerMatch,
   derivedFromPairings = false,
+  matchSchedule = {},
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
@@ -218,27 +227,86 @@ export default function MatchesLiveGrid({
     return map;
   }, [holes]);
 
+  // Último hoyo capturado por match (para ordenar y detectar retrasos).
+  const lastHoleByMatch = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const h of holes) {
+      if (h.top_points == null && h.bottom_points == null) continue;
+      if (h.hole_no > holesPerMatch) continue;
+      const prev = map.get(h.match_id) ?? 0;
+      if (h.hole_no > prev) map.set(h.match_id, h.hole_no);
+    }
+    return map;
+  }, [holes, holesPerMatch]);
+
+  function teeTimeOrder(t: string | null): number {
+    if (!t) return Number.POSITIVE_INFINITY;
+    const m = t.match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return Number.POSITIVE_INFINITY;
+    return Number(m[1]) * 60 + Number(m[2]);
+  }
+
   const byRound = useMemo(() => {
     const map = new Map<number, MatchRow[]>();
     for (const m of matches) {
+      // Ocultar BYE de la página pública: no es un partido jugado.
+      if (m.status === "bye") continue;
       const list = map.get(m.round_no) ?? [];
       list.push(m);
       map.set(m.round_no, list);
     }
-    return Array.from({ length: roundCount }, (_, i) => ({
-      roundNo: i + 1,
-      label: roundLabel(i + 1, roundCount, bracketSize),
-      matches: (map.get(i + 1) ?? []).sort(
-        (a, b) => a.position_no - b.position_no
-      ),
-    }));
-  }, [matches, roundCount, bracketSize]);
+    return Array.from({ length: roundCount }, (_, i) => {
+      const roundNo = i + 1;
+      const list = (map.get(roundNo) ?? []).slice();
+      list.sort((a, b) => {
+        const sa = matchSchedule[a.id];
+        const sb = matchSchedule[b.id];
+        const ta = teeTimeOrder(sa?.teeTime ?? null);
+        const tb = teeTimeOrder(sb?.teeTime ?? null);
+        if (ta !== tb) return ta - tb;
+        const ga = sa?.groupNo ?? a.position_no;
+        const gb = sb?.groupNo ?? b.position_no;
+        if (ga !== gb) return ga - gb;
+        return a.position_no - b.position_no;
+      });
+      // Detección de "retrasados": si existe otro match con salida POSTERIOR
+      // que va más adelantado en hoyos capturados, este match va retrasado.
+      const behindSet = new Set<string>();
+      const decoratedAll = list.map((m) => ({
+        id: m.id,
+        teeOrder: teeTimeOrder(matchSchedule[m.id]?.teeTime ?? null),
+        lastHole: lastHoleByMatch.get(m.id) ?? 0,
+        isDone: m.status === "completed",
+      }));
+      for (const m of decoratedAll) {
+        if (m.isDone) continue;
+        if (m.teeOrder === Number.POSITIVE_INFINITY) continue;
+        const maxAheadHole = decoratedAll
+          .filter(
+            (other) =>
+              other.id !== m.id &&
+              other.teeOrder !== Number.POSITIVE_INFINITY &&
+              other.teeOrder > m.teeOrder
+          )
+          .reduce((max, other) => Math.max(max, other.lastHole), 0);
+        if (maxAheadHole > m.lastHole) behindSet.add(m.id);
+      }
+      return {
+        roundNo,
+        label: roundLabel(roundNo, roundCount, bracketSize),
+        matches: list,
+        behindSet,
+      };
+    });
+  }, [matches, roundCount, bracketSize, matchSchedule, lastHoleByMatch]);
 
+  // Totales calculados sin BYEs (los BYE no son partidos jugados).
   const totals = useMemo(() => {
-    const total = matches.length;
-    const live = matches.filter((m) => m.status === "in_progress").length;
-    const done = matches.filter((m) => m.status === "completed").length;
-    const pending = matches.filter(
+    const real = matches.filter((m) => m.status !== "bye");
+    const total = real.length;
+    const live = real.filter((m) => m.status === "in_progress").length;
+    const done = real.filter((m) => m.status === "completed").length;
+    const pending = real.filter(
       (m) => m.status === "scheduled" || !m.status
     ).length;
     return { total, live, done, pending };
@@ -314,6 +382,7 @@ export default function MatchesLiveGrid({
                   const bottomTeam = m.bottom_pair_id
                     ? teamById.get(m.bottom_pair_id) ?? null
                     : null;
+                  const sched = matchSchedule[m.id];
                   return (
                     <MatchCard
                       key={m.id}
@@ -322,6 +391,9 @@ export default function MatchesLiveGrid({
                       bottomTeam={bottomTeam}
                       holes={holesByMatch.get(m.id) ?? []}
                       holesPerMatch={holesPerMatch}
+                      teeTime={sched?.teeTime ?? null}
+                      groupNo={sched?.groupNo ?? null}
+                      behindOnCapture={round.behindSet.has(m.id)}
                       onOpen={() =>
                         setDetail({
                           match: m,
@@ -385,6 +457,9 @@ function MatchCard({
   bottomTeam,
   holes,
   holesPerMatch,
+  teeTime,
+  groupNo,
+  behindOnCapture = false,
   onOpen,
 }: {
   match: MatchRow;
@@ -392,6 +467,9 @@ function MatchCard({
   bottomTeam: MatchPlayTeamRow | null;
   holes: HoleRow[];
   holesPerMatch: number;
+  teeTime?: string | null;
+  groupNo?: number | null;
+  behindOnCapture?: boolean;
   onOpen?: () => void;
 }) {
   const isBye = match.status === "bye";
@@ -542,18 +620,38 @@ function MatchCard({
       } ${
         isBye
           ? "border-slate-700/40 bg-slate-900/40 text-slate-500"
-          : isDone
-            ? "border-emerald-500/30 bg-emerald-950/20"
-            : isLive
-              ? "border-cyan-400/40 bg-cyan-950/20 shadow-[0_0_24px_-12px_rgba(34,211,238,0.5)]"
-              : "border-white/10 bg-[#0c1728]"
+          : behindOnCapture
+            ? "border-red-500/70 bg-red-950/30 shadow-[0_0_24px_-10px_rgba(239,68,68,0.55)]"
+            : isDone
+              ? "border-emerald-500/30 bg-emerald-950/20"
+              : isLive
+                ? "border-cyan-400/40 bg-cyan-950/20 shadow-[0_0_24px_-12px_rgba(34,211,238,0.5)]"
+                : "border-white/10 bg-[#0c1728]"
       }`}
     >
       <div className="mb-1.5 flex items-center justify-between gap-1 text-[9px] uppercase tracking-wider">
-        <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-400">
-          R{match.round_no} · M{match.position_no}
+        <span className="flex items-center gap-1">
+          <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-400">
+            R{match.round_no} · M{match.position_no}
+          </span>
+          {teeTime ? (
+            <span className="inline-flex items-center gap-1 rounded bg-cyan-500/10 px-1.5 py-0.5 font-bold text-cyan-200">
+              🕘 {teeTime}
+              {groupNo != null ? (
+                <span className="opacity-80">· G{groupNo}</span>
+              ) : null}
+            </span>
+          ) : null}
         </span>
-        {isLive ? (
+        {behindOnCapture && !isDone ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-red-500/30 px-2 py-0.5 font-bold text-red-100"
+            title="Otro grupo con salida posterior ya capturó más hoyos. Captura atrasada."
+          >
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-300" />
+            CAPTURA ATRASADA · H{lastHolePlayed}/{holesPerMatch}
+          </span>
+        ) : isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2 py-0.5 font-bold text-cyan-200">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
             EN JUEGO · va en H{Math.max(lastHolePlayed, 1)}/{holesPerMatch}
