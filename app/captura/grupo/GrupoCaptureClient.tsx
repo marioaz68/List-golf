@@ -108,12 +108,19 @@ function focusNextScoreCell(current: HTMLInputElement): void {
  * Cada vez que el usuario teclea un dígito válido el valor se guarda
  * automáticamente — no hace falta hacer blur ni dar Enter para que se
  * persista. La lógica:
- *  - Un dígito (1-9)  → se guarda al instante y el cursor salta a la
- *    siguiente casilla tras ~250 ms (para permitir teclear 10-15).
- *  - Dos dígitos (10-15) → se guarda y salta al instante.
+ *  - Dígito 2-9    → se guarda y el cursor salta al instante (un score
+ *    de 20+ no existe en este formato, así que no esperamos por un
+ *    posible segundo dígito).
+ *  - Dígito 1      → se guarda como 1 (hole-in-one) pero NO se avanza
+ *    automáticamente: el usuario debe presionar Enter para confirmar.
+ *    Esto deja espacio para que pueda teclear un segundo dígito y
+ *    formar 10-15.
+ *  - Dos dígitos 10-15 → se guarda y salta al instante.
  *  - "X" → se guarda como "levantó" y salta al instante.
  *  - Limpia con Backspace/Delete → se manda `null`, queda en blanco y
  *    NO salta el cursor.
+ *  - Cualquier otro tecleo (p. ej. otro número después de un 2-9) se
+ *    descarta automáticamente.
  *
  * Para evitar mandar muchas requests al backend mientras el usuario
  * sigue tecleando, se debouncea ~150 ms.
@@ -227,29 +234,39 @@ function ScoreCell({
       return;
     }
 
-    const cleaned = trimmed.replace(/[^0-9]/g, "").slice(0, 2);
+    let cleaned = trimmed.replace(/[^0-9]/g, "");
+    // Sólo aceptamos un dígito por casilla, salvo cuando el primer dígito es
+    // "1" (puede formar 10-15). Si el usuario teclea más después de 2-9, los
+    // dígitos extra se descartan visual y lógicamente.
+    if (cleaned.length >= 2) {
+      if (cleaned[0] === "1") {
+        cleaned = cleaned.slice(0, 2);
+      } else {
+        cleaned = cleaned[0];
+      }
+    }
     setDraft(cleaned);
     if (cleaned === "") {
-      // Borrado: no avanzamos para que el usuario pueda re-teclear.
       cancelAdvance();
       scheduleCommit(null, false);
       return;
     }
     const n = Number(cleaned);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
-      // Valor fuera de rango: descartamos sin guardar (no error).
       cancelAdvance();
       return;
     }
     scheduleCommit(Math.trunc(n), false);
     // Auto-avance:
-    //  - 2 dígitos válidos (10-15) → final, saltar ya.
-    //  - 1 dígito → esperamos 250 ms por si el usuario está tecleando 10-15.
-    //    Si dentro de ese plazo entra otro keypress, se reinicia el timer.
+    //  - 2 dígitos (10-15)        → final, saltar ya.
+    //  - "1" (posible hole-in-one o inicio de 10-15) → esperar Enter manual.
+    //  - 2-9 (un solo dígito)     → saltar ya (no existe 20+).
     if (cleaned.length >= 2) {
       scheduleAdvance(0);
+    } else if (cleaned === "1") {
+      cancelAdvance();
     } else {
-      scheduleAdvance(250);
+      scheduleAdvance(0);
     }
   }
 
@@ -312,8 +329,8 @@ function ScoreCell({
       disabled={disabled}
       title={
         allowPickup
-          ? "Score 1–15 o X para no terminó el hoyo (pierde bola alta)"
-          : undefined
+          ? "Score 1–15 (un dígito por casilla; sólo el 1 permite un segundo). Hole-in-one: teclea 1 y presiona Enter. X: no terminó (pierde bola alta)."
+          : "Score 1–15 (un dígito por casilla; sólo el 1 permite un segundo). Hole-in-one: teclea 1 y presiona Enter."
       }
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => handleChange(e.target.value)}
@@ -1205,8 +1222,10 @@ export default function GrupoCaptureClient({
             </table>
           </div>
           <p className="mt-1 px-1 text-[10px] text-slate-500">
-            Toca una celda y escribe el número de tiros. Los cambios se
-            guardan automáticamente al salir del campo o al presionar Enter.
+            Toca una celda y escribe el número de tiros. Sólo se acepta un
+            dígito por casilla; el 1 permite un segundo (10–15). Para
+            hole-in-one teclea <span className="font-semibold">1</span> y
+            presiona <span className="font-semibold">Enter</span>.
           </p>
         </div>
 
