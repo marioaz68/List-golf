@@ -200,15 +200,15 @@ function PublicMatchCell({
             className={`pointer-events-none absolute right-0 top-1/2 -mt-px h-0.5 w-3 translate-x-full ${lineColor}`}
             aria-hidden
           />
-          {/* Vertical merger: del centro hasta el límite con su pareja */}
+          {/* Vertical merger: en el centro del gap entre columnas */}
           {isTopOfPair ? (
             <span
-              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-0.5 ${lineColor}`}
+              className={`pointer-events-none absolute -right-3 top-1/2 bottom-0 w-0.5 ${lineColor}`}
               aria-hidden
             />
           ) : (
             <span
-              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-0.5 ${lineColor}`}
+              className={`pointer-events-none absolute -right-3 top-0 h-1/2 w-0.5 ${lineColor}`}
               aria-hidden
             />
           )}
