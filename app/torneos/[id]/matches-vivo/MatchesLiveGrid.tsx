@@ -452,55 +452,73 @@ function MatchCard({
     match.status === "in_progress" || (isScheduled && hasCapturedHoles);
 
   /**
-   * Diferencial en tiempo real estilo match play (Bola Baja + Bola Alta).
-   * Cada hoyo otorga máximo 2 puntos (1 bola baja + 1 bola alta).
-   *   - En juego:        "X UP" / "X DN" / "AS"
-   *   - Finalizado temprano (acabó por marcador): "X/Y" donde
-   *       X = diferencia de puntos con que ganó.
-   *       Y = puntos que quedaban por jugar = hoyos restantes × 2.
-   *     Ej.: ganó 6 arriba a falta de 2 hoyos (4 puntos posibles) → "6/4".
-   *   - Finalizado al 18: solo "X UP" / "X DN" / "AS".
+   * Diferencial estilo match play (Bola Baja + Bola Alta). Cada hoyo
+   * otorga hasta 2 puntos (1 bola baja + 1 bola alta).
    *
-   * Si todavía no hay hoyos capturados (y el match no está finalizado),
-   * no mostramos badge.
+   *   - En juego:        "X UP" / "X DN" / "AS"
+   *   - Finalizado:      ganador → "X/Y", perdedor → "X DN".
+   *     X = diferencia de puntos con la que ganó.
+   *     Y = puntos por jugar al momento de la decisión (hoyos restantes
+   *         × 2). Si ganó al 18, Y = 0 → "X/0".
+   *
+   * Cuando el match está cerrado preferimos los datos parseados de
+   * `result_text` y respetamos `winner_pair_id` (no la suma hoyo×hoyo),
+   * porque pueden capturarse scores posteriores al cierre que igualan
+   * el conteo y harían aparecer "AS" en un match ya ganado.
    */
   function fmtDiff(n: number): string {
     return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
   }
   const showDiffBadge = hasCapturedHoles || isDone;
-  const diffAbs = Math.abs(topPts - bottomPts);
 
-  const endedEarly = isDone && decidedAtHole != null;
-  const holesLeftAtDecision = endedEarly
-    ? Math.max(0, holesPerMatch - (decidedAtHole as number))
-    : 0;
-  // En Bola Baja + Bola Alta cada hoyo otorga hasta 2 puntos, así que los
-  // "puntos por jugar" al momento de la decisión son hoyos restantes × 2.
-  const pointsLeftAtDecision = holesLeftAtDecision * 2;
+  const finalDiffFromText: number | null = (() => {
+    if (!isDone || !match.result_text) return null;
+    const m = match.result_text.match(/(\d+(?:\.\d+)?)\s*arriba/i);
+    if (!m) return null;
+    const v = Number(m[1]);
+    return Number.isFinite(v) && v > 0 ? v : null;
+  })();
+  const finalPointsLeftFromText: number | null = (() => {
+    if (!isDone || !match.result_text) return null;
+    const m = match.result_text.match(/(\d+)\s*por jugar/i);
+    if (!m) return 0;
+    const v = Number(m[1]);
+    return Number.isFinite(v) ? v : 0;
+  })();
 
-  const winnerLabel: string =
-    endedEarly && pointsLeftAtDecision > 0
-      ? `${fmtDiff(diffAbs)}/${pointsLeftAtDecision}`
-      : `${fmtDiff(diffAbs)} UP`;
-  const loserLabel: string =
-    endedEarly && pointsLeftAtDecision > 0
-      ? `${fmtDiff(diffAbs)}/${pointsLeftAtDecision}`
-      : `${fmtDiff(diffAbs)} DN`;
+  const liveDiffAbs = Math.abs(topPts - bottomPts);
+  const finalDiffAbs = finalDiffFromText ?? liveDiffAbs;
+  const finalPointsLeft = finalPointsLeftFromText ?? 0;
+
+  const winnerLabel: string = isDone
+    ? `${fmtDiff(finalDiffAbs)}/${finalPointsLeft}`
+    : `${fmtDiff(liveDiffAbs)} UP`;
+  const loserLabel: string = isDone
+    ? `${fmtDiff(finalDiffAbs)} DN`
+    : `${fmtDiff(liveDiffAbs)} DN`;
 
   const topDiffLabel: string | null = !showDiffBadge
     ? null
-    : topPts === bottomPts
-      ? "AS"
-      : topPts > bottomPts
+    : isDone && winnerId
+      ? topWin
         ? winnerLabel
-        : loserLabel;
+        : loserLabel
+      : topPts === bottomPts
+        ? "AS"
+        : topPts > bottomPts
+          ? winnerLabel
+          : loserLabel;
   const bottomDiffLabel: string | null = !showDiffBadge
     ? null
-    : topPts === bottomPts
-      ? "AS"
-      : bottomPts > topPts
+    : isDone && winnerId
+      ? bottomWin
         ? winnerLabel
-        : loserLabel;
+        : loserLabel
+      : topPts === bottomPts
+        ? "AS"
+        : bottomPts > topPts
+          ? winnerLabel
+          : loserLabel;
 
   const clickable = !!onOpen && !isBye;
 
@@ -677,7 +695,12 @@ function Side({
             diffLabel === "AS"
               ? "All Square (empate acumulado)"
               : diffLabel.includes("/")
-                ? `Ganó ${diffLabel.split("/")[0]} arriba con ${diffLabel.split("/")[1]} punto(s) por jugar (cada hoyo da máx. 2 pts en Bola Baja + Bola Alta)`
+                ? (() => {
+                    const [up, left] = diffLabel.split("/");
+                    return left === "0"
+                      ? `Ganó ${up} arriba en el hoyo 18 (sin puntos por jugar)`
+                      : `Ganó ${up} arriba con ${left} punto(s) por jugar (cada hoyo da máx. 2 pts en Bola Baja + Bola Alta)`;
+                  })()
                 : diffLabel.endsWith("UP")
                   ? "Va arriba en el match (puntos acumulados)"
                   : "Va abajo en el match (puntos acumulados)"
