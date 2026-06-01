@@ -81,6 +81,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "entries_operator",
     "score_capture",
     "caddie_manager",
+    "marshal",
   ],
 
   "score-entry": [
@@ -105,6 +106,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "tournament_director",
     "score_capture",
     "viewer",
+    "marshal",
   ],
 
   caddies: [
@@ -134,6 +136,7 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "tournament_director",
     "score_capture",
     "caddie_manager",
+    "marshal",
   ],
 };
 

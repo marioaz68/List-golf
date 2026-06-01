@@ -47,6 +47,16 @@ function arg(name: string): string | null {
 const listClubs = process.argv.includes("--list-clubs");
 const clubId = arg("club-id");
 const tournamentId = arg("tournament-id");
+/**
+ * scope=club  → user_club_roles (marshal ve todos los torneos del club).
+ * scope=tournament → user_tournament_roles (solo este torneo).
+ * Si no se especifica: club si hay --club-id, tournament si solo hay --tournament-id.
+ */
+const scopeArg = arg("scope")?.toLowerCase() as
+  | "club"
+  | "tournament"
+  | null
+  | undefined;
 const password = arg("password") ?? "Marshal2026!";
 
 const MARSHALS = [
@@ -57,7 +67,8 @@ const MARSHALS = [
   { first: "Marshal", last: "Cinco", email: "marshal5@listgolf.club" },
 ];
 
-async function ensureMarshalRole(admin: ReturnType<typeof createClient>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ensureMarshalRole(admin: any) {
   const { data: existing } = await admin
     .from("roles")
     .select("id, code")
@@ -77,7 +88,8 @@ async function ensureMarshalRole(admin: ReturnType<typeof createClient>) {
   }
 }
 
-async function getMarshalRoleId(admin: ReturnType<typeof createClient>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getMarshalRoleId(admin: any) {
   const { data, error } = await admin
     .from("roles")
     .select("id")
@@ -114,38 +126,66 @@ async function main() {
 
   if (!clubId && !tournamentId) {
     console.error(
-      "Uso: npx tsx scripts/create-marshal-users.ts --club-id=<uuid>\n" +
-        "     npx tsx scripts/create-marshal-users.ts --tournament-id=<uuid>\n" +
-        "     npx tsx scripts/create-marshal-users.ts --list-clubs"
+      "Uso:\n" +
+        "  npx tsx scripts/create-marshal-users.ts --club-id=<uuid>\n" +
+        "  npx tsx scripts/create-marshal-users.ts --tournament-id=<uuid>             # scope=tournament por defecto\n" +
+        "  npx tsx scripts/create-marshal-users.ts --tournament-id=<uuid> --scope=club\n" +
+        "  npx tsx scripts/create-marshal-users.ts --list-clubs"
     );
     process.exit(1);
   }
 
+  // Determinar scope efectivo.
+  // - Si pasa --scope=tournament: asignar a user_tournament_roles.
+  // - Si pasa --scope=club: asignar a user_club_roles (necesita resolver el club).
+  // - Si no pasa --scope:
+  //     - --club-id → club
+  //     - solo --tournament-id → tournament
+  const effectiveScope: "club" | "tournament" =
+    scopeArg ?? (clubId ? "club" : "tournament");
+
+  if (effectiveScope === "tournament" && !tournamentId) {
+    throw new Error("Scope 'tournament' requiere --tournament-id");
+  }
+
   let resolvedClubId = clubId;
-  if (!resolvedClubId && tournamentId) {
+  let tournamentName: string | null = null;
+
+  if (tournamentId) {
     const { data: t, error: tErr } = await admin
       .from("tournaments")
       .select("id, name, club_id")
       .eq("id", tournamentId)
       .maybeSingle();
-    if (tErr || !t?.club_id) {
-      throw new Error("Torneo no encontrado o sin club_id.");
+    if (tErr || !t) {
+      throw new Error("Torneo no encontrado.");
     }
-    console.log(`Torneo: ${t.name}`);
-    resolvedClubId = t.club_id;
+    tournamentName = (t.name as string | null) ?? null;
+    if (!resolvedClubId && effectiveScope === "club") {
+      if (!t.club_id) {
+        throw new Error("Scope 'club' pero el torneo no tiene club_id.");
+      }
+      resolvedClubId = t.club_id as string;
+    }
   }
 
   await ensureMarshalRole(admin);
   const marshalRoleId = await getMarshalRoleId(admin);
 
-  const { data: club, error: clubErr } = await admin
-    .from("clubs")
-    .select("id, name")
-    .eq("id", resolvedClubId!)
-    .maybeSingle();
-  if (clubErr || !club) throw new Error("Club no encontrado.");
+  let clubName: string | null = null;
+  if (effectiveScope === "club") {
+    const { data: club, error: clubErr } = await admin
+      .from("clubs")
+      .select("id, name")
+      .eq("id", resolvedClubId!)
+      .maybeSingle();
+    if (clubErr || !club) throw new Error("Club no encontrado.");
+    clubName = club.name as string | null;
+  }
 
-  console.log(`Club: ${club.name} (${club.id})`);
+  console.log(`Scope: ${effectiveScope}`);
+  if (tournamentName) console.log(`Torneo: ${tournamentName}`);
+  if (clubName) console.log(`Club: ${clubName} (${resolvedClubId})`);
   console.log(`Password temporal para todos: ${password}\n`);
 
   const created: Array<{ email: string; status: string }> = [];
@@ -197,19 +237,31 @@ async function main() {
       continue;
     }
 
-    const { error: roleError } = await admin.from("user_club_roles").upsert(
-      {
-        user_id: userId,
-        club_id: resolvedClubId!,
-        role_id: marshalRoleId,
-        is_active: true,
-      },
-      { onConflict: "user_id,club_id,role_id" }
-    );
-    if (roleError) {
+    const roleAssign =
+      effectiveScope === "club"
+        ? await admin.from("user_club_roles").upsert(
+            {
+              user_id: userId,
+              club_id: resolvedClubId!,
+              role_id: marshalRoleId,
+              is_active: true,
+            },
+            { onConflict: "user_id,club_id,role_id" }
+          )
+        : await admin.from("user_tournament_roles").upsert(
+            {
+              user_id: userId,
+              tournament_id: tournamentId!,
+              role_id: marshalRoleId,
+              is_active: true,
+            },
+            { onConflict: "user_id,tournament_id,role_id" }
+          );
+
+    if (roleAssign.error) {
       created.push({
         email: m.email,
-        status: `ERROR rol: ${roleError.message}`,
+        status: `ERROR rol (${effectiveScope}): ${roleAssign.error.message}`,
       });
       continue;
     }

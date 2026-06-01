@@ -377,6 +377,7 @@ export default async function ScoreEntryPage(props: {
         "club_admin",
         "tournament_director",
         "score_capture",
+        "marshal",
       ],
     });
 

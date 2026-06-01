@@ -484,6 +484,7 @@ export async function savePlayerScores(
         "club_admin",
         "tournament_director",
         "score_capture",
+        "marshal",
       ],
     });
 

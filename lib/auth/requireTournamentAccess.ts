@@ -9,7 +9,8 @@ type AllowedRole =
   | "checkin"
   | "viewer"
   | "entries_operator"
-  | "caddie_manager";
+  | "caddie_manager"
+  | "marshal";
 
 type Options = {
   tournamentId: string | null | undefined;
@@ -76,6 +77,15 @@ export async function checkTournamentAccess({
       clubRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
 
     if (clubCodes.includes("club_admin")) {
+      return { ok: true };
+    }
+
+    // Marshal con rol asignado al club tiene acceso al torneo del club
+    // si el rol está dentro de los permitidos para la ruta.
+    if (
+      (allowedRoles.length === 0 || allowedRoles.includes("marshal")) &&
+      clubCodes.includes("marshal")
+    ) {
       return { ok: true };
     }
   }
