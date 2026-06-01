@@ -119,6 +119,7 @@ export default function PublicMatchPlayBracket({
                       pairFormat={bracket.pair_format}
                       labels={labels}
                       round={roundNo}
+                      positionIdx={idx}
                       rowStart={rowStart}
                       span={span}
                       half={half}
@@ -140,6 +141,7 @@ function PublicMatchCell({
   pairFormat,
   labels,
   round,
+  positionIdx,
   rowStart,
   span,
   half,
@@ -149,6 +151,7 @@ function PublicMatchCell({
   pairFormat: PublicBracketView["pair_format"];
   labels: Labels;
   round: number;
+  positionIdx: number;
   rowStart: number;
   span: number;
   half: "top" | "bottom" | "final";
@@ -178,14 +181,46 @@ function PublicMatchCell({
   const topWin = match.winner_label === match.top_label && !isBye;
   const botWin = match.winner_label === match.bottom_label && !isBye;
 
+  const isTopOfPair = positionIdx % 2 === 0;
+  const lineColor = "bg-slate-400/40";
+
   return (
     <div
-      className="relative flex flex-col justify-center self-center px-1"
+      className="relative flex flex-col justify-center px-2"
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
       }}
     >
+      {/* Conectores estilo bracket */}
+      {!isFinal ? (
+        <>
+          {/* Stub horizontal saliendo a la derecha (hacia siguiente ronda) */}
+          <span
+            className={`pointer-events-none absolute right-0 top-1/2 h-px w-3 translate-x-full ${lineColor}`}
+            aria-hidden
+          />
+          {/* Vertical merger: del centro hasta el límite con su pareja */}
+          {isTopOfPair ? (
+            <span
+              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-px ${lineColor}`}
+              aria-hidden
+            />
+          ) : (
+            <span
+              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-px ${lineColor}`}
+              aria-hidden
+            />
+          )}
+        </>
+      ) : null}
+      {round > 1 ? (
+        <span
+          className={`pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-x-full ${lineColor}`}
+          aria-hidden
+        />
+      ) : null}
+
       <div className={`rounded-lg border ${cellBox} px-2.5 py-1.5`}>
         {/* Fila superior */}
         <div
