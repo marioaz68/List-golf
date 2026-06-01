@@ -376,14 +376,26 @@ export default function MatchDetailModal({
             </section>
           ) : null}
 
-          {/* Tabla de hoyos: scorecard horizontal estilo "resultados en vivo" */}
+          {/* Tabla de hoyos: scorecard horizontal con desempate appendido */}
           {detail ? (
             <section>
-              <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                Tarjeta del match (brutos)
+              <h3 className="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                <span>Tarjeta del match (brutos)</span>
+                {detail.needs_playoff ||
+                detail.holes.some((h) => h.hole_no > 18) ? (
+                  <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    Desempate appended → scroll →
+                  </span>
+                ) : null}
               </h3>
               <HoleTable
                 holes={detail.holes.filter((h) => h.hole_no <= 18)}
+                playoffHoles={detail.holes.filter((h) => h.hole_no > 18)}
+                showPlayoff={
+                  detail.needs_playoff ||
+                  detail.holes.some((h) => h.hole_no > 18)
+                }
                 topPlayers={topPlayers}
                 bottomPlayers={bottomPlayers}
                 topLabel={topName}
@@ -394,26 +406,6 @@ export default function MatchDetailModal({
                     ? detail.decided_at_hole
                     : null
                 }
-              />
-            </section>
-          ) : null}
-
-          {/* Desempate: tabla compacta para los hoyos 1-9 jugados como playoff */}
-          {detail &&
-          (detail.needs_playoff ||
-            detail.holes.some((h) => h.hole_no > 18)) ? (
-            <section>
-              <h3 className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
-                Desempate · muerte súbita
-              </h3>
-              <PlayoffTable
-                holes={detail.holes.filter((h) => h.hole_no > 18)}
-                topPlayers={topPlayers}
-                bottomPlayers={bottomPlayers}
-                topLabel={topName}
-                bottomLabel={bottomName}
-                allowancePct={detail.allowance_pct}
                 decidedAtPlayoffHole={detail.playoff_decided_hole ?? null}
               />
             </section>
@@ -1131,6 +1123,9 @@ function HoleTable({
   bottomLabel,
   allowancePct,
   decidedAtHole = null,
+  playoffHoles = [],
+  showPlayoff = false,
+  decidedAtPlayoffHole = null,
 }: {
   holes: HoleDetail[];
   topPlayers: PlayerInfo[];
@@ -1139,6 +1134,12 @@ function HoleTable({
   bottomLabel: string;
   allowancePct: number;
   decidedAtHole?: number | null;
+  /** Hoyos del desempate (hole_no 19-27 ↔ playoff_hole 1-9). */
+  playoffHoles?: HoleDetail[];
+  /** Mostrar 9 columnas adicionales al final con el desempate. */
+  showPlayoff?: boolean;
+  /** Playoff hole 1-9 donde se decidió el match. */
+  decidedAtPlayoffHole?: number | null;
 }) {
   const tA = shortPlayerLabel(topPlayers[0]?.label ?? "—");
   const tB = shortPlayerLabel(topPlayers[1]?.label ?? "—");
@@ -1159,6 +1160,14 @@ function HoleTable({
 
   const hasPar = holes.some((h) => h.par != null);
   const hasSI = holes.some((h) => h.stroke_index != null);
+
+  // Hoyos del desempate (1..9 físico) indexados por playoff_hole.
+  const playoffByPos = new Map<number, HoleDetail>();
+  for (const ph of playoffHoles) {
+    const p = ph.playoff_hole ?? ph.hole_no - 18;
+    if (p >= 1 && p <= 9) playoffByPos.set(p, ph);
+  }
+  const renderPlayoff = showPlayoff;
 
   function grossOf(h: HoleDetail, who: "tA" | "tB" | "bA" | "bB"): number | null {
     switch (who) {
@@ -1470,6 +1479,19 @@ function HoleTable({
           capturando para stroke play, pero no aportan puntos al match.
         </div>
       ) : null}
+      {renderPlayoff ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-400/30 bg-amber-950/40 px-3 py-1.5 text-[10px] text-amber-200">
+          <span className="inline-flex items-center gap-1 font-bold uppercase tracking-wider">
+            <span className="inline-flex h-2 w-2 rounded-full bg-amber-400" />
+            Desempate · muerte súbita
+          </span>
+          <span className="text-[9px] text-amber-200/80">
+            Se juega en los hoyos 1-9 (PD1..PD9). Mismas ventajas que en la
+            ronda normal. Primer hoyo donde una pareja saque ventaja en puntos
+            cierra el match.
+          </span>
+        </div>
+      ) : null}
       <table className="min-w-full border-separate border-spacing-0 text-[10px] text-white">
         <thead>
           <tr className="bg-gradient-to-r from-cyan-950 via-sky-900 to-cyan-950 text-cyan-50">
@@ -1513,6 +1535,21 @@ function HoleTable({
                 </span>
               ) : null}
             </th>
+            {renderPlayoff
+              ? Array.from({ length: 9 }, (_, i) => (
+                  <th
+                    key={`hp-${i + 1}`}
+                    className={`${holeTh} bg-amber-950/60 text-amber-100 ${
+                      i === 0 ? "border-l-2 border-l-amber-400/60" : ""
+                    }`}
+                  >
+                    <span className="block leading-none">PD{i + 1}</span>
+                    <span className="block text-[7px] font-normal text-amber-300/80">
+                      hoyo {i + 1}
+                    </span>
+                  </th>
+                ))
+              : null}
           </tr>
         </thead>
         <tbody>
@@ -1563,6 +1600,21 @@ function HoleTable({
                   ? holes.reduce((acc, h) => acc + Number(h.par ?? 0), 0)
                   : "—"}
               </td>
+              {renderPlayoff
+                ? Array.from({ length: 9 }, (_, i) => {
+                    const ph = playoffByPos.get(i + 1);
+                    return (
+                      <td
+                        key={`par-p-${i + 1}`}
+                        className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold ${
+                          i === 0 ? "border-l-2 border-l-amber-400/40" : ""
+                        }`}
+                      >
+                        {ph?.par ?? holes[i]?.par ?? "—"}
+                      </td>
+                    );
+                  })
+                : null}
             </tr>
           ) : null}
 
@@ -1602,6 +1654,24 @@ function HoleTable({
               ))}
               <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
               <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
+              {renderPlayoff
+                ? Array.from({ length: 9 }, (_, i) => {
+                    const ph = playoffByPos.get(i + 1);
+                    return (
+                      <td
+                        key={`si-p-${i + 1}`}
+                        className={`${cellTd} bg-amber-950/40 text-[10px] font-semibold ${
+                          i === 0 ? "border-l-2 border-l-amber-400/40" : ""
+                        }`}
+                        title={`PD${i + 1} (físico ${i + 1}) · Ventaja ${
+                          ph?.stroke_index ?? holes[i]?.stroke_index ?? "—"
+                        }`}
+                      >
+                        {ph?.stroke_index ?? holes[i]?.stroke_index ?? "—"}
+                      </td>
+                    );
+                  })
+                : null}
             </tr>
           ) : null}
 
@@ -1690,6 +1760,36 @@ function HoleTable({
                 >
                   {hasPar ? fmtToPar(totTp) : fmtStroke(totStr)}
                 </td>
+                {renderPlayoff
+                  ? Array.from({ length: 9 }, (_, i) => {
+                      const ph = playoffByPos.get(i + 1);
+                      const r = ph ? role(ph, p.key) : null;
+                      const playoffDim =
+                        decidedAtPlayoffHole != null &&
+                        i + 1 > decidedAtPlayoffHole
+                          ? "bg-slate-500/10 opacity-60"
+                          : "";
+                      return (
+                        <td
+                          key={`c-${p.key}-p${i + 1}`}
+                          className={`${cellTd} ${stripe} ${roleTint(r)} ${playoffDim} ${
+                            i === 0 ? "border-l-2 border-l-amber-400/40" : ""
+                          }`}
+                        >
+                          {ph ? (
+                            <StrokeMark
+                              strokes={netOf(ph, p.key)}
+                              par={ph.par ?? holes[i]?.par ?? null}
+                              handicapReceived={strokesReceivedOnHole(ph, p.key)}
+                              gross={grossOf(ph, p.key)}
+                            />
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
+                      );
+                    })
+                  : null}
               </tr>
             );
           })}
@@ -1744,6 +1844,36 @@ function HoleTable({
                 <td className={`${subTd} ${stripe} ${diffTone(d18)}`}>
                   {fmtDiff(d18)}
                 </td>
+                {renderPlayoff
+                  ? Array.from({ length: 9 }, (_, i) => {
+                      const ph = playoffByPos.get(i + 1);
+                      // En desempate cada hoyo es una mini-decisión: el
+                      // diferencial mostrado es la diferencia de puntos
+                      // del hoyo (no acumulado), porque cualquier ventaja
+                      // cierra el match.
+                      const d =
+                        ph && ph.top_points != null && ph.bottom_points != null
+                          ? Number(ph.top_points) - Number(ph.bottom_points)
+                          : null;
+                      const playoffDim =
+                        decidedAtPlayoffHole != null &&
+                        i + 1 > decidedAtPlayoffHole
+                          ? "bg-slate-500/10 opacity-60"
+                          : "";
+                      return (
+                        <td
+                          key={`d-p${i + 1}`}
+                          className={`${cellTd} ${stripe} font-bold ${diffTone(
+                            d
+                          )} ${playoffDim} ${
+                            i === 0 ? "border-l-2 border-l-amber-400/60" : ""
+                          }`}
+                        >
+                          {fmtDiff(d)}
+                        </td>
+                      );
+                    })
+                  : null}
               </tr>
             );
           })()}

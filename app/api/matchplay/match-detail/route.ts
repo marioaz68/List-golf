@@ -109,6 +109,8 @@ export async function GET(req: Request) {
   let topAcc = 0;
   let bottomAcc = 0;
   let decidedAtHole: number | null = null;
+  let decidedAtPlayoffHole: number | undefined;
+  let viaPlayoff = false;
   const lineByHole = match.holes.map((h) => {
     const tpRaw = Number(h.top_points ?? 0);
     const bpRaw = Number(h.bottom_points ?? 0);
@@ -130,6 +132,8 @@ export async function GET(req: Request) {
       bottomAcc += bp;
     }
 
+    const isPlayoff = h.hole_no > 18;
+    const physicalHole = isPlayoff ? h.hole_no - 18 : h.hole_no;
     const row = {
       hole_no: h.hole_no,
       has_score: hasScore,
@@ -145,19 +149,31 @@ export async function GET(req: Request) {
       bottom_player_a_strokes: h.bottom_player_a_strokes,
       bottom_player_b_strokes: h.bottom_player_b_strokes,
       breakdown: afterDecision ? null : h.detail_json?.breakdown ?? null,
-      stroke_index: match.stroke_index_by_hole.get(h.hole_no) ?? null,
-      par: parByHole.get(h.hole_no) ?? null,
+      stroke_index: match.stroke_index_by_hole.get(physicalHole) ?? null,
+      par: parByHole.get(physicalHole) ?? null,
       after_decision: afterDecision,
+      is_playoff: isPlayoff,
+      playoff_hole: isPlayoff ? physicalHole : undefined,
     };
 
     if (hasScore && !afterDecision) {
-      const winner = isLowHighMatchDecidedAt({
-        top_total: topAcc,
-        bottom_total: bottomAcc,
-        hole_no: h.hole_no,
-        holes_in_match: match.holes_in_match,
-      });
-      if (winner) decidedAtHole = h.hole_no;
+      if (isPlayoff) {
+        // Muerte súbita: el primer hoyo donde una pareja saca ventaja
+        // de puntos cierra el match.
+        if (tp !== bp) {
+          decidedAtHole = h.hole_no;
+          decidedAtPlayoffHole = physicalHole;
+          viaPlayoff = true;
+        }
+      } else {
+        const winner = isLowHighMatchDecidedAt({
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          hole_no: h.hole_no,
+          holes_in_match: match.holes_in_match,
+        });
+        if (winner) decidedAtHole = h.hole_no;
+      }
     }
 
     return row;
@@ -181,6 +197,17 @@ export async function GET(req: Request) {
     finalStatus = "completed";
   }
 
+  // Fallback a los flags que ya trae loadMatchForScoring (cuando viene
+  // de la derivación). Si decidimos aquí dentro del playoff, esos flags
+  // se imponen porque tenemos la información hoyo-por-hoyo a la mano.
+  const needsPlayoff =
+    !viaPlayoff &&
+    decidedAtHole == null &&
+    topAcc === bottomAcc &&
+    lineByHole.some((h) => h.has_score && !h.is_playoff) &&
+    (match.needs_playoff ?? false);
+  const playoffDecided = decidedAtPlayoffHole ?? match.playoff_decided_hole;
+
   return NextResponse.json({
     ok: true,
     match: {
@@ -200,6 +227,9 @@ export async function GET(req: Request) {
       top_total: topAcc,
       bottom_total: bottomAcc,
       decided_at_hole: decidedAtHole,
+      needs_playoff: needsPlayoff,
+      via_playoff: viaPlayoff || (match.via_playoff ?? false),
+      playoff_decided_hole: playoffDecided,
       holes: lineByHole,
     },
   });

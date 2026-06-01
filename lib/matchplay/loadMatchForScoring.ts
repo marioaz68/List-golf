@@ -41,6 +41,12 @@ export type MatchForScoring = {
   top_pair_id: string | null;
   bottom_pair_id: string | null;
   winner_pair_id: string | null;
+  /** AS al 18 con puntos jugados → necesita muerte súbita. */
+  needs_playoff?: boolean;
+  /** Match decidido en muerte súbita (hoyos 19..27). */
+  via_playoff?: boolean;
+  /** Hoyo dentro del desempate (1..9) donde se decidió. */
+  playoff_decided_hole?: number;
   top_label: string;
   bottom_label: string;
   /**
@@ -168,6 +174,11 @@ export async function loadMatchForScoring(
     match_status_after: string | null;
     detail_json: MatchHoleScoreRow["detail_json"];
   }[] | null = null;
+  let derivedPlayoffInfo: {
+    needs_playoff: boolean;
+    via_playoff: boolean;
+    playoff_decided_hole?: number;
+  } | null = null;
   const noOfficialHoles = !holeRows || holeRows.length === 0;
   const topAEntry = top?.player_a ?? null;
   const topBEntry = top?.player_b ?? null;
@@ -217,6 +228,13 @@ export async function loadMatchForScoring(
           .filter((h) => h.match_id === match.id)
           .map((h) => [h.hole_no, h])
       );
+      const decision = derived.decisions.get(match.id);
+      const summary = derived.summaries.get(match.id);
+      derivedPlayoffInfo = {
+        needs_playoff: Boolean(summary?.needs_playoff),
+        via_playoff: Boolean(decision?.via_playoff),
+        playoff_decided_hole: decision?.playoff_hole,
+      };
 
       // Cargar strokes brutos de los 4 jugadores en la ronda calendario.
       const playerIds = [
@@ -277,8 +295,7 @@ export async function loadMatchForScoring(
         return strokesByPlayerHole.get(playerId)?.get(holeNo) ?? null;
       }
 
-      derivedHoleRows = Array.from({ length: holesInMatch }, (_, i) => {
-        const hole_no = i + 1;
+      const buildRow = (hole_no: number) => {
         const pt = pointsByHole.get(hole_no);
         return {
           hole_no,
@@ -299,7 +316,30 @@ export async function loadMatchForScoring(
             ? { breakdown: pt.breakdown }
             : null,
         };
-      });
+      };
+
+      const regular = Array.from({ length: holesInMatch }, (_, i) =>
+        buildRow(i + 1)
+      );
+
+      // Hoyos del desempate (1..9 físico → almacenados como 19..27).
+      // Solo agregamos los hoyos donde haya algún stroke o algún punto;
+      // así si todavía no se inicia el desempate, no aparecen filas
+      // vacías. Una vez se captura cualquier hoyo 19..27, lo incluimos.
+      const playoffRows: typeof regular = [];
+      for (let p = 1; p <= 9; p++) {
+        const hole_no = 18 + p;
+        const pt = pointsByHole.get(hole_no);
+        const anyStroke =
+          strokeFor(topAEntry.player_id, hole_no) != null ||
+          strokeFor(topBEntry.player_id, hole_no) != null ||
+          strokeFor(bottomAEntry.player_id, hole_no) != null ||
+          strokeFor(bottomBEntry.player_id, hole_no) != null;
+        if (!pt && !anyStroke) continue;
+        playoffRows.push(buildRow(hole_no));
+      }
+
+      derivedHoleRows = [...regular, ...playoffRows];
     }
   }
 
@@ -362,6 +402,9 @@ export async function loadMatchForScoring(
     top_pair_id: match.top_pair_id,
     bottom_pair_id: match.bottom_pair_id,
     winner_pair_id: match.winner_pair_id,
+    needs_playoff: derivedPlayoffInfo?.needs_playoff ?? false,
+    via_playoff: derivedPlayoffInfo?.via_playoff ?? false,
+    playoff_decided_hole: derivedPlayoffInfo?.playoff_decided_hole,
     top_label: top?.team_name ?? "Arriba",
     bottom_label: bottom?.team_name ?? "Abajo",
     top_players: topPlayers,
