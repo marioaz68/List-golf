@@ -1260,6 +1260,13 @@ export async function saveLowHighMatchScores(formData: FormData) {
       winner_pair_id: winnerId,
     });
     advanceNote = adv.advanced ? ` ${adv.message}` : "";
+    // Si se generó la salida de la siguiente ronda, refresca los paneles
+    // de tee-sheet / matches-vivo / cuadro para que aparezca al instante.
+    if (adv.next_group?.created || adv.next_group?.updated) {
+      revalidatePath("/tee-sheet");
+      revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+      revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    }
   }
 
   revalidatePath("/matchplay");

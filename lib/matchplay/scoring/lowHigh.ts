@@ -172,8 +172,14 @@ export function scoreLowHighHole(params: {
   bottom_total_before: number;
   holes_in_match: number;
   /** Match play: jugadores que no terminaron el hoyo (levantaron / X).
-   *  Mismo orden que `gross`. Para esos, gross puede venir null y el net
-   *  se trata como infinito → pierden la bola alta automáticamente. */
+   *  Mismo orden que `gross`. Reglas de puntuación:
+   *   - 1 X individual: ese jugador queda como bola alta de su pareja con
+   *     net = +∞ (pierde la sub-competencia frente a cualquier número).
+   *   - 2 X en la misma pareja: pierden automáticamente los 2 puntos del
+   *     hoyo (la pareja rival barre baja y alta).
+   *   - 3 X (sólo uno terminó): 1 punto para la pareja del jugador que
+   *     terminó, 0 para la otra. Sin reparto fraccional.
+   *   - 4 X (todos levantaron): 0 puntos para nadie en el hoyo. */
   picked_up?: [boolean, boolean, boolean, boolean];
 }): LowHighHoleResult | null {
   const { hole_no, gross, hi, allowance_pct, strokeIndexByHole, playing_handicaps } = params;
@@ -225,8 +231,26 @@ export function scoreLowHighHole(params: {
   const bottomLow = Math.min(nets.bottom_a, nets.bottom_b);
   const bottomHigh = Math.max(nets.bottom_a, nets.bottom_b);
 
-  const lowCmp = pointsFromComparison(topLow, bottomLow);
-  const highCmp = pointsFromComparison(topHigh, bottomHigh);
+  // Casos especiales con jugadores que levantaron (X):
+  //  - 4 X (todos levantaron) → 0–0 en el hoyo (nadie compite).
+  //  - 3 X (sólo uno terminó) → 1 punto para la pareja del que terminó,
+  //    0 para la otra pareja. Anula la comparación bola baja / alta
+  //    para evitar repartos raros tipo 1.5–0.5.
+  const pickedCount = pickedUp.filter(Boolean).length;
+  let lowCmp = pointsFromComparison(topLow, bottomLow);
+  let highCmp = pointsFromComparison(topHigh, bottomHigh);
+  if (pickedCount >= 4) {
+    lowCmp = { top: 0, bottom: 0 };
+    highCmp = { top: 0, bottom: 0 };
+  } else if (pickedCount === 3) {
+    const topFinished = !pickedUp[0] || !pickedUp[1];
+    if (topFinished) {
+      lowCmp = { top: 1, bottom: 0 };
+    } else {
+      lowCmp = { top: 0, bottom: 1 };
+    }
+    highCmp = { top: 0, bottom: 0 };
+  }
 
   const top_points = lowCmp.top + highCmp.top;
   const bottom_points = lowCmp.bottom + highCmp.bottom;
