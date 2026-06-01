@@ -789,84 +789,82 @@ function BracketMatchCell({
   const isFinal = round === roundCount;
   const hasBye = byeSide !== null;
 
-  const accentColor = hasBye && !realMatch
-    ? "bg-slate-500/40"
+  // Cuadro de match: cada par enmarcado, fondo según mitad del bracket.
+  const cellBox = hasBye && !realMatch
+    ? "border-slate-600/40 bg-slate-900/50"
     : isFinal || half === "final"
-      ? "bg-amber-400"
+      ? "border-amber-400/60 bg-amber-950/30 shadow-[0_0_20px_-8px_rgba(251,191,36,0.45)]"
       : half === "bottom"
-        ? "bg-violet-400"
-        : "bg-cyan-400";
+        ? "border-violet-400/50 bg-violet-950/35"
+        : "border-cyan-400/50 bg-cyan-950/35";
 
   return (
     <div
-      className="relative flex flex-col justify-center self-center px-3"
+      className="relative flex flex-col justify-center self-center px-1"
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
       }}
     >
-      <span
-        className={`absolute left-0 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full ${accentColor}`}
-        aria-hidden
-      />
+      <div className={`rounded-lg border ${cellBox} px-2 py-1`}>
+        <SidePill
+          side="top"
+          seed={topSeed}
+          team={topTeam}
+          isWinner={!!winnerId && topTeam?.id === winnerId}
+          isVacant={topVacant}
+          isPending={!topVacant && !topTeam && round === 1}
+          showBid={round === 1}
+          currency={currency}
+          compactNames={compactNames}
+          teeRules={teeRules}
+          teeSets={teeSets}
+          birthYearByPlayerId={birthYearByPlayerId}
+        />
 
-      <SidePill
-        side="top"
-        seed={topSeed}
-        team={topTeam}
-        isWinner={!!winnerId && topTeam?.id === winnerId}
-        isVacant={topVacant}
-        isPending={!topVacant && !topTeam && round === 1}
-        showBid={round === 1}
-        currency={currency}
-        compactNames={compactNames}
-        teeRules={teeRules}
-        teeSets={teeSets}
-        birthYearByPlayerId={birthYearByPlayerId}
-      />
+        <div className="h-px bg-white/15" />
 
-      <div className="h-px bg-white/10" />
+        <SidePill
+          side="bottom"
+          seed={bottomSeed}
+          team={bottomTeam}
+          isWinner={!!winnerId && bottomTeam?.id === winnerId}
+          isVacant={bottomVacant}
+          isPending={!bottomVacant && !bottomTeam && round === 1}
+          showBid={round === 1}
+          currency={currency}
+          compactNames={compactNames}
+          teeRules={teeRules}
+          teeSets={teeSets}
+          birthYearByPlayerId={birthYearByPlayerId}
+        />
 
-      <SidePill
-        side="bottom"
-        seed={bottomSeed}
-        team={bottomTeam}
-        isWinner={!!winnerId && bottomTeam?.id === winnerId}
-        isVacant={bottomVacant}
-        isPending={!bottomVacant && !bottomTeam && round === 1}
-        showBid={round === 1}
-        currency={currency}
-        compactNames={compactNames}
-        teeRules={teeRules}
-        teeSets={teeSets}
-        birthYearByPlayerId={birthYearByPlayerId}
-      />
-
-      {realMatch?.result_text ? (
-        <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
-          {realMatch.result_text}
-        </p>
-      ) : null}
-      {realMatch?.status === "in_progress" ? (
-        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
-          ● en juego
-        </p>
-      ) : null}
-      {hasBye && !realMatch ? (
-        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-amber-300/80">
-          BYE → R2
-        </p>
-      ) : null}
-      {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (
-        <p className="mt-0.5 text-center text-[9px] text-slate-400/60">
-          (esperando subasta)
-        </p>
-      ) : null}
-      {isFinal ? (
-        <p className="mt-0.5 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200/90">
-          🏆 Final
-        </p>
-      ) : null}
+        {realMatch?.result_text ? (
+          <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
+            {realMatch.result_text}
+          </p>
+        ) : null}
+        {realMatch?.status === "in_progress" ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
+            ● en juego
+          </p>
+        ) : null}
+        {hasBye && !realMatch ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-amber-300/80">
+            BYE → R2
+          </p>
+        ) : null}
+        {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (
+          <p className="mt-0.5 text-center text-[9px] text-slate-400/60">
+            (esperando subasta)
+          </p>
+        ) : null}
+        {isFinal ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200/90">
+            🏆 Final
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

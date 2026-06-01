@@ -165,85 +165,82 @@ function PublicMatchCell({
     match.top_total_pts != null &&
     match.bottom_total_pts != null;
 
-  // Acento vertical izquierdo: cian (superior), violeta (inferior), ámbar (final).
-  const accentColor = isBye
-    ? "bg-slate-500/40"
+  // Cuadro de match: cada par enmarcado, fondo según mitad del bracket.
+  // Superior = cian · Inferior = violeta · Final = ámbar.
+  const cellBox = isBye
+    ? "border-slate-600/40 bg-slate-900/40"
     : isFinal || half === "final"
-      ? "bg-amber-400"
+      ? "border-amber-400/60 bg-amber-950/30 shadow-[0_0_20px_-8px_rgba(251,191,36,0.45)]"
       : half === "bottom"
-        ? "bg-violet-400"
-        : "bg-cyan-400";
+        ? "border-violet-400/50 bg-violet-950/35"
+        : "border-cyan-400/50 bg-cyan-950/35";
 
   const topWin = match.winner_label === match.top_label && !isBye;
   const botWin = match.winner_label === match.bottom_label && !isBye;
 
   return (
     <div
-      className="relative flex flex-col justify-center self-center px-3"
+      className="relative flex flex-col justify-center self-center px-1"
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
       }}
     >
-      {/* Acento vertical lateral */}
-      <span
-        className={`absolute left-0 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full ${accentColor}`}
-        aria-hidden
-      />
+      <div className={`rounded-lg border ${cellBox} px-2.5 py-1.5`}>
+        {/* Fila superior */}
+        <div
+          className={`flex items-center justify-between gap-2 py-0.5 text-[12px] ${
+            topWin
+              ? "font-bold text-emerald-300"
+              : isBye
+                ? "text-slate-500"
+                : "text-slate-100"
+          }`}
+        >
+          <span className="truncate">{match.top_label}</span>
+          {showTotals ? (
+            <span className="shrink-0 text-amber-300/90">
+              {formatPts(match.top_total_pts!)}
+            </span>
+          ) : null}
+        </div>
 
-      {/* Fila superior */}
-      <div
-        className={`flex items-center justify-between gap-2 py-1 text-[12px] ${
-          topWin
-            ? "font-bold text-emerald-300"
-            : isBye
-              ? "text-slate-500"
-              : "text-slate-100"
-        }`}
-      >
-        <span className="truncate">{match.top_label}</span>
-        {showTotals ? (
-          <span className="shrink-0 text-amber-300/90">
-            {formatPts(match.top_total_pts!)}
-          </span>
+        {/* Divisor horizontal entre top y bottom */}
+        <div className="h-px bg-white/15" />
+
+        {/* Fila inferior */}
+        <div
+          className={`flex items-center justify-between gap-2 py-0.5 text-[12px] ${
+            botWin
+              ? "font-bold text-emerald-300"
+              : isBye
+                ? "text-slate-500"
+                : "text-slate-100"
+          }`}
+        >
+          <span className="truncate">{match.bottom_label}</span>
+          {showTotals ? (
+            <span className="shrink-0 text-amber-300/90">
+              {formatPts(match.bottom_total_pts!)}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Estado / resultado: una sola línea pequeña */}
+        {match.result_text ? (
+          <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
+            {match.result_text}
+          </p>
+        ) : isLive ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
+            ● {labels.liveMarker}
+          </p>
+        ) : isBye ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-slate-500">
+            {labels.bye}
+          </p>
         ) : null}
       </div>
-
-      {/* Divisor horizontal entre top y bottom */}
-      <div className="h-px bg-white/10" />
-
-      {/* Fila inferior */}
-      <div
-        className={`flex items-center justify-between gap-2 py-1 text-[12px] ${
-          botWin
-            ? "font-bold text-emerald-300"
-            : isBye
-              ? "text-slate-500"
-              : "text-slate-100"
-        }`}
-      >
-        <span className="truncate">{match.bottom_label}</span>
-        {showTotals ? (
-          <span className="shrink-0 text-amber-300/90">
-            {formatPts(match.bottom_total_pts!)}
-          </span>
-        ) : null}
-      </div>
-
-      {/* Estado / resultado: una sola línea pequeña */}
-      {match.result_text ? (
-        <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
-          {match.result_text}
-        </p>
-      ) : isLive ? (
-        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
-          ● {labels.liveMarker}
-        </p>
-      ) : isBye ? (
-        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-slate-500">
-          {labels.bye}
-        </p>
-      ) : null}
 
       {/* Detalle por hoyo (solo low/high) */}
       {pairFormat === "low_high" && match.holes.length > 0 ? (
