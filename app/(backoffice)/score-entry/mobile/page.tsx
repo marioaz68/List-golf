@@ -783,6 +783,8 @@ function buildCapturaTarjetaPath(
   const caddieT = caddie?.trim();
   if (meT) sp.set("me", meT);
   if (caddieT) sp.set("caddie", caddieT);
+  // El botón "← Volver" debe regresar al menú móvil de captura.
+  sp.set("back", "/score-entry/mobile");
   return `/captura/tarjeta?${sp.toString()}`;
 }
 
@@ -1579,7 +1581,7 @@ function MobileScoreEntryContent() {
                     href={
                       groupId
                         ? buildCapturaTarjetaPath(groupId, meFromUrl, caddieFromUrl)
-                        : "/captura/tarjeta"
+                        : "/captura/tarjeta?back=/score-entry/mobile"
                     }
                     className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 shadow-sm"
                   >
