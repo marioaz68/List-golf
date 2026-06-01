@@ -112,6 +112,49 @@ export default async function PublicMatchesLivePage(props: {
         .in("match_id", matchIds);
       initialHoles = holeRows ?? [];
     }
+
+    // Si `matchplay_hole_results` está vacío (la captura se hace en stroke
+    // play y no se persiste por hoyo aquí), derivamos los puntos a partir
+    // de `hole_scores` para que la página pública refleje el live scoring.
+    if (initialHoles.length === 0 && initialMatches.length > 0) {
+      const derivedAll = await derivePairingGroupMatches(supabase, tournamentId);
+      const derivedByPairKey = new Map<
+        string,
+        (typeof derivedAll.matches)[number]
+      >();
+      for (const d of derivedAll.matches) {
+        if (!d.top_pair_id || !d.bottom_pair_id) continue;
+        const k = [d.top_pair_id, d.bottom_pair_id].sort().join("|");
+        derivedByPairKey.set(`${d.round_no}:${k}`, d);
+      }
+      // Match cada match oficial con su versión derivada (mismas 2 parejas
+      // y misma ronda) para reutilizar la cadena de derivación de puntos.
+      type MatchInput = (typeof derivedAll.matches)[number];
+      const inputs: MatchInput[] = [];
+      const idMap = new Map<string, string>(); // derived.id → official.id
+      for (const m of initialMatches) {
+        if (!m.top_pair_id || !m.bottom_pair_id) continue;
+        const k = [m.top_pair_id, m.bottom_pair_id].sort().join("|");
+        const d = derivedByPairKey.get(`${m.round_no}:${k}`);
+        if (!d) continue;
+        inputs.push({ ...d, status: "scheduled" });
+        idMap.set(d.id, m.id);
+      }
+      if (inputs.length > 0) {
+        const derivedHoles = await deriveMatchHolesFromStrokes(
+          supabase,
+          tournamentId,
+          inputs
+        );
+        initialHoles = derivedHoles.holes.map((h) => ({
+          match_id: idMap.get(h.match_id) ?? h.match_id,
+          hole_no: h.hole_no,
+          top_points: h.top_points,
+          bottom_points: h.bottom_points,
+          match_status_after: h.match_status_after,
+        }));
+      }
+    }
   }
 
   // Fallback: si aún no hay bracket oficial pero ya hay salidas (pairings)

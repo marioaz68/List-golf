@@ -6,6 +6,8 @@ import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHand
 import { loadCourseLayoutForTournament } from "./loadCourseLayout";
 import { effectivePhForMatchEntry } from "@/lib/matchplay/resolveEntryPhForMatch";
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
+import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
+import type { DerivedMatchRow } from "@/lib/matchplay/derivePairingGroupMatches";
 import type { MatchPlayEntryRow } from "./teamTypes";
 import type {
   LowHighPlayerGross,
@@ -151,6 +153,154 @@ export async function loadMatchForScoring(
   const holesInMatch =
     rules?.holes_per_match === 9 ? 9 : 18;
 
+  // Fallback: si no hay rows en `matchplay_hole_results` (porque la captura
+  // se hace en stroke play), derivamos los puntos y los strokes por jugador
+  // directamente desde `hole_scores`. Sin esto, el detalle del match en la
+  // página pública aparece vacío aunque ya haya tarjetas capturadas.
+  let derivedHoleRows: {
+    hole_no: number;
+    top_player_a_strokes: number | null;
+    top_player_b_strokes: number | null;
+    bottom_player_a_strokes: number | null;
+    bottom_player_b_strokes: number | null;
+    top_points: number | null;
+    bottom_points: number | null;
+    match_status_after: string | null;
+    detail_json: MatchHoleScoreRow["detail_json"];
+  }[] | null = null;
+  const noOfficialHoles = !holeRows || holeRows.length === 0;
+  const topAEntry = top?.player_a ?? null;
+  const topBEntry = top?.player_b ?? null;
+  const bottomAEntry = bottom?.player_a ?? null;
+  const bottomBEntry = bottom?.player_b ?? null;
+
+  if (
+    noOfficialHoles &&
+    topAEntry &&
+    topBEntry &&
+    bottomAEntry &&
+    bottomBEntry
+  ) {
+    const { data: roundRow } = await supabase
+      .from("rounds")
+      .select("id")
+      .eq("tournament_id", match.tournament_id)
+      .eq("round_no", match.round_no)
+      .maybeSingle();
+    const roundId = roundRow?.id ? String(roundRow.id) : null;
+    if (roundId) {
+      const synthetic: DerivedMatchRow = {
+        id: match.id,
+        bracket_id: String(match.bracket_id ?? ""),
+        round_no: match.round_no,
+        position_no: match.position_no,
+        top_pair_id: match.top_pair_id,
+        bottom_pair_id: match.bottom_pair_id,
+        winner_pair_id: match.winner_pair_id,
+        status: "scheduled",
+        result_text: null,
+        round_id: roundId,
+        group_id: "official",
+        group_no: null,
+        top_a_entry_id: topAEntry.id,
+        top_b_entry_id: topBEntry.id,
+        bottom_a_entry_id: bottomAEntry.id,
+        bottom_b_entry_id: bottomBEntry.id,
+      };
+      const derived = await deriveMatchHolesFromStrokes(
+        supabase,
+        match.tournament_id,
+        [synthetic]
+      );
+      const pointsByHole = new Map(
+        derived.holes
+          .filter((h) => h.match_id === match.id)
+          .map((h) => [h.hole_no, h])
+      );
+
+      // Cargar strokes brutos de los 4 jugadores en la ronda calendario.
+      const playerIds = [
+        topAEntry.player_id,
+        topBEntry.player_id,
+        bottomAEntry.player_id,
+        bottomBEntry.player_id,
+      ];
+      const { data: rsRows } = await supabase
+        .from("round_scores")
+        .select("id, player_id")
+        .eq("round_id", roundId)
+        .in("player_id", playerIds);
+      const rsByPlayer = new Map<string, string>();
+      for (const rs of (rsRows ?? []) as Array<{
+        id: string;
+        player_id: string;
+      }>) {
+        rsByPlayer.set(String(rs.player_id), String(rs.id));
+      }
+      const rsToPlayer = new Map<string, string>();
+      for (const [pid, rsid] of rsByPlayer) rsToPlayer.set(rsid, pid);
+      const rsIds = Array.from(rsByPlayer.values());
+      const strokesByPlayerHole = new Map<
+        string,
+        Map<number, number | null>
+      >();
+      if (rsIds.length > 0) {
+        const { data: hs } = await supabase
+          .from("hole_scores")
+          .select("round_score_id, hole_number, hole_no, strokes")
+          .in("round_score_id", rsIds);
+        for (const r of (hs ?? []) as Array<{
+          round_score_id: string;
+          hole_number: number | null;
+          hole_no: number | null;
+          strokes: number | null;
+        }>) {
+          const rid = String(r.round_score_id);
+          const pid = rsToPlayer.get(rid);
+          if (!pid) continue;
+          const hn = r.hole_number ?? r.hole_no;
+          if (hn == null) continue;
+          const m =
+            strokesByPlayerHole.get(pid) ??
+            new Map<number, number | null>();
+          m.set(
+            Number(hn),
+            r.strokes != null ? Number(r.strokes) : null
+          );
+          strokesByPlayerHole.set(pid, m);
+        }
+      }
+      function strokeFor(
+        playerId: string,
+        holeNo: number
+      ): number | null {
+        return strokesByPlayerHole.get(playerId)?.get(holeNo) ?? null;
+      }
+
+      derivedHoleRows = Array.from({ length: holesInMatch }, (_, i) => {
+        const hole_no = i + 1;
+        const pt = pointsByHole.get(hole_no);
+        return {
+          hole_no,
+          top_player_a_strokes: strokeFor(topAEntry.player_id, hole_no),
+          top_player_b_strokes: strokeFor(topBEntry.player_id, hole_no),
+          bottom_player_a_strokes: strokeFor(
+            bottomAEntry.player_id,
+            hole_no
+          ),
+          bottom_player_b_strokes: strokeFor(
+            bottomBEntry.player_id,
+            hole_no
+          ),
+          top_points: pt?.top_points ?? null,
+          bottom_points: pt?.bottom_points ?? null,
+          match_status_after: pt?.match_status_after ?? null,
+          detail_json: null,
+        };
+      });
+    }
+  }
+
   const allowance_pct = resolveMatchHandicapPct({
     match_type: rules?.match_type === "individual" ? "individual" : "pairs",
     pair_format,
@@ -166,38 +316,38 @@ export async function loadMatchForScoring(
     (holeRows ?? []).map((h) => [h.hole_no, h])
   );
 
-  const holes: MatchHoleScoreRow[] = Array.from(
-    { length: holesInMatch },
-    (_, i) => {
-      const hole_no = i + 1;
-      const ex = existingByHole.get(hole_no);
-      return {
-        hole_no,
-        top_player_a_strokes:
-          ex?.top_player_a_strokes != null
-            ? Number(ex.top_player_a_strokes)
-            : null,
-        top_player_b_strokes:
-          ex?.top_player_b_strokes != null
-            ? Number(ex.top_player_b_strokes)
-            : null,
-        bottom_player_a_strokes:
-          ex?.bottom_player_a_strokes != null
-            ? Number(ex.bottom_player_a_strokes)
-            : null,
-        bottom_player_b_strokes:
-          ex?.bottom_player_b_strokes != null
-            ? Number(ex.bottom_player_b_strokes)
-            : null,
-        top_points:
-          ex?.top_points != null ? Number(ex.top_points) : null,
-        bottom_points:
-          ex?.bottom_points != null ? Number(ex.bottom_points) : null,
-        match_status_after: ex?.match_status_after ?? null,
-        detail_json: (ex?.detail_json ?? null) as MatchHoleScoreRow["detail_json"],
-      };
-    }
-  );
+  const holes: MatchHoleScoreRow[] = derivedHoleRows
+    ? derivedHoleRows
+    : Array.from({ length: holesInMatch }, (_, i) => {
+        const hole_no = i + 1;
+        const ex = existingByHole.get(hole_no);
+        return {
+          hole_no,
+          top_player_a_strokes:
+            ex?.top_player_a_strokes != null
+              ? Number(ex.top_player_a_strokes)
+              : null,
+          top_player_b_strokes:
+            ex?.top_player_b_strokes != null
+              ? Number(ex.top_player_b_strokes)
+              : null,
+          bottom_player_a_strokes:
+            ex?.bottom_player_a_strokes != null
+              ? Number(ex.bottom_player_a_strokes)
+              : null,
+          bottom_player_b_strokes:
+            ex?.bottom_player_b_strokes != null
+              ? Number(ex.bottom_player_b_strokes)
+              : null,
+          top_points:
+            ex?.top_points != null ? Number(ex.top_points) : null,
+          bottom_points:
+            ex?.bottom_points != null ? Number(ex.bottom_points) : null,
+          match_status_after: ex?.match_status_after ?? null,
+          detail_json: (ex?.detail_json ??
+            null) as MatchHoleScoreRow["detail_json"],
+        };
+      });
 
   return {
     id: match.id,
