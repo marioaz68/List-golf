@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "@/components/captura/BackButton";
+import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   getScoreClass,
   HOLES_BACK,
@@ -422,6 +423,10 @@ export default function TarjetaCaptureClient({
   initial: GroupCapturePayload;
 }) {
   const [meta, setMeta] = useState(initial);
+  const scoreEntryBackHref = useMemo(
+    () => buildScoreEntryHref({ tournamentId: meta.tournamentId }),
+    [meta.tournamentId]
+  );
   const [scoresByEntry, setScoresByEntry] = useState<ScoresByEntry>(() =>
     scoresFromPlayers(initial.players)
   );
@@ -1000,13 +1005,7 @@ export default function TarjetaCaptureClient({
               </div>
             </div>
             <BackButton
-              fallbackHref={
-                meta.tournamentId
-                  ? `/score-entry?tournament_id=${encodeURIComponent(
-                      meta.tournamentId
-                    )}`
-                  : "/score-entry"
-              }
+              fallbackHref={scoreEntryBackHref}
               className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
             />
           </div>

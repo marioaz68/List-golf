@@ -12,8 +12,10 @@ import { useEffect, useState } from "react";
  *  2. Si la pestaña fue abierta con `window.open` (existe `window.opener`)
  *     y no hay `?back=`, intentamos cerrarla — la pestaña original ya
  *     tiene el menú abierto.
- *  3. Si hay historial dentro de la app, hacemos `router.back()`.
- *  4. Como último recurso, `fallbackHref` (default `/score-entry`).
+ *  3. Como último recurso, `fallbackHref` (default `/score-entry`).
+ *
+ * No usamos `router.back()` porque en Telegram / móvil el historial suele
+ * llevar a login u otra ruta impredecible; el destino explícito es más fiable.
  */
 export default function BackButton({
   fallbackHref = "/score-entry",
@@ -27,12 +29,10 @@ export default function BackButton({
   const router = useRouter();
   const searchParams = useSearchParams();
   const backParam = searchParams.get("back")?.trim() || null;
-  const [canGoBack, setCanGoBack] = useState(false);
   const [openedAsTab, setOpenedAsTab] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setCanGoBack(window.history.length > 1);
     setOpenedAsTab(Boolean(window.opener));
   }, []);
 
@@ -57,10 +57,6 @@ export default function BackButton({
       } catch {
         // si el navegador rechaza cerrar la pestaña, navegamos
       }
-    }
-    if (canGoBack) {
-      router.back();
-      return;
     }
     router.push(fallbackHref);
   };

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BackButton from "@/components/captura/BackButton";
+import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   HOLES_FRONT,
   HOLES_BACK,
@@ -821,6 +822,10 @@ export default function GrupoCaptureClient({
   const searchParams = useSearchParams();
   const backParam = searchParams.get("back");
   const backQs = backParam ? `&back=${encodeURIComponent(backParam)}` : "";
+  const scoreEntryBackHref = useMemo(
+    () => buildScoreEntryHref({ tournamentId: meta.tournamentId }),
+    [meta.tournamentId]
+  );
   const [scoresByEntry, setScoresByEntry] = useState<ScoresByEntry>(() =>
     Object.fromEntries(meta.players.map((p) => [p.entryId, { ...p.scores }]))
   );
@@ -1097,15 +1102,7 @@ export default function GrupoCaptureClient({
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-[11px]">
-              <BackButton
-                fallbackHref={
-                  meta.tournamentId
-                    ? `/score-entry?tournament_id=${encodeURIComponent(
-                        meta.tournamentId
-                      )}`
-                    : "/score-entry"
-                }
-              />
+              <BackButton fallbackHref={scoreEntryBackHref} />
               <Link
                 href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"

@@ -1304,13 +1304,13 @@ export default async function ScoreEntryPage(props: {
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Link
-                    href={`/captura/tarjeta?group_id=${matchPlayGroupId}&back=${encodeURIComponent("/score-entry")}`}
+                    href={`/captura/tarjeta?group_id=${matchPlayGroupId}&back=${encodeURIComponent(tabCaptureHref)}`}
                     className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
                   >
                     Tarjeta completa →
                   </Link>
                   <Link
-                    href={`/captura/grupo?group_id=${matchPlayGroupId}&back=${encodeURIComponent("/score-entry")}`}
+                    href={`/captura/grupo?group_id=${matchPlayGroupId}&back=${encodeURIComponent(tabCaptureHref)}`}
                     className="inline-flex items-center justify-center rounded-lg border-2 border-emerald-600 bg-white px-5 py-2.5 text-sm font-bold text-emerald-900 shadow-sm hover:bg-emerald-50"
                   >
                     Captura rápida →

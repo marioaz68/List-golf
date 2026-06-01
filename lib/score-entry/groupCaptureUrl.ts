@@ -1,3 +1,5 @@
+import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
+
 const PRODUCTION_FALLBACK = "https://www.listgolf.club";
 
 function normalizeBase(raw: string | null | undefined): string | null {
@@ -67,5 +69,11 @@ export function buildGroupCaptureUrl(params: {
   if (me) sp.set("me", me);
   const caddie = String(params.caddieId ?? "").trim();
   if (caddie) sp.set("caddie", caddie);
+  if (params.tournamentId) {
+    sp.set(
+      "back",
+      buildScoreEntryHref({ tournamentId: params.tournamentId })
+    );
+  }
   return `${base}/captura/tarjeta?${sp.toString()}`;
 }
