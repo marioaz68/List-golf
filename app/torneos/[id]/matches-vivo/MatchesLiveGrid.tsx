@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
@@ -48,6 +47,11 @@ type Props = {
   holesPerMatch: number;
   /** Cuando los matches vienen de pairing_groups (no del bracket oficial). */
   derivedFromPairings?: boolean;
+  /**
+   * Puntos derivados desde `hole_scores` (captura rápida). Activa realtime
+   * sobre strokes aunque exista bracket publicado.
+   */
+  liveFromStrokeScores?: boolean;
   /** Mapa match_id → datos de la salida (group_no, tee_time, group_id). */
   matchSchedule?: Record<string, MatchScheduleInfo>;
 };
@@ -88,11 +92,38 @@ export default function MatchesLiveGrid({
   roundCount,
   holesPerMatch,
   derivedFromPairings = false,
+  liveFromStrokeScores = false,
   matchSchedule = {},
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
   const [holes, setHoles] = useState<HoleRow[]>(initialHoles);
+
+  useEffect(() => {
+    setMatches(initialMatches);
+  }, [initialMatches]);
+  useEffect(() => {
+    setHoles(initialHoles);
+  }, [initialHoles]);
+
+  const strokeLive = derivedFromPairings || liveFromStrokeScores;
+
+  const refreshFromStrokes = useMemo(() => {
+    return () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void fetch(
+        `/api/matchplay/live-from-strokes?tournament_id=${encodeURIComponent(tournamentId)}`,
+        { cache: "no-store" }
+      )
+        .then((res) => res.json())
+        .then((data: { ok?: boolean; matches?: MatchRow[]; holes?: HoleRow[] }) => {
+          if (!data.ok) return;
+          if (data.matches) setMatches(data.matches);
+          if (data.holes) setHoles(data.holes);
+        })
+        .catch(() => {});
+    };
+  }, [tournamentId]);
   const [detail, setDetail] = useState<{
     match: MatchRow;
     topTeam: MatchPlayTeamRow | null;
@@ -132,9 +163,16 @@ export default function MatchesLiveGrid({
     };
   }, [tournamentId, bracketId, derivedFromPairings]);
 
-  // Realtime: hoyos (live scoring) — sólo cuando hay bracket real.
+  // Realtime: hoyos oficiales en matchplay_hole_results (no captura rápida).
   useEffect(() => {
-    if (!tournamentId || !bracketId || derivedFromPairings || matches.length === 0) return;
+    if (
+      !tournamentId ||
+      !bracketId ||
+      derivedFromPairings ||
+      liveFromStrokeScores ||
+      matches.length === 0
+    )
+      return;
     const supabase = createClient();
     const matchIds = matches.map((m) => m.id);
     const ch = supabase
@@ -162,15 +200,17 @@ export default function MatchesLiveGrid({
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [tournamentId, bracketId, matches, derivedFromPairings]);
+  }, [tournamentId, bracketId, matches, derivedFromPairings, liveFromStrokeScores]);
 
-  // Realtime para matches derivados: cuando se captura/edita stroke play
-  // (hole_scores), pedimos al servidor que vuelva a derivar los matches
-  // del torneo. Usamos debounce para no recargar en cada hoyo individual.
-  const router = useRouter();
+  // Captura rápida → hole_scores. Realtime en hole_scores no siempre está
+  // publicado; polling + debounce en cambios cubren el live scoring.
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!tournamentId || !derivedFromPairings) return;
+    if (!tournamentId || !strokeLive) return;
+
+    refreshFromStrokes();
+    const pollId = setInterval(refreshFromStrokes, 4000);
+
     const supabase = createClient();
     const scheduleRefresh = () => {
       if (refreshTimerRef.current != null) {
@@ -178,8 +218,7 @@ export default function MatchesLiveGrid({
       }
       refreshTimerRef.current = setTimeout(() => {
         refreshTimerRef.current = null;
-        if (typeof document !== "undefined" && document.hidden) return;
-        router.refresh();
+        refreshFromStrokes();
       }, 1200);
     };
     const ch = supabase
@@ -204,13 +243,14 @@ export default function MatchesLiveGrid({
       )
       .subscribe();
     return () => {
+      clearInterval(pollId);
       if (refreshTimerRef.current != null) {
         clearTimeout(refreshTimerRef.current);
         refreshTimerRef.current = null;
       }
       supabase.removeChannel(ch);
     };
-  }, [tournamentId, derivedFromPairings, router]);
+  }, [tournamentId, strokeLive, refreshFromStrokes]);
 
   const teamById = useMemo(
     () => new Map(teams.map((t) => [t.id, t])),
