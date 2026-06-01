@@ -818,12 +818,12 @@ function BracketMatchCell({
           />
           {isTopOfPair ? (
             <span
-              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-0.5 ${lineColor}`}
+              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-0.5 ${lineColor}`}
               aria-hidden
             />
           ) : (
             <span
-              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-0.5 ${lineColor}`}
+              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-0.5 ${lineColor}`}
               aria-hidden
             />
           )}
