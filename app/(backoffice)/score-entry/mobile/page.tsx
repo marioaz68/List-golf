@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
+import BackButton from "@/components/captura/BackButton";
 
 /**
  * Hoyos 1-18 = recorrido normal.
@@ -1420,9 +1421,15 @@ function MobileScoreEntryContent() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#eef3f7]">
-        <header className="sticky top-0 z-20 bg-black px-3 py-2 text-white">
-          <div className="text-sm font-semibold">List.golf</div>
-          <div className="text-[10px] opacity-70">Captura por grupo</div>
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 bg-black px-3 py-2 text-white">
+          <div>
+            <div className="text-sm font-semibold">List.golf</div>
+            <div className="text-[10px] opacity-70">Captura por grupo</div>
+          </div>
+          <BackButton
+            fallbackHref="/"
+            className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+          />
         </header>
 
         {tab === "anotar" ? (
