@@ -743,8 +743,17 @@ function MatchCard({
       ) : null}
 
       {clickable ? (
-        <p className="mt-2 text-center text-[10px] text-cyan-300/80">
-          Tocar para ver detalle hoyo por hoyo →
+        <p className="mt-2 flex items-center justify-center gap-2 text-[10px] text-cyan-300/80">
+          {lastHolePlayed > 0 ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 font-bold text-cyan-100"
+              title={`Hasta el hoyo ${lastHolePlayed} capturado (thru ${lastHolePlayed})`}
+            >
+              Hasta {lastHolePlayed}
+              <span className="text-cyan-300/70">· thru {lastHolePlayed}</span>
+            </span>
+          ) : null}
+          <span>Tocar para ver detalle hoyo por hoyo →</span>
         </p>
       ) : null}
     </article>
