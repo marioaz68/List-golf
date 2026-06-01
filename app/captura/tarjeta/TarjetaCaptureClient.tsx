@@ -870,9 +870,16 @@ export default function TarjetaCaptureClient({
       if (caddie) sp.set("caddie", caddie);
     }
     sp.set("tab", "anotar");
+    // El botón "← Volver" del módulo móvil debe regresar a esta misma
+    // tarjeta (no a la página pública).
+    if (typeof window !== "undefined") {
+      sp.set("back", window.location.pathname + window.location.search);
+    } else if (meta.tournamentId) {
+      sp.set("back", buildScoreEntryHref({ tournamentId: meta.tournamentId }));
+    }
     // Ruta pública (sin login) — espejo del módulo backoffice.
     return `/captura/mobile?${sp.toString()}`;
-  }, [meta.groupId, meta.myEntryId]);
+  }, [meta.groupId, meta.myEntryId, meta.tournamentId]);
 
   /**
    * Link a resultados en vivo (página pública del torneo). Si el visitante
