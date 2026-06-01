@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import BackButton from "@/components/captura/BackButton";
 import {
   getScoreClass,
   HOLES_BACK,
@@ -991,11 +992,17 @@ export default function TarjetaCaptureClient({
     <div className="w-full bg-slate-100">
       <div className="flex w-full justify-center bg-slate-100">
         <div className="w-full max-w-[390px] bg-slate-100 pb-28">
-          <div className="bg-black px-2 py-2 text-white">
-            <div className="text-sm font-semibold">List.golf</div>
-            <div className="text-[10px] opacity-70">
-              Captura grupal · tiempo real
+          <div className="flex items-center justify-between gap-2 bg-black px-2 py-2 text-white">
+            <div>
+              <div className="text-sm font-semibold">List.golf</div>
+              <div className="text-[10px] opacity-70">
+                Captura grupal · tiempo real
+              </div>
             </div>
+            <BackButton
+              fallbackHref="/"
+              className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+            />
           </div>
 
           <div className="space-y-2 p-2">
