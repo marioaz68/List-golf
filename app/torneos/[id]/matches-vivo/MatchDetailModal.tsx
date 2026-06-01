@@ -1715,15 +1715,6 @@ function HoleTable({
             recibió golpe de ventaja en ese hoyo.
           </p>
         ) : null}
-        <p>
-          Diferencial = puntos acumulados de{" "}
-          <span className="text-cyan-300">{topLabel}</span> menos{" "}
-          <span className="text-fuchsia-300">{bottomLabel}</span>. Positivo =
-          va arriba <span className="text-cyan-300">{topLabel}</span>; negativo
-          = va arriba{" "}
-          <span className="text-fuchsia-300">{bottomLabel}</span>; AS = empate
-          acumulado.
-        </p>
       </div>
     </div>
   );
