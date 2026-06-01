@@ -546,39 +546,26 @@ export default function LiveBracketView({
         </div>
       </div>
 
-      {/* BANDERAS DE CUADRO SUPERIOR / INFERIOR */}
-      <div className="grid grid-cols-2 gap-2 text-[11px]">
-        <div className="flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 py-1.5">
-          <span className="text-base" aria-hidden>
-            ⬆
-          </span>
-          <div>
-            <div className="font-bold uppercase tracking-wider text-cyan-200">
-              Cuadro Superior
-            </div>
-            <div className="text-[10px] text-cyan-200/70">
-              Mitad de arriba · fondo azul-cyan
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 rounded-lg border border-violet-400/40 bg-violet-500/15 px-3 py-1.5">
-          <span className="text-base" aria-hidden>
-            ⬇
-          </span>
-          <div>
-            <div className="font-bold uppercase tracking-wider text-violet-200">
-              Cuadro Inferior
-            </div>
-            <div className="text-[10px] text-violet-200/70">
-              Mitad de abajo · fondo violeta
-            </div>
-          </div>
-        </div>
+      {/* LEYENDA DE COLORES (2 colores: arriba / abajo) */}
+      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-300">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
+          Cuadro superior
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-violet-400" />
+          Cuadro inferior
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-amber-400" />
+          Final
+        </span>
       </div>
 
       {/* BRACKET (con transform scale: encoge VISUALMENTE sin reflowear texto) */}
       <div className="overflow-auto pb-3">
         <div
+          className="mx-auto"
           style={{
             width: bracketSize.w ? bracketSize.w * zoom : undefined,
             height: bracketSize.h ? bracketSize.h * zoom : undefined,
@@ -586,21 +573,21 @@ export default function LiveBracketView({
         >
           <div
             ref={bracketRef}
-            className="relative grid min-w-max gap-x-4"
+            className="relative mx-auto grid min-w-max gap-x-6"
             style={{
-              gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 280px))`,
-              gridTemplateRows: `repeat(${targetSize}, minmax(34px, auto))`,
+              gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 260px))`,
+              gridTemplateRows: `auto repeat(${targetSize}, minmax(28px, auto))`,
               transform: `scale(${zoom})`,
               transformOrigin: "top left",
             }}
           >
-            {/* Cabeceras */}
+            {/* Cabeceras: solo texto, sin caja */}
             {Array.from({ length: roundCount }, (_, ri) => {
               const r = ri + 1;
               return (
                 <div
                   key={`hdr-${r}`}
-                  className="sticky top-0 z-10 col-start-auto rounded-t-xl border border-white/10 bg-[#0c1728] px-3 py-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300"
+                  className="sticky top-0 z-10 pb-1 text-center text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-300/80"
                   style={{ gridColumn: r, gridRow: "1 / span 1" }}
                 >
                   {roundLabel(r, roundCount, targetSize)}
@@ -608,24 +595,16 @@ export default function LiveBracketView({
               );
             })}
 
-            {/* DIVISOR HORIZONTAL entre cuadro superior e inferior */}
+            {/* DIVISOR fino entre cuadro superior e inferior */}
             <div
-              className="pointer-events-none flex items-center justify-center"
+              className="pointer-events-none self-end"
               style={{
                 gridColumn: `1 / span ${roundCount}`,
                 gridRow: `${targetSize / 2 + 1} / span 1`,
-                alignSelf: "end",
-                marginBottom: "-1px",
                 zIndex: 5,
               }}
             >
-              <div className="flex w-full items-center gap-2">
-                <div className="h-0.5 flex-1 bg-gradient-to-r from-cyan-400/60 via-amber-400/60 to-violet-400/60" />
-                <span className="rounded-full border border-amber-400/50 bg-[#0c1728] px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
-                  ━━ línea divisoria ━━
-                </span>
-                <div className="h-0.5 flex-1 bg-gradient-to-r from-violet-400/60 via-amber-400/60 to-cyan-400/60" />
-              </div>
+              <div className="h-px w-full bg-gradient-to-r from-cyan-400/50 via-amber-400/40 to-violet-400/50" />
             </div>
 
             {/* Matches */}
@@ -810,27 +789,27 @@ function BracketMatchCell({
   const isFinal = round === roundCount;
   const hasBye = byeSide !== null;
 
-  // Fondo según la mitad del cuadro:
-  // - Superior: azul-cyan.
-  // - Inferior: violeta-índigo.
-  // - Final: cyan con borde dorado de acento.
-  // BYE (R1) siempre usa pizarra, sea cual sea la mitad.
-  const cellBg = hasBye && !realMatch
-    ? "rounded-xl border border-slate-500/40 bg-gradient-to-br from-slate-800/70 to-[#0a1220] p-2 shadow-md"
+  const accentColor = hasBye && !realMatch
+    ? "bg-slate-500/40"
     : isFinal || half === "final"
-      ? "rounded-xl border-2 border-amber-400/60 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_0_28px_-10px_rgba(251,191,36,0.55)]"
+      ? "bg-amber-400"
       : half === "bottom"
-        ? "rounded-xl border border-violet-400/40 bg-gradient-to-br from-violet-900/45 via-[#160e3a] to-[#0e0a24] p-2 shadow-[0_4px_18px_-6px_rgba(139,92,246,0.45)]"
-        : "rounded-xl border border-cyan-400/40 bg-gradient-to-br from-cyan-900/45 via-[#0e213c] to-[#0a1424] p-2 shadow-[0_4px_18px_-6px_rgba(8,145,178,0.45)]";
+        ? "bg-violet-400"
+        : "bg-cyan-400";
 
   return (
     <div
-      className={`relative flex flex-col justify-center ${cellBg}`}
+      className="relative flex flex-col justify-center self-center px-3"
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
       }}
     >
+      <span
+        className={`absolute left-0 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full ${accentColor}`}
+        aria-hidden
+      />
+
       <SidePill
         side="top"
         seed={topSeed}
@@ -845,9 +824,9 @@ function BracketMatchCell({
         teeSets={teeSets}
         birthYearByPlayerId={birthYearByPlayerId}
       />
-      <div className="my-1 text-center text-[9px] uppercase tracking-wider text-slate-400/70">
-        vs
-      </div>
+
+      <div className="h-px bg-white/10" />
+
       <SidePill
         side="bottom"
         seed={bottomSeed}
@@ -864,33 +843,30 @@ function BracketMatchCell({
       />
 
       {realMatch?.result_text ? (
-        <p className="mt-1 text-center text-[10px] font-bold text-emerald-300">
+        <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
           {realMatch.result_text}
         </p>
       ) : null}
       {realMatch?.status === "in_progress" ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-cyan-300">
+        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
           ● en juego
         </p>
       ) : null}
       {hasBye && !realMatch ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-wider text-amber-300">
-          Pasa por BYE → espera R2
+        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-amber-300/80">
+          BYE → R2
         </p>
       ) : null}
       {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (
-        <p className="mt-1 text-center text-[9px] text-slate-400/70">
+        <p className="mt-0.5 text-center text-[9px] text-slate-400/60">
           (esperando subasta)
         </p>
       ) : null}
       {isFinal ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200">
+        <p className="mt-0.5 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200/90">
           🏆 Final
         </p>
       ) : null}
-      <p className="mt-1 text-center text-[8px] text-slate-400/60">
-        R{round} · M{positionIdx + 1}
-      </p>
     </div>
   );
 }
@@ -922,102 +898,78 @@ function SidePill({
   teeSets: TeeSetLite[];
   birthYearByPlayerId: Record<string, number | null>;
 }) {
-  // Vacante = seed nunca se llenará (genera BYE). Pending = seed inscrito pero
-  // aún no adjudicado en la subasta. Equipo = ya adjudicado.
-  const tone = isVacant
-    ? "bg-slate-900/60 border-slate-600/30 border-dashed"
-    : isPending
-      ? "bg-[#0a1426]/70 border-cyan-700/30 border-dashed"
-      : isWinner
-        ? "bg-emerald-900/70 border-emerald-400/70"
-        : team
-          ? "bg-[#0b1c34]/80 border-white/15"
-          : "bg-black/40 border-white/10";
-
   const players = team
     ? playersOrderedMaleFirst(team, compactNames, teeRules, teeSets, birthYearByPlayerId)
     : [];
 
+  const textTone = isVacant
+    ? "text-slate-500"
+    : isPending
+      ? "text-cyan-200/60 italic"
+      : isWinner
+        ? "font-bold text-emerald-300"
+        : team
+          ? "text-slate-100"
+          : "text-slate-500 italic";
+
   return (
-    <div
-      className={`overflow-hidden rounded-lg border px-2 py-1.5 ${tone}`}
-      data-side={side}
-    >
-      <div className="flex items-start gap-1.5">
-        {/* Seed: oculto en móvil para aprovechar espacio */}
+    <div className="flex items-center gap-2 py-1" data-side={side}>
+      {seed != null ? (
         <span
-          className={`mt-0.5 hidden h-5 w-7 shrink-0 items-center justify-center rounded text-[10px] font-bold sm:inline-flex ${
-            isVacant
-              ? "bg-slate-700/40 text-slate-500"
-              : seed != null
-                ? "bg-cyan-500/30 text-cyan-100"
-                : "bg-slate-700/40 text-slate-400"
+          className={`hidden w-7 shrink-0 text-right text-[10px] font-bold tabular-nums sm:inline ${
+            isVacant ? "text-slate-600" : "text-cyan-300/70"
           }`}
         >
-          {seed != null ? `#${seed}` : "—"}
+          #{seed}
         </span>
-        <div className="min-w-0 flex-1 overflow-hidden">
-          {isVacant ? (
-            <div className="text-[12px] font-bold uppercase tracking-wider text-slate-500">
-              BYE · vacante
-            </div>
-          ) : team ? (
-            <ul className="space-y-0.5">
-              {players.map((p, i) => (
-                <li
-                  key={`${p.label}-${i}`}
-                  className={`flex items-center gap-1 overflow-hidden whitespace-nowrap text-[12px] font-semibold leading-tight ${
-                    isWinner ? "text-emerald-100" : "text-white"
+      ) : null}
+      <div className={`min-w-0 flex-1 ${textTone}`}>
+        {isVacant ? (
+          <span className="text-[11px] uppercase tracking-wider">BYE · vacante</span>
+        ) : team ? (
+          <ul className="space-y-0.5">
+            {players.map((p, i) => (
+              <li
+                key={`${p.label}-${i}`}
+                className="flex items-center gap-1 overflow-hidden text-[12px] leading-tight"
+              >
+                <span
+                  className={`shrink-0 text-[9px] ${
+                    p.gender === "F"
+                      ? "text-pink-300/80"
+                      : p.gender === "M"
+                        ? "text-blue-300/80"
+                        : "text-slate-400"
                   }`}
+                  aria-hidden
                 >
+                  {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
+                </span>
+                {p.tee ? (
                   <span
-                    className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm text-[8px] font-bold ${
-                      p.gender === "F"
-                        ? "bg-pink-500/30 text-pink-200"
-                        : p.gender === "M"
-                          ? "bg-blue-500/30 text-blue-200"
-                          : "bg-slate-500/30 text-slate-200"
-                    }`}
-                    title={
-                      p.gender === "F"
-                        ? "Mujer"
-                        : p.gender === "M"
-                          ? "Hombre"
-                          : "Sin género"
-                    }
-                  >
-                    {p.gender === "F" ? "♀" : p.gender === "M" ? "♂" : "·"}
-                  </span>
-                  {p.tee ? (
-                    <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40"
-                      style={{ background: p.tee.color ?? "#9ca3af" }}
-                      title={`Sale de: ${p.tee.name}`}
-                    />
-                  ) : null}
-                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                    {p.label}
-                  </span>
-                </li>
-              ))}
-              {players.length === 0 ? (
-                <li className="text-[12px] italic text-slate-400">(equipo)</li>
-              ) : null}
-            </ul>
-          ) : isPending ? (
-            <div className="text-[11px] italic text-cyan-200/70">
-              Por adjudicar
-            </div>
-          ) : (
-            <div className="text-[12px] italic text-slate-500">Por definir</div>
-          )}
-        </div>
-        {showBid && team && team.auction_bid != null ? (
-          <span className="ml-auto hidden shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200 sm:inline-flex">
-            {money(team.auction_bid, currency)}
-          </span>
-        ) : null}
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: p.tee.color ?? "#9ca3af" }}
+                    title={`Sale de: ${p.tee.name}`}
+                  />
+                ) : null}
+                <span className="truncate">{p.label}</span>
+              </li>
+            ))}
+            {players.length === 0 ? (
+              <li className="text-[12px] italic text-slate-400">(equipo)</li>
+            ) : null}
+          </ul>
+        ) : isPending ? (
+          <span className="text-[11px]">Por adjudicar</span>
+        ) : (
+          <span className="text-[11px]">Por definir</span>
+        )}
       </div>
+      {showBid && team && team.auction_bid != null ? (
+        <span className="hidden shrink-0 text-[10px] font-semibold text-amber-300/80 sm:inline">
+          {money(team.auction_bid, currency)}
+        </span>
+      ) : null}
     </div>
   );
 }

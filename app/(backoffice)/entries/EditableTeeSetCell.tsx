@@ -104,7 +104,7 @@ export default function EditableTeeSetCell({
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center gap-1">
         <span
-          className="inline-flex h-5 min-w-[44px] items-center justify-center rounded border px-1.5 text-[10px] font-bold uppercase"
+          className="inline-flex h-6 min-w-[40px] items-center justify-center rounded border px-2 text-[10px] font-bold uppercase"
           style={{
             background: chip.background,
             color: chip.text,
@@ -127,7 +127,7 @@ export default function EditableTeeSetCell({
           value={override ?? ""}
           onChange={(e) => handleChange(e.target.value)}
           disabled={pending}
-          className={`h-5 max-w-[110px] rounded border bg-white px-1 text-[10px] ${
+          className={`h-6 max-w-[110px] rounded border bg-white px-1 text-[10px] ${
             pending ? "opacity-50" : ""
           }`}
           title="Cambiar la salida (color) que se muestra al jugador. No afecta HC ni PH."
@@ -136,14 +136,13 @@ export default function EditableTeeSetCell({
           {teeSets.map((tee) => (
             <option key={tee.id} value={tee.id}>
               {tee.code || tee.name || tee.id.slice(0, 4)}
-              {tee.color ? ` · ${tee.color}` : ""}
             </option>
           ))}
         </select>
       </div>
       {feedback ? (
         <span
-          className={`text-[9px] ${
+          className={`text-[10px] ${
             feedback.kind === "ok" ? "text-emerald-700" : "text-red-700"
           }`}
         >
