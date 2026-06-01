@@ -31,9 +31,15 @@ export default function PublicMatchPlayBracket({
   const formatLabel =
     MATCHPLAY_PAIR_FORMAT_LABELS[bracket.pair_format] ?? bracket.pair_format;
 
+  const roundCount = bracket.rounds.length;
+  // Cantidad de matches en R1 = base del grid (cada match ocupa 2 filas).
+  const r1Count =
+    bracket.rounds[0]?.matches.length || Math.max(1, bracketSize / 2);
+  const gridRows = r1Count * 2; // 2 filas por match en R1
+
   return (
     <div className="space-y-4">
-      <div className="rounded-[28px] border border-white/10 bg-[#0c1728] px-4 py-3 text-sm text-slate-300">
+      <div className="rounded-2xl border border-white/10 bg-[#0c1728] px-4 py-3 text-sm text-slate-300">
         <p>
           <span className="font-semibold text-cyan-200">{labels.format}:</span>{" "}
           {formatLabel}
@@ -46,34 +52,82 @@ export default function PublicMatchPlayBracket({
         ) : null}
       </div>
 
+      {/* Leyenda colores (2 colores: arriba / abajo) */}
+      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-300">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
+          Cuadro superior
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-violet-400" />
+          Cuadro inferior
+        </span>
+      </div>
+
       {bracket.matches.length === 0 ? (
-        <div className="rounded-[28px] border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-400">
+        <div className="rounded-2xl border border-white/10 bg-[#0c1728] p-6 text-center text-sm text-slate-400">
           {labels.empty}
         </div>
       ) : (
         <div className="overflow-x-auto pb-2">
-          <div className="flex min-w-max gap-4">
-            {bracket.rounds.map(({ roundNo, label, matches }) => (
+          <div className="mx-auto flex justify-center">
+            <div
+              className="grid min-w-max gap-x-6"
+              style={{
+                gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 260px))`,
+                gridTemplateRows: `auto repeat(${gridRows}, minmax(28px, auto))`,
+              }}
+            >
+              {/* Headers */}
+              {bracket.rounds.map(({ roundNo, label }) => (
+                <div
+                  key={`hdr-${roundNo}`}
+                  className="text-center text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-300/80"
+                  style={{ gridColumn: roundNo, gridRow: "1 / span 1" }}
+                >
+                  {label || roundLabel(roundNo, roundCount, bracketSize)}
+                </div>
+              ))}
+
+              {/* Línea divisoria fina entre cuadro superior e inferior */}
               <div
-                key={roundNo}
-                className="w-[min(280px,85vw)] shrink-0 rounded-2xl border border-white/10 bg-[#0c1728] p-3"
+                className="pointer-events-none self-end"
+                style={{
+                  gridColumn: `1 / span ${roundCount}`,
+                  gridRow: `${gridRows / 2 + 1} / span 1`,
+                }}
               >
-                <h3 className="mb-3 border-b border-white/10 pb-2 text-center text-xs font-bold uppercase tracking-wide text-cyan-300">
-                  {label ||
-                    roundLabel(roundNo, bracket.roundCount, bracketSize)}
-                </h3>
-                <div className="space-y-3">
-                  {matches.map((m) => (
-                    <PublicMatchCard
+                <div className="h-px w-full bg-gradient-to-r from-cyan-400/50 via-amber-400/40 to-violet-400/50" />
+              </div>
+
+              {/* Matches */}
+              {bracket.rounds.map(({ roundNo, matches }) => {
+                const span = Math.pow(2, roundNo);
+                return matches.map((m, idx) => {
+                  const rowStart = span * idx + 2;
+                  const isFinal = roundNo === roundCount;
+                  const half: "top" | "bottom" | "final" =
+                    matches.length === 1
+                      ? "final"
+                      : idx < matches.length / 2
+                        ? "top"
+                        : "bottom";
+                  return (
+                    <PublicMatchCell
                       key={m.id}
                       match={m}
                       pairFormat={bracket.pair_format}
                       labels={labels}
+                      round={roundNo}
+                      rowStart={rowStart}
+                      span={span}
+                      half={half}
+                      isFinal={isFinal}
                     />
-                  ))}
-                </div>
-              </div>
-            ))}
+                  );
+                });
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -81,14 +135,24 @@ export default function PublicMatchPlayBracket({
   );
 }
 
-function PublicMatchCard({
+function PublicMatchCell({
   match,
   pairFormat,
   labels,
+  round,
+  rowStart,
+  span,
+  half,
+  isFinal,
 }: {
   match: PublicBracketView["matches"][number];
   pairFormat: PublicBracketView["pair_format"];
   labels: Labels;
+  round: number;
+  rowStart: number;
+  span: number;
+  half: "top" | "bottom" | "final";
+  isFinal: boolean;
 }) {
   const isBye = match.status === "bye";
   const isLive =
@@ -101,78 +165,99 @@ function PublicMatchCard({
     match.top_total_pts != null &&
     match.bottom_total_pts != null;
 
+  // Acento vertical izquierdo: cian (superior), violeta (inferior), ámbar (final).
+  const accentColor = isBye
+    ? "bg-slate-500/40"
+    : isFinal || half === "final"
+      ? "bg-amber-400"
+      : half === "bottom"
+        ? "bg-violet-400"
+        : "bg-cyan-400";
+
+  const topWin = match.winner_label === match.top_label && !isBye;
+  const botWin = match.winner_label === match.bottom_label && !isBye;
+
   return (
-    <article
-      className={`rounded-xl border px-3 py-2 text-[11px] ${
-        isBye
-          ? "border-slate-600/40 bg-slate-900/40 text-slate-500"
-          : "border-white/15 bg-[#111827] text-slate-200"
-      }`}
+    <div
+      className="relative flex flex-col justify-center self-center px-3"
+      style={{
+        gridColumn: round,
+        gridRow: `${rowStart} / span ${span}`,
+      }}
     >
+      {/* Acento vertical lateral */}
+      <span
+        className={`absolute left-0 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full ${accentColor}`}
+        aria-hidden
+      />
+
+      {/* Fila superior */}
       <div
-        className={
-          match.winner_label === match.top_label
-            ? "font-semibold text-emerald-300"
-            : ""
-        }
+        className={`flex items-center justify-between gap-2 py-1 text-[12px] ${
+          topWin
+            ? "font-bold text-emerald-300"
+            : isBye
+              ? "text-slate-500"
+              : "text-slate-100"
+        }`}
       >
-        {match.top_label}
+        <span className="truncate">{match.top_label}</span>
         {showTotals ? (
-          <span className="ml-1 text-amber-300/90">
-            ({formatPts(match.top_total_pts!)})
-          </span>
-        ) : null}
-      </div>
-      <div className="my-1 text-center text-[10px] text-slate-500">{labels.vs}</div>
-      <div
-        className={
-          match.winner_label === match.bottom_label
-            ? "font-semibold text-emerald-300"
-            : ""
-        }
-      >
-        {match.bottom_label}
-        {showTotals ? (
-          <span className="ml-1 text-amber-300/90">
-            ({formatPts(match.bottom_total_pts!)})
+          <span className="shrink-0 text-amber-300/90">
+            {formatPts(match.top_total_pts!)}
           </span>
         ) : null}
       </div>
 
+      {/* Divisor horizontal entre top y bottom */}
+      <div className="h-px bg-white/10" />
+
+      {/* Fila inferior */}
+      <div
+        className={`flex items-center justify-between gap-2 py-1 text-[12px] ${
+          botWin
+            ? "font-bold text-emerald-300"
+            : isBye
+              ? "text-slate-500"
+              : "text-slate-100"
+        }`}
+      >
+        <span className="truncate">{match.bottom_label}</span>
+        {showTotals ? (
+          <span className="shrink-0 text-amber-300/90">
+            {formatPts(match.bottom_total_pts!)}
+          </span>
+        ) : null}
+      </div>
+
+      {/* Estado / resultado: una sola línea pequeña */}
       {match.result_text ? (
-        <p className="mt-2 text-center text-[10px] font-medium text-amber-300/90">
+        <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
           {match.result_text}
         </p>
-      ) : null}
-
-      {isLive ? (
-        <p className="mt-1 text-center text-[9px] uppercase tracking-wide text-cyan-400/80">
-          {labels.liveMarker}
+      ) : isLive ? (
+        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
+          ● {labels.liveMarker}
+        </p>
+      ) : isBye ? (
+        <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-slate-500">
+          {labels.bye}
         </p>
       ) : null}
 
-      {match.status === "completed" && !isBye ? (
-        <p className="mt-1 text-center text-[9px] text-emerald-400/70">
-          {labels.completed}
-        </p>
-      ) : null}
-
-      {isBye ? (
-        <p className="mt-1 text-center text-[9px]">{labels.bye}</p>
-      ) : null}
-
+      {/* Detalle por hoyo (solo low/high) */}
       {pairFormat === "low_high" && match.holes.length > 0 ? (
-        <details className="mt-2 border-t border-white/10 pt-2">
-          <summary className="cursor-pointer select-none text-[10px] font-semibold text-cyan-300 hover:text-cyan-200">
+        <details className="mt-1">
+          <summary className="cursor-pointer select-none text-center text-[9px] uppercase tracking-wider text-cyan-300/70 hover:text-cyan-200">
             {labels.holeDetail} ({match.holes.length})
           </summary>
-          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-[9px] text-slate-400">
+          <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto text-[9px] text-slate-400">
             {match.holes.map((h) => {
               const b = h.breakdown;
               return (
                 <li
                   key={h.hole_no}
-                  className="rounded border border-white/5 bg-black/20 px-1.5 py-1"
+                  className="rounded border border-white/5 bg-black/20 px-1.5 py-0.5"
                 >
                   <span className="font-semibold text-slate-300">
                     H{h.hole_no}
@@ -187,8 +272,9 @@ function PublicMatchCard({
                     <div className="mt-0.5 leading-snug">
                       <div>
                         {match.top_label.split(" ")[0]}: {labels.lowBall}{" "}
-                        {b.top.low} ({formatPts(b.top.low_pts)}) · {labels.highBall}{" "}
-                        {b.top.high} ({formatPts(b.top.high_pts)})
+                        {b.top.low} ({formatPts(b.top.low_pts)}) ·{" "}
+                        {labels.highBall} {b.top.high} (
+                        {formatPts(b.top.high_pts)})
                       </div>
                       <div>
                         {match.bottom_label.split(" ")[0]}: {labels.lowBall}{" "}
@@ -204,6 +290,6 @@ function PublicMatchCard({
           </ul>
         </details>
       ) : null}
-    </article>
+    </div>
   );
 }
