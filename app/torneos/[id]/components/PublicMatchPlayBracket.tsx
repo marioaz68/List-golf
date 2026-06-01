@@ -182,7 +182,7 @@ function PublicMatchCell({
   const botWin = match.winner_label === match.bottom_label && !isBye;
 
   const isTopOfPair = positionIdx % 2 === 0;
-  const lineColor = "bg-slate-400/40";
+  const lineColor = "bg-slate-300/70";
 
   return (
     <div
@@ -197,18 +197,18 @@ function PublicMatchCell({
         <>
           {/* Stub horizontal saliendo a la derecha (hacia siguiente ronda) */}
           <span
-            className={`pointer-events-none absolute right-0 top-1/2 h-px w-3 translate-x-full ${lineColor}`}
+            className={`pointer-events-none absolute right-0 top-1/2 -mt-px h-0.5 w-3 translate-x-full ${lineColor}`}
             aria-hidden
           />
           {/* Vertical merger: del centro hasta el límite con su pareja */}
           {isTopOfPair ? (
             <span
-              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-px ${lineColor}`}
+              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-0.5 ${lineColor}`}
               aria-hidden
             />
           ) : (
             <span
-              className={`pointer-events-none absolute right-0 top-0 h-1/2 w-px ${lineColor}`}
+              className={`pointer-events-none absolute right-0 top-1/2 bottom-0 w-0.5 ${lineColor}`}
               aria-hidden
             />
           )}
@@ -216,12 +216,12 @@ function PublicMatchCell({
       ) : null}
       {round > 1 ? (
         <span
-          className={`pointer-events-none absolute left-0 top-1/2 h-px w-3 -translate-x-full ${lineColor}`}
+          className={`pointer-events-none absolute left-0 top-1/2 -mt-px h-0.5 w-3 -translate-x-full ${lineColor}`}
           aria-hidden
         />
       ) : null}
 
-      <div className={`rounded-lg border ${cellBox} px-2.5 py-1.5`}>
+      <div className={`rounded-lg border-2 ${cellBox} px-2.5 py-1.5`}>
         {/* Fila superior */}
         <div
           className={`flex items-center justify-between gap-2 py-0.5 text-[12px] ${
@@ -241,7 +241,7 @@ function PublicMatchCell({
         </div>
 
         {/* Divisor horizontal entre top y bottom */}
-        <div className="h-px bg-white/15" />
+        <div className="h-0.5 bg-white/25" />
 
         {/* Fila inferior */}
         <div
