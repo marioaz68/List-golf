@@ -825,44 +825,75 @@ for (const row of membersRaw) {
   let matchplaySource: "derived_r1" | "bracket" | "none" = "none";
   if (isMatchPlay && effectiveTournamentId) {
     try {
-      if (targetRoundNo === 1) {
-        const { data: rulesRow } = await supabase
-          .from("tournament_matchplay_rules")
-          .select("bracket_main_pairs, max_pairs_per_category")
-          .eq("tournament_id", effectiveTournamentId)
-          .maybeSingle();
+      // Cargamos datos básicos para el header (parejas activas / adjudicadas
+      // y tamaño del cuadro). Se muestran solo en R1.
+      const { data: rulesRow } = await supabase
+        .from("tournament_matchplay_rules")
+        .select("bracket_main_pairs, max_pairs_per_category")
+        .eq("tournament_id", effectiveTournamentId)
+        .maybeSingle();
 
-        const { data: teamsRows } = await supabase
-          .from("matchplay_pair_teams")
-          .select("id, auction_order, player_a_entry_id, player_b_entry_id")
-          .eq("tournament_id", effectiveTournamentId)
-          .eq("is_active", true);
+      const { data: teamsRows } = await supabase
+        .from("matchplay_pair_teams")
+        .select("id, seed, auction_order, auction_bid")
+        .eq("tournament_id", effectiveTournamentId)
+        .eq("is_active", true);
 
-        const activeTeams = (teamsRows ?? []) as Array<{
-          id: string;
-          auction_order: number | null;
-          player_a_entry_id: string | null;
-          player_b_entry_id: string | null;
-        }>;
-        matchplayActiveTeams = activeTeams.length;
-        const auctioned = activeTeams.filter((t) => t.auction_order != null);
-        matchplayAuctionedTeams = auctioned.length;
+      const activeTeams = (teamsRows ?? []) as Array<{
+        id: string;
+        seed: number | null;
+        auction_order: number | null;
+        auction_bid: number | string | null;
+      }>;
+      matchplayActiveTeams = activeTeams.length;
+      matchplayAuctionedTeams = activeTeams.filter(
+        (t) => t.auction_order != null
+      ).length;
 
-        const bracketMainPairs =
-          rulesRow?.bracket_main_pairs ??
-          rulesRow?.max_pairs_per_category ??
-          null;
-        function nextPow2(n: number) {
-          let p = 2;
-          while (p < n) p *= 2;
-          return p;
-        }
-        const targetSize =
-          bracketMainPairs && bracketMainPairs >= 2
-            ? nextPow2(Number(bracketMainPairs))
-            : nextPow2(Math.max(activeTeams.length, 2));
-        matchplayTargetSize = targetSize;
+      const bracketMainPairs =
+        rulesRow?.bracket_main_pairs ??
+        rulesRow?.max_pairs_per_category ??
+        null;
+      function nextPow2(n: number) {
+        let p = 2;
+        while (p < n) p *= 2;
+        return p;
+      }
+      matchplayTargetSize =
+        bracketMainPairs && bracketMainPairs >= 2
+          ? nextPow2(Number(bracketMainPairs))
+          : nextPow2(Math.max(activeTeams.length, 2));
 
+      // Si hay bracket publicado, usamos ESE como única fuente — para
+      // cualquier ronda. Las salidas se generan a partir de los
+      // matchplay_matches reales, así el calendario refleja exactamente
+      // el cuadro USGA (mismas parejas, mismo orden).
+      const { data: bracketRow } = await supabase
+        .from("matchplay_brackets")
+        .select("id")
+        .eq("tournament_id", effectiveTournamentId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (bracketRow?.id) {
+        const { data: mpMatches } = await supabase
+          .from("matchplay_matches")
+          .select("id, top_pair_id, bottom_pair_id")
+          .eq("bracket_id", bracketRow.id)
+          .eq("round_no", targetRoundNo);
+
+        const total = (mpMatches ?? []).length;
+        matchplayRealMatchesCount = (mpMatches ?? []).filter(
+          (m: any) => m.top_pair_id && m.bottom_pair_id
+        ).length;
+        matchplayByeCount = total - matchplayRealMatchesCount;
+        matchplayPendingCount = 0;
+        matchplaySource = "bracket";
+      } else if (targetRoundNo === 1) {
+        // Fallback R1 sin bracket: usamos el SEED almacenado (mismo orden
+        // que el bracket virtual de /cuadro-vivo). Si una pareja no tiene
+        // seed, completa con postura desc · auction_order asc.
         function bracketSeedOrder(size: number): number[] {
           if (size === 2) return [1, 2];
           const half = size / 2;
@@ -874,15 +905,33 @@ for (const row of membersRaw) {
           }
           return out;
         }
-        const seedOrder = bracketSeedOrder(targetSize);
-        const sortedAuctioned = [...auctioned].sort(
-          (a, b) => Number(a.auction_order) - Number(b.auction_order)
-        );
+        const seedOrder = bracketSeedOrder(matchplayTargetSize);
+
         const teamBySeed = new Map<number, (typeof activeTeams)[number]>();
-        sortedAuctioned.forEach((t, i) => teamBySeed.set(i + 1, t));
+        const withSeed = activeTeams.filter((t) => t.seed != null);
+        for (const t of withSeed) {
+          const s = Number(t.seed);
+          if (!teamBySeed.has(s)) teamBySeed.set(s, t);
+        }
+        const remaining = activeTeams.filter((t) => !withSeed.includes(t));
+        remaining.sort((a, b) => {
+          const bidA = a.auction_bid != null ? Number(a.auction_bid) : -Infinity;
+          const bidB = b.auction_bid != null ? Number(b.auction_bid) : -Infinity;
+          if (bidB !== bidA) return bidB - bidA;
+          const ordA = a.auction_order ?? Number.POSITIVE_INFINITY;
+          const ordB = b.auction_order ?? Number.POSITIVE_INFINITY;
+          return ordA - ordB;
+        });
+        let nextFree = 1;
+        for (const t of remaining) {
+          while (teamBySeed.has(nextFree)) nextFree += 1;
+          if (nextFree > matchplayTargetSize) break;
+          teamBySeed.set(nextFree, t);
+          nextFree += 1;
+        }
 
         const totalInscribed = activeTeams.length;
-        const r1Count = targetSize / 2;
+        const r1Count = matchplayTargetSize / 2;
         let real = 0;
         let bye = 0;
         let pending = 0;
@@ -903,30 +952,6 @@ for (const row of membersRaw) {
         matchplayByeCount = bye;
         matchplayPendingCount = pending;
         matchplaySource = "derived_r1";
-      } else {
-        // R2+: usar bracket en BD
-        const { data: bracketRow } = await supabase
-          .from("matchplay_brackets")
-          .select("id")
-          .eq("tournament_id", effectiveTournamentId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (bracketRow?.id) {
-          const { data: mpMatches } = await supabase
-            .from("matchplay_matches")
-            .select("id, top_pair_id, bottom_pair_id")
-            .eq("bracket_id", bracketRow.id)
-            .eq("round_no", targetRoundNo);
-
-          const total = (mpMatches ?? []).length;
-          matchplayRealMatchesCount = (mpMatches ?? []).filter(
-            (m: any) => m.top_pair_id && m.bottom_pair_id
-          ).length;
-          matchplayByeCount = total - matchplayRealMatchesCount;
-          matchplaySource = "bracket";
-        }
       }
     } catch (err) {
       console.error("[tee-sheet] matchplay preview:", err);
