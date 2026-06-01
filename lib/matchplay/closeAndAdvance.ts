@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
+import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundGroup";
 import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
 
 /**
@@ -37,24 +38,6 @@ export type CloseMatchResult =
       message: string;
     }
   | { ok: false; error: string };
-
-function formatHHMM(totalMinutes: number): string {
-  const m = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-}
-
-function parseHHMM(raw: string): number | null {
-  const trimmed = String(raw ?? "").trim();
-  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
-  if (!match) return null;
-  const h = Number(match[1]);
-  const mm = Number(match[2]);
-  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
-  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
-  return h * 60 + mm;
-}
 
 function formatResultText(
   decidedAtHole: number,
@@ -251,31 +234,38 @@ export async function closeMatchAndAdvanceForGroup(
     }
   }
 
-  // 8) Avanzar al ganador
+  // 8) Avanzar al ganador (advanceWinnerInBracket también intenta crear
+  //    la salida de la ronda siguiente automáticamente).
   const adv = await advanceWinnerInBracket(admin, {
     match_id: matchplayMatchId,
     winner_pair_id: winnerPairId,
   });
 
   let nextGroupCreated = false;
-  let nextGroupNo: number | null = null;
-  let nextRoundId: string | null = null;
-  let nextTeeTime: string | null = null;
+  let nextGroupNo: number | null = adv.next_group?.groupNo ?? null;
+  let nextRoundId: string | null = adv.next_group?.roundId ?? null;
+  let nextTeeTime: string | null = adv.next_group?.teeTime ?? null;
 
-  if (adv.advanced && adv.next_match_id) {
-    // 9) Si el siguiente match ya tiene AMBAS parejas, crear la salida.
-    const created = await maybeCreateNextRoundGroup(admin, {
+  if (adv.next_group?.created || adv.next_group?.updated) {
+    nextGroupCreated = !!adv.next_group.created;
+  } else if (adv.advanced && adv.next_match_id) {
+    // Fallback: si la siguiente salida no se generó automáticamente (por
+    // ejemplo, porque la cascada de BYE creó el siguiente match y aún
+    // espera a la otra pareja), reintentamos por si la actualización de
+    // la otra pareja ya pasó.
+    const retry = await maybeCreateNextRoundGroup(admin, {
       tournamentId,
       nextMatchId: adv.next_match_id,
-      currentRoundNo,
     });
-    if (created.ok) {
-      nextGroupCreated = created.created;
-      nextGroupNo = created.groupNo;
-      nextRoundId = created.roundId;
-      nextTeeTime = created.teeTime;
+    if (retry.ok) {
+      nextGroupCreated = retry.created;
+      nextGroupNo = retry.groupNo;
+      nextRoundId = retry.roundId;
+      nextTeeTime = retry.teeTime;
     }
   }
+  // Variable usada para mantener el rastro del paso 6 (no para lógica).
+  void currentRoundNo;
 
   // 10) Notificar por Telegram al nuevo grupo (jugadores + caddies).
   //     Best-effort: no rompemos el cierre si falla.
@@ -332,161 +322,3 @@ export async function closeMatchAndAdvanceForGroup(
   };
 }
 
-/**
- * Si el match siguiente ya tiene ambas parejas, intenta crear el
- * `pairing_group` para la ronda del torneo correspondiente. La ronda
- * destino se identifica por `rounds.round_no = nextMatch.round_no`.
- *
- * Reglas:
- *  - Si ya existe un grupo en esa ronda con `group_no = position_no`,
- *    sólo actualiza sus miembros (no duplica).
- *  - Si la ronda destino no existe en `rounds`, no falla — sólo
- *    reporta `created: false`.
- *  - El `tee_time` usa `rounds.start_time` + (position_no - 1) ·
- *    `interval_minutes` (default 10).
- */
-async function maybeCreateNextRoundGroup(
-  admin: SupabaseClient,
-  params: {
-    tournamentId: string;
-    nextMatchId: string;
-    currentRoundNo: number;
-  }
-): Promise<{
-  ok: boolean;
-  created: boolean;
-  groupNo: number | null;
-  roundId: string | null;
-  teeTime: string | null;
-}> {
-  const { data: nextMatch } = await admin
-    .from("matchplay_matches")
-    .select(
-      "id, round_no, position_no, top_pair_id, bottom_pair_id, status"
-    )
-    .eq("id", params.nextMatchId)
-    .maybeSingle();
-  if (!nextMatch) {
-    return { ok: false, created: false, groupNo: null, roundId: null, teeTime: null };
-  }
-  if (!nextMatch.top_pair_id || !nextMatch.bottom_pair_id) {
-    // Esperando a la otra pareja. No creamos salida todavía.
-    return { ok: true, created: false, groupNo: null, roundId: null, teeTime: null };
-  }
-  if (nextMatch.status === "bye" || nextMatch.status === "walkover") {
-    // No requiere salida — quien tiene pareja avanza automáticamente.
-    return { ok: true, created: false, groupNo: null, roundId: null, teeTime: null };
-  }
-
-  // Ronda destino en el calendario del torneo
-  const nextRoundNo = Number(nextMatch.round_no);
-  const { data: roundRow } = await admin
-    .from("rounds")
-    .select("id, start_time, interval_minutes")
-    .eq("tournament_id", params.tournamentId)
-    .eq("round_no", nextRoundNo)
-    .maybeSingle();
-  if (!roundRow?.id) {
-    // Aún no hay ronda creada para la siguiente fase.
-    return { ok: true, created: false, groupNo: null, roundId: null, teeTime: null };
-  }
-  const nextRoundId = String(roundRow.id);
-
-  const baseMinutes = roundRow.start_time
-    ? parseHHMM(String(roundRow.start_time))
-    : null;
-  const interval =
-    typeof roundRow.interval_minutes === "number" &&
-    roundRow.interval_minutes > 0
-      ? Math.trunc(roundRow.interval_minutes)
-      : 10;
-
-  const positionNo = Number(nextMatch.position_no ?? 1);
-  // group_no = position_no para mantener la convención del bracket
-  const groupNo = positionNo;
-  const teeTime =
-    baseMinutes != null ? formatHHMM(baseMinutes + (groupNo - 1) * interval) : null;
-
-  // Cargar parejas (ya completas) para sacar entries
-  const { data: pairs } = await admin
-    .from("matchplay_pair_teams")
-    .select("id, player_a_entry_id, player_b_entry_id, seed")
-    .in("id", [nextMatch.top_pair_id, nextMatch.bottom_pair_id]);
-  const topPair = (pairs ?? []).find((p) => p.id === nextMatch.top_pair_id);
-  const botPair = (pairs ?? []).find(
-    (p) => p.id === nextMatch.bottom_pair_id
-  );
-  if (!topPair || !botPair) {
-    return { ok: false, created: false, groupNo: null, roundId: null, teeTime: null };
-  }
-
-  const entryIds: string[] = [
-    topPair.player_a_entry_id,
-    topPair.player_b_entry_id,
-    botPair.player_a_entry_id,
-    botPair.player_b_entry_id,
-  ].filter((v): v is string => !!v);
-
-  const topLabel = topPair.seed != null ? `#${topPair.seed}` : "TOP";
-  const botLabel = botPair.seed != null ? `#${botPair.seed}` : "BOT";
-  const notes = `MATCH PLAY · ${topLabel} vs ${botLabel}`;
-
-  // ¿Ya existe un grupo con ese group_no en la ronda destino?
-  const { data: existing } = await admin
-    .from("pairing_groups")
-    .select("id")
-    .eq("round_id", nextRoundId)
-    .eq("group_no", groupNo)
-    .maybeSingle();
-
-  let groupRecordId: string;
-  let created = false;
-  if (existing?.id) {
-    groupRecordId = String(existing.id);
-    if (teeTime) {
-      await admin
-        .from("pairing_groups")
-        .update({ tee_time: teeTime, notes })
-        .eq("id", groupRecordId);
-    }
-    // Reemplazamos miembros para reflejar las parejas actuales.
-    await admin
-      .from("pairing_group_members")
-      .delete()
-      .eq("group_id", groupRecordId);
-  } else {
-    const { data: inserted, error: insErr } = await admin
-      .from("pairing_groups")
-      .insert({
-        round_id: nextRoundId,
-        group_no: groupNo,
-        tee_time: teeTime ?? null,
-        starting_hole: null,
-        notes,
-      })
-      .select("id")
-      .single();
-    if (insErr || !inserted) {
-      return { ok: false, created: false, groupNo, roundId: nextRoundId, teeTime };
-    }
-    groupRecordId = String(inserted.id);
-    created = true;
-  }
-
-  if (entryIds.length > 0) {
-    const members = entryIds.map((entry_id, idx) => ({
-      group_id: groupRecordId,
-      entry_id,
-      position: idx + 1,
-    }));
-    await admin.from("pairing_group_members").insert(members);
-  }
-
-  return {
-    ok: true,
-    created,
-    groupNo,
-    roundId: nextRoundId,
-    teeTime,
-  };
-}

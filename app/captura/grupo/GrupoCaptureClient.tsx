@@ -79,15 +79,41 @@ function sumPar(holes: HoleNumber[]): number {
   return holes.reduce((acc, h) => acc + (PAR_BY_HOLE[h] ?? 0), 0);
 }
 
+/** Avanza el foco a la siguiente celda de score (habilitada) en orden
+ *  visual. Si la fila del jugador termina, salta al primer hoyo del
+ *  siguiente jugador automáticamente (orden del DOM). Si no hay
+ *  siguiente, hace `blur()`.
+ */
+function focusNextScoreCell(current: HTMLInputElement): void {
+  const all = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[data-score-cell="1"]')
+  );
+  const idx = all.indexOf(current);
+  if (idx < 0) return;
+  for (let i = idx + 1; i < all.length; i += 1) {
+    const el = all[i];
+    if (el && !el.disabled && !el.readOnly) {
+      el.focus();
+      el.select();
+      return;
+    }
+  }
+  // No hay siguiente celda: cerramos el teclado en mobile.
+  current.blur();
+}
+
 /**
  * Celda de score con auto-guardado.
  *
  * Cada vez que el usuario teclea un dígito válido el valor se guarda
  * automáticamente — no hace falta hacer blur ni dar Enter para que se
  * persista. La lógica:
- *  - Un dígito (1-9)  → se guarda al instante.
- *  - Dos dígitos (10-15) → se guarda al instante con el nuevo valor.
- *  - Limpia con Backspace/Delete → se manda `null` y queda en blanco.
+ *  - Un dígito (1-9)  → se guarda al instante y el cursor salta a la
+ *    siguiente casilla tras ~250 ms (para permitir teclear 10-15).
+ *  - Dos dígitos (10-15) → se guarda y salta al instante.
+ *  - "X" → se guarda como "levantó" y salta al instante.
+ *  - Limpia con Backspace/Delete → se manda `null`, queda en blanco y
+ *    NO salta el cursor.
  *
  * Para evitar mandar muchas requests al backend mientras el usuario
  * sigue tecleando, se debouncea ~150 ms.
@@ -116,6 +142,8 @@ function ScoreCell({
   const initialDraft = pickedUp ? "X" : value != null ? String(value) : "";
   const [draft, setDraft] = useState<string>(initialDraft);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const lastCommittedRef = useRef<{ strokes: number | null; pickedUp: boolean }>({
     strokes: value,
     pickedUp: Boolean(pickedUp),
@@ -132,8 +160,28 @@ function ScoreCell({
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (advanceRef.current) clearTimeout(advanceRef.current);
     };
   }, []);
+
+  function scheduleAdvance(delayMs: number) {
+    if (advanceRef.current) clearTimeout(advanceRef.current);
+    advanceRef.current = setTimeout(() => {
+      const el = inputRef.current;
+      // Sólo avanzamos si el input sigue enfocado (el usuario no se movió
+      // manualmente a otra celda mientras tanto).
+      if (el && document.activeElement === el) {
+        focusNextScoreCell(el);
+      }
+    }, delayMs);
+  }
+
+  function cancelAdvance() {
+    if (advanceRef.current) {
+      clearTimeout(advanceRef.current);
+      advanceRef.current = null;
+    }
+  }
 
   function sameAsCommitted(
     strokes: number | null,
@@ -174,21 +222,35 @@ function ScoreCell({
     ) {
       setDraft("X");
       scheduleCommit(null, true);
+      // X es valor final → avanzar de inmediato.
+      scheduleAdvance(0);
       return;
     }
 
     const cleaned = trimmed.replace(/[^0-9]/g, "").slice(0, 2);
     setDraft(cleaned);
     if (cleaned === "") {
+      // Borrado: no avanzamos para que el usuario pueda re-teclear.
+      cancelAdvance();
       scheduleCommit(null, false);
       return;
     }
     const n = Number(cleaned);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
       // Valor fuera de rango: descartamos sin guardar (no error).
+      cancelAdvance();
       return;
     }
     scheduleCommit(Math.trunc(n), false);
+    // Auto-avance:
+    //  - 2 dígitos válidos (10-15) → final, saltar ya.
+    //  - 1 dígito → esperamos 250 ms por si el usuario está tecleando 10-15.
+    //    Si dentro de ese plazo entra otro keypress, se reinicia el timer.
+    if (cleaned.length >= 2) {
+      scheduleAdvance(0);
+    } else {
+      scheduleAdvance(250);
+    }
   }
 
   function handleBlur() {
@@ -240,6 +302,8 @@ function ScoreCell({
 
   return (
     <input
+      ref={inputRef}
+      data-score-cell="1"
       type="text"
       inputMode={allowPickup ? "text" : "numeric"}
       pattern={allowPickup ? "[0-9xX]*" : "[0-9]*"}
@@ -253,11 +317,20 @@ function ScoreCell({
       }
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => handleChange(e.target.value)}
-      onBlur={handleBlur}
+      onBlur={(e) => {
+        cancelAdvance();
+        handleBlur();
+        void e;
+      }}
       onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          (e.currentTarget as HTMLInputElement).blur();
+        if (e.key === "Enter" || e.key === "Tab") {
+          // Tab y Enter avanzan manualmente: cancelamos cualquier avance
+          // automático pendiente para no saltar dos celdas.
+          cancelAdvance();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            focusNextScoreCell(e.currentTarget as HTMLInputElement);
+          }
         }
       }}
       className={[
