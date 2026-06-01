@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import { createClient } from "@/utils/supabase/client";
 
 type PlayerInfo = {
   label: string;
@@ -131,6 +132,50 @@ export default function MatchDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const inFlightRef = useRef(false);
+
+  const fetchDetail = useCallback(
+    async (opts?: { showSpinner?: boolean }) => {
+      if (!matchId) return;
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      if (opts?.showSpinner) setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          match_id: matchId,
+          tournament_id: tournamentId,
+        });
+        const r = await fetch(
+          `/api/matchplay/match-detail?${params.toString()}`,
+          { cache: "no-store" }
+        );
+        const j = (await r.json().catch(() => null)) as
+          | { ok: true; match: MatchDetail }
+          | { ok: false; error: string }
+          | null;
+        if (!r.ok || !j || j.ok === false) {
+          if (opts?.showSpinner) {
+            setError(
+              (j && "error" in j && j.error) || "No se pudo cargar el detalle."
+            );
+            setDetail(null);
+          }
+        } else {
+          setDetail(j.match);
+          setError(null);
+        }
+      } catch (e) {
+        if (opts?.showSpinner) {
+          setError(e instanceof Error ? e.message : "Error de red");
+        }
+      } finally {
+        inFlightRef.current = false;
+        if (opts?.showSpinner) setLoading(false);
+      }
+    },
+    [matchId, tournamentId]
+  );
+
   useEffect(() => {
     if (!open) {
       setDetail(null);
@@ -143,38 +188,54 @@ export default function MatchDetailModal({
       setError(null);
       return;
     }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams({
-      match_id: matchId,
-      tournament_id: tournamentId,
-    });
-    fetch(`/api/matchplay/match-detail?${params.toString()}`)
-      .then(async (r) => {
-        const j = (await r.json().catch(() => null)) as
-          | { ok: true; match: MatchDetail }
-          | { ok: false; error: string }
-          | null;
-        if (cancelled) return;
-        if (!r.ok || !j || j.ok === false) {
-          setError((j && "error" in j && j.error) || "No se pudo cargar el detalle.");
-          setDetail(null);
-        } else {
-          setDetail(j.match);
-        }
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Error de red");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
+    void fetchDetail({ showSpinner: true });
+  }, [open, matchId, tournamentId, isDerived, fetchDetail]);
+
+  // Mientras el modal esté abierto: polling cada 4 s + realtime debounced
+  // sobre hole_scores / round_scores / matchplay_hole_results para que el
+  // detalle se actualice sin tener que cerrar y reabrir.
+  useEffect(() => {
+    if (!open || !matchId) return;
+    const supabase = createClient();
+    const debounceRef: { id: ReturnType<typeof setTimeout> | null } = {
+      id: null,
     };
-  }, [open, matchId, tournamentId, isDerived]);
+    const scheduleRefresh = () => {
+      if (debounceRef.id != null) clearTimeout(debounceRef.id);
+      debounceRef.id = setTimeout(() => {
+        debounceRef.id = null;
+        if (typeof document !== "undefined" && document.hidden) return;
+        void fetchDetail();
+      }, 800);
+    };
+    const pollId = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void fetchDetail();
+    }, 4000);
+    const ch = supabase
+      .channel(`mp-modal-${tournamentId}-${matchId}`)
+      .on(
+        "postgres_changes" as never,
+        { event: "*", schema: "public", table: "hole_scores" },
+        scheduleRefresh
+      )
+      .on(
+        "postgres_changes" as never,
+        { event: "*", schema: "public", table: "round_scores" },
+        scheduleRefresh
+      )
+      .on(
+        "postgres_changes" as never,
+        { event: "*", schema: "public", table: "matchplay_hole_results" },
+        scheduleRefresh
+      )
+      .subscribe();
+    return () => {
+      clearInterval(pollId);
+      if (debounceRef.id != null) clearTimeout(debounceRef.id);
+      supabase.removeChannel(ch);
+    };
+  }, [open, matchId, tournamentId, fetchDetail]);
 
   if (!open) return null;
 
