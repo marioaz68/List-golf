@@ -264,6 +264,58 @@ export default function MatchesLiveGrid({
     [teams]
   );
 
+  // Rondas disponibles (las que tienen al menos 1 partido real) y filtro.
+  const availableRounds = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const m of matches) {
+      if (m.status === "bye") continue;
+      counts.set(m.round_no, (counts.get(m.round_no) ?? 0) + 1);
+    }
+    return Array.from({ length: roundCount }, (_, i) => {
+      const roundNo = i + 1;
+      return {
+        roundNo,
+        label: roundLabel(roundNo, roundCount, bracketSize),
+        count: counts.get(roundNo) ?? 0,
+      };
+    });
+  }, [matches, roundCount, bracketSize]);
+
+  const [selectedRounds, setSelectedRounds] = useState<Set<number>>(new Set());
+  const [showRoundFilter, setShowRoundFilter] = useState(false);
+
+  // Auto-selección: cuando los partidos cambian (p. ej. se publica nueva
+  // ronda), si todavía no hay nada seleccionado o quedaron rondas
+  // inválidas, marcamos las rondas con al menos 1 partido.
+  useEffect(() => {
+    const validNos = new Set(
+      availableRounds.filter((r) => r.count > 0).map((r) => r.roundNo)
+    );
+    setSelectedRounds((prev) => {
+      const next = new Set<number>();
+      for (const n of prev) if (validNos.has(n)) next.add(n);
+      if (next.size > 0) return prev.size === next.size ? prev : next;
+      return validNos;
+    });
+  }, [availableRounds]);
+
+  function toggleRound(roundNo: number) {
+    setSelectedRounds((prev) => {
+      const next = new Set(prev);
+      if (next.has(roundNo)) next.delete(roundNo);
+      else next.add(roundNo);
+      return next;
+    });
+  }
+  function selectAllRounds() {
+    setSelectedRounds(
+      new Set(availableRounds.filter((r) => r.count > 0).map((r) => r.roundNo))
+    );
+  }
+  function clearRounds() {
+    setSelectedRounds(new Set());
+  }
+
   const holesByMatch = useMemo(() => {
     const map = new Map<string, HoleRow[]>();
     for (const h of holes) {
@@ -302,8 +354,12 @@ export default function MatchesLiveGrid({
       list.push(m);
       map.set(m.round_no, list);
     }
+    const filterActive = selectedRounds.size > 0;
     return Array.from({ length: roundCount }, (_, i) => {
       const roundNo = i + 1;
+      if (filterActive && !selectedRounds.has(roundNo)) {
+        return null;
+      }
       const list = (map.get(roundNo) ?? []).slice();
       list.sort((a, b) => {
         const sa = matchSchedule[a.id];
@@ -344,8 +400,15 @@ export default function MatchesLiveGrid({
         matches: list,
         behindSet,
       };
-    });
-  }, [matches, roundCount, bracketSize, matchSchedule, lastHoleByMatch]);
+    }).filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [
+    matches,
+    roundCount,
+    bracketSize,
+    matchSchedule,
+    lastHoleByMatch,
+    selectedRounds,
+  ]);
 
   // Totales calculados sin BYEs (los BYE no son partidos jugados).
   const totals = useMemo(() => {
@@ -377,21 +440,116 @@ export default function MatchesLiveGrid({
     );
   }
 
+  const filteredRoundsLabel = (() => {
+    const active = availableRounds.filter(
+      (r) => r.count > 0 && selectedRounds.has(r.roundNo)
+    );
+    const totalActive = availableRounds.filter((r) => r.count > 0).length;
+    if (active.length === 0) return "Sin rondas";
+    if (active.length === totalActive) return "Todas las rondas";
+    if (active.length === 1) return active[0]!.label;
+    return `${active.length} rondas`;
+  })();
+
   return (
     <div className="space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-[#0c1728] px-4 py-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
-            📺 Live scoring · todos los matches
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowRoundFilter((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-[12px] font-bold text-cyan-100 hover:bg-cyan-500/20"
+              aria-expanded={showRoundFilter}
+              aria-haspopup="true"
+              title="Filtrar rondas a mostrar"
+            >
+              <span aria-hidden>🎯</span>
+              <span>{filteredRoundsLabel}</span>
+              <span aria-hidden className="text-cyan-300">
+                {showRoundFilter ? "▴" : "▾"}
+              </span>
+            </button>
+            {showRoundFilter ? (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setShowRoundFilter(false)}
+                />
+                <div className="absolute left-0 top-full z-40 mt-2 w-60 rounded-lg border border-cyan-500/40 bg-[#0a1220] p-2 shadow-2xl">
+                  <div className="mb-1 flex items-center justify-between px-1.5 text-[10px] uppercase tracking-wider text-cyan-300/80">
+                    <span>Rondas</span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={selectAllRounds}
+                        className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white hover:bg-white/20"
+                      >
+                        Todas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearRounds}
+                        className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-slate-200 hover:bg-white/10"
+                      >
+                        Ninguna
+                      </button>
+                    </div>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {availableRounds.map((r) => {
+                      const checked = selectedRounds.has(r.roundNo);
+                      const disabled = r.count === 0;
+                      return (
+                        <li key={r.roundNo}>
+                          <label
+                            className={`flex cursor-pointer items-center justify-between gap-2 rounded px-2 py-1.5 text-[12px] ${
+                              disabled
+                                ? "cursor-not-allowed opacity-40"
+                                : "hover:bg-white/5"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                className="h-3.5 w-3.5 accent-cyan-400"
+                                checked={checked}
+                                disabled={disabled}
+                                onChange={() =>
+                                  disabled ? null : toggleRound(r.roundNo)
+                                }
+                              />
+                              <span className="font-semibold text-white">
+                                {r.label}
+                              </span>
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {r.count > 0
+                                ? `${r.count} ${r.count === 1 ? "partido" : "partidos"}`
+                                : "sin partidos"}
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </>
+            ) : null}
           </div>
-          <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
-            {tournamentName}
-          </h1>
-          {derivedFromPairings ? (
-            <p className="mt-1 text-[11px] text-amber-200">
-              Matches programados desde las salidas. El cuadro oficial aún no se publica.
-            </p>
-          ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
+              📺 Live scoring · todos los matches
+            </div>
+            <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
+              {tournamentName}
+            </h1>
+            {derivedFromPairings ? (
+              <p className="mt-1 text-[11px] text-amber-200">
+                Matches programados desde las salidas. El cuadro oficial aún no se publica.
+              </p>
+            ) : null}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <Stat label="Partidos" value={String(totals.total)} />
