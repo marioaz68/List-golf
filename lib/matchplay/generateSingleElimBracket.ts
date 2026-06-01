@@ -65,8 +65,19 @@ function advanceWinners(
     }
   }
 
-  for (const nm of next) {
-    resolveBye(nm);
+  // Sólo aplica resolveBye() (que marca el siguiente match como BYE y
+  // cascadea al ganador) cuando AMBOS partidos fuente ya están finalizados.
+  // Si uno es `scheduled` (real, aún por jugarse), el siguiente match debe
+  // quedar `scheduled` esperando ese ganador, NO marcarse como BYE.
+  for (let np = 0; np < next.length; np++) {
+    const nm = next[np];
+    const srcTop = current[np * 2];
+    const srcBottom = current[np * 2 + 1];
+    const srcTopDetermined = !srcTop || srcTop.status !== "scheduled";
+    const srcBottomDetermined = !srcBottom || srcBottom.status !== "scheduled";
+    if (srcTopDetermined && srcBottomDetermined) {
+      resolveBye(nm);
+    }
   }
 }
 
