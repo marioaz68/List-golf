@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import BackButton from "@/components/captura/BackButton";
 import {
   HOLES_FRONT,
@@ -817,6 +818,9 @@ export default function GrupoCaptureClient({
   initial: GroupCapturePayload;
 }) {
   const [meta, setMeta] = useState(initial);
+  const searchParams = useSearchParams();
+  const backParam = searchParams.get("back");
+  const backQs = backParam ? `&back=${encodeURIComponent(backParam)}` : "";
   const [scoresByEntry, setScoresByEntry] = useState<ScoresByEntry>(() =>
     Object.fromEntries(meta.players.map((p) => [p.entryId, { ...p.scores }]))
   );
@@ -1095,13 +1099,13 @@ export default function GrupoCaptureClient({
             <div className="flex flex-wrap gap-2 text-[11px]">
               <BackButton fallbackHref="/" />
               <Link
-                href={`/captura/tarjeta?group_id=${meta.groupId}`}
+                href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Tarjeta completa →
               </Link>
               <Link
-                href={`/captura/mobile?group_id=${meta.groupId}`}
+                href={`/captura/mobile?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Vista keypad móvil →
