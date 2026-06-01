@@ -249,6 +249,10 @@ function formatRoleLabel(code: string) {
       return "Viewer";
     case "handicap_committee":
       return "Comité de Handicap";
+    case "caddie_manager":
+      return "Caddie Manager";
+    case "marshal":
+      return "Marshal / Juez de campo";
     default:
       return code;
   }
@@ -560,15 +564,60 @@ export default async function UsersPage({
     tournamentRolesByUser.set(row.user_id, list);
   }
 
-  const canAssignClubRoles = isSuperAdmin;
+  const canAssignClubRoles = isSuperAdmin || isClubAdmin;
   const canAssignTournamentRoles = isSuperAdmin || isClubAdmin || isTournamentDirector;
 
-  const clubRoleCodes = isSuperAdmin ? ["club_admin"] : [];
-  const tournamentRoleCodes = isSuperAdmin
-    ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"]
+  const clubRoleCodes = isSuperAdmin
+    ? [
+        "club_admin",
+        "marshal",
+        "viewer",
+        "score_capture",
+        "caddie_manager",
+        "entries_operator",
+        "checkin",
+        "handicap_committee",
+      ]
     : isClubAdmin
-      ? ["tournament_director", "score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"]
-      : ["score_capture", "entries_operator", "checkin", "viewer", "handicap_committee"];
+      ? [
+          "marshal",
+          "viewer",
+          "score_capture",
+          "caddie_manager",
+          "entries_operator",
+          "checkin",
+          "handicap_committee",
+        ]
+      : [];
+
+  const tournamentRoleCodes = isSuperAdmin
+    ? [
+        "tournament_director",
+        "score_capture",
+        "entries_operator",
+        "checkin",
+        "viewer",
+        "handicap_committee",
+        "marshal",
+      ]
+    : isClubAdmin
+      ? [
+          "tournament_director",
+          "score_capture",
+          "entries_operator",
+          "checkin",
+          "viewer",
+          "handicap_committee",
+          "marshal",
+        ]
+      : [
+          "score_capture",
+          "entries_operator",
+          "checkin",
+          "viewer",
+          "handicap_committee",
+          "marshal",
+        ];
 
   const { data: clubRoleOptions } = clubRoleCodes.length
     ? await supabase
@@ -585,6 +634,34 @@ export default async function UsersPage({
         .in("code", tournamentRoleCodes)
         .order("name", { ascending: true })
     : { data: [] as RoleOption[] };
+
+  // Clubs disponibles para asignar roles. Super admin ve todos; club_admin
+  // ve los suyos. Si entramos por tournament_id, fijamos a contextClubId.
+  type ClubOption = { id: string; name: string };
+  let availableClubs: ClubOption[] = [];
+  if (canAssignClubRoles) {
+    if (contextClubId) {
+      const { data: clubRow } = await supabase
+        .from("clubs")
+        .select("id, name")
+        .eq("id", contextClubId)
+        .maybeSingle();
+      if (clubRow) availableClubs = [clubRow as ClubOption];
+    } else if (isSuperAdmin) {
+      const { data: allClubs } = await supabase
+        .from("clubs")
+        .select("id, name")
+        .order("name", { ascending: true });
+      availableClubs = (allClubs ?? []) as ClubOption[];
+    } else if (isClubAdmin) {
+      const { data: myClubs } = await supabase
+        .from("clubs")
+        .select("id, name")
+        .in("id", Array.from(allowedClubIds))
+        .order("name", { ascending: true });
+      availableClubs = (myClubs ?? []) as ClubOption[];
+    }
+  }
 
   const newUserHref = tournamentId
     ? `/users/new?tournament_id=${tournamentId}`
@@ -783,37 +860,86 @@ export default async function UsersPage({
                               ))
                             )}
 
-                            {canAssignClubRoles && contextClubId && (
+                            {canAssignClubRoles && availableClubs.length > 0 && (
                               <form
                                 action={assignUserClubRoleAction}
-                                style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+                                style={{
+                                  display: "grid",
+                                  gap: 6,
+                                  border: "1px dashed #cbd5e1",
+                                  borderRadius: 8,
+                                  padding: 8,
+                                  background: "#f8fafc",
+                                }}
                               >
                                 <input type="hidden" name="profile_id" value={u.id} />
-                                <input type="hidden" name="club_id" value={contextClubId} />
                                 <input
                                   type="hidden"
                                   name="tournament_id"
                                   value={tournamentId}
                                 />
 
-                                <select name="role_id" style={selectStyle} defaultValue="">
-                                  <option value="">Agregar rol club</option>
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: "#334155",
+                                  }}
+                                >
+                                  Asignar rol de club
+                                </div>
+
+                                {contextClubId ? (
+                                  <input
+                                    type="hidden"
+                                    name="club_id"
+                                    value={contextClubId}
+                                  />
+                                ) : availableClubs.length === 1 ? (
+                                  <input
+                                    type="hidden"
+                                    name="club_id"
+                                    value={availableClubs[0]!.id}
+                                  />
+                                ) : (
+                                  <select
+                                    name="club_id"
+                                    style={selectStyle}
+                                    defaultValue=""
+                                    required
+                                  >
+                                    <option value="">Elegir club…</option>
+                                    {availableClubs.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                <select
+                                  name="role_id"
+                                  style={selectStyle}
+                                  defaultValue=""
+                                  required
+                                >
+                                  <option value="">Elegir rol…</option>
                                   {(clubRoleOptions ?? []).map((role: RoleOption) => (
                                     <option key={role.id} value={role.id}>
-                                      {role.name ?? role.code ?? role.id}
+                                      {formatRoleLabel(role.code ?? role.id)}
                                     </option>
                                   ))}
                                 </select>
 
                                 <button type="submit" style={miniButtonStyle}>
-                                  Agregar
+                                  Agregar rol
                                 </button>
                               </form>
                             )}
 
                             {!canAssignClubRoles && (
                               <div style={{ fontSize: 11, color: "#64748b" }}>
-                                Solo super admin puede asignar roles de club.
+                                No tienes permiso para asignar roles de club.
                               </div>
                             )}
                           </div>
@@ -941,7 +1067,9 @@ export default async function UsersPage({
                                               value={role.id}
                                             />
                                             <span>
-                                              {role.name ?? role.code ?? role.id}
+                                              {formatRoleLabel(
+                                                role.code ?? role.id
+                                              )}
                                             </span>
                                           </label>
                                         ))}

@@ -241,6 +241,24 @@ function canAssignClubRole(
   roleCode: string | null
 ) {
   if (actor.isSuperAdmin) return true;
+
+  // El club_admin puede dar de alta/quitar a usuarios operativos del club
+  // (marshals, viewers, capturistas, caddie managers, entries operators y
+  // handicap committee), pero nunca a otro club_admin ni a super_admin.
+  const allowedForClubAdmin = new Set([
+    "marshal",
+    "viewer",
+    "score_capture",
+    "caddie_manager",
+    "entries_operator",
+    "checkin",
+    "handicap_committee",
+  ]);
+
+  if (actor.allowedClubIds.size > 0) {
+    return allowedForClubAdmin.has(roleCode ?? "");
+  }
+
   return false;
 }
 
@@ -257,6 +275,7 @@ function canAssignTournamentRole(
     "checkin",
     "viewer",
     "handicap_committee",
+    "marshal",
   ]);
 
   const allowedForTournamentDirector = new Set([
@@ -265,6 +284,7 @@ function canAssignTournamentRole(
     "checkin",
     "viewer",
     "handicap_committee",
+    "marshal",
   ]);
 
   if (actor.allowedClubIds.size > 0) {
