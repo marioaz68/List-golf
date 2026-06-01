@@ -4,6 +4,7 @@ import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFro
 import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
 import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundGroup";
 import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
+import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
 
 /**
  * Cierra un match (formato Bola Baja + Alta) cuando ya está
@@ -109,19 +110,52 @@ export async function closeMatchAndAdvanceForGroup(
     };
   }
 
-  // 3) Bracket publicado en DB
-  const { data: bracket } = await admin
+  // 3) Bracket publicado en DB (si falta y la subasta está completa, publicar
+  //    aquí para no bloquear cierre desde captura).
+  let { data: bracket } = await admin
     .from("matchplay_brackets")
     .select("id, status")
     .eq("tournament_id", tournamentId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (!bracket?.id) {
+    const pub = await autoPublishOnAuctionComplete(admin, tournamentId);
+    if (pub.status === "published" || pub.status === "bracket_exists") {
+      const refetch = await admin
+        .from("matchplay_brackets")
+        .select("id, status")
+        .eq("tournament_id", tournamentId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      bracket = refetch.data;
+    } else if (pub.status === "incomplete") {
+      return {
+        ok: false,
+        error: `Faltan ${pub.pending} pareja(s) por adjudicar en la subasta antes de cerrar el match.`,
+      };
+    } else if (pub.status === "no_teams") {
+      return {
+        ok: false,
+        error: "No hay equipos activos para publicar el cuadro.",
+      };
+    } else {
+      return {
+        ok: false,
+        error:
+          pub.reason ??
+          "No se pudo publicar el cuadro automáticamente. Revisa /matchplay.",
+      };
+    }
+  }
+
   if (!bracket?.id) {
     return {
       ok: false,
       error:
-        "El torneo no tiene cuadro publicado. Publícalo en /matchplay antes de cerrar partidos automáticamente.",
+        "El torneo no tiene cuadro publicado. Publícalo en /matchplay o completa la subasta.",
     };
   }
   const bracketId = String(bracket.id);

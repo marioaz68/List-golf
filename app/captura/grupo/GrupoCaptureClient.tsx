@@ -355,6 +355,8 @@ function PlayerRow({
   savingKey,
   setSavingKey,
   onScoreSaved,
+  onMatchAutoClose,
+  onMatchAutoCloseError,
   disabledHoles,
   highlight,
 }: {
@@ -374,6 +376,14 @@ function PlayerRow({
     strokes: number | null,
     isPickedUp: boolean
   ) => void;
+  onMatchAutoClose?: (payload: {
+    message: string;
+    nextGroupCreated?: boolean;
+    nextGroupNo?: number | null;
+    nextTeeTime?: string | null;
+    bracketPublished?: boolean;
+  }) => void;
+  onMatchAutoCloseError?: (error: string) => void;
   disabledHoles?: Set<HoleNumber>;
   highlight?: "me" | "witness" | null;
 }) {
@@ -423,8 +433,33 @@ function PlayerRow({
           role: caddieIdParam ? "caddie" : meId ? "player" : null,
         }),
       });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        matchAutoClose?: {
+          attempted?: boolean;
+          closed?: boolean;
+          message?: string;
+          error?: string;
+          nextGroupCreated?: boolean;
+          nextGroupNo?: number | null;
+          nextTeeTime?: string | null;
+          bracketPublished?: boolean;
+        };
+      };
       if (res.ok) {
         onScoreSaved(player.entryId, hole, strokes, isPickedUp);
+        const ac = json.matchAutoClose;
+        if (ac?.attempted && ac.closed && ac.message) {
+          onMatchAutoClose?.({
+            message: ac.message,
+            nextGroupCreated: ac.nextGroupCreated,
+            nextGroupNo: ac.nextGroupNo,
+            nextTeeTime: ac.nextTeeTime,
+            bracketPublished: ac.bracketPublished,
+          });
+        } else if (ac?.attempted && !ac.closed && ac.error) {
+          onMatchAutoCloseError?.(ac.error);
+        }
       }
     } catch {
       // Silencioso: la siguiente sincronización del polling reflejará el estado real.
@@ -767,6 +802,132 @@ export default function GrupoCaptureClient({
   } | null>(null);
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
+  const autoCloseAttemptedRef = useRef(false);
+
+  const refreshGroupMeta = useCallback(async () => {
+    try {
+      const qs = new URLSearchParams({ group_id: meta.groupId });
+      if (meta.myEntryId) qs.set("me", meta.myEntryId);
+      const res = await fetch(`/api/captura/group?${qs.toString()}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: GroupCapturePayload;
+      };
+      if (!json.ok || !json.data) return;
+      setMeta(json.data);
+    } catch {
+      /* silencioso */
+    }
+  }, [meta.groupId, meta.myEntryId]);
+
+  function formatMatchCloseMessage(payload: {
+    message: string;
+    nextGroupCreated?: boolean;
+    nextGroupNo?: number | null;
+    nextTeeTime?: string | null;
+    bracketPublished?: boolean;
+  }): string {
+    const parts: string[] = [];
+    if (payload.bracketPublished) {
+      parts.push("Cuadro publicado automáticamente.");
+    }
+    parts.push("Match cerrado y ganador avanzado al cuadro.");
+    if (payload.nextGroupCreated) {
+      parts.push(
+        `Siguiente salida creada: Grupo ${payload.nextGroupNo}${
+          payload.nextTeeTime ? ` · ${payload.nextTeeTime}` : ""
+        }.`
+      );
+    } else if (payload.message) {
+      parts.push(payload.message);
+    }
+    return parts.join(" ");
+  }
+
+  const handleMatchAutoClose = useCallback(
+    (payload: {
+      message: string;
+      nextGroupCreated?: boolean;
+      nextGroupNo?: number | null;
+      nextTeeTime?: string | null;
+      bracketPublished?: boolean;
+    }) => {
+      setCloseFeedback({
+        kind: "ok",
+        message: formatMatchCloseMessage(payload),
+      });
+      void refreshGroupMeta();
+    },
+    [refreshGroupMeta]
+  );
+
+  const handleMatchAutoCloseError = useCallback((error: string) => {
+    setCloseFeedback({ kind: "err", message: error });
+  }, []);
+
+  // Si el match ya está decidido pero aún no cerrado en el cuadro, intentar
+  // cerrarlo al cargar (p. ej. tarjetas llenas antes de este despliegue).
+  useEffect(() => {
+    const mp = meta.matchPlay;
+    if (
+      !mp ||
+      mp.matchplayCompleted ||
+      mp.needsPlayoff ||
+      mp.decidedAtHole == null ||
+      autoCloseAttemptedRef.current
+    ) {
+      return;
+    }
+    autoCloseAttemptedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/captura/close-match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ group_id: meta.groupId }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          message?: string;
+          error?: string;
+          nextGroupCreated?: boolean;
+          nextGroupNo?: number | null;
+          nextTeeTime?: string | null;
+        };
+        if (cancelled) return;
+        if (json.ok) {
+          handleMatchAutoClose({
+            message: json.message ?? "",
+            nextGroupCreated: json.nextGroupCreated,
+            nextGroupNo: json.nextGroupNo,
+            nextTeeTime: json.nextTeeTime,
+            bracketPublished: true,
+          });
+        } else if (json.error) {
+          handleMatchAutoCloseError(json.error);
+        }
+      } catch {
+        /* silencioso */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    meta.groupId,
+    meta.matchPlay?.decidedAtHole,
+    meta.matchPlay?.matchplayCompleted,
+    meta.matchPlay?.needsPlayoff,
+    handleMatchAutoClose,
+    handleMatchAutoCloseError,
+  ]);
+
+  useEffect(() => {
+    autoCloseAttemptedRef.current = false;
+  }, [meta.groupId]);
 
   // Polling para sincronizar con cambios de otros usuarios.
   useEffect(() => {
@@ -945,13 +1106,13 @@ export default function GrupoCaptureClient({
 
             {/* CTA de cierre + avance al cuadro */}
             {meta.matchPlay.decidedAtHole != null &&
-            meta.matchPlay.matchplayMatchId &&
             !meta.matchPlay.matchplayCompleted ? (
               <CloseMatchPrompt
                 groupId={meta.groupId}
                 resultText={meta.matchPlay.resultText}
                 onClosed={(msg) => {
                   setCloseFeedback({ kind: "ok", message: msg });
+                  void refreshGroupMeta();
                 }}
                 onError={(msg) => {
                   setCloseFeedback({ kind: "err", message: msg });
@@ -1027,6 +1188,8 @@ export default function GrupoCaptureClient({
                       savingKey={savingKey}
                       setSavingKey={setSavingKey}
                       onScoreSaved={onScoreSaved}
+                      onMatchAutoClose={handleMatchAutoClose}
+                      onMatchAutoCloseError={handleMatchAutoCloseError}
                       highlight={highlight}
                     />
                   );
@@ -1081,6 +1244,8 @@ export default function GrupoCaptureClient({
                         savingKey={savingKey}
                         setSavingKey={setSavingKey}
                         onScoreSaved={onScoreSaved}
+                        onMatchAutoClose={handleMatchAutoClose}
+                        onMatchAutoCloseError={handleMatchAutoCloseError}
                         disabledHoles={playoffDisabled}
                         highlight={highlight}
                       />

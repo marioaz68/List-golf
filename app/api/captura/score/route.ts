@@ -3,6 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { saveGroupHoleScore } from "@/lib/captura/saveGroupHoleScore";
 import { resolveScoreActor } from "@/lib/captura/resolveActor";
+import { tryAutoCloseMatchForGroup } from "@/lib/matchplay/tryAutoCloseMatchForGroup";
 import type { HoleNumber } from "@/lib/captura/types";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +113,17 @@ export async function POST(req: Request) {
     if (!result.ok) {
       return NextResponse.json(result, { status: 400 });
     }
-    return NextResponse.json(result);
+
+    let matchAutoClose: Awaited<
+      ReturnType<typeof tryAutoCloseMatchForGroup>
+    > | null = null;
+    try {
+      matchAutoClose = await tryAutoCloseMatchForGroup(admin, groupId);
+    } catch {
+      // No bloquear el guardado del score si falla el cierre automático.
+    }
+
+    return NextResponse.json({ ...result, matchAutoClose });
   } catch (err) {
     return NextResponse.json(
       {
