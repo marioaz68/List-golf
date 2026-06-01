@@ -3,6 +3,7 @@ import {
   scoreLowHighHole,
   isLowHighMatchDecidedAt,
   type LowHighPlayerGross,
+  type LowHighHoleBreakdown,
 } from "./scoring/lowHigh";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
 import { loadCourseLayoutForTournament } from "./loadCourseLayout";
@@ -60,6 +61,12 @@ export type DerivedHoleResultRow = {
   top_points: number;
   bottom_points: number;
   match_status_after: string | null;
+  /**
+   * Detalle del hoyo (nets + ventajas recibidas). Permite que el modal de
+   * detalle marque los hoyos con golpe de ventaja en amarillo y pinte
+   * bola baja / bola alta usando los netos.
+   */
+  breakdown?: LowHighHoleBreakdown | null;
 };
 
 export type DerivedMatchHolesResult = {
@@ -356,6 +363,7 @@ export async function deriveMatchHolesFromStrokes(
           top_points: 0,
           bottom_points: 0,
           match_status_after: `Decidido en H${decidedAtHole}`,
+          breakdown: null,
         });
         continue;
       }
@@ -385,6 +393,7 @@ export async function deriveMatchHolesFromStrokes(
         top_points: res.top_points,
         bottom_points: res.bottom_points,
         match_status_after: res.match_status_after,
+        breakdown: res.breakdown,
       });
 
       const winner = isLowHighMatchDecidedAt({
@@ -503,6 +512,7 @@ export async function deriveMatchHolesFromStrokes(
           top_points: res.top_points,
           bottom_points: res.bottom_points,
           match_status_after: `Playoff H${p}`,
+          breakdown: res.breakdown,
         });
 
         if (res.top_points !== res.bottom_points) {

@@ -295,7 +295,9 @@ export async function loadMatchForScoring(
           top_points: pt?.top_points ?? null,
           bottom_points: pt?.bottom_points ?? null,
           match_status_after: pt?.match_status_after ?? null,
-          detail_json: null,
+          detail_json: pt?.breakdown
+            ? { breakdown: pt.breakdown }
+            : null,
         };
       });
     }
