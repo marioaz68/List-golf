@@ -122,6 +122,24 @@ function shortPlayerLabel(label: string): string {
   return `${parts[0]} ${parts[parts.length - 2]}`;
 }
 
+/** Primer nombre del label "Mario Alvarez ..." → "Mario". */
+function firstNameOf(label: string | undefined | null): string {
+  if (!label) return "—";
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  return parts[0] ?? "—";
+}
+
+/** Etiqueta corta de la pareja: "Mario · Luis" (primer nombre de cada uno). */
+function pairFirstNamesLabel(players: PlayerInfo[] | undefined): string {
+  if (!players || players.length === 0) return "—";
+  const a = firstNameOf(players[0]?.label);
+  const b = firstNameOf(players[1]?.label);
+  if (a === "—" && b === "—") return "—";
+  if (b === "—") return a;
+  if (a === "—") return b;
+  return `${a} · ${b}`;
+}
+
 export default function MatchDetailModal({
   open,
   onClose,
@@ -823,8 +841,8 @@ function PlayoffTable({
                 >
                   <span className="block text-amber-200">Puntos</span>
                   <span className="block text-[8px] font-normal text-slate-400">
-                    {shortPlayerLabel(topLabel)} −{" "}
-                    {shortPlayerLabel(bottomLabel)}
+                    {pairFirstNamesLabel(topPlayers)} −{" "}
+                    {pairFirstNamesLabel(bottomPlayers)}
                   </span>
                 </td>
                 {holes.map((h) => {
@@ -1809,8 +1827,8 @@ function HoleTable({
                 >
                   <span className="block text-amber-200">Diferencial</span>
                   <span className="block text-[8px] font-normal text-slate-400">
-                    {shortPlayerLabel(topLabel)} −{" "}
-                    {shortPlayerLabel(bottomLabel)}
+                    {pairFirstNamesLabel(topPlayers)} −{" "}
+                    {pairFirstNamesLabel(bottomPlayers)}
                   </span>
                 </td>
                 {Array.from({ length: 9 }, (_, i) => {
