@@ -13,6 +13,7 @@ import {
 import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
+import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
 import type {
   MatchPlayHandicapAllowance,
   MatchPlaySeedingMethod,
@@ -609,10 +610,20 @@ export async function updateTeamAuctionBid(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  const autoPub = await autoPublishOnAuctionComplete(admin, tournament_id);
+
   revalidatePath("/matchplay");
+  if (autoPub.status === "published") {
+    revalidatePath(`/torneos/${tournament_id}`);
+    revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+  }
   redirectMatchPlay(tournament_id, {
     bracket_status: "ok",
-    bracket_message: "Postura de subasta guardada.",
+    bracket_message:
+      autoPub.status === "published"
+        ? "Postura guardada. Cuadro publicado automáticamente."
+        : "Postura de subasta guardada.",
   });
 }
 
@@ -674,11 +685,23 @@ export async function saveAuctionSheet(formData: FormData) {
     saved++;
   }
 
+  const autoPub = await autoPublishOnAuctionComplete(admin, tournament_id);
+
   revalidatePath("/matchplay");
   revalidatePath("/matchplay/auction");
+  if (autoPub.status === "published") {
+    revalidatePath(`/torneos/${tournament_id}`);
+    revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+  }
+  const baseMsg = `Hoja guardada (${saved} equipos).`;
+  const finalMsg =
+    autoPub.status === "published"
+      ? `${baseMsg} Cuadro publicado automáticamente.`
+      : baseMsg;
   redirect(
     `/matchplay/auction?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(
-      `Hoja guardada (${saved} equipos).`
+      finalMsg
     )}`
   );
 }
@@ -723,14 +746,21 @@ export async function awardAuctionBid(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  const autoPub = await autoPublishOnAuctionComplete(admin, tournament_id);
+
   revalidatePath("/matchplay");
   revalidatePath("/matchplay/auction");
   revalidatePath("/matchplay/auction/show");
   revalidatePath("/matchplay/auction/raffle");
+  if (autoPub.status === "published") {
+    revalidatePath(`/torneos/${tournament_id}`);
+    revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+  }
 
   const awardMsg = `Adjudicado #${auction_order} en ${
     bid != null ? `$${bid.toLocaleString("es-MX")}` : "—"
-  }.`;
+  }.${autoPub.status === "published" ? " Cuadro publicado automáticamente." : ""}`;
 
   if (redirect_to === "show") {
     redirect(
