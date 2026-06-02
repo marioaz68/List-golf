@@ -625,8 +625,10 @@ export default async function ScoreEntryPage(props: {
           }
         } else if (!capture.ok) {
           if (capture.reason === "prior_not_officially_closed") {
+            // Compatibilidad: resolveEntryCaptureRound ya no devuelve esta razón
+            // (la R+1 individual no depende del cierre oficial a nivel torneo).
             scoringRoundBlocked = true;
-            priorRoundGateMessage = `La R${capture.priorRoundNo} ya está capturada en todas las categorías. El comité debe pulsar «Cerrar Ronda ${capture.priorRoundNo} definitivamente» (arriba) antes de capturar la R${capture.targetRoundNo}.`;
+            priorRoundGateMessage = `R${capture.priorRoundNo} no se puede usar como base para capturar R${capture.targetRoundNo}.`;
           } else if (capture.reason === "prior_not_closed") {
             scoringRoundBlocked = true;
             priorRoundGateMessage = fmt(se.priorRoundGate, {

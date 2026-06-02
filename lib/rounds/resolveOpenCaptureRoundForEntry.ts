@@ -3,7 +3,6 @@ import {
   isEntryRoundClosed,
   type LockedScorecardLookups,
 } from "@/lib/leaderboard/lockedScorecards";
-import { isTournamentRoundOfficiallyClosed } from "@/lib/rounds/tournamentRoundClosure";
 
 export type OpenCaptureRoundResult =
   | {
@@ -21,6 +20,11 @@ export type OpenCaptureRoundResult =
     }
   | {
       ok: false;
+      /**
+       * Reservado: el cierre oficial del torneo ya NO es prerrequisito para capturar
+       * R+1 de un jugador individual. Se mantiene la variante para compatibilidad,
+       * pero `resolveOpenCaptureRoundForEntry` no la devuelve nunca.
+       */
       reason: "prior_not_officially_closed";
       targetRoundNo: number;
       priorRoundNo: number;
@@ -38,14 +42,21 @@ export type OpenCaptureRoundResult =
 /**
  * Qué ronda debe capturarse para este inscrito:
  * la primera no cerrada en su categoría (R1, luego R2…).
- * No depende del turno AM/PM del selector de mesa.
+ *
+ * Reglas:
+ * - Solo exige que la ronda anterior de ESTE inscrito esté cerrada (tarjeta lockeada).
+ *   No depende de que el comité haya cerrado oficialmente la ronda a nivel torneo, ni
+ *   de que otros inscritos/categorías hayan terminado: en cuanto un jugador o pareja
+ *   cierra su R1, puede capturarse su R2 (las salidas siguientes ya las genera el
+ *   sistema en cuanto la pareja y su rival cierran).
+ * - El parámetro `_tournamentSettings` queda solo por compatibilidad de firma.
  */
 export function resolveOpenCaptureRoundForEntry(
   entryId: string,
   entryCategoryId: string | null,
   rounds: RoundForGate[],
   lookups: LockedScorecardLookups,
-  tournamentSettings?: unknown
+  _tournamentSettings?: unknown
 ): OpenCaptureRoundResult {
   const cat = String(entryCategoryId ?? "").trim();
   const roundNos = [...new Set(rounds.map((r) => r.round_no))]
@@ -72,17 +83,6 @@ export function resolveOpenCaptureRoundForEntry(
         return {
           ok: false,
           reason: "prior_not_closed",
-          targetRoundNo: roundNo,
-          priorRoundNo,
-        };
-      }
-      if (
-        priorRound?.id &&
-        !isTournamentRoundOfficiallyClosed(tournamentSettings, priorRoundNo)
-      ) {
-        return {
-          ok: false,
-          reason: "prior_not_officially_closed",
           targetRoundNo: roundNo,
           priorRoundNo,
         };
