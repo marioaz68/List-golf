@@ -117,15 +117,11 @@ export async function closeMatchPlayGroupRound(
     ])
   );
 
-  let minHolesRequired = 18;
-  try {
-    const mp = await loadGroupMatchPlayStatus(admin, groupId);
-    if (mp?.holesRequired != null && mp.holesRequired >= 1) {
-      minHolesRequired = Math.min(18, mp.holesRequired);
-    }
-  } catch {
-    /* default 18 */
-  }
+  // Match play: el resultado oficial vive en matchplay_matches, no en
+  // hole_scores. El cierre del grupo desde score-entry no debe exigir
+  // un mínimo de capturas hoyo por hoyo (parejas con BYE no juegan, y
+  // matches decididos antes del 18 quedan con capturas parciales).
+  const minHolesRequired = 0;
 
   let closedCount = 0;
   let alreadyLockedCount = 0;

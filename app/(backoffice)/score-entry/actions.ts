@@ -290,17 +290,14 @@ async function staffCloseRoundScorecard(
     scorecardRoundId: params.roundId,
   });
 
-  const minHoles = Math.min(
-    18,
-    Math.max(1, params.minHolesRequired ?? 18)
-  );
+  const minHoles = Math.max(0, params.minHolesRequired ?? 18);
   const holeCount = await countHolesOnPlayerRound(
     admin,
     params.playerId,
     params.roundId
   );
 
-  if (holeCount < minHoles) {
+  if (minHoles > 0 && holeCount < minHoles) {
     throw new Error(
       `No se puede cerrar la ronda: faltan hoyos (${holeCount}/${minHoles}). Complete la tarjeta o use solo «Guardar scores».`
     );
