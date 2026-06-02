@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 
 interface GroupDot {
@@ -11,6 +11,7 @@ interface GroupDot {
   hoyo: number;
   status: "en_ritmo" | "adelantado" | "atrasado";
   label: string;
+  detail?: string;
 }
 
 const STATUS_COLOR: Record<GroupDot["status"], string> = {
@@ -25,17 +26,34 @@ const HOYO_COLORS = [
   "#FFAB40","#EEFF41","#FF6E40","#69F0AE","#FFFF8D","#FFD180",
 ];
 
+/**
+ * Mapa rotado 90° con CSS para que el eje largo del campo quede horizontal
+ * y aproveche mejor la pantalla landscape. El contenido visible (markers,
+ * etiquetas) se contra-rotan para que el texto siga legible.
+ */
 export function RitmoMap({ groups }: { groups: GroupDot[] }) {
-  const mapRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
 
+  // Medir el container y reaccionar a resize/rotación
   useEffect(() => {
-    if (!mapRef.current) return;
-    let leafletMap: any = null;
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setSize({ w: Math.round(r.width), h: Math.round(r.height) });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Inicializar/reiniciar Leaflet cuando hay tamaño válido
+  useEffect(() => {
+    if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
     let cleanup = () => {};
 
-    // Cargar Leaflet dinámicamente desde CDN (sin agregar dep a package.json)
     (async () => {
-      // CSS
+      // Cargar Leaflet desde CDN sin agregar dep
       if (!document.querySelector('link[data-leaflet]')) {
         const css = document.createElement("link");
         css.rel = "stylesheet";
@@ -43,110 +61,119 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
         css.setAttribute("data-leaflet", "1");
         document.head.appendChild(css);
       }
-      // JS
       if (!(window as any).L) {
         await new Promise<void>((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-          script.onload = () => resolve();
-          script.onerror = () => reject(new Error("Leaflet failed to load"));
-          document.head.appendChild(script);
+          const s = document.createElement("script");
+          s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("Leaflet failed to load"));
+          document.head.appendChild(s);
         });
       }
       const L = (window as any).L;
 
-      const map = L.map(mapRef.current, {
+      const map = L.map(mapDivRef.current, {
         center: [20.5625, -100.4078],
         zoom: 17,
         maxZoom: 20,
         zoomControl: true,
       });
-      leafletMap = map;
 
+      // Satélite "puro" (sin labels de calle) para que la rotación no las muestre sideways
       L.tileLayer(
-        "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+        "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         { subdomains: ["0", "1", "2", "3"], maxZoom: 21, maxNativeZoom: 20, attribution: "© Google" }
       ).addTo(map);
 
-      // Polígonos de hoyos
+      // Capa invisible solo para calcular bounds del campo (no se dibuja)
       const holesLayer = L.geoJSON(CCQ_HOLES, {
-        style: (f: any) => ({
-          color: HOYO_COLORS[(f.properties.hoyo - 1) % HOYO_COLORS.length],
-          weight: 1.5,
-          fillOpacity: 0.15,
-          fillColor: HOYO_COLORS[(f.properties.hoyo - 1) % HOYO_COLORS.length],
-        }),
-      }).addTo(map);
+        style: () => ({ opacity: 0, fillOpacity: 0, weight: 0 }),
+      });
+      // (No la agregamos al mapa — solo la usamos para fitBounds más abajo)
 
-      // Etiquetas de hoyos
+      // Etiquetas de hoyos, contra-rotadas para que el texto se lea horizontal
       CCQ_HOLES.features.forEach((f: any) => {
         const center = L.geoJSON(f).getBounds().getCenter();
         L.marker(center, {
           icon: L.divIcon({
             className: "",
-            html: `<div style="background:rgba(0,0,0,0.6);color:#fff;border:1px solid ${HOYO_COLORS[(f.properties.hoyo-1)%HOYO_COLORS.length]};padding:1px 6px;border-radius:10px;font-weight:600;font-size:10px;font-family:Arial,sans-serif;">H${f.properties.hoyo}</div>`,
-            iconSize: [24, 18], iconAnchor: [12, 9],
+            html: `<div style="transform: rotate(90deg); transform-origin: center;">
+              <div style="background:rgba(0,0,0,0.75);color:#fff;border:1px solid ${HOYO_COLORS[(f.properties.hoyo-1)%HOYO_COLORS.length]};padding:1px 6px;border-radius:10px;font-weight:700;font-size:11px;font-family:Arial,sans-serif;display:inline-block;">H${f.properties.hoyo}</div>
+            </div>`,
+            iconSize: [30, 22], iconAnchor: [15, 11],
           }),
           interactive: false,
         }).addTo(map);
       });
 
-      // Puntos de los grupos
-      const groupMarkers: any[] = [];
+      // Puntos de grupos (también contra-rotados para que se lean derechos)
       groups.forEach((g) => {
         const color = STATUS_COLOR[g.status];
-        const marker = L.marker([g.lat, g.lon], {
+        L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="position:relative;">
+              <div style="transform: rotate(90deg); transform-origin: center; position: relative;">
                 <div style="
-                  position:absolute; left:-14px; top:-14px;
-                  width:28px; height:28px; border-radius:50%;
+                  position:absolute; left:-16px; top:-16px;
+                  width:32px; height:32px; border-radius:50%;
                   background:${color};
                   border:3px solid #fff;
-                  box-shadow:0 2px 6px rgba(0,0,0,0.5);
+                  box-shadow:0 2px 8px rgba(0,0,0,0.6);
                   display:flex; align-items:center; justify-content:center;
-                  color:#fff; font-weight:700; font-size:13px;
+                  color:#fff; font-weight:700; font-size:14px;
                   font-family:Arial,sans-serif;
                 ">${g.number}</div>
                 <div style="
-                  position:absolute; left:18px; top:-10px;
-                  background:rgba(0,0,0,0.85); color:#fff;
-                  padding:2px 8px; border-radius:6px;
+                  position:absolute; left:20px; top:-10px;
+                  background:rgba(0,0,0,0.88); color:#fff;
+                  padding:3px 8px; border-radius:6px;
                   font-size:11px; white-space:nowrap;
                   font-family:Arial,sans-serif;
                   border:1px solid ${color};
-                ">${g.label}</div>
+                ">${g.label} · ${g.detail ?? ""}</div>
               </div>
             `,
             iconSize: [0, 0],
           }),
         }).addTo(map);
-        groupMarkers.push(marker);
       });
 
-      // Ajustar al campo con padding mínimo (que llene la pantalla)
       const fitToCourse = () => {
         map.invalidateSize();
-        map.fitBounds(holesLayer.getBounds(), { padding: [10, 10] });
+        map.fitBounds(holesLayer.getBounds(), { padding: [20, 20] });
       };
       fitToCourse();
 
-      // Re-ajustar si cambia el tamaño de ventana o rota el dispositivo
-      const onResize = () => fitToCourse();
-      window.addEventListener("resize", onResize);
-      window.addEventListener("orientationchange", onResize);
-
       cleanup = () => {
-        window.removeEventListener("resize", onResize);
-        window.removeEventListener("orientationchange", onResize);
         map.remove();
       };
     })();
 
     return () => cleanup();
-  }, [groups]);
+  }, [size.w, size.h, groups]);
 
-  return <div ref={mapRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative", background: "#000" }}
+    >
+      {size.w > 0 && size.h > 0 && (
+        <div
+          ref={mapDivRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            // dimensiones invertidas: el map "cree" que es retrato
+            width: size.h,
+            height: size.w,
+            // rotar -90deg, luego trasladar para que entre en el viewport
+            transformOrigin: "0 0",
+            transform: `translate(0, ${size.h}px) rotate(-90deg)`,
+          }}
+        />
+      )}
+    </div>
+  );
 }
