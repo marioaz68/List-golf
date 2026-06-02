@@ -20,6 +20,8 @@ import {
 } from "@/lib/telegram/sendMessage";
 import { isTelegramIdRequest, parseTelegramCommand } from "@/lib/telegram/parseCommand";
 import { resolveTelegramUserId } from "@/lib/telegram/resolveUserId";
+import { handleRitmoLocationUpdate } from "@/lib/telegram/ritmo/handleLocationUpdate";
+import { isRitmoStatusCommand, buildRitmoStatusReply } from "@/lib/telegram/ritmo/commands";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -126,6 +128,28 @@ export async function POST(req: Request) {
       chatType,
     });
     const command = parseTelegramCommand(text);
+
+    // === RITMO DE JUEGO: Live Location ===
+    // Si el update trae una ubicación (compartida o live), procesarla y salir.
+    if (parsed.location && userId && supabase) {
+      const result = await handleRitmoLocationUpdate(supabase, {
+        telegramUserId: userId,
+        lat: parsed.location.lat,
+        lon: parsed.location.lon,
+        messageId: parsed.messageId,
+        isLiveUpdate: parsed.isEditedMessage,
+      });
+      if (result.silent) {
+        return NextResponse.json({ ok: true, ritmo: "silent_update" });
+      }
+      if (result.reply) {
+        await sendTelegramMessage({
+          chatId: chatId || userId,
+          text: result.reply,
+        });
+      }
+      return NextResponse.json({ ok: true, ritmo: "processed" });
+    }
 
     let replyText = "No pude procesar tu mensaje.";
 
@@ -343,15 +367,18 @@ export async function POST(req: Request) {
           } else {
             replyText = await buildPlayerGroupTelegramReply(supabase, player.id);
           }
+        } else if (isRitmoStatusCommand(command)) {
+          replyText = await buildRitmoStatusReply(supabase, userId);
         } else if (command === "HOLA") {
-          replyText = `Hola ${playerName}, ya te identifiqué correctamente.\n\nComandos: ID · RECIBIDO · RECIBIDO PARCIAL · GRUPO · INICIO`;
+          replyText = `Hola ${playerName}, ya te identifiqué correctamente.\n\nComandos: ID · RECIBIDO · RECIBIDO PARCIAL · GRUPO · INICIO · RITMO`;
         } else {
           replyText =
             `Hola ${playerName}.\n` +
             `Comandos:\n` +
             `HOLA — verificar vínculo\n` +
             `RECIBIDO / RECIBIDO PARCIAL — confirmar kit\n` +
-            `GRUPO o INICIO — salida, grupo y captura (tras confirmar kit)`;
+            `GRUPO o INICIO — salida, grupo y captura (tras confirmar kit)\n` +
+            `RITMO — ritmo actual de tu grupo (comparte Live Location primero)`;
         }
       }
     }
