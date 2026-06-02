@@ -981,6 +981,59 @@ export default async function ScoreEntryPage(props: {
         const gid = String(memberRow?.group_id ?? "").trim();
         if (gid) matchPlayGroupId = gid;
       }
+
+      // BYE / sin pairing en la ronda activa: buscar en rondas siguientes
+      // del mismo torneo. Una pareja con bye en R1 no tiene
+      // pairing_group_members en R1 pero sí en R2 (o donde le toque).
+      if (!matchPlayGroupId) {
+        const currentRoundNo =
+          roundListAll.find((r) => r.id === scoringRoundId)?.round_no ?? 1;
+        const laterRoundIds = roundListAll
+          .filter(
+            (r) =>
+              r.tournament_id === effectiveTournamentId &&
+              (r.round_no ?? 0) > currentRoundNo
+          )
+          .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0))
+          .map((r) => r.id);
+
+        if (laterRoundIds.length > 0) {
+          const { data: laterGroups } = await admin
+            .from("pairing_groups")
+            .select("id, round_id")
+            .in("round_id", laterRoundIds);
+          const laterGroupIds = (laterGroups ?? [])
+            .map((g) => String(g.id ?? "").trim())
+            .filter(Boolean);
+          if (laterGroupIds.length > 0) {
+            const { data: laterMember } = await admin
+              .from("pairing_group_members")
+              .select("group_id")
+              .eq("entry_id", matchedEntryForLinks.id)
+              .in("group_id", laterGroupIds)
+              .limit(1)
+              .maybeSingle();
+            const lateGid = String(laterMember?.group_id ?? "").trim();
+            if (lateGid) {
+              matchPlayGroupId = lateGid;
+              const lateGroupRoundId =
+                (laterGroups ?? []).find(
+                  (g) => String(g.id ?? "").trim() === lateGid
+                )?.round_id ?? null;
+              const lateRound = roundListAll.find(
+                (r) => r.id === lateGroupRoundId
+              );
+              if (lateRound) {
+                scoringRoundId = lateRound.id;
+                captureRoundNotice = `Pareja con BYE en R${currentRoundNo}. Capturando R${lateRound.round_no ?? "?"} (siguiente ronda con grupo asignado).`;
+                roundClosed = false;
+                scoringRoundBlocked = false;
+                priorRoundGateMessage = "";
+              }
+            }
+          }
+        }
+      }
       if (matchPlayGroupId && matchedEntryForLinks) {
         matchPlayGroupCapture = await loadGroupCapture(admin, matchPlayGroupId, {
           meEntryId: matchedEntryForLinks.id,
