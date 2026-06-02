@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import GrupoCaptureClient from "@/app/captura/grupo/GrupoCaptureClient";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
@@ -39,6 +40,15 @@ export default function ScoreEntryMatchPlayGroupPanel({
     : allLocked
       ? `Abrir captura R${nextRoundLabel} →`
       : `Cerrar todas y abrir R${nextRoundLabel} →`;
+
+  const backHref = buildScoreEntryHref({
+    tournamentId,
+    q: searchQuery,
+    entryId: anchorEntryId,
+  });
+  const backQs = `&back=${encodeURIComponent(backHref)}`;
+  const tarjetaCompletaHref = `/captura/tarjeta?group_id=${initialGroup.groupId}${backQs}`;
+  const capturaRapidaHref = `/captura/grupo?group_id=${initialGroup.groupId}${backQs}`;
 
   useEffect(() => {
     if (!state.ok || redirectedRef.current) return;
@@ -97,6 +107,20 @@ export default function ScoreEntryMatchPlayGroupPanel({
               {buttonLabel}
             </button>
           </form>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <Link
+            href={tarjetaCompletaHref}
+            className="inline-flex items-center justify-center rounded-md border-2 border-emerald-600 bg-white px-3 py-1.5 font-bold text-emerald-900 hover:bg-emerald-50"
+          >
+            Tarjeta completa (hoyo por hoyo) →
+          </Link>
+          <Link
+            href={capturaRapidaHref}
+            className="inline-flex items-center justify-center rounded-md border border-emerald-400 bg-white px-3 py-1.5 font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            Captura rápida (pantalla completa) →
+          </Link>
         </div>
         {state.message ? (
           <p
