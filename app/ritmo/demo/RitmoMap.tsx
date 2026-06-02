@@ -12,6 +12,8 @@ interface GroupDot {
   status: "en_ritmo" | "adelantado" | "atrasado";
   label: string;
   detail?: string;
+  role?: "normal" | "blocker" | "blocked";
+  blockedBy?: number;
 }
 
 const STATUS_COLOR: Record<GroupDot["status"], string> = {
@@ -19,6 +21,7 @@ const STATUS_COLOR: Record<GroupDot["status"], string> = {
   adelantado: "#3b82f6",
   atrasado: "#ef4444",
 };
+const BLOCKED_COLOR = "#f59e0b"; // amarillo/naranja para "víctimas"
 
 const HOYO_COLORS = [
   "#FF1744","#00E676","#FFEA00","#2979FF","#FF9100","#D500F9",
@@ -106,14 +109,30 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
         }).addTo(map);
       });
 
-      // Puntos de grupos: solo círculo con número y color (sin etiqueta de texto)
+      // Puntos de grupos
       groups.forEach((g) => {
-        const color = STATUS_COLOR[g.status];
+        const isBlocker = g.role === "blocker";
+        const isBlocked = g.role === "blocked";
+        const color = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
+        const ring = isBlocker
+          ? `<div style="
+              position:absolute; left:-7px; top:-7px;
+              width:50px; height:50px; border-radius:50%;
+              border:3px solid ${color};
+              animation: pulse-ring 1.5s ease-out infinite;
+              pointer-events:none;
+            "></div>`
+          : "";
+        const blockerIcon = isBlocker
+          ? `<div style="position:absolute; left:30px; top:-26px; font-size:22px;">🚦</div>`
+          : "";
+
         L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="transform: rotate(90deg); transform-origin: center;">
+              <div style="transform: rotate(90deg); transform-origin: center; position: relative;">
+                ${ring}
                 <div style="
                   width:36px; height:36px; border-radius:50%;
                   background:${color};
@@ -123,6 +142,7 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
                   color:#fff; font-weight:800; font-size:16px;
                   font-family:Arial,sans-serif;
                 ">${g.number}</div>
+                ${blockerIcon}
               </div>
             `,
             iconSize: [36, 36],
@@ -130,6 +150,19 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
           }),
         }).addTo(map);
       });
+
+      // Animación CSS para el anillo pulsante del bloqueador
+      if (!document.querySelector("style[data-ritmo-anim]")) {
+        const style = document.createElement("style");
+        style.setAttribute("data-ritmo-anim", "1");
+        style.innerHTML = `
+          @keyframes pulse-ring {
+            0%   { transform: scale(0.85); opacity: 1; }
+            100% { transform: scale(1.5);  opacity: 0; }
+          }
+        `;
+        document.head.appendChild(style);
+      }
 
       // Fit + zoom-in extra para que el campo llene la pantalla
       const fitToCourse = () => {

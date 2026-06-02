@@ -1,27 +1,55 @@
 import { RitmoMap } from "./RitmoMap";
 import { SidebarGroups } from "./SidebarGroups";
 
-// Datos ficticios — no toca DB. Solo para visualización demo.
+/**
+ * Demo con 6 grupos que ilustra los 3 escenarios reales de ritmo:
+ *  1. Grupo en ritmo o adelantado (verde / azul)
+ *  2. Grupo "atrasado vs reloj" pero EN RITMO DEL CAMPO (sigue al de enfrente con gap normal)
+ *  3. Grupo verdaderamente lento (bloqueador) + víctimas pegadas detrás
+ *
+ * En producción el `status` y `role` se calculan server-side comparando hoyos
+ * actuales contra grupo en frente (ver paceAnalyzer en próximo paso).
+ */
 const DEMO_GROUPS = [
   {
-    id: "G1", number: 1, lat: 20.56120, lon: -100.40860, hoyo: 5,
-    status: "en_ritmo" as const, label: "Hoyo 5", detail: "✅ En ritmo", tee: "08:00",
+    id: "G1", number: 1, lat: 20.55520, lon: -100.40550, hoyo: 14,
+    status: "en_ritmo" as const, label: "Hoyo 14", detail: "✅ En ritmo (primer grupo)", tee: "08:00",
     players: ["Mario Alvarez", "Luis Nava", "Carlos Alcocer", "Rodrigo Soto"],
+    role: "normal" as const,
   },
   {
-    id: "G2", number: 2, lat: 20.56240, lon: -100.40760, hoyo: 8,
-    status: "adelantado" as const, label: "Hoyo 8", detail: "🟢 Adelantado 6 min", tee: "08:10",
+    id: "G2", number: 2, lat: 20.55600, lon: -100.40510, hoyo: 15,
+    status: "adelantado" as const, label: "Hoyo 15", detail: "🟢 Adelantado · va rápido", tee: "08:10",
     players: ["Pablo Mendez", "Santiago Vazquez", "Mauricio Borja", "Juan Pablo Borja"],
+    role: "normal" as const,
   },
   {
-    id: "G3", number: 3, lat: 20.55700, lon: -100.40720, hoyo: 12,
-    status: "atrasado" as const, label: "Hoyo 12", detail: "⚠️ Atrasado 14 min", tee: "08:20",
+    id: "G3", number: 3, lat: 20.55480, lon: -100.40580, hoyo: 14,
+    status: "en_ritmo" as const, label: "Hoyo 14",
+    detail: "✅ En ritmo del campo · sigue a G2 (gap normal)", tee: "08:20",
     players: ["Emilio Hernandez", "Horacio Ovando", "Alfonso Suarez", "Jorge Vargas"],
+    role: "normal" as const,
   },
   {
-    id: "G4", number: 4, lat: 20.55880, lon: -100.40460, hoyo: 16,
-    status: "en_ritmo" as const, label: "Hoyo 16", detail: "✅ En ritmo", tee: "08:30",
+    id: "G4", number: 4, lat: 20.55700, lon: -100.40720, hoyo: 10,
+    status: "atrasado" as const, label: "Hoyo 10",
+    detail: "🚦 Lento real · 4 hoyos detrás de G3 · BLOQUEA AL FIELD", tee: "08:30",
     players: ["Rodrigo Urquiza", "Mario Urquiza", "Javier Urquiza", "Eduardo Carrillo"],
+    role: "blocker" as const,
+  },
+  {
+    id: "G5", number: 5, lat: 20.55730, lon: -100.40745, hoyo: 10,
+    status: "atrasado" as const, label: "Hoyo 10",
+    detail: "↑ Pegado a G4 (no es su culpa)", tee: "08:40",
+    players: ["Manuel Ochoa", "Manuel Ramirez", "Israel Pacheco", "Rogelio Molina"],
+    role: "blocked" as const, blockedBy: 4,
+  },
+  {
+    id: "G6", number: 6, lat: 20.55810, lon: -100.40780, hoyo: 9,
+    status: "atrasado" as const, label: "Hoyo 9",
+    detail: "↑ Pegado a G4 (no es su culpa)", tee: "08:50",
+    players: ["Juan Reyes", "Eduardo Urbiola", "Faro Niembro", "Oscar Vazquez"],
+    role: "blocked" as const, blockedBy: 4,
   },
 ];
 

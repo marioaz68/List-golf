@@ -11,6 +11,8 @@ interface DemoGroup {
   detail: string;
   tee: string;
   players: string[];
+  role?: "normal" | "blocker" | "blocked";
+  blockedBy?: number;
 }
 
 const STATUS_COLOR: Record<DemoGroup["status"], string> = {
@@ -18,6 +20,7 @@ const STATUS_COLOR: Record<DemoGroup["status"], string> = {
   adelantado: "#3b82f6",
   atrasado: "#ef4444",
 };
+const BLOCKED_COLOR = "#f59e0b";
 
 export function SidebarGroups({ groups }: { groups: DemoGroup[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -44,11 +47,17 @@ export function SidebarGroups({ groups }: { groups: DemoGroup[] }) {
       <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
         {groups.map((g) => {
           const isOpen = openId === g.id;
+          const isBlocker = g.role === "blocker";
+          const isBlocked = g.role === "blocked";
+          const accent = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
+          const detailColor = isBlocker ? "#fecaca" : isBlocked ? "#fde68a" : "#d1d5db";
           return (
             <div key={g.id} style={{
-              background: "#1a1a1a", border: `1px solid ${STATUS_COLOR[g.status]}33`,
-              borderLeft: `4px solid ${STATUS_COLOR[g.status]}`,
+              background: isBlocker ? "#3f0d0d" : "#1a1a1a",
+              border: `1px solid ${accent}55`,
+              borderLeft: `4px solid ${accent}`,
               borderRadius: 6, marginBottom: 6, overflow: "hidden",
+              boxShadow: isBlocker ? `0 0 0 1px ${accent}66, 0 0 12px ${accent}40` : "none",
             }}>
               <button
                 onClick={() => setOpenId(isOpen ? null : g.id)}
@@ -63,17 +72,23 @@ export function SidebarGroups({ groups }: { groups: DemoGroup[] }) {
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{
                       width: 22, height: 22, borderRadius: "50%",
-                      background: STATUS_COLOR[g.status],
+                      background: accent,
                       color: "#fff", fontSize: 12, fontWeight: 700,
                       display: "flex", alignItems: "center", justifyContent: "center",
                     }}>{g.number}</div>
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{g.label}</div>
+                    {isBlocker && (
+                      <span style={{
+                        fontSize: 9, background: "#dc2626", color: "#fff",
+                        padding: "1px 5px", borderRadius: 3, fontWeight: 800,
+                      }}>🚦 BLOQUEA</span>
+                    )}
                   </div>
                   <div style={{ fontSize: 10, color: "#9ca3af" }}>
                     tee {g.tee} · {isOpen ? "▾" : "▸"}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: "#d1d5db", marginTop: 4 }}>{g.detail}</div>
+                <div style={{ fontSize: 11, color: detailColor, marginTop: 4 }}>{g.detail}</div>
               </button>
 
               {isOpen && (
