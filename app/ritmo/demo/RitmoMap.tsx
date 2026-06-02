@@ -106,42 +106,39 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
         }).addTo(map);
       });
 
-      // Puntos de grupos (también contra-rotados para que se lean derechos)
+      // Puntos de grupos: solo círculo con número y color (sin etiqueta de texto)
       groups.forEach((g) => {
         const color = STATUS_COLOR[g.status];
         L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="transform: rotate(90deg); transform-origin: center; position: relative;">
+              <div style="transform: rotate(90deg); transform-origin: center;">
                 <div style="
-                  position:absolute; left:-16px; top:-16px;
-                  width:32px; height:32px; border-radius:50%;
+                  width:36px; height:36px; border-radius:50%;
                   background:${color};
                   border:3px solid #fff;
-                  box-shadow:0 2px 8px rgba(0,0,0,0.6);
+                  box-shadow:0 2px 10px rgba(0,0,0,0.7);
                   display:flex; align-items:center; justify-content:center;
-                  color:#fff; font-weight:700; font-size:14px;
+                  color:#fff; font-weight:800; font-size:16px;
                   font-family:Arial,sans-serif;
                 ">${g.number}</div>
-                <div style="
-                  position:absolute; left:20px; top:-10px;
-                  background:rgba(0,0,0,0.88); color:#fff;
-                  padding:3px 8px; border-radius:6px;
-                  font-size:11px; white-space:nowrap;
-                  font-family:Arial,sans-serif;
-                  border:1px solid ${color};
-                ">${g.label} · ${g.detail ?? ""}</div>
               </div>
             `,
-            iconSize: [0, 0],
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
           }),
         }).addTo(map);
       });
 
+      // Fit + zoom-in extra para que el campo llene la pantalla
       const fitToCourse = () => {
         map.invalidateSize();
-        map.fitBounds(holesLayer.getBounds(), { padding: [20, 20] });
+        const bounds = holesLayer.getBounds();
+        map.fitBounds(bounds, { padding: [10, 10], animate: false });
+        // Forzar un nivel de zoom adicional para crecer el campo
+        const z = map.getZoom();
+        map.setZoom(Math.min(z + 1, 20), { animate: false });
       };
       fitToCourse();
 
