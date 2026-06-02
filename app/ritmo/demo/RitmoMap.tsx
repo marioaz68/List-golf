@@ -126,10 +126,21 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
         groupMarkers.push(marker);
       });
 
-      // Ajustar al campo
-      map.fitBounds(holesLayer.getBounds(), { padding: [40, 40] });
+      // Ajustar al campo con padding mínimo (que llene la pantalla)
+      const fitToCourse = () => {
+        map.invalidateSize();
+        map.fitBounds(holesLayer.getBounds(), { padding: [10, 10] });
+      };
+      fitToCourse();
+
+      // Re-ajustar si cambia el tamaño de ventana o rota el dispositivo
+      const onResize = () => fitToCourse();
+      window.addEventListener("resize", onResize);
+      window.addEventListener("orientationchange", onResize);
 
       cleanup = () => {
+        window.removeEventListener("resize", onResize);
+        window.removeEventListener("orientationchange", onResize);
         map.remove();
       };
     })();
@@ -137,5 +148,5 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
     return () => cleanup();
   }, [groups]);
 
-  return <div ref={mapRef} style={{ flex: 1, width: "100%" }} />;
+  return <div ref={mapRef} style={{ width: "100%", height: "100%" }} />;
 }
