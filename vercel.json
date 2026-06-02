@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/ritmo/check-reminders",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

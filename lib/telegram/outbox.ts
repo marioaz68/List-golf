@@ -5,7 +5,12 @@ import {
   type TelegramInlineButton,
 } from "@/lib/telegram/sendMessage";
 
-export type OutboxKind = "next_round_group" | "tee_kit_invite" | "generic";
+export type OutboxKind =
+  | "next_round_group"
+  | "tee_kit_invite"
+  | "ritmo_share_invite"
+  | "ritmo_share_late"
+  | "generic";
 
 export type SendAndTrackOptions = {
   tournamentId: string;
