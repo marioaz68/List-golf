@@ -17,7 +17,14 @@
  * tarjetas y tarjetas privadas usar /captura/tarjeta.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BackButton from "@/components/captura/BackButton";
@@ -82,34 +89,40 @@ function sumPar(holes: HoleNumber[]): number {
   return holes.reduce((acc, h) => acc + (PAR_BY_HOLE[h] ?? 0), 0);
 }
 
-/** Avanza el foco a la siguiente celda de score (habilitada) en orden
- *  visual. Si la fila del jugador termina, salta al primer hoyo del
- *  siguiente jugador automáticamente (orden del DOM). Si no hay
- *  siguiente, hace `blur()`.
- *
- *  Se llama sincrónicamente desde el handler de input para preservar el
- *  contexto de gesto del usuario en iOS (de lo contrario el teclado
- *  móvil podría cerrarse al cambiar de input).
- */
-function focusNextScoreCell(current: HTMLInputElement): void {
+/** Localiza la siguiente celda editable en orden DOM (misma tabla de captura). */
+function findNextScoreCell(
+  current: HTMLInputElement
+): HTMLInputElement | null {
+  const grid = current.closest('[data-capture-grid="1"]');
+  const scope = grid ?? document;
   const all = Array.from(
-    document.querySelectorAll<HTMLInputElement>('input[data-score-cell="1"]')
+    scope.querySelectorAll<HTMLInputElement>('input[data-score-cell="1"]')
   );
   const idx = all.indexOf(current);
-  if (idx < 0) return;
+  if (idx < 0) return null;
   for (let i = idx + 1; i < all.length; i += 1) {
     const el = all[i];
-    if (el && !el.disabled && !el.readOnly) {
-      el.focus();
-      try {
-        el.select();
-      } catch {
-        /* algunos navegadores móviles lanzan al seleccionar; ignorar */
-      }
-      return;
-    }
+    if (el && !el.disabled && !el.readOnly) return el;
   }
-  // No hay siguiente celda: cerramos el teclado en mobile.
+  return null;
+}
+
+function focusScoreInput(el: HTMLInputElement): void {
+  el.focus();
+  try {
+    el.select();
+  } catch {
+    /* algunos navegadores móviles lanzan al seleccionar; ignorar */
+  }
+}
+
+/** Avanza el foco a la siguiente celda. Si no hay siguiente, hace blur. */
+function focusNextScoreCell(current: HTMLInputElement): void {
+  const next = findNextScoreCell(current);
+  if (next) {
+    focusScoreInput(next);
+    return;
+  }
   current.blur();
 }
 
@@ -137,6 +150,8 @@ function focusNextScoreCell(current: HTMLInputElement): void {
  * sigue tecleando, se debouncea ~150 ms.
  */
 function ScoreCell({
+  entryId,
+  hole,
   value,
   par,
   isPending,
@@ -145,7 +160,10 @@ function ScoreCell({
   pickedUp,
   allowPickup,
   onCommit,
+  onQueueFocus,
 }: {
+  entryId: string;
+  hole: HoleNumber;
   value: number | null;
   par: number;
   isPending: boolean;
@@ -156,12 +174,16 @@ function ScoreCell({
   /** Si true, se acepta "x"/"X" para marcar levantó. Sólo match play. */
   allowPickup?: boolean;
   onCommit: (next: number | null, options?: { pickedUp?: boolean }) => void;
+  /** Tras un re-render del padre, enfocar esta celda (entryId + hoyo). */
+  onQueueFocus?: (entryId: string, hole: HoleNumber) => void;
 }) {
   const initialDraft = pickedUp ? "X" : value != null ? String(value) : "";
   const [draft, setDraft] = useState<string>(initialDraft);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /** Evita que handleBlur revierta el draft mientras movemos el foco. */
+  const advancingRef = useRef(false);
   const lastCommittedRef = useRef<{ strokes: number | null; pickedUp: boolean }>({
     strokes: value,
     pickedUp: Boolean(pickedUp),
@@ -199,19 +221,33 @@ function ScoreCell({
 
   function scheduleAdvance(delayMs: number) {
     if (advanceRef.current) clearTimeout(advanceRef.current);
-    // Para preservar el contexto de gesto del usuario en iOS (que cierra
-    // el teclado si el cambio de focus se hace fuera del handler), cuando
-    // delayMs es 0 movemos el focus sincrónicamente. Para delays mayores
-    // (p. ej. al confirmar tras pegar texto) usamos setTimeout normal.
-    if (delayMs <= 0) {
+    const run = () => {
       const el = inputRef.current;
-      if (el) focusNextScoreCell(el);
+      if (!el) return;
+      const next = findNextScoreCell(el);
+      if (!next) {
+        el.blur();
+        return;
+      }
+      const nextEntry = next.dataset.entryId ?? "";
+      const nextHole = Number(next.dataset.hole ?? "");
+      advancingRef.current = true;
+      if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
+        onQueueFocus(nextEntry, nextHole as HoleNumber);
+      } else {
+        focusScoreInput(next);
+      }
+      queueMicrotask(() => {
+        advancingRef.current = false;
+      });
+    };
+    // Encolamos la celda destino de inmediato; el foco real se aplica en
+    // useLayoutEffect del padre tras el update optimista (microtask).
+    if (delayMs <= 0) {
+      run();
       return;
     }
-    advanceRef.current = setTimeout(() => {
-      const el = inputRef.current;
-      if (el) focusNextScoreCell(el);
-    }, delayMs);
+    advanceRef.current = setTimeout(run, delayMs);
   }
 
   function cancelAdvance() {
@@ -262,8 +298,7 @@ function ScoreCell({
       const compact = trimmed.replace(/\s+/g, "");
       if (compact.length > 0 && /^[xX]+$/.test(compact)) {
         setDraft("X");
-        scheduleCommit(null, true);
-        // X es valor final → avanzar de inmediato.
+        flushCommit(null, true);
         scheduleAdvance(0);
         return;
       }
@@ -300,12 +335,12 @@ function ScoreCell({
       cancelAdvance();
       return;
     }
-    scheduleCommit(Math.trunc(n), false);
-    // Auto-avance: 2-9 o 10-15 son valores finales → saltar ya.
+    flushCommit(Math.trunc(n), false);
     scheduleAdvance(0);
   }
 
   function handleBlur() {
+    if (advancingRef.current) return;
     // Leemos del input directamente (no del `draft` capturado en clousure)
     // porque cuando blur llega después de un cambio de focus sincrónico,
     // el estado `draft` puede no estar todavía propagado al render.
@@ -363,6 +398,8 @@ function ScoreCell({
     <input
       ref={inputRef}
       data-score-cell="1"
+      data-entry-id={entryId}
+      data-hole={hole}
       type="text"
       inputMode={allowPickup ? "text" : "numeric"}
       pattern={allowPickup ? "[0-9xX]*" : "[0-9]*"}
@@ -388,7 +425,19 @@ function ScoreCell({
           cancelAdvance();
           if (e.key === "Enter") {
             e.preventDefault();
-            focusNextScoreCell(e.currentTarget as HTMLInputElement);
+            const el = e.currentTarget as HTMLInputElement;
+            const next = findNextScoreCell(el);
+            if (!next) {
+              el.blur();
+              return;
+            }
+            const nextEntry = next.dataset.entryId ?? "";
+            const nextHole = Number(next.dataset.hole ?? "");
+            if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
+              onQueueFocus(nextEntry, nextHole as HoleNumber);
+            } else {
+              focusNextScoreCell(el);
+            }
           }
         }
       }}
@@ -418,6 +467,7 @@ function PlayerRow({
   onMatchAutoCloseError,
   disabledHoles,
   highlight,
+  onQueueFocus,
 }: {
   player: GroupCapturePlayer;
   scores: HoleScores;
@@ -445,6 +495,7 @@ function PlayerRow({
   onMatchAutoCloseError?: (error: string) => void;
   disabledHoles?: Set<HoleNumber>;
   highlight?: "me" | "witness" | null;
+  onQueueFocus?: (entryId: string, hole: HoleNumber) => void;
 }) {
   const rowBg =
     highlight === "me"
@@ -473,8 +524,11 @@ function PlayerRow({
   ) {
     const key = `${player.entryId}-${hole}`;
     setSavingKey(key);
-    // Optimistic: el número se ve al instante (sobre todo 10–15 de dos dígitos).
-    onScoreSaved(player.entryId, hole, strokes, isPickedUp);
+    // Optimistic diferido: si corre en el mismo tick que el cambio de foco,
+    // el re-render del padre roba el foco de la siguiente celda.
+    queueMicrotask(() => {
+      onScoreSaved(player.entryId, hole, strokes, isPickedUp);
+    });
     try {
       const sp = new URLSearchParams(window.location.search);
       const meId = sp.get("me")?.trim() || null;
@@ -539,6 +593,8 @@ function PlayerRow({
       {frontHoles.map((h) => (
         <td key={`f-${player.entryId}-${h}`} className={holeBodyCell}>
           <ScoreCell
+            entryId={player.entryId}
+            hole={h}
             value={scores[h] ?? null}
             par={PAR_BY_HOLE[h] ?? 4}
             isPending={Boolean(pending[h])}
@@ -546,6 +602,7 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
+            onQueueFocus={onQueueFocus}
             onCommit={(next, opts) =>
               saveScore(h, next, Boolean(opts?.pickedUp))
             }
@@ -558,6 +615,8 @@ function PlayerRow({
       {backHoles.map((h) => (
         <td key={`b-${player.entryId}-${h}`} className={holeBodyCell}>
           <ScoreCell
+            entryId={player.entryId}
+            hole={h}
             value={scores[h] ?? null}
             par={PAR_BY_HOLE[h] ?? 4}
             isPending={Boolean(pending[h])}
@@ -565,6 +624,7 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
+            onQueueFocus={onQueueFocus}
             onCommit={(next, opts) =>
               saveScore(h, next, Boolean(opts?.pickedUp))
             }
@@ -871,6 +931,26 @@ export default function GrupoCaptureClient({
     kind: "ok" | "err";
     message: string;
   } | null>(null);
+  /** Celda a enfocar tras el próximo commit de React (evita perder foco al guardar). */
+  const pendingFocusRef = useRef<{ entryId: string; hole: HoleNumber } | null>(
+    null
+  );
+  const queueFocusCell = useCallback((entryId: string, hole: HoleNumber) => {
+    pendingFocusRef.current = { entryId, hole };
+  }, []);
+
+  useLayoutEffect(() => {
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    pendingFocusRef.current = null;
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-score-cell="1"][data-entry-id="${target.entryId}"][data-hole="${target.hole}"]`
+    );
+    if (el && !el.disabled && !el.readOnly) {
+      focusScoreInput(el);
+    }
+  });
+
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
   const autoCloseAttemptedRef = useRef(false);
@@ -1234,7 +1314,7 @@ export default function GrupoCaptureClient({
 
         {/* Tabla principal: 4 jugadores × 18 hoyos */}
         <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-          <div className={scrollClass}>
+          <div className={scrollClass} data-capture-grid="1">
             <table className={tableClass}>
               <HoleTableHeader
                 holes={[...HOLES_FRONT, ...HOLES_BACK] as HoleNumber[]}
@@ -1265,6 +1345,7 @@ export default function GrupoCaptureClient({
                       onMatchAutoClose={handleMatchAutoClose}
                       onMatchAutoCloseError={handleMatchAutoCloseError}
                       highlight={highlight}
+                      onQueueFocus={queueFocusCell}
                     />
                   );
                 })}
@@ -1298,7 +1379,7 @@ export default function GrupoCaptureClient({
             <div className="mb-2 px-1 text-[11px] font-bold tracking-wide text-amber-900">
               DESEMPATE · muerte súbita (hoyos 1-9 físicos)
             </div>
-            <div className={scrollClass}>
+            <div className={scrollClass} data-capture-grid="1">
               <table className={tableClass}>
                 <HoleTableHeader
                   holes={HOLES_PLAYOFF}
@@ -1330,6 +1411,7 @@ export default function GrupoCaptureClient({
                         onMatchAutoCloseError={handleMatchAutoCloseError}
                         disabledHoles={playoffDisabled}
                         highlight={highlight}
+                        onQueueFocus={queueFocusCell}
                       />
                     );
                   })}
