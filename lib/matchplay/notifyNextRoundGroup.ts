@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
+import { sendAndTrackTelegramMessage } from "@/lib/telegram/outbox";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
 
 /**
@@ -13,10 +13,27 @@ import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
  * Es best-effort: errores de envío no rompen el cierre del match. Las
  * filas sin telegram_chat_id se ignoran silenciosamente.
  */
+export type NotifyRecipient = {
+  /** "player" | "caddie" */
+  role: "player" | "caddie";
+  name: string;
+  /** Si se envió correctamente. */
+  ok: boolean;
+  /** Error de Telegram si ok=false (no se muestra al usuario si está vacío). */
+  error?: string;
+  /** Cuántos mensajes anteriores se borraron en su chat (de rondas previas). */
+  replacedPrevious: number;
+};
+
 export type NotifyResult = {
   sent: number;
   failed: number;
+  /** Destinatarios sin chat_id de Telegram (no se intentó enviar). */
   skipped: number;
+  /** Nombres de quienes no tenían chat_id (player/caddie). */
+  skippedNames: Array<{ role: "player" | "caddie"; name: string }>;
+  /** Lista detallada de envíos efectuados (éxitos y fallos). */
+  recipients: NotifyRecipient[];
 };
 
 function fullName(
@@ -43,7 +60,13 @@ export async function notifyNextRoundGroupCreated(
     closedMatchResult?: string | null;
   }
 ): Promise<NotifyResult> {
-  const result: NotifyResult = { sent: 0, failed: 0, skipped: 0 };
+  const result: NotifyResult = {
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    skippedNames: [],
+    recipients: [],
+  };
 
   // 1. Identificar el grupo destino: o se pasó explícito o se busca por
   //    group_no en la ronda.
@@ -147,6 +170,7 @@ export async function notifyNextRoundGroupCreated(
     const name = fullName(player.first_name, player.last_name);
     if (!chatId) {
       result.skipped += 1;
+      result.skippedNames.push({ role: "player", name });
       continue;
     }
     players.push({
@@ -195,13 +219,15 @@ export async function notifyNextRoundGroupCreated(
           const chatId = String(
             c.telegram_chat_id ?? c.telegram_user_id ?? ""
           ).trim();
+          const name = fullName(c.first_name, c.last_name);
           if (!chatId) {
             result.skipped += 1;
+            result.skippedNames.push({ role: "caddie", name });
             continue;
           }
           caddieRecipients.push({
             chatId,
-            name: fullName(c.first_name, c.last_name),
+            name,
             caddieId: String(c.id),
           });
         }
@@ -237,14 +263,34 @@ export async function notifyNextRoundGroupCreated(
       groupId,
       meEntryId: p.entryId,
     });
-    const res = await sendTelegramMessage({
+    const res = await sendAndTrackTelegramMessage(admin, {
+      tournamentId: args.tournamentId,
       chatId: p.chatId,
       text: buildText(`Hola ${p.name}`),
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
+      kind: "next_round_group",
+      roundId: args.nextRoundId,
+      groupId,
     });
-    if (res.ok) result.sent += 1;
-    else result.failed += 1;
+    if (res.ok) {
+      result.sent += 1;
+      result.recipients.push({
+        role: "player",
+        name: p.name,
+        ok: true,
+        replacedPrevious: res.deletedMessageIds.length,
+      });
+    } else {
+      result.failed += 1;
+      result.recipients.push({
+        role: "player",
+        name: p.name,
+        ok: false,
+        error: res.error,
+        replacedPrevious: res.deletedMessageIds.length,
+      });
+    }
   }
 
   for (const c of caddieRecipients) {
@@ -254,14 +300,34 @@ export async function notifyNextRoundGroupCreated(
       groupId,
       caddieId: c.caddieId,
     });
-    const res = await sendTelegramMessage({
+    const res = await sendAndTrackTelegramMessage(admin, {
+      tournamentId: args.tournamentId,
       chatId: c.chatId,
       text: buildText(`Hola ${c.name} (caddie)`),
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
+      kind: "next_round_group",
+      roundId: args.nextRoundId,
+      groupId,
     });
-    if (res.ok) result.sent += 1;
-    else result.failed += 1;
+    if (res.ok) {
+      result.sent += 1;
+      result.recipients.push({
+        role: "caddie",
+        name: c.name,
+        ok: true,
+        replacedPrevious: res.deletedMessageIds.length,
+      });
+    } else {
+      result.failed += 1;
+      result.recipients.push({
+        role: "caddie",
+        name: c.name,
+        ok: false,
+        error: res.error,
+        replacedPrevious: res.deletedMessageIds.length,
+      });
+    }
   }
 
   return result;

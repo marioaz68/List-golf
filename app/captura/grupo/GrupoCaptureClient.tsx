@@ -86,6 +86,10 @@ function sumPar(holes: HoleNumber[]): number {
  *  visual. Si la fila del jugador termina, salta al primer hoyo del
  *  siguiente jugador automáticamente (orden del DOM). Si no hay
  *  siguiente, hace `blur()`.
+ *
+ *  Se llama sincrónicamente desde el handler de input para preservar el
+ *  contexto de gesto del usuario en iOS (de lo contrario el teclado
+ *  móvil podría cerrarse al cambiar de input).
  */
 function focusNextScoreCell(current: HTMLInputElement): void {
   const all = Array.from(
@@ -97,7 +101,11 @@ function focusNextScoreCell(current: HTMLInputElement): void {
     const el = all[i];
     if (el && !el.disabled && !el.readOnly) {
       el.focus();
-      el.select();
+      try {
+        el.select();
+      } catch {
+        /* algunos navegadores móviles lanzan al seleccionar; ignorar */
+      }
       return;
     }
   }
@@ -191,13 +199,18 @@ function ScoreCell({
 
   function scheduleAdvance(delayMs: number) {
     if (advanceRef.current) clearTimeout(advanceRef.current);
+    // Para preservar el contexto de gesto del usuario en iOS (que cierra
+    // el teclado si el cambio de focus se hace fuera del handler), cuando
+    // delayMs es 0 movemos el focus sincrónicamente. Para delays mayores
+    // (p. ej. al confirmar tras pegar texto) usamos setTimeout normal.
+    if (delayMs <= 0) {
+      const el = inputRef.current;
+      if (el) focusNextScoreCell(el);
+      return;
+    }
     advanceRef.current = setTimeout(() => {
       const el = inputRef.current;
-      // Sólo avanzamos si el input sigue enfocado (el usuario no se movió
-      // manualmente a otra celda mientras tanto).
-      if (el && document.activeElement === el) {
-        focusNextScoreCell(el);
-      }
+      if (el) focusNextScoreCell(el);
     }, delayMs);
   }
 
@@ -238,18 +251,22 @@ function ScoreCell({
   }
 
   function handleChange(raw: string) {
-    // Aceptamos sólo "x"/"X" (si está permitido) o dígitos. Cualquier
-    // otra cosa se descarta — nunca lanzamos error.
+    // Aceptamos "x"/"X" (con tolerancia a espacios, autosuggestion móvil)
+    // o dígitos. Cualquier otra cosa se descarta — nunca lanzamos error.
     const trimmed = raw.trim();
-    if (
-      allowPickup &&
-      (trimmed === "x" || trimmed === "X" || trimmed === "xx" || trimmed === "XX")
-    ) {
-      setDraft("X");
-      scheduleCommit(null, true);
-      // X es valor final → avanzar de inmediato.
-      scheduleAdvance(0);
-      return;
+
+    if (allowPickup) {
+      // Match play: la celda es "levantó" si el contenido (sin espacios)
+      // está compuesto sólo de X/x (uno o varios). Esto cubre casos
+      // típicos en mobile donde el teclado pega " X" o "X ".
+      const compact = trimmed.replace(/\s+/g, "");
+      if (compact.length > 0 && /^[xX]+$/.test(compact)) {
+        setDraft("X");
+        scheduleCommit(null, true);
+        // X es valor final → avanzar de inmediato.
+        scheduleAdvance(0);
+        return;
+      }
     }
 
     let cleaned = trimmed.replace(/[^0-9]/g, "");
@@ -274,31 +291,38 @@ function ScoreCell({
       cancelAdvance();
       return;
     }
-    scheduleCommit(Math.trunc(n), false);
-    // Auto-avance:
-    //  - 2 dígitos (10-15)        → final, saltar ya.
-    //  - "1" (posible hole-in-one o inicio de 10-15) → esperar Enter manual.
-    //  - 2-9 (un solo dígito)     → saltar ya (no existe 20+).
-    if (cleaned.length >= 2) {
-      scheduleAdvance(0);
-    } else if (cleaned === "1") {
+    // Caso especial: cleaned === "1". El usuario puede estar formando
+    // 10-15 o quiere registrar hole-in-one. NO COMMIT todavía — esperamos
+    // un segundo dígito, Enter, Tab o blur. Esto evita un POST intermedio
+    // con strokes=1 que marca el hoyo como "pendiente de testigo"
+    // (rojo/texto blanco) cuando luego se completa "10-15".
+    if (cleaned === "1") {
       cancelAdvance();
-    } else {
-      scheduleAdvance(0);
+      return;
     }
+    scheduleCommit(Math.trunc(n), false);
+    // Auto-avance: 2-9 o 10-15 son valores finales → saltar ya.
+    scheduleAdvance(0);
   }
 
   function handleBlur() {
-    const trimmed = draft.trim();
-    if (allowPickup && (trimmed === "x" || trimmed === "X")) {
-      flushCommit(null, true);
-      return;
+    // Leemos del input directamente (no del `draft` capturado en clousure)
+    // porque cuando blur llega después de un cambio de focus sincrónico,
+    // el estado `draft` puede no estar todavía propagado al render.
+    const live = (inputRef.current?.value ?? draft).trim();
+    if (allowPickup) {
+      const compact = live.replace(/\s+/g, "");
+      if (compact.length > 0 && /^[xX]+$/.test(compact)) {
+        setDraft("X");
+        flushCommit(null, true);
+        return;
+      }
     }
-    if (trimmed === "") {
+    if (live === "") {
       flushCommit(null, false);
       return;
     }
-    const n = Number(trimmed);
+    const n = Number(live);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
       // Restauramos visualmente lo último confirmado.
       setDraft(
@@ -347,8 +371,8 @@ function ScoreCell({
       disabled={disabled}
       title={
         allowPickup
-          ? "Score 1–15 (un dígito por casilla; sólo el 1 permite un segundo). Hole-in-one: teclea 1 y presiona Enter. X: no terminó (pierde bola alta)."
-          : "Score 1–15 (un dígito por casilla; sólo el 1 permite un segundo). Hole-in-one: teclea 1 y presiona Enter."
+          ? "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter. X: el jugador levantó."
+          : "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter."
       }
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => handleChange(e.target.value)}
@@ -1255,10 +1279,16 @@ export default function GrupoCaptureClient({
             </table>
           </div>
           <p className="mt-1 px-1 text-[10px] text-slate-500">
-            Toca una celda y escribe el número de tiros. Sólo se acepta un
-            dígito por casilla; el 1 permite un segundo (10–15). Para
-            hole-in-one teclea <span className="font-semibold">1</span> y
-            presiona <span className="font-semibold">Enter</span>.
+            Score 1–15. Para 10–15 teclea dos dígitos seguidos. Hole-in-one:{" "}
+            <span className="font-semibold">1</span> +{" "}
+            <span className="font-semibold">Enter</span>.
+            {meta.matchPlay ? (
+              <>
+                {" · "}
+                <span className="font-semibold">X</span> = el jugador
+                levantó (perdió ese hoyo en match play).
+              </>
+            ) : null}
           </p>
         </div>
 

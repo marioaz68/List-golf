@@ -1071,10 +1071,25 @@ export async function confirmTournamentRoundClosed(
   }
 }
 
+export type TelegramRecipientReport = {
+  role: "player" | "caddie";
+  name: string;
+  ok: boolean;
+  error?: string;
+  replacedPrevious: number;
+};
+
 export type CloseMatchPlayGroupState = {
   ok: boolean;
   message: string;
   nextRoundNo?: number | null;
+  telegram?: {
+    sent: number;
+    failed: number;
+    skipped: number;
+    skippedNames: Array<{ role: "player" | "caddie"; name: string }>;
+    recipients: TelegramRecipientReport[];
+  } | null;
 };
 
 /** Cierra las 4 tarjetas del grupo match play y abre la ronda siguiente. */
@@ -1138,6 +1153,15 @@ export async function closeMatchPlayGroupRoundAction(
       ok: true,
       message: result.message,
       nextRoundNo: result.nextRoundNo,
+      telegram: result.telegramNotified
+        ? {
+            sent: result.telegramNotified.sent,
+            failed: result.telegramNotified.failed,
+            skipped: result.telegramNotified.skipped,
+            skippedNames: result.telegramNotified.skippedNames,
+            recipients: result.telegramNotified.recipients,
+          }
+        : null,
     };
   } catch (e) {
     return {

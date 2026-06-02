@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadGroupMatchPlayStatus } from "@/lib/captura/matchPlayGroupDecision";
 import { closeMatchAndAdvanceForGroup } from "@/lib/matchplay/closeAndAdvance";
+import {
+  notifyNextRoundGroupCreated,
+  type NotifyResult,
+} from "@/lib/matchplay/notifyNextRoundGroup";
 import { loadCategoryRoundGateContext } from "@/lib/rounds/loadCategoryRoundGate";
 import { resolveOpenCaptureRoundForEntry } from "@/lib/rounds/resolveOpenCaptureRoundForEntry";
 import type { SessionRoundFields } from "@/app/(backoffice)/tee-sheet/sessionBlock";
@@ -13,7 +17,9 @@ export type CloseMatchPlayGroupRoundResult =
       alreadyLockedCount: number;
       currentRoundNo: number;
       nextRoundNo: number | null;
+      nextRoundId: string | null;
       nextGroupId: string | null;
+      telegramNotified: NotifyResult | null;
       message: string;
     }
   | { ok: false; error: string };
@@ -196,10 +202,12 @@ export async function closeMatchPlayGroupRound(
   );
 
   let nextRoundNo: number | null = null;
+  let nextRoundId: string | null = null;
   let nextGroupId: string | null = null;
 
   if (open.ok && open.roundNo > currentRoundNo) {
     nextRoundNo = open.roundNo;
+    nextRoundId = open.roundId;
     nextGroupId = await findGroupForEntryInRound(
       admin,
       anchorEntryId,
@@ -223,12 +231,29 @@ export async function closeMatchPlayGroupRound(
       );
       if (followRound?.id) {
         nextRoundNo = followRoundNo;
+        nextRoundId = String(followRound.id);
         nextGroupId = await findGroupForEntryInRound(
           admin,
           anchorEntryId,
           followRound.id
         );
       }
+    }
+  }
+
+  // Notificar por Telegram a jugadores + caddies del nuevo grupo.
+  // Best-effort: si falla, seguimos devolviendo ok=true para el cierre.
+  let telegramNotified: NotifyResult | null = null;
+  if (nextRoundNo != null && nextRoundId && nextGroupId) {
+    try {
+      telegramNotified = await notifyNextRoundGroupCreated(admin, {
+        tournamentId,
+        nextRoundId,
+        nextGroupId,
+        closedMatchResult: `R${currentRoundNo} cerrada`,
+      });
+    } catch {
+      telegramNotified = null;
     }
   }
 
@@ -242,7 +267,9 @@ export async function closeMatchPlayGroupRound(
       alreadyLockedCount,
       currentRoundNo,
       nextRoundNo,
+      nextRoundId,
       nextGroupId,
+      telegramNotified,
       message: `R${currentRoundNo} cerrada (${closedCount} tarjeta${closedCount === 1 ? "" : "s"} nuevas). Abriendo captura de R${nextRoundNo}.${partialNote}`,
     };
   }
@@ -254,7 +281,9 @@ export async function closeMatchPlayGroupRound(
       alreadyLockedCount,
       currentRoundNo,
       nextRoundNo,
+      nextRoundId,
       nextGroupId: null,
+      telegramNotified,
       message: `R${currentRoundNo} cerrada. R${nextRoundNo} lista para captura; la salida del grupo se creará cuando el rival también termine su partido.${partialNote}`,
     };
   }
@@ -266,7 +295,9 @@ export async function closeMatchPlayGroupRound(
       alreadyLockedCount,
       currentRoundNo,
       nextRoundNo: null,
+      nextRoundId: null,
       nextGroupId: null,
+      telegramNotified,
       message: `Las tarjetas de este grupo ya estaban cerradas.${partialNote}`,
     };
   }
@@ -277,7 +308,9 @@ export async function closeMatchPlayGroupRound(
     alreadyLockedCount,
     currentRoundNo,
     nextRoundNo: null,
+    nextRoundId: null,
     nextGroupId: null,
+    telegramNotified,
     message: `Tarjetas de R${currentRoundNo} cerradas.${partialNote}`,
   };
 }
