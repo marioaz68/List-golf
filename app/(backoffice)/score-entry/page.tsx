@@ -10,6 +10,9 @@ import ScoreEntryClient from "./ScoreEntryClient";
 import ScoreEntryModeTabs from "./ScoreEntryModeTabs";
 import ScoreEntryRoundCloseBanner from "./ScoreEntryRoundCloseBanner";
 import DecidedMatchesPanel from "./DecidedMatchesPanel";
+import ScoreEntryMatchPlayGroupPanel from "./ScoreEntryMatchPlayGroupPanel";
+import { loadGroupCapture } from "@/lib/captura/loadGroupCapture";
+import type { GroupCapturePayload } from "@/lib/captura/types";
 import {
   buildScoreEntryHref,
   parseScoreEntryMode,
@@ -417,6 +420,7 @@ export default async function ScoreEntryPage(props: {
    *  este valor para abrir la captura de las 4 tarjetas del grupo
    *  (`/captura/tarjeta?group_id=…`), incluyendo soporte de desempate. */
   let matchPlayGroupId: string | null = null;
+  let matchPlayGroupCapture: GroupCapturePayload | null = null;
   const roundCloseStatuses: ReturnType<typeof buildTournamentRoundCloseStatus>[] =
     [];
 
@@ -977,6 +981,11 @@ export default async function ScoreEntryPage(props: {
         const gid = String(memberRow?.group_id ?? "").trim();
         if (gid) matchPlayGroupId = gid;
       }
+      if (matchPlayGroupId && matchedEntryForLinks) {
+        matchPlayGroupCapture = await loadGroupCapture(admin, matchPlayGroupId, {
+          meEntryId: matchedEntryForLinks.id,
+        });
+      }
     } catch (e) {
       console.error("[score-entry] matchplay group lookup:", e);
     }
@@ -1079,7 +1088,11 @@ export default async function ScoreEntryPage(props: {
   const showScoreEntryForm =
     Boolean(player && holes.length > 0 && scoringRoundId && !scoringRoundBlocked) &&
     (isModifyMode || !captureClosedNeedsModify) &&
-    (isModifyMode || !roundClosed);
+    (isModifyMode || !roundClosed) &&
+    !(isMatchPlayTournament && matchPlayGroupCapture && !isModifyMode);
+
+  const activeRoundNo =
+    roundListAll.find((r) => r.id === scoringRoundId)?.round_no ?? 1;
 
   return (
     <div className="p-4 md:p-6">
@@ -1263,6 +1276,23 @@ export default async function ScoreEntryPage(props: {
           <RepairCapturesButton tournamentId={effectiveTournamentId} />
         )}
 
+        {/* Match play: captura del grupo embebida en score-entry */}
+        {effectiveTournamentId &&
+          isMatchPlayTournament &&
+          player &&
+          matchPlayGroupCapture &&
+          matchedEntryForLinks &&
+          searchRaw &&
+          !isModifyMode && (
+            <ScoreEntryMatchPlayGroupPanel
+              initialGroup={matchPlayGroupCapture}
+              tournamentId={effectiveTournamentId}
+              anchorEntryId={matchedEntryForLinks.id}
+              searchQuery={searchRaw}
+              currentRoundNo={activeRoundNo}
+            />
+          )}
+
         {/* Match play: aviso general (sin jugador todavía). */}
         {effectiveTournamentId &&
           isMatchPlayTournament &&
@@ -1281,54 +1311,7 @@ export default async function ScoreEntryPage(props: {
             </div>
           )}
 
-        {/* Match play: jugador encontrado → atajo a la captura del grupo
-            (las 4 tarjetas a la vez + desempate). */}
-        {effectiveTournamentId &&
-          isMatchPlayTournament &&
-          player &&
-          matchPlayGroupId && (
-            <div className="mt-4 rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-4 shadow-sm">
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="flex-1 min-w-[240px]">
-                  <p className="text-sm font-bold text-emerald-900">
-                    Captura del grupo (las 4 tarjetas)
-                  </p>
-                  <p className="mt-1 text-sm text-emerald-800">
-                    {[player.first_name, player.last_name]
-                      .filter(Boolean)
-                      .join(" ")
-                      .trim() || "Jugador"}{" "}
-                    juega en este grupo. Elige cómo capturarlo: la
-                    <b> tarjeta completa</b> muestra el progreso del
-                    match hoyo por hoyo; la <b>captura rápida</b> usa el
-                    keypad por hoyo (más ágil en cancha). Ambas soportan
-                    el desempate (P1-P9) si terminan empatados al 18.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Link
-                    href={`/captura/tarjeta?group_id=${matchPlayGroupId}&back=${encodeURIComponent(tabCaptureHref)}`}
-                    className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
-                  >
-                    Tarjeta completa →
-                  </Link>
-                  <Link
-                    href={`/captura/grupo?group_id=${matchPlayGroupId}&back=${encodeURIComponent(tabCaptureHref)}`}
-                    className="inline-flex items-center justify-center rounded-lg border-2 border-emerald-600 bg-white px-5 py-2.5 text-sm font-bold text-emerald-900 shadow-sm hover:bg-emerald-50"
-                  >
-                    Captura rápida →
-                  </Link>
-                </div>
-              </div>
-              <p className="mt-2 text-[11px] text-emerald-700">
-                Abajo se sigue mostrando la tarjeta individual del jugador
-                buscado por si necesitas corregir un hoyo en particular.
-              </p>
-            </div>
-          )}
-
-        {/* Match play: jugador encontrado pero no está en ningún grupo de
-            esta ronda. Probable: falta asignarlo al pairing. */}
+        {/* Match play: jugador sin grupo en esta ronda */}
         {effectiveTournamentId &&
           isMatchPlayTournament &&
           player &&

@@ -68,6 +68,8 @@ export type GroupCapturePlayer = {
   categoryId?: string | null;
   /** Firmas de la tarjeta (jugador + testigo). */
   signatures?: CardSignaturePayload;
+  /** Tarjeta cerrada oficialmente (`scorecards.locked_at`). */
+  lockedAt?: string | null;
 };
 
 export type WitnessAssignmentPayload = {

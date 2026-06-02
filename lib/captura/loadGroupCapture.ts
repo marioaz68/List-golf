@@ -269,6 +269,22 @@ export async function loadGroupCapture(
     entryIds
   );
 
+  const lockedAtByEntry = new Map<string, string | null>();
+  if (roundId && entryIds.length > 0) {
+    const { data: lockedRows } = await supabase
+      .from("scorecards")
+      .select("entry_id, locked_at")
+      .eq("round_id", roundId)
+      .in("entry_id", entryIds);
+    for (const row of (lockedRows ?? []) as Array<{
+      entry_id: string;
+      locked_at: string | null;
+    }>) {
+      const eid = safeString(row.entry_id);
+      if (eid) lockedAtByEntry.set(eid, row.locked_at ?? null);
+    }
+  }
+
   // Identidad del visitante (me=entry_id o caddie=caddie_id).
   const meEntryIdRaw = String(options.meEntryId ?? "").trim();
   const meEntryId = entryIds.includes(meEntryIdRaw) ? meEntryIdRaw : null;
@@ -339,6 +355,7 @@ export async function loadGroupCapture(
         signedByWitnessEntryId:
           signaturesByEntry[entryId]?.signedByWitnessEntryId ?? null,
       },
+      lockedAt: lockedAtByEntry.get(entryId) ?? null,
     });
   }
 

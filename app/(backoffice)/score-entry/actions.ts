@@ -280,6 +280,7 @@ async function staffCloseRoundScorecard(
     entryId: string;
     roundNo: number;
     playerId: string;
+    minHolesRequired?: number;
   }
 ) {
   await alignCaptureToScorecardRound(admin, {
@@ -289,15 +290,19 @@ async function staffCloseRoundScorecard(
     scorecardRoundId: params.roundId,
   });
 
+  const minHoles = Math.min(
+    18,
+    Math.max(1, params.minHolesRequired ?? 18)
+  );
   const holeCount = await countHolesOnPlayerRound(
     admin,
     params.playerId,
     params.roundId
   );
 
-  if (holeCount < 18) {
+  if (holeCount < minHoles) {
     throw new Error(
-      `No se puede cerrar la ronda: faltan hoyos (${holeCount}/18). Complete la tarjeta o use solo «Guardar scores».`
+      `No se puede cerrar la ronda: faltan hoyos (${holeCount}/${minHoles}). Complete la tarjeta o use solo «Guardar scores».`
     );
   }
 
@@ -1065,6 +1070,82 @@ export async function confirmTournamentRoundClosed(
     return {
       ok: false,
       message: e instanceof Error ? e.message : "Error al cerrar la ronda.",
+    };
+  }
+}
+
+export type CloseMatchPlayGroupState = {
+  ok: boolean;
+  message: string;
+  nextRoundNo?: number | null;
+};
+
+/** Cierra las 4 tarjetas del grupo match play y abre la ronda siguiente. */
+export async function closeMatchPlayGroupRoundAction(
+  _prev: CloseMatchPlayGroupState,
+  formData: FormData
+): Promise<CloseMatchPlayGroupState> {
+  try {
+    const tournamentId = String(formData.get("tournament_id") ?? "").trim();
+    const groupId = String(formData.get("group_id") ?? "").trim();
+    const anchorEntryId = String(formData.get("anchor_entry_id") ?? "").trim();
+
+    if (!tournamentId || !groupId || !anchorEntryId) {
+      return { ok: false, message: "Faltan datos del grupo." };
+    }
+
+    const access = await checkTournamentAccess({
+      tournamentId,
+      allowedRoles: [
+        "super_admin",
+        "club_admin",
+        "tournament_director",
+        "score_capture",
+        "marshal",
+      ],
+    });
+
+    if (!access.ok) {
+      return {
+        ok: false,
+        message: tournamentAccessDeniedMessage(access.reason),
+      };
+    }
+
+    const admin = getAdminClient();
+    const { closeMatchPlayGroupRound } = await import(
+      "@/lib/score-entry/closeMatchPlayGroupRound"
+    );
+
+    const result = await closeMatchPlayGroupRound(
+      admin,
+      async (client, params) =>
+        staffCloseRoundScorecard(client, {
+          tournamentId: params.tournamentId,
+          roundId: params.roundId,
+          entryId: params.entryId,
+          roundNo: params.roundNo,
+          playerId: params.playerId,
+          minHolesRequired: params.minHolesRequired,
+        }),
+      { tournamentId, groupId, anchorEntryId }
+    );
+
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+
+    await revalidateScoreEntryAndLeaderboard(tournamentId);
+
+    return {
+      ok: true,
+      message: result.message,
+      nextRoundNo: result.nextRoundNo,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Error cerrando tarjetas del grupo.",
     };
   }
 }

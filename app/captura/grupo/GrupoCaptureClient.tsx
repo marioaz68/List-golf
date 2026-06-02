@@ -815,8 +815,11 @@ function CloseMatchPrompt({
 
 export default function GrupoCaptureClient({
   initial,
+  embedded = false,
 }: {
   initial: GroupCapturePayload;
+  /** Embebido en /score-entry: sin cabecera de página completa. */
+  embedded?: boolean;
 }) {
   const [meta, setMeta] = useState(initial);
   const searchParams = useSearchParams();
@@ -1085,8 +1088,9 @@ export default function GrupoCaptureClient({
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-black">
-      <div className="mx-auto max-w-5xl space-y-3 p-3 md:p-5">
+    <div className={embedded ? "bg-slate-100 text-black" : "min-h-screen bg-slate-100 text-black"}>
+      <div className={embedded ? "space-y-3 p-3 md:p-4" : "mx-auto max-w-5xl space-y-3 p-3 md:p-5"}>
+        {!embedded ? (
         <header className="rounded-xl bg-white px-4 py-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1118,6 +1122,7 @@ export default function GrupoCaptureClient({
             </div>
           </div>
         </header>
+        ) : null}
 
         {meta.matchPlay ? (
           <div
