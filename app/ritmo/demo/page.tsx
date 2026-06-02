@@ -1,14 +1,10 @@
-import { RitmoMap } from "./RitmoMap";
-import { SidebarGroups } from "./SidebarGroups";
+import { DemoView } from "./DemoView";
 
 /**
  * Demo con 6 grupos que ilustra los 3 escenarios reales de ritmo:
  *  1. Grupo en ritmo o adelantado (verde / azul)
  *  2. Grupo "atrasado vs reloj" pero EN RITMO DEL CAMPO (sigue al de enfrente con gap normal)
  *  3. Grupo verdaderamente lento (bloqueador) + víctimas pegadas detrás
- *
- * En producción el `status` y `role` se calculan server-side comparando hoyos
- * actuales contra grupo en frente (ver paceAnalyzer en próximo paso).
  */
 const DEMO_GROUPS = [
   {
@@ -54,16 +50,5 @@ const DEMO_GROUPS = [
 ];
 
 export default function RitmoDemoPage() {
-  return (
-    <main style={{
-      height: "100dvh", width: "100vw", display: "flex", flexDirection: "row",
-      background: "#0a0a0a", overflow: "hidden",
-      fontFamily: "-apple-system, system-ui, sans-serif",
-    }}>
-      <SidebarGroups groups={DEMO_GROUPS} />
-      <div style={{ flex: 1, height: "100%", position: "relative" }}>
-        <RitmoMap groups={DEMO_GROUPS} />
-      </div>
-    </main>
-  );
+  return <DemoView groups={DEMO_GROUPS} />;
 }

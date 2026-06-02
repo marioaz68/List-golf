@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 
-interface GroupDot {
+interface RitmoMapProps {
+  groups: GroupDot[];
+  selectedId?: string | null;
+}
+
+export interface GroupDot {
   id: string;
   number: number;
   lat: number;
@@ -34,9 +39,11 @@ const HOYO_COLORS = [
  * y aproveche mejor la pantalla landscape. El contenido visible (markers,
  * etiquetas) se contra-rotan para que el texto siga legible.
  */
-export function RitmoMap({ groups }: { groups: GroupDot[] }) {
+export function RitmoMap({ groups, selectedId }: RitmoMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const holesLayerRef = useRef<any>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
   // Medir el container y reaccionar a resize/rotación
@@ -92,6 +99,8 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
       const holesLayer = L.geoJSON(CCQ_HOLES, {
         style: () => ({ opacity: 0, fillOpacity: 0, weight: 0 }),
       });
+      holesLayerRef.current = holesLayer;
+      mapRef.current = map;
       // (No la agregamos al mapa — solo la usamos para fitBounds más abajo)
 
       // Etiquetas de hoyos, contra-rotadas para que el texto se lea horizontal
@@ -176,12 +185,29 @@ export function RitmoMap({ groups }: { groups: GroupDot[] }) {
       fitToCourse();
 
       cleanup = () => {
+        mapRef.current = null;
+        holesLayerRef.current = null;
         map.remove();
       };
     })();
 
     return () => cleanup();
   }, [size.w, size.h, groups]);
+
+  // Reaccionar a selectedId: flyTo al grupo + zoom o volver a vista completa
+  useEffect(() => {
+    const map = mapRef.current;
+    const holesLayer = holesLayerRef.current;
+    if (!map || !holesLayer) return;
+    if (selectedId) {
+      const g = groups.find((x) => x.id === selectedId);
+      if (g) {
+        map.flyTo([g.lat, g.lon], 19, { duration: 0.8 });
+      }
+    } else {
+      map.flyToBounds(holesLayer.getBounds(), { padding: [10, 10], duration: 0.8, maxZoom: 19 });
+    }
+  }, [selectedId, groups]);
 
   return (
     <div
