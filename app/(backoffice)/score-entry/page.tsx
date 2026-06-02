@@ -951,89 +951,129 @@ export default async function ScoreEntryPage(props: {
   }
 
   /**
-   * Match play: localiza el pairing_group del jugador para la ronda
-   * activa. Si lo encuentra, mostramos un acceso directo para capturar
-   * las 4 tarjetas del grupo a la vez (con soporte de desempate). Se hace
-   * con admin client porque la tabla puede tener RLS restrictiva para
-   * el usuario actual.
+   * Match play: localiza el pairing_group del jugador. En match play la
+   * sola existencia del pairing implica que el bracket avanzó (la ronda
+   * previa quedó decidida), así que el gate "prior_not_closed" de stroke
+   * play no debe bloquear esta vista. Buscamos el grupo en cualquier
+   * ronda del torneo y, si lo encontramos, destrancamos `scoringRoundId`.
+   *
+   * Prioridad:
+   *   1) la ronda elegida por el gate (`scoringRoundId`), si existe;
+   *   2) cualquier ronda con pairing del jugador, eligiendo la más alta
+   *      donde haya un grupo (la "activa" del bracket).
+   *
+   * Usamos admin client porque RLS puede ocultar `pairing_groups` /
+   * `pairing_group_members` al rol actual.
    */
-  if (
-    isMatchPlayTournament &&
-    matchedEntryForLinks &&
-    scoringRoundId
-  ) {
+  if (isMatchPlayTournament && matchedEntryForLinks) {
     try {
       const admin = await createAdminClient();
-      const { data: groupsInRound } = await admin
-        .from("pairing_groups")
-        .select("id")
-        .eq("round_id", scoringRoundId);
-      const groupIds = (groupsInRound ?? [])
-        .map((g) => String(g.id ?? ""))
+
+      const allTournamentRounds = roundListAll
+        .filter((r) => r.tournament_id === effectiveTournamentId)
+        .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0));
+
+      const candidateRoundIds = allTournamentRounds
+        .map((r) => String(r.id ?? ""))
         .filter(Boolean);
-      if (groupIds.length > 0) {
-        const { data: memberRow } = await admin
-          .from("pairing_group_members")
-          .select("group_id")
-          .eq("entry_id", matchedEntryForLinks.id)
-          .in("group_id", groupIds)
-          .maybeSingle();
-        const gid = String(memberRow?.group_id ?? "").trim();
-        if (gid) matchPlayGroupId = gid;
+
+      // 1) intentamos primero la ronda actual (la del gate).
+      if (scoringRoundId) {
+        const { data: groupsInRound } = await admin
+          .from("pairing_groups")
+          .select("id")
+          .eq("round_id", scoringRoundId);
+        const groupIds = (groupsInRound ?? [])
+          .map((g) => String(g.id ?? ""))
+          .filter(Boolean);
+        if (groupIds.length > 0) {
+          const { data: memberRow } = await admin
+            .from("pairing_group_members")
+            .select("group_id")
+            .eq("entry_id", matchedEntryForLinks.id)
+            .in("group_id", groupIds)
+            .maybeSingle();
+          const gid = String(memberRow?.group_id ?? "").trim();
+          if (gid) matchPlayGroupId = gid;
+        }
       }
 
-      // BYE / sin pairing en la ronda activa: buscar en rondas siguientes
-      // del mismo torneo. Una pareja con bye en R1 no tiene
-      // pairing_group_members en R1 pero sí en R2 (o donde le toque).
-      if (!matchPlayGroupId) {
-        const currentRoundNo =
-          roundListAll.find((r) => r.id === scoringRoundId)?.round_no ?? 1;
-        const laterRoundIds = roundListAll
-          .filter(
-            (r) =>
-              r.tournament_id === effectiveTournamentId &&
-              (r.round_no ?? 0) > currentRoundNo
-          )
-          .sort((a, b) => (a.round_no ?? 0) - (b.round_no ?? 0))
-          .map((r) => r.id);
+      // 2) Si no hay grupo en la ronda actual (BYE, gate, sin scoring
+      //    round todavía…), buscamos en CUALQUIER ronda del torneo.
+      //    Tomamos el grupo de la ronda más alta para reflejar el avance
+      //    real del bracket (R2 si ya hay pairing R2, R3 si llegó hasta
+      //    R3, etc.).
+      if (!matchPlayGroupId && candidateRoundIds.length > 0) {
+        const { data: allGroups } = await admin
+          .from("pairing_groups")
+          .select("id, round_id")
+          .in("round_id", candidateRoundIds);
+        const groupsList = (allGroups ?? [])
+          .map((g) => ({
+            id: String(g.id ?? "").trim(),
+            roundId: String(g.round_id ?? "").trim(),
+          }))
+          .filter((g) => g.id && g.roundId);
 
-        if (laterRoundIds.length > 0) {
-          const { data: laterGroups } = await admin
-            .from("pairing_groups")
-            .select("id, round_id")
-            .in("round_id", laterRoundIds);
-          const laterGroupIds = (laterGroups ?? [])
-            .map((g) => String(g.id ?? "").trim())
-            .filter(Boolean);
-          if (laterGroupIds.length > 0) {
-            const { data: laterMember } = await admin
-              .from("pairing_group_members")
-              .select("group_id")
-              .eq("entry_id", matchedEntryForLinks.id)
-              .in("group_id", laterGroupIds)
-              .limit(1)
-              .maybeSingle();
-            const lateGid = String(laterMember?.group_id ?? "").trim();
-            if (lateGid) {
-              matchPlayGroupId = lateGid;
-              const lateGroupRoundId =
-                (laterGroups ?? []).find(
-                  (g) => String(g.id ?? "").trim() === lateGid
-                )?.round_id ?? null;
-              const lateRound = roundListAll.find(
-                (r) => r.id === lateGroupRoundId
-              );
-              if (lateRound) {
-                scoringRoundId = lateRound.id;
-                captureRoundNotice = `Pareja con BYE en R${currentRoundNo}. Capturando R${lateRound.round_no ?? "?"} (siguiente ronda con grupo asignado).`;
-                roundClosed = false;
-                scoringRoundBlocked = false;
-                priorRoundGateMessage = "";
-              }
+        if (groupsList.length > 0) {
+          const groupIdsList = groupsList.map((g) => g.id);
+          const { data: memberRows } = await admin
+            .from("pairing_group_members")
+            .select("group_id")
+            .eq("entry_id", matchedEntryForLinks.id)
+            .in("group_id", groupIdsList);
+          const playerGroupIds = new Set(
+            (memberRows ?? [])
+              .map((r) => String(r.group_id ?? "").trim())
+              .filter(Boolean)
+          );
+
+          const playerGroups = groupsList.filter((g) =>
+            playerGroupIds.has(g.id)
+          );
+          if (playerGroups.length > 0) {
+            const roundNoById = new Map(
+              allTournamentRounds.map((r) => [String(r.id), r.round_no ?? 0])
+            );
+            playerGroups.sort(
+              (a, b) =>
+                (roundNoById.get(b.roundId) ?? 0) -
+                (roundNoById.get(a.roundId) ?? 0)
+            );
+            const pick = playerGroups[0]!;
+            matchPlayGroupId = pick.id;
+
+            // Reasignamos la ronda de captura a la ronda del grupo del
+            // jugador y destrancamos. En match play esto es seguro: la
+            // existencia del pairing implica que el bracket avanzó.
+            const groupRound = allTournamentRounds.find(
+              (r) => String(r.id) === pick.roundId
+            );
+            if (groupRound && groupRound.id !== scoringRoundId) {
+              const priorRoundNo =
+                roundListAll.find((r) => r.id === scoringRoundId)?.round_no ??
+                null;
+              scoringRoundId = String(groupRound.id);
+              roundClosed = false;
+              scoringRoundBlocked = false;
+              priorRoundGateMessage = "";
+              const groupRoundNo = groupRound.round_no ?? "?";
+              const noticeBase =
+                priorRoundNo != null && priorRoundNo !== groupRound.round_no
+                  ? `Match play: capturando R${groupRoundNo} (ronda actual del bracket).`
+                  : `Match play: capturando R${groupRoundNo}.`;
+              captureRoundNotice = [captureRoundNotice, noticeBase]
+                .filter(Boolean)
+                .join(" ");
+            } else if (scoringRoundBlocked) {
+              // Mismo round que el gate bloqueó: destrancamos.
+              scoringRoundBlocked = false;
+              priorRoundGateMessage = "";
             }
           }
         }
       }
+
       if (matchPlayGroupId && matchedEntryForLinks) {
         matchPlayGroupCapture = await loadGroupCapture(admin, matchPlayGroupId, {
           meEntryId: matchedEntryForLinks.id,
