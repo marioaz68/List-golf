@@ -4,6 +4,10 @@ import {
   assignCaddieAction,
   deleteCaddieAssignmentAction,
 } from "./actions";
+import AsignarPorCaddieClient, {
+  type CaddiePickOption,
+  type PlayerPickOption,
+} from "./AsignarPorCaddieClient";
 import { createAdminClient } from "@/utils/supabase/admin";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { getLocale } from "@/lib/i18n/server";
@@ -648,6 +652,31 @@ export default async function CaddiesPage({
           })
       : [];
 
+  // Datos para el buscador centrado en el caddie (flujo inverso).
+  const caddiePickOptions: CaddiePickOption[] = caddies
+    .filter((c) => c.is_active !== false)
+    .sort(sortCaddiesByName)
+    .map((c) => ({
+      id: c.id,
+      primary: displayCaddiePrimary(c),
+      secondary: displayCaddieName(c),
+      phone: c.phone ?? c.whatsapp_phone ?? null,
+      telegram: c.telegram,
+      level: c.level,
+    }));
+
+  const playerPickOptions: PlayerPickOption[] = assignmentCandidates.map(
+    (row) => ({
+      entryId: row.entry.id,
+      name: displayEntryPlayerName(row.entry),
+      playerNumber: row.entry.player_number,
+      category: displayEntryCategory(row.entry),
+      groupId: row.group.id,
+      groupLabel: pairingGroupLabel(row.group.id, pairingGroupsAll),
+      currentCaddieId: row.currentCaddie?.id ?? null,
+    })
+  );
+
   return (
     <div style={pageWrap}>
       {/* Resalta la fila apuntada por el ancla (#assignment-<entryId>) por
@@ -775,6 +804,37 @@ export default async function CaddiesPage({
             <p style={statValueStyle}>{conflictCount}</p>
           </div>
         </div>
+      </div>
+
+      <div style={cardStyle}>
+        <div style={cardHeader}>
+          <div>
+            <h2 style={titleStyle}>Buscar caddie y asignar jugador</h2>
+            <p style={subStyle}>
+              Encuentra al caddie por nombre y asígnale un jugador del torneo
+              en la ronda seleccionada.
+            </p>
+          </div>
+        </div>
+
+        {!selectedTournamentId || !selectedRoundId ? (
+          <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
+            Primero selecciona <strong>torneo</strong> y <strong>ronda</strong>.
+          </div>
+        ) : playerPickOptions.length === 0 ? (
+          <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
+            No hay jugadores con grupo asignado en esa ronda.
+          </div>
+        ) : (
+          <AsignarPorCaddieClient
+            caddies={caddiePickOptions}
+            players={playerPickOptions}
+            ctx={{
+              tournamentId: selectedTournamentId,
+              roundId: selectedRoundId,
+            }}
+          />
+        )}
       </div>
 
       <div style={caddiesTableCardStyle}>
