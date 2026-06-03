@@ -233,17 +233,21 @@ function ScoreCell({
       const nextEntry = next.dataset.entryId ?? "";
       const nextHole = Number(next.dataset.hole ?? "");
       advancingRef.current = true;
+      // Foco inmediato: no esperar al layout effect del padre (en la 1ª
+      // carga el re-render por setSavingKey/onScoreSaved solía ganar la
+      // carrera y el cursor se quedaba en la misma casilla).
+      focusScoreInput(next);
       if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
         onQueueFocus(nextEntry, nextHole as HoleNumber);
-      } else {
-        focusScoreInput(next);
       }
-      queueMicrotask(() => {
-        advancingRef.current = false;
+      // Mantener advancingRef hasta después del paint para que handleBlur
+      // de la celda anterior no revierta el draft ni dispare otro commit.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          advancingRef.current = false;
+        });
       });
     };
-    // Encolamos la celda destino de inmediato; el foco real se aplica en
-    // useLayoutEffect del padre tras el update optimista (microtask).
     if (delayMs <= 0) {
       run();
       return;
@@ -434,11 +438,16 @@ function ScoreCell({
             }
             const nextEntry = next.dataset.entryId ?? "";
             const nextHole = Number(next.dataset.hole ?? "");
+            advancingRef.current = true;
+            focusScoreInput(next);
             if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
               onQueueFocus(nextEntry, nextHole as HoleNumber);
-            } else {
-              focusNextScoreCell(el);
             }
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                advancingRef.current = false;
+              });
+            });
           }
         }
       }}
@@ -524,12 +533,8 @@ function PlayerRow({
     isPickedUp: boolean
   ) {
     const key = `${player.entryId}-${hole}`;
+    onScoreSaved(player.entryId, hole, strokes, isPickedUp);
     setSavingKey(key);
-    // Optimistic diferido: si corre en el mismo tick que el cambio de foco,
-    // el re-render del padre roba el foco de la siguiente celda.
-    queueMicrotask(() => {
-      onScoreSaved(player.entryId, hole, strokes, isPickedUp);
-    });
     try {
       const sp = new URLSearchParams(window.location.search);
       const meId = sp.get("me")?.trim() || null;
@@ -932,28 +937,45 @@ export default function GrupoCaptureClient({
     kind: "ok" | "err";
     message: string;
   } | null>(null);
-  /** Celda a enfocar tras el próximo commit de React (evita perder foco al guardar). */
-  const pendingFocusRef = useRef<{ entryId: string; hole: HoleNumber } | null>(
-    null
-  );
+  /** Celda a re-enfocar tras re-render del padre (respaldo del foco síncrono). */
+  const [pendingFocus, setPendingFocus] = useState<{
+    entryId: string;
+    hole: HoleNumber;
+  } | null>(null);
   const queueFocusCell = useCallback((entryId: string, hole: HoleNumber) => {
-    pendingFocusRef.current = { entryId, hole };
+    setPendingFocus({ entryId, hole });
   }, []);
 
   useLayoutEffect(() => {
-    const target = pendingFocusRef.current;
-    if (!target) return;
-    pendingFocusRef.current = null;
-    const el = document.querySelector<HTMLInputElement>(
-      `input[data-score-cell="1"][data-entry-id="${target.entryId}"][data-hole="${target.hole}"]`
-    );
-    if (el && !el.disabled && !el.readOnly) {
+    if (!pendingFocus) return;
+    const { entryId, hole } = pendingFocus;
+    const selector = `input[data-score-cell="1"][data-entry-id="${entryId}"][data-hole="${hole}"]`;
+
+    const tryFocus = (): boolean => {
+      const el = document.querySelector<HTMLInputElement>(selector);
+      if (!el || el.disabled || el.readOnly) return false;
+      if (document.activeElement === el) {
+        return true;
+      }
       focusScoreInput(el);
+      return document.activeElement === el;
+    };
+
+    if (tryFocus()) {
+      setPendingFocus(null);
+      return;
     }
-  });
+
+    const raf = requestAnimationFrame(() => {
+      if (tryFocus()) setPendingFocus(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [pendingFocus, savingKey]);
 
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
+  const pendingFocusActiveRef = useRef(false);
+  pendingFocusActiveRef.current = pendingFocus != null;
   const autoCloseAttemptedRef = useRef(false);
 
   const refreshGroupMeta = useCallback(async () => {
@@ -1084,7 +1106,7 @@ export default function GrupoCaptureClient({
   // Polling para sincronizar con cambios de otros usuarios.
   useEffect(() => {
     const id = window.setInterval(async () => {
-      if (savingRef.current) return;
+      if (savingRef.current || pendingFocusActiveRef.current) return;
       try {
         const qs = new URLSearchParams({ group_id: meta.groupId });
         if (meta.myEntryId) qs.set("me", meta.myEntryId);
