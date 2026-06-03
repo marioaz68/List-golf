@@ -25,7 +25,7 @@ import {
   isRitmoStatusCommand,
   buildRitmoStatusReply,
   isRitmoMapCommand,
-  buildRitmoMapReply,
+  buildRitmoMapReplyForUser,
 } from "@/lib/telegram/ritmo/commands";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -156,10 +156,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ritmo: "processed" });
     }
 
-    // === RITMO DE JUEGO: comando MAPA (cualquier usuario linkeado) ===
-    // Devuelve link al dashboard con botón inline. No requiere registro previo.
-    if (isRitmoMapCommand(command) && userId) {
-      const mapReply = buildRitmoMapReply();
+    // === RITMO DE JUEGO: comando MAPA ===
+    // Link al mapa en vivo (/ritmo). Si el usuario es jugador/caddie vinculado,
+    // incluye tournament_id de su torneo activo.
+    if (isRitmoMapCommand(command) && userId && supabase) {
+      const mapReply = await buildRitmoMapReplyForUser(supabase, userId);
       await sendTelegramMessage({
         chatId: chatId || userId,
         text: mapReply.text,
