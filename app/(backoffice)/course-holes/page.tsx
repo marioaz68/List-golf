@@ -21,6 +21,7 @@ type HoleRow = {
   hole_number: number;
   par: number;
   handicap_index: number | null;
+  pace_minutes: number | null;
 };
 
 function buildDefaultHoles(): HoleRow[] {
@@ -30,7 +31,16 @@ function buildDefaultHoles(): HoleRow[] {
     hole_number: i + 1,
     par: pars[i] ?? 4,
     handicap_index: i + 1,
+    pace_minutes: null,
   }));
+}
+
+function formatTotalPace(holes: HoleRow[]): string {
+  const total = holes.reduce((acc, h) => acc + (h.pace_minutes ?? 0), 0);
+  if (total <= 0) return "—";
+  const hh = Math.floor(total / 60);
+  const mm = Math.round(total % 60);
+  return `${total} min (${hh}:${String(mm).padStart(2, "0")})`;
 }
 
 export default async function CourseHolesPage(props: {
@@ -73,7 +83,7 @@ export default async function CourseHolesPage(props: {
   if (effectiveCourseId) {
     const { data, error } = await supabase
       .from("course_holes")
-      .select("hole_number, par, handicap_index")
+      .select("hole_number, par, handicap_index, pace_minutes")
       .eq("course_id", effectiveCourseId)
       .order("hole_number", { ascending: true });
 
@@ -86,6 +96,8 @@ export default async function CourseHolesPage(props: {
         par: Number(r.par),
         handicap_index:
           r.handicap_index == null ? null : Number(r.handicap_index),
+        pace_minutes:
+          r.pace_minutes == null ? null : Number(r.pace_minutes),
       }));
     }
   }
@@ -160,6 +172,10 @@ export default async function CourseHolesPage(props: {
             </div>
             <div className="mt-1 text-[11px] leading-none text-gray-500">
               Edita los 18 hoyos. Par entre 3 y 6. HCP hoyo entre 1 y 18.
+              Ritmo = minutos objetivo por hoyo (ritmo del torneo).
+            </div>
+            <div className="mt-1 text-[11px] font-semibold leading-none text-gray-700">
+              Ritmo total ronda: {formatTotalPace(holes)}
             </div>
           </div>
 
@@ -180,7 +196,7 @@ export default async function CourseHolesPage(props: {
           <input type="hidden" name="course_id" value={effectiveCourseId} />
 
           <div className="rounded border border-gray-300" style={backofficeTableStickyScroll}>
-            <table className="min-w-[520px] w-full border-collapse text-[11px] text-black">
+            <table className="min-w-[680px] w-full border-collapse text-[11px] text-black">
               <thead className={twStickyTheadGray50}>
                 <tr>
                   <th className="w-24 border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
@@ -191,6 +207,9 @@ export default async function CourseHolesPage(props: {
                   </th>
                   <th className="w-40 border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
                     HCP hoyo
+                  </th>
+                  <th className="w-40 border border-gray-300 px-1.5 py-[3px] text-left font-semibold leading-none">
+                    Ritmo (min)
                   </th>
                 </tr>
               </thead>
@@ -221,6 +240,19 @@ export default async function CourseHolesPage(props: {
                         defaultValue={h.handicap_index ?? ""}
                         className="h-7 w-full rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
                         required
+                        disabled={!effectiveCourseId}
+                      />
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-[3px]">
+                      <input
+                        name={`pace_${h.hole_number}`}
+                        type="number"
+                        min="1"
+                        max="60"
+                        step="0.5"
+                        defaultValue={h.pace_minutes ?? ""}
+                        placeholder="16"
+                        className="h-7 w-full rounded border border-gray-300 bg-white px-2 text-[11px] leading-none text-black"
                         disabled={!effectiveCourseId}
                       />
                     </td>

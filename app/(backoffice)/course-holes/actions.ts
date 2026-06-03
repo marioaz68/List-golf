@@ -29,6 +29,17 @@ function normalizeHcp(n: number) {
   return n;
 }
 
+/** Minutos objetivo por hoyo (ritmo). Campo opcional: vacío = null. */
+function optPace(fd: FormData, key: string): number | null {
+  const raw = String(fd.get(key) ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0 || n > 60) {
+    throw new Error("Ritmo inválido. Minutos por hoyo entre 1 y 60.");
+  }
+  return Math.round(n * 100) / 100;
+}
+
 function buildDefaultHoleRows(courseId: string) {
   const pars = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 3, 4, 4];
 
@@ -67,12 +78,14 @@ export async function saveCourseHoles(formData: FormData) {
     const hole = i + 1;
     const par = normalizePar(reqInt(formData, `par_${hole}`));
     const handicap_index = normalizeHcp(reqInt(formData, `hcp_${hole}`));
+    const pace_minutes = optPace(formData, `pace_${hole}`);
 
     return {
       course_id: courseId,
       hole_number: hole,
       par,
       handicap_index,
+      pace_minutes,
     };
   });
 

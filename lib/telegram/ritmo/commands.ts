@@ -2,9 +2,42 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { computePace, smoothedHoleForGroup } from "./paceCalculator";
 
 const RITMO_COMMANDS = new Set(["RITMO", "/RITMO", "MI RITMO"]);
+const RITMO_MAP_COMMANDS = new Set([
+  "MAPA", "/MAPA", "RITMO_MAPA", "/RITMO_MAPA",
+  "DASHBOARD", "/DASHBOARD", "MAP",
+]);
 
 export function isRitmoStatusCommand(command: string): boolean {
   return RITMO_COMMANDS.has(command.trim().toUpperCase());
+}
+
+export function isRitmoMapCommand(command: string): boolean {
+  return RITMO_MAP_COMMANDS.has(command.trim().toUpperCase());
+}
+
+/** Mensaje + botón inline con el link al dashboard de ritmo. */
+export function buildRitmoMapReply(): {
+  text: string;
+  buttons: { text: string; url: string }[][];
+} {
+  const appUrl = (
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "https://www.listgolf.club"
+  );
+  const mapUrl = `${appUrl}/ritmo/demo`;
+  return {
+    text: [
+      "🗺️ Mapa de Ritmo de Juego del CCQ",
+      "",
+      "Toca el botón para abrir el mapa en vivo. Vas a ver cada grupo marcado con su número y un color según su ritmo:",
+      "🟢 En ritmo · 🔵 Adelantado · 🔴 Lento (bloquea) · 🟡 Pegado al de adelante",
+      "",
+      "El mapa se actualiza conforme los grupos comparten su Live Location.",
+      "",
+      "Funciona durante las 8 horas que cada jugador comparte su ubicación.",
+    ].join("\n"),
+    buttons: [[{ text: "🗺️ Abrir mapa en vivo", url: mapUrl }]],
+  };
 }
 
 export async function buildRitmoStatusReply(

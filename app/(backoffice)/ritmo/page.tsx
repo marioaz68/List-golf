@@ -4,7 +4,11 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessModule } from "@/lib/auth/permissions";
-import { computePace } from "@/lib/telegram/ritmo/paceCalculator";
+import {
+  computePace,
+  loadPerHoleMinutes,
+  type PerHoleMinutes,
+} from "@/lib/telegram/ritmo/paceCalculator";
 import { getCourseHoles } from "@/lib/telegram/ritmo/holes";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
@@ -135,7 +139,7 @@ export default async function RitmoPage({
 
   const { data: tournamentRow } = await admin
     .from("tournaments")
-    .select("id, name, short_name, course_name")
+    .select("id, name, short_name, course_name, course_id")
     .eq("id", tournamentId)
     .maybeSingle();
 
@@ -144,7 +148,14 @@ export default async function RitmoPage({
     (tournamentRow?.name as string | null) ??
     "Torneo";
   const courseName = (tournamentRow?.course_name as string | null) ?? null;
+  const courseId = (tournamentRow?.course_id as string | null) ?? null;
   const mapUnsupported = !getCourseHoles(courseName);
+
+  // Minutos objetivo por hoyo del campo (ritmo del torneo, editable).
+  const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
+    admin,
+    courseId
+  );
 
   // Rondas del torneo.
   const { data: roundsRaw } = await admin
@@ -284,6 +295,7 @@ export default async function RitmoPage({
       teeStartHole: g.starting_hole ?? 1,
       roundDate: round!.round_date,
       now,
+      perHoleMinutes,
     });
 
     let status: LiveStatus;

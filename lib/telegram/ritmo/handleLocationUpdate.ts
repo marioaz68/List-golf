@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { detectHole } from "./geometry";
 import { getCourseHoles } from "./holes";
-import { computePace, smoothedHoleForGroup } from "./paceCalculator";
+import {
+  computePace,
+  loadPerHoleMinutes,
+  smoothedHoleForGroup,
+} from "./paceCalculator";
 
 export interface RitmoLocationInput {
   telegramUserId: string;
@@ -47,7 +51,7 @@ export async function handleRitmoLocationUpdate(
   // 2) Inscripción activa más reciente
   const { data: entry } = await supabase
     .from("tournament_entries")
-    .select("id, tournament_id, tournaments ( id, name, course_name )")
+    .select("id, tournament_id, tournaments ( id, name, course_name, course_id )")
     .eq("player_id", player.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -61,6 +65,7 @@ export async function handleRitmoLocationUpdate(
 
   const tournamentRow = Array.isArray(entry.tournaments) ? entry.tournaments[0] : entry.tournaments;
   const courseName = tournamentRow?.course_name ?? null;
+  const courseId = (tournamentRow as { course_id?: string | null } | null)?.course_id ?? null;
   const holes = getCourseHoles(courseName);
   if (!holes) {
     return {
@@ -132,11 +137,13 @@ export async function handleRitmoLocationUpdate(
     ? (await smoothedHoleForGroup(supabase, groupId)) ?? hoyoInstantaneo
     : hoyoInstantaneo;
 
+  const perHoleMinutes = await loadPerHoleMinutes(supabase, courseId);
   const pace = computePace({
     hoyoActual: hoyoSuavizado,
     teeTimeISO: groupTeeTime,
     teeStartHole: groupStartHole,
     roundDate: round?.round_date ?? null,
+    perHoleMinutes,
   });
 
   return {

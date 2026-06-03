@@ -21,7 +21,12 @@ import {
 import { isTelegramIdRequest, parseTelegramCommand } from "@/lib/telegram/parseCommand";
 import { resolveTelegramUserId } from "@/lib/telegram/resolveUserId";
 import { handleRitmoLocationUpdate } from "@/lib/telegram/ritmo/handleLocationUpdate";
-import { isRitmoStatusCommand, buildRitmoStatusReply } from "@/lib/telegram/ritmo/commands";
+import {
+  isRitmoStatusCommand,
+  buildRitmoStatusReply,
+  isRitmoMapCommand,
+  buildRitmoMapReply,
+} from "@/lib/telegram/ritmo/commands";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -149,6 +154,18 @@ export async function POST(req: Request) {
         });
       }
       return NextResponse.json({ ok: true, ritmo: "processed" });
+    }
+
+    // === RITMO DE JUEGO: comando MAPA (cualquier usuario linkeado) ===
+    // Devuelve link al dashboard con botón inline. No requiere registro previo.
+    if (isRitmoMapCommand(command) && userId) {
+      const mapReply = buildRitmoMapReply();
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: mapReply.text,
+        buttons: mapReply.buttons,
+      });
+      return NextResponse.json({ ok: true, ritmo: "map_link_sent" });
     }
 
     let replyText = "No pude procesar tu mensaje.";
@@ -306,7 +323,7 @@ export async function POST(req: Request) {
           "",
           "Cuando el comité te asigne grupo recibirás aquí el link de captura por grupo.",
           "",
-          "Comandos: HOLA · ID",
+          "Comandos: HOLA · ID · MAPA — abre el mapa de ritmo de juego",
         ].join("\n");
       } else if (!player) {
         replyText = buildUnlinkedTelegramReply(userId);
@@ -370,7 +387,7 @@ export async function POST(req: Request) {
         } else if (isRitmoStatusCommand(command)) {
           replyText = await buildRitmoStatusReply(supabase, userId);
         } else if (command === "HOLA") {
-          replyText = `Hola ${playerName}, ya te identifiqué correctamente.\n\nComandos: ID · RECIBIDO · RECIBIDO PARCIAL · GRUPO · INICIO · RITMO`;
+          replyText = `Hola ${playerName}, ya te identifiqué correctamente.\n\nComandos: ID · RECIBIDO · RECIBIDO PARCIAL · GRUPO · INICIO · RITMO · MAPA`;
         } else {
           replyText =
             `Hola ${playerName}.\n` +
@@ -378,7 +395,8 @@ export async function POST(req: Request) {
             `HOLA — verificar vínculo\n` +
             `RECIBIDO / RECIBIDO PARCIAL — confirmar kit\n` +
             `GRUPO o INICIO — salida, grupo y captura (tras confirmar kit)\n` +
-            `RITMO — ritmo actual de tu grupo (comparte Live Location primero)`;
+            `RITMO — ritmo actual de tu grupo (comparte Live Location primero)\n` +
+            `MAPA — abrir el mapa de ritmo del campo en vivo`;
         }
       }
     }
