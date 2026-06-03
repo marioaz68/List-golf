@@ -685,6 +685,30 @@ export default function CaddieClient({
                             Editar
                           </button>
 
+                          <a
+                            href={`/caddies?caddie_q=${encodeURIComponent(
+                              c.nickname?.trim() ||
+                                `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim()
+                            )}`}
+                            style={{
+                              height: 28,
+                              padding: "0 10px",
+                              border: "1px solid #15803d",
+                              borderRadius: 8,
+                              background: "#16a34a",
+                              color: "#fff",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              whiteSpace: "nowrap",
+                              textDecoration: "none",
+                            }}
+                          >
+                            Asignar jugador →
+                          </a>
+
                           <form action={handleDeleteCaddie}>
                             <input type="hidden" name="caddie_id" value={c.id} />
                             <SubmitButton

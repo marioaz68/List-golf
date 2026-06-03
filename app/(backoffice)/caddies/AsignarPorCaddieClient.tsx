@@ -62,12 +62,14 @@ export default function AsignarPorCaddieClient({
   caddies,
   players,
   ctx,
+  initialQuery = "",
 }: {
   caddies: CaddiePickOption[];
   players: PlayerPickOption[];
   ctx: AsignarPorCaddieCtx;
+  initialQuery?: string;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [selectedEntryByCaddie, setSelectedEntryByCaddie] = useState<
     Record<string, string>
   >({});

@@ -453,6 +453,7 @@ export default async function CaddiesPage({
   const cd = messages[locale].caddies;
   const tournamentId = String(getParam(sp, "tournament_id") ?? "").trim();
   const roundId = String(getParam(sp, "round_id") ?? "").trim();
+  const caddieQuery = String(getParam(sp, "caddie_q") ?? "").trim();
 
   const supabase = await createClient();
   const supabaseAdmin = createAdminClient();
@@ -725,6 +726,9 @@ export default async function CaddiesPage({
         </div>
 
         <form method="get" style={filtersFormStyle}>
+          {caddieQuery ? (
+            <input type="hidden" name="caddie_q" value={caddieQuery} />
+          ) : null}
           <div style={filtersGridStyle}>
             <div style={{ ...fieldWrapStyle, gridColumn: "span 5" }}>
               <label htmlFor="tournament_id" style={labelStyle}>
@@ -833,6 +837,7 @@ export default async function CaddiesPage({
               tournamentId: selectedTournamentId,
               roundId: selectedRoundId,
             }}
+            initialQuery={caddieQuery}
           />
         )}
       </div>
