@@ -22,6 +22,10 @@ import {
   roundsInSameSession,
 } from "./sessionBlock";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
+import {
+  gpsStateFromTimestamp,
+  loadLatestGpsByGroup,
+} from "@/lib/ritmo/groupCoverage";
 import { buildTeeSheetEntryOrderMap } from "@/lib/tee-sheet/leaderboardOrderForPairing";
 import {
   cutEnforcesAtTargetRound,
@@ -101,6 +105,7 @@ type GroupUI = GroupRow & {
   members: MemberUI[];
   starting_label: string | null;
   session_round_date: string | null;
+  gpsState?: "live" | "stale" | "none";
 };
 
 function catKey(notes: string | null) {
@@ -604,6 +609,24 @@ for (const row of membersRaw) {
       members: membersByGroup.get(g.id) ?? [],
     };
   });
+
+  // Indicador GPS (ritmo del campo) por grupo en la ronda visible.
+  if (effectiveTournamentId && effectiveRoundId && groupsForUI.length > 0) {
+    const admin = tryCreateAdminClient();
+    if (admin) {
+      const latestGps = await loadLatestGpsByGroup(
+        admin,
+        effectiveTournamentId,
+        effectiveRoundId,
+        groupsForUI.map((g) => g.id)
+      );
+      const now = new Date();
+      for (const g of groupsForUI) {
+        const last = latestGps.get(g.id);
+        g.gpsState = gpsStateFromTimestamp(last?.ts ?? null, 12, now);
+      }
+    }
+  }
 
   const categoriesSet = new Set<string>();
   for (const g of groupsForUI) {

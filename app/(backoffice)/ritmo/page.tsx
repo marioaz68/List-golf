@@ -10,6 +10,11 @@ import {
   type PerHoleMinutes,
 } from "@/lib/telegram/ritmo/paceCalculator";
 import { getCourseHoles } from "@/lib/telegram/ritmo/holes";
+import {
+  gpsStateFromTimestamp,
+  loadGroupCoverageForRound,
+  type GroupGpsState,
+} from "@/lib/ritmo/groupCoverage";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -227,6 +232,7 @@ export default async function RitmoPage({
 
   // Miembros de cada grupo + nombres de jugadores.
   const playersByGroup = new Map<string, string[]>();
+  const entryIdsByGroup = new Map<string, string[]>();
   if (groupIds.length > 0) {
     const { data: membersRaw } = await admin
       .from("pairing_group_members")
@@ -250,8 +256,19 @@ export default async function RitmoPage({
       const arr = playersByGroup.get(m.group_id) ?? [];
       arr.push(nameByEntry.get(m.entry_id) ?? "Jugador");
       playersByGroup.set(m.group_id, arr);
+      const eids = entryIdsByGroup.get(m.group_id) ?? [];
+      eids.push(m.entry_id);
+      entryIdsByGroup.set(m.group_id, eids);
     }
   }
+
+  const coverageByGroup = await loadGroupCoverageForRound(
+    admin,
+    tournamentId,
+    round.id,
+    playersByGroup,
+    entryIdsByGroup
+  );
 
   // Posiciones recientes por grupo.
   const cutoff = new Date(
@@ -313,11 +330,20 @@ export default async function RitmoPage({
       status = "en_ritmo";
     }
 
+    const coverage = coverageByGroup.get(g.id);
+    const gpsState: GroupGpsState = gpsStateFromTimestamp(
+      lastTs,
+      STALE_MINUTES,
+      now
+    );
+
     const detail = latest
       ? smoothedHole == null
         ? "Posición recibida, detectando hoyo…"
         : pace.msg
-      : "Sin ubicación compartida todavía.";
+      : gpsState === "none"
+        ? "Sin Live Location — el caddie o un jugador del grupo debe compartir ubicación 8 h por Telegram."
+        : "Sin ubicación compartida todavía.";
 
     return {
       id: g.id,
@@ -334,6 +360,10 @@ export default async function RitmoPage({
       lon: latest?.lon ?? null,
       lastTs,
       stale,
+      gpsState,
+      caddies: coverage?.caddies ?? [],
+      playersWithTelegram: coverage?.playersWithTelegram ?? 0,
+      playerCount: coverage?.playerCount ?? players.length,
     };
   });
 

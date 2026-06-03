@@ -7,6 +7,12 @@ import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 
 export type LiveStatus = "en_ritmo" | "adelantado" | "atrasado" | "sin_datos";
+export type GpsState = "live" | "stale" | "none";
+
+export type CaddieCoverageRow = {
+  name: string;
+  hasTelegram: boolean;
+};
 
 export interface LiveGroup {
   id: string;
@@ -23,6 +29,10 @@ export interface LiveGroup {
   lon: number | null;
   lastTs: string | null;
   stale: boolean;
+  gpsState: GpsState;
+  caddies: CaddieCoverageRow[];
+  playersWithTelegram: number;
+  playerCount: number;
 }
 
 interface RoundOption {
@@ -78,6 +88,8 @@ export default function RitmoLiveView({
   const vp = useViewport();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [onlyMissingGps, setOnlyMissingGps] = useState(false);
+  const [showMissingList, setShowMissingList] = useState(true);
 
   // Auto-refresco cada 30 s (re-render del Server Component con datos frescos).
   useEffect(() => {
@@ -126,6 +138,33 @@ export default function RitmoLiveView({
     for (const g of groups) c[g.status] += 1;
     return c;
   }, [groups]);
+
+  const gpsCounts = useMemo(() => {
+    let live = 0;
+    let stale = 0;
+    let none = 0;
+    for (const g of groups) {
+      if (g.gpsState === "live") live += 1;
+      else if (g.gpsState === "stale") stale += 1;
+      else none += 1;
+    }
+    return { live, stale, none, total: groups.length };
+  }, [groups]);
+
+  const missingGpsGroups = useMemo(
+    () =>
+      [...groups]
+        .filter((g) => g.gpsState === "none")
+        .sort((a, b) => a.number - b.number),
+    [groups]
+  );
+
+  const visibleGroups = useMemo(() => {
+    const base = onlyMissingGps
+      ? sortedGroups.filter((g) => g.gpsState !== "live")
+      : sortedGroups;
+    return base;
+  }, [sortedGroups, onlyMissingGps]);
 
   const sidebar = (
     <div
@@ -242,7 +281,117 @@ export default function RitmoLiveView({
         <SummaryChip color={STATUS_COLOR.atrasado} n={counts.atrasado} label="lentos" />
         <SummaryChip color={STATUS_COLOR.en_ritmo} n={counts.en_ritmo} label="en ritmo" />
         <SummaryChip color={STATUS_COLOR.adelantado} n={counts.adelantado} label="adelant." />
-        <SummaryChip color={STATUS_COLOR.sin_datos} n={counts.sin_datos} label="sin GPS" />
+        <SummaryChip color={STATUS_COLOR.sin_datos} n={counts.sin_datos} label="sin ritmo" />
+      </div>
+
+      {/* Cobertura GPS por grupo */}
+      <div
+        style={{
+          padding: "8px 12px",
+          borderBottom: "1px solid #222",
+          background: "#0f1419",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 6,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9,
+              color: "#9ca3af",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+              fontWeight: 700,
+            }}
+          >
+            Live Location (GPS)
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: "#e5e7eb" }}>
+            {gpsCounts.live}/{gpsCounts.total} activos
+          </span>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+          <SummaryChip color="#22c55e" n={gpsCounts.live} label="en vivo" />
+          <SummaryChip color="#f59e0b" n={gpsCounts.stale} label="GPS viejo" />
+          <SummaryChip color="#6b7280" n={gpsCounts.none} label="sin señal" />
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setOnlyMissingGps((v) => !v)}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "4px 8px",
+              borderRadius: 5,
+              border: `1px solid ${onlyMissingGps ? "#f59e0b" : "#374151"}`,
+              background: onlyMissingGps ? "#78350f" : "#1f2937",
+              color: onlyMissingGps ? "#fde68a" : "#cbd5e1",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {onlyMissingGps ? "✓ Solo sin GPS" : "Ver sin GPS"}
+          </button>
+          {missingGpsGroups.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowMissingList((v) => !v)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "4px 8px",
+                borderRadius: 5,
+                border: "1px solid #374151",
+                background: "#1f2937",
+                color: "#cbd5e1",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {showMissingList ? "▾" : "▸"} Lista ({missingGpsGroups.length})
+            </button>
+          ) : null}
+        </div>
+        {showMissingList && missingGpsGroups.length > 0 ? (
+          <div
+            style={{
+              marginTop: 8,
+              maxHeight: 120,
+              overflowY: "auto",
+              fontSize: 10,
+              color: "#d1d5db",
+              lineHeight: 1.45,
+              borderTop: "1px solid #262626",
+              paddingTop: 6,
+            }}
+          >
+            <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 4 }}>
+              Pendientes de activar Live Location (8 h):
+            </div>
+            {missingGpsGroups.map((g) => (
+              <div key={g.id} style={{ marginBottom: 3 }}>
+                <b>G{g.number}</b> · tee {formatTime(g.teeTime)}
+                {g.caddies.length > 0 ? (
+                  <>
+                    {" "}
+                    · caddie{" "}
+                    {g.caddies.map((c) => c.name).join(", ")}
+                    {g.caddies.some((c) => c.hasTelegram) ? "" : " ⚠ sin ID Telegram"}
+                  </>
+                ) : (
+                  <span style={{ color: "#f87171" }}> · sin caddie asignado</span>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
@@ -271,8 +420,12 @@ export default function RitmoLiveView({
             del torneo. En cuanto lleguen posiciones aparecerán aquí los grupos
             sobre el mapa.
           </div>
+        ) : visibleGroups.length === 0 ? (
+          <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>
+            Todos los grupos tienen GPS activo.
+          </div>
         ) : (
-          sortedGroups.map((g) => (
+          visibleGroups.map((g) => (
             <GroupCard
               key={g.id}
               g={g}
@@ -430,6 +583,15 @@ function SummaryChip({
   );
 }
 
+const GPS_BADGE: Record<
+  GpsState,
+  { label: string; bg: string; fg: string }
+> = {
+  live: { label: "GPS ✓", bg: "#064e3b", fg: "#6ee7b7" },
+  stale: { label: "GPS viejo", bg: "#78350f", fg: "#fde68a" },
+  none: { label: "Sin GPS", bg: "#450a0a", fg: "#fca5a5" },
+};
+
 function GroupCard({
   g,
   open,
@@ -440,6 +602,7 @@ function GroupCard({
   onToggle: () => void;
 }) {
   const accent = STATUS_COLOR[g.status];
+  const gpsBadge = GPS_BADGE[g.gpsState];
   return (
     <div
       style={{
@@ -494,21 +657,18 @@ function GroupCard({
             <div style={{ fontSize: 12, fontWeight: 700 }}>
               {g.hoyo != null ? `Hoyo ${g.hoyo}` : "Sin hoyo"}
             </div>
-            {g.stale && g.status !== "sin_datos" ? (
-              <span
-                style={{
-                  fontSize: 9,
-                  background: "#374151",
-                  color: "#d1d5db",
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  fontWeight: 700,
-                }}
-                title="Hace rato que no recibimos su ubicación"
-              >
-                GPS viejo
-              </span>
-            ) : null}
+            <span
+              style={{
+                fontSize: 9,
+                background: gpsBadge.bg,
+                color: gpsBadge.fg,
+                padding: "1px 6px",
+                borderRadius: 3,
+                fontWeight: 800,
+              }}
+            >
+              {gpsBadge.label}
+            </span>
           </div>
           <DeltaChip status={g.status} deltaMinutes={g.deltaMinutes} />
         </div>
@@ -533,6 +693,26 @@ function GroupCard({
         <div style={{ fontSize: 11, color: "#d1d5db", marginTop: 4 }}>
           {g.detail}
         </div>
+        {g.caddies.length > 0 ? (
+          <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
+            Caddie:{" "}
+            {g.caddies.map((c, i) => (
+              <span key={i}>
+                {i > 0 ? ", " : ""}
+                <span style={{ color: "#e5e7eb" }}>{c.name}</span>
+                {c.hasTelegram ? (
+                  <span style={{ color: "#6ee7b7" }}> ✓ TG</span>
+                ) : (
+                  <span style={{ color: "#f87171" }}> ⚠ sin ID</span>
+                )}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: "#f87171", marginTop: 4 }}>
+            Sin caddie asignado en esta ronda
+          </div>
+        )}
       </button>
 
       {open ? (
@@ -543,6 +723,23 @@ function GroupCard({
             padding: "8px 12px",
           }}
         >
+          {g.gpsState === "none" ? (
+            <div
+              style={{
+                fontSize: 10,
+                color: "#fde68a",
+                background: "#422006",
+                border: "1px solid #78350f",
+                borderRadius: 6,
+                padding: "6px 8px",
+                marginBottom: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              Que el <b>caddie</b> (o un jugador) comparta{" "}
+              <b>Ubicación en tiempo real · 8 horas</b> en el bot de Telegram.
+            </div>
+          ) : null}
           <div
             style={{
               fontSize: 9,
@@ -552,7 +749,11 @@ function GroupCard({
               marginBottom: 6,
             }}
           >
-            Jugadores ({g.players.length})
+            Jugadores ({g.players.length}
+            {g.playersWithTelegram > 0
+              ? ` · ${g.playersWithTelegram} con Telegram`
+              : ""}
+            )
           </div>
           {g.players.length === 0 ? (
             <div style={{ fontSize: 11, color: "#6b7280" }}>Sin jugadores.</div>

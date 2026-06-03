@@ -47,6 +47,8 @@ type MemberUI = {
   tee_name: string | null;
 };
 
+type GroupGpsState = "live" | "stale" | "none";
+
 type GroupUI = {
   id: string;
   group_no: number;
@@ -56,6 +58,8 @@ type GroupUI = {
   notes: string | null;
   members: MemberUI[];
   session_round_date?: string | null;
+  /** Estado de Live Location para ritmo del campo. */
+  gpsState?: GroupGpsState;
 };
 
 type Props = {
@@ -743,8 +747,30 @@ function DroppableGroupCard({
       >
         <div className="flex items-center justify-between gap-1 border-b border-slate-300/70 pb-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
-            <div className="text-[10px] font-semibold text-slate-400">
-              G{group.group_no}
+            <div className="flex items-center gap-1">
+              <div className="text-[10px] font-semibold text-slate-400">
+                G{group.group_no}
+              </div>
+              {group.gpsState ? (
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  title={
+                    group.gpsState === "live"
+                      ? "GPS en vivo (ritmo)"
+                      : group.gpsState === "stale"
+                        ? "GPS desactualizado"
+                        : "Sin Live Location"
+                  }
+                  style={{
+                    backgroundColor:
+                      group.gpsState === "live"
+                        ? "#22c55e"
+                        : group.gpsState === "stale"
+                          ? "#f59e0b"
+                          : "#ef4444",
+                  }}
+                />
+              ) : null}
             </div>
 
             <div className="text-[11px] font-semibold text-slate-900">
