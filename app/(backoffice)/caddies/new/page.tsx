@@ -193,8 +193,25 @@ export default async function NewCaddiePage() {
           </p>
         </div>
 
-        <Link href="/caddies" style={{ fontSize: 12, color: "#0f172a" }}>
-          Asignaciones
+        <Link
+          href="/caddies"
+          style={{
+            height: 36,
+            padding: "0 16px",
+            border: "1px solid #1f2937",
+            borderRadius: 8,
+            background: "#111827",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+          }}
+        >
+          Asignar torneo →
         </Link>
       </div>
 

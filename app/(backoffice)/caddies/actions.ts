@@ -3,16 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  assignCaddieToEntry,
+  resolveDefaultRoundForEntry,
+} from "@/lib/caddies/assignCaddieToEntry";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
 }
 
-function redirectBack(tournamentId: string, roundId: string) {
+function redirectBack(tournamentId: string, roundId: string, caddieQuery = "") {
   const params = new URLSearchParams();
 
   if (tournamentId) params.set("tournament_id", tournamentId);
   if (roundId) params.set("round_id", roundId);
+  if (caddieQuery) params.set("caddie_q", caddieQuery);
 
   const qs = params.toString();
   redirect(qs ? `/caddies?${qs}` : "/caddies");
@@ -218,6 +223,87 @@ export async function assignCaddieAction(formData: FormData) {
     redirect(redirect_to);
   }
   redirectBack(tournament_id, round_id);
+}
+
+/**
+ * Asigna un caddie a un INSCRITO del torneo (sin requerir que la ronda tenga
+ * grupos armados): resuelve la primera ronda aplicable y, si existe, su grupo.
+ * Además marca al jugador como FAVORITO del caddie (sin borrar otros favoritos).
+ *
+ * Usado por el panel "Buscar caddie y asignar jugador" de /caddies, que opera
+ * con solo seleccionar el torneo arriba.
+ */
+export async function assignCaddieByEntryAction(formData: FormData) {
+  const supabase = createAdminClient();
+
+  const tournament_id = clean(formData.get("tournament_id"));
+  const entry_id = clean(formData.get("entry_id"));
+  const caddie_id = clean(formData.get("caddie_id"));
+  const player_id = clean(formData.get("player_id"));
+  const caddie_q = clean(formData.get("caddie_q"));
+
+  if (!tournament_id || !entry_id || !caddie_id) {
+    throw new Error("Selecciona torneo, caddie e inscrito.");
+  }
+
+  const { data: entry } = await supabase
+    .from("tournament_entries")
+    .select("id, tournament_id")
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (!entry) {
+    throw new Error("El inscrito no pertenece a ese torneo.");
+  }
+
+  const { roundId, pairingGroupId } = await resolveDefaultRoundForEntry(
+    supabase,
+    tournament_id,
+    entry_id
+  );
+
+  if (!roundId) {
+    throw new Error(
+      "El torneo no tiene rondas configuradas. Crea las rondas primero."
+    );
+  }
+
+  const result = await assignCaddieToEntry(supabase, {
+    tournamentId: tournament_id,
+    entryId: entry_id,
+    caddieId: caddie_id,
+    roundId,
+    pairingGroupId,
+  });
+
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+
+  // Marcar al jugador como favorito del caddie (sin tocar los demás favoritos).
+  if (player_id) {
+    const { data: existingFav } = await supabase
+      .from("caddie_favorites")
+      .select("id")
+      .eq("caddie_id", caddie_id)
+      .eq("player_id", player_id)
+      .maybeSingle();
+
+    if (!existingFav) {
+      const { error: favErr } = await supabase
+        .from("caddie_favorites")
+        .insert({ caddie_id, player_id });
+      if (favErr) {
+        console.warn("[caddies] no se pudo marcar favorito:", favErr.message);
+      }
+    }
+  }
+
+  revalidatePath("/caddies");
+  revalidatePath("/caddies/new");
+  revalidatePath("/entries");
+  redirectBack(tournament_id, "", caddie_q);
 }
 
 export async function deleteCaddieAssignmentAction(formData: FormData) {

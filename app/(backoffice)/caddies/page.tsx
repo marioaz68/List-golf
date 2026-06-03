@@ -666,17 +666,44 @@ export default async function CaddiesPage({
       level: c.level,
     }));
 
-  const playerPickOptions: PlayerPickOption[] = assignmentCandidates.map(
-    (row) => ({
-      entryId: row.entry.id,
-      name: displayEntryPlayerName(row.entry),
-      playerNumber: row.entry.player_number,
-      category: displayEntryCategory(row.entry),
-      groupId: row.group.id,
-      groupLabel: pairingGroupLabel(row.group.id, pairingGroupsAll),
-      currentCaddieId: row.currentCaddie?.id ?? null,
-    })
-  );
+  // Caddie ya asignado a cada inscrito en el torneo (cualquier ronda activa).
+  const caddieByEntryInTournament = new Map<string, string>();
+  if (selectedTournamentId) {
+    for (const a of assignmentsAll) {
+      if (a.is_active === false) continue;
+      if (a.tournament_id !== selectedTournamentId) continue;
+      if (!a.caddie_id) continue;
+      if (!caddieByEntryInTournament.has(a.entry_id)) {
+        caddieByEntryInTournament.set(a.entry_id, a.caddie_id);
+      }
+    }
+  }
+
+  // Opciones por INSCRITO del torneo (no requiere grupos armados): basta
+  // seleccionar el torneo arriba para poder asignar y marcar favorito.
+  const playerPickOptions: PlayerPickOption[] = selectedTournamentId
+    ? entriesAll
+        .filter((e) => e.tournament_id === selectedTournamentId)
+        .map((entry) => {
+          const player = oneOrNull(entry.players);
+          return {
+            entryId: entry.id,
+            playerId: player?.id ?? "",
+            name: displayEntryPlayerName(entry),
+            playerNumber: entry.player_number,
+            category: displayEntryCategory(entry),
+            currentCaddieId: caddieByEntryInTournament.get(entry.id) ?? null,
+          };
+        })
+        .sort(
+          (a, b) =>
+            (a.playerNumber ?? 1_000_000) - (b.playerNumber ?? 1_000_000)
+        )
+    : [];
+
+  const selectedTournament = selectedTournamentId
+    ? tournamentMap.get(selectedTournamentId) ?? null
+    : null;
 
   return (
     <div style={pageWrap}>
@@ -815,8 +842,9 @@ export default async function CaddiesPage({
           <div>
             <h2 style={titleStyle}>Buscar caddie y asignar jugador</h2>
             <p style={subStyle}>
-              Encuentra al caddie por nombre y asígnale un jugador del torneo
-              en la ronda seleccionada.
+              Selecciona arriba un torneo, busca al caddie por nombre y asígnale
+              un inscrito. El jugador queda como favorito del caddie y la
+              asignación se refleja en Inscripciones.
             </p>
           </div>
         </div>
@@ -831,11 +859,11 @@ export default async function CaddiesPage({
             players={playerPickOptions}
             ctx={{
               tournamentId: selectedTournamentId,
-              roundId: selectedRoundId,
+              tournamentName: selectedTournament
+                ? displayTournamentName(selectedTournament)
+                : "",
               ready: Boolean(
-                selectedTournamentId &&
-                  selectedRoundId &&
-                  playerPickOptions.length > 0
+                selectedTournamentId && playerPickOptions.length > 0
               ),
             }}
             initialQuery={caddieQuery}

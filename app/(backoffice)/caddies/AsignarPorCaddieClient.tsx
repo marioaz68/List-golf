@@ -4,15 +4,18 @@
  * Asignación centrada en el CADDIE (flujo inverso al de la tabla por jugador).
  *
  * Permite buscar un caddie por nombre/apodo/teléfono/telegram y, una vez
- * encontrado, asignarle un jugador del torneo (en la ronda seleccionada).
+ * encontrado, asignarle un INSCRITO del torneo seleccionado arriba. No requiere
+ * que la ronda tenga grupos armados: la acción resuelve la ronda/grupo. Además,
+ * al asignar también marca al jugador como FAVORITO del caddie.
+ *
  * Cada tarjeta de caddie muestra:
  *  - Nombre + nivel + contacto.
- *  - El jugador que ya tiene asignado en esta ronda (si lo hay).
- *  - Un selector de jugador + botón "Asignar".
+ *  - El inscrito que ya tiene asignado en este torneo (si lo hay).
+ *  - Un selector de inscrito + botón "Asignar".
  */
 
 import { useMemo, useState } from "react";
-import { assignCaddieAction } from "./actions";
+import { assignCaddieByEntryAction } from "./actions";
 import SubmitButton from "@/components/ui/SubmitButton";
 
 export type CaddiePickOption = {
@@ -26,18 +29,18 @@ export type CaddiePickOption = {
 
 export type PlayerPickOption = {
   entryId: string;
+  playerId: string;
   name: string;
   playerNumber: number | null;
   category: string;
-  groupId: string;
-  groupLabel: string;
+  /** caddie ya asignado a este inscrito en el torneo (cualquier ronda). */
   currentCaddieId: string | null;
 };
 
 export type AsignarPorCaddieCtx = {
   tournamentId: string;
-  roundId: string;
-  /** true cuando hay torneo y ronda concretos: se puede asignar jugador. */
+  tournamentName: string;
+  /** true cuando hay torneo seleccionado con inscritos: se puede asignar. */
   ready: boolean;
 };
 
@@ -76,14 +79,14 @@ export default function AsignarPorCaddieClient({
     Record<string, string>
   >({});
 
-  // entryId -> player (para resolver group y el jugador actual del caddie).
+  // entryId -> inscrito (para resolver el jugador actual del caddie).
   const playersByEntry = useMemo(() => {
     const map = new Map<string, PlayerPickOption>();
     for (const p of players) map.set(p.entryId, p);
     return map;
   }, [players]);
 
-  // caddieId -> jugador asignado actualmente en esta ronda.
+  // caddieId -> inscrito asignado actualmente en este torneo.
   const playerByCaddie = useMemo(() => {
     const map = new Map<string, PlayerPickOption>();
     for (const p of players) {
@@ -122,7 +125,22 @@ export default function AsignarPorCaddieClient({
         }}
       />
 
-      {!ctx.ready ? (
+      {ctx.tournamentName ? (
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "#ecfdf5",
+            border: "1px solid #6ee7b7",
+            color: "#065f46",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          Torneo seleccionado: <strong>{ctx.tournamentName}</strong>
+          {ctx.ready ? null : " · No hay inscritos en este torneo."}
+        </div>
+      ) : (
         <div
           style={{
             padding: "8px 10px",
@@ -134,10 +152,9 @@ export default function AsignarPorCaddieClient({
           }}
         >
           Puedes buscar al caddie. Para <strong>asignarle un jugador</strong>,
-          selecciona arriba <strong>torneo</strong> y una <strong>ronda</strong>{" "}
-          específica.
+          selecciona arriba un <strong>torneo</strong>.
         </div>
-      ) : null}
+      )}
 
       <div
         style={{
@@ -249,12 +266,12 @@ export default function AsignarPorCaddieClient({
                   </div>
                 ) : (
                   <div style={{ fontSize: 11, color: "#64748b" }}>
-                    Sin jugador asignado en esta ronda
+                    Sin jugador asignado en este torneo
                   </div>
                 )}
 
                 <form
-                  action={assignCaddieAction}
+                  action={assignCaddieByEntryAction}
                   style={{ display: "grid", gap: 6 }}
                 >
                   <input
@@ -263,7 +280,6 @@ export default function AsignarPorCaddieClient({
                     value={ctx.tournamentId}
                   />
                   <input type="hidden" name="caddie_id" value={c.id} />
-                  <input type="hidden" name="round_id" value={ctx.roundId} />
                   <input
                     type="hidden"
                     name="entry_id"
@@ -271,9 +287,10 @@ export default function AsignarPorCaddieClient({
                   />
                   <input
                     type="hidden"
-                    name="pairing_group_id"
-                    value={selectedPlayer?.groupId ?? ""}
+                    name="player_id"
+                    value={selectedPlayer?.playerId ?? ""}
                   />
+                  <input type="hidden" name="caddie_q" value={query} />
 
                   <select
                     value={selectedEntry}
@@ -297,8 +314,8 @@ export default function AsignarPorCaddieClient({
                   >
                     <option value="">
                       {ctx.ready
-                        ? "Selecciona jugador…"
-                        : "Selecciona torneo y ronda arriba…"}
+                        ? "Selecciona jugador inscrito…"
+                        : "Selecciona un torneo arriba…"}
                     </option>
                     {players.map((p) => {
                       const takenByOther =
@@ -311,7 +328,6 @@ export default function AsignarPorCaddieClient({
                           {p.category && p.category !== "—"
                             ? ` · ${p.category}`
                             : ""}
-                          {` · ${p.groupLabel}`}
                           {takenByOther ? " · (tiene caddie)" : ""}
                         </option>
                       );
@@ -323,11 +339,13 @@ export default function AsignarPorCaddieClient({
                     disabled={!ctx.ready || !selectedEntry}
                     className={
                       ctx.ready && selectedEntry
-                        ? "h-8 px-3 border border-gray-800 rounded bg-gray-900 text-white text-[12px] font-bold hover:bg-gray-800"
+                        ? "h-8 px-3 border border-emerald-700 rounded bg-emerald-700 text-white text-[12px] font-bold hover:bg-emerald-800"
                         : "h-8 px-3 border border-slate-300 rounded bg-slate-100 text-slate-400 text-[12px] font-semibold cursor-not-allowed"
                     }
                   >
-                    {current ? "Reasignar jugador →" : "Asignar jugador →"}
+                    {current
+                      ? "Reasignar y marcar favorito →"
+                      : "Asignar y marcar favorito →"}
                   </SubmitButton>
                 </form>
               </div>

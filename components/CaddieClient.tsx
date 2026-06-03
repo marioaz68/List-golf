@@ -373,6 +373,7 @@ export default function CaddieClient({
   );
   const [formError, setFormError] = useState("");
   const [editError, setEditError] = useState("");
+  const listSectionRef = useRef<HTMLDivElement | null>(null);
   const editSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -441,11 +442,28 @@ export default function CaddieClient({
     setEditError("");
     setAssignFeedback(null);
     setAssignEntryId("");
+    setAssignTournamentId("");
     setSearchTournamentEntry("");
     setSelected(caddie);
 
     window.requestAnimationFrame(() => {
       editSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  function handleCloseEdit() {
+    setEditError("");
+    setAssignFeedback(null);
+    setAssignEntryId("");
+    setAssignTournamentId("");
+    setSearchTournamentEntry("");
+    setSelected(null);
+
+    window.requestAnimationFrame(() => {
+      listSectionRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -655,7 +673,7 @@ export default function CaddieClient({
         </form>
       </div>
 
-      <div style={cardStyle}>
+      <div ref={listSectionRef} style={cardStyle}>
         <div style={cardHeader}>
           <h2 style={titleStyle}>BUSCAR / EDITAR CADDIE</h2>
           <p style={subStyle}>Busca por nombre, apodo, teléfono o Telegram</p>
@@ -783,9 +801,30 @@ export default function CaddieClient({
 
       {selected && (
         <div ref={editSectionRef} style={cardStyle}>
-          <div style={cardHeader}>
-            <h2 style={titleStyle}>EDITAR CADDIE</h2>
-            <p style={subStyle}>{displayCaddieName(selected)}</p>
+          <div
+            style={{
+              ...cardHeader,
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <h2 style={titleStyle}>EDITAR CADDIE</h2>
+              <p style={subStyle}>{displayCaddieName(selected)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseEdit}
+              style={{
+                ...ghostButtonStyle,
+                height: 34,
+                padding: "0 14px",
+                fontSize: 12,
+              }}
+            >
+              ← Volver al listado
+            </button>
           </div>
 
           <form
