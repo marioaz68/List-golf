@@ -43,6 +43,9 @@ export async function assignCaddieAction(formData: FormData) {
   const round_id = clean(formData.get("round_id"));
   const pairing_group_id = clean(formData.get("pairing_group_id"));
   const redirect_to = safeRedirectTo(clean(formData.get("redirect_to")));
+  // Cuando viene "1", el caddie se asigna a TODAS las rondas elegibles del
+  // torneo, sobreescribiendo cualquier otro caddie que el inscrito tuviera.
+  const apply_all_rounds = clean(formData.get("apply_all_rounds")) === "1";
 
   if (!tournament_id || !entry_id || !caddie_id) {
     throw new Error("Datos incompletos");
@@ -137,9 +140,12 @@ export async function assignCaddieAction(formData: FormData) {
         .eq("entry_id", entry_id)
         .eq("is_active", true)
         .in("round_id", eligibleIds);
-      const occupiedByEntry = new Set(
-        (existingForEntry ?? []).map((a) => String(a.round_id))
-      );
+      // round_id -> caddie_id actualmente asignado al inscrito.
+      const caddieByRoundForEntry = new Map<string, string>();
+      for (const a of existingForEntry ?? []) {
+        caddieByRoundForEntry.set(String(a.round_id), String(a.caddie_id));
+      }
+      const occupiedByEntry = new Set(caddieByRoundForEntry.keys());
 
       // 4. Rondas donde el caddie ya está asignado a otro jugador.
       const { data: caddieElsewhere } = await supabase
@@ -155,12 +161,41 @@ export async function assignCaddieAction(formData: FormData) {
           .map((a) => String(a.round_id))
       );
 
-      // 5. Mapeo de pairing_group para esas rondas (si el inscrito ya
-      //    está en un grupo, lo asociamos también; si no, queda null).
-      const targetRoundIds = eligibleIds.filter(
-        (rid) =>
-          !occupiedByEntry.has(rid) && !blockedRoundsForCaddie.has(rid)
-      );
+      // 5. Rondas destino.
+      //  - Modo normal: sólo rondas donde el inscrito aún no tiene caddie.
+      //  - Modo "todas las rondas": también las que ya tienen OTRO caddie
+      //    (se sobreescribe), saltando sólo las rondas donde este caddie ya
+      //    trabaja con otro jugador (conflicto real).
+      const targetRoundIds = eligibleIds.filter((rid) => {
+        if (blockedRoundsForCaddie.has(rid)) return false;
+        const existingCaddie = caddieByRoundForEntry.get(rid);
+        if (existingCaddie === caddie_id) return false; // ya está este caddie
+        if (apply_all_rounds) return true; // sobreescribir cualquier otro
+        return !occupiedByEntry.has(rid); // normal: sólo rondas vacías
+      });
+
+      // En modo "todas las rondas" desactivamos el caddie previo del inscrito
+      // en las rondas que vamos a sobreescribir.
+      if (apply_all_rounds) {
+        const roundsToOverwrite = targetRoundIds.filter((rid) =>
+          occupiedByEntry.has(rid)
+        );
+        if (roundsToOverwrite.length > 0) {
+          const { error: deactOthersErr } = await supabase
+            .from("caddie_assignments")
+            .update({ is_active: false })
+            .eq("tournament_id", tournament_id)
+            .eq("entry_id", entry_id)
+            .eq("is_active", true)
+            .in("round_id", roundsToOverwrite);
+          if (deactOthersErr) {
+            console.warn(
+              "[caddies] no se pudo desactivar caddie previo en otras rondas:",
+              deactOthersErr.message
+            );
+          }
+        }
+      }
       const groupByRound = new Map<string, string | null>();
       if (targetRoundIds.length > 0) {
         const { data: pgmRows } = await supabase

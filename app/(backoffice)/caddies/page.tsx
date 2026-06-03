@@ -877,6 +877,9 @@ export default async function CaddiesPage({
             <h2 style={titleStyle}>{cd.assignHeading}</h2>
             <p style={subStyle}>
               Los caddies ya usados en esta ronda se ocultan del selector.
+              <strong> Guardar</strong> asigna sólo a la ronda seleccionada;
+              <strong> Todas las rondas</strong> asigna el caddie en todas las
+              rondas del torneo (sobreescribe el caddie previo del jugador).
             </p>
           </div>
         </div>
@@ -984,6 +987,15 @@ export default async function CaddiesPage({
                             className="h-7 px-2 border border-gray-800 rounded bg-gray-900 text-white text-[11px] font-bold"
                           >
                             Guardar
+                          </SubmitButton>
+
+                          <SubmitButton
+                            name="apply_all_rounds"
+                            value="1"
+                            pendingText="Asignando..."
+                            className="h-7 px-2 border border-emerald-700 rounded bg-emerald-700 text-white text-[11px] font-bold"
+                          >
+                            Todas las rondas
                           </SubmitButton>
                         </form>
                       </td>
