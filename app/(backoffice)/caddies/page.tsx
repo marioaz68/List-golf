@@ -554,18 +554,18 @@ export default async function CaddiesPage({
     ? roundsAll.filter((r) => r.tournament_id === selectedTournamentId)
     : roundsAll;
 
-  // Si el usuario entró por shortcut desde Inscritos (sólo viene
-  // tournament_id) escogemos la primera ronda del torneo automáticamente
-  // para que la tabla de asignación aparezca de una vez.
-  const selectedRoundId = rounds.some((r) => r.id === roundId)
-    ? roundId
-    : selectedTournamentId && !roundId && rounds.length > 0
-      ? rounds[0]!.id
-      : "";
+  // Ronda del filtro (URL): vacío = "Todas" en el listado de asignaciones.
+  const filterRoundId = rounds.some((r) => r.id === roundId) ? roundId : "";
+
+  // Ronda efectiva para la tabla "asignar por jugador" (requiere grupo en una
+  // ronda). Si el filtro es "Todas", usamos la primera ronda solo ahí.
+  const assignmentRoundId =
+    filterRoundId ||
+    (selectedTournamentId && rounds.length > 0 ? rounds[0]!.id : "");
 
   const assignments = assignmentsAll.filter((a) => {
     if (selectedTournamentId && a.tournament_id !== selectedTournamentId) return false;
-    if (selectedRoundId && a.round_id !== selectedRoundId) return false;
+    if (filterRoundId && a.round_id !== filterRoundId) return false;
     return true;
   });
 
@@ -604,19 +604,19 @@ export default async function CaddiesPage({
       .filter(
         (a) =>
           a.is_active !== false &&
-          !!selectedRoundId &&
-          a.round_id === selectedRoundId &&
+          !!assignmentRoundId &&
+          a.round_id === assignmentRoundId &&
           a.caddie_id
       )
       .map((a) => a.caddie_id)
   );
 
   const assignmentCandidates =
-    selectedTournamentId && selectedRoundId
+    selectedTournamentId && assignmentRoundId
       ? pairingGroupMembersAll
           .map((member) => {
             const group = pairingGroupsAll.find((g) => g.id === member.group_id);
-            if (!group || group.round_id !== selectedRoundId) return null;
+            if (!group || group.round_id !== assignmentRoundId) return null;
 
             const entry = entriesAll.find(
               (e) => e.id === member.entry_id && e.tournament_id === selectedTournamentId
@@ -624,7 +624,8 @@ export default async function CaddiesPage({
             if (!entry) return null;
 
             const currentAssignment =
-              currentAssignmentsByEntryRound.get(`${entry.id}_${selectedRoundId}`) ?? null;
+              currentAssignmentsByEntryRound.get(`${entry.id}_${assignmentRoundId}`) ??
+              null;
 
             return {
               entry,
@@ -783,7 +784,7 @@ export default async function CaddiesPage({
               <select
                 id="round_id"
                 name="round_id"
-                defaultValue={selectedRoundId}
+                defaultValue={filterRoundId}
                 style={fieldStyle}
               >
                 <option value="">Todas</option>
@@ -884,7 +885,7 @@ export default async function CaddiesPage({
           </div>
         </div>
 
-        {!selectedTournamentId || !selectedRoundId ? (
+        {!selectedTournamentId || !assignmentRoundId ? (
           <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
             Primero selecciona <strong>torneo</strong> y <strong>ronda</strong>.
           </div>
@@ -964,7 +965,12 @@ export default async function CaddiesPage({
                         >
                           <input type="hidden" name="tournament_id" value={selectedTournamentId} />
                           <input type="hidden" name="entry_id" value={row.entry.id} />
-                          <input type="hidden" name="round_id" value={selectedRoundId} />
+                          <input type="hidden" name="round_id" value={assignmentRoundId} />
+                          <input
+                            type="hidden"
+                            name="redirect_round_id"
+                            value={filterRoundId}
+                          />
                           <input type="hidden" name="pairing_group_id" value={row.group.id} />
 
                           <select
@@ -1014,6 +1020,11 @@ export default async function CaddiesPage({
             <h2 style={titleStyle}>{cd.assignments}</h2>
             <p style={subStyle}>
               Solo se muestran asignaciones activas. Quitar conserva historial.
+              {filterRoundId
+                ? ""
+                : selectedTournamentId
+                  ? " Con ronda «Todas» ves las asignaciones de todas las rondas del torneo."
+                  : ""}
             </p>
           </div>
         </div>
@@ -1088,7 +1099,7 @@ export default async function CaddiesPage({
                             name="tournament_id"
                             value={selectedTournamentId}
                           />
-                          <input type="hidden" name="round_id" value={selectedRoundId} />
+                          <input type="hidden" name="round_id" value={filterRoundId} />
 
                           <SubmitButton
                             pendingText="Quitando..."

@@ -257,7 +257,10 @@ export async function assignCaddieAction(formData: FormData) {
     revalidatePath(redirect_to);
     redirect(redirect_to);
   }
-  redirectBack(tournament_id, round_id);
+  const redirectRoundId = formData.has("redirect_round_id")
+    ? clean(formData.get("redirect_round_id"))
+    : round_id;
+  redirectBack(tournament_id, redirectRoundId);
 }
 
 /**
