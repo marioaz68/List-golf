@@ -168,6 +168,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ritmo: "map_link_sent" });
     }
 
+    // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===
+    // Se resuelve por sí mismo (jugador o caddie), así que va antes de la
+    // identificación de jugador para que también funcione con caddies.
+    if (isRitmoStatusCommand(command) && userId && supabase) {
+      const statusReply = await buildRitmoStatusReply(supabase, userId);
+      await sendTelegramMessage({ chatId: chatId || userId, text: statusReply });
+      return NextResponse.json({ ok: true, ritmo: "status_sent" });
+    }
+
     let replyText = "No pude procesar tu mensaje.";
 
     if (!TELEGRAM_TOKEN?.trim()) {

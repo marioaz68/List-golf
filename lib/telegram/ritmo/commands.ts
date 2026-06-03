@@ -4,6 +4,7 @@ import {
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "./paceCalculator";
+import { resolveRitmoContext } from "./handleLocationUpdate";
 
 const RITMO_COMMANDS = new Set(["RITMO", "/RITMO", "MI RITMO"]);
 const RITMO_MAP_COMMANDS = new Set([
@@ -48,64 +49,33 @@ export async function buildRitmoStatusReply(
   supabase: SupabaseClient,
   telegramUserId: string
 ): Promise<string> {
-  const { data: player } = await supabase
-    .from("players")
-    .select("id, first_name")
-    .eq("telegram_user_id", telegramUserId)
-    .maybeSingle();
-  if (!player) return "No estás vinculado como jugador.";
+  const resolution = await resolveRitmoContext(supabase, telegramUserId);
+  if (resolution.status === "not_linked") {
+    return "No estás vinculado en List.golf como jugador ni caddie.";
+  }
+  if (resolution.status === "no_active") {
+    return "No tienes torneo/ronda activa asignada en este momento.";
+  }
 
-  const { data: entry } = await supabase
-    .from("tournament_entries")
-    .select("id, tournament_id, tournaments ( course_id )")
-    .eq("player_id", player.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!entry?.id) return "No tienes inscripción activa.";
+  const ctx = resolution.ctx;
+  if (!ctx.groupId) {
+    return "No tienes grupo asignado en esta ronda todavía.";
+  }
 
-  const tRow = Array.isArray(entry.tournaments)
-    ? entry.tournaments[0]
-    : entry.tournaments;
-  const courseId =
-    (tRow as { course_id?: string | null } | null)?.course_id ?? null;
-
-  const { data: round } = await supabase
-    .from("rounds")
-    .select("id, round_date")
-    .eq("tournament_id", entry.tournament_id)
-    .order("round_no", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!round?.id) return "Aún no hay ronda activa.";
-
-  const { data: gm } = await supabase
-    .from("pairing_group_members")
-    .select("group_id")
-    .eq("entry_id", entry.id)
-    .maybeSingle();
-  if (!gm?.group_id) return "No tienes grupo asignado en esta ronda.";
-
-  const { data: g } = await supabase
-    .from("pairing_groups")
-    .select("id, starting_hole, tee_time")
-    .eq("id", gm.group_id)
-    .maybeSingle();
-  if (!g) return "Grupo no encontrado.";
-
-  const hoyo = await smoothedHoleForGroup(supabase, g.id);
-  const perHoleMinutes = await loadPerHoleMinutes(supabase, courseId);
+  const hoyo = await smoothedHoleForGroup(supabase, ctx.groupId);
+  const perHoleMinutes = await loadPerHoleMinutes(supabase, ctx.courseId);
   const pace = computePace({
     hoyoActual: hoyo,
-    teeTimeISO: g.tee_time,
-    teeStartHole: g.starting_hole ?? 1,
-    roundDate: round.round_date,
+    teeTimeISO: ctx.groupTeeTime,
+    teeStartHole: ctx.groupStartHole,
+    roundDate: ctx.roundDate,
     perHoleMinutes,
   });
 
+  const who = `${ctx.displayName}${ctx.kind === "caddie" ? " (caddie)" : ""}`;
   const lines = [
-    `🏌️ ${player.first_name ?? ""} · Grupo ${g.id.slice(0, 4)}`.trim(),
-    `Tee: ${g.tee_time ?? "-"} · Salida hoyo ${g.starting_hole ?? 1}`,
+    `🏌️ ${who} · Grupo ${ctx.groupId.slice(0, 4)}`.trim(),
+    `Tee: ${ctx.groupTeeTime ?? "-"} · Salida hoyo ${ctx.groupStartHole}`,
     "",
     pace.msg,
   ];
