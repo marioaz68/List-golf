@@ -6,6 +6,8 @@ import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 interface RitmoMapProps {
   groups: GroupDot[];
   selectedId?: string | null;
+  /** Si true, rota el mapa 90° (mejor para landscape). Default true. */
+  rotate?: boolean;
 }
 
 export interface GroupDot {
@@ -39,7 +41,7 @@ const HOYO_COLORS = [
  * y aproveche mejor la pantalla landscape. El contenido visible (markers,
  * etiquetas) se contra-rotan para que el texto siga legible.
  */
-export function RitmoMap({ groups, selectedId }: RitmoMapProps) {
+export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -109,7 +111,7 @@ export function RitmoMap({ groups, selectedId }: RitmoMapProps) {
         L.marker(center, {
           icon: L.divIcon({
             className: "",
-            html: `<div style="transform: rotate(90deg); transform-origin: center;">
+            html: `<div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center;">
               <div style="background:rgba(0,0,0,0.75);color:#fff;border:1px solid ${HOYO_COLORS[(f.properties.hoyo-1)%HOYO_COLORS.length]};padding:1px 6px;border-radius:10px;font-weight:700;font-size:11px;font-family:Arial,sans-serif;display:inline-block;">H${f.properties.hoyo}</div>
             </div>`,
             iconSize: [30, 22], iconAnchor: [15, 11],
@@ -140,7 +142,7 @@ export function RitmoMap({ groups, selectedId }: RitmoMapProps) {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="transform: rotate(90deg); transform-origin: center; position: relative;">
+              <div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center; position: relative;">
                 ${ring}
                 <div style="
                   width:36px; height:36px; border-radius:50%;
@@ -215,20 +217,34 @@ export function RitmoMap({ groups, selectedId }: RitmoMapProps) {
       style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative", background: "#000" }}
     >
       {size.w > 0 && size.h > 0 && (
-        <div
-          ref={mapDivRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            // dimensiones invertidas: el map "cree" que es retrato
-            width: size.h,
-            height: size.w,
-            // rotar -90deg, luego trasladar para que entre en el viewport
-            transformOrigin: "0 0",
-            transform: `translate(0, ${size.h}px) rotate(-90deg)`,
-          }}
-        />
+        rotate ? (
+          <div
+            ref={mapDivRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              // dimensiones invertidas: el map "cree" que es retrato
+              width: size.h,
+              height: size.w,
+              // rotar -90deg, luego trasladar para que entre en el viewport
+              transformOrigin: "0 0",
+              transform: `translate(0, ${size.h}px) rotate(-90deg)`,
+            }}
+          />
+        ) : (
+          // Modo portrait: sin rotación, dimensiones naturales
+          <div
+            ref={mapDivRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: size.w,
+              height: size.h,
+            }}
+          />
+        )
       )}
     </div>
   );
