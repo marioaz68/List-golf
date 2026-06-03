@@ -35,6 +35,8 @@ export type AssignmentContext = {
   pairingGroupId: string | null;
   redirectTo: string;
   currentCaddieId: string | null;
+  /** true = asignar a TODAS las rondas del torneo (sobreescribe). */
+  allRounds: boolean;
 };
 
 function displayCaddiePrimary(c: CaddieOption): string {
@@ -207,6 +209,9 @@ export default function AsignarCaddieClient({
                 <input type="hidden" name="entry_id" value={ctx.entryId} />
                 <input type="hidden" name="caddie_id" value={c.id} />
                 <input type="hidden" name="round_id" value={ctx.roundId} />
+                {ctx.allRounds ? (
+                  <input type="hidden" name="apply_all_rounds" value="1" />
+                ) : null}
                 {ctx.pairingGroupId ? (
                   <input
                     type="hidden"
@@ -294,7 +299,13 @@ export default function AsignarCaddieClient({
                         : "h-7 px-3 border border-gray-800 rounded bg-gray-900 text-white text-[11px] font-bold hover:bg-gray-800"
                   }
                 >
-                  {isCurrent ? "Reasignar este caddie" : "Asignar →"}
+                  {isCurrent
+                    ? ctx.allRounds
+                      ? "Reasignar (todas las rondas)"
+                      : "Reasignar este caddie"
+                    : ctx.allRounds
+                      ? "Asignar a todas →"
+                      : "Asignar →"}
                 </SubmitButton>
               </form>
             );

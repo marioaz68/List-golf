@@ -177,7 +177,11 @@ export default async function AsignarCaddiePage({
     .order("round_no", { ascending: true });
   const rounds = (roundsRaw ?? []) as RoundRow[];
 
-  // 4. Elegir ronda: query > primera ronda disponible
+  // 4. Elegir ronda: query > primera ronda disponible.
+  //    Modo "Todas": por defecto (sin round_id en la URL) el caddie se asigna
+  //    a TODAS las rondas del torneo. Al elegir una ronda concreta (R1, R2…)
+  //    se cambia solo esa ronda. La ronda ancla para el insert es la primera.
+  const allRoundsMode = rounds.length > 0 && !queryRoundId;
   const round =
     rounds.find((r) => r.id === queryRoundId) ??
     rounds[0] ??
@@ -264,6 +268,7 @@ export default async function AsignarCaddiePage({
     pairingGroupId: pairingGroup?.id ?? null,
     redirectTo,
     currentCaddieId,
+    allRounds: allRoundsMode,
   };
 
   const tournamentName =
@@ -307,7 +312,11 @@ export default async function AsignarCaddiePage({
                 ? `#${entry.player_number} · `
                 : ""}
               {displayCategory(entry)}
-              {round ? ` · R${round.round_no ?? "?"}` : ""}
+              {allRoundsMode
+                ? " · Todas las rondas"
+                : round
+                  ? ` · R${round.round_no ?? "?"}`
+                  : ""}
               {pairingGroup
                 ? ` · Grupo ${pairingGroup.group_no ?? "?"} (${formatTime(
                     pairingGroup.tee_time
@@ -344,8 +353,33 @@ export default async function AsignarCaddiePage({
             }}
           >
             <span style={labelChipStyle}>RONDA</span>
+            {(() => {
+              // "Todas" siempre primero. Omite round_id para volver al modo
+              // que asigna el caddie a todas las rondas del torneo.
+              const allParams = new URLSearchParams({
+                entry_id,
+                tournament_id: tournamentId,
+              });
+              if (backParam) allParams.set("back", backParam);
+              return (
+                <Link
+                  href={`/caddies/asignar?${allParams.toString()}`}
+                  style={{
+                    ...ghostButtonStyle,
+                    background: allRoundsMode ? "#111827" : "#fff",
+                    color: allRoundsMode ? "#fff" : "#0f172a",
+                    borderColor: allRoundsMode ? "#111827" : "#cbd5e1",
+                    fontWeight: 800,
+                    height: 28,
+                    fontSize: 11,
+                  }}
+                >
+                  Todas
+                </Link>
+              );
+            })()}
             {rounds.map((r) => {
-              const isCurrent = r.id === round.id;
+              const isCurrent = !allRoundsMode && r.id === round.id;
               const baseParams = new URLSearchParams({
                 entry_id,
                 tournament_id: tournamentId,
