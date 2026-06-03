@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { bracketCapacity } from "@/lib/matchplay/bracketUtils";
 
 /**
  * Match "derivado" a partir de pairing_groups + matchplay_pair_teams.
@@ -196,15 +197,26 @@ export async function derivePairingGroupMatches(
 
   if (matches.length === 0) return empty;
 
-  // Capacidad equivalente: la siguiente potencia de 2 ≥ matches*2 de la
-  // ronda más grande (mín 2). Sólo se usa para etiquetar la ronda.
+  // Tamaño del cuadro = siguiente potencia de 2 ≥ número de parejas activas
+  // del torneo. Esto define cuántas rondas hay (log2) y, por tanto, las
+  // etiquetas (Dieciseisavos / Octavos / Cuartos / Semifinal / Final).
+  //
+  // Es más robusto que inferirlo de matches*2 de la ronda más grande, porque
+  // con BYEs la 1ª ronda tiene menos matches y se subestimaba el cuadro (p. ej.
+  // 32 parejas con byes mostraban "Octavos" en la R1 en vez de "Dieciseisavos").
+  const teamCount = teamEntries.size;
+  let bracketSize = bracketCapacity(Math.max(2, teamCount));
+
+  // Piso de seguridad: nunca menor que lo que exigen los matches de la ronda
+  // más grande (por si el conteo de parejas viniera incompleto).
   const maxPerRound = Math.max(
     ...Array.from({ length: assignedRoundNo }, (_, i) =>
       matches.filter((m) => m.round_no === i + 1).length
     )
   );
-  let bracketSize = 2;
-  while (bracketSize < maxPerRound * 2) bracketSize *= 2;
+  let minBySize = 2;
+  while (minBySize < maxPerRound * 2) minBySize *= 2;
+  if (minBySize > bracketSize) bracketSize = minBySize;
 
   return {
     matches,
