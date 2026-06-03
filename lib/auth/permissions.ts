@@ -23,6 +23,7 @@ export type AppModule =
   | "scorecards"
   | "leaderboard"
   | "caddies"
+  | "ritmo"
   | "reports"
   | "comite-handicap"
   | "captura-telegram";
@@ -116,6 +117,19 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "caddie_manager",
   ],
 
+  // Ritmo del campo: visible para todo el staff que opera el torneo.
+  ritmo: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "entries_operator",
+    "caddie_manager",
+    "checkin",
+    "viewer",
+    "marshal",
+  ],
+
   reports: [
     "super_admin",
     "club_admin",
@@ -150,6 +164,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/scorecards",
   "/leaderboard",
   "/caddies",
+  "/ritmo",
   "/reports",
   "/tournaments",
   "/convocatoria",
@@ -208,6 +223,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/scorecards")) return "scorecards";
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/caddies")) return "caddies";
+  if (pathname.startsWith("/ritmo")) return "ritmo";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";

@@ -14,6 +14,7 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   scorecards: "scorecards",
   leaderboard: "leaderboard",
   caddies: "caddies",
+  ritmo: "ritmo",
   reports: "reports",
   tournaments: "tournaments",
   editTournament: "tournaments-setup",

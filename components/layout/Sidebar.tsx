@@ -34,6 +34,7 @@ import {
   ExternalLink,
   CalendarDays,
   Car,
+  Gauge,
   Gavel,
   Scale,
   Send,
@@ -216,6 +217,12 @@ export default function Sidebar() {
         nameKey: "caddies",
         href: "/caddies",
         icon: Car,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "ritmo",
+        href: "/ritmo",
+        icon: Gauge,
         requiresTournament: true,
       },
       {
