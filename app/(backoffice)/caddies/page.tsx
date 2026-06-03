@@ -733,7 +733,7 @@ export default async function CaddiesPage({
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/caddies/new" style={buttonStyle}>
-              {cd.catalog}
+              ← Alta de caddies
             </Link>
             <Link href="/tournaments" style={ghostButtonStyle}>
               {cd.tournaments}
