@@ -611,7 +611,14 @@ export default async function TournamentsPage({
   } = await supabase.auth.getUser();
 
   const roles = user ? await getUserRoles(supabase, user.id) : [];
-  const isScoreCapture = roles.includes("score_capture");
+  // Un administrador/director puede tener además un rol de captura asignado a
+  // algún torneo. En ese caso NO debe verse como capturista de solo lectura:
+  // los permisos de admin tienen prioridad sobre la vista de captura.
+  const hasAdminRole =
+    roles.includes("super_admin") ||
+    roles.includes("club_admin") ||
+    roles.includes("tournament_director");
+  const isScoreCapture = !hasAdminRole && roles.includes("score_capture");
 
   const { data: hostClubRows, error: hostClubErr } = await supabase
     .from("tournaments")
