@@ -8,10 +8,13 @@ import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import type { GroupCapturePayload } from "@/lib/captura/types";
 import {
   closeMatchPlayGroupRoundAction,
+  reopenMatchPlayGroupRoundAction,
   type CloseMatchPlayGroupState,
+  type ReopenMatchPlayGroupState,
 } from "./actions";
 
-const initial: CloseMatchPlayGroupState = { ok: false, message: "" };
+const closeInitial: CloseMatchPlayGroupState = { ok: false, message: "" };
+const reopenInitial: ReopenMatchPlayGroupState = { ok: false, message: "" };
 
 export default function ScoreEntryMatchPlayGroupPanel({
   initialGroup,
@@ -19,19 +22,27 @@ export default function ScoreEntryMatchPlayGroupPanel({
   anchorEntryId,
   searchQuery,
   currentRoundNo,
+  mode = "capture",
 }: {
   initialGroup: GroupCapturePayload;
   tournamentId: string;
   anchorEntryId: string;
   searchQuery: string;
   currentRoundNo: number;
+  mode?: "capture" | "modify";
 }) {
   const router = useRouter();
+  const isModifyMode = mode === "modify";
   const [state, action, pending] = useActionState(
     closeMatchPlayGroupRoundAction,
-    initial
+    closeInitial
+  );
+  const [reopenState, reopenAction, reopenPending] = useActionState(
+    reopenMatchPlayGroupRoundAction,
+    reopenInitial
   );
   const refreshedRef = useRef(false);
+  const reopenRefreshedRef = useRef(false);
 
   const allLocked = initialGroup.players.every((p) => Boolean(p.lockedAt));
 
@@ -75,8 +86,27 @@ export default function ScoreEntryMatchPlayGroupPanel({
     router.refresh();
   }, [state.ok, router]);
 
+  useEffect(() => {
+    if (!reopenState.ok || reopenRefreshedRef.current) return;
+    reopenRefreshedRef.current = true;
+    router.refresh();
+  }, [reopenState.ok, router]);
+
+  const showEliminatedNotice =
+    (state.ok && state.eliminated) ||
+    (allLocked &&
+      matchDecided &&
+      initialGroup.matchPlay?.matchplayCompleted &&
+      isAnchorEliminatedPreview(initialGroup, anchorEntryId));
+
   const showNextRoundChoice =
-    state.ok && state.nextRoundNo != null && state.nextRoundNo > currentRoundNo;
+    !showEliminatedNotice &&
+    state.ok &&
+    state.nextRoundNo != null &&
+    state.nextRoundNo > currentRoundNo;
+
+  const showReopenControl =
+    isModifyMode || allLocked || Boolean(state.ok && !state.eliminated);
 
   // Destino de la siguiente ronda. Si ya existe el grupo, enlazamos directo
   // a la captura del grupo; si no (la salida se crea cuando el rival
@@ -116,22 +146,28 @@ export default function ScoreEntryMatchPlayGroupPanel({
               {initialGroup.teeTime ? ` · ${initialGroup.teeTime}` : ""}
             </p>
           </div>
-          <form action={action}>
-            <input type="hidden" name="tournament_id" value={tournamentId} />
-            <input type="hidden" name="group_id" value={initialGroup.groupId} />
-            <input
-              type="hidden"
-              name="anchor_entry_id"
-              value={anchorEntryId}
-            />
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {buttonLabel}
-            </button>
-          </form>
+          {!isModifyMode ? (
+            <form action={action}>
+              <input type="hidden" name="tournament_id" value={tournamentId} />
+              <input
+                type="hidden"
+                name="group_id"
+                value={initialGroup.groupId}
+              />
+              <input
+                type="hidden"
+                name="anchor_entry_id"
+                value={anchorEntryId}
+              />
+              <button
+                type="submit"
+                disabled={pending || reopenPending}
+                className="rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {buttonLabel}
+              </button>
+            </form>
+          ) : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
           <Link
@@ -154,8 +190,60 @@ export default function ScoreEntryMatchPlayGroupPanel({
             {state.message}
           </p>
         ) : null}
+
+        {showEliminatedNotice ? (
+          <EliminatedFromTournamentNotice
+            names={
+              state.eliminatedPlayerNames?.length
+                ? state.eliminatedPlayerNames
+                : initialGroup.players
+                    .filter((p) => p.entryId === anchorEntryId)
+                    .map((p) => p.name)
+            }
+          />
+        ) : null}
+
         {state.ok && state.telegram ? (
           <TelegramRecipientsReport telegram={state.telegram} />
+        ) : null}
+
+        {showReopenControl ? (
+          <div className="mt-3 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2.5">
+            <p className="text-xs font-bold text-orange-950">
+              {isModifyMode
+                ? "Corregir tarjetas del grupo"
+                : "¿Hubo un error en el resultado?"}
+            </p>
+            <p className="mt-0.5 text-[11px] text-orange-900">
+              Abre las 4 tarjetas, revierte el avance en el cuadro y elimina la
+              salida auto-generada de la ronda siguiente. Al corregir y volver a
+              cerrar, se regeneran grupos y captura rápida.
+            </p>
+            <form action={reopenAction} className="mt-2">
+              <input type="hidden" name="tournament_id" value={tournamentId} />
+              <input
+                type="hidden"
+                name="group_id"
+                value={initialGroup.groupId}
+              />
+              <button
+                type="submit"
+                disabled={reopenPending || pending}
+                className="rounded-md border-2 border-orange-700 bg-orange-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                {reopenPending
+                  ? "Abriendo tarjetas…"
+                  : "Abrir tarjetas y corregir →"}
+              </button>
+            </form>
+            {reopenState.message ? (
+              <p
+                className={`mt-2 text-[11px] font-medium ${reopenState.ok ? "text-orange-900" : "text-red-700"}`}
+              >
+                {reopenState.message}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {/* Tras cerrar: el usuario elige cómo capturar la siguiente ronda. */}
@@ -223,6 +311,49 @@ export default function ScoreEntryMatchPlayGroupPanel({
       <GrupoCaptureClient initial={initialGroup} embedded />
     </div>
   );
+}
+
+function EliminatedFromTournamentNotice({ names }: { names: string[] }) {
+  const label =
+    names.length > 0 ? names.join(" y ") : "Jugador eliminado del torneo";
+  return (
+    <div
+      role="alert"
+      className="mt-3 rounded-lg border-2 border-red-500 bg-red-50 px-3 py-3"
+    >
+      <p className="text-sm font-bold text-red-950">
+        Jugador eliminado del torneo
+      </p>
+      <p className="mt-1 text-xs text-red-900">
+        <span className="font-semibold">{label}</span> quedó fuera tras perder
+        el match. La ronda quedó cerrada; no hay captura de ronda siguiente para
+        esta pareja.
+      </p>
+    </div>
+  );
+}
+
+/** Vista previa: anchor en pareja perdedora con match ya cerrado en cuadro. */
+function isAnchorEliminatedPreview(
+  group: GroupCapturePayload,
+  anchorEntryId: string
+): boolean {
+  const mp = group.matchPlay;
+  if (!mp?.matchplayCompleted || mp.decidedAtHole == null) return false;
+  const prog = mp.progression;
+  if (!prog?.length) return false;
+  const last = prog[prog.length - 1]!;
+  const topWins = last.top_cum > last.bottom_cum;
+  const bottomWins = last.bottom_cum > last.top_cum;
+  if (!topWins && !bottomWins) return false;
+  const anchorIndex = group.players.findIndex(
+    (p) => p.entryId === anchorEntryId
+  );
+  if (anchorIndex < 0) return false;
+  const anchorIsTop = anchorIndex < 2;
+  if (anchorIsTop && bottomWins) return true;
+  if (!anchorIsTop && topWins) return true;
+  return false;
 }
 
 function TelegramRecipientsReport({

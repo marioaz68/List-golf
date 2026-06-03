@@ -1085,6 +1085,8 @@ export type CloseMatchPlayGroupState = {
   nextRoundNo?: number | null;
   /** Grupo de la ronda siguiente, si ya se pudo crear su salida. */
   nextGroupId?: string | null;
+  eliminated?: boolean;
+  eliminatedPlayerNames?: string[];
   telegram?: {
     sent: number;
     failed: number;
@@ -1092,6 +1094,11 @@ export type CloseMatchPlayGroupState = {
     skippedNames: Array<{ role: "player" | "caddie"; name: string }>;
     recipients: TelegramRecipientReport[];
   } | null;
+};
+
+export type ReopenMatchPlayGroupState = {
+  ok: boolean;
+  message: string;
 };
 
 /** Cierra las 4 tarjetas del grupo match play y abre la ronda siguiente. */
@@ -1156,6 +1163,8 @@ export async function closeMatchPlayGroupRoundAction(
       message: result.message,
       nextRoundNo: result.nextRoundNo,
       nextGroupId: result.nextGroupId ?? null,
+      eliminated: result.eliminated,
+      eliminatedPlayerNames: result.eliminatedPlayerNames,
       telegram: result.telegramNotified
         ? {
             sent: result.telegramNotified.sent,
@@ -1170,6 +1179,72 @@ export async function closeMatchPlayGroupRoundAction(
     return {
       ok: false,
       message: e instanceof Error ? e.message : "Error cerrando tarjetas del grupo.",
+    };
+  }
+}
+
+/** Abre las 4 tarjetas del grupo, revierte el match en el cuadro y quita salidas auto-generadas. */
+export async function reopenMatchPlayGroupRoundAction(
+  _prev: ReopenMatchPlayGroupState,
+  formData: FormData
+): Promise<ReopenMatchPlayGroupState> {
+  try {
+    const tournamentId = String(formData.get("tournament_id") ?? "").trim();
+    const groupId = String(formData.get("group_id") ?? "").trim();
+
+    if (!tournamentId || !groupId) {
+      return { ok: false, message: "Faltan datos del grupo." };
+    }
+
+    const access = await checkTournamentAccess({
+      tournamentId,
+      allowedRoles: [
+        "super_admin",
+        "club_admin",
+        "tournament_director",
+        "score_capture",
+        "marshal",
+      ],
+    });
+
+    if (!access.ok) {
+      return {
+        ok: false,
+        message: tournamentAccessDeniedMessage(access.reason),
+      };
+    }
+
+    const admin = getAdminClient();
+    const { reopenMatchPlayGroupRound } = await import(
+      "@/lib/score-entry/reopenMatchPlayGroupRound"
+    );
+
+    const result = await reopenMatchPlayGroupRound(
+      admin,
+      async (client, params) => {
+        const openInfo = await staffOpenRoundScorecard(client, {
+          tournamentId: params.tournamentId,
+          roundId: params.roundId,
+          entryId: params.entryId,
+          roundNo: params.roundNo,
+        });
+        return { wasOpen: openInfo.wasOpen };
+      },
+      { tournamentId, groupId }
+    );
+
+    if (!result.ok) {
+      return { ok: false, message: result.error };
+    }
+
+    await revalidateScoreEntryAndLeaderboard(tournamentId);
+
+    return { ok: true, message: result.message };
+  } catch (e) {
+    return {
+      ok: false,
+      message:
+        e instanceof Error ? e.message : "Error abriendo tarjetas del grupo.",
     };
   }
 }

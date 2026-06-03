@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadGroupMatchPlayStatus } from "@/lib/captura/matchPlayGroupDecision";
 import { closeMatchAndAdvanceForGroup } from "@/lib/matchplay/closeAndAdvance";
+import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
+import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
+import {
+  isEntryEliminatedInMatch,
+  losingPairEntryIds,
+} from "@/lib/matchplay/entryMatchOutcome";
 import {
   notifyNextRoundGroupCreated,
   type NotifyResult,
@@ -20,9 +26,23 @@ export type CloseMatchPlayGroupRoundResult =
       nextRoundId: string | null;
       nextGroupId: string | null;
       telegramNotified: NotifyResult | null;
+      /** Pareja del anchor perdió el match y queda fuera del torneo. */
+      eliminated: boolean;
+      /** Nombres de los jugadores de la pareja eliminada (para aviso en UI). */
+      eliminatedPlayerNames: string[];
       message: string;
     }
   | { ok: false; error: string };
+
+function buildPlayerName(
+  first: string | null | undefined,
+  last: string | null | undefined
+): string {
+  const parts = [String(first ?? "").trim(), String(last ?? "").trim()].filter(
+    Boolean
+  );
+  return parts.join(" ") || "Jugador";
+}
 
 async function findGroupForEntryInRound(
   admin: SupabaseClient,
@@ -80,7 +100,7 @@ export async function closeMatchPlayGroupRound(
 
   const { data: groupRow } = await admin
     .from("pairing_groups")
-    .select("id, round_id")
+    .select("id, round_id, group_no")
     .eq("id", groupId)
     .maybeSingle();
   const roundId = String(groupRow?.round_id ?? "").trim();
@@ -178,6 +198,63 @@ export async function closeMatchPlayGroupRound(
     /* best-effort: el cierre de tarjetas ya se aplicó */
   }
 
+  let eliminated = false;
+  let eliminatedPlayerNames: string[] = [];
+
+  try {
+    const { data: rulesRow } = await admin
+      .from("tournament_matchplay_rules")
+      .select("pair_format")
+      .eq("tournament_id", tournamentId)
+      .maybeSingle();
+    if (rulesRow?.pair_format === "low_high") {
+      const derived = await derivePairingGroupMatches(admin, tournamentId);
+      const groupNo =
+        typeof groupRow?.group_no === "number" ? groupRow.group_no : null;
+      const derivedMatchId =
+        groupNo != null ? `derived-${roundId}-g${groupNo}` : "";
+      const derivedMatch =
+        derivedMatchId !== ""
+          ? derived.matches.find((m) => m.id === derivedMatchId)
+          : undefined;
+      if (derivedMatch) {
+        const { decisions } = await deriveMatchHolesFromStrokes(
+          admin,
+          tournamentId,
+          [derivedMatch]
+        );
+        const decision = decisions.get(derivedMatchId);
+        if (
+          decision &&
+          isEntryEliminatedInMatch(anchorEntryId, derivedMatch, decision)
+        ) {
+          eliminated = true;
+          const loserEntryIds = losingPairEntryIds(derivedMatch, decision);
+          if (loserEntryIds.length > 0) {
+            const { data: loserEntries } = await admin
+              .from("tournament_entries")
+              .select("player_id")
+              .in("id", loserEntryIds);
+            const playerIds = (loserEntries ?? [])
+              .map((r) => String(r.player_id ?? "").trim())
+              .filter(Boolean);
+            if (playerIds.length > 0) {
+              const { data: players } = await admin
+                .from("players")
+                .select("id, first_name, last_name")
+                .in("id", playerIds);
+              eliminatedPlayerNames = (players ?? []).map((p) =>
+                buildPlayerName(p.first_name, p.last_name)
+              );
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    /* best-effort: el aviso de eliminación no debe bloquear el cierre */
+  }
+
   const anchorMeta = entriesById.get(anchorEntryId);
   const gateCtx = await loadCategoryRoundGateContext(admin, tournamentId);
   const { data: roundRows } = await admin
@@ -205,7 +282,7 @@ export async function closeMatchPlayGroupRound(
   let nextRoundId: string | null = null;
   let nextGroupId: string | null = null;
 
-  if (open.ok && open.roundNo > currentRoundNo) {
+  if (!eliminated && open.ok && open.roundNo > currentRoundNo) {
     nextRoundNo = open.roundNo;
     nextRoundId = open.roundId;
     nextGroupId = await findGroupForEntryInRound(
@@ -213,7 +290,12 @@ export async function closeMatchPlayGroupRound(
       anchorEntryId,
       open.roundId
     );
-  } else if (open.ok && open.roundNo === currentRoundNo && alreadyLockedCount === entryIds.length) {
+  } else if (
+    !eliminated &&
+    open.ok &&
+    open.roundNo === currentRoundNo &&
+    alreadyLockedCount === entryIds.length
+  ) {
     // Todas cerradas en R actual: buscar siguiente ronda lógica del torneo.
     const roundNos = [
       ...new Set(roundsForCapture.map((r) => r.round_no)),
@@ -260,6 +342,27 @@ export async function closeMatchPlayGroupRound(
   const partialNote =
     errors.length > 0 ? ` Algunas tarjetas no se cerraron: ${errors.join(" ")}` : "";
 
+  const eliminatedNamesLabel =
+    eliminatedPlayerNames.length > 0
+      ? eliminatedPlayerNames.join(" y ")
+      : "La pareja buscada";
+
+  if (eliminated) {
+    return {
+      ok: true,
+      closedCount,
+      alreadyLockedCount,
+      currentRoundNo,
+      nextRoundNo: null,
+      nextRoundId: null,
+      nextGroupId: null,
+      telegramNotified: null,
+      eliminated: true,
+      eliminatedPlayerNames,
+      message: `R${currentRoundNo} cerrada. ${eliminatedNamesLabel} eliminado${eliminatedPlayerNames.length === 1 ? "" : "s"} del torneo tras perder el match.${partialNote}`,
+    };
+  }
+
   if (nextRoundNo != null && nextGroupId) {
     return {
       ok: true,
@@ -270,6 +373,8 @@ export async function closeMatchPlayGroupRound(
       nextRoundId,
       nextGroupId,
       telegramNotified,
+      eliminated: false,
+      eliminatedPlayerNames: [],
       message: `R${currentRoundNo} cerrada (${closedCount} tarjeta${closedCount === 1 ? "" : "s"} nuevas). Abriendo captura de R${nextRoundNo}.${partialNote}`,
     };
   }
@@ -284,6 +389,8 @@ export async function closeMatchPlayGroupRound(
       nextRoundId,
       nextGroupId: null,
       telegramNotified,
+      eliminated: false,
+      eliminatedPlayerNames: [],
       message: `R${currentRoundNo} cerrada. R${nextRoundNo} lista para captura; la salida del grupo se creará cuando el rival también termine su partido.${partialNote}`,
     };
   }
@@ -298,6 +405,8 @@ export async function closeMatchPlayGroupRound(
       nextRoundId: null,
       nextGroupId: null,
       telegramNotified,
+      eliminated: false,
+      eliminatedPlayerNames: [],
       message: `Las tarjetas de este grupo ya estaban cerradas.${partialNote}`,
     };
   }
@@ -311,6 +420,8 @@ export async function closeMatchPlayGroupRound(
     nextRoundId: null,
     nextGroupId: null,
     telegramNotified,
+    eliminated: false,
+    eliminatedPlayerNames: [],
     message: `Tarjetas de R${currentRoundNo} cerradas.${partialNote}`,
   };
 }

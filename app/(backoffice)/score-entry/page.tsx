@@ -2,10 +2,11 @@ import Link from "next/link";
 import { createAdminClient, createClient } from "@/utils/supabase/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { unstable_noStore as noStore } from "next/cache";
+import { checkTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import {
-  checkTournamentAccess,
-  requireTournamentAccess,
-} from "@/lib/auth/requireTournamentAccess";
+  checkScoreEntryTournamentAccess,
+  createScoreEntryDataClient,
+} from "@/lib/auth/scoreEntryDataClient";
 import ScoreEntryClient from "./ScoreEntryClient";
 import ScoreEntryModeTabs from "./ScoreEntryModeTabs";
 import ScoreEntryRoundCloseBanner from "./ScoreEntryRoundCloseBanner";
@@ -278,6 +279,15 @@ export default async function ScoreEntryPage(props: {
   const supabase = await createClient();
   const sp = props.searchParams ? await props.searchParams : {};
 
+  const tournamentIdFromQueryEarly =
+    typeof sp.tournament_id === "string" ? sp.tournament_id.trim() : "";
+
+  /** Lecturas de captura: admin tras validar torneo (RLS no bloquea a marshals). */
+  let dataSupabase: ServerSupabase = supabase;
+  if (tournamentIdFromQueryEarly) {
+    dataSupabase = await createScoreEntryDataClient(tournamentIdFromQueryEarly);
+  }
+
   const searchRaw = typeof sp.q === "string" ? normalizeText(sp.q) : "";
   const requestedEntryId =
     typeof sp.entry_id === "string" ? sp.entry_id.trim() : "";
@@ -294,7 +304,7 @@ export default async function ScoreEntryPage(props: {
   );
   const isModifyMode = scoreEntryMode === "modify";
 
-  const roundsQuery = supabase
+  const roundsQuery = dataSupabase
     .from("rounds")
     .select(
       `
@@ -347,7 +357,7 @@ export default async function ScoreEntryPage(props: {
 
   let tournamentOptions: Array<{ id: string; name: string | null }> = [];
   if (tournamentIdsInSystem.length > 0) {
-    const { data: tournamentRows } = await supabase
+    const { data: tournamentRows } = await dataSupabase
       .from("tournaments")
       .select("id, name, start_date")
       .in("id", tournamentIdsInSystem)
@@ -372,18 +382,11 @@ export default async function ScoreEntryPage(props: {
    *  jugador. */
   let isMatchPlayTournament = false;
 
-  if (effectiveTournamentId) {
-    await requireTournamentAccess({
-      tournamentId: effectiveTournamentId,
-      allowedRoles: [
-        "super_admin",
-        "club_admin",
-        "tournament_director",
-        "score_capture",
-        "marshal",
-      ],
-    });
+  if (effectiveTournamentId && dataSupabase === supabase) {
+    dataSupabase = await createScoreEntryDataClient(effectiveTournamentId);
+  }
 
+  if (effectiveTournamentId) {
     const repairAccess = await checkTournamentAccess({
       tournamentId: effectiveTournamentId,
       allowedRoles: [
@@ -425,14 +428,14 @@ export default async function ScoreEntryPage(props: {
     [];
 
   if (effectiveTournamentId) {
-    const { data: tournamentRow } = await supabase
+    const { data: tournamentRow } = await dataSupabase
       .from("tournaments")
       .select("settings")
       .eq("id", effectiveTournamentId)
       .maybeSingle();
     tournamentSettings = tournamentRow?.settings ?? null;
 
-    const { data: mpRulesRow } = await supabase
+    const { data: mpRulesRow } = await dataSupabase
       .from("tournament_matchplay_rules")
       .select("tournament_id, pair_format")
       .eq("tournament_id", effectiveTournamentId)
@@ -441,7 +444,7 @@ export default async function ScoreEntryPage(props: {
 
     try {
       const gateCtxBanner = await loadCategoryRoundGateContext(
-        supabase,
+        dataSupabase,
         effectiveTournamentId
       );
       const roundNos = [
@@ -462,7 +465,7 @@ export default async function ScoreEntryPage(props: {
       /* banner opcional */
     }
     const regStatus = await fetchTournamentRegistrationStatus(
-      supabase,
+      dataSupabase,
       effectiveTournamentId
     );
     if (!isRegistrationClosed(regStatus)) {
@@ -471,7 +474,7 @@ export default async function ScoreEntryPage(props: {
   }
 
   if (effectiveTournamentId) {
-    const { data: holesData, error: holesErr } = await supabase
+    const { data: holesData, error: holesErr } = await dataSupabase
       .from("tournament_holes")
       .select("hole_number, par, handicap_index")
       .eq("tournament_id", effectiveTournamentId)
@@ -498,7 +501,7 @@ export default async function ScoreEntryPage(props: {
 
     if (isNumeric) {
       const wanted = Number(searchRaw);
-      const { data, error } = await supabase
+      const { data, error } = await dataSupabase
         .from("tournament_entries")
         .select(ENTRY_SELECT_FOR_LOOKUP)
         .eq("tournament_id", effectiveTournamentId)
@@ -508,7 +511,7 @@ export default async function ScoreEntryPage(props: {
 
       if (!error && entryRows.length === 0) {
         const full = await fetchAllTournamentEntriesForLookup(
-          supabase,
+          dataSupabase,
           effectiveTournamentId
         );
         entryErr = full.error;
@@ -516,7 +519,7 @@ export default async function ScoreEntryPage(props: {
       }
     } else {
       const full = await fetchAllTournamentEntriesForLookup(
-        supabase,
+        dataSupabase,
         effectiveTournamentId
       );
       entryErr = full.error;
@@ -577,7 +580,7 @@ export default async function ScoreEntryPage(props: {
     if (matchedEntry) {
       try {
         const gateCtx = await loadCategoryRoundGateContext(
-          supabase,
+          dataSupabase,
           effectiveTournamentId
         );
         gateLookupsForEntry = gateCtx.lookups;
@@ -591,7 +594,7 @@ export default async function ScoreEntryPage(props: {
           Number.isFinite(requestedRoundNo) &&
           requestedRoundNo >= 1;
 
-        const capture = await resolveEntryCaptureRound(supabase, {
+        const capture = await resolveEntryCaptureRound(dataSupabase, {
           entryId: matchedEntry.id,
           entryCategoryId: matchedEntry.category_id,
           tournamentId: effectiveTournamentId,
@@ -608,7 +611,7 @@ export default async function ScoreEntryPage(props: {
 
         if (viewingExplicitRound && player) {
           scoringRoundBlocked = false;
-          const forced = await resolveForcedScoreEntryRound(supabase, {
+          const forced = await resolveForcedScoreEntryRound(dataSupabase, {
             entryId: matchedEntry.id,
             playerId: player.id,
             categoryId: matchedEntry.category_id,
@@ -668,7 +671,7 @@ export default async function ScoreEntryPage(props: {
           }
 
           if (player && isModifyMode) {
-            const display = await resolveScoreEntryDisplayTarget(supabase, {
+            const display = await resolveScoreEntryDisplayTarget(dataSupabase, {
               entryId: matchedEntry.id,
               playerId: player.id,
               categoryId: matchedEntry.category_id,
@@ -755,7 +758,7 @@ export default async function ScoreEntryPage(props: {
         .filter((r) => r.tournament_id === effectiveTournamentId)
         .map((r) => r.id);
 
-      const { data: roundScoresData, error: roundScoresErr } = await supabase
+      const { data: roundScoresData, error: roundScoresErr } = await dataSupabase
         .from("round_scores")
         .select("id, round_id")
         .eq("player_id", player.id)
@@ -795,7 +798,7 @@ export default async function ScoreEntryPage(props: {
         }
 
         if (selectedRoundScore?.id) {
-          const { data: holeScoreData, error: holeScoreErr } = await supabase
+          const { data: holeScoreData, error: holeScoreErr } = await dataSupabase
             .from("hole_scores")
             .select("hole_number, hole_no, strokes")
             .eq("round_score_id", selectedRoundScore.id)
@@ -815,7 +818,7 @@ export default async function ScoreEntryPage(props: {
         if (roundScores.length > 0) {
           const roundScoreIds = roundScores.map((x) => x.id);
 
-          const { data: allHoleScores, error: allHoleScoresErr } = await supabase
+          const { data: allHoleScores, error: allHoleScoresErr } = await dataSupabase
             .from("hole_scores")
             .select("round_score_id, hole_number, hole_no, strokes")
             .in("round_score_id", roundScoreIds)
@@ -917,7 +920,7 @@ export default async function ScoreEntryPage(props: {
         }
 
         if (entryIdForScorecard && scoringRoundId && player) {
-          const { data: scorecardRow, error: scorecardErr } = await supabase
+          const { data: scorecardRow, error: scorecardErr } = await dataSupabase
             .from("scorecards")
             .select("locked_at")
             .eq("entry_id", entryIdForScorecard)
@@ -928,7 +931,7 @@ export default async function ScoreEntryPage(props: {
             errorMsg = scorecardErr.message;
           } else {
             const holesOnRound = await countHolesOnPlayerRound(
-              supabase,
+              dataSupabase,
               player.id,
               scoringRoundId
             );
@@ -1376,13 +1379,14 @@ export default async function ScoreEntryPage(props: {
           matchPlayGroupCapture &&
           matchedEntryForLinks &&
           searchRaw &&
-          !isModifyMode && (
+          (
             <ScoreEntryMatchPlayGroupPanel
               initialGroup={matchPlayGroupCapture}
               tournamentId={effectiveTournamentId}
               anchorEntryId={matchedEntryForLinks.id}
               searchQuery={searchRaw}
               currentRoundNo={activeRoundNo}
+              mode={isModifyMode ? "modify" : "capture"}
             />
           )}
 
