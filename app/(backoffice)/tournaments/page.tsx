@@ -937,53 +937,62 @@ export default async function TournamentsPage({
                           minWidth: 0,
                         }}
                       >
-                        {posterUrl ? (
-                          <div
-                            style={{
-                              width: 112,
-                              height: 160,
-                              flexShrink: 0,
-                              overflow: "hidden",
-                              borderRadius: 16,
-                              border: "1px solid #dbe2ea",
-                              background: "#f8fafc",
-                              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
-                            }}
-                          >
-                            <img
-                              src={posterUrl}
-                              alt={displayTournamentName(t)}
+                        <Link
+                          href={`/entries?tournament_id=${t.id}`}
+                          title={nav.entries}
+                          aria-label={nav.entries}
+                          style={{ display: "block", flexShrink: 0 }}
+                        >
+                          {posterUrl ? (
+                            <div
                               style={{
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "cover",
-                                display: "block",
+                                width: 112,
+                                height: 160,
+                                flexShrink: 0,
+                                overflow: "hidden",
+                                borderRadius: 16,
+                                border: "1px solid #dbe2ea",
+                                background: "#f8fafc",
+                                boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+                                cursor: "pointer",
                               }}
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              width: 112,
-                              height: 160,
-                              flexShrink: 0,
-                              overflow: "hidden",
-                              borderRadius: 16,
-                              border: "1px dashed #cbd5e1",
-                              background: "#f8fafc",
-                              color: "#64748b",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              textAlign: "center",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              padding: 8,
-                            }}
-                          >
-                            {tm.noPoster}
-                          </div>
-                        )}
+                            >
+                              <img
+                                src={posterUrl}
+                                alt={displayTournamentName(t)}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                  display: "block",
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                width: 112,
+                                height: 160,
+                                flexShrink: 0,
+                                overflow: "hidden",
+                                borderRadius: 16,
+                                border: "1px dashed #cbd5e1",
+                                background: "#f8fafc",
+                                color: "#64748b",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                textAlign: "center",
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: 8,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {tm.noPoster}
+                            </div>
+                          )}
+                        </Link>
 
                         <div style={{ minWidth: 0 }}>
                           <Link
