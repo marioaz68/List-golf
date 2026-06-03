@@ -122,6 +122,12 @@ export type GroupCapturePayload = {
   startingHole: number | null;
   teeTime: string | null;
   tournamentName: string | null;
+  /** Número de ronda del torneo (rounds.round_no), p. ej. 2. */
+  roundNo: number | null;
+  /** Etiqueta de la etapa del cuadro de match play: "Octavos", "Cuartos",
+   *  "Semifinal", "Final", "Dieciseisavos"… null si no es match play o no
+   *  se pudo derivar. */
+  bracketRoundLabel: string | null;
   players: GroupCapturePlayer[];
   witnesses: WitnessAssignmentPayload[];
   /** entryId del jugador identificado por el link (?me=...). Null si el

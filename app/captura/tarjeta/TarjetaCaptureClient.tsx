@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "@/components/captura/BackButton";
+import BracketRoundBadge from "@/components/captura/BracketRoundBadge";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   getScoreClass,
@@ -1024,6 +1025,12 @@ export default function TarjetaCaptureClient({
                   {meta.tournamentName}
                 </div>
               ) : null}
+              <div className="mt-1 flex justify-center">
+                <BracketRoundBadge
+                  roundNo={meta.roundNo}
+                  bracketRoundLabel={meta.bracketRoundLabel}
+                />
+              </div>
               <div className="text-slate-600">
                 Grupo #{meta.groupNo ?? "?"}
                 {meta.startingHole != null

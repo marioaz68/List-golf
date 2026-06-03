@@ -31,14 +31,25 @@ export default function ScoreEntryMatchPlayGroupPanel({
     closeMatchPlayGroupRoundAction,
     initial
   );
-  const redirectedRef = useRef(false);
-  const hasTelegramReport = Boolean(
-    state.telegram &&
-      (state.telegram.recipients.length > 0 ||
-        state.telegram.skippedNames.length > 0)
-  );
+  const refreshedRef = useRef(false);
 
   const allLocked = initialGroup.players.every((p) => Boolean(p.lockedAt));
+
+  // ¿El grupo ya está completamente capturado? En match play eso significa
+  // que el match quedó decidido (o resuelto el desempate). Cuando lo está
+  // pero las tarjetas siguen abiertas, mostramos un aviso prominente para
+  // cerrar la ronda antes de avanzar.
+  const matchDecided =
+    initialGroup.matchPlay?.decidedAtHole != null &&
+    !initialGroup.matchPlay?.needsPlayoff;
+  const fullyCaptured = initialGroup.matchPlay
+    ? matchDecided
+    : initialGroup.players.every(
+        (p) =>
+          Object.values(p.scores ?? {}).filter((v) => v != null).length >= 18
+      );
+  const needsClosePrompt = fullyCaptured && !allLocked;
+
   const nextRoundLabel = currentRoundNo + 1;
   const buttonLabel = pending
     ? "Cerrando tarjetas…"
@@ -55,47 +66,36 @@ export default function ScoreEntryMatchPlayGroupPanel({
   const tarjetaCompletaHref = `/captura/tarjeta?group_id=${initialGroup.groupId}${backQs}`;
   const capturaRapidaHref = `/captura/grupo?group_id=${initialGroup.groupId}${backQs}`;
 
+  // Tras cerrar con éxito NO redirigimos automáticamente: refrescamos los
+  // datos del servidor (para reflejar el cierre) y dejamos que el usuario
+  // elija cómo capturar la siguiente ronda (tarjeta completa vs rápida).
   useEffect(() => {
-    if (!state.ok || redirectedRef.current) return;
-    // Si hay reporte de Telegram, dejamos que el marshal lo lea y luego
-    // pulse «Ir a R{n+1}». Solo auto-redirect cuando no hay nada que mostrar.
-    if (hasTelegramReport) {
-      router.refresh();
-      return;
-    }
-    redirectedRef.current = true;
-
-    if (state.nextRoundNo != null && state.nextRoundNo > currentRoundNo) {
-      router.push(
-        buildScoreEntryHref({
-          tournamentId,
-          q: searchQuery,
-          entryId: anchorEntryId,
-          roundNo: state.nextRoundNo,
-        })
-      );
-    }
+    if (!state.ok || refreshedRef.current) return;
+    refreshedRef.current = true;
     router.refresh();
-  }, [
-    state.ok,
-    state.nextRoundNo,
-    currentRoundNo,
-    tournamentId,
-    searchQuery,
-    anchorEntryId,
-    hasTelegramReport,
-    router,
-  ]);
+  }, [state.ok, router]);
 
-  const nextRoundHref =
-    state.ok && state.nextRoundNo != null && state.nextRoundNo > currentRoundNo
-      ? buildScoreEntryHref({
-          tournamentId,
-          q: searchQuery,
-          entryId: anchorEntryId,
-          roundNo: state.nextRoundNo,
-        })
-      : null;
+  const showNextRoundChoice =
+    state.ok && state.nextRoundNo != null && state.nextRoundNo > currentRoundNo;
+
+  // Destino de la siguiente ronda. Si ya existe el grupo, enlazamos directo
+  // a la captura del grupo; si no (la salida se crea cuando el rival
+  // termine), volvemos a score-entry de la ronda siguiente.
+  const nextGroupId = state.nextGroupId?.trim() || null;
+  const nextBackHref = buildScoreEntryHref({
+    tournamentId,
+    q: searchQuery,
+    entryId: anchorEntryId,
+    roundNo: state.nextRoundNo ?? null,
+  });
+  const nextBackQs = `&back=${encodeURIComponent(nextBackHref)}`;
+  const nextTarjetaHref = nextGroupId
+    ? `/captura/tarjeta?group_id=${nextGroupId}${nextBackQs}`
+    : null;
+  const nextRapidaHref = nextGroupId
+    ? `/captura/grupo?group_id=${nextGroupId}${nextBackQs}`
+    : null;
+  const nextScoreEntryHref = nextBackHref;
 
   return (
     <div className="mt-4 overflow-hidden rounded-xl border-2 border-emerald-400 bg-white shadow-sm">
@@ -104,6 +104,9 @@ export default function ScoreEntryMatchPlayGroupPanel({
           <div>
             <p className="text-sm font-bold text-emerald-950">
               Captura del grupo · R{currentRoundNo}
+              {initialGroup.bracketRoundLabel
+                ? ` · ${initialGroup.bracketRoundLabel}`
+                : ""}
             </p>
             <p className="mt-0.5 text-xs text-emerald-800">
               {initialGroup.players.length} jugadores
@@ -154,20 +157,65 @@ export default function ScoreEntryMatchPlayGroupPanel({
         {state.ok && state.telegram ? (
           <TelegramRecipientsReport telegram={state.telegram} />
         ) : null}
-        {nextRoundHref ? (
-          <div className="mt-2">
-            <Link
-              href={nextRoundHref}
-              className="inline-flex items-center justify-center rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800"
-            >
-              Ir a captura R{state.nextRoundNo} →
-            </Link>
+
+        {/* Tras cerrar: el usuario elige cómo capturar la siguiente ronda. */}
+        {showNextRoundChoice ? (
+          <div className="mt-3 rounded-lg border border-emerald-300 bg-white px-3 py-2.5">
+            <p className="text-xs font-bold text-emerald-950">
+              R{currentRoundNo} cerrada. ¿Cómo quieres capturar la R
+              {state.nextRoundNo}?
+            </p>
+            {nextGroupId ? (
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                <Link
+                  href={nextTarjetaHref!}
+                  className="inline-flex items-center justify-center rounded-md border-2 border-emerald-600 bg-white px-3 py-1.5 font-bold text-emerald-900 hover:bg-emerald-50"
+                >
+                  Tarjeta completa (hoyo por hoyo) →
+                </Link>
+                <Link
+                  href={nextRapidaHref!}
+                  className="inline-flex items-center justify-center rounded-md border border-emerald-400 bg-white px-3 py-1.5 font-semibold text-emerald-900 hover:bg-emerald-50"
+                >
+                  Captura rápida (pantalla completa) →
+                </Link>
+              </div>
+            ) : (
+              <div className="mt-2">
+                <Link
+                  href={nextScoreEntryHref}
+                  className="inline-flex items-center justify-center rounded-md bg-emerald-700 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-800"
+                >
+                  Ir a captura R{state.nextRoundNo} →
+                </Link>
+                <p className="mt-1 text-[11px] text-emerald-700">
+                  La salida del grupo de la R{state.nextRoundNo} se crea cuando
+                  el rival también cierre su partido.
+                </p>
+              </div>
+            )}
           </div>
         ) : null}
-        {!allLocked ? (
+
+        {/* Aviso prominente: ronda totalmente capturada pero sin cerrar. */}
+        {!state.ok && needsClosePrompt ? (
+          <div className="mt-3 rounded-lg border-2 border-amber-400 bg-amber-50 px-3 py-2.5">
+            <p className="text-xs font-bold text-amber-950">
+              Esta ronda ya está capturada.
+            </p>
+            <p className="mt-0.5 text-[11px] text-amber-900">
+              Ciérrala con el botón «Cerrar todas y abrir R{nextRoundLabel}»
+              de arriba antes de pasar a la siguiente ronda. Mientras no se
+              cierre, no se publica en el leaderboard oficial ni se genera la
+              salida del rival.
+            </p>
+          </div>
+        ) : null}
+
+        {!state.ok && !needsClosePrompt && !allLocked ? (
           <p className="mt-2 text-[11px] text-emerald-700">
-            Cierra las 4 tarjetas de este grupo y pasa automáticamente a la
-            captura de la ronda {nextRoundLabel}.
+            Captura las 4 tarjetas; al terminar pulsa «Cerrar todas y abrir R
+            {nextRoundLabel}».
           </p>
         ) : null}
       </div>

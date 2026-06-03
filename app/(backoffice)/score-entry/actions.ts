@@ -1083,6 +1083,8 @@ export type CloseMatchPlayGroupState = {
   ok: boolean;
   message: string;
   nextRoundNo?: number | null;
+  /** Grupo de la ronda siguiente, si ya se pudo crear su salida. */
+  nextGroupId?: string | null;
   telegram?: {
     sent: number;
     failed: number;
@@ -1153,6 +1155,7 @@ export async function closeMatchPlayGroupRoundAction(
       ok: true,
       message: result.message,
       nextRoundNo: result.nextRoundNo,
+      nextGroupId: result.nextGroupId ?? null,
       telegram: result.telegramNotified
         ? {
             sent: result.telegramNotified.sent,

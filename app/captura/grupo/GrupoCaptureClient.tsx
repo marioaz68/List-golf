@@ -28,6 +28,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BackButton from "@/components/captura/BackButton";
+import BracketRoundBadge from "@/components/captura/BracketRoundBadge";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   HOLES_FRONT,
@@ -1205,6 +1206,11 @@ export default function GrupoCaptureClient({
                 {meta.tournamentName ?? "Torneo"}
                 {meta.groupNo != null ? ` · Grupo ${meta.groupNo}` : ""}
               </h1>
+              <BracketRoundBadge
+                roundNo={meta.roundNo}
+                bracketRoundLabel={meta.bracketRoundLabel}
+                className="mt-1"
+              />
               <p className="mt-0.5 text-[11px] text-slate-500">
                 {meta.players.length} jugadores · tee time {meta.teeTime ?? "—"}
               </p>
@@ -1226,6 +1232,23 @@ export default function GrupoCaptureClient({
             </div>
           </div>
         </header>
+        ) : null}
+
+        {embedded ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <span className="text-[11px] font-semibold text-emerald-950">
+              Match
+            </span>
+            <BracketRoundBadge
+              roundNo={meta.roundNo}
+              bracketRoundLabel={meta.bracketRoundLabel}
+            />
+            {meta.groupNo != null ? (
+              <span className="text-[11px] text-emerald-800">
+                · Grupo {meta.groupNo}
+              </span>
+            ) : null}
+          </div>
         ) : null}
 
         {meta.matchPlay ? (

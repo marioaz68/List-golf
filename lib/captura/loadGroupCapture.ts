@@ -9,6 +9,11 @@ import { ensureGroupWitnesses } from "./witnesses";
 import { loadPrivateScoresForGroup } from "./privateScores";
 import { loadCardSignaturesForGroup } from "./cardSignatures";
 import { loadGroupMatchPlayStatus } from "./matchPlayGroupDecision";
+import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
+import {
+  roundCountForBracketSize,
+  roundLabel as bracketRoundLabelFn,
+} from "@/lib/matchplay/bracketUtils";
 
 export const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 export const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -126,11 +131,13 @@ export async function loadGroupCapture(
 
   const { data: roundRow } = await supabase
     .from("rounds")
-    .select("tournament_id, tournaments(name)")
+    .select("tournament_id, round_no, tournaments(name)")
     .eq("id", roundId)
     .maybeSingle();
 
   tournamentId = safeString(roundRow?.tournament_id) || null;
+  const roundNo =
+    typeof roundRow?.round_no === "number" ? roundRow.round_no : null;
   const t = roundRow?.tournaments;
   const tRow = Array.isArray(t) ? t[0] : t;
   tournamentName =
@@ -161,6 +168,8 @@ export async function loadGroupCapture(
           : null,
       teeTime: safeString(groupRow?.tee_time) || null,
       tournamentName,
+      roundNo,
+      bracketRoundLabel: null,
       players: [],
       witnesses: [],
       myEntryId: null,
@@ -368,6 +377,26 @@ export async function loadGroupCapture(
     }
   }
 
+  // Etiqueta de la etapa del cuadro (Octavos / Cuartos / Semifinal / Final /
+  // Dieciseisavos). Se deriva de los pairings del torneo para que aparezca
+  // aunque la tarjeta todavía no tenga scores capturados.
+  let bracketRoundLabel: string | null = null;
+  if (tournamentId) {
+    try {
+      const derived = await derivePairingGroupMatches(supabase, tournamentId);
+      const groupMatch = derived.matches.find((m) => m.group_id === gid);
+      if (groupMatch && derived.bracketSize >= 2) {
+        bracketRoundLabel = bracketRoundLabelFn(
+          groupMatch.round_no,
+          roundCountForBracketSize(derived.bracketSize),
+          derived.bracketSize
+        );
+      }
+    } catch {
+      bracketRoundLabel = null;
+    }
+  }
+
   return {
     groupId: gid,
     roundId,
@@ -377,6 +406,8 @@ export async function loadGroupCapture(
       typeof groupRow?.starting_hole === "number" ? groupRow.starting_hole : null,
     teeTime: safeString(groupRow?.tee_time) || null,
     tournamentName,
+    roundNo,
+    bracketRoundLabel,
     players,
     witnesses: witnessRows.map((w) => ({
       entryId: w.entryId,
