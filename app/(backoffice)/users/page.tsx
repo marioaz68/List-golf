@@ -21,6 +21,7 @@ type SP = { [key: string]: string | string[] | undefined };
 type UserRow = {
   id: string;
   email: string | null;
+  username: string | null;
   first_name: string | null;
   last_name: string | null;
   is_active: boolean | null;
@@ -415,7 +416,7 @@ export default async function UsersPage({
   let profilesQuery = supabase
     .from("profiles")
     .select(
-      "id, email, first_name, last_name, is_active, telegram_username, telegram_chat_id"
+      "id, email, username, first_name, last_name, is_active, telegram_username, telegram_chat_id"
     )
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
@@ -424,7 +425,7 @@ export default async function UsersPage({
     profilesQuery = supabase
       .from("profiles")
       .select(
-        "id, email, first_name, last_name, is_active, telegram_username, telegram_chat_id"
+        "id, email, username, first_name, last_name, is_active, telegram_username, telegram_chat_id"
       )
       .eq("id", "__none__");
   } else if (visibleUserIds) {
@@ -733,6 +734,9 @@ export default async function UsersPage({
                               {u.email ?? "-"}
                             </div>
                             <div style={{ fontSize: 11, color: "#64748b" }}>
+                              {u.username ? `usuario: ${u.username}` : "usuario: —"}
+                            </div>
+                            <div style={{ fontSize: 11, color: "#64748b" }}>
                               {u.id}
                             </div>
                           </div>
@@ -761,6 +765,17 @@ export default async function UsersPage({
                               name="last_name"
                               defaultValue={u.last_name ?? ""}
                               placeholder="Apellidos"
+                              style={inputStyle}
+                            />
+
+                            <input
+                              name="username"
+                              defaultValue={u.username ?? ""}
+                              placeholder="Usuario (login alterno, sin @)"
+                              autoComplete="off"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
                               style={inputStyle}
                             />
 

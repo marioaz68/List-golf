@@ -23,19 +23,22 @@ export default function LoginForm() {
       <h1 className="text-2xl font-bold text-gray-900">Iniciar sesión</h1>
 
       <p className="mt-1 text-sm text-gray-600">
-        Entra con tu usuario de Supabase Auth.
+        Entra con tu correo o tu nombre de usuario.
       </p>
 
       <div className="mt-5">
         <label className="mb-1 block text-sm font-medium text-gray-700">
-          Email
+          Email o usuario
         </label>
         <input
-          type="email"
+          type="text"
           name="email"
-          autoComplete="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           className="w-full rounded-lg border border-gray-300 px-3 py-2"
-          placeholder="tu@email.com"
+          placeholder="tu@email.com o tu_usuario"
         />
       </div>
 

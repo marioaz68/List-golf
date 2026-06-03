@@ -3,25 +3,63 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
 
 export type LoginState = {
   ok: boolean;
   message: string;
 };
 
+/** Resuelve un nombre de usuario a su email para poder iniciar sesión en
+ *  Supabase Auth (que sólo acepta email/teléfono). Usa el cliente admin para
+ *  poder leer profiles aunque haya RLS. Devuelve null si no existe. */
+async function resolveEmailFromUsername(
+  username: string
+): Promise<string | null> {
+  const admin = tryCreateAdminClient();
+  if (!admin) return null;
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("email")
+    .ilike("username", username)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return (data.email as string | null) ?? null;
+}
+
 export async function loginAction(
   _prevState: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "").trim();
+  // El campo admite email o nombre de usuario.
+  const identifier = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  if (!email) {
-    return { ok: false, message: "Falta el email." };
+  if (!identifier) {
+    return { ok: false, message: "Falta el email o usuario." };
   }
 
   if (!password) {
     return { ok: false, message: "Falta el password." };
+  }
+
+  // Si no parece email (sin "@"), lo tratamos como nombre de usuario y
+  // resolvemos su email asociado.
+  let email = identifier;
+
+  if (!identifier.includes("@")) {
+    const resolved = await resolveEmailFromUsername(identifier);
+
+    if (!resolved) {
+      return {
+        ok: false,
+        message: "Usuario o contraseña incorrectos.",
+      };
+    }
+
+    email = resolved;
   }
 
   const cookieStore = await cookies();

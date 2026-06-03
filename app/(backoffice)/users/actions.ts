@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -12,6 +13,23 @@ function reqStr(fd: FormData, key: string) {
 function optStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
   return v ? v : null;
+}
+
+/** Valida y normaliza un nombre de usuario opcional para login alterno. */
+function normalizeUsername(raw: string | null): string | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.includes("@")) {
+    throw new Error('El usuario no puede contener "@".');
+  }
+  if (/\s/.test(value)) {
+    throw new Error("El usuario no puede contener espacios.");
+  }
+  if (value.length < 3) {
+    throw new Error("El usuario debe tener al menos 3 caracteres.");
+  }
+  return value;
 }
 
 type AccessContext = {
@@ -314,17 +332,33 @@ export async function updateProfileAction(formData: FormData) {
 
   const firstName = optStr(formData, "first_name");
   const lastName = optStr(formData, "last_name");
+  const username = normalizeUsername(optStr(formData, "username"));
   const telegramUsernameRaw = optStr(formData, "telegram_username");
   const telegramUsername = telegramUsernameRaw
     ? telegramUsernameRaw.replace(/^@+/, "").trim() || null
     : null;
   const isActive = String(formData.get("is_active") ?? "") === "true";
 
+  if (username) {
+    const admin = createAdminClient();
+    const { data: existingUsername } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("username", username)
+      .neq("id", profileId)
+      .maybeSingle();
+
+    if (existingUsername) {
+      throw new Error(`El usuario "${username}" ya está en uso.`);
+    }
+  }
+
   const { error } = await supabase
     .from("profiles")
     .update({
       first_name: firstName,
       last_name: lastName,
+      username,
       is_active: isActive,
       telegram_username: telegramUsername,
     })

@@ -221,9 +221,28 @@ function revalidateUsersPaths(tournamentId?: string | null) {
   }
 }
 
+/** Valida y normaliza un nombre de usuario opcional. Debe ser único, sin
+ *  espacios ni "@" (para no confundirse con un email en el login). */
+function normalizeUsername(raw: string | null): string | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.includes("@")) {
+    throw new Error('El usuario no puede contener "@".');
+  }
+  if (/\s/.test(value)) {
+    throw new Error("El usuario no puede contener espacios.");
+  }
+  if (value.length < 3) {
+    throw new Error("El usuario debe tener al menos 3 caracteres.");
+  }
+  return value;
+}
+
 export async function createUserAction(formData: FormData) {
   const email = reqStr(formData, "email").toLowerCase();
   const password = reqStr(formData, "password");
+  const username = normalizeUsername(optStr(formData, "username"));
   const firstName = optStr(formData, "first_name");
   const lastName = optStr(formData, "last_name");
   const telegramUsernameRaw = optStr(formData, "telegram_username");
@@ -292,6 +311,18 @@ export async function createUserAction(formData: FormData) {
 
   const admin = createAdminClient();
 
+  if (username) {
+    const { data: existingUsername } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("username", username)
+      .maybeSingle();
+
+    if (existingUsername) {
+      throw new Error(`El usuario "${username}" ya está en uso.`);
+    }
+  }
+
   const { data: authData, error: authError } = await admin.auth.admin.createUser({
     email,
     password,
@@ -314,6 +345,7 @@ export async function createUserAction(formData: FormData) {
   const { error: profileError } = await supabase.from("profiles").upsert({
     id: newUserId,
     email,
+    username,
     first_name: firstName,
     last_name: lastName,
     is_active: isActive,

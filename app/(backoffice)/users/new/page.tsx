@@ -195,6 +195,27 @@ export default async function NewUserPage() {
             </div>
 
             <div style={fieldWrap}>
+              <label style={labelStyle} htmlFor="username">
+                Usuario (login alterno)
+              </label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="ej. mario.alvarez"
+                style={inputStyle}
+              />
+              <div style={helpTextStyle}>
+                Opcional. Permite entrar con este usuario además del correo. Sin
+                espacios ni &quot;@&quot;, mínimo 3 caracteres y único.
+              </div>
+            </div>
+
+            <div style={fieldWrap}>
               <label style={labelStyle} htmlFor="password">
                 Password temporal
               </label>
