@@ -22,6 +22,9 @@ export type CaddiePickOption = {
   id: string;
   primary: string;
   secondary: string;
+  firstName: string | null;
+  lastName: string | null;
+  nickname: string | null;
   phone: string | null;
   telegram: string | null;
   level: string | null;
@@ -53,14 +56,36 @@ const levelBadge: Record<
   beginner: { label: "PRINCIPIANTE", bg: "#dcfce7", fg: "#15803d" },
 };
 
+/** Minúsculas y sin acentos para comparar de forma tolerante. */
+function normalizeText(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 function matchesCaddie(c: CaddiePickOption, q: string): boolean {
-  const needle = q.toLowerCase().trim();
+  const needle = normalizeText(q);
   if (!needle) return true;
-  const haystack = [c.primary, c.secondary, c.phone, c.telegram]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(needle);
+
+  const haystack = normalizeText(
+    [
+      c.firstName,
+      c.lastName,
+      c.nickname,
+      c.primary,
+      c.secondary,
+      c.phone,
+      c.telegram,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  // Cada palabra escrita debe aparecer (permite "ana lopez" en cualquier orden).
+  const tokens = needle.split(/\s+/).filter(Boolean);
+  return tokens.every((token) => haystack.includes(token));
 }
 
 export default function AsignarPorCaddieClient({
@@ -110,7 +135,7 @@ export default function AsignarPorCaddieClient({
     <div style={{ display: "grid", gap: 12, padding: 12 }}>
       <input
         type="search"
-        placeholder="Buscar caddie por nombre, apodo, teléfono o telegram…"
+        placeholder="Buscar por nombre, apellido, apodo, teléfono o telegram…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         style={{
