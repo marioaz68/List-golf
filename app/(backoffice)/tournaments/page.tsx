@@ -1170,7 +1170,7 @@ export default async function TournamentsPage({
                                   : "inline-flex h-8 items-center justify-center whitespace-nowrap rounded-lg border border-emerald-500 bg-emerald-600 px-2.5 text-[11px] font-bold text-white"
                               }
                             >
-                              {isPublic ? "🔒 Ocultar" : "🌐 Publicar"}
+                              {isPublic ? `🔒 ${tm.hide}` : `🌐 ${tm.show}`}
                             </SubmitButton>
                           </form>
                         ) : null}
