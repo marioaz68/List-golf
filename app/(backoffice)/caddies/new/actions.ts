@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  assignCaddieToEntry,
+  resolveDefaultRoundForEntry,
+} from "@/lib/caddies/assignCaddieToEntry";
 
 function clean(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -239,6 +243,67 @@ export async function updateCaddieAction(formData: FormData) {
 
   return {
     ok: true,
+  };
+}
+
+/** Asigna este caddie a un inscrito del torneo (aparece en Inscripciones). */
+export async function assignCaddieFromCatalogAction(
+  formData: FormData
+): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const caddie_id = clean(formData.get("caddie_id"));
+  const tournament_id = clean(formData.get("tournament_id"));
+  const entry_id = clean(formData.get("entry_id"));
+
+  if (!caddie_id || !tournament_id || !entry_id) {
+    return { ok: false, error: "Selecciona torneo e inscrito." };
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: entry } = await supabase
+    .from("tournament_entries")
+    .select("id, tournament_id")
+    .eq("id", entry_id)
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  if (!entry) {
+    return { ok: false, error: "El inscrito no pertenece a ese torneo." };
+  }
+
+  const { roundId, pairingGroupId } = await resolveDefaultRoundForEntry(
+    supabase,
+    tournament_id,
+    entry_id
+  );
+
+  if (!roundId) {
+    return {
+      ok: false,
+      error: "El torneo no tiene rondas configuradas. Crea las rondas primero.",
+    };
+  }
+
+  const result = await assignCaddieToEntry(supabase, {
+    tournamentId: tournament_id,
+    entryId: entry_id,
+    caddieId: caddie_id,
+    roundId,
+    pairingGroupId,
+  });
+
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
+
+  revalidatePath("/caddies");
+  revalidatePath("/caddies/new");
+  revalidatePath("/entries");
+
+  return {
+    ok: true,
+    message:
+      "Caddie asignado al inscrito. Se reflejará en Inscripciones y en las rondas del torneo.",
   };
 }
 

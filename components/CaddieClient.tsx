@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  assignCaddieFromCatalogAction,
   createCaddieAction,
   deleteCaddieAction,
   saveCaddieFavoritesAction,
@@ -43,12 +44,27 @@ type Player = {
   last_name: string | null;
 };
 
+type TournamentOption = {
+  id: string;
+  name: string;
+  status: string | null;
+};
+
+type TournamentEntryOption = {
+  entryId: string;
+  tournamentId: string;
+  playerId: string;
+  label: string;
+};
+
 type Props = {
   clubs: Club[];
   caddies: Caddie[];
   players: Player[];
   initialSelectedCaddie: Caddie | null;
   favoriteIdsByCaddie: Record<string, string[]>;
+  tournaments?: TournamentOption[];
+  tournamentEntries?: TournamentEntryOption[];
 };
 
 type AntiAutofillInputProps = {
@@ -337,11 +353,20 @@ export default function CaddieClient({
   players,
   initialSelectedCaddie,
   favoriteIdsByCaddie,
+  tournaments = [],
+  tournamentEntries = [],
 }: Props) {
   const router = useRouter();
   const [createFormKey, setCreateFormKey] = useState(0);
   const [searchCaddie, setSearchCaddie] = useState("");
   const [searchPlayer, setSearchPlayer] = useState("");
+  const [searchTournamentEntry, setSearchTournamentEntry] = useState("");
+  const [assignTournamentId, setAssignTournamentId] = useState("");
+  const [assignEntryId, setAssignEntryId] = useState("");
+  const [assignFeedback, setAssignFeedback] = useState<{
+    kind: "ok" | "err";
+    message: string;
+  } | null>(null);
   const [selected, setSelected] = useState<Caddie | null>(initialSelectedCaddie);
   const [selectedFavoriteIds, setSelectedFavoriteIds] = useState<Set<string>>(
     new Set()
@@ -392,6 +417,14 @@ export default function CaddieClient({
     return players.filter((p) => selectedFavoriteIds.has(p.id));
   }, [players, selectedFavoriteIds]);
 
+  const entriesForAssignTournament = useMemo(() => {
+    if (!assignTournamentId) return [];
+    const q = searchTournamentEntry.toLowerCase().trim();
+    return tournamentEntries
+      .filter((e) => e.tournamentId === assignTournamentId)
+      .filter((e) => !q || e.label.toLowerCase().includes(q));
+  }, [tournamentEntries, assignTournamentId, searchTournamentEntry]);
+
   function toggleFavorite(playerId: string) {
     setSelectedFavoriteIds((prev) => {
       const next = new Set(prev);
@@ -406,6 +439,9 @@ export default function CaddieClient({
 
   function handleSelectCaddie(caddie: Caddie) {
     setEditError("");
+    setAssignFeedback(null);
+    setAssignEntryId("");
+    setSearchTournamentEntry("");
     setSelected(caddie);
 
     window.requestAnimationFrame(() => {
@@ -482,6 +518,22 @@ export default function CaddieClient({
     router.refresh();
   }
 
+  async function handleAssignToTournament(formData: FormData) {
+    setAssignFeedback(null);
+    const result = await assignCaddieFromCatalogAction(formData);
+    if (!result.ok) {
+      setAssignFeedback({
+        kind: "err",
+        message: result.error ?? "No se pudo asignar.",
+      });
+      return;
+    }
+    setAssignFeedback({
+      kind: "ok",
+      message: result.message ?? "Asignado correctamente.",
+    });
+    router.refresh();
+  }
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -888,6 +940,142 @@ export default function CaddieClient({
               </SubmitButton>
             </div>
           </form>
+
+          <div
+            style={{
+              borderTop: "1px solid #e5e7eb",
+              margin: "0 12px",
+            }}
+          />
+
+          <form
+            action={handleAssignToTournament}
+            style={bodyStyle}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          >
+            <input type="hidden" name="caddie_id" value={selected.id} />
+            <input type="hidden" name="entry_id" value={assignEntryId} />
+
+            <div>
+              <h3 style={{ ...titleStyle, fontSize: 13 }}>
+                Asignar a torneo (inscripciones)
+              </h3>
+              <p style={subStyle}>
+                Registra este caddie con un inscrito del torneo. Aparecerá en
+                Inscripciones como jugador con caddie asignado.
+              </p>
+            </div>
+
+            <div style={gridStyle}>
+              <div style={{ gridColumn: "span 6" }}>
+                <label style={labelStyle}>Torneo activo</label>
+                <select
+                  name="tournament_id"
+                  value={assignTournamentId}
+                  onChange={(e) => {
+                    setAssignTournamentId(e.target.value);
+                    setAssignEntryId("");
+                    setSearchTournamentEntry("");
+                  }}
+                  style={fieldStyle}
+                  required
+                >
+                  <option value="">Selecciona torneo…</option>
+                  {tournaments.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.status ? ` (${t.status})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ gridColumn: "span 6" }}>
+                <label style={labelStyle}>Buscar inscrito</label>
+                <input
+                  type="search"
+                  value={searchTournamentEntry}
+                  onChange={(e) => setSearchTournamentEntry(e.target.value)}
+                  placeholder="Nombre o # de jugador…"
+                  disabled={!assignTournamentId}
+                  style={{
+                    ...fieldStyle,
+                    opacity: assignTournamentId ? 1 : 0.6,
+                  }}
+                  {...antiSafariProps}
+                />
+              </div>
+
+              <div style={{ gridColumn: "span 12" }}>
+                <label style={labelStyle}>Inscrito del torneo</label>
+                <select
+                  value={assignEntryId}
+                  onChange={(e) => setAssignEntryId(e.target.value)}
+                  disabled={!assignTournamentId}
+                  style={{
+                    ...fieldStyle,
+                    opacity: assignTournamentId ? 1 : 0.6,
+                  }}
+                  required
+                >
+                  <option value="">
+                    {assignTournamentId
+                      ? "Selecciona jugador inscrito…"
+                      : "Primero elige un torneo"}
+                  </option>
+                  {entriesForAssignTournament.map((e) => (
+                    <option key={e.entryId} value={e.entryId}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {assignFeedback ? (
+              <div
+                style={{
+                  border:
+                    assignFeedback.kind === "ok"
+                      ? "1px solid #86efac"
+                      : "1px solid #fecaca",
+                  background:
+                    assignFeedback.kind === "ok" ? "#f0fdf4" : "#fef2f2",
+                  color:
+                    assignFeedback.kind === "ok" ? "#15803d" : "#b91c1c",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {assignFeedback.message}
+              </div>
+            ) : null}
+
+            <div>
+              <SubmitButton
+                pendingText="Asignando…"
+                disabled={!assignTournamentId || !assignEntryId}
+                className={
+                  assignTournamentId && assignEntryId
+                    ? "h-8 rounded border border-emerald-700 bg-emerald-700 px-3 text-[12px] font-bold text-white"
+                    : "h-8 rounded border border-slate-300 bg-slate-100 px-3 text-[12px] font-semibold text-slate-400 cursor-not-allowed"
+                }
+              >
+                Asignar a inscrito del torneo →
+              </SubmitButton>
+            </div>
+          </form>
+
+          <div
+            style={{
+              borderTop: "1px solid #e5e7eb",
+              margin: "0 12px",
+            }}
+          />
 
           <form
             action={handleSaveFavorites}

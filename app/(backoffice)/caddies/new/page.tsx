@@ -39,10 +39,49 @@ type FavoriteRow = {
   player_id: string;
 };
 
+type TournamentRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+  status: string | null;
+  start_date: string | null;
+};
+
+type EntryRow = {
+  id: string;
+  tournament_id: string;
+  player_id: string;
+  player_number: number | null;
+  status: string | null;
+  players: PlayerRow | PlayerRow[] | null;
+  categories: { code: string | null; name: string | null } | { code: string | null; name: string | null }[] | null;
+};
+
+function oneOrNull<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function displayTournamentName(t: TournamentRow) {
+  return t.short_name?.trim() || t.name || "Torneo";
+}
+
+function displayEntryLabel(e: EntryRow) {
+  const player = oneOrNull(e.players);
+  const name = player
+    ? `${player.first_name ?? ""} ${player.last_name ?? ""}`.trim()
+    : "Sin nombre";
+  const cat = oneOrNull(e.categories);
+  const catLabel = cat?.code ?? cat?.name ?? "";
+  const num = e.player_number != null ? `#${e.player_number} · ` : "";
+  return `${num}${name}${catLabel ? ` · ${catLabel}` : ""}`;
+}
+
 export default async function NewCaddiePage() {
   const supabase = await createClient();
 
-  const [clubsRes, caddiesRes, playersRes, favoritesRes] = await Promise.all([
+  const [clubsRes, caddiesRes, playersRes, favoritesRes, tournamentsRes, entriesRes] =
+    await Promise.all([
     supabase
       .from("clubs")
       .select("id, name, short_name")
@@ -64,6 +103,29 @@ export default async function NewCaddiePage() {
       .order("last_name", { ascending: true }),
 
     supabase.from("caddie_favorites").select("caddie_id, player_id"),
+
+    supabase
+      .from("tournaments")
+      .select("id, name, short_name, status, start_date")
+      .not("status", "eq", "completed")
+      .not("status", "eq", "cancelled")
+      .order("start_date", { ascending: false }),
+
+    supabase
+      .from("tournament_entries")
+      .select(
+        `
+        id,
+        tournament_id,
+        player_id,
+        player_number,
+        status,
+        players ( id, first_name, last_name ),
+        categories ( code, name )
+      `
+      )
+      .neq("status", "withdrawn")
+      .order("player_number", { ascending: true, nullsFirst: false }),
   ]);
 
   if (clubsRes.error) throw new Error(`Error leyendo clubs: ${clubsRes.error.message}`);
@@ -72,11 +134,32 @@ export default async function NewCaddiePage() {
   if (favoritesRes.error) {
     throw new Error(`Error leyendo favoritos: ${favoritesRes.error.message}`);
   }
+  if (tournamentsRes.error) {
+    throw new Error(`Error leyendo torneos: ${tournamentsRes.error.message}`);
+  }
+  if (entriesRes.error) {
+    throw new Error(`Error leyendo inscritos: ${entriesRes.error.message}`);
+  }
 
   const clubs = (clubsRes.data ?? []) as ClubRow[];
   const caddies = (caddiesRes.data ?? []) as CaddieRow[];
   const players = (playersRes.data ?? []) as PlayerRow[];
   const favorites = (favoritesRes.data ?? []) as FavoriteRow[];
+  const tournaments = (tournamentsRes.data ?? []) as TournamentRow[];
+  const tournamentEntries = (entriesRes.data ?? []) as EntryRow[];
+
+  const tournamentOptions = tournaments.map((t) => ({
+    id: t.id,
+    name: displayTournamentName(t),
+    status: t.status,
+  }));
+
+  const entryOptions = tournamentEntries.map((e) => ({
+    entryId: e.id,
+    tournamentId: e.tournament_id,
+    playerId: e.player_id,
+    label: displayEntryLabel(e),
+  }));
 
   const favoriteIdsByCaddie: Record<string, string[]> = {};
 
@@ -121,6 +204,8 @@ export default async function NewCaddiePage() {
         players={players}
         initialSelectedCaddie={null}
         favoriteIdsByCaddie={favoriteIdsByCaddie}
+        tournaments={tournamentOptions}
+        tournamentEntries={entryOptions}
       />
     </div>
   );
