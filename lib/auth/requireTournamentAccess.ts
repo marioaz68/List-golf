@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
-type AllowedRole =
+export type AllowedRole =
   | "super_admin"
   | "club_admin"
   | "tournament_director"
@@ -57,7 +57,8 @@ export async function checkTournamentAccess({
   const { data: globalRows } = await supabase
     .from("user_global_roles")
     .select("roles(code)")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("is_active", true);
 
   const globalCodes =
     globalRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
@@ -94,7 +95,8 @@ export async function checkTournamentAccess({
     .from("user_tournament_roles")
     .select("roles(code)")
     .eq("user_id", user.id)
-    .eq("tournament_id", tournamentId);
+    .eq("tournament_id", tournamentId)
+    .eq("is_active", true);
 
   const tournamentCodes =
     tournamentRows?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
