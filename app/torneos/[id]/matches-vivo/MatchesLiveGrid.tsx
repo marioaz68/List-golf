@@ -624,10 +624,10 @@ export default function MatchesLiveGrid({
           🎯 Ver bracket en vivo
         </Link>
         <Link
-          href={`/torneos/${tournamentId}`}
+          href={`/torneos/${tournamentId}?view=tee-sheet`}
           className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
         >
-          ← Página del torneo
+          🏌 Salidas/Grupos
         </Link>
       </div>
 

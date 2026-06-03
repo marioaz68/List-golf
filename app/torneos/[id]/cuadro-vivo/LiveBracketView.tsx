@@ -720,16 +720,16 @@ export default function LiveBracketView({
 
       <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-slate-500">
         <Link
+          href={`/torneos/${tournamentId}?view=tee-sheet`}
+          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+        >
+          🏌 Salidas/Grupos
+        </Link>
+        <Link
           href={`/torneos/${tournamentId}/matches-vivo`}
           className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
         >
           📺 Matches en vivo
-        </Link>
-        <Link
-          href={`/torneos/${tournamentId}`}
-          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
-        >
-          ← Página del torneo
         </Link>
       </div>
     </div>
