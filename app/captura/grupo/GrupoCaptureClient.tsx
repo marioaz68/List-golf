@@ -103,12 +103,21 @@ function findNextScoreCell(
   if (idx < 0) return null;
   for (let i = idx + 1; i < all.length; i += 1) {
     const el = all[i];
-    if (el && !el.disabled && !el.readOnly) return el;
+    // No exigir !readOnly: BrowserBehaviorFix dejaba las celdas siguientes
+    // bloqueadas hasta un clic manual y el avance no encontraba destino.
+    if (el && !el.disabled) return el;
   }
   return null;
 }
 
+function unlockScoreInput(el: HTMLInputElement): void {
+  el.readOnly = false;
+  el.removeAttribute("readonly");
+  delete el.dataset.autofillLocked;
+}
+
 function focusScoreInput(el: HTMLInputElement): void {
+  unlockScoreInput(el);
   el.focus();
   try {
     el.select();
@@ -169,7 +178,7 @@ function insistAdvanceFrom(
     onQueueFocus(nextEntry, nextHole as HoleNumber);
   }
   const attempt = () => {
-    if (next.disabled || next.readOnly) return false;
+    if (next.disabled) return false;
     focusScoreInput(next);
     return document.activeElement === next;
   };
@@ -269,6 +278,7 @@ function ScoreCell({
       data-hole={hole}
       type="text"
       inputMode={allowPickup ? "text" : "numeric"}
+      enterKeyHint="next"
       autoComplete="off"
       defaultValue={serverDisplay}
       readOnly={disabled}
@@ -926,7 +936,8 @@ export default function GrupoCaptureClient({
     ) => {
       const key = `${entryId}-${hole}`;
       onScoreSaved(entryId, hole, strokes, isPickedUp);
-      setSavingKey(key);
+      // Diferir para no competir con el avance de foco en el mismo frame.
+      requestAnimationFrame(() => setSavingKey(key));
       try {
         const sp = new URLSearchParams(window.location.search);
         const meId = sp.get("me")?.trim() || null;
@@ -976,7 +987,7 @@ export default function GrupoCaptureClient({
       } catch {
         /* silencioso */
       } finally {
-        setSavingKey(null);
+        requestAnimationFrame(() => setSavingKey(null));
       }
     },
     [
@@ -1060,11 +1071,12 @@ export default function GrupoCaptureClient({
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
+      if (e.key !== "Enter" && e.key !== "Tab") return;
       const input = e.target;
       if (!(input instanceof HTMLInputElement)) return;
       if (input.dataset.scoreCell !== "1") return;
       if (!input.closest('[data-capture-grid="1"]')) return;
+      if (e.key === "Tab" && e.shiftKey) return;
 
       e.preventDefault();
       const entryId = input.dataset.entryId ?? "";

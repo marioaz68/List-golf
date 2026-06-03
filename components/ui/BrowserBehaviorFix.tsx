@@ -84,6 +84,11 @@ export default function BrowserBehaviorFix() {
 
         const isFakeField = field.getAttribute("data-browser-behavior-fix") === "true";
 
+        /** Captura rápida de scores: el readonly anti-autofill rompe el auto-avance
+         *  de celda (la siguiente casilla queda readonly hasta un clic manual). */
+        const isScoreCaptureCell =
+          field instanceof HTMLInputElement && field.dataset.scoreCell === "1";
+
         const looksLikeLoginField =
           inputType === "password" ||
           inputType === "email" ||
@@ -131,7 +136,11 @@ export default function BrowserBehaviorFix() {
          * apellido, teléfono y correo. El truco más estable es marcar readonly
          * hasta que el usuario haga click/focus. Así Safari no abre el menú gris.
          */
-        if (isSafeAdministrativeField && field instanceof HTMLInputElement) {
+        if (
+          isSafeAdministrativeField &&
+          field instanceof HTMLInputElement &&
+          !isScoreCaptureCell
+        ) {
           const safeTypes = ["", "text", "search", "tel", "number", "url"];
 
           if (safeTypes.includes(inputType)) {
