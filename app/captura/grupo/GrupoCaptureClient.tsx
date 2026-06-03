@@ -117,6 +117,14 @@ function focusScoreInput(el: HTMLInputElement): void {
   }
 }
 
+function isScoreCaptureInputFocused(): boolean {
+  const active = document.activeElement;
+  return (
+    active instanceof HTMLInputElement &&
+    active.dataset.scoreCell === "1"
+  );
+}
+
 /** Avanza el foco a la siguiente celda. Si no hay siguiente, hace blur. */
 function focusNextScoreCell(current: HTMLInputElement): void {
   const next = findNextScoreCell(current);
@@ -240,13 +248,11 @@ function ScoreCell({
       if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
         onQueueFocus(nextEntry, nextHole as HoleNumber);
       }
-      // Mantener advancingRef hasta después del paint para que handleBlur
-      // de la celda anterior no revierta el draft ni dispare otro commit.
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          advancingRef.current = false;
-        });
-      });
+      // Mantener advancingRef hasta que el foco se asiente (blur de la celda
+      // anterior + re-render del padre por guardado).
+      window.setTimeout(() => {
+        advancingRef.current = false;
+      }, 80);
     };
     if (delayMs <= 0) {
       run();
@@ -281,14 +287,23 @@ function ScoreCell({
     }, 150);
   }
 
-  function flushCommit(strokes: number | null, isPicked: boolean) {
+  function flushCommit(
+    strokes: number | null,
+    isPicked: boolean,
+    options?: { deferParent?: boolean }
+  ) {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
     if (sameAsCommitted(strokes, isPicked)) return;
     lastCommittedRef.current = { strokes, pickedUp: isPicked };
-    onCommit(strokes, { pickedUp: isPicked });
+    const commit = () => onCommit(strokes, { pickedUp: isPicked });
+    if (options?.deferParent) {
+      queueMicrotask(commit);
+      return;
+    }
+    commit();
   }
 
   function handleChange(raw: string) {
@@ -303,8 +318,8 @@ function ScoreCell({
       const compact = trimmed.replace(/\s+/g, "");
       if (compact.length > 0 && /^[xX]+$/.test(compact)) {
         setDraft("X");
-        flushCommit(null, true);
         scheduleAdvance(0);
+        flushCommit(null, true, { deferParent: true });
         return;
       }
     }
@@ -340,8 +355,8 @@ function ScoreCell({
       cancelAdvance();
       return;
     }
-    flushCommit(Math.trunc(n), false);
     scheduleAdvance(0);
+    flushCommit(Math.trunc(n), false, { deferParent: true });
   }
 
   function handleBlur() {
@@ -374,7 +389,9 @@ function ScoreCell({
       );
       return;
     }
-    flushCommit(Math.trunc(n), false);
+    const strokes = Math.trunc(n);
+    flushCommit(strokes, false);
+    scheduleAdvance(0);
   }
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
@@ -419,6 +436,7 @@ function ScoreCell({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => handleChange(e.target.value)}
       onBlur={(e) => {
+        if (advancingRef.current) return;
         cancelAdvance();
         handleBlur();
         void e;
@@ -443,11 +461,9 @@ function ScoreCell({
             if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
               onQueueFocus(nextEntry, nextHole as HoleNumber);
             }
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                advancingRef.current = false;
-              });
-            });
+            window.setTimeout(() => {
+              advancingRef.current = false;
+            }, 80);
           }
         }
       }}
@@ -533,8 +549,10 @@ function PlayerRow({
     isPickedUp: boolean
   ) {
     const key = `${player.entryId}-${hole}`;
-    onScoreSaved(player.entryId, hole, strokes, isPickedUp);
     setSavingKey(key);
+    queueMicrotask(() => {
+      onScoreSaved(player.entryId, hole, strokes, isPickedUp);
+    });
     try {
       const sp = new URLSearchParams(window.location.search);
       const meId = sp.get("me")?.trim() || null;
@@ -568,7 +586,6 @@ function PlayerRow({
         };
       };
       if (res.ok) {
-        onScoreSaved(player.entryId, hole, strokes, isPickedUp);
         const ac = json.matchAutoClose;
         if (ac?.attempted && ac.closed && ac.message) {
           onMatchAutoClose?.({
@@ -937,45 +954,35 @@ export default function GrupoCaptureClient({
     kind: "ok" | "err";
     message: string;
   } | null>(null);
-  /** Celda a re-enfocar tras re-render del padre (respaldo del foco síncrono). */
-  const [pendingFocus, setPendingFocus] = useState<{
-    entryId: string;
-    hole: HoleNumber;
-  } | null>(null);
-  const queueFocusCell = useCallback((entryId: string, hole: HoleNumber) => {
-    setPendingFocus({ entryId, hole });
+  /** Respaldo de foco tras re-render del padre (sin setState extra). */
+  const pendingFocusRef = useRef<{ entryId: string; hole: HoleNumber } | null>(
+    null
+  );
+  const refocusPendingCell = useCallback(() => {
+    const target = pendingFocusRef.current;
+    if (!target) return;
+    const el = document.querySelector<HTMLInputElement>(
+      `input[data-score-cell="1"][data-entry-id="${target.entryId}"][data-hole="${target.hole}"]`
+    );
+    if (!el || el.disabled || el.readOnly) return;
+    if (document.activeElement !== el) focusScoreInput(el);
+    if (document.activeElement === el) pendingFocusRef.current = null;
   }, []);
 
+  const queueFocusCell = useCallback(
+    (entryId: string, hole: HoleNumber) => {
+      pendingFocusRef.current = { entryId, hole };
+      queueMicrotask(() => refocusPendingCell());
+    },
+    [refocusPendingCell]
+  );
+
   useLayoutEffect(() => {
-    if (!pendingFocus) return;
-    const { entryId, hole } = pendingFocus;
-    const selector = `input[data-score-cell="1"][data-entry-id="${entryId}"][data-hole="${hole}"]`;
-
-    const tryFocus = (): boolean => {
-      const el = document.querySelector<HTMLInputElement>(selector);
-      if (!el || el.disabled || el.readOnly) return false;
-      if (document.activeElement === el) {
-        return true;
-      }
-      focusScoreInput(el);
-      return document.activeElement === el;
-    };
-
-    if (tryFocus()) {
-      setPendingFocus(null);
-      return;
-    }
-
-    const raf = requestAnimationFrame(() => {
-      if (tryFocus()) setPendingFocus(null);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [pendingFocus, savingKey]);
+    refocusPendingCell();
+  }, [savingKey, refocusPendingCell]);
 
   const savingRef = useRef<string | null>(null);
   savingRef.current = savingKey;
-  const pendingFocusActiveRef = useRef(false);
-  pendingFocusActiveRef.current = pendingFocus != null;
   const autoCloseAttemptedRef = useRef(false);
 
   const refreshGroupMeta = useCallback(async () => {
@@ -1106,7 +1113,7 @@ export default function GrupoCaptureClient({
   // Polling para sincronizar con cambios de otros usuarios.
   useEffect(() => {
     const id = window.setInterval(async () => {
-      if (savingRef.current || pendingFocusActiveRef.current) return;
+      if (savingRef.current || isScoreCaptureInputFocused()) return;
       try {
         const qs = new URLSearchParams({ group_id: meta.groupId });
         if (meta.myEntryId) qs.set("me", meta.myEntryId);
