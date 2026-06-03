@@ -125,14 +125,35 @@ function isScoreCaptureInputFocused(): boolean {
   );
 }
 
-/** Avanza el foco a la siguiente celda. Si no hay siguiente, hace blur. */
-function focusNextScoreCell(current: HTMLInputElement): void {
-  const next = findNextScoreCell(current);
-  if (next) {
-    focusScoreInput(next);
+/** Reintenta el foco varias veces (el re-render del padre suele robarlo). */
+function insistAdvanceFrom(
+  from: HTMLInputElement,
+  onQueueFocus?: (entryId: string, hole: HoleNumber) => void
+): void {
+  const next = findNextScoreCell(from);
+  if (!next) {
+    from.blur();
     return;
   }
-  current.blur();
+  const nextEntry = next.dataset.entryId ?? "";
+  const nextHole = Number(next.dataset.hole ?? "");
+  if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
+    onQueueFocus(nextEntry, nextHole as HoleNumber);
+  }
+  const attempt = () => {
+    if (next.disabled || next.readOnly) return false;
+    focusScoreInput(next);
+    return document.activeElement === next;
+  };
+  attempt();
+  queueMicrotask(attempt);
+  requestAnimationFrame(() => {
+    attempt();
+    requestAnimationFrame(attempt);
+  });
+  window.setTimeout(attempt, 0);
+  window.setTimeout(attempt, 50);
+  window.setTimeout(attempt, 150);
 }
 
 /**
@@ -186,86 +207,49 @@ function ScoreCell({
   /** Tras un re-render del padre, enfocar esta celda (entryId + hoyo). */
   onQueueFocus?: (entryId: string, hole: HoleNumber) => void;
 }) {
-  const initialDraft = pickedUp ? "X" : value != null ? String(value) : "";
-  const [draft, setDraft] = useState<string>(initialDraft);
+  /** Solo para dígito "1" a medio escribir (10–15 o hole-in-one). */
+  const [partialDraft, setPartialDraft] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  /** Evita que handleBlur revierta el draft mientras movemos el foco. */
+  /** Evita que handleBlur revierta mientras movemos el foco. */
   const advancingRef = useRef(false);
   const lastCommittedRef = useRef<{ strokes: number | null; pickedUp: boolean }>({
     strokes: value,
     pickedUp: Boolean(pickedUp),
   });
 
+  const serverDisplay = pickedUp ? "X" : value != null ? String(value) : "";
+  const inputKey = `${entryId}-${hole}-${serverDisplay}-${isPending ? "p" : "o"}`;
+  const isPartial = partialDraft !== null;
+
   useEffect(() => {
     const picked = Boolean(pickedUp);
     if (picked) {
       lastCommittedRef.current = { strokes: null, pickedUp: true };
-      setDraft("X");
-      return;
-    }
-    if (value != null) {
+    } else if (value != null) {
       lastCommittedRef.current = { strokes: value, pickedUp: false };
-      setDraft(String(value));
-      return;
+    } else if (!lastCommittedRef.current.pickedUp) {
+      lastCommittedRef.current = { strokes: null, pickedUp: false };
     }
-    // El padre aún no refleja el score (guardado async o polling). Si ya
-    // confirmamos localmente (p. ej. 10–15), no vaciar la casilla.
-    const lc = lastCommittedRef.current;
-    if (lc.strokes != null && !lc.pickedUp) {
-      setDraft(String(lc.strokes));
-      return;
+    if (document.activeElement !== inputRef.current) {
+      setPartialDraft(null);
     }
-    lastCommittedRef.current = { strokes: null, pickedUp: false };
-    setDraft("");
   }, [value, pickedUp]);
 
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (advanceRef.current) clearTimeout(advanceRef.current);
     };
   }, []);
 
-  function scheduleAdvance(delayMs: number) {
-    if (advanceRef.current) clearTimeout(advanceRef.current);
-    const run = () => {
-      const el = inputRef.current;
-      if (!el) return;
-      const next = findNextScoreCell(el);
-      if (!next) {
-        el.blur();
-        return;
-      }
-      const nextEntry = next.dataset.entryId ?? "";
-      const nextHole = Number(next.dataset.hole ?? "");
-      advancingRef.current = true;
-      // Foco inmediato: no esperar al layout effect del padre (en la 1ª
-      // carga el re-render por setSavingKey/onScoreSaved solía ganar la
-      // carrera y el cursor se quedaba en la misma casilla).
-      focusScoreInput(next);
-      if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
-        onQueueFocus(nextEntry, nextHole as HoleNumber);
-      }
-      // Mantener advancingRef hasta que el foco se asiente (blur de la celda
-      // anterior + re-render del padre por guardado).
-      window.setTimeout(() => {
-        advancingRef.current = false;
-      }, 80);
-    };
-    if (delayMs <= 0) {
-      run();
-      return;
-    }
-    advanceRef.current = setTimeout(run, delayMs);
-  }
-
-  function cancelAdvance() {
-    if (advanceRef.current) {
-      clearTimeout(advanceRef.current);
-      advanceRef.current = null;
-    }
+  function scheduleAdvance() {
+    const el = inputRef.current;
+    if (!el) return;
+    advancingRef.current = true;
+    insistAdvanceFrom(el, onQueueFocus);
+    window.setTimeout(() => {
+      advancingRef.current = false;
+    }, 200);
   }
 
   function sameAsCommitted(
@@ -317,17 +301,14 @@ function ScoreCell({
       // típicos en mobile donde el teclado pega " X" o "X ".
       const compact = trimmed.replace(/\s+/g, "");
       if (compact.length > 0 && /^[xX]+$/.test(compact)) {
-        setDraft("X");
-        scheduleAdvance(0);
+        setPartialDraft(null);
+        scheduleAdvance();
         flushCommit(null, true, { deferParent: true });
         return;
       }
     }
 
     let cleaned = trimmed.replace(/[^0-9]/g, "");
-    // Sólo aceptamos un dígito por casilla, salvo cuando el primer dígito es
-    // "1" (puede formar 10-15). Si el usuario teclea más después de 2-9, los
-    // dígitos extra se descartan visual y lógicamente.
     if (cleaned.length >= 2) {
       if (cleaned[0] === "1") {
         cleaned = cleaned.slice(0, 2);
@@ -335,63 +316,49 @@ function ScoreCell({
         cleaned = cleaned[0];
       }
     }
-    setDraft(cleaned);
     if (cleaned === "") {
-      cancelAdvance();
+      setPartialDraft(null);
       scheduleCommit(null, false);
       return;
     }
     const n = Number(cleaned);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
-      cancelAdvance();
       return;
     }
-    // Caso especial: cleaned === "1". El usuario puede estar formando
-    // 10-15 o quiere registrar hole-in-one. NO COMMIT todavía — esperamos
-    // un segundo dígito, Enter, Tab o blur. Esto evita un POST intermedio
-    // con strokes=1 que marca el hoyo como "pendiente de testigo"
-    // (rojo/texto blanco) cuando luego se completa "10-15".
     if (cleaned === "1") {
-      cancelAdvance();
+      setPartialDraft("1");
       return;
     }
-    scheduleAdvance(0);
+    setPartialDraft(null);
+    scheduleAdvance();
     flushCommit(Math.trunc(n), false, { deferParent: true });
   }
 
   function handleBlur() {
     if (advancingRef.current) return;
-    // Leemos del input directamente (no del `draft` capturado en clousure)
-    // porque cuando blur llega después de un cambio de focus sincrónico,
-    // el estado `draft` puede no estar todavía propagado al render.
-    const live = (inputRef.current?.value ?? draft).trim();
+    const live = (inputRef.current?.value ?? partialDraft ?? serverDisplay).trim();
     if (allowPickup) {
       const compact = live.replace(/\s+/g, "");
       if (compact.length > 0 && /^[xX]+$/.test(compact)) {
-        setDraft("X");
+        setPartialDraft(null);
         flushCommit(null, true);
         return;
       }
     }
     if (live === "") {
+      setPartialDraft(null);
       flushCommit(null, false);
       return;
     }
     const n = Number(live);
     if (!Number.isFinite(n) || n < 1 || n > 15) {
-      // Restauramos visualmente lo último confirmado.
-      setDraft(
-        lastCommittedRef.current.pickedUp
-          ? "X"
-          : lastCommittedRef.current.strokes != null
-            ? String(lastCommittedRef.current.strokes)
-            : ""
-      );
+      setPartialDraft(null);
       return;
     }
     const strokes = Math.trunc(n);
+    setPartialDraft(null);
     flushCommit(strokes, false);
-    scheduleAdvance(0);
+    scheduleAdvance();
   }
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
@@ -416,8 +383,14 @@ function ScoreCell({
     isPending && !pickedUp ? "bg-red-500 text-white border-red-700" : "";
   const savingClass = isSaving ? "opacity-60" : "";
 
+  const inputProps = isPartial
+    ? { value: partialDraft ?? "" }
+    : { defaultValue: serverDisplay };
+
   return (
     <input
+      key={isPartial ? `partial-${entryId}-${hole}` : inputKey}
+      {...inputProps}
       ref={inputRef}
       data-score-cell="1"
       data-entry-id={entryId}
@@ -425,7 +398,6 @@ function ScoreCell({
       type="text"
       inputMode={allowPickup ? "text" : "numeric"}
       pattern={allowPickup ? "[0-9xX]*" : "[0-9]*"}
-      value={draft}
       readOnly={disabled}
       disabled={disabled}
       title={
@@ -437,33 +409,20 @@ function ScoreCell({
       onChange={(e) => handleChange(e.target.value)}
       onBlur={(e) => {
         if (advancingRef.current) return;
-        cancelAdvance();
         handleBlur();
         void e;
       }}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === "Tab") {
-          // Tab y Enter avanzan manualmente: cancelamos cualquier avance
-          // automático pendiente para no saltar dos celdas.
-          cancelAdvance();
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const el = e.currentTarget as HTMLInputElement;
-            const next = findNextScoreCell(el);
-            if (!next) {
-              el.blur();
-              return;
-            }
-            const nextEntry = next.dataset.entryId ?? "";
-            const nextHole = Number(next.dataset.hole ?? "");
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const el = e.currentTarget as HTMLInputElement;
+          handleBlur();
+          if (!advancingRef.current) {
             advancingRef.current = true;
-            focusScoreInput(next);
-            if (onQueueFocus && nextEntry && Number.isFinite(nextHole)) {
-              onQueueFocus(nextEntry, nextHole as HoleNumber);
-            }
+            insistAdvanceFrom(el, onQueueFocus);
             window.setTimeout(() => {
               advancingRef.current = false;
-            }, 80);
+            }, 200);
           }
         }
       }}
@@ -965,8 +924,23 @@ export default function GrupoCaptureClient({
       `input[data-score-cell="1"][data-entry-id="${target.entryId}"][data-hole="${target.hole}"]`
     );
     if (!el || el.disabled || el.readOnly) return;
-    if (document.activeElement !== el) focusScoreInput(el);
-    if (document.activeElement === el) pendingFocusRef.current = null;
+    const attempt = () => {
+      focusScoreInput(el);
+      return document.activeElement === el;
+    };
+    if (attempt()) {
+      pendingFocusRef.current = null;
+      return;
+    }
+    queueMicrotask(() => {
+      if (attempt()) pendingFocusRef.current = null;
+    });
+    window.setTimeout(() => {
+      if (attempt()) pendingFocusRef.current = null;
+    }, 50);
+    window.setTimeout(() => {
+      if (attempt()) pendingFocusRef.current = null;
+    }, 150);
   }, []);
 
   const queueFocusCell = useCallback(
