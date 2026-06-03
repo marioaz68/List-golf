@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import {
   updateProfileAction,
+  setUserPasswordAction,
   assignUserClubRoleAction,
   removeUserClubRoleAction,
   assignUserTournamentRoleAction,
@@ -809,6 +810,53 @@ export default async function UsersPage({
 
                             <button type="submit" style={miniButtonStyle}>
                               Guardar datos
+                            </button>
+                          </form>
+
+                          <form
+                            action={setUserPasswordAction}
+                            style={{
+                              display: "grid",
+                              gap: 6,
+                              minWidth: 220,
+                              marginTop: 10,
+                              paddingTop: 10,
+                              borderTop: "1px solid #e5e7eb",
+                            }}
+                          >
+                            <input type="hidden" name="profile_id" value={u.id} />
+                            <input
+                              type="hidden"
+                              name="tournament_id"
+                              value={tournamentId}
+                            />
+
+                            <input
+                              name="password"
+                              type="text"
+                              required
+                              minLength={6}
+                              placeholder="Nueva contraseña de acceso"
+                              autoComplete="new-password"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              style={inputStyle}
+                            />
+
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#64748b",
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              Mínimo 6 caracteres. El usuario podrá entrar con
+                              email o usuario + esta contraseña.
+                            </div>
+
+                            <button type="submit" style={miniButtonStyle}>
+                              Cambiar contraseña
                             </button>
                           </form>
                         </td>

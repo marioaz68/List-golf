@@ -371,6 +371,33 @@ export async function updateProfileAction(formData: FormData) {
   revalidateUsersPaths(tournamentId);
 }
 
+/** Fija/resetea la contraseña de acceso al sistema de un usuario.
+ *  Usa el cliente admin (service role) y respeta los mismos permisos que la
+ *  edición de perfil. */
+export async function setUserPasswordAction(formData: FormData) {
+  const profileId = reqStr(formData, "profile_id");
+  const tournamentId = optStr(formData, "tournament_id");
+  const password = reqStr(formData, "password");
+
+  if (password.length < 6) {
+    throw new Error("La contraseña debe tener al menos 6 caracteres.");
+  }
+
+  await ensureCanTouchProfile(profileId, tournamentId);
+
+  const admin = createAdminClient();
+
+  const { error } = await admin.auth.admin.updateUserById(profileId, {
+    password,
+  });
+
+  if (error) {
+    throw new Error(`Error actualizando contraseña: ${error.message}`);
+  }
+
+  revalidateUsersPaths(tournamentId);
+}
+
 export async function assignUserClubRoleAction(formData: FormData) {
   const profileId = reqStr(formData, "profile_id");
   const clubId = reqStr(formData, "club_id");
