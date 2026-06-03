@@ -37,6 +37,8 @@ export type PlayerPickOption = {
 export type AsignarPorCaddieCtx = {
   tournamentId: string;
   roundId: string;
+  /** true cuando hay torneo y ronda concretos: se puede asignar jugador. */
+  ready: boolean;
 };
 
 const levelBadge: Record<
@@ -119,6 +121,23 @@ export default function AsignarPorCaddieClient({
           color: "#0f172a",
         }}
       />
+
+      {!ctx.ready ? (
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "#fef9c3",
+            border: "1px solid #fde047",
+            color: "#854d0e",
+            fontSize: 12,
+          }}
+        >
+          Puedes buscar al caddie. Para <strong>asignarle un jugador</strong>,
+          selecciona arriba <strong>torneo</strong> y una <strong>ronda</strong>{" "}
+          específica.
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -258,6 +277,7 @@ export default function AsignarPorCaddieClient({
 
                   <select
                     value={selectedEntry}
+                    disabled={!ctx.ready}
                     onChange={(e) =>
                       setSelectedEntryByCaddie((prev) => ({
                         ...prev,
@@ -271,11 +291,15 @@ export default function AsignarPorCaddieClient({
                       border: "1px solid #cbd5e1",
                       borderRadius: 8,
                       fontSize: 12,
-                      background: "#fff",
+                      background: ctx.ready ? "#fff" : "#f1f5f9",
                       color: "#0f172a",
                     }}
                   >
-                    <option value="">Selecciona jugador…</option>
+                    <option value="">
+                      {ctx.ready
+                        ? "Selecciona jugador…"
+                        : "Selecciona torneo y ronda arriba…"}
+                    </option>
                     {players.map((p) => {
                       const takenByOther =
                         p.currentCaddieId != null &&
@@ -296,9 +320,9 @@ export default function AsignarPorCaddieClient({
 
                   <SubmitButton
                     pendingText="Asignando…"
-                    disabled={!selectedEntry}
+                    disabled={!ctx.ready || !selectedEntry}
                     className={
-                      selectedEntry
+                      ctx.ready && selectedEntry
                         ? "h-8 px-3 border border-gray-800 rounded bg-gray-900 text-white text-[12px] font-bold hover:bg-gray-800"
                         : "h-8 px-3 border border-slate-300 rounded bg-slate-100 text-slate-400 text-[12px] font-semibold cursor-not-allowed"
                     }

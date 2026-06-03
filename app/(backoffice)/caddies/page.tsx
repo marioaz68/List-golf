@@ -821,13 +821,9 @@ export default async function CaddiesPage({
           </div>
         </div>
 
-        {!selectedTournamentId || !selectedRoundId ? (
+        {caddiePickOptions.length === 0 ? (
           <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
-            Primero selecciona <strong>torneo</strong> y <strong>ronda</strong>.
-          </div>
-        ) : playerPickOptions.length === 0 ? (
-          <div style={{ padding: 12, fontSize: 12, color: "#475569" }}>
-            No hay jugadores con grupo asignado en esa ronda.
+            No hay caddies activos en el catálogo.
           </div>
         ) : (
           <AsignarPorCaddieClient
@@ -836,6 +832,11 @@ export default async function CaddiesPage({
             ctx={{
               tournamentId: selectedTournamentId,
               roundId: selectedRoundId,
+              ready: Boolean(
+                selectedTournamentId &&
+                  selectedRoundId &&
+                  playerPickOptions.length > 0
+              ),
             }}
             initialQuery={caddieQuery}
           />
