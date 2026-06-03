@@ -39,35 +39,104 @@ export function pointInPolygon(p: LatLon, poly: Polygon): boolean {
   return true;
 }
 
-function minDistanceDeg(p: LatLon, poly: Polygon): number {
+const M_PER_DEG_LAT = 110_574; // metros por grado de latitud (aprox)
+
+/** Metros por grado de longitud a una latitud dada (se encoge con cos(lat)). */
+function metersPerDegLon(lat: number): number {
+  return 111_320 * Math.cos((lat * Math.PI) / 180);
+}
+
+/** Distancia (m) de un punto a un segmento, en un plano local equirectangular
+ *  centrado en el punto p (suficiente a escala de un campo de golf). */
+function distPointToSegmentMeters(
+  p: LatLon,
+  a: number[],
+  b: number[]
+): number {
+  const mLon = metersPerDegLon(p.lat);
+  // Proyección local en metros relativa a p.
+  const ax = (a[0] - p.lon) * mLon;
+  const ay = (a[1] - p.lat) * M_PER_DEG_LAT;
+  const bx = (b[0] - p.lon) * mLon;
+  const by = (b[1] - p.lat) * M_PER_DEG_LAT;
+  // p está en el origen (0,0).
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? (-(ax * dx + ay * dy)) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  return Math.hypot(cx, cy);
+}
+
+/** Distancia (m) del punto al borde más cercano del polígono. */
+function minDistanceMeters(p: LatLon, poly: Polygon): number {
   let min = Infinity;
   for (const ring of poly.coordinates) {
-    for (const [lon, lat] of ring) {
-      const d = Math.hypot(p.lat - lat, p.lon - lon);
+    for (let i = 0; i < ring.length - 1; i++) {
+      const d = distPointToSegmentMeters(p, ring[i], ring[i + 1]);
       if (d < min) min = d;
     }
   }
   return min;
 }
 
-const NEAR_THRESHOLD_DEG = 0.00025; // ≈ 25-28 m
+const NEAR_THRESHOLD_M = 30; // metros: agarra puntos en green/tee/orilla del fairway
 
-/** Devuelve el número de hoyo donde cae el punto, o el más cercano si está
- *  a menos de ~25 m, o null si está fuera del campo. */
+/** Centroide (promedio de vértices del anillo exterior) en metros relativo a p. */
+function centroidDistanceMeters(p: LatLon, poly: Polygon): number {
+  const ring = poly.coordinates[0] ?? [];
+  if (ring.length === 0) return Infinity;
+  let sx = 0;
+  let sy = 0;
+  // El anillo está cerrado (último = primero); no contar el repetido.
+  const n = ring.length - 1 > 0 ? ring.length - 1 : ring.length;
+  for (let i = 0; i < n; i++) {
+    sx += ring[i][0];
+    sy += ring[i][1];
+  }
+  const clon = sx / n;
+  const clat = sy / n;
+  const mLon = metersPerDegLon(p.lat);
+  return Math.hypot((clon - p.lon) * mLon, (clat - p.lat) * M_PER_DEG_LAT);
+}
+
+/** Devuelve el número de hoyo donde cae el punto. Si cae dentro de varios
+ *  polígonos que se traslapan, gana el hoyo cuyo centroide está más cerca
+ *  (evita sesgo por orden de la lista). Si no cae en ninguno, devuelve el del
+ *  borde más cercano si está a ≤30 m, o null si está fuera del campo. */
 export function detectHole(
   p: LatLon,
   holes: FeatureCollection<Polygon, { hoyo: number }>
 ): number | null {
-  for (const f of holes.features) {
-    if (pointInPolygon(p, f.geometry)) return f.properties.hoyo;
+  const containing = holes.features.filter((f) =>
+    pointInPolygon(p, f.geometry)
+  );
+  if (containing.length === 1) return containing[0].properties.hoyo;
+  if (containing.length > 1) {
+    let best = containing[0];
+    let bestD = centroidDistanceMeters(p, best.geometry);
+    for (let i = 1; i < containing.length; i++) {
+      const d = centroidDistanceMeters(p, containing[i].geometry);
+      if (d < bestD) {
+        bestD = d;
+        best = containing[i];
+      }
+    }
+    return best.properties.hoyo;
   }
+
   let best: number | null = null;
   let bestD = Infinity;
   for (const f of holes.features) {
-    const d = minDistanceDeg(p, f.geometry);
-    if (d < bestD) { bestD = d; best = f.properties.hoyo; }
+    const d = minDistanceMeters(p, f.geometry);
+    if (d < bestD) {
+      bestD = d;
+      best = f.properties.hoyo;
+    }
   }
-  return bestD <= NEAR_THRESHOLD_DEG ? best : null;
+  return bestD <= NEAR_THRESHOLD_M ? best : null;
 }
 
 export function centroid(points: LatLon[]): LatLon | null {

@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { computePace, smoothedHoleForGroup } from "./paceCalculator";
+import {
+  computePace,
+  loadPerHoleMinutes,
+  smoothedHoleForGroup,
+} from "./paceCalculator";
 
 const RITMO_COMMANDS = new Set(["RITMO", "/RITMO", "MI RITMO"]);
 const RITMO_MAP_COMMANDS = new Set([
@@ -53,12 +57,18 @@ export async function buildRitmoStatusReply(
 
   const { data: entry } = await supabase
     .from("tournament_entries")
-    .select("id, tournament_id")
+    .select("id, tournament_id, tournaments ( course_id )")
     .eq("player_id", player.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!entry?.id) return "No tienes inscripción activa.";
+
+  const tRow = Array.isArray(entry.tournaments)
+    ? entry.tournaments[0]
+    : entry.tournaments;
+  const courseId =
+    (tRow as { course_id?: string | null } | null)?.course_id ?? null;
 
   const { data: round } = await supabase
     .from("rounds")
@@ -84,11 +94,13 @@ export async function buildRitmoStatusReply(
   if (!g) return "Grupo no encontrado.";
 
   const hoyo = await smoothedHoleForGroup(supabase, g.id);
+  const perHoleMinutes = await loadPerHoleMinutes(supabase, courseId);
   const pace = computePace({
     hoyoActual: hoyo,
     teeTimeISO: g.tee_time,
     teeStartHole: g.starting_hole ?? 1,
     roundDate: round.round_date,
+    perHoleMinutes,
   });
 
   const lines = [
