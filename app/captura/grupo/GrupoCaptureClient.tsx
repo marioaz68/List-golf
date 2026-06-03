@@ -125,6 +125,34 @@ function isScoreCaptureInputFocused(): boolean {
   );
 }
 
+type ParsedCellInput =
+  | { kind: "clear" }
+  | { kind: "pickup" }
+  | { kind: "partial-one" }
+  | { kind: "score"; strokes: number };
+
+function parseScoreCellInput(
+  raw: string,
+  allowPickup: boolean
+): ParsedCellInput | null {
+  const trimmed = raw.trim();
+  if (allowPickup) {
+    const compact = trimmed.replace(/\s+/g, "");
+    if (compact.length > 0 && /^[xX]+$/.test(compact)) {
+      return { kind: "pickup" };
+    }
+  }
+  let cleaned = trimmed.replace(/[^0-9]/g, "");
+  if (cleaned.length >= 2) {
+    cleaned = cleaned[0] === "1" ? cleaned.slice(0, 2) : cleaned[0]!;
+  }
+  if (cleaned === "") return { kind: "clear" };
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n < 1 || n > 15) return null;
+  if (cleaned === "1") return { kind: "partial-one" };
+  return { kind: "score", strokes: Math.trunc(n) };
+}
+
 /** Reintenta el foco varias veces (el re-render del padre suele robarlo). */
 function insistAdvanceFrom(
   from: HTMLInputElement,
@@ -179,6 +207,8 @@ function insistAdvanceFrom(
  * Para evitar mandar muchas requests al backend mientras el usuario
  * sigue tecleando, se debouncea ~150 ms.
  */
+/** Input estable (sin key que cambie al guardar / pending). La lógica de
+ *  avance vive en el listener nativo del padre (useCaptureGridInput). */
 function ScoreCell({
   entryId,
   hole,
@@ -189,8 +219,6 @@ function ScoreCell({
   disabled,
   pickedUp,
   allowPickup,
-  onCommit,
-  onQueueFocus,
 }: {
   entryId: string;
   hole: HoleNumber;
@@ -199,167 +227,17 @@ function ScoreCell({
   isPending: boolean;
   isSaving: boolean;
   disabled: boolean;
-  /** True si el jugador levantó (X). value debe ser null. */
   pickedUp?: boolean;
-  /** Si true, se acepta "x"/"X" para marcar levantó. Sólo match play. */
   allowPickup?: boolean;
-  onCommit: (next: number | null, options?: { pickedUp?: boolean }) => void;
-  /** Tras un re-render del padre, enfocar esta celda (entryId + hoyo). */
-  onQueueFocus?: (entryId: string, hole: HoleNumber) => void;
 }) {
-  /** Solo para dígito "1" a medio escribir (10–15 o hole-in-one). */
-  const [partialDraft, setPartialDraft] = useState<string | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  /** Evita que handleBlur revierta mientras movemos el foco. */
-  const advancingRef = useRef(false);
-  const lastCommittedRef = useRef<{ strokes: number | null; pickedUp: boolean }>({
-    strokes: value,
-    pickedUp: Boolean(pickedUp),
-  });
-
   const serverDisplay = pickedUp ? "X" : value != null ? String(value) : "";
-  const inputKey = `${entryId}-${hole}-${serverDisplay}-${isPending ? "p" : "o"}`;
-  const isPartial = partialDraft !== null;
 
   useEffect(() => {
-    const picked = Boolean(pickedUp);
-    if (picked) {
-      lastCommittedRef.current = { strokes: null, pickedUp: true };
-    } else if (value != null) {
-      lastCommittedRef.current = { strokes: value, pickedUp: false };
-    } else if (!lastCommittedRef.current.pickedUp) {
-      lastCommittedRef.current = { strokes: null, pickedUp: false };
-    }
-    if (document.activeElement !== inputRef.current) {
-      setPartialDraft(null);
-    }
-  }, [value, pickedUp]);
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, []);
-
-  function scheduleAdvance() {
     const el = inputRef.current;
-    if (!el) return;
-    advancingRef.current = true;
-    insistAdvanceFrom(el, onQueueFocus);
-    window.setTimeout(() => {
-      advancingRef.current = false;
-    }, 200);
-  }
-
-  function sameAsCommitted(
-    strokes: number | null,
-    isPicked: boolean
-  ): boolean {
-    return (
-      lastCommittedRef.current.strokes === strokes &&
-      lastCommittedRef.current.pickedUp === isPicked
-    );
-  }
-
-  function scheduleCommit(strokes: number | null, isPicked: boolean) {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (sameAsCommitted(strokes, isPicked)) return;
-      lastCommittedRef.current = { strokes, pickedUp: isPicked };
-      onCommit(strokes, { pickedUp: isPicked });
-    }, 150);
-  }
-
-  function flushCommit(
-    strokes: number | null,
-    isPicked: boolean,
-    options?: { deferParent?: boolean }
-  ) {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    if (sameAsCommitted(strokes, isPicked)) return;
-    lastCommittedRef.current = { strokes, pickedUp: isPicked };
-    const commit = () => onCommit(strokes, { pickedUp: isPicked });
-    if (options?.deferParent) {
-      queueMicrotask(commit);
-      return;
-    }
-    commit();
-  }
-
-  function handleChange(raw: string) {
-    // Aceptamos "x"/"X" (con tolerancia a espacios, autosuggestion móvil)
-    // o dígitos. Cualquier otra cosa se descarta — nunca lanzamos error.
-    const trimmed = raw.trim();
-
-    if (allowPickup) {
-      // Match play: la celda es "levantó" si el contenido (sin espacios)
-      // está compuesto sólo de X/x (uno o varios). Esto cubre casos
-      // típicos en mobile donde el teclado pega " X" o "X ".
-      const compact = trimmed.replace(/\s+/g, "");
-      if (compact.length > 0 && /^[xX]+$/.test(compact)) {
-        setPartialDraft(null);
-        scheduleAdvance();
-        flushCommit(null, true, { deferParent: true });
-        return;
-      }
-    }
-
-    let cleaned = trimmed.replace(/[^0-9]/g, "");
-    if (cleaned.length >= 2) {
-      if (cleaned[0] === "1") {
-        cleaned = cleaned.slice(0, 2);
-      } else {
-        cleaned = cleaned[0];
-      }
-    }
-    if (cleaned === "") {
-      setPartialDraft(null);
-      scheduleCommit(null, false);
-      return;
-    }
-    const n = Number(cleaned);
-    if (!Number.isFinite(n) || n < 1 || n > 15) {
-      return;
-    }
-    if (cleaned === "1") {
-      setPartialDraft("1");
-      return;
-    }
-    setPartialDraft(null);
-    scheduleAdvance();
-    flushCommit(Math.trunc(n), false, { deferParent: true });
-  }
-
-  function handleBlur() {
-    if (advancingRef.current) return;
-    const live = (inputRef.current?.value ?? partialDraft ?? serverDisplay).trim();
-    if (allowPickup) {
-      const compact = live.replace(/\s+/g, "");
-      if (compact.length > 0 && /^[xX]+$/.test(compact)) {
-        setPartialDraft(null);
-        flushCommit(null, true);
-        return;
-      }
-    }
-    if (live === "") {
-      setPartialDraft(null);
-      flushCommit(null, false);
-      return;
-    }
-    const n = Number(live);
-    if (!Number.isFinite(n) || n < 1 || n > 15) {
-      setPartialDraft(null);
-      return;
-    }
-    const strokes = Math.trunc(n);
-    setPartialDraft(null);
-    flushCommit(strokes, false);
-    scheduleAdvance();
-  }
+    if (!el || document.activeElement === el) return;
+    el.value = serverDisplay;
+  }, [serverDisplay]);
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
   const diff = value == null ? null : value - par;
@@ -383,49 +261,24 @@ function ScoreCell({
     isPending && !pickedUp ? "bg-red-500 text-white border-red-700" : "";
   const savingClass = isSaving ? "opacity-60" : "";
 
-  const inputProps = isPartial
-    ? { value: partialDraft ?? "" }
-    : { defaultValue: serverDisplay };
-
   return (
     <input
-      key={isPartial ? `partial-${entryId}-${hole}` : inputKey}
-      {...inputProps}
       ref={inputRef}
       data-score-cell="1"
       data-entry-id={entryId}
       data-hole={hole}
       type="text"
       inputMode={allowPickup ? "text" : "numeric"}
-      pattern={allowPickup ? "[0-9xX]*" : "[0-9]*"}
+      autoComplete="off"
+      defaultValue={serverDisplay}
       readOnly={disabled}
       disabled={disabled}
       title={
         allowPickup
-          ? "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter. X: el jugador levantó."
+          ? "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter. X: levantó."
           : "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter."
       }
       onFocus={(e) => e.currentTarget.select()}
-      onChange={(e) => handleChange(e.target.value)}
-      onBlur={(e) => {
-        if (advancingRef.current) return;
-        handleBlur();
-        void e;
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const el = e.currentTarget as HTMLInputElement;
-          handleBlur();
-          if (!advancingRef.current) {
-            advancingRef.current = true;
-            insistAdvanceFrom(el, onQueueFocus);
-            window.setTimeout(() => {
-              advancingRef.current = false;
-            }, 200);
-          }
-        }
-      }}
       className={[
         "mx-auto box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold text-gray-900 outline-none focus:ring-2 focus:ring-green-300",
         frame,
@@ -444,43 +297,19 @@ function PlayerRow({
   pickedUp,
   allowPickup,
   holes,
-  groupId,
   savingKey,
-  setSavingKey,
-  onScoreSaved,
-  onMatchAutoClose,
-  onMatchAutoCloseError,
   disabledHoles,
   highlight,
-  onQueueFocus,
 }: {
   player: GroupCapturePlayer;
   scores: HoleScores;
   pending: Partial<Record<HoleNumber, boolean>>;
   pickedUp?: Partial<Record<HoleNumber, boolean>>;
-  /** Si true, las celdas aceptan "X" para marcar levantó. */
   allowPickup?: boolean;
   holes: HoleNumber[];
-  groupId: string;
   savingKey: string | null;
-  setSavingKey: (key: string | null) => void;
-  onScoreSaved: (
-    entryId: string,
-    hole: HoleNumber,
-    strokes: number | null,
-    isPickedUp: boolean
-  ) => void;
-  onMatchAutoClose?: (payload: {
-    message: string;
-    nextGroupCreated?: boolean;
-    nextGroupNo?: number | null;
-    nextTeeTime?: string | null;
-    bracketPublished?: boolean;
-  }) => void;
-  onMatchAutoCloseError?: (error: string) => void;
   disabledHoles?: Set<HoleNumber>;
   highlight?: "me" | "witness" | null;
-  onQueueFocus?: (entryId: string, hole: HoleNumber) => void;
 }) {
   const rowBg =
     highlight === "me"
@@ -502,69 +331,6 @@ function PlayerRow({
   const back9 = backHoles.length > 0 ? sumHoles(backHoles, scores) : 0;
   const total = front9 + back9;
 
-  async function saveScore(
-    hole: HoleNumber,
-    strokes: number | null,
-    isPickedUp: boolean
-  ) {
-    const key = `${player.entryId}-${hole}`;
-    setSavingKey(key);
-    queueMicrotask(() => {
-      onScoreSaved(player.entryId, hole, strokes, isPickedUp);
-    });
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const meId = sp.get("me")?.trim() || null;
-      const caddieIdParam = sp.get("caddie")?.trim() || null;
-      const res = await fetch("/api/captura/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          group_id: groupId,
-          entry_id: player.entryId,
-          hole,
-          strokes,
-          picked_up: isPickedUp,
-          mode: "modify",
-          me_entry_id: meId,
-          caddie_id: caddieIdParam,
-          role: caddieIdParam ? "caddie" : meId ? "player" : null,
-        }),
-      });
-      const json = (await res.json()) as {
-        ok?: boolean;
-        matchAutoClose?: {
-          attempted?: boolean;
-          closed?: boolean;
-          message?: string;
-          error?: string;
-          nextGroupCreated?: boolean;
-          nextGroupNo?: number | null;
-          nextTeeTime?: string | null;
-          bracketPublished?: boolean;
-        };
-      };
-      if (res.ok) {
-        const ac = json.matchAutoClose;
-        if (ac?.attempted && ac.closed && ac.message) {
-          onMatchAutoClose?.({
-            message: ac.message,
-            nextGroupCreated: ac.nextGroupCreated,
-            nextGroupNo: ac.nextGroupNo,
-            nextTeeTime: ac.nextTeeTime,
-            bracketPublished: ac.bracketPublished,
-          });
-        } else if (ac?.attempted && !ac.closed && ac.error) {
-          onMatchAutoCloseError?.(ac.error);
-        }
-      }
-    } catch {
-      // Silencioso: la siguiente sincronización del polling reflejará el estado real.
-    } finally {
-      setSavingKey(null);
-    }
-  }
-
   return (
     <tr className={rowBg}>
       <td className={stickyLabelCell(rowBg)}>
@@ -584,10 +350,6 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
-            onQueueFocus={onQueueFocus}
-            onCommit={(next, opts) =>
-              saveScore(h, next, Boolean(opts?.pickedUp))
-            }
           />
         </td>
       ))}
@@ -606,10 +368,6 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
-            onQueueFocus={onQueueFocus}
-            onCommit={(next, opts) =>
-              saveScore(h, next, Boolean(opts?.pickedUp))
-            }
           />
         </td>
       ))}
@@ -1150,6 +908,206 @@ export default function GrupoCaptureClient({
     });
   }
 
+  const commitGridScoreRef = useRef<
+    (
+      entryId: string,
+      hole: HoleNumber,
+      strokes: number | null,
+      isPickedUp: boolean
+    ) => void
+  >(() => {});
+
+  const commitGridScore = useCallback(
+    async (
+      entryId: string,
+      hole: HoleNumber,
+      strokes: number | null,
+      isPickedUp: boolean
+    ) => {
+      const key = `${entryId}-${hole}`;
+      onScoreSaved(entryId, hole, strokes, isPickedUp);
+      setSavingKey(key);
+      try {
+        const sp = new URLSearchParams(window.location.search);
+        const meId = sp.get("me")?.trim() || null;
+        const caddieIdParam = sp.get("caddie")?.trim() || null;
+        const res = await fetch("/api/captura/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            group_id: meta.groupId,
+            entry_id: entryId,
+            hole,
+            strokes,
+            picked_up: isPickedUp,
+            mode: "modify",
+            me_entry_id: meId,
+            caddie_id: caddieIdParam,
+            role: caddieIdParam ? "caddie" : meId ? "player" : null,
+          }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          matchAutoClose?: {
+            attempted?: boolean;
+            closed?: boolean;
+            message?: string;
+            error?: string;
+            nextGroupCreated?: boolean;
+            nextGroupNo?: number | null;
+            nextTeeTime?: string | null;
+            bracketPublished?: boolean;
+          };
+        };
+        if (res.ok) {
+          const ac = json.matchAutoClose;
+          if (ac?.attempted && ac.closed && ac.message) {
+            handleMatchAutoClose({
+              message: ac.message,
+              nextGroupCreated: ac.nextGroupCreated,
+              nextGroupNo: ac.nextGroupNo,
+              nextTeeTime: ac.nextTeeTime,
+              bracketPublished: ac.bracketPublished,
+            });
+          } else if (ac?.attempted && !ac.closed && ac.error) {
+            handleMatchAutoCloseError(ac.error);
+          }
+        }
+      } catch {
+        /* silencioso */
+      } finally {
+        setSavingKey(null);
+      }
+    },
+    [
+      meta.groupId,
+      onScoreSaved,
+      handleMatchAutoClose,
+      handleMatchAutoCloseError,
+    ]
+  );
+
+  commitGridScoreRef.current = (
+    entryId,
+    hole,
+    strokes,
+    isPickedUp
+  ) => {
+    void commitGridScore(entryId, hole, strokes, isPickedUp);
+  };
+
+  const queueFocusRef = useRef(queueFocusCell);
+  queueFocusRef.current = queueFocusCell;
+
+  const allowPickupGrid = Boolean(meta.matchPlay);
+  const advancingGridRef = useRef(false);
+  const partialOneCellsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const onInput = (e: Event) => {
+      if (advancingGridRef.current) return;
+      const input = e.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      if (input.dataset.scoreCell !== "1") return;
+      if (!input.closest('[data-capture-grid="1"]')) return;
+      if (input.readOnly || input.disabled) return;
+
+      const entryId = input.dataset.entryId ?? "";
+      const hole = Number(input.dataset.hole ?? "");
+      if (!entryId || !Number.isFinite(hole)) return;
+
+      const cellKey = `${entryId}-${hole}`;
+      const parsed = parseScoreCellInput(input.value, allowPickupGrid);
+      if (!parsed) return;
+
+      if (parsed.kind === "partial-one") {
+        partialOneCellsRef.current.add(cellKey);
+        return;
+      }
+      partialOneCellsRef.current.delete(cellKey);
+
+      if (parsed.kind === "clear") {
+        commitGridScoreRef.current(entryId, hole as HoleNumber, null, false);
+        return;
+      }
+
+      advancingGridRef.current = true;
+
+      if (parsed.kind === "pickup") {
+        input.value = "X";
+      } else {
+        input.value = String(parsed.strokes);
+      }
+
+      // Primero el foco (DOM puro); después el guardado React/API.
+      insistAdvanceFrom(input, (eid, h) => queueFocusRef.current(eid, h));
+      queueMicrotask(() => {
+        if (parsed.kind === "pickup") {
+          commitGridScoreRef.current(entryId, hole as HoleNumber, null, true);
+        } else {
+          commitGridScoreRef.current(
+            entryId,
+            hole as HoleNumber,
+            parsed.strokes,
+            false
+          );
+        }
+      });
+
+      window.setTimeout(() => {
+        advancingGridRef.current = false;
+      }, 200);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      const input = e.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      if (input.dataset.scoreCell !== "1") return;
+      if (!input.closest('[data-capture-grid="1"]')) return;
+
+      e.preventDefault();
+      const entryId = input.dataset.entryId ?? "";
+      const hole = Number(input.dataset.hole ?? "");
+      if (!entryId || !Number.isFinite(hole)) return;
+
+      const cellKey = `${entryId}-${hole}`;
+      const parsed = parseScoreCellInput(input.value, allowPickupGrid);
+      partialOneCellsRef.current.delete(cellKey);
+
+      if (parsed?.kind === "partial-one") {
+        input.value = "1";
+        commitGridScoreRef.current(entryId, hole as HoleNumber, 1, false);
+      } else if (parsed?.kind === "pickup") {
+        input.value = "X";
+        commitGridScoreRef.current(entryId, hole as HoleNumber, null, true);
+      } else if (parsed?.kind === "score") {
+        input.value = String(parsed.strokes);
+        commitGridScoreRef.current(
+          entryId,
+          hole as HoleNumber,
+          parsed.strokes,
+          false
+        );
+      } else if (parsed?.kind === "clear") {
+        commitGridScoreRef.current(entryId, hole as HoleNumber, null, false);
+      }
+
+      advancingGridRef.current = true;
+      insistAdvanceFrom(input, (eid, h) => queueFocusRef.current(eid, h));
+      window.setTimeout(() => {
+        advancingGridRef.current = false;
+      }, 200);
+    };
+
+    document.addEventListener("input", onInput, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("input", onInput, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [allowPickupGrid]);
+
   const witnessTargetForMe = useMemo(() => {
     if (!meta.myEntryId) return null;
     for (const w of meta.witnesses ?? []) {
@@ -1364,14 +1322,8 @@ export default function GrupoCaptureClient({
                       pickedUp={pickedUpByEntry[player.entryId] ?? {}}
                       allowPickup={Boolean(meta.matchPlay)}
                       holes={[...HOLES_FRONT, ...HOLES_BACK] as HoleNumber[]}
-                      groupId={meta.groupId}
                       savingKey={savingKey}
-                      setSavingKey={setSavingKey}
-                      onScoreSaved={onScoreSaved}
-                      onMatchAutoClose={handleMatchAutoClose}
-                      onMatchAutoCloseError={handleMatchAutoCloseError}
                       highlight={highlight}
-                      onQueueFocus={queueFocusCell}
                     />
                   );
                 })}
@@ -1429,15 +1381,9 @@ export default function GrupoCaptureClient({
                         pickedUp={pickedUpByEntry[player.entryId] ?? {}}
                         allowPickup={Boolean(meta.matchPlay)}
                         holes={HOLES_PLAYOFF}
-                        groupId={meta.groupId}
                         savingKey={savingKey}
-                        setSavingKey={setSavingKey}
-                        onScoreSaved={onScoreSaved}
-                        onMatchAutoClose={handleMatchAutoClose}
-                        onMatchAutoCloseError={handleMatchAutoCloseError}
                         disabledHoles={playoffDisabled}
                         highlight={highlight}
-                        onQueueFocus={queueFocusCell}
                       />
                     );
                   })}
