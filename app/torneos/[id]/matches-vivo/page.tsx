@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { buildLiveStrokeSnapshot } from "@/lib/matchplay/buildLiveStrokeSnapshot";
@@ -11,6 +14,36 @@ import MatchesLiveGrid from "./MatchesLiveGrid";
 export const dynamic = "force-dynamic";
 
 type RouteParams = { id: string };
+
+export async function generateMetadata(props: {
+  params: Promise<RouteParams> | RouteParams;
+}): Promise<Metadata> {
+  const params = await Promise.resolve(props.params);
+  const tournamentId = params.id;
+  const locale = await getLocale();
+  const pub = messages[locale].publicTournament;
+  const tabTitle = pub.matchesLiveTab;
+
+  if (!tournamentId) {
+    return { title: tabTitle };
+  }
+
+  const supabase = createAdminClient();
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("name, is_public")
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  if (!tournament || tournament.is_public === false) {
+    return { title: tabTitle };
+  }
+
+  return {
+    title: `${tabTitle} · ${tournament.name}`,
+    description: pub.pageDescBracket,
+  };
+}
 
 export default async function PublicMatchesLivePage(props: {
   params: Promise<RouteParams> | RouteParams;

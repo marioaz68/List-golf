@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { getLocale } from "@/lib/i18n/server";
+import { messages } from "@/lib/i18n/messages";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import type { TournamentSettings } from "@/types/tournament";
@@ -14,6 +17,36 @@ import LiveBracketView, { type TeeRuleLite, type TeeSetLite } from "./LiveBracke
 export const dynamic = "force-dynamic";
 
 type RouteParams = { id: string };
+
+export async function generateMetadata(props: {
+  params: Promise<RouteParams> | RouteParams;
+}): Promise<Metadata> {
+  const params = await Promise.resolve(props.params);
+  const tournamentId = params.id;
+  const locale = await getLocale();
+  const pub = messages[locale].publicTournament;
+  const tabTitle = pub.bracketLiveTab;
+
+  if (!tournamentId) {
+    return { title: tabTitle };
+  }
+
+  const supabase = createAdminClient();
+  const { data: tournament } = await supabase
+    .from("tournaments")
+    .select("name, is_public")
+    .eq("id", tournamentId)
+    .maybeSingle();
+
+  if (!tournament || tournament.is_public === false) {
+    return { title: tabTitle };
+  }
+
+  return {
+    title: `${tabTitle} · ${tournament.name}`,
+    description: pub.pageDescBracket,
+  };
+}
 
 export default async function PublicLiveBracketPage(props: {
   params: Promise<RouteParams> | RouteParams;
@@ -39,7 +72,7 @@ export default async function PublicLiveBracketPage(props: {
   if (!isMatchPlay) {
     return (
       <main className="mx-auto max-w-3xl space-y-3 p-4 text-white">
-        <h1 className="text-xl font-bold">Cuadro en vivo</h1>
+        <h1 className="text-xl font-bold">Bracket en vivo</h1>
         <p className="text-sm text-amber-200">
           Este torneo no es match play.
         </p>
@@ -58,7 +91,7 @@ export default async function PublicLiveBracketPage(props: {
   if (teamsData.migrationMissing) {
     return (
       <main className="mx-auto max-w-3xl space-y-3 p-4 text-white">
-        <h1 className="text-xl font-bold">Cuadro en vivo</h1>
+        <h1 className="text-xl font-bold">Bracket en vivo</h1>
         <div className="rounded border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-100">
           Faltan migraciones de match play. Pide al administrador aplicarlas.
         </div>

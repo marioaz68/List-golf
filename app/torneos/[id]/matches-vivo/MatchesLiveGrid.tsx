@@ -621,13 +621,7 @@ export default function MatchesLiveGrid({
           href={`/torneos/${tournamentId}/cuadro-vivo`}
           className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
         >
-          🎯 Ver cuadro en vivo
-        </Link>
-        <Link
-          href={`/torneos/${tournamentId}?view=bracket`}
-          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
-        >
-          Bracket oficial
+          🎯 Ver bracket en vivo
         </Link>
         <Link
           href={`/torneos/${tournamentId}`}

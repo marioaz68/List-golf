@@ -472,7 +472,7 @@ export default function LiveBracketView({
       <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-[#0c1728] px-4 py-3">
         <div className="min-w-0">
           <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
-            Cuadro en vivo · armado por subasta
+            Bracket en vivo · armado por subasta
           </div>
           <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
             {tournamentName}

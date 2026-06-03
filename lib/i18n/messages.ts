@@ -1025,6 +1025,8 @@ const es = {
     favorites: "Favoritos",
     convocatoria: "Convocatoria",
     bracket: "Cuadro",
+    bracketLiveTab: "Bracket en vivo",
+    matchesLiveTab: "Matches en vivo",
     pageTitleBracket: "Cuadro match play",
     pageDescBracket:
       "Partidos en vivo con puntos por hoyo (bola baja y bola alta).",
@@ -2678,6 +2680,8 @@ const en: Messages = {
     favorites: "Favorites",
     convocatoria: "Tournament call",
     bracket: "Bracket",
+    bracketLiveTab: "Live bracket",
+    matchesLiveTab: "Live matches",
     pageTitleBracket: "Match play bracket",
     pageDescBracket:
       "Live matches with points per hole (low ball and high ball).",
