@@ -32,8 +32,15 @@ export async function runRitmoReminders(
   supabase: SupabaseClient
 ): Promise<ReminderRunResult> {
   const errors: string[] = [];
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
   const now = new Date();
+  // Fecha "de hoy" en horario de México (UTC-6, Querétaro sin horario de verano),
+  // para que coincida con round_date aunque el servidor corra en UTC.
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
 
   // 1) Rondas activas del día (tournament debe estar activo)
   const { data: rounds, error: roundsErr } = await supabase
@@ -139,8 +146,9 @@ async function sendInviteToGroup(
   args: { tournamentId: string; groupId: string; roundId: string;
           teeTime: string | null; startingHole: number; minutesLeft: number; }
 ): Promise<number> {
-  const players = await loadGroupPlayers(supabase, args.groupId);
   let sent = 0;
+
+  const players = await loadGroupPlayers(supabase, args.groupId);
   for (const p of players) {
     if (!p.chatId) continue;
     const text = [
@@ -162,6 +170,35 @@ async function sendInviteToGroup(
     });
     if (result.ok) sent++;
   }
+
+  // También a los caddies del grupo (suelen ser ellos quienes llevan el GPS).
+  const caddies = await loadGroupCaddies(
+    supabase,
+    args.groupId,
+    args.roundId,
+    args.tournamentId
+  );
+  for (const c of caddies) {
+    const text = [
+      `🏌️ El grupo que acompañas sale en ~${args.minutesLeft} min.`,
+      `Tee time: ${args.teeTime ?? "-"} · Hoyo de salida: ${args.startingHole}`,
+      "",
+      "Para que el comité vea el ritmo de tu grupo:",
+      "📎 Adjuntar → Ubicación → *Compartir mi ubicación en tiempo real* → 8 horas",
+      "",
+      "Solo una vez al inicio. Después puedes guardar el celular.",
+    ].join("\n");
+    const result = await sendAndTrackTelegramMessage(supabase, {
+      tournamentId: args.tournamentId,
+      chatId: c.chatId,
+      text,
+      kind: "ritmo_share_invite",
+      roundId: args.roundId,
+      groupId: args.groupId,
+    });
+    if (result.ok) sent++;
+  }
+
   return sent;
 }
 
@@ -170,8 +207,9 @@ async function sendLateToGroup(
   args: { tournamentId: string; groupId: string; roundId: string;
           minutesLate: number; }
 ): Promise<number> {
-  const players = await loadGroupPlayers(supabase, args.groupId);
   let sent = 0;
+
+  const players = await loadGroupPlayers(supabase, args.groupId);
   for (const p of players) {
     if (!p.chatId) continue;
     const text = [
@@ -192,6 +230,33 @@ async function sendLateToGroup(
     });
     if (result.ok) sent++;
   }
+
+  const caddies = await loadGroupCaddies(
+    supabase,
+    args.groupId,
+    args.roundId,
+    args.tournamentId
+  );
+  for (const c of caddies) {
+    const text = [
+      `⏰ Ya pasaron ~${args.minutesLate} min de la salida de tu grupo y aún no recibo ubicación.`,
+      "",
+      "Si ya estás en el campo, comparte tu Live Location:",
+      "📎 Adjuntar → Ubicación → *Compartir mi ubicación en tiempo real* → 8 horas",
+      "",
+      "Sin esto, el sistema no puede ver el ritmo de tu grupo.",
+    ].join("\n");
+    const result = await sendAndTrackTelegramMessage(supabase, {
+      tournamentId: args.tournamentId,
+      chatId: c.chatId,
+      text,
+      kind: "ritmo_share_late",
+      roundId: args.roundId,
+      groupId: args.groupId,
+    });
+    if (result.ok) sent++;
+  }
+
   return sent;
 }
 
@@ -228,11 +293,61 @@ async function loadGroupPlayers(
   return out;
 }
 
+interface GroupCaddie {
+  caddieId: string;
+  chatId: string;
+  firstName: string | null;
+}
+
+/** Caddies asignados al grupo en la ronda con ID de Telegram numérico válido. */
+async function loadGroupCaddies(
+  supabase: SupabaseClient,
+  groupId: string,
+  roundId: string,
+  tournamentId: string
+): Promise<GroupCaddie[]> {
+  const { data: members } = await supabase
+    .from("pairing_group_members")
+    .select("entry_id")
+    .eq("group_id", groupId);
+  const entryIds = Array.from(
+    new Set((members ?? []).map((m: any) => m.entry_id).filter(Boolean))
+  );
+  if (entryIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("caddie_assignments")
+    .select("caddie_id, caddies ( first_name, telegram )")
+    .eq("tournament_id", tournamentId)
+    .eq("round_id", roundId)
+    .eq("is_active", true)
+    .in("entry_id", entryIds);
+  if (error || !data) return [];
+
+  const byCaddie = new Map<string, GroupCaddie>();
+  for (const row of data as any[]) {
+    const caddieId = String(row.caddie_id ?? "");
+    if (!caddieId || byCaddie.has(caddieId)) continue;
+    const c = Array.isArray(row.caddies) ? row.caddies[0] : row.caddies;
+    const tg = String(c?.telegram ?? "").trim();
+    if (!/^\d+$/.test(tg)) continue; // sin ID de Telegram válido → no se le puede escribir
+    byCaddie.set(caddieId, {
+      caddieId,
+      chatId: tg,
+      firstName: c?.first_name ?? null,
+    });
+  }
+  return Array.from(byCaddie.values());
+}
+
 function parseTeeDateTime(roundDate: string, teeTime: string | null): Date | null {
   if (!teeTime) return null;
   const time = teeTime.includes("T") ? teeTime.split("T")[1]?.slice(0, 8) : teeTime;
   if (!time) return null;
-  const iso = `${roundDate}T${time.length === 5 ? `${time}:00` : time}`;
+  // El tee_time se guarda en hora de México (UTC-6, sin horario de verano).
+  // Fijamos el offset para obtener el instante UTC correcto en el servidor.
+  const hhmmss = time.length === 5 ? `${time}:00` : time;
+  const iso = `${roundDate}T${hhmmss}-06:00`;
   const d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
