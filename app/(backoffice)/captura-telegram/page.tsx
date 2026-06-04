@@ -206,29 +206,35 @@ export default async function CapturaTelegramPage(props: {
     id: string;
     first_name: string | null;
     last_name: string | null;
-    telegram_user_id?: string | null;
-    telegram_chat_id?: string | null;
+    telegram?: string | null;
+    telegram_username?: string | null;
   };
   const caddieMap = new Map<string, CaddieMini>();
   if (caddieIds.length > 0) {
-    let caddiesRaw: CaddieMini[] | null = null;
-    const tryWithTg = await admin
+    // El ID numérico de Telegram del caddie se guarda en la columna `telegram`.
+    const { data: caddiesRaw } = await admin
       .from("caddies")
-      .select("id, first_name, last_name, telegram_user_id, telegram_chat_id")
+      .select("id, first_name, last_name, telegram, telegram_username")
       .in("id", caddieIds);
-    if (tryWithTg.error) {
-      // Fallback si las columnas aún no existen en BD.
-      const basic = await admin
-        .from("caddies")
-        .select("id, first_name, last_name")
-        .in("id", caddieIds);
-      caddiesRaw = (basic.data ?? null) as CaddieMini[] | null;
-    } else {
-      caddiesRaw = (tryWithTg.data ?? null) as CaddieMini[] | null;
-    }
-    for (const c of caddiesRaw ?? []) {
+    for (const c of (caddiesRaw ?? []) as CaddieMini[]) {
       caddieMap.set(c.id, c);
     }
+  }
+
+  // Caddie por inscrito (entry) para mostrarlo junto a cada jugador.
+  function caddieTelegramLinked(c: CaddieMini): boolean {
+    return /^\d+$/.test(String(c.telegram ?? "").trim());
+  }
+  const caddieByEntry = new Map<string, { name: string; linked: boolean }>();
+  for (const a of assignments) {
+    if (!a.entry_id || !a.caddie_id) continue;
+    if (caddieByEntry.has(a.entry_id)) continue;
+    const c = caddieMap.get(a.caddie_id);
+    if (!c) continue;
+    caddieByEntry.set(a.entry_id, {
+      name: fullName(c.first_name, c.last_name),
+      linked: caddieTelegramLinked(c),
+    });
   }
 
   // Dejamos que buildGroupCaptureUrl resuelva la base: ignora localhost en server
@@ -245,6 +251,7 @@ export default async function CapturaTelegramPage(props: {
           ? entry.players[0]
           : entry.players
         : null;
+      const caddie = m.entry_id ? caddieByEntry.get(m.entry_id) ?? null : null;
       return {
         id: m.id,
         position: m.position,
@@ -253,6 +260,8 @@ export default async function CapturaTelegramPage(props: {
         telegramLinked: Boolean(
           (player?.telegram_chat_id ?? player?.telegram_user_id ?? "").toString().trim()
         ),
+        caddieName: caddie?.name ?? null,
+        caddieTelegramLinked: caddie?.linked ?? false,
       };
     });
 
@@ -265,9 +274,7 @@ export default async function CapturaTelegramPage(props: {
         return {
           id: c.id,
           name: fullName(c.first_name, c.last_name),
-          telegramLinked: Boolean(
-            (c.telegram_chat_id ?? c.telegram_user_id ?? "").toString().trim()
-          ),
+          telegramLinked: caddieTelegramLinked(c),
           role: a.role ?? null,
         };
       })

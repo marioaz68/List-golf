@@ -15,6 +15,8 @@ export type MemberRow = {
   playerNumber: number | null;
   playerName: string;
   telegramLinked: boolean;
+  caddieName: string | null;
+  caddieTelegramLinked: boolean;
 };
 
 export type CaddieRow = {
@@ -212,25 +214,52 @@ export default function CapturaTelegramPanel(props: {
                     {g.teeTime ?? "—"}
                   </td>
                   <td className="px-3 py-2">
-                    <ul className="space-y-0.5 text-xs">
+                    <ul className="space-y-1.5 text-xs">
                       {g.members.map((m) => (
-                        <li key={m.id} className="flex items-center gap-1.5">
-                          <span className="font-mono text-slate-500">
-                            {m.position ?? "-"}.
-                          </span>
-                          <span className="text-slate-900">
-                            {m.playerNumber != null ? `#${m.playerNumber} ` : ""}
-                            {m.playerName}
-                          </span>
-                          <span
-                            className={`rounded px-1 text-[10px] ${
-                              m.telegramLinked
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {m.telegramLinked ? tt.linkedYes : tt.linkedNo}
-                          </span>
+                        <li key={m.id}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-slate-500">
+                              {m.position ?? "-"}.
+                            </span>
+                            <span className="text-slate-900">
+                              {m.playerNumber != null ? `#${m.playerNumber} ` : ""}
+                              {m.playerName}
+                            </span>
+                            <span
+                              className={`rounded px-1 text-[10px] ${
+                                m.telegramLinked
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {m.telegramLinked ? tt.linkedYes : tt.linkedNo}
+                            </span>
+                          </div>
+                          <div className="ml-5 mt-0.5 flex items-center gap-1.5 text-[11px]">
+                            <span className="text-slate-400">↳ caddie:</span>
+                            {m.caddieName ? (
+                              <>
+                                <span className="text-slate-700">
+                                  {m.caddieName}
+                                </span>
+                                <span
+                                  className={`rounded px-1 text-[10px] ${
+                                    m.caddieTelegramLinked
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {m.caddieTelegramLinked
+                                    ? tt.linkedYes
+                                    : tt.linkedNo}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="italic text-red-600">
+                                sin caddie
+                              </span>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
