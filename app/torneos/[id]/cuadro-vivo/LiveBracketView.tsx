@@ -78,6 +78,19 @@ function money(v: number | null | undefined, currency: string) {
   return `$${Math.round(v).toLocaleString("es-MX")} ${currency}`;
 }
 
+/** Formatea un diferencial de match play: entero o 1 decimal ("2", "1.5"). */
+function fmtDiff(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
+
+/** Marcador en vivo derivado de hole_scores para un match. */
+type LiveScore = {
+  topPts: number;
+  bottomPts: number;
+  lastHole: number;
+  status: string | null;
+};
+
 /** Nombre compacto para móvil: solo primer nombre + primer apellido.
  *  Ej.: "Leticia Sosa Rodriguez" → "Leticia Sosa". */
 function formatPlayerNameCompact(p: {
@@ -269,6 +282,77 @@ export default function LiveBracketView({
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
+    };
+  }, [tournamentId]);
+
+  // Marcador en vivo (puntos por hoyo) por match, derivado de hole_scores.
+  // Se actualiza por polling + se refresca cuando cambian los matches.
+  const [liveByMatch, setLiveByMatch] = useState<Map<string, LiveScore>>(
+    new Map()
+  );
+  useEffect(() => {
+    if (!tournamentId) return;
+    let cancelled = false;
+    const load = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetch(
+        `/api/matchplay/live-from-strokes?tournament_id=${encodeURIComponent(
+          tournamentId
+        )}`,
+        { cache: "no-store" }
+      )
+        .then((r) => r.json())
+        .then(
+          (data: {
+            ok?: boolean;
+            matches?: Array<{ id: string; status: string | null }>;
+            holes?: Array<{
+              match_id: string;
+              hole_no: number;
+              top_points: number | null;
+              bottom_points: number | null;
+            }>;
+          }) => {
+            if (cancelled || !data.ok) return;
+            const agg = new Map<
+              string,
+              { top: number; bottom: number; last: number }
+            >();
+            for (const h of data.holes ?? []) {
+              if (h.hole_no > 18) continue;
+              const cur = agg.get(h.match_id) ?? { top: 0, bottom: 0, last: 0 };
+              cur.top += h.top_points != null ? Number(h.top_points) : 0;
+              cur.bottom += h.bottom_points != null ? Number(h.bottom_points) : 0;
+              if (
+                (h.top_points != null || h.bottom_points != null) &&
+                h.hole_no > cur.last
+              ) {
+                cur.last = h.hole_no;
+              }
+              agg.set(h.match_id, cur);
+            }
+            const statusById = new Map<string, string | null>();
+            for (const m of data.matches ?? [])
+              statusById.set(m.id, m.status ?? null);
+            const map = new Map<string, LiveScore>();
+            for (const [id, v] of agg) {
+              map.set(id, {
+                topPts: v.top,
+                bottomPts: v.bottom,
+                lastHole: v.last,
+                status: statusById.get(id) ?? null,
+              });
+            }
+            setLiveByMatch(map);
+          }
+        )
+        .catch(() => {});
+    };
+    load();
+    const poll = setInterval(load, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
     };
   }, [tournamentId]);
 
@@ -645,6 +729,7 @@ export default function LiveBracketView({
                     byeSide={slot?.byeSide ?? null}
                     computedWinnerId={slot?.winner?.id ?? null}
                     realMatch={real}
+                    liveInfo={real ? liveByMatch.get(real.id) ?? null : null}
                     currency={currency}
                     compactNames={isMobile}
                     teeRules={teeRules}
@@ -754,6 +839,7 @@ function BracketMatchCell({
   byeSide,
   computedWinnerId,
   realMatch,
+  liveInfo,
   currency,
   compactNames,
   teeRules,
@@ -783,6 +869,7 @@ function BracketMatchCell({
     status: string | null;
     result_text: string | null;
   } | null;
+  liveInfo: LiveScore | null;
   currency: string;
   compactNames: boolean;
   teeRules: TeeRuleLite[];
@@ -800,6 +887,32 @@ function BracketMatchCell({
           realMatch.id
         )}`
       : null;
+
+  // Marcador en vivo por lado ("2 UP" / "2 DN" / "AS"). Solo mientras el match
+  // está en juego (hay hoyos capturados y aún no finaliza). Al finalizar manda
+  // result_text + el resaltado del ganador.
+  const isCompleted = realMatch?.status === "completed";
+  const showLive =
+    !!liveInfo && liveInfo.lastHole > 0 && !isCompleted && !hasBye;
+  const liveDiffAbs = liveInfo
+    ? Math.abs(liveInfo.topPts - liveInfo.bottomPts)
+    : 0;
+  const topLiveLabel = showLive
+    ? liveInfo!.topPts === liveInfo!.bottomPts
+      ? "AS"
+      : liveInfo!.topPts > liveInfo!.bottomPts
+        ? `${fmtDiff(liveDiffAbs)} UP`
+        : `${fmtDiff(liveDiffAbs)} DN`
+    : null;
+  const bottomLiveLabel = showLive
+    ? liveInfo!.topPts === liveInfo!.bottomPts
+      ? "AS"
+      : liveInfo!.bottomPts > liveInfo!.topPts
+        ? `${fmtDiff(liveDiffAbs)} UP`
+        : `${fmtDiff(liveDiffAbs)} DN`
+    : null;
+  const topAhead = showLive && liveInfo!.topPts > liveInfo!.bottomPts;
+  const bottomAhead = showLive && liveInfo!.bottomPts > liveInfo!.topPts;
 
   // Cuadro de match: cada par enmarcado, fondo según mitad del bracket.
   const cellBox = hasBye && !realMatch
@@ -863,12 +976,14 @@ function BracketMatchCell({
           isWinner={!!winnerId && topTeam?.id === winnerId}
           isVacant={topVacant}
           isPending={!topVacant && !topTeam && round === 1}
-          showBid={round === 1}
+          showBid={round === 1 && !showLive}
           currency={currency}
           compactNames={compactNames}
           teeRules={teeRules}
           teeSets={teeSets}
           birthYearByPlayerId={birthYearByPlayerId}
+          liveLabel={topLiveLabel}
+          liveAhead={topAhead}
         />
 
         <div className="h-0.5 bg-white/25" />
@@ -880,12 +995,14 @@ function BracketMatchCell({
           isWinner={!!winnerId && bottomTeam?.id === winnerId}
           isVacant={bottomVacant}
           isPending={!bottomVacant && !bottomTeam && round === 1}
-          showBid={round === 1}
+          showBid={round === 1 && !showLive}
           currency={currency}
           compactNames={compactNames}
           teeRules={teeRules}
           teeSets={teeSets}
           birthYearByPlayerId={birthYearByPlayerId}
+          liveLabel={bottomLiveLabel}
+          liveAhead={bottomAhead}
         />
 
         {realMatch?.result_text ? (
@@ -893,7 +1010,11 @@ function BracketMatchCell({
             {realMatch.result_text}
           </p>
         ) : null}
-        {realMatch?.status === "in_progress" ? (
+        {showLive ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
+            ● en juego · va en H{liveInfo!.lastHole}
+          </p>
+        ) : realMatch?.status === "in_progress" ? (
           <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-cyan-300/80">
             ● en juego
           </p>
@@ -956,6 +1077,8 @@ function SidePill({
   teeRules,
   teeSets,
   birthYearByPlayerId,
+  liveLabel = null,
+  liveAhead = false,
 }: {
   side: "top" | "bottom";
   seed: number | null;
@@ -969,6 +1092,9 @@ function SidePill({
   teeRules: TeeRuleLite[];
   teeSets: TeeSetLite[];
   birthYearByPlayerId: Record<string, number | null>;
+  /** Diferencial match play en vivo ("2 UP" / "2 DN" / "AS"). */
+  liveLabel?: string | null;
+  liveAhead?: boolean;
 }) {
   const players = team
     ? playersOrderedMaleFirst(team, compactNames, teeRules, teeSets, birthYearByPlayerId)
@@ -1037,7 +1163,26 @@ function SidePill({
           <span className="text-[11px]">Por definir</span>
         )}
       </div>
-      {showBid && team && team.auction_bid != null ? (
+      {liveLabel ? (
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-extrabold tracking-tight ${
+            liveAhead
+              ? "bg-emerald-500/30 text-emerald-100"
+              : liveLabel === "AS"
+                ? "bg-amber-500/20 text-amber-200"
+                : "bg-white/10 text-slate-300"
+          }`}
+          title={
+            liveLabel === "AS"
+              ? "Empate acumulado (All Square)"
+              : liveLabel.endsWith("UP")
+                ? "Va arriba en el match"
+                : "Va abajo en el match"
+          }
+        >
+          {liveLabel}
+        </span>
+      ) : showBid && team && team.auction_bid != null ? (
         <span className="hidden shrink-0 text-[10px] font-semibold text-amber-300/80 sm:inline">
           {money(team.auction_bid, currency)}
         </span>
