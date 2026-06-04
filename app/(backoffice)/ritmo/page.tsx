@@ -12,6 +12,7 @@ import {
 import { getCourseHoles } from "@/lib/telegram/ritmo/holes";
 import {
   gpsStateFromTimestamp,
+  loadCaddieByEntry,
   loadGroupCoverageForRound,
   type GroupGpsState,
 } from "@/lib/ritmo/groupCoverage";
@@ -233,6 +234,11 @@ export default async function RitmoPage({
   // Miembros de cada grupo + nombres de jugadores.
   const playersByGroup = new Map<string, string[]>();
   const entryIdsByGroup = new Map<string, string[]>();
+  // Pares ordenados {entryId, name} por grupo, para emparejar jugador↔caddie.
+  const memberRowsByGroup = new Map<
+    string,
+    { entryId: string; name: string }[]
+  >();
   if (groupIds.length > 0) {
     const { data: membersRaw } = await admin
       .from("pairing_group_members")
@@ -253,12 +259,16 @@ export default async function RitmoPage({
       }
     }
     for (const m of members) {
+      const name = nameByEntry.get(m.entry_id) ?? "Jugador";
       const arr = playersByGroup.get(m.group_id) ?? [];
-      arr.push(nameByEntry.get(m.entry_id) ?? "Jugador");
+      arr.push(name);
       playersByGroup.set(m.group_id, arr);
       const eids = entryIdsByGroup.get(m.group_id) ?? [];
       eids.push(m.entry_id);
       entryIdsByGroup.set(m.group_id, eids);
+      const rows = memberRowsByGroup.get(m.group_id) ?? [];
+      rows.push({ entryId: m.entry_id, name });
+      memberRowsByGroup.set(m.group_id, rows);
     }
   }
 
@@ -268,6 +278,17 @@ export default async function RitmoPage({
     round.id,
     playersByGroup,
     entryIdsByGroup
+  );
+
+  // Caddie por inscrito (para mostrar jugador → su caddie + estado Telegram).
+  const allEntryIds = Array.from(
+    new Set(Array.from(entryIdsByGroup.values()).flat())
+  );
+  const caddieByEntry = await loadCaddieByEntry(
+    admin,
+    tournamentId,
+    round.id,
+    allEntryIds
   );
 
   // Posiciones recientes por grupo.
@@ -345,6 +366,15 @@ export default async function RitmoPage({
         ? "Sin Live Location — el caddie o un jugador del grupo debe compartir ubicación 8 h por Telegram."
         : "Sin ubicación compartida todavía.";
 
+    const playerRows = (memberRowsByGroup.get(g.id) ?? []).map((row) => {
+      const caddie = caddieByEntry.get(row.entryId) ?? null;
+      return {
+        name: row.name,
+        caddieName: caddie?.name ?? null,
+        caddieHasTelegram: caddie?.hasTelegram ?? false,
+      };
+    });
+
     return {
       id: g.id,
       number: g.group_no ?? 0,
@@ -352,6 +382,7 @@ export default async function RitmoPage({
       startingHole: g.starting_hole ?? 1,
       teeTime: g.tee_time,
       players,
+      playerRows,
       status,
       hoyo: smoothedHole,
       detail,

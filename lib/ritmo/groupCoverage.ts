@@ -56,6 +56,48 @@ export function gpsStateFromTimestamp(
   return "live";
 }
 
+/** Caddie activo por inscrito (entry) en una ronda, con su estado de Telegram. */
+export async function loadCaddieByEntry(
+  supabase: SupabaseClient,
+  tournamentId: string,
+  roundId: string,
+  entryIds: string[]
+): Promise<Map<string, CaddieCoverage>> {
+  const caddieByEntry = new Map<string, CaddieCoverage>();
+  if (entryIds.length === 0) return caddieByEntry;
+
+  const { data: caRaw } = await supabase
+    .from("caddie_assignments")
+    .select(
+      `entry_id,
+       caddies ( first_name, last_name, telegram )`
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("round_id", roundId)
+    .eq("is_active", true)
+    .in("entry_id", entryIds);
+
+  type CaRow = {
+    entry_id: string;
+    caddies:
+      | { first_name: string | null; last_name: string | null; telegram: string | null }
+      | { first_name: string | null; last_name: string | null; telegram: string | null }[]
+      | null;
+  };
+  for (const row of (caRaw ?? []) as unknown as CaRow[]) {
+    const c = Array.isArray(row.caddies) ? row.caddies[0] : row.caddies;
+    if (!c) continue;
+    const name =
+      `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Caddie";
+    const tg = String(c.telegram ?? "").trim();
+    caddieByEntry.set(row.entry_id, {
+      name,
+      hasTelegram: /^\d+$/.test(tg),
+    });
+  }
+  return caddieByEntry;
+}
+
 /** Caddies asignados por grupo (ronda) + jugadores con Telegram vinculado. */
 export async function loadGroupCoverageForRound(
   supabase: SupabaseClient,
@@ -69,38 +111,12 @@ export async function loadGroupCoverageForRound(
     new Set(Array.from(entryIdsByGroup.values()).flat())
   );
 
-  const caddieByEntry = new Map<string, CaddieCoverage>();
-  if (allEntryIds.length > 0) {
-    const { data: caRaw } = await supabase
-      .from("caddie_assignments")
-      .select(
-        `entry_id,
-         caddies ( first_name, last_name, telegram )`
-      )
-      .eq("tournament_id", tournamentId)
-      .eq("round_id", roundId)
-      .eq("is_active", true)
-      .in("entry_id", allEntryIds);
-
-    type CaRow = {
-      entry_id: string;
-      caddies:
-        | { first_name: string | null; last_name: string | null; telegram: string | null }
-        | { first_name: string | null; last_name: string | null; telegram: string | null }[]
-        | null;
-    };
-    for (const row of (caRaw ?? []) as unknown as CaRow[]) {
-      const c = Array.isArray(row.caddies) ? row.caddies[0] : row.caddies;
-      if (!c) continue;
-      const name =
-        `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Caddie";
-      const tg = String(c.telegram ?? "").trim();
-      caddieByEntry.set(row.entry_id, {
-        name,
-        hasTelegram: /^\d+$/.test(tg),
-      });
-    }
-  }
+  const caddieByEntry = await loadCaddieByEntry(
+    supabase,
+    tournamentId,
+    roundId,
+    allEntryIds
+  );
 
   const playerTelegram = new Set<string>();
   if (allEntryIds.length > 0) {

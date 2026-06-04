@@ -14,6 +14,12 @@ export type CaddieCoverageRow = {
   hasTelegram: boolean;
 };
 
+export type PlayerRow = {
+  name: string;
+  caddieName: string | null;
+  caddieHasTelegram: boolean;
+};
+
 export interface LiveGroup {
   id: string;
   number: number;
@@ -21,6 +27,7 @@ export interface LiveGroup {
   startingHole: number;
   teeTime: string | null;
   players: string[];
+  playerRows: PlayerRow[];
   status: LiveStatus;
   hoyo: number | null;
   detail: string;
@@ -755,23 +762,50 @@ function GroupCard({
               : ""}
             )
           </div>
-          {g.players.length === 0 ? (
+          {g.playerRows.length === 0 ? (
             <div style={{ fontSize: 11, color: "#6b7280" }}>Sin jugadores.</div>
           ) : (
-            g.players.map((p, i) => (
+            g.playerRows.map((row, i) => (
               <div
                 key={i}
                 style={{
                   fontSize: 11,
                   color: "#e5e7eb",
-                  padding: "3px 0",
+                  padding: "4px 0",
+                  borderBottom:
+                    i < g.playerRows.length - 1 ? "1px solid #161616" : "none",
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 6,
                 }}
               >
-                <span style={{ color: "#6b7280", width: 14 }}>{i + 1}.</span>
-                <span>{p}</span>
+                <span style={{ color: "#6b7280", width: 14, flexShrink: 0 }}>
+                  {i + 1}.
+                </span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div>{row.name}</div>
+                  <div style={{ fontSize: 10, marginTop: 1 }}>
+                    {row.caddieName ? (
+                      <>
+                        <span style={{ color: "#9ca3af" }}>caddie: </span>
+                        <span style={{ color: "#cbd5e1" }}>
+                          {row.caddieName}
+                        </span>{" "}
+                        {row.caddieHasTelegram ? (
+                          <span style={{ color: "#6ee7b7", fontWeight: 700 }}>
+                            ✓ Telegram
+                          </span>
+                        ) : (
+                          <span style={{ color: "#f87171", fontWeight: 700 }}>
+                            ⚠ sin ID Telegram
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ color: "#f87171" }}>sin caddie asignado</span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))
           )}
