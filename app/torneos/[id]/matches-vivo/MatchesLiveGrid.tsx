@@ -54,6 +54,8 @@ type Props = {
   liveFromStrokeScores?: boolean;
   /** Mapa match_id → datos de la salida (group_no, tee_time, group_id). */
   matchSchedule?: Record<string, MatchScheduleInfo>;
+  /** Si viene del bracket con ?match=<id>, abre ese detalle al cargar. */
+  initialOpenMatchId?: string | null;
 };
 
 /** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
@@ -94,6 +96,7 @@ export default function MatchesLiveGrid({
   derivedFromPairings = false,
   liveFromStrokeScores = false,
   matchSchedule = {},
+  initialOpenMatchId = null,
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
@@ -263,6 +266,32 @@ export default function MatchesLiveGrid({
     () => new Map(teams.map((t) => [t.id, t])),
     [teams]
   );
+
+  // Apertura automática del detalle cuando se llega con ?match=<id> desde el
+  // bracket. Solo una vez: en cuanto encontramos el match y los equipos.
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (!initialOpenMatchId) return;
+    if (matches.length === 0 || teams.length === 0) return;
+    const m = matches.find((x) => x.id === initialOpenMatchId);
+    if (!m) return;
+    autoOpenedRef.current = true;
+    setSelectedRounds((prev) => {
+      if (prev.has(m.round_no)) return prev;
+      const next = new Set(prev);
+      next.add(m.round_no);
+      return next;
+    });
+    setDetail({
+      match: m,
+      topTeam: m.top_pair_id ? teamById.get(m.top_pair_id) ?? null : null,
+      bottomTeam: m.bottom_pair_id
+        ? teamById.get(m.bottom_pair_id) ?? null
+        : null,
+      label: roundLabel(m.round_no, roundCount, bracketSize),
+    });
+  }, [initialOpenMatchId, matches, teams, teamById, roundCount, bracketSize]);
 
   // Rondas disponibles (las que tienen al menos 1 partido real) y filtro.
   const availableRounds = useMemo(() => {

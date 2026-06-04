@@ -45,10 +45,20 @@ export async function generateMetadata(props: {
   };
 }
 
+type SearchParams = { [key: string]: string | string[] | undefined };
+
 export default async function PublicMatchesLivePage(props: {
   params: Promise<RouteParams> | RouteParams;
+  searchParams?: Promise<SearchParams> | SearchParams;
 }) {
   const params = await Promise.resolve(props.params);
+  const sp = props.searchParams
+    ? await Promise.resolve(props.searchParams)
+    : {};
+  const matchParam = sp.match;
+  const initialOpenMatchId = String(
+    Array.isArray(matchParam) ? matchParam[0] : matchParam ?? ""
+  ).trim();
   const tournamentId = params.id;
   if (!tournamentId) notFound();
 
@@ -184,6 +194,7 @@ export default async function PublicMatchesLivePage(props: {
         derivedFromPairings={snapshot.derivedFromPairings}
         liveFromStrokeScores={snapshot.liveFromStrokeScores}
         matchSchedule={matchSchedule}
+        initialOpenMatchId={initialOpenMatchId || null}
       />
     </main>
   );

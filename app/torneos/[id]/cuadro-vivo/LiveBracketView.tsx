@@ -629,6 +629,7 @@ export default function LiveBracketView({
                 items.push(
                   <BracketMatchCell
                     key={`m-${r}-${i}`}
+                    tournamentId={tournamentId}
                     round={r}
                     positionIdx={i}
                     span={span}
@@ -737,6 +738,7 @@ export default function LiveBracketView({
 }
 
 function BracketMatchCell({
+  tournamentId,
   round,
   positionIdx,
   span,
@@ -758,6 +760,7 @@ function BracketMatchCell({
   teeSets,
   birthYearByPlayerId,
 }: {
+  tournamentId: string;
   round: number;
   positionIdx: number;
   span: number;
@@ -773,6 +776,7 @@ function BracketMatchCell({
   byeSide: "top" | "bottom" | null;
   computedWinnerId: string | null;
   realMatch: {
+    id: string;
     top_pair_id: string | null;
     bottom_pair_id: string | null;
     winner_pair_id: string | null;
@@ -788,6 +792,14 @@ function BracketMatchCell({
   const winnerId = realMatch?.winner_pair_id ?? computedWinnerId ?? null;
   const isFinal = round === roundCount;
   const hasBye = byeSide !== null;
+  // El match es navegable si ya existe (publicado) y no es un BYE: lleva al
+  // detalle hoyo por hoyo en la pantalla de matches en vivo.
+  const matchHref =
+    realMatch && realMatch.status !== "bye"
+      ? `/torneos/${tournamentId}/matches-vivo?match=${encodeURIComponent(
+          realMatch.id
+        )}`
+      : null;
 
   // Cuadro de match: cada par enmarcado, fondo según mitad del bracket.
   const cellBox = hasBye && !realMatch
@@ -836,7 +848,14 @@ function BracketMatchCell({
         />
       ) : null}
 
-      <div className={`rounded-lg border-2 ${cellBox} px-2 py-1`}>
+      <BracketCellShell
+        className={`block rounded-lg border-2 ${cellBox} px-2 py-1 ${
+          matchHref
+            ? "cursor-pointer transition hover:border-white/60 hover:brightness-110"
+            : ""
+        }`}
+        href={matchHref}
+      >
         <SidePill
           side="top"
           seed={topSeed}
@@ -889,14 +908,39 @@ function BracketMatchCell({
             (esperando subasta)
           </p>
         ) : null}
+        {matchHref ? (
+          <p className="mt-0.5 text-center text-[9px] text-cyan-300/70">
+            ver detalle →
+          </p>
+        ) : null}
         {isFinal ? (
           <p className="mt-0.5 text-center text-[9px] uppercase tracking-[0.2em] text-amber-200/90">
             🏆 Final
           </p>
         ) : null}
-      </div>
+      </BracketCellShell>
     </div>
   );
+}
+
+/** Envoltura del cuadro de un match: Link si es navegable, div si no. */
+function BracketCellShell({
+  href,
+  className,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {children}
+      </Link>
+    );
+  }
+  return <div className={className}>{children}</div>;
 }
 
 function SidePill({
