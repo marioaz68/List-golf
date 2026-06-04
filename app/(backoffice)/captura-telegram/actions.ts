@@ -120,6 +120,7 @@ async function loadGroupRecipients(args: {
         }
       | null;
   };
+  const groupEntryIds: string[] = [];
   for (const m of (members ?? []) as unknown as MemberRaw[]) {
     const entry = Array.isArray(m.tournament_entries)
       ? m.tournament_entries[0]
@@ -129,11 +130,12 @@ async function loadGroupRecipients(args: {
         ? entry.players[0]
         : entry.players
       : null;
+    const entryId = String(m.entry_id ?? entry?.id ?? "").trim();
+    if (entryId) groupEntryIds.push(entryId);
     if (!player) continue;
     const chatId = String(player.telegram_chat_id ?? player.telegram_user_id ?? "").trim();
     if (!chatId) continue;
     const name = fullName(player.first_name, player.last_name);
-    const entryId = String(m.entry_id ?? entry?.id ?? "").trim();
     recipients.push({
       chatId,
       name,
@@ -143,48 +145,44 @@ async function loadGroupRecipients(args: {
     });
   }
 
-  // Caddies asignados al grupo (intentar leer columnas Telegram; si no existen, no hay destinatarios caddie)
-  let caddieAssigns: Array<{
-    caddie_id: string | null;
-  }> = [];
-  const { data: assignsRaw } = await admin
-    .from("caddie_assignments")
-    .select("caddie_id, pairing_group_id, is_active, round_id")
-    .eq("tournament_id", args.tournamentId)
-    .eq("pairing_group_id", args.groupId);
-  caddieAssigns = ((assignsRaw ?? []) as Array<{
-    caddie_id: string | null;
-    pairing_group_id: string | null;
-    is_active: boolean | null;
-    round_id: string | null;
-  }>)
-    .filter(
-      (a) => a.is_active !== false && (a.round_id == null || a.round_id === args.roundId)
-    )
-    .map((a) => ({ caddie_id: a.caddie_id }));
-
-  const caddieIds = Array.from(
-    new Set(
-      caddieAssigns
-        .map((a) => a.caddie_id)
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-  if (caddieIds.length > 0) {
-    const tryWithTg = await admin
-      .from("caddies")
-      .select("id, first_name, last_name, telegram_user_id, telegram_chat_id")
-      .in("id", caddieIds);
-    if (!tryWithTg.error && tryWithTg.data) {
-      for (const c of tryWithTg.data as Array<{
+  // Caddies del grupo: por los entry_id de sus integrantes (las asignaciones
+  // suelen guardarse sin pairing_group_id). El ID de Telegram está en `telegram`.
+  if (groupEntryIds.length > 0) {
+    const { data: assignsRaw } = await admin
+      .from("caddie_assignments")
+      .select("caddie_id, entry_id, is_active, round_id")
+      .eq("tournament_id", args.tournamentId)
+      .in("entry_id", groupEntryIds);
+    const caddieIds = Array.from(
+      new Set(
+        ((assignsRaw ?? []) as Array<{
+          caddie_id: string | null;
+          entry_id: string | null;
+          is_active: boolean | null;
+          round_id: string | null;
+        }>)
+          .filter(
+            (a) =>
+              a.is_active !== false &&
+              (a.round_id == null || a.round_id === args.roundId)
+          )
+          .map((a) => a.caddie_id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+    if (caddieIds.length > 0) {
+      const { data: caddiesRaw } = await admin
+        .from("caddies")
+        .select("id, first_name, last_name, telegram")
+        .in("id", caddieIds);
+      for (const c of (caddiesRaw ?? []) as Array<{
         id: string;
         first_name: string | null;
         last_name: string | null;
-        telegram_user_id?: string | null;
-        telegram_chat_id?: string | null;
+        telegram?: string | null;
       }>) {
-        const chatId = String(c.telegram_chat_id ?? c.telegram_user_id ?? "").trim();
-        if (!chatId) continue;
+        const chatId = String(c.telegram ?? "").trim();
+        if (!/^\d+$/.test(chatId)) continue;
         const name = fullName(c.first_name, c.last_name);
         recipients.push({
           chatId,
@@ -195,7 +193,6 @@ async function loadGroupRecipients(args: {
         });
       }
     }
-    // Si falla por columnas faltantes, simplemente no hay caddies destinatarios todavía.
   }
 
   // Dedupe por (chatId + role): si jugador y caddie comparten chat, cada

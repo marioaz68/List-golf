@@ -188,8 +188,10 @@ export default async function CapturaTelegramPage(props: {
       .select("id, pairing_group_id, entry_id, caddie_id, is_active, role")
       .eq("tournament_id", tournamentId)
       .or(`round_id.eq.${round.id},round_id.is.null`);
+    // Emparejamos por entry_id (no por pairing_group_id): las asignaciones
+    // suelen guardarse sin pairing_group_id, así que filtrar por él las perdía.
     assignments = ((assignsRaw ?? []) as CaddieAssignRow[]).filter(
-      (a) => a.is_active !== false && a.pairing_group_id
+      (a) => a.is_active !== false && a.entry_id
     );
   }
 
@@ -265,7 +267,14 @@ export default async function CapturaTelegramPage(props: {
       };
     });
 
-    const gAssigns = assignments.filter((a) => a.pairing_group_id === g.id);
+    // Caddies del grupo: por los entry_id de sus integrantes (no por
+    // pairing_group_id, que muchas asignaciones no traen).
+    const groupEntryIds = new Set(
+      gMembers.map((m) => m.entry_id).filter((id): id is string => Boolean(id))
+    );
+    const gAssigns = assignments.filter(
+      (a) => a.entry_id && groupEntryIds.has(a.entry_id)
+    );
     const caddieRowsForGroup: CaddieRow[] = gAssigns
       .map((a): CaddieRow | null => {
         if (!a.caddie_id) return null;
