@@ -71,6 +71,8 @@ type Props = {
   teeSets?: TeeSetLite[];
   teeRules?: TeeRuleLite[];
   birthYearByPlayerId?: Record<string, number | null>;
+  /** Si se regresó del detalle con ?focus=<matchId>, hace scroll y resalta. */
+  focusMatchId?: string | null;
 };
 
 function money(v: number | null | undefined, currency: string) {
@@ -193,6 +195,7 @@ export default function LiveBracketView({
   teeSets = [],
   teeRules = [],
   birthYearByPlayerId = {},
+  focusMatchId = null,
 }: Props) {
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
 
@@ -355,6 +358,39 @@ export default function LiveBracketView({
       clearInterval(poll);
     };
   }, [tournamentId]);
+
+  // Al regresar del detalle con ?focus=<matchId>, hace scroll a esa celda y la
+  // resalta unos segundos para que el usuario reconozca el match marcado.
+  const [highlightMatchId, setHighlightMatchId] = useState<string | null>(
+    focusMatchId
+  );
+  useEffect(() => {
+    if (!focusMatchId) return;
+    setHighlightMatchId(focusMatchId);
+    let tries = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(`bk-match-${focusMatchId}`);
+      if (el) {
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "center",
+        });
+        return true;
+      }
+      return false;
+    };
+    // Reintentos cortos hasta que el bracket termine de medir/renderizar.
+    const interval = setInterval(() => {
+      tries += 1;
+      if (tryScroll() || tries > 20) clearInterval(interval);
+    }, 150);
+    const clearHi = setTimeout(() => setHighlightMatchId(null), 4000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(clearHi);
+    };
+  }, [focusMatchId]);
 
   // Equipos vivos ordenados por subasta (postura desc, orden asc)
   const seededTeams = useMemo(() => {
@@ -730,6 +766,7 @@ export default function LiveBracketView({
                     computedWinnerId={slot?.winner?.id ?? null}
                     realMatch={real}
                     liveInfo={real ? liveByMatch.get(real.id) ?? null : null}
+                    highlighted={!!real && real.id === highlightMatchId}
                     currency={currency}
                     compactNames={isMobile}
                     teeRules={teeRules}
@@ -840,6 +877,7 @@ function BracketMatchCell({
   computedWinnerId,
   realMatch,
   liveInfo,
+  highlighted,
   currency,
   compactNames,
   teeRules,
@@ -870,6 +908,7 @@ function BracketMatchCell({
     result_text: string | null;
   } | null;
   liveInfo: LiveScore | null;
+  highlighted: boolean;
   currency: string;
   compactNames: boolean;
   teeRules: TeeRuleLite[];
@@ -885,7 +924,7 @@ function BracketMatchCell({
     realMatch && realMatch.status !== "bye"
       ? `/torneos/${tournamentId}/matches-vivo?match=${encodeURIComponent(
           realMatch.id
-        )}`
+        )}&from=bracket`
       : null;
 
   // Marcador en vivo por lado ("2 UP" / "2 DN" / "AS"). Solo mientras el match
@@ -928,7 +967,10 @@ function BracketMatchCell({
 
   return (
     <div
-      className="relative flex flex-col justify-center px-2"
+      id={realMatch ? `bk-match-${realMatch.id}` : undefined}
+      className={`relative flex flex-col justify-center px-2 ${
+        highlighted ? "scroll-mt-24" : ""
+      }`}
       style={{
         gridColumn: round,
         gridRow: `${rowStart} / span ${span}`,
@@ -965,6 +1007,10 @@ function BracketMatchCell({
         className={`block rounded-lg border-2 ${cellBox} px-2 py-1 ${
           matchHref
             ? "cursor-pointer transition hover:border-white/60 hover:brightness-110"
+            : ""
+        } ${
+          highlighted
+            ? "ring-4 ring-amber-300/90 ring-offset-2 ring-offset-[#0a1220] animate-pulse"
             : ""
         }`}
         href={matchHref}

@@ -59,6 +59,10 @@ export default async function PublicMatchesLivePage(props: {
   const initialOpenMatchId = String(
     Array.isArray(matchParam) ? matchParam[0] : matchParam ?? ""
   ).trim();
+  const fromParam = sp.from;
+  const openedFromBracket =
+    String(Array.isArray(fromParam) ? fromParam[0] : fromParam ?? "").trim() ===
+    "bracket";
   const tournamentId = params.id;
   if (!tournamentId) notFound();
 
@@ -195,6 +199,7 @@ export default async function PublicMatchesLivePage(props: {
         liveFromStrokeScores={snapshot.liveFromStrokeScores}
         matchSchedule={matchSchedule}
         initialOpenMatchId={initialOpenMatchId || null}
+        openedFromBracket={openedFromBracket}
       />
     </main>
   );

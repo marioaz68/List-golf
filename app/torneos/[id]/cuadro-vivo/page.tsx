@@ -48,10 +48,20 @@ export async function generateMetadata(props: {
   };
 }
 
+type SearchParams = { [key: string]: string | string[] | undefined };
+
 export default async function PublicLiveBracketPage(props: {
   params: Promise<RouteParams> | RouteParams;
+  searchParams?: Promise<SearchParams> | SearchParams;
 }) {
   const params = await Promise.resolve(props.params);
+  const sp = props.searchParams
+    ? await Promise.resolve(props.searchParams)
+    : {};
+  const focusParam = sp.focus;
+  const focusMatchId = String(
+    Array.isArray(focusParam) ? focusParam[0] : focusParam ?? ""
+  ).trim();
   const tournamentId = params.id;
   if (!tournamentId) notFound();
 
@@ -250,6 +260,7 @@ export default async function PublicLiveBracketPage(props: {
         teeSets={teeSets}
         teeRules={teeRules}
         birthYearByPlayerId={birthYearByPlayerId}
+        focusMatchId={focusMatchId || null}
       />
     </main>
   );

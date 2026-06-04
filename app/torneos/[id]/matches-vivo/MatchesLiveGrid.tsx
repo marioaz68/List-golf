@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
@@ -56,6 +57,8 @@ type Props = {
   matchSchedule?: Record<string, MatchScheduleInfo>;
   /** Si viene del bracket con ?match=<id>, abre ese detalle al cargar. */
   initialOpenMatchId?: string | null;
+  /** True si se llegó desde el bracket (?from=bracket): al cerrar regresa allá. */
+  openedFromBracket?: boolean;
 };
 
 /** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
@@ -97,7 +100,9 @@ export default function MatchesLiveGrid({
   liveFromStrokeScores = false,
   matchSchedule = {},
   initialOpenMatchId = null,
+  openedFromBracket = false,
 }: Props) {
+  const router = useRouter();
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
   const [matches, setMatches] = useState<MatchRow[]>(initialMatches);
   const [holes, setHoles] = useState<HoleRow[]>(initialHoles);
@@ -139,7 +144,24 @@ export default function MatchesLiveGrid({
     topTeam: MatchPlayTeamRow | null;
     bottomTeam: MatchPlayTeamRow | null;
     label: string;
+    fromBracket: boolean;
   } | null>(null);
+
+  // Cierre del detalle. Si se abrió desde el bracket, regresamos al cuadro con
+  // ?focus=<matchId> para que haga scroll y resalte el match marcado. Si se
+  // abrió dentro de matches-vivo, solo cerramos (se conserva el scroll).
+  const closeDetail = () => {
+    const fromBracket = detail?.fromBracket;
+    const matchId = detail?.match.id;
+    setDetail(null);
+    if (fromBracket && matchId) {
+      router.push(
+        `/torneos/${tournamentId}/cuadro-vivo?focus=${encodeURIComponent(
+          matchId
+        )}`
+      );
+    }
+  };
 
   // Realtime: matches del bracket (sólo si es un bracket oficial real).
   useEffect(() => {
@@ -290,8 +312,17 @@ export default function MatchesLiveGrid({
         ? teamById.get(m.bottom_pair_id) ?? null
         : null,
       label: roundLabel(m.round_no, roundCount, bracketSize),
+      fromBracket: openedFromBracket,
     });
-  }, [initialOpenMatchId, matches, teams, teamById, roundCount, bracketSize]);
+  }, [
+    initialOpenMatchId,
+    matches,
+    teams,
+    teamById,
+    roundCount,
+    bracketSize,
+    openedFromBracket,
+  ]);
 
   // Rondas disponibles (las que tienen al menos 1 partido real) y filtro.
   const availableRounds = useMemo(() => {
@@ -634,6 +665,7 @@ export default function MatchesLiveGrid({
                           topTeam,
                           bottomTeam,
                           label: round.label,
+                          fromBracket: false,
                         })
                       }
                     />
@@ -662,7 +694,7 @@ export default function MatchesLiveGrid({
 
       <MatchDetailModal
         open={!!detail}
-        onClose={() => setDetail(null)}
+        onClose={closeDetail}
         tournamentId={tournamentId}
         matchId={detail?.match.id ?? null}
         isDerived={
