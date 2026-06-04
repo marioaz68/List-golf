@@ -963,19 +963,34 @@ function MatchCard({
         </p>
       ) : null}
 
-      {clickable ? (
-        <p className="mt-2 flex items-center justify-center gap-2 text-[10px] text-cyan-300/80">
-          {lastHolePlayed > 0 ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 px-2 py-0.5 font-bold text-cyan-100"
-              title={`Hasta el hoyo ${lastHolePlayed} capturado (thru ${lastHolePlayed})`}
-            >
-              Hasta {lastHolePlayed}
-              <span className="text-cyan-300/70">· thru {lastHolePlayed}</span>
+      {!isBye ? (
+        <div className="mt-2 flex items-end justify-between gap-2">
+          {/* Número GRANDE del hoyo en el que van (abajo a la izquierda). */}
+          <div className="flex shrink-0 flex-col items-center leading-none">
+            <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
+              Hoyo
             </span>
+            <span
+              className={`font-extrabold tabular-nums ${
+                isDone ? "text-emerald-300" : isLive ? "text-cyan-200" : "text-slate-300"
+              }`}
+              style={{ fontSize: "20px" }}
+              title={
+                lastHolePlayed > 0
+                  ? `Van en el hoyo ${lastHolePlayed}`
+                  : `Salen del hoyo ${nextHole}`
+              }
+            >
+              {lastHolePlayed > 0 ? lastHolePlayed : nextHole}
+            </span>
+          </div>
+
+          {clickable ? (
+            <p className="flex flex-1 items-center justify-end gap-2 text-[10px] text-cyan-300/80">
+              <span>Tocar para ver detalle hoyo por hoyo →</span>
+            </p>
           ) : null}
-          <span>Tocar para ver detalle hoyo por hoyo →</span>
-        </p>
+        </div>
       ) : null}
     </article>
   );
