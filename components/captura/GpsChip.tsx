@@ -174,17 +174,62 @@ export default function GpsChip({
     startWatching();
   }, [state, key, startWatching, stopWatching]);
 
-  // Auto-resume si el usuario ya lo había activado en esta sesión.
+  // Auto-start al montar el componente:
+  //
+  // 1. Si el navegador ya tiene permiso "granted" para este dominio
+  //    (porque el usuario lo concedió en una visita anterior), arrancamos
+  //    watchPosition inmediato — el caddie no tiene que tocar el chip.
+  // 2. Como respaldo (Safari iOS antiguo no soporta permissions.query),
+  //    también checamos sessionStorage por si el usuario lo activó en
+  //    esta misma sesión y la pestaña recargó.
+  // 3. Si el permiso está "prompt" o "denied", quedamos en off — el
+  //    usuario tiene que tocar el chip para disparar el prompt (regla
+  //    de seguridad de Chrome/Safari: la primera vez requiere gesto).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    let armed = false;
-    try {
-      armed = sessionStorage.getItem(key) === "1";
-    } catch {
-      armed = false;
+
+    let cancelled = false;
+
+    async function tryAutoStart() {
+      // Respaldo: sessionStorage (misma sesión, post-reload)
+      let armedBySession = false;
+      try {
+        armedBySession = sessionStorage.getItem(key) === "1";
+      } catch {
+        armedBySession = false;
+      }
+
+      // Vía moderna: Permissions API. granted = navegador ya autorizó
+      // este dominio. prompt = no ha decidido. denied = bloqueado.
+      let granted = false;
+      try {
+        const nav = navigator as Navigator & {
+          permissions?: {
+            query: (d: { name: PermissionName }) => Promise<PermissionStatus>;
+          };
+        };
+        if (nav.permissions?.query) {
+          const status = await nav.permissions.query({
+            name: "geolocation" as PermissionName,
+          });
+          granted = status.state === "granted";
+        }
+      } catch {
+        granted = false;
+      }
+
+      if (cancelled) return;
+
+      if (granted || armedBySession) {
+        startWatching();
+      }
     }
-    if (armed) startWatching();
-    return () => stopWatching();
+
+    void tryAutoStart();
+    return () => {
+      cancelled = true;
+      stopWatching();
+    };
     // intentional: solo en mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
