@@ -101,6 +101,7 @@ export default function RitmoLiveView({
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [onlyMissingGps, setOnlyMissingGps] = useState(false);
   const [showMissingList, setShowMissingList] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   // Auto-refresco cada 30 s (re-render del Server Component con datos frescos).
   useEffect(() => {
@@ -463,24 +464,53 @@ export default function RitmoLiveView({
         }}
       >
         <span>Actualizado hace {secondsAgo}s</span>
-        <button
-          type="button"
-          onClick={() => router.refresh()}
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            padding: "3px 9px",
-            borderRadius: 5,
-            background: "#1f2937",
-            color: "#e5e7eb",
-            border: "1px solid #374151",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          ↻ Actualizar
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          {currentRoundId ? (
+            <button
+              type="button"
+              onClick={() => setShowSchedule(true)}
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "3px 9px",
+                borderRadius: 5,
+                background: "#0c4a6e",
+                color: "#bae6fd",
+                border: "1px solid #075985",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              🕐 Orden y horas
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "3px 9px",
+              borderRadius: 5,
+              background: "#1f2937",
+              color: "#e5e7eb",
+              border: "1px solid #374151",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            ↻ Actualizar
+          </button>
+        </div>
       </div>
+
+      {showSchedule && currentRoundId ? (
+        <GroupScheduleEditor
+          roundId={currentRoundId}
+          groups={groups}
+          onClose={() => setShowSchedule(false)}
+        />
+      ) : null}
     </div>
   );
 
@@ -894,6 +924,344 @@ function DeltaChip({
       {ahead ? "−" : "+"}
       {mins} min
     </span>
+  );
+}
+
+type ScheduleRow = {
+  groupId: string;
+  number: number;
+  order: number;
+  time: string;
+  players: string[];
+  actualStartAt: string | null;
+};
+
+function GroupScheduleEditor({
+  roundId,
+  groups,
+  onClose,
+}: {
+  roundId: string;
+  groups: LiveGroup[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [rows, setRows] = useState<ScheduleRow[]>(() =>
+    [...groups]
+      .sort((a, b) => a.number - b.number)
+      .map((g, i) => ({
+        groupId: g.id,
+        number: g.number,
+        order: i + 1,
+        time: g.teeTime ? g.teeTime.slice(0, 5) : "",
+        players: g.players,
+        actualStartAt: g.actualStartAt,
+      }))
+  );
+  const [baseTime, setBaseTime] = useState("");
+  const [intervalMin, setIntervalMin] = useState("10");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  function update(groupId: string, patch: Partial<ScheduleRow>) {
+    setRows((prev) =>
+      prev.map((r) => (r.groupId === groupId ? { ...r, ...patch } : r))
+    );
+  }
+
+  function move(idx: number, dir: -1 | 1) {
+    setRows((prev) => {
+      const next = [...prev];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return prev;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      return next.map((r, i) => ({ ...r, order: i + 1 }));
+    });
+  }
+
+  function autofill() {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(baseTime.trim());
+    if (!m) {
+      setErr("Hora base inválida (HH:MM).");
+      return;
+    }
+    const step = Math.max(1, Math.trunc(Number(intervalMin)) || 10);
+    let mins = Number(m[1]) * 60 + Number(m[2]);
+    setRows((prev) =>
+      [...prev]
+        .sort((a, b) => a.order - b.order)
+        .map((r, i) => {
+          const t = mins + i * step;
+          const hh = String(Math.floor((t % 1440) / 60)).padStart(2, "0");
+          const mm = String(t % 60).padStart(2, "0");
+          return { ...r, time: `${hh}:${mm}` };
+        })
+    );
+    setErr("");
+  }
+
+  async function save() {
+    setBusy(true);
+    setErr("");
+    try {
+      const ordered = [...rows].sort((a, b) => a.order - b.order);
+      const items = ordered.map((r, i) => ({
+        group_id: r.groupId,
+        group_no: i + 1,
+        tee_time: r.time.trim() || null,
+      }));
+      const res = await fetch("/api/ritmo/group-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ round_id: roundId, items }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setErr(data.error ?? "Error guardando.");
+      } else {
+        onClose();
+        router.refresh();
+      }
+    } catch {
+      setErr("Error de red.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ordered = [...rows].sort((a, b) => a.order - b.order);
+
+  const cellBtn: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 700,
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    border: "1px solid #374151",
+    background: "#1f2937",
+    color: "#e5e7eb",
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 12,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#0f1720",
+          border: "1px solid #1f2937",
+          borderRadius: 10,
+          width: "min(560px, 100%)",
+          maxHeight: "90vh",
+          overflow: "auto",
+          color: "#e5e7eb",
+          fontFamily: "inherit",
+        }}
+      >
+        <div
+          style={{
+            padding: "10px 14px",
+            borderBottom: "1px solid #1f2937",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: 14 }}>Orden y horas de salida</div>
+          <button type="button" onClick={onClose} style={{ ...cellBtn, width: 26 }}>
+            ✕
+          </button>
+        </div>
+
+        <div
+          style={{
+            padding: "8px 14px",
+            borderBottom: "1px solid #1f2937",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+          }}
+        >
+          <span style={{ color: "#9ca3af" }}>Autollenar:</span>
+          <input
+            type="time"
+            value={baseTime}
+            onChange={(e) => setBaseTime(e.target.value)}
+            style={{
+              fontSize: 12,
+              padding: "3px 6px",
+              borderRadius: 5,
+              border: "1px solid #374151",
+              background: "#0a0a0a",
+              color: "#fff",
+              fontFamily: "inherit",
+            }}
+          />
+          <span style={{ color: "#9ca3af" }}>cada</span>
+          <input
+            type="number"
+            min={1}
+            value={intervalMin}
+            onChange={(e) => setIntervalMin(e.target.value)}
+            style={{
+              fontSize: 12,
+              width: 52,
+              padding: "3px 6px",
+              borderRadius: 5,
+              border: "1px solid #374151",
+              background: "#0a0a0a",
+              color: "#fff",
+              fontFamily: "inherit",
+            }}
+          />
+          <span style={{ color: "#9ca3af" }}>min</span>
+          <button
+            type="button"
+            onClick={autofill}
+            style={{ ...cellBtn, width: "auto", padding: "0 10px" }}
+          >
+            Aplicar
+          </button>
+        </div>
+
+        <div style={{ padding: "6px 8px" }}>
+          {ordered.map((r, idx) => (
+            <div
+              key={r.groupId}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 6px",
+                borderBottom: "1px solid #161e2b",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => move(idx, -1)}
+                  disabled={idx === 0}
+                  style={{ ...cellBtn, height: 16, opacity: idx === 0 ? 0.3 : 1 }}
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => move(idx, 1)}
+                  disabled={idx === ordered.length - 1}
+                  style={{
+                    ...cellBtn,
+                    height: 16,
+                    opacity: idx === ordered.length - 1 ? 0.3 : 1,
+                  }}
+                >
+                  ▼
+                </button>
+              </div>
+              <div
+                style={{
+                  width: 26,
+                  textAlign: "center",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  color: "#38bdf8",
+                }}
+              >
+                {idx + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>
+                  G{r.number}
+                  {r.actualStartAt ? (
+                    <span style={{ color: "#6ee7b7", marginLeft: 6, fontWeight: 700 }}>
+                      ▶ {formatStartTimeMexico(r.actualStartAt)}
+                    </span>
+                  ) : null}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#9ca3af",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {r.players.join(", ") || "Sin jugadores"}
+                </div>
+              </div>
+              <input
+                type="time"
+                value={r.time}
+                onChange={(e) => update(r.groupId, { time: e.target.value })}
+                style={{
+                  fontSize: 12,
+                  padding: "3px 6px",
+                  borderRadius: 5,
+                  border: "1px solid #374151",
+                  background: "#0a0a0a",
+                  color: "#fff",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {err ? (
+          <div style={{ padding: "0 14px 8px", fontSize: 11, color: "#fca5a5" }}>{err}</div>
+        ) : null}
+
+        <div
+          style={{
+            padding: "10px 14px",
+            borderTop: "1px solid #1f2937",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 10, color: "#6b7280" }}>
+            El orden y la hora se guardan en la salida programada. La salida real
+            (botón «Salió») manda en el ritmo si está marcada.
+          </span>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy}
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: "6px 14px",
+              borderRadius: 6,
+              border: "1px solid #047857",
+              background: "#065f46",
+              color: "#d1fae5",
+              cursor: busy ? "default" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {busy ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
