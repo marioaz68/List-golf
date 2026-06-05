@@ -42,37 +42,66 @@ export default function StrokeAggregateStandingsView({
 }) {
   const [data, setData] = useState<StandingsPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
   const [tab, setTab] = useState<Tab>("live");
   const [favs, setFavs] = useState<string[]>([]);
   const [onlyFavs, setOnlyFavs] = useState(false);
 
-  const load = useCallback(() => {
-    return fetch(
-      `/api/matchplay/stroke-aggregate-standings?tournament_id=${encodeURIComponent(
-        tournamentId
-      )}`,
-      { cache: "no-store" }
-    )
-      .then((r) => r.json())
-      .then((d: StandingsPayload) => setData(d))
-      .catch(() =>
-        setData({
-          ok: false,
-          message: "Error de red",
-          pairs: [],
-          groups: [],
-          roundNo: null,
-          allowancePct: 80,
-        })
+  const load = useCallback(
+    (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setRefreshing(true);
+      return fetch(
+        `/api/matchplay/stroke-aggregate-standings?tournament_id=${encodeURIComponent(
+          tournamentId
+        )}`,
+        { cache: "no-store" }
       )
-      .finally(() => setLoading(false));
-  }, [tournamentId]);
+        .then((r) => r.json())
+        .then((d: StandingsPayload) => {
+          setData(d);
+          setLastUpdated(new Date());
+        })
+        .catch(() =>
+          setData({
+            ok: false,
+            message: "Error de red",
+            pairs: [],
+            groups: [],
+            roundNo: null,
+            allowancePct: 80,
+          })
+        )
+        .finally(() => {
+          setLoading(false);
+          setRefreshing(false);
+        });
+    },
+    [tournamentId]
+  );
 
   useEffect(() => {
     void load();
-    const poll = setInterval(() => void load(), 15000);
-    return () => clearInterval(poll);
+    const poll = setInterval(() => void load({ silent: true }), 10000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const tick = () =>
+      setSecondsAgo(Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000)));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
 
   // Favoritos (localStorage) + sincronización entre vistas.
   useEffect(() => {
@@ -130,14 +159,31 @@ export default function StrokeAggregateStandingsView({
         <TabBtn active={tab === "leaderboard"} onClick={() => setTab("leaderboard")}>
           🏆 Clasificación
         </TabBtn>
-        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-300">
-          <input
-            type="checkbox"
-            checked={onlyFavs}
-            onChange={(e) => setOnlyFavs(e.target.checked)}
-          />
-          Solo favoritos ★
-        </label>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="text-[10px] text-slate-500">
+            {lastUpdated
+              ? refreshing
+                ? "Actualizando…"
+                : `Actualizado hace ${secondsAgo}s`
+              : "—"}
+          </span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={refreshing}
+            className="rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] font-semibold text-slate-200 hover:bg-white/10 disabled:opacity-50"
+          >
+            ↻ Actualizar
+          </button>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-300">
+            <input
+              type="checkbox"
+              checked={onlyFavs}
+              onChange={(e) => setOnlyFavs(e.target.checked)}
+            />
+            Solo favoritos ★
+          </label>
+        </div>
       </div>
 
       {tab === "live" ? (

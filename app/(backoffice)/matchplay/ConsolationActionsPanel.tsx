@@ -70,6 +70,8 @@ export default function ConsolationActionsPanel({
 
   useEffect(() => {
     void refreshStandings();
+    const poll = setInterval(() => void refreshStandings(), 15000);
+    return () => clearInterval(poll);
   }, [refreshStandings]);
 
   async function call(endpoint: string, key: string) {

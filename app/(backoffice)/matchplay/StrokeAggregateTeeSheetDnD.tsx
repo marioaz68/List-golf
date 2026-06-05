@@ -80,6 +80,15 @@ export default function StrokeAggregateTeeSheetDnD({
 
   useEffect(() => {
     void refresh();
+    const poll = setInterval(() => void refresh(), 10000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
 
   const groups = useMemo(
