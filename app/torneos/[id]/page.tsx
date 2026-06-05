@@ -1582,6 +1582,12 @@ export default async function PublicTournamentPage({
                   >
                     📺 {pub.matchesLiveTab}
                   </Link>
+                  <Link
+                    href={`/torneos/${id}/consolacion-stroke`}
+                    className="inline-flex items-center justify-center rounded-full border border-sky-400/40 bg-sky-950/40 px-3 py-1.5 text-[11px] font-bold text-sky-200 hover:bg-sky-900/60"
+                  >
+                    ⛳ Consolación stroke
+                  </Link>
                 </>
               ) : null}
             </div>

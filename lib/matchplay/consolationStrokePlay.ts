@@ -7,6 +7,54 @@ import {
 
 export const STROKE_AGG_NOTES_PREFIX = "STROKE AGREGADO · ";
 
+/** Parejas perdedoras de R1, R2 y consolación MP (participan stroke agregado). */
+export async function collectLoserPairIdsForStrokeAggregate(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<Set<string>> {
+  const loserPairIds = new Set<string>();
+
+  const { data: mainBracket } = await admin
+    .from("matchplay_brackets")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .neq("name", CONSOLATION_BRACKET_NAME)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (mainBracket?.id) {
+    const { data: mainDone } = await admin
+      .from("matchplay_matches")
+      .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
+      .eq("bracket_id", mainBracket.id)
+      .in("round_no", [1, 2])
+      .eq("status", "completed");
+    for (const m of mainDone ?? []) {
+      if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
+      const loser =
+        m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
+      if (loser) loserPairIds.add(String(loser));
+    }
+  }
+
+  const consolId = await getConsolationBracketId(admin, tournamentId);
+  if (consolId) {
+    const { data: consolDone } = await admin
+      .from("matchplay_matches")
+      .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
+      .eq("bracket_id", consolId)
+      .eq("status", "completed");
+    for (const m of consolDone ?? []) {
+      if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
+      const loser =
+        m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
+      if (loser) loserPairIds.add(String(loser));
+    }
+  }
+
+  return loserPairIds;
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -107,36 +155,10 @@ export async function createStrokeAggregateGroups(
     Math.round(Math.log2(Math.max(2, bracketSize)))
   );
 
-  // Parejas perdedoras de R1 y R2 del cuadro principal.
-  const loserPairIds = new Set<string>();
-  const { data: mainDone } = await admin
-    .from("matchplay_matches")
-    .select("round_no, top_pair_id, bottom_pair_id, winner_pair_id, status")
-    .eq("bracket_id", mainBracket.id)
-    .in("round_no", [1, 2])
-    .eq("status", "completed");
-  for (const m of mainDone ?? []) {
-    if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
-    const loser =
-      m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
-    if (loser) loserPairIds.add(String(loser));
-  }
-
-  // Parejas perdedoras de la consolación Match Play.
-  const consolId = await getConsolationBracketId(admin, tournamentId);
-  if (consolId) {
-    const { data: consolDone } = await admin
-      .from("matchplay_matches")
-      .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
-      .eq("bracket_id", consolId)
-      .eq("status", "completed");
-    for (const m of consolDone ?? []) {
-      if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
-      const loser =
-        m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
-      if (loser) loserPairIds.add(String(loser));
-    }
-  }
+  const loserPairIds = await collectLoserPairIdsForStrokeAggregate(
+    admin,
+    tournamentId
+  );
 
   if (loserPairIds.size === 0) {
     return {

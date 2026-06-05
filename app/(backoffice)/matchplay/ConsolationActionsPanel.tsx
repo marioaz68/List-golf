@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import type { StrokeAggregatePairRow } from "@/lib/matchplay/strokeAggregateStandings";
 
 const btn: React.CSSProperties = {
   display: "inline-flex",
@@ -26,6 +28,14 @@ type Result = {
   groupsCreated?: number;
 };
 
+type StandingsPayload = {
+  ok: boolean;
+  pairs: StrokeAggregatePairRow[];
+  message: string;
+  roundNo: number | null;
+  allowancePct: number;
+};
+
 export default function ConsolationActionsPanel({
   tournamentId,
 }: {
@@ -35,6 +45,30 @@ export default function ConsolationActionsPanel({
   const [result, setResult] = useState<{ tone: "ok" | "err"; text: string } | null>(
     null
   );
+  const [standings, setStandings] = useState<StandingsPayload | null>(null);
+  const [standingsLoading, setStandingsLoading] = useState(false);
+
+  const refreshStandings = useCallback(async () => {
+    setStandingsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/matchplay/stroke-aggregate-standings?tournament_id=${encodeURIComponent(
+          tournamentId
+        )}`,
+        { cache: "no-store" }
+      );
+      const data = (await res.json()) as StandingsPayload;
+      setStandings(data);
+    } catch {
+      setStandings(null);
+    } finally {
+      setStandingsLoading(false);
+    }
+  }, [tournamentId]);
+
+  useEffect(() => {
+    void refreshStandings();
+  }, [refreshStandings]);
 
   async function call(endpoint: string, key: string) {
     setLoading(key);
@@ -53,6 +87,7 @@ export default function ConsolationActionsPanel({
             data.message ??
             `Listo. ${data.created ?? data.processed ?? 0} salida(s).`,
         });
+        void refreshStandings();
       } else {
         setResult({ tone: "err", text: data.error ?? "Error desconocido." });
       }
@@ -99,6 +134,26 @@ export default function ConsolationActionsPanel({
         >
           {loading === "stroke" ? "Creando…" : "⛳ Crear salidas Stroke Agregado"}
         </button>
+        <button
+          type="button"
+          style={{
+            ...btn,
+            border: "1px solid #334155",
+            background: "#1e293b",
+          }}
+          disabled={standingsLoading}
+          onClick={() => void refreshStandings()}
+        >
+          {standingsLoading ? "…" : "↻ Clasificación stroke"}
+        </button>
+        <Link
+          href={`/torneos/${tournamentId}/consolacion-stroke`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[30px] items-center rounded-md border border-sky-600/50 bg-sky-950/50 px-3 text-[11px] font-bold text-sky-200 hover:bg-sky-900/60"
+        >
+          Ver pública ↗
+        </Link>
       </div>
 
       {result ? (
@@ -111,6 +166,50 @@ export default function ConsolationActionsPanel({
         >
           {result.text}
         </div>
+      ) : null}
+
+      {standings?.ok && standings.pairs.length > 0 ? (
+        <div className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/20">
+          <p className="border-b border-white/10 px-2 py-1 text-[10px] text-amber-100/80">
+            Clasificación stroke agregado · R{standings.roundNo ?? "—"} · neto{" "}
+            {standings.allowancePct}% HI
+          </p>
+          <table className="w-full text-left text-[11px]">
+            <thead className="text-[9px] uppercase text-slate-500">
+              <tr>
+                <th className="px-2 py-1">#</th>
+                <th className="px-2 py-1">Pareja</th>
+                <th className="px-2 py-1 text-right">Total neto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.pairs.slice(0, 12).map((p) => (
+                <tr key={p.pairId} className="border-t border-white/5">
+                  <td className="px-2 py-0.5 font-bold text-white">
+                    {p.position}
+                    {p.tied ? "T" : ""}
+                  </td>
+                  <td className="px-2 py-0.5 text-slate-300">
+                    {p.label}
+                    <span className="block text-[9px] text-slate-500">
+                      {p.playerA.name} / {p.playerB.name}
+                    </span>
+                  </td>
+                  <td className="px-2 py-0.5 text-right font-bold tabular-nums text-sky-200">
+                    {p.aggregateNet ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {standings.pairs.length > 12 ? (
+            <p className="px-2 py-1 text-[9px] text-slate-500">
+              +{standings.pairs.length - 12} más en la vista pública
+            </p>
+          ) : null}
+        </div>
+      ) : standings && !standings.ok ? (
+        <p className="text-[10px] text-slate-500">{standings.message}</p>
       ) : null}
     </div>
   );
