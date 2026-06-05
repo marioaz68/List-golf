@@ -6,6 +6,7 @@ import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundG
 import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
 import {
+  advanceConsolationWinner,
   findBracketMatchForPairs,
   getMainBracketSize,
   routeLoserToConsolationMp,
@@ -278,22 +279,60 @@ export async function closeMatchAndAdvanceForGroup(
     }
   }
 
-  // 8) Avanzar al ganador (advanceWinnerInBracket también intenta crear
-  //    la salida de la ronda siguiente automáticamente).
-  const adv = await advanceWinnerInBracket(admin, {
-    match_id: matchplayMatchId,
-    winner_pair_id: winnerPairId,
-  });
+  const isMainBracketMatch = String(realMatch.bracket_id) === bracketId;
 
-  let nextGroupCreated = !!adv.next_group?.created;
-  let nextGroupNo: number | null = adv.next_group?.groupNo ?? null;
-  let nextRoundId: string | null = adv.next_group?.roundId ?? null;
-  let nextTeeTime: string | null = adv.next_group?.teeTime ?? null;
+  let nextGroupCreated = false;
+  let nextGroupNo: number | null = null;
+  let nextRoundId: string | null = null;
+  let nextTeeTime: string | null = null;
   let consolationNote = "";
+
+  // 8) Avanzar al ganador.
+  //  - Cuadro principal: advanceWinnerInBracket (crea salida de la ronda
+  //    siguiente con group_no = position_no).
+  //  - Cuadro de consolación: advanceConsolationWinner (final de consolación
+  //    con group_no desplazado tras el cuadro principal).
+  let adv: { advanced: boolean; next_match_id: string | null; message: string };
+  if (isMainBracketMatch) {
+    adv = await advanceWinnerInBracket(admin, {
+      match_id: matchplayMatchId,
+      winner_pair_id: winnerPairId,
+    }).then((r) => {
+      if (r.next_group?.created) {
+        nextGroupCreated = true;
+        nextGroupNo = r.next_group.groupNo;
+        nextRoundId = r.next_group.roundId;
+        nextTeeTime = r.next_group.teeTime;
+      }
+      return {
+        advanced: r.advanced,
+        next_match_id: r.next_match_id,
+        message: r.message,
+      };
+    });
+  } else {
+    const mainSize = await getMainBracketSize(admin, tournamentId);
+    const cadv = await advanceConsolationWinner(admin, {
+      tournamentId,
+      consolationMatchId: matchplayMatchId,
+      winnerPairId,
+      mainBracketSize: mainSize,
+    });
+    if (cadv.groupCreated) {
+      nextGroupCreated = true;
+      nextGroupNo = cadv.groupNo;
+      nextRoundId = cadv.roundId;
+      nextTeeTime = cadv.teeTime;
+    }
+    adv = {
+      advanced: cadv.advanced,
+      next_match_id: cadv.nextMatchId,
+      message: cadv.message,
+    };
+  }
 
   // Perdedores de la ronda configurada (ej. R3 cuartos) → consolación MP en
   // la ronda siguiente (G3–G4 en R4, después de semis G1–G2 del cuadro principal).
-  const isMainBracketMatch = String(realMatch.bracket_id) === bracketId;
   if (isMainBracketMatch && winnerPairId) {
     const loserPairId =
       winnerPairId === topPairId ? bottomPairId : topPairId;
@@ -345,9 +384,7 @@ export async function closeMatchAndAdvanceForGroup(
     }
   }
 
-  if (adv.next_group?.created || adv.next_group?.updated) {
-    nextGroupCreated = !!adv.next_group.created;
-  } else if (adv.advanced && adv.next_match_id && isMainBracketMatch) {
+  if (!nextGroupCreated && adv.advanced && adv.next_match_id && isMainBracketMatch) {
     // Fallback: si la siguiente salida no se generó automáticamente (por
     // ejemplo, porque la cascada de BYE creó el siguiente match y aún
     // espera a la otra pareja), reintentamos por si la actualización de

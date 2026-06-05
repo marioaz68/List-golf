@@ -450,6 +450,142 @@ export async function routeLoserToConsolationMp(
   };
 }
 
+export type AdvanceConsolationResult = {
+  advanced: boolean;
+  isFinal: boolean;
+  nextMatchId: string | null;
+  groupCreated: boolean;
+  groupNo: number | null;
+  roundId: string | null;
+  teeTime: string | null;
+  message: string;
+};
+
+/**
+ * Avanza al GANADOR de un match de consolación a la siguiente ronda del cuadro
+ * de consolación (ej. ganadores de R4 G3–G4 → final de consolación en R5),
+ * creando su salida con `group_no` desplazado tras el cuadro principal.
+ */
+export async function advanceConsolationWinner(
+  admin: SupabaseClient,
+  params: {
+    tournamentId: string;
+    consolationMatchId: string;
+    winnerPairId: string;
+    mainBracketSize: number;
+  }
+): Promise<AdvanceConsolationResult> {
+  const { data: match } = await admin
+    .from("matchplay_matches")
+    .select("id, bracket_id, round_no, position_no")
+    .eq("id", params.consolationMatchId)
+    .maybeSingle();
+
+  if (!match) {
+    return {
+      advanced: false,
+      isFinal: false,
+      nextMatchId: null,
+      groupCreated: false,
+      groupNo: null,
+      roundId: null,
+      teeTime: null,
+      message: "Match de consolación no encontrado.",
+    };
+  }
+
+  const consolationBracketId = String(match.bracket_id);
+  const roundNo = Number(match.round_no);
+  const positionNo = Number(match.position_no);
+
+  // ¿Cuántas rondas de consolación hay? La consolación arranca en
+  // from_round_no+1 y dura hasta la última ronda del cuadro principal.
+  const mainRoundCount = Math.max(
+    1,
+    Math.round(Math.log2(Math.max(2, params.mainBracketSize)))
+  );
+
+  if (roundNo >= mainRoundCount) {
+    // Ya es la final de consolación: campeón de consolación, sin más rondas.
+    return {
+      advanced: false,
+      isFinal: true,
+      nextMatchId: null,
+      groupCreated: false,
+      groupNo: null,
+      roundId: null,
+      teeTime: null,
+      message: "Campeón de consolación Match Play.",
+    };
+  }
+
+  const nextRoundNo = roundNo + 1;
+  const nextPosition = Math.floor((positionNo - 1) / 2) + 1;
+  const slotIsTop = (positionNo - 1) % 2 === 0;
+
+  const nextMatchId = await ensureConsolationMatch(admin, {
+    consolationBracketId,
+    tournamentId: params.tournamentId,
+    roundNo: nextRoundNo,
+    positionNo: nextPosition,
+  });
+  if (!nextMatchId) {
+    return {
+      advanced: false,
+      isFinal: false,
+      nextMatchId: null,
+      groupCreated: false,
+      groupNo: null,
+      roundId: null,
+      teeTime: null,
+      message: "No se pudo crear el siguiente match de consolación.",
+    };
+  }
+
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (slotIsTop) patch.top_pair_id = params.winnerPairId;
+  else patch.bottom_pair_id = params.winnerPairId;
+  await admin.from("matchplay_matches").update(patch).eq("id", nextMatchId);
+
+  const { data: nextRow } = await admin
+    .from("matchplay_matches")
+    .select("id, top_pair_id, bottom_pair_id")
+    .eq("id", nextMatchId)
+    .maybeSingle();
+
+  let groupCreated = false;
+  let groupNo: number | null = null;
+  let roundId: string | null = null;
+  let teeTime: string | null = null;
+  if (nextRow?.top_pair_id && nextRow.bottom_pair_id) {
+    const grp = await maybeCreateConsolationRoundGroup(admin, {
+      tournamentId: params.tournamentId,
+      nextMatchId,
+      mainBracketSize: params.mainBracketSize,
+    });
+    groupCreated = grp.created;
+    groupNo = grp.groupNo;
+    roundId = grp.roundId;
+    teeTime = grp.teeTime;
+  }
+
+  const isFinal = nextRoundNo >= mainRoundCount;
+  return {
+    advanced: true,
+    isFinal,
+    nextMatchId,
+    groupCreated,
+    groupNo,
+    roundId,
+    teeTime,
+    message: groupCreated
+      ? `Ganador a ${isFinal ? "FINAL de consolación" : `consolación R${nextRoundNo}`} · salida G${groupNo}.`
+      : `Ganador registrado en ${isFinal ? "final de consolación" : `consolación R${nextRoundNo}`} (esperando rival).`,
+  };
+}
+
 /** ¿Un perdedor de esta ronda sigue jugando consolación MP? */
 export function isConsolationMpEntryRound(
   rule: MatchPlayConsolationRule | null,
@@ -551,6 +687,31 @@ export async function backfillConsolationLosersFromRound(
       processed += 1;
       messages.push(res.message);
       if (res.groupCreated) groupsCreated += 1;
+    }
+  }
+
+  // Avanzar ganadores de matches de consolación ya cerrados (ej. R4 G3–G4 →
+  // final de consolación R5 G2).
+  const consolBracketId = await getConsolationBracketId(admin, tournamentId);
+  if (consolBracketId) {
+    const { data: consolDone } = await admin
+      .from("matchplay_matches")
+      .select("id, round_no, position_no, winner_pair_id, top_pair_id, bottom_pair_id, status")
+      .eq("bracket_id", consolBracketId)
+      .eq("status", "completed");
+    for (const m of consolDone ?? []) {
+      if (!m.winner_pair_id) continue;
+      const adv = await advanceConsolationWinner(admin, {
+        tournamentId,
+        consolationMatchId: String(m.id),
+        winnerPairId: String(m.winner_pair_id),
+        mainBracketSize: mainSize,
+      });
+      if (adv.advanced) {
+        processed += 1;
+        messages.push(adv.message);
+        if (adv.groupCreated) groupsCreated += 1;
+      }
     }
   }
 
