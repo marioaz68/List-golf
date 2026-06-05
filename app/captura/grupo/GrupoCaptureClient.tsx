@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import BackButton from "@/components/captura/BackButton";
 import BracketRoundBadge from "@/components/captura/BracketRoundBadge";
+import GpsChip from "@/components/captura/GpsChip";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   HOLES_FRONT,
@@ -659,6 +660,9 @@ export default function GrupoCaptureClient({
   const searchParams = useSearchParams();
   const backParam = searchParams.get("back");
   const backQs = backParam ? `&back=${encodeURIComponent(backParam)}` : "";
+  // UUIDs del URL para el chip GPS — ?me=<entry_id> | ?caddie=<caddie_id>
+  const meEntryIdParam = searchParams.get("me");
+  const caddieIdParam = searchParams.get("caddie");
   const scoreEntryBackHref = useMemo(
     () => buildScoreEntryHref({ tournamentId: meta.tournamentId }),
     [meta.tournamentId]
@@ -1188,8 +1192,13 @@ export default function GrupoCaptureClient({
                 {meta.players.length} jugadores · tee time {meta.teeTime ?? "—"}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 text-[11px]">
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <BackButton fallbackHref={scoreEntryBackHref} />
+              <GpsChip
+                entryId={meEntryIdParam}
+                caddieId={caddieIdParam}
+                groupId={meta.groupId}
+              />
               <Link
                 href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"

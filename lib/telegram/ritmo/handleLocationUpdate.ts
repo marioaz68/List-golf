@@ -97,7 +97,7 @@ async function loadGroup(
 }
 
 /** Jugador: inscripción más reciente → torneo, ronda activa y grupo. */
-async function buildPlayerContext(
+export async function buildPlayerContext(
   supabase: SupabaseClient,
   player: { id: string; first_name: string | null }
 ): Promise<ResolvedContext | null> {
@@ -144,7 +144,7 @@ async function buildPlayerContext(
 }
 
 /** Caddie: asignación activa más reciente → torneo, ronda activa y grupo. */
-async function buildCaddieContext(
+export async function buildCaddieContext(
   supabase: SupabaseClient,
   caddie: { id: string; first_name: string | null }
 ): Promise<ResolvedContext | null> {

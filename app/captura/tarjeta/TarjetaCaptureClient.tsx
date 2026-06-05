@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "@/components/captura/BackButton";
 import BracketRoundBadge from "@/components/captura/BracketRoundBadge";
+import GpsChip from "@/components/captura/GpsChip";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   getScoreClass,
@@ -428,6 +429,14 @@ export default function TarjetaCaptureClient({
     () => buildScoreEntryHref({ tournamentId: meta.tournamentId }),
     [meta.tournamentId]
   );
+  // UUID del caddie en el URL (?caddie=...) para el chip GPS.
+  // meta.myEntryId ya viene resuelto del query ?me=...
+  const [caddieIdParam, setCaddieIdParam] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    setCaddieIdParam(sp.get("caddie")?.trim() || null);
+  }, []);
   const [scoresByEntry, setScoresByEntry] = useState<ScoresByEntry>(() =>
     scoresFromPlayers(initial.players)
   );
@@ -1012,10 +1021,17 @@ export default function TarjetaCaptureClient({
                 Captura grupal · tiempo real
               </div>
             </div>
-            <BackButton
-              fallbackHref={scoreEntryBackHref}
-              className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
-            />
+            <div className="flex items-center gap-2">
+              <GpsChip
+                entryId={meta.myEntryId}
+                caddieId={caddieIdParam}
+                groupId={meta.groupId}
+              />
+              <BackButton
+                fallbackHref={scoreEntryBackHref}
+                className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+              />
+            </div>
           </div>
 
           <div className="space-y-2 p-2">
