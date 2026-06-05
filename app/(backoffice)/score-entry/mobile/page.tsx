@@ -11,6 +11,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
 import BackButton from "@/components/captura/BackButton";
+import GpsChip from "@/components/captura/GpsChip";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 
 /**
@@ -1429,14 +1430,21 @@ function MobileScoreEntryContent() {
             <div className="text-sm font-semibold">List.golf</div>
             <div className="text-[10px] opacity-70">Captura por grupo</div>
           </div>
-          <BackButton
-            fallbackHref={
-              tournamentId
-                ? buildScoreEntryHref({ tournamentId })
-                : "/score-entry"
-            }
-            className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
-          />
+          <div className="flex items-center gap-2">
+            <GpsChip
+              entryId={viewerEntryId}
+              caddieId={caddieFromUrl}
+              groupId={groupId}
+            />
+            <BackButton
+              fallbackHref={
+                tournamentId
+                  ? buildScoreEntryHref({ tournamentId })
+                  : "/score-entry"
+              }
+              className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+            />
+          </div>
         </header>
 
         {tab === "anotar" ? (
