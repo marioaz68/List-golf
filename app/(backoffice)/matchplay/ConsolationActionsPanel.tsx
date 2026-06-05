@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { StrokeAggregatePairRow } from "@/lib/matchplay/strokeAggregateStandings";
+import StrokeAggregateTeeSheetDnD from "./StrokeAggregateTeeSheetDnD";
 
 const btn: React.CSSProperties = {
   display: "inline-flex",
@@ -47,6 +48,7 @@ export default function ConsolationActionsPanel({
   );
   const [standings, setStandings] = useState<StandingsPayload | null>(null);
   const [standingsLoading, setStandingsLoading] = useState(false);
+  const [showDnd, setShowDnd] = useState(false);
 
   const refreshStandings = useCallback(async () => {
     setStandingsLoading(true);
@@ -146,6 +148,17 @@ export default function ConsolationActionsPanel({
         >
           {standingsLoading ? "…" : "↻ Clasificación stroke"}
         </button>
+        <button
+          type="button"
+          style={{
+            ...btn,
+            border: "1px solid #155e75",
+            background: showDnd ? "#0e7490" : "#0c4a5e",
+          }}
+          onClick={() => setShowDnd((v) => !v)}
+        >
+          {showDnd ? "Ocultar salidas (DnD)" : "✋ Acomodar salidas (DnD)"}
+        </button>
         <Link
           href={`/torneos/${tournamentId}/consolacion-stroke`}
           target="_blank"
@@ -155,6 +168,12 @@ export default function ConsolationActionsPanel({
           Ver pública ↗
         </Link>
       </div>
+
+      {showDnd ? (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2">
+          <StrokeAggregateTeeSheetDnD tournamentId={tournamentId} />
+        </div>
+      ) : null}
 
       {result ? (
         <div

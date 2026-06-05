@@ -25,6 +25,8 @@ import {
 
 export type StrokeAggregatePlayerRow = {
   entryId: string;
+  playerId: string | null;
+  gender: string;
   name: string;
   gross: number | null;
   net: number | null;
@@ -32,6 +34,15 @@ export type StrokeAggregatePlayerRow = {
   holesPlayed: number;
   playingHandicap: number;
   handicapIndex: number | null;
+};
+
+export type StrokeAggregateGroup = {
+  groupId: string;
+  groupNo: number;
+  /** Etiqueta de género (Hombres / Mujeres / Mixto). */
+  label: string;
+  teeTime: string | null;
+  members: StrokeAggregatePlayerRow[];
 };
 
 export type StrokeAggregatePairRow = {
@@ -58,6 +69,8 @@ export type StrokeAggregateStandings = {
   roundId: string | null;
   allowancePct: number;
   pairs: StrokeAggregatePairRow[];
+  /** Salidas (foursomes) de la consolación con score en vivo por jugador. */
+  groups: StrokeAggregateGroup[];
   message: string;
 };
 
@@ -290,6 +303,7 @@ export async function loadStrokeAggregateStandings(
     roundId: null,
     allowancePct: 80,
     pairs: [],
+    groups: [],
     message: msg,
   });
 
@@ -355,6 +369,7 @@ export async function loadStrokeAggregateStandings(
       roundId,
       allowancePct,
       pairs: [],
+      groups: [],
       message: "Aún no hay parejas perdedoras registradas.",
     };
   }
@@ -372,10 +387,36 @@ export async function loadStrokeAggregateStandings(
     if (t.player_b_entry_id) entryIds.add(String(t.player_b_entry_id));
   }
 
+  // Salidas (foursomes) STROKE AGREGADO de la ronda destino + sus integrantes.
+  const { data: strokeGroupRows } = await admin
+    .from("pairing_groups")
+    .select("id, group_no, tee_time, notes")
+    .eq("round_id", roundId)
+    .ilike("notes", `${STROKE_AGG_NOTES_PREFIX}%`)
+    .order("group_no", { ascending: true });
+  const strokeGroupIds = (strokeGroupRows ?? []).map((g) => String(g.id));
+  const groupMembersByGroup = new Map<
+    string,
+    Array<{ entryId: string; position: number }>
+  >();
+  if (strokeGroupIds.length > 0) {
+    const { data: memberRows } = await admin
+      .from("pairing_group_members")
+      .select("group_id, entry_id, position")
+      .in("group_id", strokeGroupIds);
+    for (const m of memberRows ?? []) {
+      const gid = String(m.group_id);
+      const list = groupMembersByGroup.get(gid) ?? [];
+      list.push({ entryId: String(m.entry_id), position: Number(m.position) || 0 });
+      groupMembersByGroup.set(gid, list);
+      if (m.entry_id) entryIds.add(String(m.entry_id));
+    }
+  }
+
   const { data: entries } = await admin
     .from("tournament_entries")
     .select(
-      "id, player_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, players(first_name, last_name)"
+      "id, player_id, handicap_index, course_handicap, playing_handicap, playing_handicap_override, players(first_name, last_name, gender)"
     )
     .in("id", Array.from(entryIds));
 
@@ -441,16 +482,26 @@ export async function loadStrokeAggregateStandings(
       : [...DEFAULT_STROKE_AGGREGATE_TIEBREAKERS];
   const tieSteps = await loadTieBreakSteps(admin, tournamentId, tieKeys);
 
+  const scoreCache = new Map<
+    string,
+    { row: StrokeAggregatePlayerRow; detail: RoundDetail | null }
+  >();
+
   function scorePlayer(entryId: string): {
     row: StrokeAggregatePlayerRow;
     detail: RoundDetail | null;
   } {
+    const cached = scoreCache.get(entryId);
+    if (cached) return cached;
+
     const entry = (entries ?? []).find((e) => String(e.id) === entryId);
     const p = entry?.players as
-      | { first_name: string | null; last_name: string | null }
-      | { first_name: string | null; last_name: string | null }[]
+      | { first_name: string | null; last_name: string | null; gender?: string | null }
+      | { first_name: string | null; last_name: string | null; gender?: string | null }[]
       | null;
     const player = Array.isArray(p) ? p[0] : p;
+    const playerId = entry?.player_id ? String(entry.player_id) : null;
+    const gender = String(player?.gender ?? "X").toUpperCase();
     const hi = entry?.handicap_index != null ? Number(entry.handicap_index) : null;
     const ph = effectivePlayingHandicapForScoring(
       entry?.playing_handicap_override ?? entry?.playing_handicap,
@@ -460,9 +511,11 @@ export async function loadStrokeAggregateStandings(
 
     const rs = rsByEntry.get(entryId);
     if (!rs) {
-      return {
+      const result = {
         row: {
           entryId,
+          playerId,
+          gender,
           name: formatName(player?.first_name ?? null, player?.last_name ?? null),
           gross: null,
           net: null,
@@ -473,6 +526,8 @@ export async function loadStrokeAggregateStandings(
         },
         detail: null,
       };
+      scoreCache.set(entryId, result);
+      return result;
     }
 
     const rawHoles = (holesByRs.get(rs.id) ?? []).map((h) => ({
@@ -491,9 +546,11 @@ export async function loadStrokeAggregateStandings(
     const scored = scoreRoundDetail(detail, catRule, ph, strokeIndexByHole, hi);
     const holesPlayed = rawHoles.filter((h) => h.strokes != null).length;
 
-    return {
+    const result = {
       row: {
         entryId,
+        playerId,
+        gender,
         name: formatName(player?.first_name ?? null, player?.last_name ?? null),
         gross: scored.gross,
         net: scored.netStrokes,
@@ -504,6 +561,8 @@ export async function loadStrokeAggregateStandings(
       },
       detail,
     };
+    scoreCache.set(entryId, result);
+    return result;
   }
 
   const pairRows: StrokeAggregatePairRow[] = [];
@@ -580,12 +639,31 @@ export async function loadStrokeAggregateStandings(
       i > 0 && pairRows[i].aggregateNet === pairRows[i - 1].aggregateNet;
   }
 
+  // Salidas (foursomes) con score en vivo por jugador.
+  const groups: StrokeAggregateGroup[] = [];
+  for (const g of strokeGroupRows ?? []) {
+    const gid = String(g.id);
+    const rawLabel = String(g.notes ?? "").slice(STROKE_AGG_NOTES_PREFIX.length).trim();
+    const memberRows = (groupMembersByGroup.get(gid) ?? []).sort(
+      (a, b) => a.position - b.position
+    );
+    const members = memberRows.map((m) => scorePlayer(m.entryId).row);
+    groups.push({
+      groupId: gid,
+      groupNo: Number(g.group_no) || 0,
+      label: rawLabel || "Stroke",
+      teeTime: g.tee_time != null ? String(g.tee_time) : null,
+      members,
+    });
+  }
+
   return {
     ok: true,
     roundNo: lastRoundNo,
     roundId,
     allowancePct,
     pairs: pairRows,
+    groups,
     message: `${pairRows.length} pareja(s) en clasificación stroke agregado (R${lastRoundNo}, neto ${allowancePct}% HI).`,
   };
 }

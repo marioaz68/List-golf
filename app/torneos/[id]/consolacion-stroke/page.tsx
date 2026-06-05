@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
 import type { TournamentSettings } from "@/types/tournament";
-import AutoRefresh from "@/components/public/AutoRefresh";
 import StrokeAggregateStandingsView from "./StrokeAggregateStandingsView";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +45,6 @@ export default async function ConsolacionStrokePage(props: {
 
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
-      <AutoRefresh intervalMs={15000} />
       <StrokeAggregateStandingsView tournamentId={tournamentId} />
     </main>
   );
