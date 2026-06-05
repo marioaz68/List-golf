@@ -7,8 +7,23 @@ import { canAccessModule } from "@/lib/auth/permissions";
 import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
 
+export type RecipientOutcome = {
+  name: string;
+  role: "player" | "caddie";
+  groupNo: number | null;
+  /** sent = entregado por Telegram; failed = Telegram rechazó; skipped = sin Telegram vinculado. */
+  status: "sent" | "failed" | "skipped";
+  detail?: string | null;
+};
+
 export type SendResult =
-  | { ok: true; sent: number; failed: number }
+  | {
+      ok: true;
+      sent: number;
+      failed: number;
+      skipped: number;
+      outcomes: RecipientOutcome[];
+    }
   | { ok: false; error: string };
 
 function fullName(
@@ -52,6 +67,7 @@ async function loadGroupRecipients(args: {
   groupId: string;
 }): Promise<{
   recipients: Recipient[];
+  skipped: { name: string; role: "player" | "caddie" }[];
   groupNo: number | null;
   startingHole: number | null;
   teeTime: string | null;
@@ -85,6 +101,7 @@ async function loadGroupRecipients(args: {
     : null;
 
   const recipients: Recipient[] = [];
+  const skipped: { name: string; role: "player" | "caddie" }[] = [];
 
   // Jugadores del grupo
   const { data: members } = await admin
@@ -133,9 +150,12 @@ async function loadGroupRecipients(args: {
     const entryId = String(m.entry_id ?? entry?.id ?? "").trim();
     if (entryId) groupEntryIds.push(entryId);
     if (!player) continue;
-    const chatId = String(player.telegram_chat_id ?? player.telegram_user_id ?? "").trim();
-    if (!chatId) continue;
     const name = fullName(player.first_name, player.last_name);
+    const chatId = String(player.telegram_chat_id ?? player.telegram_user_id ?? "").trim();
+    if (!chatId) {
+      skipped.push({ name, role: "player" });
+      continue;
+    }
     recipients.push({
       chatId,
       name,
@@ -181,9 +201,12 @@ async function loadGroupRecipients(args: {
         last_name: string | null;
         telegram?: string | null;
       }>) {
-        const chatId = String(c.telegram ?? "").trim();
-        if (!/^\d+$/.test(chatId)) continue;
         const name = fullName(c.first_name, c.last_name);
+        const chatId = String(c.telegram ?? "").trim();
+        if (!/^\d+$/.test(chatId)) {
+          skipped.push({ name, role: "caddie" });
+          continue;
+        }
         recipients.push({
           chatId,
           name,
@@ -207,6 +230,7 @@ async function loadGroupRecipients(args: {
 
   return {
     recipients: unique,
+    skipped,
     groupNo: groupRow?.group_no ?? null,
     startingHole: groupRow?.starting_hole ?? null,
     teeTime: groupRow?.tee_time ?? null,
@@ -253,9 +277,7 @@ export async function sendCaptureLinkToGroupAction(
 
   try {
     const data = await loadGroupRecipients({ tournamentId, roundId, groupId });
-    if (data.recipients.length === 0) {
-      return { ok: true, sent: 0, failed: 0 };
-    }
+    const outcomes: RecipientOutcome[] = [];
     let sent = 0;
     let failed = 0;
     for (const r of data.recipients) {
@@ -280,10 +302,34 @@ export async function sendCaptureLinkToGroupAction(
         buttons: [[{ text: buttonLabel, url: personalUrl }]],
         disablePreview: true,
       });
-      if (res.ok) sent += 1;
-      else failed += 1;
+      if (res.ok) {
+        sent += 1;
+        outcomes.push({
+          name: r.name,
+          role: r.role,
+          groupNo: data.groupNo,
+          status: "sent",
+        });
+      } else {
+        failed += 1;
+        outcomes.push({
+          name: r.name,
+          role: r.role,
+          groupNo: data.groupNo,
+          status: "failed",
+          detail: res.error ?? null,
+        });
+      }
     }
-    return { ok: true, sent, failed };
+    for (const s of data.skipped) {
+      outcomes.push({
+        name: s.name,
+        role: s.role,
+        groupNo: data.groupNo,
+        status: "skipped",
+      });
+    }
+    return { ok: true, sent, failed, skipped: data.skipped.length, outcomes };
   } catch (err) {
     return {
       ok: false,
@@ -317,6 +363,8 @@ export async function sendCaptureLinkToAllGroupsAction(
 
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
+    const outcomes: RecipientOutcome[] = [];
     for (const g of (groups ?? []) as Array<{ id: string }>) {
       const fd = new FormData();
       fd.set("tournament_id", tournamentId);
@@ -326,11 +374,20 @@ export async function sendCaptureLinkToAllGroupsAction(
       if (r.ok) {
         sent += r.sent;
         failed += r.failed;
+        skipped += r.skipped;
+        outcomes.push(...r.outcomes);
       } else {
         failed += 1;
+        outcomes.push({
+          name: r.error,
+          role: "player",
+          groupNo: null,
+          status: "failed",
+          detail: r.error,
+        });
       }
     }
-    return { ok: true, sent, failed };
+    return { ok: true, sent, failed, skipped, outcomes };
   } catch (err) {
     return {
       ok: false,

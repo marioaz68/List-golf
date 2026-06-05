@@ -6,6 +6,7 @@ import {
   sendCaptureLinkToGroupAction,
   sendCaptureLinkToAllGroupsAction,
   type SendResult,
+  type RecipientOutcome,
 } from "./actions";
 import AuditCaptureModal from "./AuditCaptureModal";
 
@@ -41,6 +42,7 @@ type Feedback = {
   groupId: string;
   kind: "ok" | "warn" | "error";
   text: string;
+  outcomes?: RecipientOutcome[];
 };
 
 function buildQrUrl(target: string, size = 360): string {
@@ -51,26 +53,90 @@ function buildQrUrl(target: string, size = 360): string {
 function formatRecipientResult(
   tpl: { ok: string; partial: string; empty: string; error: string },
   result: SendResult
-): { kind: "ok" | "warn" | "error"; text: string } {
+): {
+  kind: "ok" | "warn" | "error";
+  text: string;
+  outcomes?: RecipientOutcome[];
+} {
   if (!result.ok) {
     return { kind: "error", text: result.error || tpl.error };
   }
-  const { sent, failed } = result;
-  if (sent === 0 && failed === 0) {
-    return { kind: "warn", text: tpl.empty };
+  const { sent, failed, skipped, outcomes } = result;
+  if (sent === 0 && failed === 0 && skipped === 0) {
+    return { kind: "warn", text: tpl.empty, outcomes };
   }
-  if (failed > 0) {
-    return {
-      kind: "warn",
-      text: tpl.partial
-        .replace("{sent}", String(sent))
-        .replace("{failed}", String(failed)),
-    };
+  const parts: string[] = [`✓ ${sent} enviado(s)`];
+  if (failed > 0) parts.push(`✗ ${failed} con error`);
+  if (skipped > 0) parts.push(`— ${skipped} sin Telegram`);
+  const text = parts.join(" · ");
+  const kind: "ok" | "warn" = failed > 0 || sent === 0 ? "warn" : "ok";
+  return { kind, text, outcomes };
+}
+
+const ROLE_LABEL: Record<"player" | "caddie", string> = {
+  player: "Jugador",
+  caddie: "Caddie",
+};
+
+const STATUS_STYLE: Record<
+  RecipientOutcome["status"],
+  { icon: string; cls: string }
+> = {
+  sent: { icon: "✓", cls: "text-emerald-700" },
+  failed: { icon: "✗", cls: "text-red-700" },
+  skipped: { icon: "—", cls: "text-slate-400" },
+};
+
+/** Lista desglosada de quién recibió / falló / quedó sin Telegram. */
+function OutcomeList({ outcomes }: { outcomes: RecipientOutcome[] }) {
+  if (!outcomes || outcomes.length === 0) return null;
+  // Agrupar por número de grupo para lectura rápida.
+  const byGroup = new Map<number | null, RecipientOutcome[]>();
+  for (const o of outcomes) {
+    const arr = byGroup.get(o.groupNo) ?? [];
+    arr.push(o);
+    byGroup.set(o.groupNo, arr);
   }
-  return {
-    kind: "ok",
-    text: tpl.ok.replace("{sent}", String(sent)),
-  };
+  const groups = Array.from(byGroup.entries()).sort((a, b) => {
+    const an = a[0] ?? Number.POSITIVE_INFINITY;
+    const bn = b[0] ?? Number.POSITIVE_INFINITY;
+    return an - bn;
+  });
+  return (
+    <div className="mt-2 max-h-64 overflow-auto rounded border border-slate-200 bg-white">
+      {groups.map(([groupNo, list]) => (
+        <div key={String(groupNo)} className="border-b border-slate-100 last:border-0">
+          <div className="bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+            Grupo #{groupNo ?? "?"}
+          </div>
+          <ul className="divide-y divide-slate-50">
+            {list.map((o, i) => {
+              const st = STATUS_STYLE[o.status];
+              return (
+                <li
+                  key={i}
+                  className="flex items-center justify-between gap-2 px-2 py-1 text-xs"
+                >
+                  <span className="text-slate-800">
+                    <span className="text-slate-400">{ROLE_LABEL[o.role]}:</span>{" "}
+                    {o.name}
+                  </span>
+                  <span className={`font-semibold ${st.cls}`}>
+                    {st.icon}{" "}
+                    {o.status === "sent"
+                      ? "recibió"
+                      : o.status === "failed"
+                        ? "error"
+                        : "sin Telegram"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function CapturaTelegramPanel(props: {
@@ -87,7 +153,9 @@ export default function CapturaTelegramPanel(props: {
   const [bulkFeedback, setBulkFeedback] = useState<{
     kind: "ok" | "warn" | "error";
     text: string;
+    outcomes?: RecipientOutcome[];
   } | null>(null);
+  const [showBulkDetail, setShowBulkDetail] = useState(false);
   const [busyGroupId, setBusyGroupId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [, startTx] = useTransition();
@@ -140,6 +208,7 @@ export default function CapturaTelegramPanel(props: {
     if (!confirm(tt.btnSendAllConfirm)) return;
     setBulkBusy(true);
     setBulkFeedback(null);
+    setShowBulkDetail(true);
     const fd = new FormData();
     fd.set("tournament_id", props.tournamentId);
     fd.set("round_id", props.roundId);
@@ -179,7 +248,21 @@ export default function CapturaTelegramPanel(props: {
                 : "border-red-300 bg-red-50 text-red-900"
           }`}
         >
-          {bulkFeedback.text}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>{bulkFeedback.text}</span>
+            {bulkFeedback.outcomes && bulkFeedback.outcomes.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowBulkDetail((v) => !v)}
+                className="rounded border border-black/20 px-2 py-0.5 text-xs font-medium hover:opacity-80"
+              >
+                {showBulkDetail ? "Ocultar detalle" : "Ver detalle"}
+              </button>
+            ) : null}
+          </div>
+          {showBulkDetail && bulkFeedback.outcomes ? (
+            <OutcomeList outcomes={bulkFeedback.outcomes} />
+          ) : null}
         </div>
       ) : null}
 
@@ -332,16 +415,21 @@ export default function CapturaTelegramPanel(props: {
                       </button>
                     </div>
                     {fb ? (
-                      <div
-                        className={`mt-1 text-[11px] ${
-                          fb.kind === "ok"
-                            ? "text-emerald-700"
-                            : fb.kind === "warn"
-                              ? "text-amber-700"
-                              : "text-red-700"
-                        }`}
-                      >
-                        {fb.text}
+                      <div className="mt-1">
+                        <div
+                          className={`text-[11px] ${
+                            fb.kind === "ok"
+                              ? "text-emerald-700"
+                              : fb.kind === "warn"
+                                ? "text-amber-700"
+                                : "text-red-700"
+                          }`}
+                        >
+                          {fb.text}
+                        </div>
+                        {fb.outcomes && fb.outcomes.length > 0 ? (
+                          <OutcomeList outcomes={fb.outcomes} />
+                        ) : null}
                       </div>
                     ) : null}
                   </td>
