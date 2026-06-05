@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
+import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
 
 export type LiveStatus = "en_ritmo" | "adelantado" | "atrasado" | "sin_datos";
 export type GpsState = "live" | "stale" | "none";
@@ -26,6 +27,7 @@ export interface LiveGroup {
   label: string;
   startingHole: number;
   teeTime: string | null;
+  actualStartAt: string | null;
   players: string[];
   playerRows: PlayerRow[];
   status: LiveStatus;
@@ -54,6 +56,7 @@ interface Props {
   roundLabel: string;
   rounds: RoundOption[];
   currentRoundId: string | null;
+  roundDate: string | null;
   groups: LiveGroup[];
   /** ISO del momento en que el servidor calculó estos datos. */
   computedAtISO: string;
@@ -87,6 +90,7 @@ export default function RitmoLiveView({
   roundLabel,
   rounds,
   currentRoundId,
+  roundDate,
   groups,
   computedAtISO,
   mapUnsupported,
@@ -436,6 +440,7 @@ export default function RitmoLiveView({
             <GroupCard
               key={g.id}
               g={g}
+              roundDate={roundDate}
               open={selectedId === g.id}
               onToggle={() =>
                 setSelectedId(selectedId === g.id ? null : g.id)
@@ -601,10 +606,12 @@ const GPS_BADGE: Record<
 
 function GroupCard({
   g,
+  roundDate,
   open,
   onToggle,
 }: {
   g: LiveGroup;
+  roundDate: string | null;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -689,7 +696,13 @@ function GroupCard({
           }}
         >
           <div style={{ fontSize: 10, color: "#9ca3af" }}>
-            tee {formatTime(g.teeTime)}
+            {g.actualStartAt ? (
+              <span style={{ color: "#6ee7b7", fontWeight: 700 }}>
+                ▶ salió {formatStartTimeMexico(g.actualStartAt)}
+              </span>
+            ) : (
+              <>tee {formatTime(g.teeTime)}</>
+            )}
             {g.startingHole && g.startingHole !== 1 ? ` · sale H${g.startingHole}` : ""}
           </div>
           <div style={{ fontSize: 10, color: "#9ca3af" }}>
@@ -721,6 +734,8 @@ function GroupCard({
           </div>
         )}
       </button>
+
+      <GroupStartControl groupId={g.id} actualStartAt={g.actualStartAt} roundDate={roundDate} />
 
       {open ? (
         <div
@@ -879,5 +894,202 @@ function DeltaChip({
       {ahead ? "−" : "+"}
       {mins} min
     </span>
+  );
+}
+
+function GroupStartControl({
+  groupId,
+  actualStartAt,
+  roundDate,
+}: {
+  groupId: string;
+  actualStartAt: string | null;
+  roundDate: string | null;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [timeValue, setTimeValue] = useState("");
+  const [err, setErr] = useState("");
+
+  async function post(body: Record<string, unknown>) {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/ritmo/mark-start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_id: groupId, ...body }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setErr(data.error ?? "Error");
+      } else {
+        setEditing(false);
+        router.refresh();
+      }
+    } catch {
+      setErr("Error de red");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const wrap: React.CSSProperties = {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+    padding: "6px 10px",
+    borderTop: "1px solid #222",
+    background: "#101010",
+  };
+  const btn: React.CSSProperties = {
+    fontSize: 10,
+    fontWeight: 700,
+    padding: "4px 9px",
+    borderRadius: 5,
+    border: "1px solid #374151",
+    background: "#1f2937",
+    color: "#e5e7eb",
+    cursor: busy ? "default" : "pointer",
+    fontFamily: "inherit",
+  };
+
+  if (!actualStartAt) {
+    return (
+      <div style={wrap}>
+        {!editing ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void post({})}
+              style={{
+                ...btn,
+                background: "#065f46",
+                borderColor: "#047857",
+                color: "#d1fae5",
+              }}
+            >
+              ▶ Salió ahora
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setEditing(true);
+                const now = new Intl.DateTimeFormat("en-GB", {
+                  timeZone: "America/Mexico_City",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }).format(new Date());
+                setTimeValue(now);
+              }}
+              style={btn}
+            >
+              🕐 Hora…
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              type="time"
+              value={timeValue}
+              onChange={(e) => setTimeValue(e.target.value)}
+              style={{
+                fontSize: 11,
+                padding: "3px 6px",
+                borderRadius: 5,
+                border: "1px solid #374151",
+                background: "#0a0a0a",
+                color: "#fff",
+                fontFamily: "inherit",
+              }}
+            />
+            <button
+              type="button"
+              disabled={busy || !timeValue}
+              onClick={() => void post({ time: timeValue, round_date: roundDate })}
+              style={{ ...btn, background: "#065f46", borderColor: "#047857", color: "#d1fae5" }}
+            >
+              Guardar
+            </button>
+            <button type="button" disabled={busy} onClick={() => setEditing(false)} style={btn}>
+              Cancelar
+            </button>
+          </>
+        )}
+        {err ? <span style={{ fontSize: 10, color: "#fca5a5" }}>{err}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div style={wrap}>
+      <span style={{ fontSize: 10, color: "#6ee7b7", fontWeight: 700 }}>
+        ▶ Salida real {formatStartTimeMexico(actualStartAt)}
+      </span>
+      {!editing ? (
+        <>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditing(true);
+              setTimeValue(
+                new Intl.DateTimeFormat("en-GB", {
+                  timeZone: "America/Mexico_City",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }).format(new Date(actualStartAt))
+              );
+            }}
+            style={btn}
+          >
+            ✎ Editar
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void post({ clear: true })}
+            style={{ ...btn, background: "#3f1d1d", borderColor: "#7f1d1d", color: "#fecaca" }}
+          >
+            ✕ Quitar
+          </button>
+        </>
+      ) : (
+        <>
+          <input
+            type="time"
+            value={timeValue}
+            onChange={(e) => setTimeValue(e.target.value)}
+            style={{
+              fontSize: 11,
+              padding: "3px 6px",
+              borderRadius: 5,
+              border: "1px solid #374151",
+              background: "#0a0a0a",
+              color: "#fff",
+              fontFamily: "inherit",
+            }}
+          />
+          <button
+            type="button"
+            disabled={busy || !timeValue}
+            onClick={() => void post({ time: timeValue, round_date: roundDate, force: true })}
+            style={{ ...btn, background: "#065f46", borderColor: "#047857", color: "#d1fae5" }}
+          >
+            Guardar
+          </button>
+          <button type="button" disabled={busy} onClick={() => setEditing(false)} style={btn}>
+            Cancelar
+          </button>
+        </>
+      )}
+      {err ? <span style={{ fontSize: 10, color: "#fca5a5" }}>{err}</span> : null}
+    </div>
   );
 }

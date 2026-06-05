@@ -31,6 +31,7 @@ export type ResolvedContext = {
   roundDate: string | null;
   groupId: string | null;
   groupTeeTime: string | null;
+  groupActualStart: string | null;
   groupStartHole: number;
   playerId: string | null;
   displayName: string;
@@ -44,7 +45,12 @@ function oneOrNull<T>(v: T | T[] | null | undefined): T | null {
 }
 
 type RoundLite = { id: string; round_no: number | null; round_date: string | null };
-type GroupLite = { id: string; starting_hole: number | null; tee_time: string | null };
+type GroupLite = {
+  id: string;
+  starting_hole: number | null;
+  tee_time: string | null;
+  actual_start_at: string | null;
+};
 
 /** Fecha de hoy en horario de México (YYYY-MM-DD). */
 function todayMexicoDate(): string {
@@ -89,7 +95,7 @@ async function loadGroup(
 ): Promise<GroupLite | null> {
   const { data } = await supabase
     .from("pairing_groups")
-    .select("id, starting_hole, tee_time")
+    .select("id, starting_hole, tee_time, actual_start_at")
     .eq("id", groupId)
     .eq("round_id", roundId)
     .maybeSingle();
@@ -136,6 +142,7 @@ export async function buildPlayerContext(
     roundDate: round?.round_date ?? null,
     groupId: group?.id ?? null,
     groupTeeTime: group?.tee_time ?? null,
+    groupActualStart: group?.actual_start_at ?? null,
     groupStartHole: group?.starting_hole ?? 1,
     playerId: player.id,
     displayName: player.first_name ?? "jugador",
@@ -220,6 +227,7 @@ export async function buildCaddieContext(
     roundDate: round?.round_date ?? null,
     groupId: group?.id ?? null,
     groupTeeTime: group?.tee_time ?? null,
+    groupActualStart: group?.actual_start_at ?? null,
     groupStartHole: group?.starting_hole ?? 1,
     playerId: null,
     displayName: caddie.first_name ?? "caddie",
@@ -343,6 +351,7 @@ export async function handleRitmoLocationUpdate(
   const pace = computePace({
     hoyoActual: hoyoSuavizado,
     teeTimeISO: ctx.groupTeeTime,
+    actualStartISO: ctx.groupActualStart,
     teeStartHole: ctx.groupStartHole,
     roundDate: ctx.roundDate,
     perHoleMinutes,

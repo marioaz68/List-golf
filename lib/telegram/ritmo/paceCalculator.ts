@@ -39,7 +39,9 @@ export type PaceStatus =
 
 interface ComputePaceArgs {
   hoyoActual: number | null;
-  teeTimeISO: string | null;     // HH:MM:SS o ISO
+  teeTimeISO: string | null;     // HH:MM:SS o ISO (programado)
+  /** Si existe, es la referencia de ritmo (salida real del grupo). */
+  actualStartISO?: string | null;
   teeStartHole: number;          // 1 o 10 (shotgun)
   roundDate: string | null;      // YYYY-MM-DD
   timezone?: string;
@@ -50,19 +52,34 @@ interface ComputePaceArgs {
 }
 
 export function computePace(args: ComputePaceArgs): PaceStatus {
-  const { hoyoActual, teeTimeISO, teeStartHole, roundDate, perHoleMinutes } = args;
+  const {
+    hoyoActual,
+    teeTimeISO,
+    actualStartISO,
+    teeStartHole,
+    roundDate,
+    perHoleMinutes,
+  } = args;
   const now = args.now ?? new Date();
 
   if (hoyoActual == null) {
     return { kind: "sin_datos", msg: "Sin detectar hoyo todavía." };
   }
-  if (!teeTimeISO || !roundDate) {
-    return { kind: "ok", hoyo: hoyoActual, msg: `📍 Hoyo ${hoyoActual}` };
+
+  let teeDate: Date | null = null;
+  if (actualStartISO) {
+    const d = new Date(actualStartISO);
+    if (!Number.isNaN(d.getTime())) teeDate = d;
+  } else if (teeTimeISO && roundDate) {
+    teeDate = parseTeeDateTime(roundDate, teeTimeISO);
   }
 
-  const teeDate = parseTeeDateTime(roundDate, teeTimeISO);
   if (!teeDate) {
-    return { kind: "ok", hoyo: hoyoActual, msg: `📍 Hoyo ${hoyoActual}` };
+    return {
+      kind: "ok",
+      hoyo: hoyoActual,
+      msg: `📍 Hoyo ${hoyoActual} · sin hora de salida (marcar arranque del grupo)`,
+    };
   }
 
   const minutosTranscurridos = (now.getTime() - teeDate.getTime()) / 60000;
@@ -135,6 +152,9 @@ function parseTeeDateTime(roundDate: string, teeTime: string): Date | null {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }
+
+/** Exportado para ritmo / recordatorios (salida programada). */
+export { parseTeeDateTime };
 
 /** Hoyo "oficial" del grupo: la moda de los últimos N puntos detectados.
  *  Filtra falsos positivos de zonas con traslape entre hoyos paralelos. */

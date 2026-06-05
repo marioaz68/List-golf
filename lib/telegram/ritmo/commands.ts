@@ -97,6 +97,7 @@ export async function buildRitmoStatusReply(
   const pace = computePace({
     hoyoActual: hoyo,
     teeTimeISO: ctx.groupTeeTime,
+    actualStartISO: ctx.groupActualStart,
     teeStartHole: ctx.groupStartHole,
     roundDate: ctx.roundDate,
     perHoleMinutes,

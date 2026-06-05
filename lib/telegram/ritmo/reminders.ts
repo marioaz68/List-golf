@@ -65,7 +65,7 @@ export async function runRitmoReminders(
   // 2) Grupos de esas rondas
   const { data: groups, error: groupsErr } = await supabase
     .from("pairing_groups")
-    .select("id, round_id, tee_time, starting_hole")
+    .select("id, round_id, tee_time, starting_hole, actual_start_at")
     .in("round_id", activeRoundIds);
   if (groupsErr) {
     return { ok: true, invitedCount: 0, lateCount: 0, groupsChecked: 0,
@@ -83,6 +83,10 @@ export async function runRitmoReminders(
   for (const group of groups) {
     const tournamentId = tournamentIdByRound.get(group.round_id) ?? "";
     if (!tournamentId) continue;
+
+    // Si ya se marcó la salida real, el ritmo se mide desde ahí: no tiene
+    // sentido invitar "antes del tee" ni avisar "tarde respecto al tee".
+    if (group.actual_start_at) continue;
 
     const teeDate = parseTeeDateTime(today, group.tee_time);
     if (!teeDate) continue;

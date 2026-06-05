@@ -39,6 +39,7 @@ type GroupRow = {
   group_no: number | null;
   starting_hole: number | null;
   tee_time: string | null;
+  actual_start_at: string | null;
 };
 
 type MemberRow = { group_id: string; entry_id: string };
@@ -214,6 +215,7 @@ export default async function RitmoPage({
           roundLabel="Sin rondas"
           rounds={[]}
           currentRoundId={null}
+          roundDate={null}
           groups={[]}
           computedAtISO={computedAtISO}
           mapUnsupported={mapUnsupported}
@@ -225,7 +227,7 @@ export default async function RitmoPage({
   // Grupos de la ronda.
   const { data: groupsRaw } = await admin
     .from("pairing_groups")
-    .select("id, group_no, starting_hole, tee_time")
+    .select("id, group_no, starting_hole, tee_time, actual_start_at")
     .eq("round_id", round.id)
     .order("group_no", { ascending: true });
   const groupRows = (groupsRaw ?? []) as GroupRow[];
@@ -330,6 +332,7 @@ export default async function RitmoPage({
     const pace = computePace({
       hoyoActual: smoothedHole,
       teeTimeISO: g.tee_time,
+      actualStartISO: g.actual_start_at,
       teeStartHole: g.starting_hole ?? 1,
       roundDate: round!.round_date,
       now,
@@ -381,6 +384,7 @@ export default async function RitmoPage({
       label: `Grupo ${g.group_no ?? "?"}`,
       startingHole: g.starting_hole ?? 1,
       teeTime: g.tee_time,
+      actualStartAt: g.actual_start_at,
       players,
       playerRows,
       status,
@@ -407,6 +411,7 @@ export default async function RitmoPage({
         roundLabel={roundLabel}
         rounds={rounds.map((r) => ({ id: r.id, round_no: r.round_no }))}
         currentRoundId={round.id}
+        roundDate={round.round_date}
         groups={groups}
         computedAtISO={computedAtISO}
         mapUnsupported={mapUnsupported}
