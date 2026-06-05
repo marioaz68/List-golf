@@ -11,6 +11,7 @@ import {
   generateMatchPlayBracket,
   publishMatchPlayBracket,
 } from "./actions";
+import ConsolationActionsPanel from "./ConsolationActionsPanel";
 
 const buttonStyle: React.CSSProperties = {
   display: "inline-flex",
@@ -158,6 +159,8 @@ export default function MatchPlayBracketPanel({
               </span>
             ) : null}
           </div>
+
+          <ConsolationActionsPanel tournamentId={tournamentId} />
 
           <div className="overflow-x-auto pb-2">
             <div className="flex min-w-max gap-4">
