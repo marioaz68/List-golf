@@ -32,6 +32,8 @@ export interface LiveGroup {
   playerRows: PlayerRow[];
   status: LiveStatus;
   hoyo: number | null;
+  /** Fuente del hoyo mostrado: escores capturados, GPS, o ninguna. */
+  holeSource: "scores" | "gps" | null;
   detail: string;
   deltaMinutes: number | null;
   lat: number | null;
@@ -39,6 +41,12 @@ export interface LiveGroup {
   lastTs: string | null;
   stale: boolean;
   gpsState: GpsState;
+  /** Hoyos capturados por el grupo (máximo entre jugadores). */
+  scoreHolesPlayed: number;
+  /** True si ya capturaron los 18 hoyos. */
+  scoreFinished: boolean;
+  /** Timestamp de la última captura de escores del grupo. */
+  lastScoreTs: string | null;
   caddies: CaddieCoverageRow[];
   playersWithTelegram: number;
   playerCount: number;
@@ -81,6 +89,19 @@ const STATUS_RANK: Record<LiveStatus, number> = {
 function formatTime(value: string | null): string {
   if (!value) return "—";
   return value.slice(0, 5);
+}
+
+/** "hace 3 min" / "hace 1 h 5 m" a partir de un ISO, relativo a ahora. */
+function agoLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `hace ${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `hace ${h} h${m ? ` ${m} m` : ""}`;
 }
 
 export default function RitmoLiveView({
@@ -177,6 +198,14 @@ export default function RitmoLiveView({
       : sortedGroups;
     return base;
   }, [sortedGroups, onlyMissingGps]);
+
+  // ¿Algún grupo tiene captura de escores? Permite mostrar ritmo sin GPS.
+  const withScores = useMemo(
+    () =>
+      groups.filter((g) => g.scoreHolesPlayed > 0 || g.lastScoreTs != null)
+        .length,
+    [groups]
+  );
 
   const sidebar = (
     <div
@@ -411,7 +440,7 @@ export default function RitmoLiveView({
           <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>
             No hay grupos en esta ronda.
           </div>
-        ) : withPosition === 0 ? (
+        ) : withPosition === 0 && withScores === 0 ? (
           <div
             style={{
               margin: 8,
@@ -425,29 +454,48 @@ export default function RitmoLiveView({
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 6, color: "#fbbf24" }}>
-              Aún nadie comparte ubicación
+              Aún sin datos de ritmo
             </div>
-            Para ver el ritmo en vivo, los jugadores o caddies deben compartir su
-            <b> Ubicación en tiempo real</b> (Live Location) por Telegram al bot
-            del torneo. En cuanto lleguen posiciones aparecerán aquí los grupos
-            sobre el mapa.
+            El ritmo se calcula con los <b>escores que captura el caddie</b> y,
+            si está disponible, con la <b>ubicación en tiempo real</b> (Live
+            Location) por Telegram. En cuanto el caddie capture el primer hoyo o
+            alguien comparta ubicación aparecerá aquí el ritmo de cada grupo.
           </div>
         ) : visibleGroups.length === 0 ? (
           <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>
             Todos los grupos tienen GPS activo.
           </div>
         ) : (
-          visibleGroups.map((g) => (
-            <GroupCard
-              key={g.id}
-              g={g}
-              roundDate={roundDate}
-              open={selectedId === g.id}
-              onToggle={() =>
-                setSelectedId(selectedId === g.id ? null : g.id)
-              }
-            />
-          ))
+          <>
+            {withPosition === 0 ? (
+              <div
+                style={{
+                  margin: "4px 4px 8px",
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #334155",
+                  background: "#0b1220",
+                  fontSize: 10,
+                  color: "#93c5fd",
+                  lineHeight: 1.4,
+                }}
+              >
+                Ritmo derivado de los <b>escores capturados</b> (nadie comparte
+                ubicación en vivo). El mapa se activa cuando llegue GPS.
+              </div>
+            ) : null}
+            {visibleGroups.map((g) => (
+              <GroupCard
+                key={g.id}
+                g={g}
+                roundDate={roundDate}
+                open={selectedId === g.id}
+                onToggle={() =>
+                  setSelectedId(selectedId === g.id ? null : g.id)
+                }
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -699,7 +747,20 @@ function GroupCard({
               {g.number}
             </div>
             <div style={{ fontSize: 12, fontWeight: 700 }}>
-              {g.hoyo != null ? `Hoyo ${g.hoyo}` : "Sin hoyo"}
+              {g.scoreFinished
+                ? "🏁 Final"
+                : g.hoyo != null
+                  ? `Hoyo ${g.hoyo}`
+                  : "Sin hoyo"}
+              {g.holeSource === "scores" ? (
+                <span style={{ fontSize: 9, color: "#86efac", marginLeft: 4 }}>
+                  📝
+                </span>
+              ) : g.holeSource === "gps" ? (
+                <span style={{ fontSize: 9, color: "#7dd3fc", marginLeft: 4 }}>
+                  📡
+                </span>
+              ) : null}
             </div>
             <span
               style={{
@@ -742,6 +803,44 @@ function GroupCard({
 
         <div style={{ fontSize: 11, color: "#d1d5db", marginTop: 4 }}>
           {g.detail}
+        </div>
+
+        <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background:
+                g.scoreHolesPlayed > 0 ? "#064e3b" : "#3f3f46",
+              color: g.scoreHolesPlayed > 0 ? "#6ee7b7" : "#a1a1aa",
+            }}
+          >
+            {g.scoreHolesPlayed > 0
+              ? `📝 ${g.scoreHolesPlayed}/18${
+                  agoLabel(g.lastScoreTs) ? ` · ${agoLabel(g.lastScoreTs)}` : ""
+                }`
+              : "📝 sin captura"}
+          </span>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "1px 6px",
+              borderRadius: 3,
+              background: g.gpsState === "live" ? "#0c4a6e" : "#3f3f46",
+              color: g.gpsState === "live" ? "#7dd3fc" : "#a1a1aa",
+            }}
+          >
+            {g.gpsState === "live"
+              ? `📡 GPS${agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""}`
+              : g.gpsState === "stale"
+                ? `📡 GPS viejo${
+                    agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""
+                  }`
+                : "📡 sin GPS"}
+          </span>
         </div>
         {g.caddies.length > 0 ? (
           <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>

@@ -16,6 +16,10 @@ import {
   loadGroupCoverageForRound,
   type GroupGpsState,
 } from "@/lib/ritmo/groupCoverage";
+import {
+  loadGroupScoreProgress,
+  currentHoleFromHolesPlayed,
+} from "@/lib/ritmo/scoreProgress";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -315,12 +319,19 @@ export default async function RitmoPage({
     }
   }
 
+  // Progreso de captura de escores por grupo (para derivar ritmo sin GPS).
+  const scoreByGroup = await loadGroupScoreProgress(
+    admin,
+    round.id,
+    entryIdsByGroup
+  );
+
   const now = new Date(computedAtISO);
   const groups: LiveGroup[] = groupRows.map((g) => {
     const players = playersByGroup.get(g.id) ?? [];
     const positions = positionsByGroup.get(g.id) ?? []; // ya viene desc por ts
     const latest = positions[0] ?? null;
-    const smoothedHole = modalHole(
+    const gpsHole = modalHole(
       positions.slice(0, 10).map((p) => p.hoyo_detectado)
     );
 
@@ -329,11 +340,34 @@ export default async function RitmoPage({
       ? now.getTime() - new Date(lastTs).getTime() > STALE_MINUTES * 60 * 1000
       : false;
 
+    const startHole = g.starting_hole ?? 1;
+    const score = scoreByGroup.get(g.id);
+    const scoreHolesPlayed = score?.holesPlayed ?? 0;
+    const scoreFinished = scoreHolesPlayed >= 18;
+    const scoreHole = score
+      ? currentHoleFromHolesPlayed(scoreHolesPlayed, startHole)
+      : null;
+
+    // Fuente del hoyo: los escores capturados son la verdad del avance; el GPS
+    // es respaldo (y da la posición en el mapa). Si hay captura, manda el score.
+    let hoyoActual: number | null;
+    let holeSource: "scores" | "gps" | null;
+    if (scoreHole != null) {
+      hoyoActual = scoreHole;
+      holeSource = "scores";
+    } else if (!stale && gpsHole != null) {
+      hoyoActual = gpsHole;
+      holeSource = "gps";
+    } else {
+      hoyoActual = null;
+      holeSource = null;
+    }
+
     const pace = computePace({
-      hoyoActual: smoothedHole,
+      hoyoActual,
       teeTimeISO: g.tee_time,
       actualStartISO: g.actual_start_at,
-      teeStartHole: g.starting_hole ?? 1,
+      teeStartHole: startHole,
       roundDate: round!.round_date,
       now,
       perHoleMinutes,
@@ -341,7 +375,7 @@ export default async function RitmoPage({
 
     let status: LiveStatus;
     let deltaMinutes: number | null = null;
-    if (!latest || smoothedHole == null) {
+    if (hoyoActual == null) {
       status = "sin_datos";
     } else if (
       pace.kind === "en_ritmo" ||
@@ -361,13 +395,17 @@ export default async function RitmoPage({
       now
     );
 
-    const detail = latest
-      ? smoothedHole == null
-        ? "Posición recibida, detectando hoyo…"
-        : pace.msg
-      : gpsState === "none"
-        ? "Sin Live Location — el caddie o un jugador del grupo debe compartir ubicación 8 h por Telegram."
-        : "Sin ubicación compartida todavía.";
+    const detail = scoreFinished
+      ? "🏁 Terminó (18 hoyos capturados)"
+      : holeSource === "scores"
+        ? pace.msg
+        : holeSource === "gps"
+          ? pace.msg
+          : score && score.lastCaptureTs
+            ? "Captura iniciada, detectando avance…"
+            : gpsState === "none"
+              ? "Sin GPS ni escores aún — el caddie aún no captura y nadie comparte ubicación."
+              : "Sin ubicación ni captura todavía.";
 
     const playerRows = (memberRowsByGroup.get(g.id) ?? []).map((row) => {
       const caddie = caddieByEntry.get(row.entryId) ?? null;
@@ -382,13 +420,14 @@ export default async function RitmoPage({
       id: g.id,
       number: g.group_no ?? 0,
       label: `Grupo ${g.group_no ?? "?"}`,
-      startingHole: g.starting_hole ?? 1,
+      startingHole: startHole,
       teeTime: g.tee_time,
       actualStartAt: g.actual_start_at,
       players,
       playerRows,
       status,
-      hoyo: smoothedHole,
+      hoyo: hoyoActual,
+      holeSource,
       detail,
       deltaMinutes,
       lat: latest?.lat ?? null,
@@ -396,6 +435,9 @@ export default async function RitmoPage({
       lastTs,
       stale,
       gpsState,
+      scoreHolesPlayed,
+      scoreFinished,
+      lastScoreTs: score?.lastCaptureTs ?? null,
       caddies: coverage?.caddies ?? [],
       playersWithTelegram: coverage?.playersWithTelegram ?? 0,
       playerCount: coverage?.playerCount ?? players.length,
