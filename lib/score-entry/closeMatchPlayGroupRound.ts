@@ -8,6 +8,10 @@ import {
   losingPairEntryIds,
 } from "@/lib/matchplay/entryMatchOutcome";
 import {
+  isConsolationMpEntryRound,
+  loadConsolationMpRule,
+} from "@/lib/matchplay/consolationMatchPlay";
+import {
   notifyNextRoundGroupCreated,
   type NotifyResult,
 } from "@/lib/matchplay/notifyNextRoundGroup";
@@ -208,6 +212,7 @@ export async function closeMatchPlayGroupRound(
       .eq("tournament_id", tournamentId)
       .maybeSingle();
     if (rulesRow?.pair_format === "low_high") {
+      const consolationRule = await loadConsolationMpRule(admin, tournamentId);
       const derived = await derivePairingGroupMatches(admin, tournamentId);
       const groupNo =
         typeof groupRow?.group_no === "number" ? groupRow.group_no : null;
@@ -226,7 +231,8 @@ export async function closeMatchPlayGroupRound(
         const decision = decisions.get(derivedMatchId);
         if (
           decision &&
-          isEntryEliminatedInMatch(anchorEntryId, derivedMatch, decision)
+          isEntryEliminatedInMatch(anchorEntryId, derivedMatch, decision) &&
+          !isConsolationMpEntryRound(consolationRule, currentRoundNo)
         ) {
           eliminated = true;
           const loserEntryIds = losingPairEntryIds(derivedMatch, decision);

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
+import { getConsolationBracketId } from "@/lib/matchplay/consolationMatchPlay";
 import {
   deriveMatchHolesFromStrokes,
   type DerivedMatchHolesResult,
@@ -164,6 +165,7 @@ export async function buildLiveStrokeSnapshot(
     .from("matchplay_brackets")
     .select("id, config_json")
     .eq("tournament_id", tournamentId)
+    .neq("name", "Consolación Match Play")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -187,6 +189,24 @@ export async function buildLiveStrokeSnapshot(
       ...m,
       bracket_id: String(m.bracket_id),
     }));
+
+    const consolBracketId = await getConsolationBracketId(admin, tournamentId);
+    if (consolBracketId) {
+      const { data: consolRaw } = await admin
+        .from("matchplay_matches")
+        .select(
+          "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, result_text"
+        )
+        .eq("bracket_id", consolBracketId);
+      const consolRows = (consolRaw ?? []).map((m) => ({
+        ...m,
+        bracket_id: String(m.bracket_id),
+        result_text: m.result_text
+          ? `Consolación · ${m.result_text}`
+          : "Consolación Match Play",
+      }));
+      matches = [...matches, ...consolRows];
+    }
 
     const matchIds = matches.map((m) => m.id);
     let holes: LiveMatchPlayHoleRow[] = [];

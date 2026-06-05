@@ -5,6 +5,11 @@ import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
 import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundGroup";
 import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
+import {
+  findBracketMatchForPairs,
+  getMainBracketSize,
+  routeLoserToConsolationMp,
+} from "@/lib/matchplay/consolationMatchPlay";
 
 /**
  * Cierra un match (formato Bola Baja + Alta) cuando ya está
@@ -177,29 +182,34 @@ export async function closeMatchAndAdvanceForGroup(
   const topPairId = derivedMatch.top_pair_id;
   const bottomPairId = derivedMatch.bottom_pair_id;
 
-  // 5) Encontrar el match real SOLO en la misma ronda del calendario.
-  //    Nunca cerrar un cruce de otra ronda del bracket (evita marcar R3
-  //    cuando el grupo es de R1).
-  const { data: candidateMatches } = await admin
+  // 5) Encontrar el match real (cuadro principal o consolación) en la misma
+  //    ronda del calendario.
+  const realMatchRef = await findBracketMatchForPairs(admin, {
+    tournamentId,
+    mainBracketId: bracketId,
+    roundNo: currentRoundNo,
+    topPairId,
+    bottomPairId,
+  });
+  if (!realMatchRef) {
+    return {
+      ok: false,
+      error:
+        `No hay partido en R${currentRoundNo} del cuadro (principal ni consolación) con estas dos parejas. ` +
+        "Usa “Reparar cuadro y cerrar R1” para regenerar el bracket desde los grupos del calendario.",
+    };
+  }
+
+  const { data: realMatch } = await admin
     .from("matchplay_matches")
     .select(
       "id, bracket_id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, next_match_id"
     )
-    .eq("bracket_id", bracketId)
-    .eq("round_no", currentRoundNo);
+    .eq("id", realMatchRef.id)
+    .maybeSingle();
 
-  const realMatch = (candidateMatches ?? []).find(
-    (m) =>
-      (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
-      (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
-  );
   if (!realMatch) {
-    return {
-      ok: false,
-      error:
-        `No hay partido en R${currentRoundNo} del cuadro con estas dos parejas. ` +
-        "Usa “Reparar cuadro y cerrar R1” para regenerar el bracket desde los grupos del calendario.",
-    };
+    return { ok: false, error: "Partido del cuadro no encontrado." };
   }
   const matchplayMatchId = String(realMatch.id);
 
@@ -275,14 +285,69 @@ export async function closeMatchAndAdvanceForGroup(
     winner_pair_id: winnerPairId,
   });
 
-  let nextGroupCreated = false;
+  let nextGroupCreated = !!adv.next_group?.created;
   let nextGroupNo: number | null = adv.next_group?.groupNo ?? null;
   let nextRoundId: string | null = adv.next_group?.roundId ?? null;
   let nextTeeTime: string | null = adv.next_group?.teeTime ?? null;
+  let consolationNote = "";
+
+  // Perdedores de la ronda configurada (ej. R3 cuartos) → consolación MP en
+  // la ronda siguiente (G3–G4 en R4, después de semis G1–G2 del cuadro principal).
+  const isMainBracketMatch = String(realMatch.bracket_id) === bracketId;
+  if (isMainBracketMatch && winnerPairId) {
+    const loserPairId =
+      winnerPairId === topPairId ? bottomPairId : topPairId;
+    const mainSize = await getMainBracketSize(admin, tournamentId);
+    const consol = await routeLoserToConsolationMp(admin, {
+      tournamentId,
+      closedRoundNo: Number(realMatch.round_no),
+      closedPositionNo: Number(realMatch.position_no),
+      loserPairId,
+      mainBracketSize: mainSize,
+    });
+    if (consol.routed) {
+      consolationNote = ` ${consol.message}`;
+      if (consol.groupCreated && consol.groupNo != null) {
+        nextGroupCreated = true;
+        nextGroupNo = consol.groupNo;
+        const nextRoundNo = Number(realMatch.round_no) + 1;
+        const { data: rr } = await admin
+          .from("rounds")
+          .select("id, start_time, interval_minutes")
+          .eq("tournament_id", tournamentId)
+          .eq("round_no", nextRoundNo)
+          .maybeSingle();
+        if (rr?.id) {
+          nextRoundId = String(rr.id);
+          if (rr.start_time && consol.groupNo != null) {
+            const parseHHMM = (raw: string): number | null => {
+              const m = /^(\d{1,2}):(\d{2})/.exec(String(raw).trim());
+              if (!m) return null;
+              return Number(m[1]) * 60 + Number(m[2]);
+            };
+            const formatHHMM = (total: number): string => {
+              const m = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+              return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+            };
+            const base = parseHHMM(String(rr.start_time));
+            const interval =
+              typeof rr.interval_minutes === "number" && rr.interval_minutes > 0
+                ? rr.interval_minutes
+                : 10;
+            if (base != null) {
+              nextTeeTime = formatHHMM(
+                base + (consol.groupNo - 1) * interval
+              );
+            }
+          }
+        }
+      }
+    }
+  }
 
   if (adv.next_group?.created || adv.next_group?.updated) {
     nextGroupCreated = !!adv.next_group.created;
-  } else if (adv.advanced && adv.next_match_id) {
+  } else if (adv.advanced && adv.next_match_id && isMainBracketMatch) {
     // Fallback: si la siguiente salida no se generó automáticamente (por
     // ejemplo, porque la cascada de BYE creó el siguiente match y aún
     // espera a la otra pareja), reintentamos por si la actualización de
@@ -351,8 +416,8 @@ export async function closeMatchAndAdvanceForGroup(
     nextTeeTime,
     telegramNotified,
     message: nextGroupCreated
-      ? `${advanceMessage} Salida creada (G${nextGroupNo} · ${nextTeeTime}).${notifySuffix}`
-      : advanceMessage,
+      ? `${advanceMessage}${consolationNote} Salida creada (G${nextGroupNo} · ${nextTeeTime}).${notifySuffix}`
+      : `${advanceMessage}${consolationNote}${notifySuffix ? notifySuffix : ""}`,
   };
 }
 
