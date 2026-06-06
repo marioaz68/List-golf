@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { runRitmoReminders } from "@/lib/telegram/ritmo/reminders";
+import { runPaceAlertsForCommittee } from "@/lib/telegram/ritmo/paceAlerts";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -42,7 +43,16 @@ export async function GET(req: Request) {
 
   try {
     const result = await runRitmoReminders(supabase);
-    return NextResponse.json(result);
+    // Además: alertas de atraso al chat del comité (silencioso a caddies).
+    // Si TELEGRAM_COMMITTEE_CHAT_ID no está configurado, simplemente no manda
+    // nada y devuelve skippedNoChatId: true.
+    let paceAlerts;
+    try {
+      paceAlerts = await runPaceAlertsForCommittee(supabase);
+    } catch (e: any) {
+      paceAlerts = { ok: false, error: e?.message ?? "alert error" };
+    }
+    return NextResponse.json({ ...result, paceAlerts });
   } catch (err: any) {
     console.error("RITMO REMINDERS ERROR:", err);
     return NextResponse.json(

@@ -10,6 +10,7 @@ export type OutboxKind =
   | "tee_kit_invite"
   | "ritmo_share_invite"
   | "ritmo_share_late"
+  | "ritmo_committee_late"
   | "generic";
 
 export type SendAndTrackOptions = {
