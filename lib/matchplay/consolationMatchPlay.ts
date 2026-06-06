@@ -357,12 +357,46 @@ export async function maybeCreateConsolationRoundGroup(
   const botLabel = botPair.seed != null ? `#${botPair.seed}` : "BOT";
   const notes = `${CONSOLATION_NOTES_PREFIX}${topLabel} vs ${botLabel}`;
 
-  const { data: existing } = await admin
+  // Buscamos un grupo de consolación ya creado para este enfrentamiento por
+  // sus notas (estables aunque cambie el group_no), no por group_no — así no
+  // pisamos una salida del cuadro principal que esté ocupando ese slot.
+  const { data: existingByNotes } = await admin
     .from("pairing_groups")
     .select("id")
     .eq("round_id", nextRoundId)
-    .eq("group_no", groupNo)
+    .eq("notes", notes)
     .maybeSingle();
+
+  // Si el slot group_no destino lo ocupa OTRO grupo (p.ej. una semifinal del
+  // cuadro principal), lo empujamos a un slot temporal alto para liberar el
+  // hueco. reconcileRoundGroupOrder normaliza el orden final después.
+  if (!existingByNotes?.id) {
+    const { data: occupant } = await admin
+      .from("pairing_groups")
+      .select("id, notes")
+      .eq("round_id", nextRoundId)
+      .eq("group_no", groupNo)
+      .maybeSingle();
+    if (
+      occupant?.id &&
+      !String(occupant.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
+    ) {
+      const { data: maxRow } = await admin
+        .from("pairing_groups")
+        .select("group_no")
+        .eq("round_id", nextRoundId)
+        .order("group_no", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const parkSlot = Math.max(Number(maxRow?.group_no ?? 0) + 1, groupNo + 1);
+      await admin
+        .from("pairing_groups")
+        .update({ group_no: parkSlot })
+        .eq("id", occupant.id);
+    }
+  }
+
+  const existing = existingByNotes;
 
   let groupRecordId: string;
   let created = false;
@@ -371,7 +405,7 @@ export async function maybeCreateConsolationRoundGroup(
     groupRecordId = String(existing.id);
     await admin
       .from("pairing_groups")
-      .update({ tee_time: teeTime, notes })
+      .update({ group_no: groupNo, tee_time: teeTime, notes })
       .eq("id", groupRecordId);
     await admin
       .from("pairing_group_members")
