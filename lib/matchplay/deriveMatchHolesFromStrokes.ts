@@ -236,12 +236,24 @@ export async function deriveMatchHolesFromStrokes(
   );
   const roundIds = Array.from(new Set(playable.map((m) => m.round_id)));
 
-  const { data: roundScoresRaw } = await admin
-    .from("round_scores")
-    .select("id, player_id, round_id")
-    .in("player_id", playerIds)
-    .in("round_id", roundIds);
-  const roundScores = (roundScoresRaw ?? []) as RoundScoreRow[];
+  const roundScores: RoundScoreRow[] = [];
+  {
+    const PAGE = 1000;
+    let from = 0;
+    for (;;) {
+      const { data: rsRaw } = await admin
+        .from("round_scores")
+        .select("id, player_id, round_id")
+        .in("player_id", playerIds)
+        .in("round_id", roundIds)
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      const rows = (rsRaw ?? []) as RoundScoreRow[];
+      roundScores.push(...rows);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+  }
 
   const rsByPlayerRound = new Map<string, string>();
   for (const rs of roundScores) {
@@ -251,11 +263,30 @@ export async function deriveMatchHolesFromStrokes(
   const roundScoreIds = roundScores.map((rs) => rs.id);
   let holeScores: (HoleScoreRow & { picked_up?: boolean | null })[] = [];
   if (roundScoreIds.length > 0) {
-    const { data: hsRaw } = await admin
-      .from("hole_scores")
-      .select("round_score_id, hole_number, hole_no, strokes, picked_up")
-      .in("round_score_id", roundScoreIds);
-    holeScores = (hsRaw ?? []) as (HoleScoreRow & { picked_up?: boolean | null })[];
+    // IMPORTANTE: PostgREST devuelve máx. 1000 filas por respuesta. Con varias
+    // rondas capturadas el total de hole_scores supera 1000 y se truncaban las
+    // rondas más recientes (semifinales sin marcador en vivo). Paginamos por
+    // chunks de round_score_id + range para traer TODO.
+    const ID_CHUNK = 150;
+    const PAGE = 1000;
+    for (let i = 0; i < roundScoreIds.length; i += ID_CHUNK) {
+      const chunk = roundScoreIds.slice(i, i + ID_CHUNK);
+      let from = 0;
+      for (;;) {
+        const { data: hsRaw } = await admin
+          .from("hole_scores")
+          .select("round_score_id, hole_number, hole_no, strokes, picked_up")
+          .in("round_score_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        const rows = (hsRaw ?? []) as (HoleScoreRow & {
+          picked_up?: boolean | null;
+        })[];
+        holeScores.push(...rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
+    }
   }
 
   // Mapa: round_score_id -> hole_no -> { gross, pickedUp }

@@ -213,13 +213,24 @@ export async function buildLiveStrokeSnapshot(
     let liveFromStrokeScores = false;
 
     if (matchIds.length > 0) {
-      const { data: holeRows } = await admin
-        .from("matchplay_hole_results")
-        .select(
-          "match_id, hole_no, top_points, bottom_points, match_status_after"
-        )
-        .in("match_id", matchIds);
-      holes = holeRows ?? [];
+      // Paginamos: PostgREST corta en 1000 filas y con muchos matches cerrados
+      // (18 hoyos c/u) se supera ese límite, truncando rondas.
+      const PAGE = 1000;
+      let from = 0;
+      for (;;) {
+        const { data: holeRows } = await admin
+          .from("matchplay_hole_results")
+          .select(
+            "match_id, hole_no, top_points, bottom_points, match_status_after"
+          )
+          .in("match_id", matchIds)
+          .order("match_id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        const rows = holeRows ?? [];
+        holes.push(...rows);
+        if (rows.length < PAGE) break;
+        from += PAGE;
+      }
     }
 
     if (holes.length === 0 && matches.length > 0) {
