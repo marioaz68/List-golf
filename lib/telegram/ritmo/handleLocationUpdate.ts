@@ -11,9 +11,25 @@ export interface RitmoLocationInput {
   telegramUserId: string;
   lat: number;
   lon: number;
+  /** horizontal_accuracy de Telegram en metros (null si no vino). Pings con
+   *  accuracy > MAX_ACCURACY_M se guardan pero NO se usan para detectar hoyo
+   *  (evitan que árboles densos o reflejos en edificios "muevan" al grupo). */
+  accuracy?: number | null;
   messageId?: number | null;
   isLiveUpdate: boolean;   // true si vino en edited_message
 }
+
+/** Umbral de calidad para usar el ping en la detección de hoyo. Más de 30 m
+ *  es típicamente un ping con multipath o con baja constelación de satélites. */
+const MAX_ACCURACY_M = 30;
+
+/** Salto máximo permitido entre el hoyo recién detectado y el último hoyo
+ *  estable del grupo. Si el delta es mayor, el ping se descarta como outlier
+ *  (alguien caminando entre fairways paralelos, polígonos que se traslapan,
+ *  o falsos positivos por antenas celulares). El recorrido normal pasa de un
+ *  hoyo al siguiente, así que un salto > 2 hoyos en pocos minutos es
+ *  prácticamente siempre un error de detección. */
+const MAX_HOLE_JUMP = 2;
 
 export interface RitmoLocationResult {
   ok: boolean;
@@ -322,7 +338,34 @@ export async function handleRitmoLocationUpdate(
   }
 
   // 2) Detectar hoyo y guardar posición.
-  const hoyoInstantaneo = detectHole({ lat, lon }, holes);
+  //
+  // Filtros silenciosos para no contaminar la detección de hoyo del grupo:
+  //   - Si la precisión horizontal es peor que MAX_ACCURACY_M (típicamente
+  //     >30 m en cobertura densa de árboles o multipath), guardamos la
+  //     posición pero NO la usamos como evidencia de hoyo.
+  //   - Si el hoyo detectado salta más de MAX_HOLE_JUMP respecto al último
+  //     estable del grupo, es casi seguro un outlier (polígonos paralelos,
+  //     fix débil). Lo guardamos pero tampoco lo dejamos votar para el hoyo
+  //     "oficial" del grupo.
+  // El ping siempre se persiste para auditoría — solo cambia si se cuenta
+  // para `hoyo_detectado` o si se guarda con null.
+  const acc = input.accuracy ?? null;
+  const noisy =
+    typeof acc === "number" && Number.isFinite(acc) && acc > MAX_ACCURACY_M;
+  const hoyoCrudo = detectHole({ lat, lon }, holes);
+
+  let stableHole: number | null = null;
+  if (ctx.groupId && hoyoCrudo != null) {
+    stableHole = await smoothedHoleForGroup(supabase, ctx.groupId);
+  }
+  const tooFar =
+    stableHole != null &&
+    hoyoCrudo != null &&
+    Math.abs(hoyoCrudo - stableHole) > MAX_HOLE_JUMP &&
+    // Permite el wrap-around 18->1 en grupos que vuelven a hoyos del front
+    Math.abs(18 - Math.abs(hoyoCrudo - stableHole)) > MAX_HOLE_JUMP;
+
+  const hoyoInstantaneo = noisy || tooFar ? null : hoyoCrudo;
   const { error: insertErr } = await supabase.from("ritmo_positions").insert({
     tournament_id: ctx.tournamentId,
     round_id: ctx.roundId,

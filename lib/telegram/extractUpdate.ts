@@ -14,7 +14,12 @@ export function extractTelegramMessageUpdate(body: Record<string, unknown>) {
   const from = message.from as Record<string, unknown> | undefined;
   const chat = message.chat as Record<string, unknown> | undefined;
   const location = message.location as
-    | { latitude?: number; longitude?: number; live_period?: number }
+    | {
+        latitude?: number;
+        longitude?: number;
+        live_period?: number;
+        horizontal_accuracy?: number;
+      }
     | undefined;
 
   let fromId = from?.id != null ? String(from.id) : "";
@@ -53,6 +58,10 @@ export function extractTelegramMessageUpdate(body: Record<string, unknown>) {
             lat: location.latitude,
             lon: location.longitude,
             livePeriod: location.live_period ?? null,
+            accuracy:
+              typeof location.horizontal_accuracy === "number"
+                ? location.horizontal_accuracy
+                : null,
           }
         : null,
   };

@@ -42,7 +42,10 @@ import {
   saveCategoryPlanOrder,
 } from "./actions";
 import { isMatchPlayFormat } from "@/lib/matchplay/tournamentFormat";
+import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
+import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import TeeSheetDnD from "./TeeSheetDnDLoader";
+import StrokeAggregateSalidasPanel from "./StrokeAggregateSalidasPanel";
 import type { TournamentSettings } from "@/types/tournament";
 
 export const dynamic = "force-dynamic";
@@ -845,6 +848,7 @@ for (const row of membersRaw) {
   let matchplayActiveTeams = 0;
   let matchplayAuctionedTeams = 0;
   let matchplayTargetSize = 0;
+  let matchplayLastRoundNo = 0;
   let matchplaySource: "derived_r1" | "bracket" | "none" = "none";
   if (isMatchPlay && effectiveTournamentId) {
     try {
@@ -886,6 +890,9 @@ for (const row of membersRaw) {
         bracketMainPairs && bracketMainPairs >= 2
           ? nextPow2(Number(bracketMainPairs))
           : nextPow2(Math.max(activeTeams.length, 2));
+      if (matchplayTargetSize >= 2) {
+        matchplayLastRoundNo = roundCountForBracketSize(matchplayTargetSize);
+      }
 
       // Si hay bracket publicado, usamos ESE como única fuente — para
       // cualquier ronda. Las salidas se generan a partir de los
@@ -981,6 +988,17 @@ for (const row of membersRaw) {
       console.error("[tee-sheet] matchplay preview:", err);
     }
   }
+
+  const strokeAggregateGroupCount = groupsForUI.filter((g) =>
+    String(g.notes ?? "").startsWith(STROKE_AGG_NOTES_PREFIX)
+  ).length;
+  const showStrokeAggregatePanel =
+    isMatchPlay &&
+    matchplayLastRoundNo > 0 &&
+    targetRoundNo === matchplayLastRoundNo;
+  const groupsForMainDnD = groupsForUI.filter(
+    (g) => !String(g.notes ?? "").startsWith(STROKE_AGG_NOTES_PREFIX)
+  );
 
   if (selectedRound && selectedRound.round_no > 1 && effectiveTournamentId) {
     const categoryIdsToCheck =
@@ -1316,6 +1334,14 @@ for (const row of membersRaw) {
         </section>
       ) : null}
 
+      {showStrokeAggregatePanel ? (
+        <StrokeAggregateSalidasPanel
+          tournamentId={effectiveTournamentId}
+          roundNo={targetRoundNo}
+          initialGroupCount={strokeAggregateGroupCount}
+        />
+      ) : null}
+
       {isMatchPlay ? null : (
       <form action={generateGroupsByCategory} className="border border-slate-300 rounded-lg bg-white p-4 shadow-sm">
         <input type="hidden" name="tournament_id" value={effectiveTournamentId} />
@@ -1605,7 +1631,7 @@ for (const row of membersRaw) {
         roundId={effectiveRoundId}
         targetGroupSize={effectiveGroupSize}
         maxGroupSize={MAX_GROUP_SIZE}
-        groups={groupsForUI}
+        groups={groupsForMainDnD}
         initialCategory={effectiveCat}
         startingOrderConfirmed={startingOrderConfirmed}
         showPairingScore={targetRoundNo > 1}

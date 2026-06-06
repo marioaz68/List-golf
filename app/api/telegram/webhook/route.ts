@@ -141,6 +141,7 @@ export async function POST(req: Request) {
         telegramUserId: userId,
         lat: parsed.location.lat,
         lon: parsed.location.lon,
+        accuracy: parsed.location.accuracy,
         messageId: parsed.messageId,
         isLiveUpdate: parsed.isEditedMessage,
       });

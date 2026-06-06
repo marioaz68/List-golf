@@ -6,6 +6,10 @@ import {
 } from "@/lib/telegram/ritmo/handleLocationUpdate";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { getCourseHoles } from "@/lib/telegram/ritmo/holes";
+import { smoothedHoleForGroup } from "@/lib/telegram/ritmo/paceCalculator";
+
+const MAX_ACCURACY_M = 30;
+const MAX_HOLE_JUMP = 2;
 
 /** Args para guardar una posición GPS desde la Mini App de captura.
  *  La Mini App pasa `entryId` (jugador) o `caddieId` directamente — no hay
@@ -96,7 +100,27 @@ export async function saveCapturaPosition(
   // Polígonos del campo: si no hay, igual guardamos la posición pero sin
   // detectar hoyo. El dashboard puede mostrar el pin sin saber el hoyo.
   const holes = getCourseHoles(ctx.courseName);
-  const hoyo = holes ? detectHole({ lat, lon }, holes) : null;
+  const hoyoCrudo = holes ? detectHole({ lat, lon }, holes) : null;
+
+  // Filtros silenciosos (mismos que el pipeline de Telegram):
+  //  - accuracy > 30 m  -> no contar para detección de hoyo
+  //  - salto > 2 hoyos respecto al hoyo estable del grupo -> outlier
+  const noisy =
+    typeof accuracy === "number" &&
+    Number.isFinite(accuracy) &&
+    accuracy > MAX_ACCURACY_M;
+
+  let stableHole: number | null = null;
+  if (ctx.groupId && hoyoCrudo != null && !noisy) {
+    stableHole = await smoothedHoleForGroup(supabase, ctx.groupId);
+  }
+  const tooFar =
+    stableHole != null &&
+    hoyoCrudo != null &&
+    Math.abs(hoyoCrudo - stableHole) > MAX_HOLE_JUMP &&
+    Math.abs(18 - Math.abs(hoyoCrudo - stableHole)) > MAX_HOLE_JUMP;
+
+  const hoyo = noisy || tooFar ? null : hoyoCrudo;
 
   // group_id: el del contexto activo, o el hint del URL si el contexto
   // no lo trajo (caso raro: el jugador abrió un link de un grupo distinto).
@@ -105,9 +129,8 @@ export async function saveCapturaPosition(
     : null);
 
   // Nota: la tabla `ritmo_positions` solo tiene las columnas que ya usa el
-  // pipeline de Telegram. No incluimos `accuracy` ni `source` para evitar
-  // tocar el schema; si se necesitan, se agregan en migración aparte.
-  void accuracy;
+  // pipeline de Telegram. accuracy se usa solo para filtrar pings ruidosos
+  // (definir si el hoyo cuenta o no); el valor en sí no se guarda en BD.
   const { error: insertErr } = await supabase.from("ritmo_positions").insert({
     tournament_id: ctx.tournamentId,
     round_id: ctx.roundId,
