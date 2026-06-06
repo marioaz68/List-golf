@@ -8,11 +8,15 @@
  */
 
 const MATCH_PLAY_NOTES_PREFIX = "MATCH PLAY";
+const CONSOLATION_MP_NOTES_PREFIX = "CONSOLACIÓN MP";
+const CONSOLATION_MP_NOTES_PREFIX_ALT = "CONSOLACION MP";
 
 export type MatchPlayPairSide = "top" | "bottom";
 
 export type MatchPlayPairInfo = {
   isMatchPlay: true;
+  /** True si el grupo es una final/partido de Consolación Match Play. */
+  isConsolation: boolean;
   topLabel: string;
   bottomLabel: string;
 };
@@ -23,13 +27,22 @@ export function parseMatchPlayGroupNotes(
   notes: string | null | undefined
 ): MatchPlayGroupInfo {
   const raw = String(notes ?? "").trim();
-  if (!raw.toUpperCase().startsWith(MATCH_PLAY_NOTES_PREFIX)) {
+  const upper = raw.toUpperCase();
+  const isConsolation =
+    upper.startsWith(CONSOLATION_MP_NOTES_PREFIX) ||
+    upper.startsWith(CONSOLATION_MP_NOTES_PREFIX_ALT);
+  const isMatchPlay = upper.startsWith(MATCH_PLAY_NOTES_PREFIX);
+
+  if (!isMatchPlay && !isConsolation) {
     return { isMatchPlay: false };
   }
 
-  const m = raw.match(/MATCH\s*PLAY[^·]*·\s*(\S+)\s*vs\s*(\S+)/i);
+  // Captura las dos etiquetas (#seed vs #seed) después del "·", sirve tanto
+  // para "MATCH PLAY · #1 vs #4" como para "CONSOLACIÓN MP · #12 vs #7".
+  const m = raw.match(/·\s*(\S+)\s*vs\s*(\S+)/i);
   return {
     isMatchPlay: true,
+    isConsolation,
     topLabel: (m?.[1] ?? "TOP").trim(),
     bottomLabel: (m?.[2] ?? "BOT").trim(),
   };

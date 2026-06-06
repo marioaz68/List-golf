@@ -27,6 +27,10 @@ import {
   isRitmoMapCommand,
   buildRitmoMapReplyForUser,
 } from "@/lib/telegram/ritmo/commands";
+import {
+  isMobileCodeCommand,
+  buildMobileCodeReply,
+} from "@/lib/telegram/ritmo/mobileCode";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -168,6 +172,13 @@ export async function POST(req: Request) {
         buttons: mapReply.buttons,
       });
       return NextResponse.json({ ok: true, ritmo: "map_link_sent" });
+    }
+
+    // === APP NATIVA: comando CODIGO (genera código one-time para la app) ===
+    if (isMobileCodeCommand(command) && userId && supabase) {
+      const codeReply = await buildMobileCodeReply(supabase, userId);
+      await sendTelegramMessage({ chatId: chatId || userId, text: codeReply });
+      return NextResponse.json({ ok: true, mobile_code: "sent" });
     }
 
     // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===

@@ -16,7 +16,11 @@ import {
 } from "@dnd-kit/core";
 import { FileSpreadsheet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { moveEntryToGroupPosition, balanceGroupsByCategory } from "./actions";
+import {
+  moveEntryToGroupPosition,
+  balanceGroupsByCategory,
+  updateGroup,
+} from "./actions";
 import { formatStartingHoleLabel } from "@/lib/tee-sheet/formatStartingHoleLabel";
 import { formatGroupTeeScheduleLabel } from "./sessionBlock";
 import {
@@ -652,6 +656,11 @@ export default function TeeSheetDnD({
                 highlight={highlightGroupId === g.id}
                 categoryColor={categoryColorByLabel.get(catKey(g.notes)) ?? getCategoryColorClasses(catKey(g.notes))}
                 setRef={(el) => groupElById.current.set(g.id, el)}
+                tournamentId={tournamentId}
+                roundId={roundId}
+                groupSize={targetGroupSize}
+                category={category}
+                editable={!startingOrderConfirmed}
               />
             );
           })}
@@ -689,6 +698,11 @@ function DroppableGroupCard({
   highlight,
   categoryColor,
   setRef,
+  tournamentId,
+  roundId,
+  groupSize,
+  category,
+  editable,
 }: {
   group: GroupUI;
   mem: MemberUI[];
@@ -698,10 +712,16 @@ function DroppableGroupCard({
   highlight: boolean;
   categoryColor: CategoryColorClasses;
   setRef: (el: HTMLDivElement | null) => void;
+  tournamentId: string;
+  roundId: string;
+  groupSize: number;
+  category: string;
+  editable: boolean;
 }) {
   const { setNodeRef: setGroupDropRef, isOver: isOverGroup } = useDroppable({
     id: groupDropId(group.id),
   });
+  const [editing, setEditing] = useState(false);
 
   const categoryLabel = catKey(group.notes);
   const color = categoryColor;
@@ -786,6 +806,15 @@ function DroppableGroupCard({
 
             {isMatchPlay ? (
               <div className="flex items-center gap-1">
+                {matchPlayInfo.isMatchPlay && matchPlayInfo.isConsolation ? (
+                  <span
+                    className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+                    style={{ backgroundColor: "#7c3aed", color: "#f5f3ff" }}
+                    title="Final de Consolación Match Play"
+                  >
+                    Consol.
+                  </span>
+                ) : null}
                 <span
                   className="rounded px-1 py-0.5 text-[10px] font-bold"
                   style={{
@@ -794,7 +823,7 @@ function DroppableGroupCard({
                   }}
                   title="Pareja A (parte superior del bracket)"
                 >
-                  {matchPlayInfo.topLabel}
+                  {matchPlayInfo.isMatchPlay ? matchPlayInfo.topLabel : ""}
                 </span>
                 <span className="text-[10px] font-semibold text-slate-500">vs</span>
                 <span
@@ -805,7 +834,7 @@ function DroppableGroupCard({
                   }}
                   title="Pareja B (parte inferior del bracket)"
                 >
-                  {matchPlayInfo.bottomLabel}
+                  {matchPlayInfo.isMatchPlay ? matchPlayInfo.bottomLabel : ""}
                 </span>
               </div>
             ) : (
@@ -815,10 +844,69 @@ function DroppableGroupCard({
             )}
           </div>
 
-          <div className="shrink-0 text-[10px] font-semibold text-slate-600">
-            {mem.length}/{maxGroupSize}
+          <div className="flex shrink-0 items-center gap-1">
+            <div className="text-[10px] font-semibold text-slate-600">
+              {mem.length}/{maxGroupSize}
+            </div>
+            {editable ? (
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                className="rounded border border-slate-400 bg-white px-1 py-0.5 text-[9px] font-bold text-slate-700 hover:bg-slate-100"
+                title="Editar horario / hoyo de salida"
+              >
+                {editing ? "✕" : "✎"}
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {editing ? (
+          <form
+            action={updateGroup}
+            className="mt-1 flex flex-wrap items-end gap-1.5 rounded border border-slate-300 bg-white/80 p-1.5"
+          >
+            <input type="hidden" name="id" value={group.id} />
+            <input type="hidden" name="tournament_id" value={tournamentId} />
+            <input type="hidden" name="round_id" value={roundId} />
+            <input type="hidden" name="group_size" value={groupSize} />
+            <input type="hidden" name="cat" value={category} />
+            <input type="hidden" name="notes" value={group.notes ?? ""} />
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[8px] font-semibold uppercase text-slate-500">
+                Hora salida
+              </span>
+              <input
+                type="time"
+                name="tee_time"
+                defaultValue={
+                  group.tee_time ? String(group.tee_time).slice(0, 5) : ""
+                }
+                className="w-20 rounded border border-slate-300 px-1 py-0.5 text-[10px] text-slate-900"
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[8px] font-semibold uppercase text-slate-500">
+                Hoyo
+              </span>
+              <input
+                type="number"
+                name="starting_hole"
+                min={1}
+                max={18}
+                defaultValue={group.starting_hole ?? ""}
+                placeholder="1-18"
+                className="w-14 rounded border border-slate-300 px-1 py-0.5 text-[10px] text-slate-900"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-slate-900"
+            >
+              Guardar
+            </button>
+          </form>
+        ) : null}
 
         {isMatchPlay ? (
           <div className="mt-0.5 flex h-1 overflow-hidden rounded-full">

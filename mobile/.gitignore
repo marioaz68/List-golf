@@ -1,0 +1,32 @@
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# Build
+android/build/
+android/app/build/
+ios/build/
+node_modules/
+
+# Local env
+.env*.local
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

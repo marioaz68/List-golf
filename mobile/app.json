@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "List.Golf",
+    "slug": "listgolf-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "listgolf",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "android": {
+      "package": "club.listgolf.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "WAKE_LOCK",
+        "INTERNET"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "club.listgolf.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "List.Golf usa tu ubicación durante el torneo para que el comité monitoree el ritmo del campo en vivo.",
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación durante la ronda para detectar en qué hoyo está tu grupo.",
+        "NSLocationAlwaysUsageDescription": "Permite mantener tu ubicación activa mientras la pantalla está bloqueada durante la ronda.",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "List.Golf necesita ubicación 'siempre' para mandar tu posición al ritmo del campo mientras el celular está bloqueado durante la ronda.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    }
+  }
+}
