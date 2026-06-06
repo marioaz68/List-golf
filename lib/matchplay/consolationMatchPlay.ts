@@ -71,6 +71,90 @@ export async function getMainBracketSize(
   return 0;
 }
 
+/** Partidos de consolación MP en una ronda del cuadro de consolación. */
+export async function countConsolationMatchesInRound(
+  admin: SupabaseClient,
+  tournamentId: string,
+  roundNo: number
+): Promise<number> {
+  const consolId = await getConsolationBracketId(admin, tournamentId);
+  if (!consolId) return 0;
+  const { count } = await admin
+    .from("matchplay_matches")
+    .select("id", { count: "exact", head: true })
+    .eq("bracket_id", consolId)
+    .eq("round_no", roundNo);
+  return count ?? 0;
+}
+
+/**
+ * Reordena salidas de una ronda: consolación MP primero (G1..n), cuadro
+ * principal después (G{n+1}..). Corrige datos creados con la numeración
+ * antigua (main antes que consolación).
+ */
+export async function reconcileRoundGroupOrder(
+  admin: SupabaseClient,
+  tournamentId: string,
+  roundNo: number
+): Promise<void> {
+  const { data: roundRow } = await admin
+    .from("rounds")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("round_no", roundNo)
+    .maybeSingle();
+  if (!roundRow?.id) return;
+
+  const roundId = String(roundRow.id);
+  const consolCount = await countConsolationMatchesInRound(
+    admin,
+    tournamentId,
+    roundNo
+  );
+  if (consolCount <= 0) return;
+
+  const { data: groups } = await admin
+    .from("pairing_groups")
+    .select("id, group_no, notes")
+    .eq("round_id", roundId)
+    .order("group_no", { ascending: true });
+
+  const consol = (groups ?? []).filter((g) =>
+    String(g.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
+  );
+  const main = (groups ?? []).filter(
+    (g) => !String(g.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
+  );
+  if (consol.length === 0) return;
+
+  // Fase 1: valores temporales negativos.
+  let tmp = -1000;
+  for (const g of [...consol, ...main]) {
+    await admin
+      .from("pairing_groups")
+      .update({ group_no: tmp-- })
+      .eq("id", g.id);
+  }
+
+  // Consolación: G1, G2, … en orden actual de group_no.
+  let order = 1;
+  for (const g of consol.sort(
+    (a, b) => Number(a.group_no) - Number(b.group_no)
+  )) {
+    await admin
+      .from("pairing_groups")
+      .update({ group_no: order++ })
+      .eq("id", g.id);
+  }
+  // Principal: después de la consolación.
+  for (const g of main.sort((a, b) => Number(a.group_no) - Number(b.group_no))) {
+    await admin
+      .from("pairing_groups")
+      .update({ group_no: order++ })
+      .eq("id", g.id);
+  }
+}
+
 export async function getConsolationBracketId(
   admin: SupabaseClient,
   tournamentId: string
@@ -162,8 +246,8 @@ async function ensureConsolationMatch(
 
 /**
  * Crea/actualiza la salida de consolación en la ronda destino.
- * group_no = partidos del cuadro principal en esa ronda + position_no consolación.
- * Ej.: R4 principal tiene G1–G2 (semis) → consolación usa G3–G4.
+ * group_no = position_no de la consolación (G1, G2, …) — salen ANTES que
+ * las semifinales del cuadro principal (G3, G4 en R4 con 16 parejas).
  */
 export async function maybeCreateConsolationRoundGroup(
   admin: SupabaseClient,
@@ -195,8 +279,7 @@ export async function maybeCreateConsolationRoundGroup(
 
   const nextRoundNo = Number(nextMatch.round_no);
   const positionNo = Number(nextMatch.position_no ?? 1);
-  const mainCount = mainMatchesInRound(params.mainBracketSize, nextRoundNo);
-  const groupNo = mainCount + positionNo;
+  const groupNo = positionNo;
 
   const { data: roundRow } = await admin
     .from("rounds")
@@ -438,14 +521,16 @@ export async function routeLoserToConsolationMp(
     groupNo = grp.groupNo;
   }
 
-  const mainCount = mainMatchesInRound(params.mainBracketSize, nextRoundNo);
+  if (groupCreated) {
+    await reconcileRoundGroupOrder(admin, params.tournamentId, nextRoundNo);
+  }
   return {
     routed: true,
     nextMatchId,
     groupCreated,
     groupNo,
     message: groupCreated
-      ? `Perdedor a consolación R${nextRoundNo} · salida G${groupNo} (después de G${mainCount}).`
+      ? `Perdedor a consolación R${nextRoundNo} · salida G${groupNo} (antes de semifinales).`
       : `Perdedor registrado en consolación R${nextRoundNo} M${nextPosition} (esperando otro perdedor).`,
   };
 }
@@ -713,6 +798,15 @@ export async function backfillConsolationLosersFromRound(
         if (adv.groupCreated) groupsCreated += 1;
       }
     }
+  }
+
+  // Asegurar orden G1..n consolación, luego principal en cada ronda tocada.
+  const roundsTouched = new Set<number>();
+  for (const m of completed ?? []) {
+    roundsTouched.add(Number(m.round_no) + 1);
+  }
+  for (const r of roundsTouched) {
+    await reconcileRoundGroupOrder(admin, tournamentId, r);
   }
 
   return { processed, groupsCreated, messages };

@@ -162,12 +162,20 @@ export default function ConsolationActionsPanel({
           {showDnd ? "Ocultar salidas (DnD)" : "✋ Acomodar salidas (DnD)"}
         </button>
         <Link
+          href={`/torneos/${tournamentId}/consolacion-match`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[30px] items-center rounded-md border border-violet-600/50 bg-violet-950/50 px-3 text-[11px] font-bold text-violet-200 hover:bg-violet-900/60"
+        >
+          Match ↗
+        </Link>
+        <Link
           href={`/torneos/${tournamentId}/consolacion-stroke`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex min-h-[30px] items-center rounded-md border border-sky-600/50 bg-sky-950/50 px-3 text-[11px] font-bold text-sky-200 hover:bg-sky-900/60"
         >
-          Ver pública ↗
+          Stroke ↗
         </Link>
       </div>
 

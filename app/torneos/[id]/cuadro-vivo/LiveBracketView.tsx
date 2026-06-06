@@ -855,6 +855,12 @@ export default function LiveBracketView({
           📺 Matches en vivo
         </Link>
         <Link
+          href={`/torneos/${tournamentId}/consolacion-match`}
+          className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
+        >
+          🏆 Consolación match
+        </Link>
+        <Link
           href={`/torneos/${tournamentId}/consolacion-stroke`}
           className="rounded border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200 hover:bg-white/10"
         >

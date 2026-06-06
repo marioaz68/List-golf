@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { countConsolationMatchesInRound } from "@/lib/matchplay/consolationMatchPlay";
 
 /**
  * Si el match siguiente del cuadro ya tiene AMBAS parejas asignadas,
@@ -129,7 +130,12 @@ export async function maybeCreateNextRoundGroup(
       : 10;
 
   const positionNo = Number(nextMatch.position_no ?? 1);
-  const groupNo = positionNo;
+  const consolCount = await countConsolationMatchesInRound(
+    admin,
+    params.tournamentId,
+    nextRoundNo
+  );
+  const groupNo = consolCount + positionNo;
   const teeTime =
     baseMinutes != null
       ? formatHHMM(baseMinutes + (groupNo - 1) * interval)
