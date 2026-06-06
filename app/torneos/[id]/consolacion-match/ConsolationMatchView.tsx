@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { ConsolationMatchPlayPublic } from "@/lib/matchplay/loadConsolationMatchPlayPublic";
+import MatchDetailModal from "@/app/torneos/[id]/matches-vivo/MatchDetailModal";
 
 type Payload = ConsolationMatchPlayPublic & { error?: string };
 
@@ -22,6 +23,11 @@ export default function ConsolationMatchView({
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [openMatch, setOpenMatch] = useState<{
+    matchId: string;
+    groupNo: number;
+    roundNo: number;
+  } | null>(null);
 
   const load = useCallback(
     (opts?: { silent?: boolean }) => {
@@ -146,10 +152,8 @@ export default function ConsolationMatchView({
                   : "scheduled";
             const cardCls =
               STATUS_COLOR[statusKey] ?? STATUS_COLOR.scheduled;
-            const detailHref =
-              g.matchId && !g.matchId.startsWith("match-")
-                ? `/torneos/${tournamentId}/matches-vivo?match=${g.matchId}&from=consolacion`
-                : null;
+            const detailMatchId =
+              g.matchId && !g.matchId.startsWith("match-") ? g.matchId : null;
 
             return (
               <li
@@ -173,13 +177,20 @@ export default function ConsolationMatchView({
                 <div className="mt-2 text-xs font-semibold text-emerald-300">
                   {g.liveText ?? g.resultText ?? "Sin resultado aún"}
                 </div>
-                {detailHref ? (
-                  <Link
-                    href={detailHref}
+                {detailMatchId ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenMatch({
+                        matchId: detailMatchId,
+                        groupNo: g.groupNo,
+                        roundNo: g.roundNo,
+                      })
+                    }
                     className="mt-2 inline-flex text-[11px] font-bold text-sky-300 hover:text-sky-200"
                   >
-                    Ver partido en vivo →
-                  </Link>
+                    Ver detalle de la jugada →
+                  </button>
                 ) : null}
               </li>
             );
@@ -201,6 +212,22 @@ export default function ConsolationMatchView({
           ⛳ Consolación stroke
         </Link>
       </div>
+
+      <MatchDetailModal
+        open={openMatch != null}
+        onClose={() => setOpenMatch(null)}
+        tournamentId={tournamentId}
+        matchId={openMatch?.matchId ?? null}
+        isDerived={false}
+        topTeam={null}
+        bottomTeam={null}
+        roundLabel={
+          openMatch ? `Consolación · R${openMatch.roundNo}` : undefined
+        }
+        positionNo={openMatch?.groupNo ?? 0}
+        holesPerMatch={18}
+        liveTick={secondsAgo}
+      />
     </div>
   );
 }
