@@ -75,6 +75,11 @@ export async function buildRitmoMapReplyForUser(
   return buildRitmoMapReply(tournamentId);
 }
 
+/** Minutos sin pings para considerar que la Live Location del usuario expiró
+ *  o se cerró el navegador / Telegram. Solo se le menciona si él escribe RITMO
+ *  (acción iniciada por el usuario), nunca proactivamente. */
+const STALE_USER_MINUTES = 15;
+
 export async function buildRitmoStatusReply(
   supabase: SupabaseClient,
   telegramUserId: string
@@ -103,6 +108,28 @@ export async function buildRitmoStatusReply(
     perHoleMinutes,
   });
 
+  // Buscar el último ping DEL USUARIO mismo (no del grupo) para detectar si
+  // su Live Location se acabó / se cerró Telegram. Si lleva >15 min sin ping
+  // propio mientras la ronda sigue activa, agregamos una línea sugiriendo
+  // reactivar. Es respuesta a SU comando, no mensaje proactivo.
+  let lastUserPingAgoMin: number | null = null;
+  try {
+    const { data: last } = await supabase
+      .from("ritmo_positions")
+      .select("ts")
+      .eq("telegram_user_id", telegramUserId)
+      .order("ts", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ts = (last as { ts?: string } | null)?.ts;
+    if (ts) {
+      const ms = Date.now() - new Date(ts).getTime();
+      lastUserPingAgoMin = ms / 60000;
+    }
+  } catch {
+    lastUserPingAgoMin = null;
+  }
+
   const who = `${ctx.displayName}${ctx.kind === "caddie" ? " (caddie)" : ""}`;
   const lines = [
     `🏌️ ${who} · Grupo ${ctx.groupId.slice(0, 4)}`.trim(),
@@ -110,8 +137,22 @@ export async function buildRitmoStatusReply(
     "",
     pace.msg,
   ];
-  if (hoyo == null) {
-    lines.push("", "(Comparte tu Live Location en este chat para que te detecte.)");
+
+  if (lastUserPingAgoMin == null) {
+    // Nunca ha mandado ubicación.
+    lines.push(
+      "",
+      "(Comparte tu Live Location en este chat para que te detecte.)"
+    );
+  } else if (lastUserPingAgoMin > STALE_USER_MINUTES) {
+    // Mandó alguna vez, pero ya no está llegando — Live Location expiró,
+    // se cerró Telegram, o el celular perdió señal.
+    const mins = Math.round(lastUserPingAgoMin);
+    lines.push(
+      "",
+      `(Tu última ubicación fue hace ${mins} min. Si sigues en el campo, reactiva tu Live Location 8 h para que el ritmo se vea en vivo.)`
+    );
   }
+
   return lines.join("\n");
 }

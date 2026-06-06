@@ -41,6 +41,10 @@ export interface LiveGroup {
   lastTs: string | null;
   stale: boolean;
   gpsState: GpsState;
+  /** Dispositivos distintos (telegram_user_id o player_id) que mandaron GPS
+   *  en los últimos 5 minutos. 0 = sin tracking; 1 = un solo punto de falla;
+   *  2-3+ = redundancia robusta. */
+  activeSources: number;
   /** Hoyos capturados por el grupo (máximo entre jugadores). */
   scoreHolesPlayed: number;
   /** True si ya capturaron los 18 hoyos. */
@@ -832,9 +836,18 @@ function GroupCard({
               background: g.gpsState === "live" ? "#0c4a6e" : "#3f3f46",
               color: g.gpsState === "live" ? "#7dd3fc" : "#a1a1aa",
             }}
+            title={
+              g.gpsState === "live" && g.activeSources >= 2
+                ? `${g.activeSources} dispositivos del grupo mandando GPS — tracking redundante`
+                : g.gpsState === "live" && g.activeSources === 1
+                  ? "Solo 1 dispositivo mandando GPS — si se cae, perdemos el grupo"
+                  : undefined
+            }
           >
             {g.gpsState === "live"
-              ? `📡 GPS${agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""}`
+              ? `📡 GPS${
+                  g.activeSources >= 2 ? ` · ${g.activeSources} fuentes` : ""
+                }${agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""}`
               : g.gpsState === "stale"
                 ? `📡 GPS viejo${
                     agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""

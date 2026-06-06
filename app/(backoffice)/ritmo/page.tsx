@@ -60,10 +60,16 @@ type PositionRow = {
   lon: number | null;
   hoyo_detectado: number | null;
   ts: string;
+  telegram_user_id: string | null;
+  player_id: string | null;
 };
 
 const STALE_MINUTES = 12;
 const LOOKBACK_MINUTES = 90;
+/** Ventana para contar "fuentes activas" (dispositivos que están mandando GPS
+ *  ahora). Se usa para indicar en el dashboard si un grupo tiene 1, 2 o 3+
+ *  dispositivos respaldándose mutuamente. */
+const ACTIVE_SOURCE_MINUTES = 5;
 
 /** Fecha de hoy en horario de México, formato YYYY-MM-DD. */
 function todayMexicoDate(): string {
@@ -305,7 +311,9 @@ export default async function RitmoPage({
   if (groupIds.length > 0) {
     const { data: posRaw } = await admin
       .from("ritmo_positions")
-      .select("group_id, lat, lon, hoyo_detectado, ts")
+      .select(
+        "group_id, lat, lon, hoyo_detectado, ts, telegram_user_id, player_id"
+      )
       .eq("tournament_id", tournamentId)
       .eq("round_id", round.id)
       .in("group_id", groupIds)
@@ -395,6 +403,23 @@ export default async function RitmoPage({
       now
     );
 
+    // Fuentes distintas que mandaron GPS en los últimos N min (telegram_user_id
+    // o player_id distintos = dispositivos físicos distintos). Sirve para que
+    // el comité vea redundancia: 1 fuente = riesgo, 2-3 = robusto.
+    const activeSinceMs =
+      now.getTime() - ACTIVE_SOURCE_MINUTES * 60 * 1000;
+    const recentDevices = new Set<string>();
+    for (const p of positions) {
+      const ts = new Date(p.ts).getTime();
+      if (!Number.isFinite(ts) || ts < activeSinceMs) continue;
+      const key =
+        (p.telegram_user_id && `tg:${p.telegram_user_id}`) ||
+        (p.player_id && `pl:${p.player_id}`) ||
+        null;
+      if (key) recentDevices.add(key);
+    }
+    const activeSources = recentDevices.size;
+
     const detail = scoreFinished
       ? "🏁 Terminó (18 hoyos capturados)"
       : holeSource === "scores"
@@ -435,6 +460,7 @@ export default async function RitmoPage({
       lastTs,
       stale,
       gpsState,
+      activeSources,
       scoreHolesPlayed,
       scoreFinished,
       lastScoreTs: score?.lastCaptureTs ?? null,
