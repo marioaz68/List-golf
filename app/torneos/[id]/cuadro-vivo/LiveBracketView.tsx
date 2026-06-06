@@ -262,9 +262,10 @@ export default function LiveBracketView({
           supabase
             .from("matchplay_matches")
             .select(
-              "id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, result_text, bracket:matchplay_brackets!inner(tournament_id)"
+              "id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, result_text, bracket:matchplay_brackets!inner(tournament_id, name)"
             )
             .eq("bracket.tournament_id", tournamentId)
+            .neq("bracket.name", "Consolación Match Play")
             .then(({ data }) => {
               if (!data) return;
               setMatches(

@@ -4,6 +4,7 @@ import {
   deriveMatchHolesFromStrokes,
   type DerivedMatchDecision,
 } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
+import { findBracketMatchForPairs } from "@/lib/matchplay/consolationMatchPlay";
 import type { GroupMatchPlayProgressionRow } from "@/lib/captura/types";
 
 export type GroupMatchPlayStatus = {
@@ -128,29 +129,34 @@ export async function loadGroupMatchPlayStatus(
   let matchplayMatchId: string | null = null;
   let matchplayCompleted = false;
   if (match.top_pair_id && match.bottom_pair_id) {
-    const { data: bracketRow } = await admin
+    // El cuadro principal explícitamente (no el de consolación, que también
+    // existe). findBracketMatchForPairs busca en ambos brackets.
+    const { data: mainBracket } = await admin
       .from("matchplay_brackets")
       .select("id")
       .eq("tournament_id", tournamentId)
+      .neq("name", "Consolación Match Play")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (bracketRow?.id) {
-      const { data: candidates } = await admin
-        .from("matchplay_matches")
-        .select("id, top_pair_id, bottom_pair_id, status, round_no")
-        .eq("bracket_id", bracketRow.id)
-        .eq("round_no", match.round_no);
-      const real = (candidates ?? []).find(
-        (m) =>
-          (m.top_pair_id === match.top_pair_id &&
-            m.bottom_pair_id === match.bottom_pair_id) ||
-          (m.top_pair_id === match.bottom_pair_id &&
-            m.bottom_pair_id === match.top_pair_id)
-      );
-      if (real) {
-        matchplayMatchId = String(real.id);
-        matchplayCompleted = real.status === "completed";
+    if (mainBracket?.id) {
+      const ref = await findBracketMatchForPairs(admin, {
+        tournamentId,
+        mainBracketId: String(mainBracket.id),
+        roundNo: match.round_no,
+        topPairId: match.top_pair_id,
+        bottomPairId: match.bottom_pair_id,
+      });
+      if (ref) {
+        const { data: real } = await admin
+          .from("matchplay_matches")
+          .select("id, status")
+          .eq("id", ref.id)
+          .maybeSingle();
+        if (real) {
+          matchplayMatchId = String(real.id);
+          matchplayCompleted = real.status === "completed";
+        }
       }
     }
   }

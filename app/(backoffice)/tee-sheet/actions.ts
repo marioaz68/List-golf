@@ -1303,6 +1303,7 @@ async function _generateMatchPlayTeeSheet(formData: FormData) {
     .from("matchplay_brackets")
     .select("id, name")
     .eq("tournament_id", tournament_id)
+    .neq("name", "Consolación Match Play")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -895,6 +895,7 @@ for (const row of membersRaw) {
         .from("matchplay_brackets")
         .select("id")
         .eq("tournament_id", effectiveTournamentId)
+        .neq("name", "Consolación Match Play")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

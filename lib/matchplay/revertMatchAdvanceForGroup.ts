@@ -54,6 +54,7 @@ export async function revertMatchAdvanceForGroup(
     .from("matchplay_brackets")
     .select("id")
     .eq("tournament_id", tournamentId)
+    .neq("name", "Consolación Match Play")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
