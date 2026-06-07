@@ -185,7 +185,7 @@ export default function StrokeAggregateStandingsView({
         </h1>
         <p className="mt-2 text-[12px] text-slate-300">
           Ronda {data.roundNo ?? "—"} · Neto {data.allowancePct}% HI · Total =
-          suma neto de los 2 jugadores de la pareja.
+          neto sobre par del campo de los 2 jugadores de la pareja.
         </p>
       </header>
 
@@ -502,7 +502,7 @@ function Leaderboard({
             <th className="px-3 py-2 text-right">PH</th>
             <th className="px-3 py-2 text-right">Hoyos</th>
             <th className="px-3 py-2 text-right font-bold text-sky-200">
-              Total pareja
+              Total pareja (vs par)
             </th>
           </tr>
         </thead>
@@ -527,11 +527,9 @@ function pairToDetail(pair: StrokeAggregatePairRow): DetailTarget {
   return {
     title: pair.label,
     subtitle:
-      pair.aggregateNet != null
-        ? `Total pareja: ${fmtScore(pair.aggregateNet)}${
-            fmtToPar(pair.aggregateNetToPar)
-              ? ` (${fmtToPar(pair.aggregateNetToPar)})`
-              : ""
+      pair.aggregateNetToPar != null
+        ? `Total pareja: ${fmtToPar(pair.aggregateNetToPar)} vs par${
+            pair.aggregateNet != null ? ` (${fmtScore(pair.aggregateNet)} neto)` : ""
           }`
         : undefined,
     players: [pair.playerA, pair.playerB].map((pl) => ({
@@ -557,6 +555,7 @@ function LeaderboardPairCard({
 }) {
   const open = () => onOpenDetail(pairToDetail(pair));
   const totalToPar = fmtToPar(pair.aggregateNetToPar);
+  const totalNet = pair.aggregateNet != null ? fmtScore(pair.aggregateNet) : "";
 
   return (
     <li className="rounded-xl border border-white/10 bg-[#0c1728] p-3">
@@ -579,10 +578,10 @@ function LeaderboardPairCard({
           </div>
           <div className="text-right">
             <div className="text-xl font-extrabold tabular-nums text-sky-200">
-              {fmtScore(pair.aggregateNet)}
+              {totalToPar || "—"}
             </div>
-            {totalToPar ? (
-              <div className="text-[11px] text-slate-400">{totalToPar}</div>
+            {totalNet ? (
+              <div className="text-[11px] text-slate-400">{totalNet}</div>
             ) : null}
           </div>
         </div>
@@ -645,8 +644,8 @@ function PairTableRows({
   onOpenDetail: (d: DetailTarget) => void;
 }) {
   const openDetail = () => onOpenDetail(pairToDetail(pair));
-  const totalLabel = fmtScore(pair.aggregateNet);
-  const totalToPar = fmtToPar(pair.aggregateNetToPar);
+  const totalLabel = fmtToPar(pair.aggregateNetToPar) || "—";
+  const totalNet = pair.aggregateNet != null ? fmtScore(pair.aggregateNet) : "";
   const favA = !!pair.playerA.playerId && favSet.has(pair.playerA.playerId);
   const favB = !!pair.playerB.playerId && favSet.has(pair.playerB.playerId);
   const isFav = favA || favB;
@@ -708,8 +707,8 @@ function PairTableRows({
           rowSpan={2}
         >
           {totalLabel}
-          {totalToPar ? (
-            <div className="text-[11px] font-normal text-slate-400">{totalToPar}</div>
+          {totalNet ? (
+            <div className="text-[11px] font-normal text-slate-400">{totalNet}</div>
           ) : null}
         </td>
       </tr>

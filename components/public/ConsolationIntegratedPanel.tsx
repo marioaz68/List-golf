@@ -270,7 +270,7 @@ export default function ConsolationIntegratedPanel({
                 <tr className="border-b border-white/10 bg-white/5 text-slate-400">
                   <th className="px-2 py-1.5 text-left">POS</th>
                   <th className="px-2 py-1.5 text-left">Pareja</th>
-                  <th className="px-2 py-1.5 text-right">Net agregado</th>
+                  <th className="px-2 py-1.5 text-right">vs Par (neto)</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,10 +287,14 @@ export default function ConsolationIntegratedPanel({
                         </div>
                       </td>
                       <td className="px-2 py-1.5 text-right font-mono text-emerald-300">
-                        {p.aggregateNet ?? "—"}
                         {p.aggregateNetToPar != null
-                          ? ` (${fmtToPar(p.aggregateNetToPar)})`
-                          : ""}
+                          ? fmtToPar(p.aggregateNetToPar)
+                          : "—"}
+                        {p.aggregateNet != null ? (
+                          <span className="ml-1 text-[10px] text-slate-500">
+                            ({p.aggregateNet})
+                          </span>
+                        ) : null}
                       </td>
                     </tr>
                   )

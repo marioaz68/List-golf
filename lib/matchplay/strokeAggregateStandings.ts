@@ -632,7 +632,7 @@ export async function loadStrokeAggregateStandings(
     const aggregateNetToPar =
       scoredA.row.netToPar != null && scoredB.row.netToPar != null
         ? scoredA.row.netToPar + scoredB.row.netToPar
-        : null;
+        : scoredA.row.netToPar ?? scoredB.row.netToPar;
     const aggregateGross =
       scoredA.row.gross != null && scoredB.row.gross != null
         ? scoredA.row.gross + scoredB.row.gross
@@ -665,20 +665,21 @@ export async function loadStrokeAggregateStandings(
     });
   }
 
-  // Orden por la SUMA neta de los 2 jugadores (menor mejor). Las parejas con
-  // ambos netos van primero por su suma real; las incompletas (solo un jugador
-  // con neto) no pueden compararse por suma, así que caen debajo en lugar de
-  // saltar al frente con un único neto bajo; las vacías van al final.
+  // Orden por la SUMA del neto sobre par del campo de los 2 jugadores (menor
+  // mejor): cuántos golpes netos van por encima/debajo del par sumando ambos.
+  // Las parejas con ambos jugadores van primero por su suma real; las
+  // incompletas (solo un jugador) caen debajo en lugar de saltar al frente con
+  // un único valor bajo; las vacías van al final.
   const sortTier = (p: StrokeAggregatePairRow): number => {
-    const a = p.playerA.net != null;
-    const b = p.playerB.net != null;
+    const a = p.playerA.netToPar != null;
+    const b = p.playerB.netToPar != null;
     if (a && b) return 0;
     if (a || b) return 1;
     return 2;
   };
   const sortValue = (p: StrokeAggregatePairRow): number => {
-    const a = p.playerA.net;
-    const b = p.playerB.net;
+    const a = p.playerA.netToPar;
+    const b = p.playerB.netToPar;
     if (a != null && b != null) return a + b;
     if (a != null) return a;
     if (b != null) return b;
