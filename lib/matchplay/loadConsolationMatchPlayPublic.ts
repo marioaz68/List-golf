@@ -118,14 +118,14 @@ export async function loadConsolationMatchPlayPublic(
   }
 
   const fromRoundNo = rule.from_round_no;
-  const activeRoundNo = fromRoundNo + 1;
+  const firstActiveRoundNo = fromRoundNo + 1;
 
   const consolBracketId = await getConsolationBracketId(admin, tournamentId);
   if (!consolBracketId) {
     return {
       ok: true,
       tournamentName,
-      activeRoundNo,
+      activeRoundNo: firstActiveRoundNo,
       fromRoundNo,
       groups: [],
       message:
@@ -153,25 +153,46 @@ export async function loadConsolationMatchPlayPublic(
     matchByPairKey.set(k, m);
   }
 
+  // La consolación Match Play abarca varias rondas: arranca en
+  // fromRoundNo + 1 y dura hasta la final (última ronda con partidos de
+  // consolación). Tomamos todas las rondas con partidos para no perder la
+  // final (ej. R5) cuando R4 ya cerró.
+  const consolRoundNos = [
+    ...new Set(
+      (consolMatches ?? [])
+        .map((m) => Number(m.round_no))
+        .filter((r) => Number.isFinite(r) && r >= firstActiveRoundNo)
+    ),
+  ].sort((a, b) => a - b);
+  if (consolRoundNos.length === 0) consolRoundNos.push(firstActiveRoundNo);
+  const activeRoundNo = consolRoundNos[consolRoundNos.length - 1];
+
   const snapshot = await buildLiveStrokeSnapshot(admin, tournamentId);
   const liveByMatchId = new Map(
     snapshot.matches.map((m) => [m.id, m.result_text])
   );
 
-  const { data: roundRow } = await admin
+  const { data: roundRows } = await admin
     .from("rounds")
-    .select("id")
+    .select("id, round_no")
     .eq("tournament_id", tournamentId)
-    .eq("round_no", activeRoundNo)
-    .maybeSingle();
+    .in("round_no", consolRoundNos);
 
-  const roundId = roundRow?.id ? String(roundRow.id) : null;
+  const roundIdByNo = new Map<number, string>();
+  const roundNoById = new Map<string, number>();
+  for (const r of roundRows ?? []) {
+    if (r.id == null || r.round_no == null) continue;
+    roundIdByNo.set(Number(r.round_no), String(r.id));
+    roundNoById.set(String(r.id), Number(r.round_no));
+  }
+  const roundIds = [...roundIdByNo.values()];
+
   const lockedEntryIds = new Set<string>();
-  if (roundId) {
+  if (roundIds.length > 0) {
     const { data: lockedRows } = await admin
       .from("scorecards")
       .select("entry_id, locked_at")
-      .eq("round_id", roundId)
+      .in("round_id", roundIds)
       .not("locked_at", "is", null);
     for (const row of lockedRows ?? []) {
       if (row.entry_id) lockedEntryIds.add(String(row.entry_id));
@@ -195,13 +216,14 @@ export async function loadConsolationMatchPlayPublic(
   function buildGroupRow(params: {
     groupId: string;
     groupNo: number;
+    roundNo: number;
     teeTime: string | null;
     match: ConsolMatchRow | undefined;
     topTeamId: string | null;
     bottomTeamId: string | null;
     memberEntryIds: string[];
   }): ConsolationLiveGroup {
-    const { groupId, groupNo, teeTime, match, topTeamId, bottomTeamId, memberEntryIds } =
+    const { groupId, groupNo, roundNo, teeTime, match, topTeamId, bottomTeamId, memberEntryIds } =
       params;
     const cardsClosed = areCardsClosed(memberEntryIds);
     const liveRaw = match?.id ? liveByMatchId.get(match.id) ?? null : null;
@@ -209,7 +231,7 @@ export async function loadConsolationMatchPlayPublic(
       groupId,
       groupNo,
       teeTime,
-      roundNo: activeRoundNo,
+      roundNo,
       matchId: match?.id ? String(match.id) : null,
       topLabel: teamLabel(topTeamId, teamById),
       bottomLabel: teamLabel(bottomTeamId, teamById),
@@ -224,11 +246,11 @@ export async function loadConsolationMatchPlayPublic(
 
   const groups: ConsolationLiveGroup[] = [];
 
-  if (roundId) {
+  if (roundIds.length > 0) {
     const { data: pgRows } = await admin
       .from("pairing_groups")
-      .select("id, group_no, tee_time, notes")
-      .eq("round_id", roundId)
+      .select("id, group_no, tee_time, notes, round_id")
+      .in("round_id", roundIds)
       .like("notes", `${CONSOLATION_NOTES_PREFIX}%`)
       .order("group_no", { ascending: true });
 
@@ -264,6 +286,8 @@ export async function loadConsolationMatchPlayPublic(
         buildGroupRow({
           groupId: String(pg.id),
           groupNo: Number(pg.group_no ?? 0),
+          roundNo:
+            roundNoById.get(String(pg.round_id)) ?? activeRoundNo,
           teeTime: pg.tee_time ? String(pg.tee_time).slice(0, 5) : null,
           match,
           topTeamId: match?.top_pair_id ?? uniqueTeams[0] ?? null,
@@ -274,9 +298,10 @@ export async function loadConsolationMatchPlayPublic(
     }
   }
 
-  // Partidos de consolación en la ronda activa sin salida aún.
+  // Partidos de consolación (cualquier ronda) sin salida aún.
   for (const m of consolMatches ?? []) {
-    if (Number(m.round_no) !== activeRoundNo) continue;
+    const mRound = Number(m.round_no);
+    if (!consolRoundNos.includes(mRound)) continue;
     if (!m.top_pair_id || !m.bottom_pair_id) continue;
     if (groups.some((g) => g.matchId === m.id)) continue;
     const memberEntryIds = [
@@ -287,6 +312,7 @@ export async function loadConsolationMatchPlayPublic(
       buildGroupRow({
         groupId: `match-${m.id}`,
         groupNo: Number(m.position_no ?? 0),
+        roundNo: mRound,
         teeTime: null,
         match: m,
         topTeamId: m.top_pair_id,
@@ -296,7 +322,12 @@ export async function loadConsolationMatchPlayPublic(
     );
   }
 
-  groups.sort((a, b) => a.groupNo - b.groupNo || a.groupId.localeCompare(b.groupId));
+  groups.sort(
+    (a, b) =>
+      a.roundNo - b.roundNo ||
+      a.groupNo - b.groupNo ||
+      a.groupId.localeCompare(b.groupId)
+  );
 
   return {
     ok: true,
