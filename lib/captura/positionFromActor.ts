@@ -29,6 +29,31 @@ export type CapturaPositionResult =
   | { ok: true; hoyo: number | null; groupId: string | null; tournamentId: string }
   | { ok: false; error: string };
 
+async function resolveTelegramUserId(
+  supabase: SupabaseClient,
+  input: { playerId?: string | null; caddieId?: string | null }
+): Promise<string | null> {
+  if (input.playerId) {
+    const { data } = await supabase
+      .from("players")
+      .select("telegram_user_id")
+      .eq("id", input.playerId)
+      .maybeSingle();
+    const tg = String((data as { telegram_user_id?: string | null } | null)?.telegram_user_id ?? "").trim();
+    return tg || null;
+  }
+  if (input.caddieId) {
+    const { data } = await supabase
+      .from("caddies")
+      .select("telegram")
+      .eq("id", input.caddieId)
+      .maybeSingle();
+    const tg = String((data as { telegram?: string | null } | null)?.telegram ?? "").trim();
+    return /^\d+$/.test(tg) ? tg : null;
+  }
+  return null;
+}
+
 async function resolveContextFromEntry(
   supabase: SupabaseClient,
   entryId: string
@@ -132,6 +157,11 @@ export async function saveCapturaPosition(
     ? groupIdHint.trim()
     : null);
 
+  const telegramUserId = await resolveTelegramUserId(supabase, {
+    playerId: ctx.playerId,
+    caddieId: input.caddieId,
+  });
+
   // Nota: la tabla `ritmo_positions` solo tiene las columnas que ya usa el
   // pipeline de Telegram. accuracy se usa solo para filtrar pings ruidosos
   // (definir si el hoyo cuenta o no); el valor en sí no se guarda en BD.
@@ -140,7 +170,7 @@ export async function saveCapturaPosition(
     round_id: ctx.roundId,
     group_id: groupId,
     player_id: ctx.playerId,
-    telegram_user_id: null,
+    telegram_user_id: telegramUserId,
     telegram_message_id: null,
     lat,
     lon,
