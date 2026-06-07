@@ -38,10 +38,12 @@ function readFavorites(tournamentId: string): string[] {
 export default function ConsolationIntegratedPanel({
   tournamentId,
   mode,
+  className,
 }: {
   tournamentId: string;
   /** live = salidas en vivo · favorites = solo favoritos · leaderboard = clasificación stroke */
   mode: "live" | "favorites" | "leaderboard";
+  className?: string;
 }) {
   const [mpData, setMpData] = useState<ConsolationMatchPlayPublic | null>(null);
   const [strokeData, setStrokeData] = useState<StrokePayload | null>(null);
@@ -133,7 +135,7 @@ export default function ConsolationIntegratedPanel({
   }
 
   return (
-    <div className="mt-6 space-y-4">
+    <div className={`${className ?? "mt-6"} space-y-4`}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
         <h2 className="text-sm font-bold uppercase tracking-wide text-slate-300">
           Consolación

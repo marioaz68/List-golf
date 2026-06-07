@@ -1070,6 +1070,27 @@ export default async function PublicTournamentPage({
     }
   }
 
+  /** Clasificación oficial vacía si ninguna tarjeta está cerrada; mostramos
+   *  scores en vivo como provisional hasta que el comité cierre tarjetas. */
+  const useProvisionalOfficial =
+    view === "official" &&
+    !rulesBlocked &&
+    !leaderboardBuildError &&
+    officialLeaderboard.length === 0 &&
+    leaderboard.length > 0;
+
+  const displayLeaderboard = useProvisionalOfficial
+    ? leaderboard
+    : view === "official"
+      ? officialLeaderboard
+      : leaderboard;
+
+  const displayLeaderboardView: "live" | "official" = useProvisionalOfficial
+    ? "live"
+    : view === "official"
+      ? "official"
+      : "live";
+
   const seedRoundIds =
     publicTeeSheetRounds.length > 0
       ? publicTeeSheetRounds.map((round) => round.id)
@@ -2057,17 +2078,30 @@ export default async function PublicTournamentPage({
                   />
                 </div>
               ) : null}
+              {isMatchPlayTournament &&
+              (view === "live" || view === "official") ? (
+                <ConsolationIntegratedPanel
+                  tournamentId={typedTournament.id}
+                  mode={view === "official" ? "leaderboard" : "live"}
+                  className={view === "official" ? "mb-4 mt-0" : "mt-6"}
+                />
+              ) : null}
+              {useProvisionalOfficial ? (
+                <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-950/25 px-3 py-2 text-[12px] leading-snug text-amber-100">
+                  Clasificación provisional: aún no hay tarjetas cerradas en esta
+                  ronda. Los totales pueden cambiar hasta que el comité firme las
+                  tarjetas.
+                </p>
+              ) : null}
               <PublicLeaderboardWithSearch
               tournamentId={typedTournament.id}
               embed={isEmbed}
               fromAdmin={fromAdmin}
-              fullLeaderboard={
-                view === "official" ? officialLeaderboard : leaderboard
-              }
+              fullLeaderboard={displayLeaderboard}
               peerRowsForNameCompact={
                 view === "official" ? leaderboard : undefined
               }
-              view={view === "official" ? "official" : "live"}
+              view={displayLeaderboardView}
               selectedCategoryId={selectedCategoryId}
               selectedRound={selectedRound}
               requestedDetailId={requestedDetailId}
@@ -2098,13 +2132,6 @@ export default async function PublicTournamentPage({
                   : undefined
               }
             />
-            {isMatchPlayTournament &&
-            (view === "live" || view === "official") ? (
-              <ConsolationIntegratedPanel
-                tournamentId={typedTournament.id}
-                mode={view === "official" ? "leaderboard" : "live"}
-              />
-            ) : null}
             </>
           )}
         </div>

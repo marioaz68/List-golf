@@ -665,11 +665,33 @@ export async function loadStrokeAggregateStandings(
     });
   }
 
-  // Ordenar: primero por total neto agregado (menor mejor), luego desempates.
+  // Orden por la SUMA neta de los 2 jugadores (menor mejor). Las parejas con
+  // ambos netos van primero por su suma real; las incompletas (solo un jugador
+  // con neto) no pueden compararse por suma, así que caen debajo en lugar de
+  // saltar al frente con un único neto bajo; las vacías van al final.
+  const sortTier = (p: StrokeAggregatePairRow): number => {
+    const a = p.playerA.net != null;
+    const b = p.playerB.net != null;
+    if (a && b) return 0;
+    if (a || b) return 1;
+    return 2;
+  };
+  const sortValue = (p: StrokeAggregatePairRow): number => {
+    const a = p.playerA.net;
+    const b = p.playerB.net;
+    if (a != null && b != null) return a + b;
+    if (a != null) return a;
+    if (b != null) return b;
+    return Number.POSITIVE_INFINITY;
+  };
+
   pairRows.sort((a, b) => {
-    const na = a.aggregateNet ?? Number.POSITIVE_INFINITY;
-    const nb = b.aggregateNet ?? Number.POSITIVE_INFINITY;
-    if (na !== nb) return na - nb;
+    const ta = sortTier(a);
+    const tb = sortTier(b);
+    if (ta !== tb) return ta - tb;
+    const va = sortValue(a);
+    const vb = sortValue(b);
+    if (va !== vb) return va - vb;
     return comparePairsByTieBreak(a, b, tieSteps, {
       catRule,
       strokeIndexByHole,
@@ -678,15 +700,15 @@ export async function loadStrokeAggregateStandings(
 
   let pos = 0;
   for (let i = 0; i < pairRows.length; i++) {
-    if (
-      i === 0 ||
-      pairRows[i].aggregateNet !== pairRows[i - 1].aggregateNet
-    ) {
+    const sameAsPrev =
+      i > 0 &&
+      sortTier(pairRows[i]) === sortTier(pairRows[i - 1]) &&
+      sortValue(pairRows[i]) === sortValue(pairRows[i - 1]);
+    if (i === 0 || !sameAsPrev) {
       pos = i + 1;
     }
     pairRows[i].position = pos;
-    pairRows[i].tied =
-      i > 0 && pairRows[i].aggregateNet === pairRows[i - 1].aggregateNet;
+    pairRows[i].tied = sameAsPrev;
   }
 
   // Salidas (foursomes) con score en vivo por jugador.
