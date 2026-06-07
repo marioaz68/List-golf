@@ -18,6 +18,7 @@ type DetailPlayer = {
   net: number | null;
   netToPar: number | null;
   holesPlayed: number;
+  holes?: HoleDetail[];
 };
 
 /** Descriptor del detalle abierto (grupo o pareja). */
@@ -149,12 +150,18 @@ export default function StrokeAggregateStandingsView({
   // marcador hoyo por hoyo tanto en grupos como en clasificación.
   const holesByEntry = useMemo(() => {
     const m = new Map<string, HoleDetail[]>();
+    const put = (entryId: string, holes: HoleDetail[] | undefined) => {
+      if (entryId && holes && holes.length > 0) m.set(entryId, holes);
+    };
     for (const p of data?.pairs ?? []) {
-      if (p.playerA?.entryId && p.detailA) m.set(p.playerA.entryId, p.detailA.holes);
-      if (p.playerB?.entryId && p.detailB) m.set(p.playerB.entryId, p.detailB.holes);
+      put(p.playerA.entryId, p.playerA.holes ?? p.detailA?.holes);
+      put(p.playerB.entryId, p.playerB.holes ?? p.detailB?.holes);
+    }
+    for (const g of data?.groups ?? []) {
+      for (const mem of g.members) put(mem.entryId, mem.holes);
     }
     return m;
-  }, [data?.pairs]);
+  }, [data?.pairs, data?.groups]);
 
   if (loading && !data) {
     return <p className="text-sm text-slate-400">Cargando consolación stroke…</p>;
@@ -372,6 +379,7 @@ function LiveGroups({
                     net: m.net,
                     netToPar: m.netToPar,
                     holesPlayed: m.holesPlayed,
+                    holes: m.holes,
                   })),
                 })
               }
@@ -469,7 +477,21 @@ function Leaderboard({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0c1728]">
+    <>
+      {/* Móvil: tarjetas clicables */}
+      <ul className="space-y-2 md:hidden">
+        {filtered.map((p) => (
+          <LeaderboardPairCard
+            key={p.pairId}
+            tournamentId={tournamentId}
+            pair={p}
+            onOpenDetail={onOpenDetail}
+          />
+        ))}
+      </ul>
+
+      {/* Escritorio: tabla */}
+      <div className="hidden overflow-x-auto rounded-xl border border-white/10 bg-[#0c1728] md:block">
       <table className="min-w-full text-left text-sm">
         <thead className="border-b border-white/10 bg-[#0a1220] text-[10px] uppercase tracking-wider text-slate-400">
           <tr>
@@ -497,6 +519,117 @@ function Leaderboard({
         </tbody>
       </table>
     </div>
+    </>
+  );
+}
+
+function pairToDetail(pair: StrokeAggregatePairRow): DetailTarget {
+  return {
+    title: pair.label,
+    subtitle:
+      pair.aggregateNet != null
+        ? `Total pareja: ${fmtScore(pair.aggregateNet)}${
+            fmtToPar(pair.aggregateNetToPar)
+              ? ` (${fmtToPar(pair.aggregateNetToPar)})`
+              : ""
+          }`
+        : undefined,
+    players: [pair.playerA, pair.playerB].map((pl) => ({
+      entryId: pl.entryId,
+      playerId: pl.playerId,
+      name: pl.name,
+      net: pl.net,
+      netToPar: pl.netToPar,
+      holesPlayed: pl.holesPlayed,
+      holes: pl.holes,
+    })),
+  };
+}
+
+function LeaderboardPairCard({
+  tournamentId,
+  pair,
+  onOpenDetail,
+}: {
+  tournamentId: string;
+  pair: StrokeAggregatePairRow;
+  onOpenDetail: (d: DetailTarget) => void;
+}) {
+  const open = () => onOpenDetail(pairToDetail(pair));
+  const totalToPar = fmtToPar(pair.aggregateNetToPar);
+
+  return (
+    <li className="rounded-xl border border-white/10 bg-[#0c1728] p-3">
+      <button
+        type="button"
+        onClick={open}
+        className="w-full text-left"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <span className="text-lg font-extrabold text-white">
+              {pair.position}
+              {pair.tied ? (
+                <span className="ml-0.5 text-[10px] text-slate-500">T</span>
+              ) : null}
+            </span>
+            <div className="mt-0.5 text-sm font-semibold text-slate-200">
+              {pair.label}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-extrabold tabular-nums text-sky-200">
+              {fmtScore(pair.aggregateNet)}
+            </div>
+            {totalToPar ? (
+              <div className="text-[11px] text-slate-400">{totalToPar}</div>
+            ) : null}
+          </div>
+        </div>
+      </button>
+      <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
+        {[pair.playerA, pair.playerB].map((pl) => (
+          <button
+            key={pl.entryId}
+            type="button"
+            onClick={open}
+            className="flex w-full items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-2 py-1.5 text-left hover:border-sky-400/30 hover:bg-sky-500/10"
+          >
+            {pl.playerId ? (
+              <span
+                className="shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <FavoriteStar
+                  tournamentId={tournamentId}
+                  playerId={pl.playerId}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-sm leading-none"
+                />
+              </span>
+            ) : (
+              <span className="h-5 w-5 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-200">
+              {pl.name}
+            </span>
+            <span className="shrink-0 text-[10px] text-slate-500">
+              {pl.holesPlayed}/18
+            </span>
+            <span className="shrink-0 font-mono text-[12px] font-bold text-emerald-300">
+              {fmtScore(pl.net)}
+            </span>
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={open}
+        className="mt-2 w-full rounded border border-sky-400/30 bg-sky-500/10 px-2 py-1.5 text-[11px] font-bold text-sky-200 hover:bg-sky-500/20"
+      >
+        Ver detalle hoyo por hoyo →
+      </button>
+    </li>
   );
 }
 
@@ -511,26 +644,7 @@ function PairTableRows({
   favSet: Set<string>;
   onOpenDetail: (d: DetailTarget) => void;
 }) {
-  const openDetail = () =>
-    onOpenDetail({
-      title: pair.label,
-      subtitle:
-        pair.aggregateNet != null
-          ? `Total pareja: ${fmtScore(pair.aggregateNet)}${
-              fmtToPar(pair.aggregateNetToPar)
-                ? ` (${fmtToPar(pair.aggregateNetToPar)})`
-                : ""
-            }`
-          : undefined,
-      players: [pair.playerA, pair.playerB].map((pl) => ({
-        entryId: pl.entryId,
-        playerId: pl.playerId,
-        name: pl.name,
-        net: pl.net,
-        netToPar: pl.netToPar,
-        holesPlayed: pl.holesPlayed,
-      })),
-    });
+  const openDetail = () => onOpenDetail(pairToDetail(pair));
   const totalLabel = fmtScore(pair.aggregateNet);
   const totalToPar = fmtToPar(pair.aggregateNetToPar);
   const favA = !!pair.playerA.playerId && favSet.has(pair.playerA.playerId);
@@ -558,7 +672,7 @@ function PairTableRows({
           </button>
         </td>
         <td className="px-3 py-1.5 text-slate-300">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex max-w-full items-center gap-1">
             {pair.playerA.playerId ? (
               <FavoriteStar
                 tournamentId={tournamentId}
@@ -566,7 +680,13 @@ function PairTableRows({
                 className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-sm leading-none"
               />
             ) : null}
-            {pair.playerA.name}
+            <button
+              type="button"
+              onClick={openDetail}
+              className="truncate text-left hover:text-sky-200 hover:underline"
+            >
+              {pair.playerA.name}
+            </button>
           </span>
         </td>
         <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
@@ -595,7 +715,7 @@ function PairTableRows({
       </tr>
       <tr className={`border-b border-white/10 ${isFav ? "bg-amber-500/10" : ""}`}>
         <td className="px-3 py-1.5 text-slate-300">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex max-w-full items-center gap-1">
             {pair.playerB.playerId ? (
               <FavoriteStar
                 tournamentId={tournamentId}
@@ -603,7 +723,13 @@ function PairTableRows({
                 className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-sm leading-none"
               />
             ) : null}
-            {pair.playerB.name}
+            <button
+              type="button"
+              onClick={openDetail}
+              className="truncate text-left hover:text-sky-200 hover:underline"
+            >
+              {pair.playerB.name}
+            </button>
           </span>
         </td>
         <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
@@ -677,7 +803,10 @@ function StrokeDetailModal({
 
         <div className="space-y-4 p-4">
           {detail.players.map((pl) => {
-            const holes = holesByEntry.get(pl.entryId) ?? [];
+            const holes =
+              pl.holes ??
+              holesByEntry.get(pl.entryId) ??
+              [];
             const byNo = new Map(holes.map((h) => [h.hole_number, h]));
             const front = Array.from({ length: 9 }, (_, i) => i + 1);
             const back = Array.from({ length: 9 }, (_, i) => i + 10);

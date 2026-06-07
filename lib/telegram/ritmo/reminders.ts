@@ -13,6 +13,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendAndTrackTelegramMessage } from "@/lib/telegram/outbox";
+import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 
 const PRE_TEE_WINDOW_MIN = 25;    // mandar invite cuando faltan ≤25 min
 const PRE_TEE_MIN_MIN = 15;       // pero solo si faltan ≥15 min
@@ -65,7 +66,7 @@ export async function runRitmoReminders(
   // 2) Grupos de esas rondas
   const { data: groups, error: groupsErr } = await supabase
     .from("pairing_groups")
-    .select("id, round_id, tee_time, starting_hole, actual_start_at")
+    .select("id, round_id, tee_time, starting_hole, actual_start_at, notes")
     .in("round_id", activeRoundIds);
   if (groupsErr) {
     return { ok: true, invitedCount: 0, lateCount: 0, groupsChecked: 0,
@@ -100,7 +101,7 @@ export async function runRitmoReminders(
         groupId: group.id,
         roundId: group.round_id,
         teeTime: group.tee_time,
-        startingHole: group.starting_hole ?? 1,
+        startingHole: resolveGroupStartHole(group.starting_hole, group.notes),
         minutesLeft: Math.round(diffMin),
       });
       invitedCount += sent;

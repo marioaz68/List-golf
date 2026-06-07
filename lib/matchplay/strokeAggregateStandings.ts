@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RoundDetail } from "@/app/torneos/[id]/lib/types";
+import type { HoleDetail, RoundDetail } from "@/app/torneos/[id]/lib/types";
 import type { TieBreakStep } from "@/lib/cuts/tieBreak";
 import { segmentStrokeTotal } from "@/lib/cuts/tieBreak";
 import {
@@ -36,6 +36,8 @@ export type StrokeAggregatePlayerRow = {
   handicapIndex: number | null;
   /** Tarjeta cerrada (scorecards.locked_at). */
   lockedAt: string | null;
+  /** Marcador hoyo por hoyo (captura en vivo). */
+  holes: HoleDetail[];
 };
 
 export type StrokeAggregateGroup = {
@@ -445,27 +447,33 @@ export async function loadStrokeAggregateStandings(
   }
 
   const rsByEntry = new Map<string, { id: string; gross_score: number | null }>();
+  const rsByPlayer = new Map<string, { id: string; gross_score: number | null }>();
   for (const rs of roundScores ?? []) {
-    if (rs.entry_id) {
-      rsByEntry.set(String(rs.entry_id), {
-        id: String(rs.id),
-        gross_score: rs.gross_score,
-      });
-    }
+    const row = {
+      id: String(rs.id),
+      gross_score: rs.gross_score != null ? Number(rs.gross_score) : null,
+    };
+    if (rs.entry_id) rsByEntry.set(String(rs.entry_id), row);
+    if (rs.player_id) rsByPlayer.set(String(rs.player_id), row);
   }
 
-  const rsIds = (roundScores ?? []).map((r) => String(r.id));
-  const holesByRs = new Map<
+  // Captura pública guarda hole_scores con entry_id + round_id (no siempre entry_id en round_scores).
+  const holesByEntry = new Map<
     string,
-    Array<{ hole_number: number; par: number | null; strokes: number | null }>
+    Array<{ hole_number: number; strokes: number | null }>
   >();
-  if (rsIds.length > 0) {
+  const entryIdList = Array.from(entryIds);
+  const ENTRY_CHUNK = 80;
+  for (let i = 0; i < entryIdList.length; i += ENTRY_CHUNK) {
+    const chunk = entryIdList.slice(i, i + ENTRY_CHUNK);
     const { data: holeRows } = await admin
       .from("hole_scores")
-      .select("round_score_id, hole_no, hole_number, strokes")
-      .in("round_score_id", rsIds);
+      .select("entry_id, hole_no, hole_number, strokes, picked_up")
+      .eq("round_id", roundId)
+      .in("entry_id", chunk);
     for (const h of holeRows ?? []) {
-      const rsId = String(h.round_score_id);
+      const eid = h.entry_id ? String(h.entry_id) : "";
+      if (!eid) continue;
       const holeNo =
         typeof h.hole_number === "number"
           ? h.hole_number
@@ -473,13 +481,21 @@ export async function loadStrokeAggregateStandings(
             ? h.hole_no
             : 0;
       if (holeNo < 1 || holeNo > 18) continue;
-      const list = holesByRs.get(rsId) ?? [];
-      list.push({
-        hole_number: holeNo,
-        par: null,
-        strokes: h.strokes != null ? Number(h.strokes) : null,
-      });
-      holesByRs.set(rsId, list);
+      const played =
+        h.strokes != null ||
+        (h as { picked_up?: boolean | null }).picked_up === true;
+      if (!played) continue;
+      const list = holesByEntry.get(eid) ?? [];
+      const existing = list.find((x) => x.hole_number === holeNo);
+      if (existing) {
+        if (h.strokes != null) existing.strokes = Number(h.strokes);
+      } else {
+        list.push({
+          hole_number: holeNo,
+          strokes: h.strokes != null ? Number(h.strokes) : null,
+        });
+      }
+      holesByEntry.set(eid, list);
     }
   }
 
@@ -529,8 +545,12 @@ export async function loadStrokeAggregateStandings(
       allowancePct
     );
 
-    const rs = rsByEntry.get(entryId);
-    if (!rs) {
+    const captured = holesByEntry.get(entryId) ?? [];
+    const rs =
+      rsByEntry.get(entryId) ??
+      (playerId ? rsByPlayer.get(playerId) : undefined);
+
+    if (captured.length === 0 && !rs) {
       const result = {
         row: {
           entryId,
@@ -544,6 +564,7 @@ export async function loadStrokeAggregateStandings(
           playingHandicap: ph,
           handicapIndex: hi,
           lockedAt,
+          holes: [] as HoleDetail[],
         },
         detail: null,
       };
@@ -551,18 +572,20 @@ export async function loadStrokeAggregateStandings(
       return result;
     }
 
-    const rawHoles = (holesByRs.get(rs.id) ?? []).map((h) => ({
-      hole_number: h.hole_number,
-      par: parByHole.get(h.hole_number) ?? null,
-      strokes: h.strokes,
-    }));
+    const rawHoles = captured
+      .sort((a, b) => a.hole_number - b.hole_number)
+      .map((h) => ({
+        hole_number: h.hole_number,
+        par: parByHole.get(h.hole_number) ?? null,
+        strokes: h.strokes,
+      }));
     const detail = buildRoundDetail(
       roundId,
       lastRoundNo,
       entryId,
       String(entry?.player_id ?? ""),
       rawHoles,
-      rs.gross_score
+      rs?.gross_score ?? null
     );
     const scored = scoreRoundDetail(detail, catRule, ph, strokeIndexByHole, hi);
     const holesPlayed = rawHoles.filter((h) => h.strokes != null).length;
@@ -580,6 +603,11 @@ export async function loadStrokeAggregateStandings(
         playingHandicap: ph,
         handicapIndex: hi,
         lockedAt,
+        holes: rawHoles.map((h) => ({
+          hole_number: h.hole_number,
+          par: h.par,
+          strokes: h.strokes,
+        })),
       },
       detail,
     };

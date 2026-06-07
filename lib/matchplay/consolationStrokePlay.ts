@@ -298,7 +298,7 @@ export async function createStrokeAggregateGroups(
         round_id: roundId,
         group_no: groupNo,
         tee_time: teeTime,
-        starting_hole: null,
+        starting_hole: 10,
         notes,
       })
       .select("id")

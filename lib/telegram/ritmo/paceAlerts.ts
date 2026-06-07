@@ -21,6 +21,7 @@ import {
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "./paceCalculator";
+import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 
 const LATE_THRESHOLD_MIN = 15;       // a partir de 15 min se considera atraso "alertable"
 const ALERT_COOLDOWN_MIN = 60;       // máximo 1 alerta por grupo por hora
@@ -40,6 +41,7 @@ interface GroupLite {
   starting_hole: number | null;
   tee_time: string | null;
   actual_start_at: string | null;
+  notes: string | null;
 }
 
 export interface PaceAlertRunResult {
@@ -97,7 +99,7 @@ export async function runPaceAlertsForCommittee(
   // 2) Grupos de esas rondas
   const { data: groupsRaw, error: groupsErr } = await supabase
     .from("pairing_groups")
-    .select("id, round_id, group_no, starting_hole, tee_time, actual_start_at")
+    .select("id, round_id, group_no, starting_hole, tee_time, actual_start_at, notes")
     .in("round_id", roundIds)
     .order("group_no", { ascending: true });
   if (groupsErr) {
@@ -128,7 +130,7 @@ export async function runPaceAlertsForCommittee(
       hoyoActual,
       teeTimeISO: group.tee_time,
       actualStartISO: group.actual_start_at,
-      teeStartHole: group.starting_hole ?? 1,
+      teeStartHole: resolveGroupStartHole(group.starting_hole, group.notes),
       roundDate: today,
       perHoleMinutes,
     });

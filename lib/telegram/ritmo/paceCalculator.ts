@@ -148,7 +148,9 @@ export async function loadPerHoleMinutes(
 function parseTeeDateTime(roundDate: string, teeTime: string): Date | null {
   const time = teeTime.includes("T") ? teeTime.split("T")[1]?.slice(0, 8) : teeTime;
   if (!time) return null;
-  const iso = `${roundDate}T${time.length === 5 ? `${time}:00` : time}`;
+  // tee_time se guarda en hora de México (Querétaro, UTC-6 sin DST).
+  const hhmmss = time.length === 5 ? `${time}:00` : time;
+  const iso = `${roundDate}T${hhmmss}-06:00`;
   const d = new Date(iso);
   return isNaN(d.getTime()) ? null : d;
 }

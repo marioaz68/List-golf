@@ -19,7 +19,9 @@ import {
 import {
   loadGroupScoreProgress,
   currentHoleFromHolesPlayed,
+  type GroupScoreMeta,
 } from "@/lib/ritmo/scoreProgress";
+import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +46,7 @@ type GroupRow = {
   starting_hole: number | null;
   tee_time: string | null;
   actual_start_at: string | null;
+  notes: string | null;
 };
 
 type MemberRow = { group_id: string; entry_id: string };
@@ -237,7 +240,7 @@ export default async function RitmoPage({
   // Grupos de la ronda.
   const { data: groupsRaw } = await admin
     .from("pairing_groups")
-    .select("id, group_no, starting_hole, tee_time, actual_start_at")
+    .select("id, group_no, starting_hole, tee_time, actual_start_at, notes")
     .eq("round_id", round.id)
     .order("group_no", { ascending: true });
   const groupRows = (groupsRaw ?? []) as GroupRow[];
@@ -327,11 +330,19 @@ export default async function RitmoPage({
     }
   }
 
+  const groupMeta = new Map<string, GroupScoreMeta>(
+    groupRows.map((g) => [
+      g.id,
+      { starting_hole: g.starting_hole, notes: g.notes },
+    ])
+  );
+
   // Progreso de captura de escores por grupo (para derivar ritmo sin GPS).
   const scoreByGroup = await loadGroupScoreProgress(
     admin,
     round.id,
-    entryIdsByGroup
+    entryIdsByGroup,
+    groupMeta
   );
 
   const now = new Date(computedAtISO);
@@ -348,8 +359,10 @@ export default async function RitmoPage({
       ? now.getTime() - new Date(lastTs).getTime() > STALE_MINUTES * 60 * 1000
       : false;
 
-    const startHole = g.starting_hole ?? 1;
     const score = scoreByGroup.get(g.id);
+    const startHole =
+      score?.startHole ??
+      resolveGroupStartHole(g.starting_hole, g.notes);
     const scoreHolesPlayed = score?.holesPlayed ?? 0;
     const scoreFinished = scoreHolesPlayed >= 18;
     const scoreHole = score

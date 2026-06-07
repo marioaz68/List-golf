@@ -6,6 +6,7 @@ import {
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "./paceCalculator";
+import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 
 export interface RitmoLocationInput {
   telegramUserId: string;
@@ -66,6 +67,7 @@ type GroupLite = {
   starting_hole: number | null;
   tee_time: string | null;
   actual_start_at: string | null;
+  notes: string | null;
 };
 
 /** Fecha de hoy en horario de México (YYYY-MM-DD). */
@@ -159,7 +161,7 @@ export async function buildPlayerContext(
     groupId: group?.id ?? null,
     groupTeeTime: group?.tee_time ?? null,
     groupActualStart: group?.actual_start_at ?? null,
-    groupStartHole: group?.starting_hole ?? 1,
+    groupStartHole: resolveGroupStartHole(group?.starting_hole, group?.notes),
     playerId: player.id,
     displayName: player.first_name ?? "jugador",
     kind: "player",
@@ -244,7 +246,7 @@ export async function buildCaddieContext(
     groupId: group?.id ?? null,
     groupTeeTime: group?.tee_time ?? null,
     groupActualStart: group?.actual_start_at ?? null,
-    groupStartHole: group?.starting_hole ?? 1,
+    groupStartHole: resolveGroupStartHole(group?.starting_hole, group?.notes),
     playerId: null,
     displayName: caddie.first_name ?? "caddie",
     kind: "caddie",

@@ -1,10 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  countSequentialHolesFromStart,
+  resolveGroupStartHole,
+} from "@/lib/ritmo/startHole";
+
+export type GroupScoreMeta = {
+  starting_hole?: number | null;
+  notes?: string | null;
+};
 
 export type GroupScoreProgress = {
-  /** Hoyos distintos (1..18) con captura en el grupo (máximo entre jugadores). */
+  /** Hoyos completados en secuencia desde el tee de salida. */
   holesPlayed: number;
-  /** Hoyo más avanzado con captura (1..18) o null. */
+  /** Último hoyo completado en esa secuencia, o null. */
   lastHole: number | null;
+  /** Hoyo de salida usado para el cálculo (BD / notas / capturas). */
+  startHole: number;
   /** Timestamp de la última captura del grupo (de la bitácora) o null. */
   lastCaptureTs: string | null;
 };
@@ -32,7 +43,8 @@ function holeNo(row: HoleRow): number | null {
 export async function loadGroupScoreProgress(
   admin: SupabaseClient,
   roundId: string,
-  entryIdsByGroup: Map<string, string[]>
+  entryIdsByGroup: Map<string, string[]>,
+  groupMeta?: Map<string, GroupScoreMeta>
 ): Promise<Map<string, GroupScoreProgress>> {
   const out = new Map<string, GroupScoreProgress>();
   const allEntryIds = Array.from(
@@ -48,7 +60,6 @@ export async function loadGroupScoreProgress(
 
   // Hoyos capturados (1..18) por entry, de hole_scores.
   const holesByEntry = new Map<string, Set<number>>();
-  const lastHoleByEntry = new Map<string, number>();
   {
     const { data } = await admin
       .from("hole_scores")
@@ -66,7 +77,6 @@ export async function loadGroupScoreProgress(
       const set = holesByEntry.get(eid) ?? new Set<number>();
       set.add(h);
       holesByEntry.set(eid, set);
-      if (h > (lastHoleByEntry.get(eid) ?? 0)) lastHoleByEntry.set(eid, h);
     }
   }
 
@@ -90,20 +100,27 @@ export async function loadGroupScoreProgress(
     }
   }
 
-  // Agregar por grupo (máximo de hoyos, hoyo más avanzado, captura más reciente).
+  // Agregar por grupo: hoyos en secuencia desde el tee de salida.
   for (const [gid, eids] of entryIdsByGroup) {
-    let holesPlayed = 0;
-    let lastHole: number | null = null;
+    const meta = groupMeta?.get(gid);
+    const captured = new Set<number>();
     let lastCaptureTs: string | null = null;
     for (const eid of eids) {
-      const n = holesByEntry.get(eid)?.size ?? 0;
-      if (n > holesPlayed) holesPlayed = n;
-      const lh = lastHoleByEntry.get(eid) ?? null;
-      if (lh != null && (lastHole == null || lh > lastHole)) lastHole = lh;
+      for (const h of holesByEntry.get(eid) ?? []) captured.add(h);
       const ts = lastTsByEntry.get(eid) ?? null;
       if (ts && (!lastCaptureTs || ts > lastCaptureTs)) lastCaptureTs = ts;
     }
-    out.set(gid, { holesPlayed, lastHole, lastCaptureTs });
+    const startHole = resolveGroupStartHole(
+      meta?.starting_hole,
+      meta?.notes,
+      captured
+    );
+    const holesPlayed = countSequentialHolesFromStart(captured, startHole);
+    const lastHole =
+      holesPlayed > 0
+        ? ((startHole - 1 + holesPlayed - 1) % 18) + 1
+        : null;
+    out.set(gid, { holesPlayed, lastHole, startHole, lastCaptureTs });
   }
 
   return out;
