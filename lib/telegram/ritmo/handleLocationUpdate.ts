@@ -120,36 +120,61 @@ async function loadGroup(
   return (data as GroupLite | null) ?? null;
 }
 
-/** Jugador: inscripción más reciente → torneo, ronda activa y grupo. */
+/** Jugador: inscripción del torneo activo → ronda activa y grupo de ESA ronda.
+ *  Si se pasa `preferredEntryId` (p. ej. el que mandó la app móvil), se prioriza
+ *  esa inscripción para no equivocar de torneo cuando el jugador tiene varios. */
 export async function buildPlayerContext(
   supabase: SupabaseClient,
-  player: { id: string; first_name: string | null }
+  player: { id: string; first_name: string | null },
+  preferredEntryId?: string | null
 ): Promise<ResolvedContext | null> {
-  const { data: entry } = await supabase
+  const { data: entriesRaw } = await supabase
     .from("tournament_entries")
-    .select("id, tournament_id, tournaments ( course_name, course_id )")
+    .select("id, tournament_id, created_at, tournaments ( course_name, course_id )")
     .eq("player_id", player.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
-  if (!entry?.tournament_id) return null;
-  const t = oneOrNull(
-    entry.tournaments as
+  const entries = (entriesRaw ?? []) as Array<{
+    id: string;
+    tournament_id: string;
+    tournaments:
       | { course_name: string | null; course_id: string | null }
       | { course_name: string | null; course_id: string | null }[]
-      | null
-  );
+      | null;
+  }>;
+  if (entries.length === 0) return null;
+
+  // Preferir la inscripción indicada (app móvil); si no, la más reciente.
+  const entry =
+    (preferredEntryId
+      ? entries.find((e) => String(e.id) === String(preferredEntryId))
+      : null) ?? entries[0];
+
+  if (!entry?.tournament_id) return null;
+  const t = oneOrNull(entry.tournaments);
   const round = await resolveActiveRound(supabase, entry.tournament_id);
 
+  // Grupo del jugador EN LA RONDA ACTIVA (filtra por round_id; el jugador puede
+  // tener membresías de rondas anteriores y `maybeSingle` fallaría con varias).
   let group: GroupLite | null = null;
   if (round?.id) {
-    const { data: gm } = await supabase
+    const { data: gms } = await supabase
       .from("pairing_group_members")
-      .select("group_id")
-      .eq("entry_id", entry.id)
-      .maybeSingle();
-    if (gm?.group_id) group = await loadGroup(supabase, gm.group_id, round.id);
+      .select("group_id, pairing_groups!inner ( id, round_id )")
+      .eq("entry_id", entry.id);
+    for (const row of (gms ?? []) as Array<{
+      group_id: string;
+      pairing_groups:
+        | { id: string; round_id: string }
+        | { id: string; round_id: string }[]
+        | null;
+    }>) {
+      const pg = oneOrNull(row.pairing_groups);
+      if (pg?.round_id === round.id) {
+        group = await loadGroup(supabase, row.group_id, round.id);
+        break;
+      }
+    }
   }
 
   return {

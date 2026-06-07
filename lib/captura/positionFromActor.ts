@@ -47,10 +47,14 @@ async function resolveContextFromEntry(
   const player = Array.isArray(p) ? p[0] : p;
   if (!player) return null;
 
-  return await buildPlayerContext(supabase, {
-    id: player.id,
-    first_name: player.first_name ?? null,
-  });
+  return await buildPlayerContext(
+    supabase,
+    {
+      id: player.id,
+      first_name: player.first_name ?? null,
+    },
+    entryId
+  );
 }
 
 async function resolveContextFromCaddie(

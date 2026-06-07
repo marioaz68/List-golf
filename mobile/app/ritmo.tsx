@@ -50,6 +50,13 @@ export default function RitmoScreen() {
         router.replace("/");
         return;
       }
+      // El task de background lee credenciales de AsyncStorage, no SecureStore.
+      // Si el usuario ya tenía sesión guardada, hay que re-sincronizar o los
+      // pings se descartan silenciosamente aunque el chip diga "GPS ACTIVO".
+      await syncSessionToBackgroundStorage({
+        caddieId: s.caddieId,
+        entryId: s.entryId,
+      });
       setSession(s);
       const running = await isBackgroundTrackingActive();
       if (!cancelled) setState(running ? "on" : "off");
@@ -69,6 +76,12 @@ export default function RitmoScreen() {
     }
     setState("starting");
     setErrorMsg(null);
+    if (session) {
+      await syncSessionToBackgroundStorage({
+        caddieId: session.caddieId,
+        entryId: session.entryId,
+      });
+    }
     const result = await startBackgroundTracking();
     if (!result.ok) {
       setState("error");
@@ -81,7 +94,7 @@ export default function RitmoScreen() {
       return;
     }
     setState("on");
-  }, [state]);
+  }, [state, session]);
 
   const onLogout = useCallback(async () => {
     Alert.alert("Cerrar sesión", "¿Seguro? Tendrás que meter un código nuevo del bot.", [
