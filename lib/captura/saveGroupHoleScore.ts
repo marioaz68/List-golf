@@ -133,6 +133,28 @@ export async function saveGroupHoleScore(
     return { ok: false, error: "El jugador no pertenece a este grupo." };
   }
 
+  // ── Bloqueo por tarjeta cerrada ──────────────────────────────────────
+  // Una vez firmada/cerrada (scorecards.locked_at), nadie captura ni edita
+  // desde el link público (jugador / caddie / testigo). El staff (rol admin
+  // desde backoffice) sí puede corregir. Aplica igual a match play,
+  // consolación MP y stroke agregado.
+  const effectiveActorRole: ScoreActorRole | null =
+    params.actor?.role ?? params.actorRole ?? null;
+  if (effectiveActorRole !== "admin") {
+    const { data: lockedCard } = await admin
+      .from("scorecards")
+      .select("locked_at")
+      .eq("round_id", roundId)
+      .eq("entry_id", entryId)
+      .maybeSingle();
+    if (lockedCard?.locked_at) {
+      return {
+        ok: false,
+        error: "Tarjeta cerrada: ya no se puede capturar ni editar.",
+      };
+    }
+  }
+
   const { data: entryRow } = await admin
     .from("tournament_entries")
     .select("id, player_id")

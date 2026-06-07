@@ -102,6 +102,7 @@ function PublicSection({
   labelForHole,
   rowAccent,
   disabledHoles,
+  lockedEntryIds,
   matchProgression,
 }: {
   title: string;
@@ -123,6 +124,8 @@ function PublicSection({
   rowAccent?: string;
   /** Hoyos que NO permiten editar (después de decidir el desempate). */
   disabledHoles?: Set<HoleNumber>;
+  /** Jugadores con tarjeta cerrada — no permiten editar. */
+  lockedEntryIds?: Set<string>;
   /** Mapa hole_no → label "AS / T+1 / B+0.5". Si se proporciona,
    *  añadimos una fila MATCH al final con el estado por hoyo. */
   matchProgression?: Map<number, {
@@ -230,7 +233,9 @@ function PublicSection({
                     const key = `${player.entryId}-${hole}`;
                     const isSaving = savingKey === `pub:${key}`;
                     const isPending = pending[hole];
-                    const disabled = disabledHoles?.has(hole) ?? false;
+                    const disabled =
+                      (disabledHoles?.has(hole) ?? false) ||
+                      (lockedEntryIds?.has(player.entryId) ?? false);
                     return (
                       <td key={key} className="px-0 py-1 text-center">
                         <button
@@ -634,7 +639,20 @@ export default function TarjetaCaptureClient({
     ? playersById.get(activeCell.entryId) ?? null
     : null;
 
+  const lockedEntryIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of meta.players) {
+      if (p.lockedAt) set.add(p.entryId);
+    }
+    return set;
+  }, [meta.players]);
+
+  const allCardsLocked =
+    meta.players.length > 0 &&
+    meta.players.every((p) => Boolean(p.lockedAt));
+
   function openCell(entryId: string, hole: HoleNumber, table: TableKind) {
+    if (lockedEntryIds.has(entryId)) return;
     const existing =
       table === "public"
         ? scoresByEntry[entryId]?.[hole] ?? null
@@ -1086,6 +1104,13 @@ export default function TarjetaCaptureClient({
                 queda en rojo hasta que el testigo del jugador lo confirme.
               </p>
 
+              {allCardsLocked ? (
+                <div className="mt-2 rounded-md border border-slate-400 bg-slate-100 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-800">
+                  Tarjeta(s) cerrada(s): ya no se puede capturar ni editar desde
+                  este enlace.
+                </div>
+              ) : null}
+
               {playoffCapture.orphanPlayoffScores ? (
                 <div className="mt-2 rounded-md border border-amber-600 bg-amber-50 px-2 py-1.5 text-center text-[11px] font-semibold text-amber-950">
                   El match ya quedó decidido ({meta.matchPlay?.resultText}). Los
@@ -1235,6 +1260,7 @@ export default function TarjetaCaptureClient({
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
+                  lockedEntryIds={lockedEntryIds}
                 />
                 <PublicSection
                   title="BACK 9"
@@ -1248,6 +1274,7 @@ export default function TarjetaCaptureClient({
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
+                  lockedEntryIds={lockedEntryIds}
                 />
 
                 {/* Desempate (muerte súbita): se muestra solo si la
@@ -1282,6 +1309,7 @@ export default function TarjetaCaptureClient({
                       rowAccent="text-amber-700"
                       disabledHoles={disabled}
                       matchProgression={matchProgressionMap}
+                      lockedEntryIds={lockedEntryIds}
                     />
                   );
                   })()

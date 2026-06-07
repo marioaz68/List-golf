@@ -34,6 +34,8 @@ export type StrokeAggregatePlayerRow = {
   holesPlayed: number;
   playingHandicap: number;
   handicapIndex: number | null;
+  /** Tarjeta cerrada (scorecards.locked_at). */
+  lockedAt: string | null;
 };
 
 export type StrokeAggregateGroup = {
@@ -43,6 +45,8 @@ export type StrokeAggregateGroup = {
   label: string;
   teeTime: string | null;
   members: StrokeAggregatePlayerRow[];
+  /** True cuando todos los integrantes tienen tarjeta cerrada. */
+  cardsClosed: boolean;
 };
 
 export type StrokeAggregatePairRow = {
@@ -425,6 +429,21 @@ export async function loadStrokeAggregateStandings(
     .select("id, entry_id, player_id, gross_score")
     .eq("round_id", roundId);
 
+  const lockedAtByEntry = new Map<string, string>();
+  if (entryIds.size > 0) {
+    const { data: lockedRows } = await admin
+      .from("scorecards")
+      .select("entry_id, locked_at")
+      .eq("round_id", roundId)
+      .in("entry_id", Array.from(entryIds))
+      .not("locked_at", "is", null);
+    for (const row of lockedRows ?? []) {
+      if (row.entry_id && row.locked_at) {
+        lockedAtByEntry.set(String(row.entry_id), String(row.locked_at));
+      }
+    }
+  }
+
   const rsByEntry = new Map<string, { id: string; gross_score: number | null }>();
   for (const rs of roundScores ?? []) {
     if (rs.entry_id) {
@@ -502,6 +521,7 @@ export async function loadStrokeAggregateStandings(
     const player = Array.isArray(p) ? p[0] : p;
     const playerId = entry?.player_id ? String(entry.player_id) : null;
     const gender = String(player?.gender ?? "X").toUpperCase();
+    const lockedAt = lockedAtByEntry.get(entryId) ?? null;
     const hi = entry?.handicap_index != null ? Number(entry.handicap_index) : null;
     const ph = effectivePlayingHandicapForScoring(
       entry?.playing_handicap_override ?? entry?.playing_handicap,
@@ -523,6 +543,7 @@ export async function loadStrokeAggregateStandings(
           holesPlayed: 0,
           playingHandicap: ph,
           handicapIndex: hi,
+          lockedAt,
         },
         detail: null,
       };
@@ -558,6 +579,7 @@ export async function loadStrokeAggregateStandings(
         holesPlayed,
         playingHandicap: ph,
         handicapIndex: hi,
+        lockedAt,
       },
       detail,
     };
@@ -648,12 +670,15 @@ export async function loadStrokeAggregateStandings(
       (a, b) => a.position - b.position
     );
     const members = memberRows.map((m) => scorePlayer(m.entryId).row);
+    const cardsClosed =
+      members.length > 0 && members.every((m) => Boolean(m.lockedAt));
     groups.push({
       groupId: gid,
       groupNo: Number(g.group_no) || 0,
       label: rawLabel || "Stroke",
       teeTime: g.tee_time != null ? String(g.tee_time) : null,
       members,
+      cardsClosed,
     });
   }
 

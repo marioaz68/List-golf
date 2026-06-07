@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
 
 function formatPlayerName(firstName: string | null, lastName: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ").trim() || "(sin nombre)";
@@ -109,19 +110,28 @@ export async function buildPlayerGroupTelegramReply(
   let captureLine = "";
 
   if (roundId && entryId) {
-    const { data: groupMember } = await supabase
-      .from("pairing_group_members")
-      .select("group_id, position")
-      .eq("entry_id", entryId)
-      .maybeSingle();
+    // Grupos de la ronda actual (un jugador puede estar en varias rondas, por
+    // eso filtramos por round_id en vez de usar maybeSingle directo).
+    const { data: roundGroups } = await supabase
+      .from("pairing_groups")
+      .select("id, starting_hole, tee_time")
+      .eq("round_id", roundId);
+    const roundGroupIds = (roundGroups ?? []).map((g) => String(g.id));
+
+    const { data: groupMember } =
+      roundGroupIds.length > 0
+        ? await supabase
+            .from("pairing_group_members")
+            .select("group_id, position")
+            .eq("entry_id", entryId)
+            .in("group_id", roundGroupIds)
+            .maybeSingle()
+        : { data: null };
 
     if (groupMember?.group_id) {
-      const { data: groupRow } = await supabase
-        .from("pairing_groups")
-        .select("id, starting_hole, tee_time")
-        .eq("id", groupMember.group_id)
-        .eq("round_id", roundId)
-        .maybeSingle();
+      const groupRow = (roundGroups ?? []).find(
+        (g) => String(g.id) === String(groupMember.group_id)
+      );
 
       if (groupRow) {
         groupLine = `Grupo #${groupMember.position ?? "?"}`;
@@ -161,11 +171,14 @@ export async function buildPlayerGroupTelegramReply(
           teammatesLine = `Compañeros:\n${lines.join("\n")}`;
         }
 
-        const captureUrl = buildScoreEntryHref({
+        // Link de captura del GRUPO (carga a los jugadores del foursome desde
+        // pairing_group_members). Funciona igual para match play, consolación
+        // MP y stroke agregado. `me` habilita la fila privada del jugador.
+        const captureUrl = buildGroupCaptureUrl({
           tournamentId,
           roundId,
-          playerNumber,
-          name: playerName,
+          groupId: groupRow.id,
+          meEntryId: entryId,
         });
         captureLine = `\nCaptura de tarjeta:\n${captureUrl}`;
       }

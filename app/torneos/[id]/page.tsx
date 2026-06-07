@@ -9,6 +9,7 @@ import {
 } from "@/lib/leaderboard/lockedScorecards";
 import { fetchLockedScorecardsForTournament } from "@/lib/leaderboard/fetchLockedScorecards";
 import FavoritesView from "@/components/public/FavoritesView";
+import ConsolationIntegratedPanel from "@/components/public/ConsolationIntegratedPanel";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
@@ -222,18 +223,11 @@ export default async function PublicTournamentPage({
     redirect(`/torneos/${id}?${qs.toString()}`);
   }
 
-  // En match play (fuera de embed) las vistas live/leaderboard/favoritos/cuadro
-  // estático no se ofrecen en el menú; el resultado vive en «Bracket en vivo».
-  // Redirigimos esas vistas (incluido el default `live`) a /cuadro-vivo para
-  // que la página pública quede limpia. Salidas/Grupos y Convocatoria siguen
-  // funcionando como vistas del menú.
+  // En match play, la vista «bracket» estática redirige al cuadro en vivo.
   if (
     isMatchPlayTournament &&
     !isEmbed &&
-    (view === "live" ||
-      view === "official" ||
-      view === "favorites" ||
-      view === "bracket")
+    view === "bracket"
   ) {
     redirect(`/torneos/${id}/cuadro-vivo`);
   }
@@ -1490,39 +1484,31 @@ export default async function PublicTournamentPage({
             ) : null}
 
             <div className={publicTournamentPrimaryNavGridClass}>
-              {/* Live scoring: solo para torneos stroke play (incluida la
-                  consolación stroke play). En match play el resultado vive en
-                  «Bracket en vivo» / «Matches en vivo». */}
-              {!isMatchPlayTournament ? (
-                <Link
-                  scroll={false}
-                  href={tHref({
-                    categoryId: selectedCategoryId || null,
-                    roundId: selectedRound?.id ?? null,
-                    view: "live",
-                  })}
-                  className={publicTournamentViewPillClasses(view === "live")}
-                >
-                  {pub.live}
-                </Link>
-              ) : null}
+              <Link
+                scroll={false}
+                href={tHref({
+                  categoryId: selectedCategoryId || null,
+                  roundId: selectedRound?.id ?? null,
+                  view: "live",
+                })}
+                className={publicTournamentViewPillClasses(view === "live")}
+              >
+                {pub.live}
+              </Link>
 
-              {/* Clasificación / Leaderboard: oculto en match play. */}
-              {!isMatchPlayTournament ? (
-                <Link
-                  scroll={false}
-                  href={tHref({
-                    categoryId: selectedCategoryId || null,
-                    roundId: selectedRound?.id ?? null,
-                    view: "official",
-                  })}
-                  className={publicTournamentViewPillClasses(
-                    view === "official"
-                  )}
-                >
-                  {pub.leaderboard}
-                </Link>
-              ) : null}
+              <Link
+                scroll={false}
+                href={tHref({
+                  categoryId: selectedCategoryId || null,
+                  roundId: selectedRound?.id ?? null,
+                  view: "official",
+                })}
+                className={publicTournamentViewPillClasses(
+                  view === "official"
+                )}
+              >
+                {pub.leaderboard}
+              </Link>
 
               <Link
                 scroll={false}
@@ -1541,20 +1527,17 @@ export default async function PublicTournamentPage({
                 {pub.teeSheet}
               </Link>
 
-              {/* Favoritos: oculto en match play. */}
-              {!isMatchPlayTournament ? (
-                <Link
-                  scroll={false}
-                  href={tHref({
-                    view: "favorites",
-                  })}
-                  className={publicTournamentViewPillClasses(
-                    view === "favorites"
-                  )}
-                >
-                  {pub.favorites}
-                </Link>
-              ) : null}
+              <Link
+                scroll={false}
+                href={tHref({
+                  view: "favorites",
+                })}
+                className={publicTournamentViewPillClasses(
+                  view === "favorites"
+                )}
+              >
+                {pub.favorites}
+              </Link>
 
               {publicConvocatoria.visible ? (
                 <Link
@@ -2011,21 +1994,29 @@ export default async function PublicTournamentPage({
           ) : null}
 
           {view === "favorites" && !rulesBlocked && !leaderboardBuildError ? (
-            <FavoritesView
-              tournamentId={typedTournament.id}
-              leaderboard={leaderboard}
-              selectedRound={selectedRound}
-              detailLabels={detailTableLabels}
-              selectedCategoryId={selectedCategoryId}
-              requestedDetailId={requestedDetailId}
-              cutLine={activePublicCutLine}
-              competitionRules={competitionRulesList}
-              handicapsByPlayerId={handicapsByPlayerId}
-              strokeIndexByHole={strokeIndexByHoleRecord}
-              leaderboardViewOverride={leaderboardViewOverride}
-              rounds={roundsForLock}
-              lockedLookups={lockedLookups}
-            />
+            <>
+              <FavoritesView
+                tournamentId={typedTournament.id}
+                leaderboard={leaderboard}
+                selectedRound={selectedRound}
+                detailLabels={detailTableLabels}
+                selectedCategoryId={selectedCategoryId}
+                requestedDetailId={requestedDetailId}
+                cutLine={activePublicCutLine}
+                competitionRules={competitionRulesList}
+                handicapsByPlayerId={handicapsByPlayerId}
+                strokeIndexByHole={strokeIndexByHoleRecord}
+                leaderboardViewOverride={leaderboardViewOverride}
+                rounds={roundsForLock}
+                lockedLookups={lockedLookups}
+              />
+              {isMatchPlayTournament ? (
+                <ConsolationIntegratedPanel
+                  tournamentId={typedTournament.id}
+                  mode="favorites"
+                />
+              ) : null}
+            </>
           ) : view === "tee-sheet" ||
             view === "convocatoria" ||
             view === "bracket" ||
@@ -2107,6 +2098,13 @@ export default async function PublicTournamentPage({
                   : undefined
               }
             />
+            {isMatchPlayTournament &&
+            (view === "live" || view === "official") ? (
+              <ConsolationIntegratedPanel
+                tournamentId={typedTournament.id}
+                mode={view === "official" ? "leaderboard" : "live"}
+              />
+            ) : null}
             </>
           )}
         </div>

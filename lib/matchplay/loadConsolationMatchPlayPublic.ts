@@ -9,6 +9,12 @@ import {
   loadConsolationMpRule,
 } from "@/lib/matchplay/consolationMatchPlay";
 
+export type ConsolationPlayerInfo = {
+  entryId: string;
+  playerId: string;
+  name: string;
+};
+
 export type ConsolationLiveGroup = {
   groupId: string;
   groupNo: number;
@@ -17,10 +23,14 @@ export type ConsolationLiveGroup = {
   matchId: string | null;
   topLabel: string;
   bottomLabel: string;
+  topPlayers: ConsolationPlayerInfo[];
+  bottomPlayers: ConsolationPlayerInfo[];
   resultText: string | null;
   status: string;
   /** Puntos en vivo derivados de captura (ej. "H12 · 2 arriba"). */
   liveText: string | null;
+  /** True cuando las 4 tarjetas del grupo están cerradas (locked_at). */
+  cardsClosed: boolean;
 };
 
 type ConsolMatchRow = {
@@ -54,6 +64,25 @@ function teamLabel(
   if (!t) return "—";
   const seed = t.seed != null ? `#${t.seed} ` : "";
   return `${seed}${t.team_name ?? formatPlayerName(t.player_a?.player ?? {})}`;
+}
+
+function teamPlayers(
+  teamId: string | null,
+  teamById: Map<string, MatchPlayTeamRow>
+): ConsolationPlayerInfo[] {
+  if (!teamId) return [];
+  const t = teamById.get(teamId);
+  if (!t) return [];
+  const out: ConsolationPlayerInfo[] = [];
+  for (const entry of [t.player_a, t.player_b]) {
+    if (!entry?.id || !entry.player_id) continue;
+    out.push({
+      entryId: String(entry.id),
+      playerId: String(entry.player_id),
+      name: formatPlayerName(entry.player ?? {}),
+    });
+  }
+  return out;
 }
 
 export async function loadConsolationMatchPlayPublic(
@@ -136,13 +165,70 @@ export async function loadConsolationMatchPlayPublic(
     .eq("round_no", activeRoundNo)
     .maybeSingle();
 
+  const roundId = roundRow?.id ? String(roundRow.id) : null;
+  const lockedEntryIds = new Set<string>();
+  if (roundId) {
+    const { data: lockedRows } = await admin
+      .from("scorecards")
+      .select("entry_id, locked_at")
+      .eq("round_id", roundId)
+      .not("locked_at", "is", null);
+    for (const row of lockedRows ?? []) {
+      if (row.entry_id) lockedEntryIds.add(String(row.entry_id));
+    }
+  }
+
+  type GroupMemberRow = { group_id: string; entry_id: string };
+
+  function groupEntryIds(groupId: string, memberRows: GroupMemberRow[]): string[] {
+    return memberRows
+      .filter((m) => String(m.group_id) === groupId)
+      .map((m) => String(m.entry_id))
+      .filter(Boolean);
+  }
+
+  function areCardsClosed(entryIds: string[]): boolean {
+    if (entryIds.length === 0) return false;
+    return entryIds.every((id) => lockedEntryIds.has(id));
+  }
+
+  function buildGroupRow(params: {
+    groupId: string;
+    groupNo: number;
+    teeTime: string | null;
+    match: ConsolMatchRow | undefined;
+    topTeamId: string | null;
+    bottomTeamId: string | null;
+    memberEntryIds: string[];
+  }): ConsolationLiveGroup {
+    const { groupId, groupNo, teeTime, match, topTeamId, bottomTeamId, memberEntryIds } =
+      params;
+    const cardsClosed = areCardsClosed(memberEntryIds);
+    const liveRaw = match?.id ? liveByMatchId.get(match.id) ?? null : null;
+    return {
+      groupId,
+      groupNo,
+      teeTime,
+      roundNo: activeRoundNo,
+      matchId: match?.id ? String(match.id) : null,
+      topLabel: teamLabel(topTeamId, teamById),
+      bottomLabel: teamLabel(bottomTeamId, teamById),
+      topPlayers: teamPlayers(topTeamId, teamById),
+      bottomPlayers: teamPlayers(bottomTeamId, teamById),
+      resultText: match?.result_text ?? null,
+      status: match?.status ?? "scheduled",
+      liveText: cardsClosed ? null : liveRaw,
+      cardsClosed,
+    };
+  }
+
   const groups: ConsolationLiveGroup[] = [];
 
-  if (roundRow?.id) {
+  if (roundId) {
     const { data: pgRows } = await admin
       .from("pairing_groups")
       .select("id, group_no, tee_time, notes")
-      .eq("round_id", roundRow.id)
+      .eq("round_id", roundId)
       .like("notes", `${CONSOLATION_NOTES_PREFIX}%`)
       .order("group_no", { ascending: true });
 
@@ -163,9 +249,9 @@ export async function loadConsolationMatchPlayPublic(
     }
 
     for (const pg of pgRows ?? []) {
-      const gTeams = (members ?? [])
-        .filter((m) => m.group_id === pg.id)
-        .map((m) => entryToTeam.get(m.entry_id))
+      const memberRows = members ?? [];
+      const gTeams = groupEntryIds(String(pg.id), memberRows)
+        .map((eid) => entryToTeam.get(eid))
         .filter((id): id is string => Boolean(id));
       const uniqueTeams = [...new Set(gTeams)];
       let match: ConsolMatchRow | undefined;
@@ -174,21 +260,17 @@ export async function loadConsolationMatchPlayPublic(
         match = matchByPairKey.get(k);
       }
 
-      groups.push({
-        groupId: String(pg.id),
-        groupNo: Number(pg.group_no ?? 0),
-        teeTime: pg.tee_time ? String(pg.tee_time).slice(0, 5) : null,
-        roundNo: activeRoundNo,
-        matchId: match?.id ? String(match.id) : null,
-        topLabel: teamLabel(match?.top_pair_id ?? uniqueTeams[0] ?? null, teamById),
-        bottomLabel: teamLabel(
-          match?.bottom_pair_id ?? uniqueTeams[1] ?? null,
-          teamById
-        ),
-        resultText: match?.result_text ?? null,
-        status: match?.status ?? "scheduled",
-        liveText: match?.id ? liveByMatchId.get(match.id) ?? null : null,
-      });
+      groups.push(
+        buildGroupRow({
+          groupId: String(pg.id),
+          groupNo: Number(pg.group_no ?? 0),
+          teeTime: pg.tee_time ? String(pg.tee_time).slice(0, 5) : null,
+          match,
+          topTeamId: match?.top_pair_id ?? uniqueTeams[0] ?? null,
+          bottomTeamId: match?.bottom_pair_id ?? uniqueTeams[1] ?? null,
+          memberEntryIds: groupEntryIds(String(pg.id), memberRows),
+        })
+      );
     }
   }
 
@@ -197,18 +279,21 @@ export async function loadConsolationMatchPlayPublic(
     if (Number(m.round_no) !== activeRoundNo) continue;
     if (!m.top_pair_id || !m.bottom_pair_id) continue;
     if (groups.some((g) => g.matchId === m.id)) continue;
-    groups.push({
-      groupId: `match-${m.id}`,
-      groupNo: Number(m.position_no ?? 0),
-      teeTime: null,
-      roundNo: activeRoundNo,
-      matchId: String(m.id),
-      topLabel: teamLabel(m.top_pair_id, teamById),
-      bottomLabel: teamLabel(m.bottom_pair_id, teamById),
-      resultText: m.result_text,
-      status: m.status ?? "scheduled",
-      liveText: liveByMatchId.get(m.id) ?? null,
-    });
+    const memberEntryIds = [
+      ...teamPlayers(m.top_pair_id, teamById),
+      ...teamPlayers(m.bottom_pair_id, teamById),
+    ].map((p) => p.entryId);
+    groups.push(
+      buildGroupRow({
+        groupId: `match-${m.id}`,
+        groupNo: Number(m.position_no ?? 0),
+        teeTime: null,
+        match: m,
+        topTeamId: m.top_pair_id,
+        bottomTeamId: m.bottom_pair_id,
+        memberEntryIds,
+      })
+    );
   }
 
   groups.sort((a, b) => a.groupNo - b.groupNo || a.groupId.localeCompare(b.groupId));

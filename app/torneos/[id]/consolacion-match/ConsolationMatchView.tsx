@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import type { ConsolationMatchPlayPublic } from "@/lib/matchplay/loadConsolationMatchPlayPublic";
+import type { ConsolationMatchPlayPublic, ConsolationPlayerInfo } from "@/lib/matchplay/loadConsolationMatchPlayPublic";
 import MatchDetailModal from "@/app/torneos/[id]/matches-vivo/MatchDetailModal";
+import FavoriteStar from "@/components/public/FavoriteStar";
 
 type Payload = ConsolationMatchPlayPublic & { error?: string };
 
@@ -11,7 +12,32 @@ const STATUS_COLOR: Record<string, string> = {
   completed: "border-emerald-500/40 bg-emerald-950/30",
   in_progress: "border-sky-500/40 bg-sky-950/30",
   scheduled: "border-white/10 bg-white/5",
+  closed: "border-slate-500/40 bg-slate-950/30",
 };
+
+function TeamPlayers({
+  tournamentId,
+  players,
+}: {
+  tournamentId: string;
+  players: ConsolationPlayerInfo[];
+}) {
+  if (players.length === 0) return null;
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+      {players.map((p) => (
+        <li key={p.playerId} className="flex items-center gap-1">
+          <FavoriteStar
+            tournamentId={tournamentId}
+            playerId={p.playerId}
+            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] leading-none transition hover:bg-white/10"
+          />
+          <span>{p.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function ConsolationMatchView({
   tournamentId,
@@ -145,11 +171,13 @@ export default function ConsolationMatchView({
         <ul className="space-y-3">
           {data?.groups.map((g) => {
             const statusKey =
-              g.status === "completed"
-                ? "completed"
-                : g.liveText
-                  ? "in_progress"
-                  : "scheduled";
+              g.cardsClosed
+                ? "closed"
+                : g.status === "completed"
+                  ? "completed"
+                  : g.liveText
+                    ? "in_progress"
+                    : "scheduled";
             const cardCls =
               STATUS_COLOR[statusKey] ?? STATUS_COLOR.scheduled;
             const detailMatchId =
@@ -169,14 +197,27 @@ export default function ConsolationMatchView({
                     R{g.roundNo}
                   </span>
                 </div>
-                <div className="mt-2 space-y-1 text-sm">
-                  <div className="font-semibold text-white">{g.topLabel}</div>
+                <div className="mt-2 space-y-2 text-sm">
+                  <div>
+                    <div className="font-semibold text-white">{g.topLabel}</div>
+                    <TeamPlayers tournamentId={tournamentId} players={g.topPlayers} />
+                  </div>
                   <div className="text-[10px] text-slate-500">vs</div>
-                  <div className="font-semibold text-white">{g.bottomLabel}</div>
+                  <div>
+                    <div className="font-semibold text-white">{g.bottomLabel}</div>
+                    <TeamPlayers tournamentId={tournamentId} players={g.bottomPlayers} />
+                  </div>
                 </div>
                 <div className="mt-2 text-xs font-semibold text-emerald-300">
-                  {g.liveText ?? g.resultText ?? "Sin resultado aún"}
+                  {g.cardsClosed
+                    ? g.resultText ?? "Tarjeta cerrada"
+                    : g.liveText ?? g.resultText ?? "Sin resultado aún"}
                 </div>
+                {g.cardsClosed ? (
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Tarjeta cerrada
+                  </div>
+                ) : null}
                 {detailMatchId ? (
                   <button
                     type="button"

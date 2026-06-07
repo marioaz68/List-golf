@@ -8,6 +8,24 @@ import type {
   StrokeAggregatePairRow,
   StrokeAggregatePlayerRow,
 } from "@/lib/matchplay/strokeAggregateStandings";
+import type { HoleDetail } from "@/app/torneos/[id]/lib/types";
+
+/** Jugador mostrado dentro del detalle (con hoyos resueltos). */
+type DetailPlayer = {
+  entryId: string;
+  playerId: string | null;
+  name: string;
+  net: number | null;
+  netToPar: number | null;
+  holesPlayed: number;
+};
+
+/** Descriptor del detalle abierto (grupo o pareja). */
+type DetailTarget = {
+  title: string;
+  subtitle?: string;
+  players: DetailPlayer[];
+};
 
 type StandingsPayload = {
   ok: boolean;
@@ -48,6 +66,7 @@ export default function StrokeAggregateStandingsView({
   const [tab, setTab] = useState<Tab>("live");
   const [favs, setFavs] = useState<string[]>([]);
   const [onlyFavs, setOnlyFavs] = useState(false);
+  const [detail, setDetail] = useState<DetailTarget | null>(null);
 
   const load = useCallback(
     (opts?: { silent?: boolean }) => {
@@ -126,6 +145,17 @@ export default function StrokeAggregateStandingsView({
 
   const favSet = useMemo(() => new Set(favs), [favs]);
 
+  // Hoyos por entry (de las parejas: detailA / detailB) para mostrar el
+  // marcador hoyo por hoyo tanto en grupos como en clasificación.
+  const holesByEntry = useMemo(() => {
+    const m = new Map<string, HoleDetail[]>();
+    for (const p of data?.pairs ?? []) {
+      if (p.playerA?.entryId && p.detailA) m.set(p.playerA.entryId, p.detailA.holes);
+      if (p.playerB?.entryId && p.detailB) m.set(p.playerB.entryId, p.detailB.holes);
+    }
+    return m;
+  }, [data?.pairs]);
+
   if (loading && !data) {
     return <p className="text-sm text-slate-400">Cargando consolación stroke…</p>;
   }
@@ -192,10 +222,28 @@ export default function StrokeAggregateStandingsView({
           groups={data.groups}
           favSet={favSet}
           onlyFavs={onlyFavs}
+          onOpenDetail={setDetail}
         />
       ) : (
-        <Leaderboard pairs={data.pairs} message={data.message} favSet={favSet} onlyFavs={onlyFavs} />
+        <Leaderboard
+          tournamentId={tournamentId}
+          pairs={data.pairs}
+          message={data.message}
+          favSet={favSet}
+          onlyFavs={onlyFavs}
+          onOpenDetail={setDetail}
+        />
       )}
+
+      {detail ? (
+        <StrokeDetailModal
+          tournamentId={tournamentId}
+          detail={detail}
+          holesByEntry={holesByEntry}
+          favSet={favSet}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
 
       <div className="flex flex-wrap gap-2 text-[11px]">
         <Link
@@ -251,11 +299,13 @@ function LiveGroups({
   groups,
   favSet,
   onlyFavs,
+  onOpenDetail,
 }: {
   tournamentId: string;
   groups: StrokeAggregateGroup[];
   favSet: Set<string>;
   onlyFavs: boolean;
+  onOpenDetail: (d: DetailTarget) => void;
 }) {
   const sorted = [...groups].sort((a, b) => a.groupNo - b.groupNo);
   const filtered = onlyFavs
@@ -294,7 +344,10 @@ function LiveGroups({
                   {g.label}
                 </span>
               </span>
-              <span className="text-[11px] text-slate-400">{g.teeTime ?? "—"}</span>
+              <span className="text-[11px] text-slate-400">
+                {g.teeTime ?? "—"}
+                {g.cardsClosed ? " · cerrada" : ""}
+              </span>
             </div>
             <div className="space-y-1">
               {g.members.map((m) => (
@@ -306,6 +359,26 @@ function LiveGroups({
                 />
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() =>
+                onOpenDetail({
+                  title: `Salida ${g.groupNo} · ${g.label}`,
+                  subtitle: g.teeTime ? `Tee ${g.teeTime.slice(0, 5)}` : undefined,
+                  players: g.members.map((m) => ({
+                    entryId: m.entryId,
+                    playerId: m.playerId,
+                    name: m.name,
+                    net: m.net,
+                    netToPar: m.netToPar,
+                    holesPlayed: m.holesPlayed,
+                  })),
+                })
+              }
+              className="mt-2 w-full rounded border border-sky-400/30 bg-sky-500/10 px-2 py-1.5 text-[11px] font-bold text-sky-200 hover:bg-sky-500/20"
+            >
+              Ver detalle hoyo por hoyo →
+            </button>
           </div>
         );
       })}
@@ -342,6 +415,9 @@ function PlayerLiveRow({
       )}
       <span className="min-w-0 flex-1 truncate font-medium text-slate-100">
         {member.name}
+        {member.lockedAt ? (
+          <span className="ml-1 text-[9px] font-semibold text-slate-500">🔒</span>
+        ) : null}
       </span>
       <span className="shrink-0 text-[10px] text-slate-500">
         PH {member.playingHandicap}
@@ -362,15 +438,19 @@ function PlayerLiveRow({
 }
 
 function Leaderboard({
+  tournamentId,
   pairs,
   message,
   favSet,
   onlyFavs,
+  onOpenDetail,
 }: {
+  tournamentId: string;
   pairs: StrokeAggregatePairRow[];
   message: string;
   favSet: Set<string>;
   onlyFavs: boolean;
+  onOpenDetail: (d: DetailTarget) => void;
 }) {
   const filtered = onlyFavs
     ? pairs.filter(
@@ -406,7 +486,13 @@ function Leaderboard({
         </thead>
         <tbody>
           {filtered.map((p) => (
-            <PairTableRows key={p.pairId} pair={p} favSet={favSet} />
+            <PairTableRows
+              key={p.pairId}
+              tournamentId={tournamentId}
+              pair={p}
+              favSet={favSet}
+              onOpenDetail={onOpenDetail}
+            />
           ))}
         </tbody>
       </table>
@@ -415,12 +501,36 @@ function Leaderboard({
 }
 
 function PairTableRows({
+  tournamentId,
   pair,
   favSet,
+  onOpenDetail,
 }: {
+  tournamentId: string;
   pair: StrokeAggregatePairRow;
   favSet: Set<string>;
+  onOpenDetail: (d: DetailTarget) => void;
 }) {
+  const openDetail = () =>
+    onOpenDetail({
+      title: pair.label,
+      subtitle:
+        pair.aggregateNet != null
+          ? `Total pareja: ${fmtScore(pair.aggregateNet)}${
+              fmtToPar(pair.aggregateNetToPar)
+                ? ` (${fmtToPar(pair.aggregateNetToPar)})`
+                : ""
+            }`
+          : undefined,
+      players: [pair.playerA, pair.playerB].map((pl) => ({
+        entryId: pl.entryId,
+        playerId: pl.playerId,
+        name: pl.name,
+        net: pl.net,
+        netToPar: pl.netToPar,
+        holesPlayed: pl.holesPlayed,
+      })),
+    });
   const totalLabel = fmtScore(pair.aggregateNet);
   const totalToPar = fmtToPar(pair.aggregateNetToPar);
   const favA = !!pair.playerA.playerId && favSet.has(pair.playerA.playerId);
@@ -439,10 +549,25 @@ function PairTableRows({
           {pair.seed != null ? (
             <span className="ml-1 text-[10px] text-slate-500">#{pair.seed}</span>
           ) : null}
+          <button
+            type="button"
+            onClick={openDetail}
+            className="mt-1 block rounded border border-sky-400/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-bold text-sky-200 hover:bg-sky-500/20"
+          >
+            Ver detalle →
+          </button>
         </td>
         <td className="px-3 py-1.5 text-slate-300">
-          {favA ? <span className="mr-1 text-amber-300">★</span> : null}
-          {pair.playerA.name}
+          <span className="inline-flex items-center gap-1">
+            {pair.playerA.playerId ? (
+              <FavoriteStar
+                tournamentId={tournamentId}
+                playerId={pair.playerA.playerId}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-sm leading-none"
+              />
+            ) : null}
+            {pair.playerA.name}
+          </span>
         </td>
         <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
           {fmtScore(pair.playerA.net)}
@@ -470,8 +595,16 @@ function PairTableRows({
       </tr>
       <tr className={`border-b border-white/10 ${isFav ? "bg-amber-500/10" : ""}`}>
         <td className="px-3 py-1.5 text-slate-300">
-          {favB ? <span className="mr-1 text-amber-300">★</span> : null}
-          {pair.playerB.name}
+          <span className="inline-flex items-center gap-1">
+            {pair.playerB.playerId ? (
+              <FavoriteStar
+                tournamentId={tournamentId}
+                playerId={pair.playerB.playerId}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-sm leading-none"
+              />
+            ) : null}
+            {pair.playerB.name}
+          </span>
         </td>
         <td className="px-3 py-1.5 text-right tabular-nums text-slate-200">
           {fmtScore(pair.playerB.net)}
@@ -489,5 +622,156 @@ function PairTableRows({
         </td>
       </tr>
     </>
+  );
+}
+
+function holeCellClass(strokes: number | null, par: number | null): string {
+  if (strokes == null || par == null) return "text-slate-500";
+  const d = strokes - par;
+  if (d <= -2) return "bg-amber-400/20 font-bold text-amber-200";
+  if (d === -1) return "bg-emerald-500/20 font-bold text-emerald-200";
+  if (d === 0) return "text-slate-200";
+  if (d === 1) return "bg-rose-500/15 text-rose-200";
+  return "bg-rose-600/25 font-bold text-rose-100";
+}
+
+function StrokeDetailModal({
+  tournamentId,
+  detail,
+  holesByEntry,
+  favSet,
+  onClose,
+}: {
+  tournamentId: string;
+  detail: DetailTarget;
+  holesByEntry: Map<string, HoleDetail[]>;
+  favSet: Set<string>;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-3 sm:p-6"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-3xl rounded-2xl border border-sky-500/30 bg-[#0b1422] shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-t-2xl border-b border-white/10 bg-[#0b1422] px-4 py-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-extrabold text-white">
+              {detail.title}
+            </div>
+            {detail.subtitle ? (
+              <div className="truncate text-[11px] text-sky-300">{detail.subtitle}</div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[12px] font-bold text-slate-200 hover:bg-white/10"
+          >
+            ← Volver
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4">
+          {detail.players.map((pl) => {
+            const holes = holesByEntry.get(pl.entryId) ?? [];
+            const byNo = new Map(holes.map((h) => [h.hole_number, h]));
+            const front = Array.from({ length: 9 }, (_, i) => i + 1);
+            const back = Array.from({ length: 9 }, (_, i) => i + 10);
+            const isFav = !!pl.playerId && favSet.has(pl.playerId);
+            return (
+              <div
+                key={pl.entryId}
+                className={`rounded-xl border p-3 ${
+                  isFav ? "border-amber-400/40 bg-amber-500/5" : "border-white/10 bg-white/[0.02]"
+                }`}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-sm font-bold text-white">
+                    {pl.playerId ? (
+                      <FavoriteStar
+                        tournamentId={tournamentId}
+                        playerId={pl.playerId}
+                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-sm leading-none"
+                      />
+                    ) : null}
+                    {pl.name}
+                  </span>
+                  <span className="shrink-0 text-right text-[12px] text-slate-300">
+                    Neto{" "}
+                    <span className="font-extrabold text-sky-200">
+                      {fmtScore(pl.net)}
+                    </span>
+                    {fmtToPar(pl.netToPar) ? (
+                      <span className="ml-1 text-slate-500">({fmtToPar(pl.netToPar)})</span>
+                    ) : null}
+                    <span className="ml-2 text-[10px] text-slate-500">
+                      {pl.holesPlayed}/18
+                    </span>
+                  </span>
+                </div>
+
+                {holes.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">Sin hoyos capturados aún.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {[front, back].map((nums, idx) => (
+                      <div key={idx} className="overflow-x-auto">
+                        <table className="w-full min-w-[420px] border-collapse text-center text-[11px]">
+                          <thead>
+                            <tr className="text-slate-500">
+                              <th className="px-1 py-0.5 text-left font-semibold">
+                                {idx === 0 ? "Ida" : "Vuelta"}
+                              </th>
+                              {nums.map((n) => (
+                                <th key={n} className="px-1 py-0.5 font-semibold">
+                                  {n}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="text-slate-500">
+                              <td className="px-1 py-0.5 text-left">Par</td>
+                              {nums.map((n) => (
+                                <td key={n} className="px-1 py-0.5">
+                                  {byNo.get(n)?.par ?? "·"}
+                                </td>
+                              ))}
+                            </tr>
+                            <tr>
+                              <td className="px-1 py-0.5 text-left font-semibold text-slate-300">
+                                Golpes
+                              </td>
+                              {nums.map((n) => {
+                                const h = byNo.get(n);
+                                return (
+                                  <td
+                                    key={n}
+                                    className={`rounded px-1 py-0.5 ${holeCellClass(
+                                      h?.strokes ?? null,
+                                      h?.par ?? null
+                                    )}`}
+                                  >
+                                    {h?.strokes ?? "·"}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
