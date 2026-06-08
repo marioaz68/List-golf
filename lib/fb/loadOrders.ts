@@ -35,6 +35,18 @@ export interface OrderForKitchen {
   clientKind: "player" | "caddie" | "unknown";
   /** Grupo del cliente, si lo tiene */
   groupNo: number | null;
+  /** UUID del grupo (para link al mapa /ritmo?group_id=...) */
+  groupId: string | null;
+  /** Ubicación EN VIVO del cliente (último ping del grupo en últimos 30 min). */
+  liveLocation: {
+    /** Hoyo actual detectado por GPS (modal de últimos pings). */
+    currentHole: number | null;
+    /** Min desde el último ping (0 = ahorita, null = sin datos). */
+    lastSeenAgoMin: number | null;
+    /** Min estimados para llegar al hoyo destino (pickup en restaurante o
+     *  hoyo de entrega para carrito). null = no se puede calcular. */
+    etaMin: number | null;
+  };
   items: OrderLine[];
 }
 
@@ -69,6 +81,14 @@ interface OrderRow {
   client_label: string | null;
   entry_id: string | null;
   caddie_id: string | null;
+}
+
+interface VenueRow {
+  id: string;
+  code: string;
+  hole_range_start: number | null;
+  hole_range_end: number | null;
+  type: string;
 }
 
 export async function loadActiveOrders(
@@ -126,6 +146,10 @@ export async function loadActiveOrders(
     linesByOrder.set(orderId, arr);
   }
 
+  // Mapa de group_id por entry/caddie para ubicación en vivo
+  const groupIdByEntry = new Map<string, string>();
+  const groupIdByCaddie = new Map<string, string>();
+
   // Datos del cliente (jugador)
   const playerNameByEntry = new Map<string, string>();
   const groupNoByEntry = new Map<string, number>();
@@ -153,7 +177,7 @@ export async function loadActiveOrders(
     // Grupo del entry (si tiene)
     const { data: gm } = await admin
       .from("pairing_group_members")
-      .select("entry_id, pairing_groups ( group_no )")
+      .select("entry_id, group_id, pairing_groups ( group_no )")
       .in("entry_id", entryIds);
     for (const row of (gm ?? []) as Array<Record<string, unknown>>) {
       const id = String(row.entry_id);
@@ -164,6 +188,7 @@ export async function loadActiveOrders(
         | undefined;
       const grp = Array.isArray(g) ? g[0] : g;
       if (grp?.group_no != null) groupNoByEntry.set(id, Number(grp.group_no));
+      if (row.group_id) groupIdByEntry.set(id, String(row.group_id));
     }
   }
 
@@ -182,22 +207,144 @@ export async function loadActiveOrders(
         .join(" ");
       if (full) caddieNameById.set(id, full);
     }
+    // Grupo del caddie via caddie_assignments activa
+    const { data: asgs } = await admin
+      .from("caddie_assignments")
+      .select("caddie_id, pairing_group_id")
+      .in("caddie_id", caddieIds)
+      .eq("is_active", true);
+    for (const a of (asgs ?? []) as Array<Record<string, unknown>>) {
+      if (a.pairing_group_id) {
+        groupIdByCaddie.set(String(a.caddie_id), String(a.pairing_group_id));
+      }
+    }
   }
+
+  // ===== Ubicación en vivo: para cada group_id, traer últimos 10 pings =====
+  const groupIds = new Set<string>();
+  for (const r of rows) {
+    if (r.entry_id) {
+      const g = groupIdByEntry.get(r.entry_id);
+      if (g) groupIds.add(g);
+    } else if (r.caddie_id) {
+      const g = groupIdByCaddie.get(r.caddie_id);
+      if (g) groupIds.add(g);
+    }
+  }
+
+  // Calcular venue → hoyo destino para ETA
+  // - Restaurante (type='restaurant'): el cliente recoge, asumimos hoyo 6
+  //   (el restaurante Mucho del CCQ). En futuro se puede agregar hole_no a fb_venues.
+  // - Carrito: usa requested_hole del pedido (el carrito va a ese hoyo)
+  const venueIds = Array.from(new Set(rows.map((r) => r.venue_id)));
+  const venueMap = new Map<string, VenueRow>();
+  if (venueIds.length > 0) {
+    const { data: vs } = await admin
+      .from("fb_venues")
+      .select("id, code, hole_range_start, hole_range_end, type")
+      .in("id", venueIds);
+    for (const v of (vs ?? []) as VenueRow[]) {
+      venueMap.set(v.id, v);
+    }
+  }
+
+  // Cargar últimos pings por grupo (últimos 30 min)
+  type LivePos = { currentHole: number | null; lastTs: string };
+  const liveByGroup = new Map<string, LivePos>();
+  if (groupIds.size > 0) {
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: pings } = await admin
+      .from("ritmo_positions")
+      .select("group_id, hoyo_detectado, ts")
+      .in("group_id", Array.from(groupIds))
+      .gte("ts", cutoff)
+      .order("ts", { ascending: false });
+    // Agrupar y calcular moda de los hoyos en últimos 10 pings
+    const byGroup = new Map<string, { hoyos: number[]; lastTs: string }>();
+    for (const p of (pings ?? []) as Array<{
+      group_id: string;
+      hoyo_detectado: number | null;
+      ts: string;
+    }>) {
+      const arr = byGroup.get(p.group_id) ?? { hoyos: [], lastTs: p.ts };
+      if (arr.hoyos.length < 10 && p.hoyo_detectado != null) {
+        arr.hoyos.push(p.hoyo_detectado);
+      }
+      byGroup.set(p.group_id, arr);
+    }
+    for (const [gid, agg] of byGroup) {
+      const counts = new Map<number, number>();
+      for (const h of agg.hoyos) counts.set(h, (counts.get(h) ?? 0) + 1);
+      let modeHole: number | null = null;
+      let best = 0;
+      for (const [h, c] of counts) {
+        if (c > best) {
+          best = c;
+          modeHole = h;
+        }
+      }
+      liveByGroup.set(gid, { currentHole: modeHole, lastTs: agg.lastTs });
+    }
+  }
+
+  // Helper para ETA simple en min: asumimos 15 min por hoyo (puede mejorarse
+  // con course_holes.pace_minutes). Soporta wrap 18→1.
+  const MIN_POR_HOYO_ESTIMADO = 15;
+  function etaToHole(fromHole: number, toHole: number): number {
+    if (fromHole === toHole) return 0;
+    let diff = toHole - fromHole;
+    if (diff < 0) diff += 18; // wrap
+    return diff * MIN_POR_HOYO_ESTIMADO;
+  }
+
+  const now = Date.now();
 
   return rows.map((r) => {
     let clientKind: OrderForKitchen["clientKind"] = "unknown";
     let clientLabel = r.client_label ?? "";
     let groupNo: number | null = null;
+    let groupId: string | null = null;
     if (r.entry_id) {
       clientKind = "player";
       clientLabel =
         playerNameByEntry.get(r.entry_id) || clientLabel || "Jugador";
       groupNo = groupNoByEntry.get(r.entry_id) ?? null;
+      groupId = groupIdByEntry.get(r.entry_id) ?? null;
     } else if (r.caddie_id) {
       clientKind = "caddie";
       clientLabel =
         caddieNameById.get(r.caddie_id) || clientLabel || "Caddie";
+      groupId = groupIdByCaddie.get(r.caddie_id) ?? null;
     }
+
+    // Ubicación en vivo del cliente
+    const live = groupId ? liveByGroup.get(groupId) : null;
+    let currentHole: number | null = null;
+    let lastSeenAgoMin: number | null = null;
+    let etaMin: number | null = null;
+    if (live) {
+      currentHole = live.currentHole;
+      lastSeenAgoMin = Math.round(
+        (now - new Date(live.lastTs).getTime()) / 60000
+      );
+      // Calcular ETA al destino según tipo de venue
+      const venue = venueMap.get(r.venue_id);
+      if (currentHole != null) {
+        let destHole: number | null = null;
+        if (r.delivery_type === "on_course" && r.requested_hole) {
+          // Carrito: ETA al hoyo donde el cliente pidió la entrega
+          destHole = r.requested_hole;
+        } else if (venue?.type === "restaurant") {
+          // Pickup: el restaurante Hoyo 6 (default code 'h6' → hoyo 6).
+          // En el seed inicial el restaurante es 'h6' del CCQ.
+          destHole = venue.code === "h6" ? 6 : null;
+        }
+        if (destHole != null) {
+          etaMin = etaToHole(currentHole, destHole);
+        }
+      }
+    }
+
     return {
       id: r.id,
       venueId: r.venue_id,
@@ -213,6 +360,12 @@ export async function loadActiveOrders(
       clientLabel,
       clientKind,
       groupNo,
+      groupId,
+      liveLocation: {
+        currentHole,
+        lastSeenAgoMin,
+        etaMin,
+      },
       items: linesByOrder.get(r.id) ?? [],
     };
   });

@@ -300,6 +300,45 @@ function OrderCard({
             ? ` · 🚚 Entregar en hoyo ${order.requestedHole ?? "?"}`
             : " · 🏠 Recoge en el venue"}
         </div>
+
+        {/* Ubicación en vivo del cliente */}
+        {order.liveLocation.currentHole != null ? (
+          <div className="mt-1 flex flex-wrap items-center gap-2 rounded-md bg-sky-50 px-2 py-1 text-[10px] text-sky-900">
+            <span>
+              📍 Cliente en <strong>hoyo {order.liveLocation.currentHole}</strong>
+            </span>
+            {order.liveLocation.lastSeenAgoMin != null ? (
+              <span className="text-sky-700">
+                {order.liveLocation.lastSeenAgoMin === 0
+                  ? "(ahorita)"
+                  : `(hace ${order.liveLocation.lastSeenAgoMin} min)`}
+              </span>
+            ) : null}
+            {order.liveLocation.etaMin != null && order.liveLocation.etaMin > 0 ? (
+              <span className="rounded bg-sky-200 px-1.5 py-0.5 font-bold">
+                ETA ~{order.liveLocation.etaMin} min
+              </span>
+            ) : order.liveLocation.etaMin === 0 ? (
+              <span className="rounded bg-emerald-200 px-1.5 py-0.5 font-bold text-emerald-900">
+                ¡ya llegó!
+              </span>
+            ) : null}
+            {order.groupId ? (
+              <a
+                href={`/ritmo?group_id=${order.groupId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-700 underline"
+              >
+                ver mapa →
+              </a>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-1 rounded-md bg-slate-50 px-2 py-1 text-[10px] text-slate-500">
+            📍 Sin ubicación en vivo del cliente (no comparte GPS o pings &gt;30 min)
+          </div>
+        )}
       </div>
 
       {/* Items */}
