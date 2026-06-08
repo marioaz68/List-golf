@@ -305,6 +305,54 @@ export default function MenuClient() {
     [favorites]
   );
 
+  // Ubicación del carrito bar seleccionado (auto-refresh cada 20s)
+  interface CartLoc {
+    venueId: string;
+    venueName: string;
+    currentHole: number | null;
+    lastSeenAgoMin: number | null;
+    etaMinToMyHole: number | null;
+  }
+  const [cartLocations, setCartLocations] = useState<CartLoc[]>([]);
+  const [myCurrentHole, setMyCurrentHole] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!selectedVenue || selectedVenue.type !== "cart") {
+      setCartLocations([]);
+      return;
+    }
+    let cancelled = false;
+    async function pull() {
+      const sp = new URLSearchParams();
+      if (myCurrentHole) sp.set("my_hole", String(myCurrentHole));
+      try {
+        const res = await fetch(`/api/captura/cart-locations?${sp.toString()}`, {
+          cache: "no-store",
+        });
+        const json = (await res.json()) as { ok: boolean; carts: CartLoc[] };
+        if (!cancelled && json.ok) setCartLocations(json.carts);
+      } catch {
+        // ignore
+      }
+    }
+    void pull();
+    const id = window.setInterval(pull, 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [selectedVenue, myCurrentHole]);
+
+  // Inferir mi hoyo actual de los pedidos (snapshot al momento de pedir)
+  useEffect(() => {
+    const latest = myOrders[0];
+    if (latest?.requested_hole) setMyCurrentHole(latest.requested_hole);
+  }, [myOrders]);
+
+  const cartLocForSelected = cartLocations.find(
+    (c) => c.venueId === selectedVenueId
+  );
+
   // ============ Render ============
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -348,6 +396,41 @@ export default function MenuClient() {
             })}
           </div>
         </div>
+
+        {/* Banner: ubicación del carrito bar seleccionado (si aplica) */}
+        {selectedVenue?.type === "cart" && cartLocForSelected ? (
+          <div className="border-b border-cyan-200 bg-cyan-50 px-3 py-2 text-[12px] text-cyan-900">
+            {cartLocForSelected.currentHole != null ? (
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  🚚 {cartLocForSelected.venueName} en{" "}
+                  <strong>hoyo {cartLocForSelected.currentHole}</strong>
+                  {cartLocForSelected.lastSeenAgoMin != null ? (
+                    <span className="ml-1 text-cyan-700">
+                      ({cartLocForSelected.lastSeenAgoMin === 0
+                        ? "ahorita"
+                        : `hace ${cartLocForSelected.lastSeenAgoMin} min`})
+                    </span>
+                  ) : null}
+                </span>
+                {cartLocForSelected.etaMinToMyHole != null &&
+                cartLocForSelected.etaMinToMyHole > 0 ? (
+                  <span className="rounded bg-cyan-700 px-2 py-0.5 font-bold text-white">
+                    ~{cartLocForSelected.etaMinToMyHole} min a tu hoyo
+                  </span>
+                ) : cartLocForSelected.etaMinToMyHole === 0 ? (
+                  <span className="rounded bg-emerald-700 px-2 py-0.5 font-bold text-white">
+                    ¡está aquí!
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <span className="text-cyan-700">
+                🚚 {cartLocForSelected.venueName} sin ubicación reciente
+              </span>
+            )}
+          </div>
+        ) : null}
 
         {/* Banner: pedidos esperando MI confirmación de entrega */}
         {myOrders
