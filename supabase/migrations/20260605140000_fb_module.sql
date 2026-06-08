@@ -175,12 +175,16 @@ ALTER TABLE public.fb_order_items ENABLE ROW LEVEL SECURITY;
 
 -- Lectura pública del menú activo y de los venues activos (para que la Mini
 -- App pueda mostrarlos sin auth especial — los precios no son secretos).
+-- DROP POLICY antes de CREATE para que la migración sea re-ejecutable.
+DROP POLICY IF EXISTS fb_venues_read_active ON public.fb_venues;
 CREATE POLICY fb_venues_read_active ON public.fb_venues
   FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS fb_categories_read_active ON public.fb_categories;
 CREATE POLICY fb_categories_read_active ON public.fb_categories
   FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS fb_menu_items_read_active ON public.fb_menu_items;
 CREATE POLICY fb_menu_items_read_active ON public.fb_menu_items
   FOR SELECT USING (is_active = true);
 
