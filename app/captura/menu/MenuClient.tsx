@@ -46,6 +46,20 @@ interface CartLine {
   notes: string | null;
 }
 
+interface FavoriteItem {
+  menuItem: {
+    id: string;
+    name: string;
+    priceCents: number;
+    imageUrl: string | null;
+    displayEmoji: string | null;
+    categoryId: string;
+  };
+  categoryCode: string;
+  timesOrdered: number;
+  lastOrderedAt: string;
+}
+
 interface MyOrderLine {
   id: string;
   qty: number;
@@ -210,9 +224,10 @@ export default function MenuClient() {
     }
   }, [cart, selectedVenue, meEntryId, caddieId, orderNotes, clearCart]);
 
-  // ============ Mis pedidos + estado de cuenta ============
+  // ============ Mis pedidos + estado de cuenta + favoritos ============
   const [myOrders, setMyOrders] = useState<MyOrder[]>([]);
   const [accountCents, setAccountCents] = useState(0);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
 
   const pullOrders = useCallback(async () => {
     if (!meEntryId && !caddieId) return;
@@ -239,6 +254,34 @@ export default function MenuClient() {
     const id = window.setInterval(pullOrders, 15_000);
     return () => window.clearInterval(id);
   }, [meEntryId, caddieId, pullOrders]);
+
+  // Cargar favoritos del cliente (filtrados por venue seleccionado)
+  useEffect(() => {
+    if (!meEntryId && !caddieId) return;
+    let cancelled = false;
+    async function pull() {
+      const sp = new URLSearchParams();
+      if (meEntryId) sp.set("entry_id", meEntryId);
+      if (caddieId) sp.set("caddie_id", caddieId);
+      if (selectedVenueId) sp.set("venue_id", selectedVenueId);
+      try {
+        const res = await fetch(`/api/captura/fb-favorites?${sp.toString()}`, {
+          cache: "no-store",
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          favorites: FavoriteItem[];
+        };
+        if (!cancelled && json.ok) setFavorites(json.favorites);
+      } catch {
+        if (!cancelled) setFavorites([]);
+      }
+    }
+    void pull();
+    return () => {
+      cancelled = true;
+    };
+  }, [meEntryId, caddieId, selectedVenueId]);
 
   // ============ Render ============
   return (
@@ -296,6 +339,78 @@ export default function MenuClient() {
               onResolved={() => void pullOrders()}
             />
           ))}
+
+        {/* Favoritos del cliente (basado en historial) */}
+        {favorites.length > 0 ? (
+          <section className="border-b border-slate-200 bg-amber-50 px-3 pt-3 pb-2">
+            <h2 className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-amber-700">
+              🌟 Tus favoritos
+            </h2>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {favorites.map((fav) => {
+                const inCart = cart.find((c) => c.menuItemId === fav.menuItem.id);
+                const icon =
+                  fav.menuItem.displayEmoji ??
+                  iconForMenuItem(fav.menuItem.name, fav.categoryCode);
+                return (
+                  <button
+                    key={fav.menuItem.id}
+                    type="button"
+                    onClick={() =>
+                      addToCart({
+                        id: fav.menuItem.id,
+                        name: fav.menuItem.name,
+                        description: null,
+                        priceCents: fav.menuItem.priceCents,
+                        imageUrl: fav.menuItem.imageUrl,
+                        prepMinutes: null,
+                        displayEmoji: fav.menuItem.displayEmoji,
+                      })
+                    }
+                    className={[
+                      "flex w-[120px] shrink-0 flex-col items-center gap-1 rounded-lg border bg-white p-2 text-center transition",
+                      inCart
+                        ? "border-emerald-500 ring-2 ring-emerald-200"
+                        : "border-amber-300",
+                    ].join(" ")}
+                    title={`Pedido ${fav.timesOrdered}× antes`}
+                  >
+                    {fav.menuItem.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={fav.menuItem.imageUrl}
+                        alt={fav.menuItem.name}
+                        className="h-12 w-12 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <span className="text-3xl leading-none">{icon}</span>
+                    )}
+                    <span className="line-clamp-2 text-[11px] font-semibold text-slate-900">
+                      {fav.menuItem.name}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] font-bold text-emerald-700">
+                        {formatPrice(fav.menuItem.priceCents)}
+                      </span>
+                      {inCart ? (
+                        <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                          {inCart.qty}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                          +
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-slate-500">
+                      pedido {fav.timesOrdered}×
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {/* Menú */}
         <main className="space-y-4 p-3">
