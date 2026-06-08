@@ -21,6 +21,7 @@ import Link from "next/link";
 
 import { formatPrice, ORDER_STATUS_LABELS, type DeliveryType, type FbVenue } from "@/lib/fb/types";
 import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
+import { stockPhotoForMenuItem } from "@/lib/fb/stockPhotos";
 
 interface MenuItem {
   id: string;
@@ -309,22 +310,24 @@ export default function MenuClient() {
                     const itemIcon =
                       it.displayEmoji ??
                       iconForMenuItem(it.name, g.category.code);
+                    const photoUrl =
+                      it.imageUrl ??
+                      stockPhotoForMenuItem(it.name, g.category.code);
                     return (
                       <div
                         key={it.id}
                         className={[
-                          "flex items-center justify-between gap-2 p-3",
+                          "flex items-center justify-between gap-3 p-3",
                           idx > 0 ? "border-t border-slate-100" : "",
                         ].join(" ")}
                       >
+                        <ItemThumb
+                          photoUrl={photoUrl}
+                          fallbackEmoji={itemIcon}
+                          alt={it.name}
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
-                            <span
-                              aria-hidden="true"
-                              className="shrink-0 text-base leading-none"
-                            >
-                              {itemIcon}
-                            </span>
                             <span className="truncate text-[13px] font-semibold">
                               {it.name}
                             </span>
@@ -470,5 +473,38 @@ export default function MenuClient() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Thumbnail del item con fallback automático.
+ * Si la URL de la foto falla (404, CORS, red), cae graceful al emoji.
+ */
+function ItemThumb({
+  photoUrl,
+  fallbackEmoji,
+  alt,
+}: {
+  photoUrl: string | null;
+  fallbackEmoji: string;
+  alt: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (!photoUrl || broken) {
+    return (
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-2xl">
+        {fallbackEmoji}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photoUrl}
+      alt={alt}
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className="h-14 w-14 shrink-0 rounded-lg object-cover"
+    />
   );
 }
