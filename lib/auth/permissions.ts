@@ -8,7 +8,8 @@ export type AppRole =
   | "checkin"
   | "viewer"
   | "handicap_committee"
-  | "marshal";
+  | "marshal"
+  | "restaurante";
 
 export type AppModule =
   | "users"
@@ -26,7 +27,8 @@ export type AppModule =
   | "ritmo"
   | "reports"
   | "comite-handicap"
-  | "captura-telegram";
+  | "captura-telegram"
+  | "fb";
 
 const ENTRIES_ROLES: AppRole[] = [
   "super_admin",
@@ -152,6 +154,16 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "caddie_manager",
     "marshal",
   ],
+
+  // F&B (Food & Beverage): backoffice del menú + cocina + carrito bar.
+  // El rol 'restaurante' SOLO ve este módulo (rutas /fb-admin, /fb-cocina,
+  // /fb-carrito-bar). Los admins del club también lo pueden ver.
+  fb: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "restaurante",
+  ],
 };
 
 /** Rutas del backoffice que exigen sesión (cualquier módulo). */
@@ -183,6 +195,9 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/users",
   "/comite-handicap",
   "/captura-telegram",
+  "/fb-admin",
+  "/fb-cocina",
+  "/fb-carrito-bar",
 ] as const;
 
 export function isBackofficePath(pathname: string): boolean {
@@ -205,6 +220,7 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "viewer",
     "handicap_committee",
     "marshal",
+    "restaurante",
   ];
 
   return valid.includes(role as AppRole) ? (role as AppRole) : null;
@@ -227,6 +243,13 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";
+  if (
+    pathname.startsWith("/fb-admin") ||
+    pathname.startsWith("/fb-cocina") ||
+    pathname.startsWith("/fb-carrito-bar")
+  ) {
+    return "fb";
+  }
   if (pathname.startsWith("/dashboard")) return "tournaments";
 
   if (
