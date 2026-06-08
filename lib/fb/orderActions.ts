@@ -158,6 +158,184 @@ export async function markAllPaidForClient(args: {
   return { ok: true, updated: data?.length ?? 0 };
 }
 
+/**
+ * El restaurante/carrito crea un pedido EN NOMBRE del cliente (típico
+ * cuando el cliente pidió verbalmente al carrito que pasaba por su hoyo).
+ *
+ * El pedido se crea en `pending_acceptance` (entregado, esperando OK del
+ * cliente) si `alreadyDelivered=true`. Si no, en `pending` para que siga
+ * el flujo normal de cocina.
+ *
+ * El cliente recibe el banner amarillo en su Mini App para confirmar
+ * o rechazar el cargo a su cuenta.
+ */
+export async function createOrderForClient(input: {
+  entryId?: string | null;
+  caddieId?: string | null;
+  venueId: string;
+  deliveryType: "pickup" | "on_course";
+  requestedHole?: number | null;
+  notes?: string | null;
+  items: Array<{ menuItemId: string; qty: number; notes?: string | null }>;
+  alreadyDelivered: boolean;
+}): Promise<{ ok: boolean; orderId?: string; total?: number; error?: string }> {
+  const admin = createAdminClient();
+  if (!input.entryId && !input.caddieId) {
+    return { ok: false, error: "Falta entry_id o caddie_id del cliente." };
+  }
+  if (!input.venueId) return { ok: false, error: "Falta venue_id." };
+  if (!input.items?.length) return { ok: false, error: "Sin items." };
+
+  // Resolver tournament_id + client_label
+  let tournamentId: string | null = null;
+  let clientLabel: string | null = null;
+  if (input.entryId) {
+    const { data } = await admin
+      .from("tournament_entries")
+      .select("id, tournament_id, players ( first_name, last_name )")
+      .eq("id", input.entryId)
+      .maybeSingle();
+    if (data) {
+      tournamentId =
+        (data as { tournament_id?: string }).tournament_id ?? null;
+      const p = (data as { players: unknown }).players;
+      const player = Array.isArray(p) ? p[0] : p;
+      if (player) {
+        const pl = player as { first_name?: string; last_name?: string };
+        clientLabel =
+          [pl.first_name, pl.last_name]
+            .map((s) => String(s ?? "").trim())
+            .filter(Boolean)
+            .join(" ") || null;
+      }
+    }
+  } else if (input.caddieId) {
+    const { data } = await admin
+      .from("caddies")
+      .select("id, first_name, last_name")
+      .eq("id", input.caddieId)
+      .maybeSingle();
+    if (data) {
+      const c = data as { first_name?: string; last_name?: string };
+      clientLabel =
+        [c.first_name, c.last_name]
+          .map((s) => String(s ?? "").trim())
+          .filter(Boolean)
+          .join(" ") || null;
+    }
+    const { data: asg } = await admin
+      .from("caddie_assignments")
+      .select("tournament_id")
+      .eq("caddie_id", input.caddieId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (asg) tournamentId = (asg as { tournament_id?: string }).tournament_id ?? null;
+  }
+
+  // Validar precios contra BD
+  const itemIds = input.items.map((it) => it.menuItemId);
+  const { data: priceRows } = await admin
+    .from("fb_menu_items")
+    .select("id, name, price_cents, available_venue_ids, is_active")
+    .in("id", itemIds);
+  const priceMap = new Map<
+    string,
+    { id: string; name: string; priceCents: number; venues: string[]; active: boolean }
+  >();
+  for (const row of (priceRows ?? []) as Array<Record<string, unknown>>) {
+    priceMap.set(String(row.id), {
+      id: String(row.id),
+      name: String(row.name),
+      priceCents: Number(row.price_cents ?? 0),
+      venues: Array.isArray(row.available_venue_ids)
+        ? (row.available_venue_ids as string[])
+        : [],
+      active: Boolean(row.is_active),
+    });
+  }
+
+  let totalCents = 0;
+  const lines: Array<{
+    menuItemId: string;
+    qty: number;
+    unitPriceCents: number;
+    name: string;
+    notes: string | null;
+  }> = [];
+  for (const it of input.items) {
+    const ref = priceMap.get(it.menuItemId);
+    if (!ref || !ref.active) {
+      return { ok: false, error: `Item ${it.menuItemId} no disponible.` };
+    }
+    if (!ref.venues.includes(input.venueId)) {
+      return { ok: false, error: `"${ref.name}" no se sirve en este venue.` };
+    }
+    const qty = Math.max(1, Math.floor(it.qty));
+    lines.push({
+      menuItemId: it.menuItemId,
+      qty,
+      unitPriceCents: ref.priceCents,
+      name: ref.name,
+      notes: it.notes ?? null,
+    });
+    totalCents += ref.priceCents * qty;
+  }
+
+  // Insertar orden
+  const nowISO = new Date().toISOString();
+  const insertOrder: Record<string, unknown> = {
+    tournament_id: tournamentId,
+    entry_id: input.entryId,
+    caddie_id: input.caddieId,
+    client_label: clientLabel,
+    venue_id: input.venueId,
+    delivery_type: input.deliveryType,
+    requested_hole:
+      input.deliveryType === "on_course" ? input.requestedHole ?? null : null,
+    total_cents: totalCents,
+    notes: input.notes?.trim() || null,
+  };
+
+  if (input.alreadyDelivered) {
+    insertOrder.status = "pending_acceptance";
+    insertOrder.accepted_at = nowISO;
+    insertOrder.ready_at = nowISO;
+    insertOrder.pending_acceptance_at = nowISO;
+  } else {
+    insertOrder.status = "pending";
+  }
+
+  const { data: orderRow, error: orderErr } = await admin
+    .from("fb_orders")
+    .insert(insertOrder)
+    .select("id")
+    .single();
+  if (orderErr || !orderRow) {
+    return { ok: false, error: orderErr?.message ?? "Error creando pedido." };
+  }
+  const orderId = (orderRow as { id: string }).id;
+
+  const lineRows = lines.map((l) => ({
+    order_id: orderId,
+    menu_item_id: l.menuItemId,
+    qty: l.qty,
+    unit_price_cents: l.unitPriceCents,
+    item_name_snapshot: l.name,
+    notes: l.notes,
+  }));
+  const { error: itemsErr } = await admin.from("fb_order_items").insert(lineRows);
+  if (itemsErr) {
+    await admin.from("fb_orders").delete().eq("id", orderId);
+    return { ok: false, error: itemsErr.message };
+  }
+
+  revalidatePath("/fb-cocina");
+  revalidatePath("/fb-cuentas");
+  return { ok: true, orderId, total: totalCents };
+}
+
 /** Cancelar pedido (cocina sin existencias, cliente se arrepintió, etc.) */
 export async function cancelOrder(
   orderId: string,
