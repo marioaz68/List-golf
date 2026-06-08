@@ -48,13 +48,15 @@ export interface FbMenuItem {
 export type DeliveryType = "pickup" | "on_course";
 
 export type OrderStatus =
-  | "pending"
-  | "accepted"
-  | "preparing"
-  | "ready"
-  | "on_the_way"
-  | "delivered"
-  | "cancelled";
+  | "pending"            // recién creado, espera aceptación del restaurante
+  | "accepted"           // restaurante/carrito aceptó
+  | "preparing"          // en cocina
+  | "ready"              // listo para recoger / entregar
+  | "on_the_way"         // carrito en camino al cliente
+  | "pending_acceptance" // restaurante dice 'entregado', cliente debe confirmar
+  | "delivered"          // cliente confirmó recepción, cuenta cobrada
+  | "disputed"           // cliente rechazó la entrega — el comité revisa
+  | "cancelled";         // cancelado por cualquier parte
 
 export interface FbOrder {
   id: string;
@@ -104,7 +106,9 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   preparing: "En preparación",
   ready: "Listo",
   on_the_way: "En camino",
+  pending_acceptance: "Esperando confirmación del cliente",
   delivered: "Entregado",
+  disputed: "En disputa",
   cancelled: "Cancelado",
 };
 
@@ -114,6 +118,8 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, { fg: string; bg: string }
   preparing: { fg: "#c7d2fe", bg: "#312e81" },
   ready: { fg: "#86efac", bg: "#14532d" },
   on_the_way: { fg: "#67e8f9", bg: "#155e75" },
+  pending_acceptance: { fg: "#fde68a", bg: "#92400e" },
   delivered: { fg: "#9ca3af", bg: "#1f2937" },
+  disputed: { fg: "#fca5a5", bg: "#7f1d1d" },
   cancelled: { fg: "#fca5a5", bg: "#7f1d1d" },
 };

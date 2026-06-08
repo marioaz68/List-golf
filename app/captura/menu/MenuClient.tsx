@@ -284,6 +284,19 @@ export default function MenuClient() {
           </div>
         </div>
 
+        {/* Banner: pedidos esperando MI confirmación de entrega */}
+        {myOrders
+          .filter((o) => o.status === "pending_acceptance")
+          .map((o) => (
+            <PendingAcceptanceBanner
+              key={o.id}
+              order={o}
+              meEntryId={meEntryId}
+              caddieId={caddieId}
+              onResolved={() => void pullOrders()}
+            />
+          ))}
+
         {/* Menú */}
         <main className="space-y-4 p-3">
           {loadingMenu ? (
@@ -472,6 +485,101 @@ export default function MenuClient() {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Banner prominente cuando el restaurante/carrito declara entregado un
+ * pedido. El cliente debe confirmar (✅ Recibido) o disputar (❌ No me
+ * llegó). Hasta que confirme, NO se carga a la cuenta.
+ */
+function PendingAcceptanceBanner({
+  order,
+  meEntryId,
+  caddieId,
+  onResolved,
+}: {
+  order: MyOrder;
+  meEntryId: string | null;
+  caddieId: string | null;
+  onResolved: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function send(action: "accept" | "dispute") {
+    setBusy(true);
+    let reason: string | undefined;
+    if (action === "dispute") {
+      reason =
+        prompt(
+          "¿Qué pasó? (opcional)\nej: no me llegó, me entregaron incorrecto, ya pasó el carrito..."
+        ) || undefined;
+    }
+    try {
+      const res = await fetch("/api/captura/fb-order/accept", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          order_id: order.id,
+          action,
+          reason,
+          entry_id: meEntryId,
+          caddie_id: caddieId,
+        }),
+      });
+      const json = (await res.json()) as { ok: boolean; error?: string };
+      if (!json.ok) {
+        alert(json.error ?? "No se pudo procesar.");
+      } else {
+        onResolved();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-3 mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 p-3 shadow-md">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">
+          🔔 Confirma tu pedido
+        </span>
+        <span className="text-[11px] text-amber-700">
+          {formatPrice(order.total_cents)}
+        </span>
+      </div>
+      <p className="mb-2 text-[13px] font-semibold text-amber-900">
+        El restaurante marcó tu pedido como entregado. ¿Lo recibiste?
+      </p>
+      <ul className="mb-3 text-[12px] text-amber-900">
+        {order.fb_order_items.map((l) => (
+          <li key={l.id}>
+            {l.qty}× {l.item_name_snapshot}
+          </li>
+        ))}
+      </ul>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => send("accept")}
+          className="flex-1 rounded-md bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          ✅ Sí, lo recibí
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => send("dispute")}
+          className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          ❌ No me llegó
+        </button>
+      </div>
+      <p className="mt-2 text-[10px] text-amber-700">
+        Hasta que confirmes, el pedido no se carga a tu cuenta del torneo.
+      </p>
     </div>
   );
 }

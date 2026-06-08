@@ -34,4 +34,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   handicapCommittee: "comite-handicap",
   capturaTelegram: "captura-telegram",
   fbAdmin: "fb",
+  fbCocina: "fb",
 };

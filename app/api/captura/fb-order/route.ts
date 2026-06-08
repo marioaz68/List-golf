@@ -326,10 +326,14 @@ export async function GET(req: Request) {
       currentTournamentId = String(ord.tournament_id);
     }
   }
+  // La cuenta acumulada solo incluye pedidos YA CONFIRMADOS por el cliente
+  // (status='delivered'). Los que aún están en proceso o esperando
+  // confirmación NO suman hasta que el cliente acepte. Los disputados
+  // tampoco suman (los resuelve el comité).
   for (const ord of orders) {
     if (
       ord.tournament_id === currentTournamentId &&
-      ord.status !== "cancelled"
+      ord.status === "delivered"
     ) {
       accountTotalCents += Number(ord.total_cents ?? 0);
     }

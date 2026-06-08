@@ -248,6 +248,11 @@ export default function Sidebar() {
         href: "/fb-admin",
         icon: UtensilsCrossed,
       },
+      {
+        nameKey: "fbCocina",
+        href: "/fb-cocina",
+        icon: ClipboardList,
+      },
     ],
     []
   );
