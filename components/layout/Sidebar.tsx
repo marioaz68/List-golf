@@ -263,6 +263,11 @@ export default function Sidebar() {
         href: "/fb-nuevo-pedido",
         icon: PencilLine,
       },
+      {
+        nameKey: "fbReportes",
+        href: "/fb-reportes",
+        icon: BarChart3,
+      },
     ],
     []
   );

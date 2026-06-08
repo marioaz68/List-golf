@@ -37,4 +37,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   fbCocina: "fb",
   fbCuentas: "fb",
   fbNuevoPedido: "fb",
+  fbReportes: "fb",
 };

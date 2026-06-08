@@ -10,6 +10,9 @@
  * detalle pedido por pedido.
  */
 import { createAdminClient } from "@/utils/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
+import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { resolveFbScope } from "@/lib/fb/userScope";
 import CuentasClient from "./CuentasClient";
 
 export const dynamic = "force-dynamic";
@@ -53,15 +56,28 @@ interface RawOrder {
 
 export default async function FbCuentasPage() {
   const admin = createAdminClient();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id ?? "";
+  const userRoles = userId ? await getUserRoles(admin, userId) : [];
+  const scope = await resolveFbScope(admin, userId, userRoles);
 
   // Pedidos relevantes: delivered (cuenta abierta) y paid (histórico reciente)
-  const { data: ordersRaw } = await admin
+  // Filtrar por venues asignados al usuario si aplica
+  let oq = admin
     .from("fb_orders")
     .select(
       "id, status, total_cents, created_at, delivered_at, paid_at, entry_id, caddie_id, client_label, tournament_id, venue_id"
     )
     .in("status", ["delivered", "paid"])
     .order("delivered_at", { ascending: false });
+  if (scope.allowedVenueIds && scope.allowedVenueIds.length > 0) {
+    oq = oq.in("venue_id", scope.allowedVenueIds);
+  } else if (scope.allowedVenueIds && scope.allowedVenueIds.length === 0) {
+    // Usuario sin venues asignados: no ve nada
+    return <CuentasClient accounts={[]} />;
+  }
+  const { data: ordersRaw } = await oq;
 
   const orders = (ordersRaw ?? []) as RawOrder[];
   const orderIds = orders.map((o) => o.id);

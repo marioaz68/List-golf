@@ -46,9 +46,11 @@ const COLUMNS: { key: Column; label: string; statuses: OrderStatus[] }[] = [
 interface Props {
   initialOrders: OrderForKitchen[];
   venues: FbVenue[];
+  isOwner?: boolean;
 }
 
-export default function CocinaClient({ initialOrders, venues }: Props) {
+export default function CocinaClient({ initialOrders, venues, isOwner }: Props) {
+  void isOwner; // disponible para futuros toggles del owner
   const [orders, setOrders] = useState(initialOrders);
   const [venueFilter, setVenueFilter] = useState<string>("");
 
