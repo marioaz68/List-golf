@@ -28,6 +28,7 @@ const STATUS_TIMESTAMP: Partial<Record<OrderStatus, string>> = {
   ready: "ready_at",
   pending_acceptance: "pending_acceptance_at",
   delivered: "delivered_at",
+  paid: "paid_at",
   disputed: "disputed_at",
   cancelled: "cancelled_at",
 };
@@ -102,6 +103,59 @@ export async function clientDisputeDelivery(
   return updateOrderStatus(orderId, "disputed", {
     disputed_reason: reason?.trim() || null,
   });
+}
+
+/** Restaurante recibió el pago físico (efectivo/tarjeta). Cierra la cuenta
+ *  abierta del cliente. */
+export async function markOrderPaid(
+  orderId: string,
+  method?: string,
+  notes?: string
+): Promise<UpdateResult> {
+  return updateOrderStatus(orderId, "paid", {
+    paid_method: method?.trim() || null,
+    paid_notes: notes?.trim() || null,
+  });
+}
+
+/** Deshacer pago (error al cobrar, devolución). Solo vuelve a 'delivered'. */
+export async function unmarkOrderPaid(orderId: string): Promise<UpdateResult> {
+  return updateOrderStatus(orderId, "delivered", {
+    paid_method: null,
+    paid_notes: null,
+    paid_at: null,
+  });
+}
+
+/** Cobrar TODOS los pedidos 'delivered' de un cliente en un torneo (cierre
+ *  de cuenta cuando paga al final). */
+export async function markAllPaidForClient(args: {
+  tournamentId: string;
+  entryId?: string | null;
+  caddieId?: string | null;
+  method?: string;
+}): Promise<{ ok: boolean; updated: number; error?: string }> {
+  const admin = createAdminClient();
+  if (!args.entryId && !args.caddieId) {
+    return { ok: false, updated: 0, error: "Falta entry_id o caddie_id." };
+  }
+  const patch = {
+    status: "paid" as const,
+    paid_at: new Date().toISOString(),
+    paid_method: args.method?.trim() || null,
+  };
+  let q = admin
+    .from("fb_orders")
+    .update(patch)
+    .eq("tournament_id", args.tournamentId)
+    .eq("status", "delivered");
+  if (args.entryId) q = q.eq("entry_id", args.entryId);
+  if (args.caddieId) q = q.eq("caddie_id", args.caddieId);
+  const { data, error } = await q.select("id");
+  if (error) return { ok: false, updated: 0, error: error.message };
+  revalidatePath("/fb-cuentas");
+  revalidatePath("/fb-cocina");
+  return { ok: true, updated: data?.length ?? 0 };
 }
 
 /** Cancelar pedido (cocina sin existencias, cliente se arrepintió, etc.) */

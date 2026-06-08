@@ -61,6 +61,7 @@ const es = {
       capturaTelegram: "Modo Telegram",
       fbAdmin: "Restaurante",
       fbCocina: "Cocina · Pedidos",
+      fbCuentas: "Cuentas · Cobros",
     },
   },
   common: {
@@ -1732,6 +1733,7 @@ const en: Messages = {
       capturaTelegram: "Telegram mode",
       fbAdmin: "Restaurant",
       fbCocina: "Kitchen · Orders",
+      fbCuentas: "Accounts · Billing",
     },
   },
   common: {

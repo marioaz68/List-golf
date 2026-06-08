@@ -35,4 +35,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   capturaTelegram: "captura-telegram",
   fbAdmin: "fb",
   fbCocina: "fb",
+  fbCuentas: "fb",
 };

@@ -54,7 +54,8 @@ export type OrderStatus =
   | "ready"              // listo para recoger / entregar
   | "on_the_way"         // carrito en camino al cliente
   | "pending_acceptance" // restaurante dice 'entregado', cliente debe confirmar
-  | "delivered"          // cliente confirmó recepción, cuenta cobrada
+  | "delivered"          // cliente confirmó recepción, en cuenta abierta
+  | "paid"               // pagado físicamente al restaurante, cuenta cerrada
   | "disputed"           // cliente rechazó la entrega — el comité revisa
   | "cancelled";         // cancelado por cualquier parte
 
@@ -107,7 +108,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   ready: "Listo",
   on_the_way: "En camino",
   pending_acceptance: "Esperando confirmación del cliente",
-  delivered: "Entregado",
+  delivered: "Entregado · por cobrar",
+  paid: "Pagado",
   disputed: "En disputa",
   cancelled: "Cancelado",
 };
@@ -119,7 +121,8 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, { fg: string; bg: string }
   ready: { fg: "#86efac", bg: "#14532d" },
   on_the_way: { fg: "#67e8f9", bg: "#155e75" },
   pending_acceptance: { fg: "#fde68a", bg: "#92400e" },
-  delivered: { fg: "#9ca3af", bg: "#1f2937" },
+  delivered: { fg: "#86efac", bg: "#14532d" },
+  paid: { fg: "#9ca3af", bg: "#1f2937" },
   disputed: { fg: "#fca5a5", bg: "#7f1d1d" },
   cancelled: { fg: "#fca5a5", bg: "#7f1d1d" },
 };
