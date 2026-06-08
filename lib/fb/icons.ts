@@ -224,6 +224,11 @@ const KEYWORD_ICONS: ReadonlyArray<readonly [RegExp, string]> = [
   [/snickers|kitkat|chocolate/i, "🍫"],
   [/oreo|chokis|galleta/i, "🍪"],
   [/cacahuate/i, "🥜"],
+  // Sabores específicos primero (para que ganen al regex genérico)
+  [/papas?\s+sabritas\s+naturales/i, "🥔"],
+  [/papas?\s+ruffles\s+queso/i, "🧀"],
+  [/doritos\s+dinamita/i, "🌶️"],
+  // Genéricos después
   [/papas?\s+sabritas|papas?\s+ruffles/i, "🍟"],
   [/doritos/i, "🌽"],
   [/cheetos/i, "🧀"],
