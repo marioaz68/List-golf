@@ -100,8 +100,64 @@ export async function loginAction(
     return { ok: false, message: error.message };
   }
 
-  // /dashboard requiere auth + módulo "tournaments"; el middleware ya redirige
-  // automáticamente al usuario de comité de handicap a /comite-handicap si no
-  // tiene acceso al panel principal.
-  redirect("/dashboard");
+  // Determinar a dónde aterrizar según rol del usuario. Un mesero / personal
+  // de restaurante no usa /dashboard (está vacío para ellos); va directo a
+  // su pantalla operativa.
+  const landing = await resolveLandingForUser(email);
+  redirect(landing);
+}
+
+/**
+ * Landing post-login según rol. Prioridad:
+ *   - admins (super/club/director) → /dashboard
+ *   - handicap_committee solo → /comite-handicap
+ *   - restaurante (sin admin) → /fb-mesero (caja del restaurante)
+ *   - marshal solo → /tee-sheet
+ *   - fallback → /dashboard
+ */
+async function resolveLandingForUser(email: string): Promise<string> {
+  const admin = tryCreateAdminClient();
+  if (!admin) return "/dashboard";
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (!profile) return "/dashboard";
+  const userId = (profile as { id: string }).id;
+
+  const ADMIN_ROLES = new Set([
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+  ]);
+
+  const roles = new Set<string>();
+  for (const table of [
+    "user_global_roles",
+    "user_club_roles",
+    "user_tournament_roles",
+  ] as const) {
+    const { data } = await admin
+      .from(table)
+      .select("roles:role_id ( code )")
+      .eq("user_id", userId)
+      .eq("is_active", true);
+    for (const row of (data ?? []) as Array<{
+      roles: { code: string | null } | { code: string | null }[] | null;
+    }>) {
+      const r = Array.isArray(row.roles) ? row.roles[0] : row.roles;
+      if (r?.code) roles.add(r.code);
+    }
+  }
+
+  // admin → /dashboard
+  for (const r of ADMIN_ROLES) {
+    if (roles.has(r)) return "/dashboard";
+  }
+  if (roles.has("restaurante")) return "/fb-mesero";
+  if (roles.has("handicap_committee")) return "/comite-handicap";
+  if (roles.has("marshal")) return "/tee-sheet";
+  return "/dashboard";
 }

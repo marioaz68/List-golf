@@ -85,6 +85,17 @@ function fmtDiff(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
 }
 
+/** Extrae el margen ("2 arriba" → "2") del result_text persistido para mostrar
+ *  un marcador final compacto en el bracket. Devuelve null si no encuentra. */
+function finalMarginFromResultText(resultText: string | null): string | null {
+  if (!resultText) return null;
+  const m = /([\d.]+)\s*arriba/i.exec(resultText);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return fmtDiff(n);
+}
+
 /** Marcador en vivo derivado de hole_scores para un match. */
 type LiveScore = {
   topPts: number;
@@ -949,22 +960,44 @@ function BracketMatchCell({
   const liveDiffAbs = liveInfo
     ? Math.abs(liveInfo.topPts - liveInfo.bottomPts)
     : 0;
+
+  // Marcador FINAL congelado: al cerrarse el match, conservamos cómo terminó
+  // mostrando un badge persistente en el ganador (mismo estilo que el de en
+  // vivo) para que el bracket no "borre" el resultado al avanzar de ronda.
+  const finalMargin = isCompleted
+    ? finalMarginFromResultText(realMatch?.result_text ?? null)
+    : null;
+  const topIsWinner = !!winnerId && topTeam?.id === winnerId;
+  const bottomIsWinner = !!winnerId && bottomTeam?.id === winnerId;
+
   const topLiveLabel = showLive
     ? liveInfo!.topPts === liveInfo!.bottomPts
       ? "AS"
       : liveInfo!.topPts > liveInfo!.bottomPts
         ? `${fmtDiff(liveDiffAbs)} UP`
         : `${fmtDiff(liveDiffAbs)} DN`
-    : null;
+    : finalMargin && topIsWinner
+      ? `${finalMargin} UP`
+      : finalMargin && bottomIsWinner
+        ? `${finalMargin} DN`
+        : null;
   const bottomLiveLabel = showLive
     ? liveInfo!.topPts === liveInfo!.bottomPts
       ? "AS"
       : liveInfo!.bottomPts > liveInfo!.topPts
         ? `${fmtDiff(liveDiffAbs)} UP`
         : `${fmtDiff(liveDiffAbs)} DN`
-    : null;
-  const topAhead = showLive && liveInfo!.topPts > liveInfo!.bottomPts;
-  const bottomAhead = showLive && liveInfo!.bottomPts > liveInfo!.topPts;
+    : finalMargin && bottomIsWinner
+      ? `${finalMargin} UP`
+      : finalMargin && topIsWinner
+        ? `${finalMargin} DN`
+        : null;
+  const topAhead = showLive
+    ? liveInfo!.topPts > liveInfo!.bottomPts
+    : topIsWinner;
+  const bottomAhead = showLive
+    ? liveInfo!.bottomPts > liveInfo!.topPts
+    : bottomIsWinner;
 
   // Cuadro de match: cada par enmarcado, fondo según mitad del bracket.
   const cellBox = hasBye && !realMatch
