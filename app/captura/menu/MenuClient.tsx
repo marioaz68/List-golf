@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { formatPrice, ORDER_STATUS_LABELS, type DeliveryType, type FbVenue } from "@/lib/fb/types";
+import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
 
 interface MenuItem {
   id: string;
@@ -31,7 +32,7 @@ interface MenuItem {
 }
 
 interface CategoryGroup {
-  category: { id: string; name: string };
+  category: { id: string; code: string; name: string };
   items: MenuItem[];
 }
 
@@ -294,12 +295,16 @@ export default function MenuClient() {
           ) : (
             menu.map((g) => (
               <section key={g.category.id}>
-                <h2 className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <h2 className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <span aria-hidden="true" className="text-base leading-none">
+                    {iconForCategory(g.category.code)}
+                  </span>
                   {g.category.name}
                 </h2>
                 <div className="overflow-hidden rounded-xl bg-white shadow-sm">
                   {g.items.map((it, idx) => {
                     const inCart = cart.find((c) => c.menuItemId === it.id);
+                    const itemIcon = iconForMenuItem(it.name, g.category.code);
                     return (
                       <div
                         key={it.id}
@@ -310,6 +315,12 @@ export default function MenuClient() {
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
+                            <span
+                              aria-hidden="true"
+                              className="shrink-0 text-base leading-none"
+                            >
+                              {itemIcon}
+                            </span>
                             <span className="truncate text-[13px] font-semibold">
                               {it.name}
                             </span>
