@@ -29,6 +29,8 @@ interface MenuItem {
   priceCents: number;
   imageUrl: string | null;
   prepMinutes: number | null;
+  /** Override manual del restaurante. Si null, usar iconForMenuItem(). */
+  displayEmoji: string | null;
 }
 
 interface CategoryGroup {
@@ -304,7 +306,9 @@ export default function MenuClient() {
                 <div className="overflow-hidden rounded-xl bg-white shadow-sm">
                   {g.items.map((it, idx) => {
                     const inCart = cart.find((c) => c.menuItemId === it.id);
-                    const itemIcon = iconForMenuItem(it.name, g.category.code);
+                    const itemIcon =
+                      it.displayEmoji ??
+                      iconForMenuItem(it.name, g.category.code);
                     return (
                       <div
                         key={it.id}

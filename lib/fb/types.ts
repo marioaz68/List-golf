@@ -40,6 +40,9 @@ export interface FbMenuItem {
   prepMinutes: number | null;
   allergens: string[] | null;
   notes: string | null;
+  /** Emoji manual elegido por el restaurante. Si null, el cliente usa el
+   *  helper automático (iconForMenuItem en lib/fb/icons.ts). */
+  displayEmoji: string | null;
 }
 
 export type DeliveryType = "pickup" | "on_course";

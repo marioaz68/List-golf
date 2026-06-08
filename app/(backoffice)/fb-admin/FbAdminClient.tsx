@@ -38,13 +38,21 @@ export default function FbAdminClient({
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">
-            F&B · Restaurante Hoyo 6 + Carritos Bar
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Edita venues, categorías y menú. Los cambios aparecen en la Mini App de inmediato.
-          </p>
+        <header className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              F&B · Restaurante Hoyo 6 + Carritos Bar
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Edita venues, categorías y menú. Los cambios aparecen en la Mini App de inmediato.
+            </p>
+          </div>
+          <a
+            href="/fb-admin/emojis"
+            className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+          >
+            😀 Revisar emojis del menú →
+          </a>
         </header>
 
         <div className="mb-4 flex gap-2 border-b border-slate-300">
@@ -334,6 +342,7 @@ function ItemModal({
         isActive,
         displayOrder,
         prepMinutes: prepMinutes ? Number(prepMinutes) : null,
+        displayEmoji: item?.displayEmoji ?? null,
         allergens: item?.allergens ?? null,
         notes: item?.notes ?? null,
       });

@@ -49,6 +49,7 @@ function rowToMenuItem(r: Record<string, unknown>): FbMenuItem {
       typeof r.prep_minutes === "number" ? r.prep_minutes : null,
     allergens: Array.isArray(r.allergens) ? (r.allergens as string[]) : null,
     notes: r.notes ? String(r.notes) : null,
+    displayEmoji: r.display_emoji ? String(r.display_emoji) : null,
   };
 }
 

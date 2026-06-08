@@ -203,6 +203,25 @@ export async function deactivateMenuItem(
   return { ok: true };
 }
 
+/** Override del emoji manual de un item. Pasa null/'' para regresar al
+ *  emoji automático del helper iconForMenuItem(). */
+export async function setMenuItemEmoji(
+  id: string,
+  emoji: string | null
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  const clean = (emoji ?? "").trim();
+  const value = clean === "" ? null : clean.slice(0, 8); // máx 2 emojis (~8 chars)
+  const { error } = await admin
+    .from("fb_menu_items")
+    .update({ display_emoji: value })
+    .eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/fb-admin");
+  revalidatePath("/fb-admin/emojis");
+  return { ok: true };
+}
+
 export async function deleteMenuItem(
   id: string
 ): Promise<{ ok: boolean; error?: string }> {

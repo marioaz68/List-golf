@@ -59,6 +59,7 @@ export async function GET(req: Request) {
         priceCents: it.priceCents,
         imageUrl: it.imageUrl,
         prepMinutes: it.prepMinutes,
+        displayEmoji: it.displayEmoji,
       })),
     })),
   });
