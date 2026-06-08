@@ -64,6 +64,7 @@ const es = {
       fbCuentas: "Cuentas · Cobros",
       fbNuevoPedido: "Nuevo pedido (verbal)",
       fbReportes: "Reportes del día",
+      fbDisputas: "Disputas (comité)",
     },
   },
   common: {
@@ -1738,6 +1739,7 @@ const en: Messages = {
       fbCuentas: "Accounts · Billing",
       fbNuevoPedido: "New order (verbal)",
       fbReportes: "Daily reports",
+      fbDisputas: "Disputes (committee)",
     },
   },
   common: {

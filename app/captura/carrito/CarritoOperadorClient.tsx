@@ -17,6 +17,8 @@ import {
   type OrderStatus,
 } from "@/lib/fb/types";
 
+type Tab = "orders" | "inventory";
+
 interface Props {
   venue: FbVenue;
   carts: FbVenue[];
@@ -25,6 +27,38 @@ interface Props {
 
 export default function CarritoOperadorClient({ venue, carts, initialOrders }: Props) {
   const [orders, setOrders] = useState(initialOrders);
+  const [tab, setTab] = useState<Tab>("orders");
+  const prevPickupCountRef = useRef<number>(
+    initialOrders.filter((o) => o.status === "awaiting_cart_pickup").length
+  );
+
+  // Sonido de notificación (beep simple via Web Audio)
+  const playBeep = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+      if (!AC) return;
+      const ctx = new AC();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.value = 0.15;
+      osc.start();
+      setTimeout(() => {
+        osc.frequency.value = 1320;
+      }, 150);
+      setTimeout(() => {
+        osc.stop();
+        ctx.close();
+      }, 350);
+      // Vibración táctil si está soportada
+      navigator.vibrate?.([200, 100, 200]);
+    } catch {
+      // silencioso
+    }
+  }, []);
 
   // Auto-refresh cada 10 seg
   const refresh = useCallback(async () => {
@@ -34,21 +68,31 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
       });
       if (!res.ok) return;
       const json = (await res.json()) as { ok: boolean; orders: OrderForKitchen[] };
-      if (json.ok) setOrders(json.orders);
+      if (json.ok) {
+        // Detectar si hay NUEVOS pedidos por recoger del restaurante
+        const newPickupCount = json.orders.filter(
+          (o) => o.status === "awaiting_cart_pickup"
+        ).length;
+        if (newPickupCount > prevPickupCountRef.current) {
+          playBeep();
+        }
+        prevPickupCountRef.current = newPickupCount;
+        setOrders(json.orders);
+      }
     } catch {
       // silencioso
     }
-  }, [venue.id]);
+  }, [venue.id, playBeep]);
 
   useEffect(() => {
     const id = window.setInterval(refresh, 10_000);
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  // Ordenar: nuevos primero, luego por hoyo del cliente (los más cerca al
-  // recorrido del carrito primero para optimizar rutas)
+  // Ordenar: PASA A RECOGER primero (urgente!), luego nuevos, luego por hoyo
   const sorted = useMemo(() => {
     const order: OrderStatus[] = [
+      "awaiting_cart_pickup", // restaurante terminó, hay que pasar a recoger
       "pending",
       "accepted",
       "preparing",
@@ -69,6 +113,9 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
   const pendingCount = orders.filter(
     (o) => o.status === "pending" || o.status === "accepted"
   ).length;
+  const pickupCount = orders.filter(
+    (o) => o.status === "awaiting_cart_pickup"
+  ).length;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
@@ -85,11 +132,18 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
                 · {orders.length} pedidos activos
               </p>
             </div>
-            {pendingCount > 0 ? (
-              <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white animate-pulse">
-                {pendingCount} nuevos
-              </span>
-            ) : null}
+            <div className="flex flex-col items-end gap-1">
+              {pickupCount > 0 ? (
+                <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white animate-pulse">
+                  📦 {pickupCount} por recoger
+                </span>
+              ) : null}
+              {pendingCount > 0 ? (
+                <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white animate-pulse">
+                  {pendingCount} nuevos
+                </span>
+              ) : null}
+            </div>
           </div>
           {carts.length > 1 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -114,26 +168,57 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
         {/* GPS chip del carrito */}
         <CartGpsChip venueId={venue.id} />
 
-        {/* Lista de pedidos */}
-        <main className="space-y-3 p-3">
-          {sorted.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-700 bg-slate-800 p-8 text-center text-sm text-slate-400">
-              Sin pedidos activos
-            </div>
-          ) : (
-            sorted.map((o) => (
-              <OrderCard
-                key={o.id}
-                order={o}
-                onChange={(next) =>
-                  setOrders((cur) =>
-                    cur.map((x) => (x.id === next.id ? { ...x, status: next.status } : x))
-                  )
-                }
-              />
-            ))
-          )}
-        </main>
+        {/* Pestañas */}
+        <div className="flex border-b border-slate-700 bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setTab("orders")}
+            className={[
+              "flex-1 py-3 text-sm font-bold transition",
+              tab === "orders"
+                ? "border-b-2 border-emerald-400 text-emerald-300"
+                : "text-slate-400",
+            ].join(" ")}
+          >
+            🍽️ Pedidos ({orders.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("inventory")}
+            className={[
+              "flex-1 py-3 text-sm font-bold transition",
+              tab === "inventory"
+                ? "border-b-2 border-emerald-400 text-emerald-300"
+                : "text-slate-400",
+            ].join(" ")}
+          >
+            📦 Inventario
+          </button>
+        </div>
+
+        {tab === "orders" ? (
+          <main className="space-y-3 p-3">
+            {sorted.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-700 bg-slate-800 p-8 text-center text-sm text-slate-400">
+                Sin pedidos activos
+              </div>
+            ) : (
+              sorted.map((o) => (
+                <OrderCard
+                  key={o.id}
+                  order={o}
+                  onChange={(next) =>
+                    setOrders((cur) =>
+                      cur.map((x) => (x.id === next.id ? { ...x, status: next.status } : x))
+                    )
+                  }
+                />
+              ))
+            )}
+          </main>
+        ) : (
+          <InventoryPanel venueId={venue.id} />
+        )}
       </div>
     </div>
   );
@@ -294,6 +379,12 @@ function OrderCard({
       onClick: () => apply(() => markOrderOnTheWay(order.id), "on_the_way"),
       color: "cyan",
     });
+  if (order.status === "awaiting_cart_pickup")
+    buttons.push({
+      label: "🛒 Recogido del Hoyo 6 · en camino al cliente",
+      onClick: () => apply(() => markOrderOnTheWay(order.id), "on_the_way"),
+      color: "amber",
+    });
   if (order.status === "on_the_way" || order.status === "ready")
     buttons.push({
       label: "✅ Entregado (esperar OK cliente)",
@@ -309,12 +400,17 @@ function OrderCard({
   }, [order.createdAt]);
 
   const isNew = order.status === "pending";
+  const isPickup = order.status === "awaiting_cart_pickup";
 
   return (
     <article
       className={[
         "overflow-hidden rounded-lg border bg-slate-800",
-        isNew ? "border-red-500 ring-2 ring-red-500/30" : "border-slate-700",
+        isPickup
+          ? "border-amber-500 ring-2 ring-amber-500/40 animate-pulse"
+          : isNew
+            ? "border-red-500 ring-2 ring-red-500/30"
+            : "border-slate-700",
       ].join(" ")}
     >
       <div className="border-b border-slate-700 px-3 py-2">
@@ -382,6 +478,13 @@ function OrderCard({
         </div>
       ) : null}
 
+      {/* Badge especial para pickup */}
+      {isPickup ? (
+        <div className="border-b border-amber-700 bg-amber-950 px-3 py-2 text-center text-[12px] font-bold text-amber-200">
+          📦 RESTAURANTE TIENE LISTO ESTE PEDIDO · PASA A RECOGER AL HOYO 6
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-1.5 p-2">
         {buttons.map((b, i) => (
           <button
@@ -395,7 +498,9 @@ function OrderCard({
                 ? "bg-indigo-600 hover:bg-indigo-700"
                 : b.color === "cyan"
                   ? "bg-cyan-600 hover:bg-cyan-700"
-                  : "bg-emerald-600 hover:bg-emerald-700",
+                  : b.color === "amber"
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-emerald-600 hover:bg-emerald-700",
             ].join(" ")}
           >
             {b.label}
@@ -403,5 +508,180 @@ function OrderCard({
         ))}
       </div>
     </article>
+  );
+}
+
+// ============================================================
+// Panel de inventario (qty por item del menú del carrito)
+// ============================================================
+interface StockItem {
+  menuItemId: string;
+  name: string;
+  emoji: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+  qtyAvailable: number;
+  lowThreshold: number;
+  isInfinite: boolean;
+}
+
+function InventoryPanel({ venueId }: { venueId: string }) {
+  const [stock, setStock] = useState<StockItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
+
+  const pull = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/captura/cart-stock?venue_id=${venueId}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { ok: boolean; stock: StockItem[] };
+      if (json.ok) setStock(json.stock);
+    } finally {
+      setLoading(false);
+    }
+  }, [venueId]);
+
+  useEffect(() => {
+    void pull();
+  }, [pull]);
+
+  const filtered = useMemo(() => {
+    if (!filter) return stock;
+    const f = filter.toLowerCase();
+    return stock.filter((s) => s.name.toLowerCase().includes(f));
+  }, [stock, filter]);
+
+  async function update(menuItemId: string, action: "inc" | "dec" | "set" | "remove", qty?: number) {
+    const res = await fetch("/api/captura/cart-stock", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ venue_id: venueId, menu_item_id: menuItemId, action, qty }),
+    });
+    const json = (await res.json()) as { ok: boolean; qtyAvailable?: number; removed?: boolean };
+    if (json.ok) {
+      setStock((cur) =>
+        cur.map((s) => {
+          if (s.menuItemId !== menuItemId) return s;
+          if (json.removed) return { ...s, qtyAvailable: 0, isInfinite: true };
+          return {
+            ...s,
+            qtyAvailable: json.qtyAvailable ?? s.qtyAvailable,
+            isInfinite: false,
+          };
+        })
+      );
+    }
+  }
+
+  return (
+    <main className="space-y-2 p-3">
+      <input
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Buscar item..."
+        className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500"
+      />
+      {loading ? (
+        <div className="rounded-md bg-slate-800 p-4 text-center text-sm text-slate-400">
+          Cargando...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-md bg-slate-800 p-4 text-center text-sm text-slate-400">
+          Sin items en este venue
+        </div>
+      ) : (
+        filtered.map((s) => {
+          const isLow = !s.isInfinite && s.qtyAvailable <= s.lowThreshold;
+          const isOut = !s.isInfinite && s.qtyAvailable === 0;
+          return (
+            <div
+              key={s.menuItemId}
+              className={[
+                "flex items-center justify-between gap-2 rounded-md border bg-slate-800 p-2",
+                isOut
+                  ? "border-red-500"
+                  : isLow
+                    ? "border-amber-500"
+                    : "border-slate-700",
+              ].join(" ")}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                {s.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={s.imageUrl}
+                    alt={s.name}
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-slate-700 text-xl">
+                    {s.emoji ?? "🍽️"}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="truncate text-[12px] font-bold text-slate-100">
+                    {s.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    {s.isInfinite
+                      ? "Stock ilimitado"
+                      : isOut
+                        ? "🚫 SIN STOCK — pedidos van al restaurante"
+                        : isLow
+                          ? `⚠ Stock bajo · queda ${s.qtyAvailable}`
+                          : `${s.qtyAvailable} disponibles`}
+                  </div>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => update(s.menuItemId, "dec", 1)}
+                  className="h-8 w-8 rounded-full border border-slate-600 bg-slate-700 text-base font-bold text-slate-100 disabled:opacity-50"
+                  disabled={s.isInfinite || s.qtyAvailable === 0}
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min="0"
+                  value={s.isInfinite ? "" : s.qtyAvailable}
+                  placeholder="∞"
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v) && v >= 0) {
+                      void update(s.menuItemId, "set", v);
+                    }
+                  }}
+                  className="h-8 w-14 rounded border border-slate-600 bg-slate-900 text-center text-sm font-bold text-slate-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => update(s.menuItemId, "inc", 1)}
+                  className="h-8 w-8 rounded-full border border-emerald-600 bg-emerald-700 text-base font-bold text-white"
+                >
+                  +
+                </button>
+                {!s.isInfinite ? (
+                  <button
+                    type="button"
+                    onClick={() => update(s.menuItemId, "remove")}
+                    className="ml-1 text-[10px] text-slate-400 underline"
+                    title="Quitar limite (volver a stock infinito)"
+                  >
+                    ∞
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })
+      )}
+      <p className="pt-2 text-center text-[10px] text-slate-500">
+        Sin cantidad = stock infinito · Toca ∞ para quitar el limite
+      </p>
+    </main>
   );
 }

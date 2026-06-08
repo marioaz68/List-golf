@@ -31,6 +31,7 @@ import {
   isMobileCodeCommand,
   buildMobileCodeReply,
 } from "@/lib/telegram/ritmo/mobileCode";
+import { isCartCommand, buildCartReply } from "@/lib/telegram/fb/cartCommand";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -179,6 +180,17 @@ export async function POST(req: Request) {
       const codeReply = await buildMobileCodeReply(supabase, userId);
       await sendTelegramMessage({ chatId: chatId || userId, text: codeReply });
       return NextResponse.json({ ok: true, mobile_code: "sent" });
+    }
+
+    // === F&B: comando /CARRITO o /BAR (Mini App para operador del carrito bar) ===
+    if (text && isCartCommand(text) && userId && supabase) {
+      const cartReply = await buildCartReply(supabase, text);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: cartReply.text,
+        buttons: cartReply.buttons,
+      });
+      return NextResponse.json({ ok: true, cart: "menu_sent" });
     }
 
     // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===

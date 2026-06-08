@@ -268,6 +268,11 @@ export default function Sidebar() {
         href: "/fb-reportes",
         icon: BarChart3,
       },
+      {
+        nameKey: "fbDisputas",
+        href: "/fb-disputas",
+        icon: Scale,
+      },
     ],
     []
   );

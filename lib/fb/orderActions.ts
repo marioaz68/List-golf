@@ -354,3 +354,33 @@ export async function cancelOrder(
     cancelled_reason: reason?.trim() || null,
   });
 }
+
+/** COMITÉ resuelve una disputa cargando el pedido al cliente (acepta el
+ *  cobro a pesar de la queja del cliente). Pasa a 'delivered' para que entre
+ *  al cierre de cuenta. Solo lo usa /fb-disputas. */
+export async function committeeApproveDispute(
+  orderId: string,
+  resolutionNote?: string
+): Promise<UpdateResult> {
+  const r = await updateOrderStatus(orderId, "delivered", {
+    dispute_resolution: resolutionNote?.trim() || "Cargado por comité",
+    dispute_resolved_at: new Date().toISOString(),
+  });
+  revalidatePath("/fb-disputas");
+  return r;
+}
+
+/** COMITÉ resuelve una disputa cancelando el pedido (la queja procedió,
+ *  no se le cobra al cliente). Solo lo usa /fb-disputas. */
+export async function committeeRefundDispute(
+  orderId: string,
+  resolutionNote?: string
+): Promise<UpdateResult> {
+  const r = await updateOrderStatus(orderId, "cancelled", {
+    cancelled_reason: "Disputa procedió",
+    dispute_resolution: resolutionNote?.trim() || "Cancelado por comité",
+    dispute_resolved_at: new Date().toISOString(),
+  });
+  revalidatePath("/fb-disputas");
+  return r;
+}
