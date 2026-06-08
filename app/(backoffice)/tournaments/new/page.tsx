@@ -458,18 +458,18 @@ export default function NewTournamentPage() {
           ) : null}
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
-            Copiar categorías desde otro torneo
+            Clonar configuración desde otro torneo
             <select
               name="copy_from_tournament_id"
               value={copyFromTournamentId}
               onChange={(e) => setCopyFromTournamentId(e.target.value)}
               style={fieldStyle}
-              disabled={loadingTournaments || formatType === "matchplay"}
+              disabled={loadingTournaments}
             >
               <option value="">
                 {loadingTournaments
                   ? "Cargando torneos..."
-                  : "No copiar / empezar desde cero"}
+                  : "No clonar / empezar desde cero"}
               </option>
 
               {tournaments.map((t) => (
@@ -478,6 +478,20 @@ export default function NewTournamentPage() {
                 </option>
               ))}
             </select>
+            <span
+              style={{
+                display: "block",
+                marginTop: 4,
+                fontWeight: 400,
+                fontSize: 12,
+                color: "#6b7280",
+              }}
+            >
+              Copia categorías y la convocatoria (reglas de competencia, cortes,
+              premios y, en match play, consolaciones y calcuta). Quedará en
+              borrador para revisarla y aplicarla. No copia inscripciones ni
+              resultados.
+            </span>
           </label>
 
           <div

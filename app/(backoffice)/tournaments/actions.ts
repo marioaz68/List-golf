@@ -160,6 +160,69 @@ async function getCourseById(course_id: string) {
     | null;
 }
 
+/**
+ * Clona la convocatoria (draft_json) de un torneo origen al nuevo torneo.
+ * El draft es portable (no embebe tournament_id) y lleva categorías,
+ * reglas de competencia/corte/premios y la config match play (consolaciones,
+ * premios, calcuta). Se deja en estado "editing" para revisar antes de aplicar.
+ */
+async function copyConvocatoriaDraft(params: {
+  admin: ReturnType<typeof createAdminClient>;
+  sourceTournamentId: string;
+  targetTournamentId: string;
+  targetName: string;
+}) {
+  const { admin, sourceTournamentId, targetTournamentId, targetName } = params;
+
+  const { data: sourceConv, error: sourceConvError } = await admin
+    .from("tournament_convocatoria")
+    .select("draft_json, warnings, file_name")
+    .eq("tournament_id", sourceTournamentId)
+    .maybeSingle();
+
+  if (sourceConvError) {
+    // No bloquear la creación del torneo si falla la copia de convocatoria.
+    return;
+  }
+  if (!sourceConv?.draft_json) return;
+
+  const draft = sourceConv.draft_json as Record<string, unknown>;
+  const meta =
+    draft && typeof draft.meta === "object" && draft.meta
+      ? (draft.meta as Record<string, unknown>)
+      : {};
+
+  const clonedDraft = {
+    ...draft,
+    source: "template",
+    meta: { ...meta, title: targetName },
+  };
+
+  const now = new Date().toISOString();
+
+  const { error: insertConvError } = await admin
+    .from("tournament_convocatoria")
+    .upsert(
+      {
+        tournament_id: targetTournamentId,
+        file_name: sourceConv.file_name
+          ? `Clonado: ${sourceConv.file_name}`
+          : "Clonado de torneo anterior",
+        extracted_text: null,
+        draft_json: clonedDraft,
+        warnings: sourceConv.warnings ?? null,
+        status: "editing",
+        updated_at: now,
+      },
+      { onConflict: "tournament_id" }
+    );
+
+  if (insertConvError) {
+    // No bloquear la creación; el usuario puede cargar plantilla manualmente.
+    return;
+  }
+}
+
 export async function createTournamentAndMaybeCopyCategories(
   formData: FormData
 ) {
@@ -353,6 +416,13 @@ export async function createTournamentAndMaybeCopyCategories(
 
       if (insertCategoriesError) throw new Error(insertCategoriesError.message);
     }
+
+    await copyConvocatoriaDraft({
+      admin,
+      sourceTournamentId: copy_from_tournament_id,
+      targetTournamentId: tournament.id,
+      targetName: name,
+    });
   }
 
   revalidatePath("/tournaments");

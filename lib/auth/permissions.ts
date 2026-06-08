@@ -202,6 +202,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/fb-nuevo-pedido",
   "/fb-reportes",
   "/fb-disputas",
+  "/fb-mesero",
 ] as const;
 
 export function isBackofficePath(pathname: string): boolean {
@@ -254,7 +255,8 @@ export function getModuleFromPath(pathname: string): AppModule | null {
     pathname.startsWith("/fb-cuentas") ||
     pathname.startsWith("/fb-nuevo-pedido") ||
     pathname.startsWith("/fb-reportes") ||
-    pathname.startsWith("/fb-disputas")
+    pathname.startsWith("/fb-disputas") ||
+    pathname.startsWith("/fb-mesero")
   ) {
     return "fb";
   }

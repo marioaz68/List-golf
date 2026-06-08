@@ -273,6 +273,11 @@ export default function Sidebar() {
         href: "/fb-disputas",
         icon: Scale,
       },
+      {
+        nameKey: "fbMesero",
+        href: "/fb-mesero",
+        icon: UtensilsCrossed,
+      },
     ],
     []
   );

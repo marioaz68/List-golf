@@ -45,7 +45,34 @@ export interface FbMenuItem {
   displayEmoji: string | null;
 }
 
-export type DeliveryType = "pickup" | "on_course";
+export type DeliveryType = "pickup" | "on_course" | "dine_in";
+
+/** Canal por el que entró el pedido. Solo informativo (reportes/analytics). */
+export type SourceChannel = "app" | "mesero" | "qr_table";
+
+export interface FbTable {
+  id: string;
+  venueId: string;
+  code: string;          // "M3", "T1", "Barra-1"
+  name: string | null;   // nombre amigable opcional
+  capacity: number;
+  area: string;          // 'salon' | 'terraza' | 'barra' | …
+  displayOrder: number;
+  posX: number | null;   // para layout futuro
+  posY: number | null;
+  isActive: boolean;
+}
+
+export interface FbHouseAccount {
+  id: string;
+  memberNo: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  creditLimitCents: number;
+  notes: string | null;
+  isActive: boolean;
+}
 
 export type OrderStatus =
   | "pending"               // recién creado, espera aceptación del restaurante

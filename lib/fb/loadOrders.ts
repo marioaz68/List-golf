@@ -32,7 +32,7 @@ export interface OrderForKitchen {
   /** Quién pidió: 'Mario Pérez (jugador)' o 'Juan Caddie' */
   clientLabel: string;
   /** 'jugador' | 'caddie' | 'desconocido' — para diferenciar en la UI */
-  clientKind: "player" | "caddie" | "unknown";
+  clientKind: "player" | "caddie" | "table" | "unknown";
   /** Grupo del cliente, si lo tiene */
   groupNo: number | null;
   /** UUID del grupo (para link al mapa /ritmo?group_id=...) */
@@ -81,6 +81,8 @@ interface OrderRow {
   client_label: string | null;
   entry_id: string | null;
   caddie_id: string | null;
+  table_id: string | null;
+  diner_name: string | null;
 }
 
 interface VenueRow {
@@ -98,7 +100,7 @@ export async function loadActiveOrders(
   let q = admin
     .from("fb_orders")
     .select(
-      "id, venue_id, status, delivery_type, total_cents, notes, requested_hole, current_hole_at_order, created_at, accepted_at, ready_at, client_label, entry_id, caddie_id"
+      "id, venue_id, status, delivery_type, total_cents, notes, requested_hole, current_hole_at_order, created_at, accepted_at, ready_at, client_label, entry_id, caddie_id, table_id, diner_name"
     )
     .order("created_at", { ascending: true });
 
@@ -124,6 +126,22 @@ export async function loadActiveOrders(
   const orderIds = rows.map((r) => r.id);
   const entryIds = Array.from(new Set(rows.map((r) => r.entry_id).filter(Boolean) as string[]));
   const caddieIds = Array.from(new Set(rows.map((r) => r.caddie_id).filter(Boolean) as string[]));
+  const tableIds = Array.from(new Set(rows.map((r) => r.table_id).filter(Boolean) as string[]));
+
+  // Tabla → code/name para mostrar "🪑 Mesa M3" en cocina
+  const tableInfoById = new Map<string, { code: string; name: string | null }>();
+  if (tableIds.length) {
+    const { data: tableRows } = await admin
+      .from("fb_tables")
+      .select("id, code, name")
+      .in("id", tableIds);
+    for (const t of (tableRows ?? []) as Array<Record<string, unknown>>) {
+      tableInfoById.set(String(t.id), {
+        code: String(t.code),
+        name: t.name ? String(t.name) : null,
+      });
+    }
+  }
 
   // Líneas del pedido
   const { data: linesRaw } = await admin
@@ -315,6 +333,14 @@ export async function loadActiveOrders(
       clientLabel =
         caddieNameById.get(r.caddie_id) || clientLabel || "Caddie";
       groupId = groupIdByCaddie.get(r.caddie_id) ?? null;
+    } else if (r.table_id) {
+      // Pedido tomado en mesa (mesero o QR). Mostrar "🪑 Mesa M3 · Comensal"
+      clientKind = "table";
+      const tbl = tableInfoById.get(r.table_id);
+      const code = tbl?.code ?? "—";
+      clientLabel = r.diner_name
+        ? `🪑 Mesa ${code} · ${r.diner_name}`
+        : `🪑 Mesa ${code}`;
     }
 
     // Ubicación en vivo del cliente

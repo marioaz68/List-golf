@@ -65,6 +65,7 @@ const es = {
       fbNuevoPedido: "Nuevo pedido (verbal)",
       fbReportes: "Reportes del día",
       fbDisputas: "Disputas (comité)",
+      fbMesero: "Mesero · Restaurante",
     },
   },
   common: {
@@ -1740,6 +1741,7 @@ const en: Messages = {
       fbNuevoPedido: "New order (verbal)",
       fbReportes: "Daily reports",
       fbDisputas: "Disputes (committee)",
+      fbMesero: "Waiter · Restaurant",
     },
   },
   common: {
