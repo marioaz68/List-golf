@@ -203,6 +203,105 @@ export async function deactivateMenuItem(
   return { ok: true };
 }
 
+const PHOTO_BUCKET = "fb-menu-photos";
+const MAX_PHOTO_BYTES = 4 * 1024 * 1024; // 4 MB
+
+/** Sube una foto al bucket de Storage y guarda la URL pública en
+ *  fb_menu_items.image_url. Recibe FormData con campos 'item_id' (uuid)
+ *  y 'file' (binary). Sobreescribe la foto anterior si existe. */
+export async function uploadMenuItemPhoto(
+  formData: FormData
+): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const admin = createAdminClient();
+  const itemId = String(formData.get("item_id") ?? "").trim();
+  const file = formData.get("file");
+
+  if (!itemId) return { ok: false, error: "Falta item_id." };
+  if (!(file instanceof File)) return { ok: false, error: "Sin archivo." };
+  if (file.size === 0) return { ok: false, error: "Archivo vacío." };
+  if (file.size > MAX_PHOTO_BYTES) {
+    return {
+      ok: false,
+      error: `Archivo muy grande (máx ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)} MB).`,
+    };
+  }
+
+  // Validar tipo MIME básico
+  const mime = file.type || "image/jpeg";
+  if (!/^image\/(jpeg|jpg|png|webp|heic|heif)$/i.test(mime)) {
+    return { ok: false, error: "Solo se aceptan imágenes (JPG, PNG, WebP)." };
+  }
+
+  // Determinar extensión desde el MIME (o fallback al nombre del archivo)
+  let ext = "jpg";
+  if (/png/i.test(mime)) ext = "png";
+  else if (/webp/i.test(mime)) ext = "webp";
+  else if (/heic|heif/i.test(mime)) ext = "heic";
+
+  // Path determinista: '{itemId}.{ext}' — siempre sobreescribe la anterior
+  // del mismo item (sin acumular versiones obsoletas).
+  const path = `${itemId}.${ext}`;
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const { error: uploadErr } = await admin.storage
+    .from(PHOTO_BUCKET)
+    .upload(path, buf, {
+      contentType: mime,
+      upsert: true,
+      cacheControl: "3600",
+    });
+  if (uploadErr) {
+    console.error("FB PHOTO upload:", uploadErr);
+    return { ok: false, error: uploadErr.message };
+  }
+
+  // URL pública con cache-bust por timestamp para que el navegador no muestre
+  // la foto cacheada anterior cuando reemplazamos.
+  const { data: pub } = admin.storage
+    .from(PHOTO_BUCKET)
+    .getPublicUrl(path);
+  const url = `${pub.publicUrl}?t=${Date.now()}`;
+
+  // Guardar URL en el item
+  const { error: updErr } = await admin
+    .from("fb_menu_items")
+    .update({ image_url: url })
+    .eq("id", itemId);
+  if (updErr) {
+    console.error("FB PHOTO update item:", updErr);
+    return { ok: false, error: updErr.message };
+  }
+
+  revalidatePath("/fb-admin");
+  revalidatePath("/fb-admin/emojis");
+  return { ok: true, url };
+}
+
+/** Quita la foto del item (borra del Storage + image_url=null en BD).
+ *  Tras esto, la Mini App vuelve a mostrar el emoji. */
+export async function removeMenuItemPhoto(
+  itemId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const admin = createAdminClient();
+  if (!itemId) return { ok: false, error: "Falta item_id." };
+
+  // Intentar borrar las posibles extensiones del path
+  const paths = ["jpg", "png", "webp", "heic", "jpeg"].map((e) => `${itemId}.${e}`);
+  await admin.storage.from(PHOTO_BUCKET).remove(paths).catch(() => {
+    // best-effort: si no existían, no es error
+  });
+
+  const { error } = await admin
+    .from("fb_menu_items")
+    .update({ image_url: null })
+    .eq("id", itemId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/fb-admin");
+  revalidatePath("/fb-admin/emojis");
+  return { ok: true };
+}
+
 /** Override del emoji manual de un item. Pasa null/'' para regresar al
  *  emoji automático del helper iconForMenuItem(). */
 export async function setMenuItemEmoji(

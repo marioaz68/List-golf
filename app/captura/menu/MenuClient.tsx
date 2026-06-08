@@ -21,7 +21,6 @@ import Link from "next/link";
 
 import { formatPrice, ORDER_STATUS_LABELS, type DeliveryType, type FbVenue } from "@/lib/fb/types";
 import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
-import { stockPhotoForMenuItem } from "@/lib/fb/stockPhotos";
 
 interface MenuItem {
   id: string;
@@ -310,9 +309,10 @@ export default function MenuClient() {
                     const itemIcon =
                       it.displayEmoji ??
                       iconForMenuItem(it.name, g.category.code);
-                    const photoUrl =
-                      it.imageUrl ??
-                      stockPhotoForMenuItem(it.name, g.category.code);
+                    // Cascada visual: foto manual del restaurante → emoji
+                    // (manual o helper). NO usamos stock photos genericas;
+                    // si no hay foto subida del item, mostramos el emoji.
+                    const photoUrl = it.imageUrl ?? null;
                     return (
                       <div
                         key={it.id}
