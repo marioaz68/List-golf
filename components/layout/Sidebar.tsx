@@ -38,6 +38,7 @@ import {
   Gavel,
   Scale,
   Send,
+  UtensilsCrossed,
   X,
 } from "lucide-react";
 
@@ -241,6 +242,11 @@ export default function Sidebar() {
         nameKey: "handicapCommittee",
         href: "/comite-handicap",
         icon: Scale,
+      },
+      {
+        nameKey: "fbAdmin",
+        href: "/fb-admin",
+        icon: UtensilsCrossed,
       },
     ],
     []

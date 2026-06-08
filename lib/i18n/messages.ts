@@ -59,6 +59,7 @@ const es = {
       users: "Usuarios",
       handicapCommittee: "Comité de Handicap",
       capturaTelegram: "Modo Telegram",
+      fbAdmin: "Restaurante",
     },
   },
   common: {
@@ -1728,6 +1729,7 @@ const en: Messages = {
       users: "Users",
       handicapCommittee: "Handicap committee",
       capturaTelegram: "Telegram mode",
+      fbAdmin: "Restaurant",
     },
   },
   common: {
