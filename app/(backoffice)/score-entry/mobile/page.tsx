@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
+import { PICKED_UP_STROKES } from "@/lib/captura/types";
 import BackButton from "@/components/captura/BackButton";
 import GpsChip from "@/components/captura/GpsChip";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
@@ -57,8 +58,8 @@ type PlayerRow = {
   scores: HoleScores;
   /** Celdas con cambio pendiente de aprobación del testigo. */
   pending?: Partial<Record<HoleNumber, boolean>>;
-  /** Match play: hoyos donde el jugador levantó (X). strokes queda en null
-   *  y pierde la bola alta automáticamente. */
+  /** Match play: hoyos donde el jugador levantó (X). strokes = 10 en BD;
+   *  la UI muestra X y pierde la bola alta automáticamente. */
   pickedUp?: Partial<Record<HoleNumber, boolean>>;
 };
 
@@ -1174,7 +1175,11 @@ function MobileScoreEntryContent() {
     options?: { pickedUp?: boolean }
   ) {
     const pickedUp = Boolean(options?.pickedUp);
-    const strokes = pickedUp ? null : value === null ? null : Math.max(1, value);
+    const strokes = pickedUp
+      ? PICKED_UP_STROKES
+      : value === null
+        ? null
+        : Math.max(1, value);
 
     // Score privado del jugador identificado (tabla amber "Mi Score").
     if (playerId === ME_ID) {
@@ -1379,8 +1384,8 @@ function MobileScoreEntryContent() {
     setDraftFresh(false);
   }
 
-  /** Match play: el jugador levanta (no termina el hoyo). Pierde la
-   *  bola alta automáticamente. */
+  /** Match play: el jugador levanta (no termina el hoyo). Cuenta 10
+   *  automático y pierde la bola alta. */
   function handlePickUp() {
     if (!activePlayerId) return;
     if (activePlayerId === ME_ID) return; // sólo aplica a tarjetas de grupo
@@ -1805,24 +1810,13 @@ function MobileScoreEntryContent() {
                       C
                     </button>
 
-                    {matchPlayInfo && activePlayerId !== ME_ID ? (
-                      <button
-                        type="button"
-                        onClick={handlePickUp}
-                        title="No terminó el hoyo (pierde bola alta)"
-                        className="h-12 rounded-lg bg-amber-100 text-lg font-extrabold text-amber-700"
-                      >
-                        X
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleNumber(0)}
-                        className="h-12 rounded-lg bg-slate-100 text-lg font-bold"
-                      >
-                        0
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleNumber(0)}
+                      className="h-12 rounded-lg bg-slate-100 text-lg font-bold"
+                    >
+                      0
+                    </button>
 
                     <button
                       type="button"
@@ -1833,14 +1827,35 @@ function MobileScoreEntryContent() {
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleEnter}
-                    disabled={!draftScore || Number(draftScore) <= 0}
-                    className="mt-2 h-12 w-full rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
-                  >
-                    Enter
-                  </button>
+                  {matchPlayInfo && activePlayerId !== ME_ID ? (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handlePickUp}
+                        title="Levantó: no terminó el hoyo (cuenta 10 automático y pierde bola alta)"
+                        className="h-12 rounded-lg bg-amber-100 text-base font-extrabold text-amber-700"
+                      >
+                        X · levantó
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleEnter}
+                        disabled={!draftScore || Number(draftScore) <= 0}
+                        className="h-12 rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
+                      >
+                        Enter
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEnter}
+                      disabled={!draftScore || Number(draftScore) <= 0}
+                      className="mt-2 h-12 w-full rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
+                    >
+                      Enter
+                    </button>
+                  )}
                 </div>
               </div>
             )}

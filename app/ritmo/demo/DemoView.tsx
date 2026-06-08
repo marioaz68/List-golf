@@ -29,7 +29,14 @@ export function DemoView({ groups }: DemoViewProps) {
         <SidebarGroups groups={groups} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
       <div style={{ flex: 1, height: "100%", position: "relative" }}>
-        <RitmoMap groups={groups} selectedId={selectedId} rotate={vp.shouldRotateMap} />
+        <RitmoMap
+          groups={groups}
+          selectedId={selectedId}
+          rotate={vp.shouldRotateMap}
+          onSelectGroup={(id) =>
+            setSelectedId((prev) => (prev === id ? null : id))
+          }
+        />
       </div>
     </main>
   );
@@ -82,7 +89,12 @@ function MobilePortraitLayout({
 
       {/* Mapa */}
       <div style={{ height: mapHeight, position: "relative", transition: "height 0.3s ease" }}>
-        <RitmoMap groups={groups} selectedId={selectedId} rotate={shouldRotate} />
+        <RitmoMap
+          groups={groups}
+          selectedId={selectedId}
+          rotate={shouldRotate}
+          onSelectGroup={(id) => setSelectedId(id === selectedId ? null : id)}
+        />
       </div>
 
       {/* Panel inferior con grupos */}

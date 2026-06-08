@@ -32,6 +32,9 @@ export type HoleNumber =
 
 export type HoleScores = Record<HoleNumber, number | null>;
 
+/** Golpes que se registran cuando el jugador levanta (X) en match play. */
+export const PICKED_UP_STROKES = 10;
+
 /** Convierte un hoyo de desempate (19-27) en su hoyo equivalente del
  *  recorrido normal (1-9). Devuelve el mismo número para 1-18. */
 export function playoffSourceHole(hole: number): number {
@@ -56,8 +59,8 @@ export type GroupCapturePlayer = {
   name: string;
   initials: string;
   scores: HoleScores;
-  /** Match play: el jugador no terminó el hoyo (levantó). strokes queda null
-   *  y para puntos cuenta como derrota automática de la bola alta. */
+  /** Match play: el jugador no terminó el hoyo (levantó). strokes = 10 y
+   *  la UI muestra X; para puntos cuenta como derrota automática de bola alta. */
   pickedUp?: Partial<Record<HoleNumber, boolean>>;
   /** Si la celda está en rojo: alguien modificó el score y se espera testigo. */
   pending: Partial<Record<HoleNumber, boolean>>;

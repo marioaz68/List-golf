@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { HoleNumber } from "./types";
+import { PICKED_UP_STROKES, type HoleNumber } from "./types";
 
 export type ScoreActorRole =
   | "player"
@@ -78,7 +78,7 @@ export async function saveGroupHoleScore(
     hole: HoleNumber;
     strokes: number | null;
     /** Match play: el jugador no terminó el hoyo (levantó). Cuando es
-     *  true, `strokes` se ignora y se guarda `null`. */
+     *  true, se guarda PICKED_UP_STROKES (10) y picked_up=true. */
     pickedUp?: boolean;
     /**
      * Modo de la operación:
@@ -101,9 +101,9 @@ export async function saveGroupHoleScore(
     return { ok: false, error: "Parámetros incompletos." };
   }
 
-  // Si el jugador levantó (X), forzamos strokes=null y aceptamos el
-  // registro aunque no tengamos número.
-  const strokesValue = pickedUp ? null : params.strokes;
+  // Si el jugador levantó (X), guardamos 10 automático para totales stroke
+  // play; match play sigue usando picked_up para la derrota de bola alta.
+  const strokesValue = pickedUp ? PICKED_UP_STROKES : params.strokes;
 
   if (strokesValue != null) {
     if (!Number.isFinite(strokesValue) || strokesValue < 1 || strokesValue > 15) {

@@ -8,6 +8,9 @@ interface RitmoMapProps {
   selectedId?: string | null;
   /** Si true, rota el mapa 90° (mejor para landscape). Default true. */
   rotate?: boolean;
+  /** Al tocar la bola de un grupo en el mapa. El padre decide alternar
+   *  (mismo id → null para volver a vista completa). */
+  onSelectGroup?: (id: string) => void;
 }
 
 export interface GroupDot {
@@ -42,12 +45,22 @@ const HOYO_COLORS = [
  * y aproveche mejor la pantalla landscape. El contenido visible (markers,
  * etiquetas) se contra-rotan para que el texto siga legible.
  */
-export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
+export function RitmoMap({
+  groups,
+  selectedId,
+  rotate = true,
+  onSelectGroup,
+}: RitmoMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const holesLayerRef = useRef<any>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+
+  // Ref siempre fresco para que el click del marker llame al último callback
+  // sin necesidad de reconstruir el mapa.
+  const onSelectGroupRef = useRef<RitmoMapProps["onSelectGroup"]>(undefined);
+  onSelectGroupRef.current = onSelectGroup;
 
   // Medir el container y reaccionar a resize/rotación
   useEffect(() => {
@@ -85,11 +98,21 @@ export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
       }
       const L = (window as any).L;
 
+      // Mapa "fijo": sin paneo ni zoom manual para que el campo nunca se
+      // salga de la pantalla. La cámara se controla solo por código
+      // (vista completa por defecto, zoom al grupo seleccionado).
       const map = L.map(mapDivRef.current, {
         center: [20.5625, -100.4078],
         zoom: 17,
         maxZoom: 20,
-        zoomControl: true,
+        zoomControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        touchZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        tap: false,
       });
 
       // Satélite "puro" (sin labels de calle) para que la rotación no las muestre sideways
@@ -139,11 +162,11 @@ export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
           ? `<div style="position:absolute; left:30px; top:-26px; font-size:22px;">🚦</div>`
           : "";
 
-        L.marker([g.lat, g.lon], {
+        const marker = L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center; position: relative;">
+              <div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center; position: relative; cursor: pointer;">
                 ${ring}
                 <div style="
                   width:36px; height:36px; border-radius:50%;
@@ -160,7 +183,10 @@ export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
             iconSize: [36, 36],
             iconAnchor: [18, 18],
           }),
+          keyboard: false,
         }).addTo(map);
+        // Tocar la bola: el padre alterna (zoom al grupo / volver a completo).
+        marker.on("click", () => onSelectGroupRef.current?.(g.id));
       });
 
       // Animación CSS para el anillo pulsante del bloqueador
@@ -176,16 +202,19 @@ export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
         document.head.appendChild(style);
       }
 
-      // Fit + zoom-in extra para que el campo llene la pantalla
+      // Vista fija por defecto: el campo COMPLETO al tamaño máximo que cabe
+      // en pantalla (sin recortar los extremos).
       const fitToCourse = () => {
         map.invalidateSize();
         const bounds = holesLayer.getBounds();
-        map.fitBounds(bounds, { padding: [10, 10], animate: false });
-        // Forzar un nivel de zoom adicional para crecer el campo
-        const z = map.getZoom();
-        map.setZoom(Math.min(z + 1, 20), { animate: false });
+        map.fitBounds(bounds, { padding: [8, 8], animate: false });
       };
       fitToCourse();
+      // Si arranca con un grupo ya seleccionado, hacemos zoom a él.
+      if (selectedId) {
+        const g = groups.find((x) => x.id === selectedId);
+        if (g) map.setView([g.lat, g.lon], 19, { animate: false });
+      }
 
       cleanup = () => {
         mapRef.current = null;
@@ -208,7 +237,7 @@ export function RitmoMap({ groups, selectedId, rotate = true }: RitmoMapProps) {
         map.flyTo([g.lat, g.lon], 19, { duration: 0.8 });
       }
     } else {
-      map.flyToBounds(holesLayer.getBounds(), { padding: [10, 10], duration: 0.8, maxZoom: 19 });
+      map.flyToBounds(holesLayer.getBounds(), { padding: [8, 8], duration: 0.8 });
     }
   }, [selectedId, groups]);
 

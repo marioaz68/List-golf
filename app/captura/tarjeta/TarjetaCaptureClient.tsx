@@ -14,13 +14,13 @@ import {
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
-import type {
-  CardSignaturePayload,
-  GroupCapturePayload,
-  GroupCapturePlayer,
-  GroupMatchPlayCapture,
-  HoleNumber,
-  HoleScores,
+import {
+  type CardSignaturePayload,
+  type GroupCapturePayload,
+  type GroupCapturePlayer,
+  type GroupMatchPlayCapture,
+  type HoleNumber,
+  type HoleScores,
 } from "@/lib/captura/types";
 
 type SignaturesByEntry = Record<string, CardSignaturePayload>;
@@ -43,13 +43,15 @@ function signaturesFromPlayers(
 function isCardReadyForSigning(
   scores: HoleScores | undefined,
   pending: Partial<Record<HoleNumber, boolean>> | undefined,
-  matchPlay: GroupMatchPlayCapture | null | undefined
+  matchPlay: GroupMatchPlayCapture | null | undefined,
+  pickedUp?: Partial<Record<HoleNumber, boolean>>
 ): boolean {
   if (!scores) return false;
   const holesRequired = matchPlay?.holesRequired ?? 18;
   for (let h = 1; h <= holesRequired; h++) {
     const hole = h as HoleNumber;
-    if (scores[hole] == null) return false;
+    const played = scores[hole] != null || Boolean(pickedUp?.[hole]);
+    if (!played) return false;
     if (pending?.[hole]) return false;
   }
   return true;
@@ -60,6 +62,7 @@ type ActiveCell = { entryId: string; hole: HoleNumber; table: TableKind };
 
 type ScoresByEntry = Record<string, HoleScores>;
 type PendingByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
+type PickedUpByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
 
 function scoresFromPlayers(players: GroupCapturePlayer[]): ScoresByEntry {
   const map: ScoresByEntry = {};
@@ -73,6 +76,14 @@ function pendingFromPlayers(players: GroupCapturePlayer[]): PendingByEntry {
   const map: PendingByEntry = {};
   for (const p of players) {
     map[p.entryId] = { ...(p.pending ?? {}) };
+  }
+  return map;
+}
+
+function pickedUpFromPlayers(players: GroupCapturePlayer[]): PickedUpByEntry {
+  const map: PickedUpByEntry = {};
+  for (const p of players) {
+    map[p.entryId] = { ...(p.pickedUp ?? {}) };
   }
   return map;
 }
@@ -93,6 +104,7 @@ function PublicSection({
   players,
   scoresByEntry,
   pendingByEntry,
+  pickedUpByEntry,
   activeCell,
   savingKey,
   onCellTap,
@@ -110,6 +122,7 @@ function PublicSection({
   players: GroupCapturePlayer[];
   scoresByEntry: ScoresByEntry;
   pendingByEntry: PendingByEntry;
+  pickedUpByEntry: PickedUpByEntry;
   activeCell: ActiveCell | null;
   savingKey: string | null;
   onCellTap: (entryId: string, hole: HoleNumber, table: TableKind) => void;
@@ -138,7 +151,10 @@ function PublicSection({
     players.length > 0 &&
     players.every((p) => {
       const v = (scoresByEntry[p.entryId] ?? p.scores)[hole];
-      return v != null;
+      const picked = Boolean(
+        pickedUpByEntry[p.entryId]?.[hole] ?? p.pickedUp?.[hole]
+      );
+      return v != null || picked;
     });
 
   return (
@@ -226,6 +242,10 @@ function PublicSection({
                   </td>
                   {holes.map((hole) => {
                     const val = scores[hole];
+                    const isPickedUp = Boolean(
+                      pickedUpByEntry[player.entryId]?.[hole] ??
+                        player.pickedUp?.[hole]
+                    );
                     const isActive =
                       activeCell?.entryId === player.entryId &&
                       activeCell.hole === hole &&
@@ -238,26 +258,35 @@ function PublicSection({
                       (lockedEntryIds?.has(player.entryId) ?? false);
                     return (
                       <td key={key} className="px-0 py-1 text-center">
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => {
-                            if (disabled) return;
-                            onCellTap(player.entryId, hole, "public");
-                          }}
-                          className={[
-                            "inline-flex h-6 w-6 items-center justify-center text-[10px] font-bold",
-                            getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
-                            isPending
-                              ? "bg-red-500 text-white"
-                              : "text-slate-900",
-                            isActive ? "ring-2 ring-sky-500 ring-offset-1" : "",
-                            isSaving ? "opacity-60" : "",
-                            disabled ? "cursor-not-allowed opacity-30" : "",
-                          ].join(" ")}
-                        >
-                          {val ?? ""}
-                        </button>
+                        {isPickedUp ? (
+                          <span
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-[10px] font-extrabold text-amber-700"
+                            title="Levantó (cuenta 10)"
+                          >
+                            X
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => {
+                              if (disabled) return;
+                              onCellTap(player.entryId, hole, "public");
+                            }}
+                            className={[
+                              "inline-flex h-6 w-6 items-center justify-center text-[10px] font-bold",
+                              getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
+                              isPending
+                                ? "bg-red-500 text-white"
+                                : "text-slate-900",
+                              isActive ? "ring-2 ring-sky-500 ring-offset-1" : "",
+                              isSaving ? "opacity-60" : "",
+                              disabled ? "cursor-not-allowed opacity-30" : "",
+                            ].join(" ")}
+                          >
+                            {val ?? ""}
+                          </button>
+                        )}
                       </td>
                     );
                   })}
@@ -448,6 +477,9 @@ export default function TarjetaCaptureClient({
   const [pendingByEntry, setPendingByEntry] = useState<PendingByEntry>(() =>
     pendingFromPlayers(initial.players)
   );
+  const [pickedUpByEntry, setPickedUpByEntry] = useState<PickedUpByEntry>(() =>
+    pickedUpFromPlayers(initial.players)
+  );
   const [privateScoresByEntry, setPrivateScoresByEntry] = useState<ScoresByEntry>(
     () => privateScoresFromPlayers(initial.players)
   );
@@ -568,6 +600,7 @@ export default function TarjetaCaptureClient({
 
       const remote = scoresFromPlayers(json.data.players);
       const remotePending = pendingFromPlayers(json.data.players);
+      const remotePickedUp = pickedUpFromPlayers(json.data.players);
       const remotePrivate = privateScoresFromPlayers(json.data.players);
 
       setScoresByEntry((prev) => {
@@ -590,6 +623,7 @@ export default function TarjetaCaptureClient({
       });
 
       setPendingByEntry(() => remotePending);
+      setPickedUpByEntry(() => remotePickedUp);
 
       const remoteSignatures = signaturesFromPlayers(json.data.players);
       setSignaturesByEntry(remoteSignatures);
@@ -954,9 +988,10 @@ export default function TarjetaCaptureClient({
     return isCardReadyForSigning(
       scoresByEntry[meta.myEntryId],
       pendingByEntry[meta.myEntryId],
-      meta.matchPlay
+      meta.matchPlay,
+      pickedUpByEntry[meta.myEntryId]
     );
-  }, [meta.myEntryId, meta.matchPlay, scoresByEntry, pendingByEntry]);
+  }, [meta.myEntryId, meta.matchPlay, scoresByEntry, pendingByEntry, pickedUpByEntry]);
 
   /** ¿La tarjeta del jugador al que atestiguo está lista para firmar? */
   const witnessCardComplete = useMemo(() => {
@@ -964,9 +999,16 @@ export default function TarjetaCaptureClient({
     return isCardReadyForSigning(
       scoresByEntry[witnessTargetForMe],
       pendingByEntry[witnessTargetForMe],
-      meta.matchPlay
+      meta.matchPlay,
+      pickedUpByEntry[witnessTargetForMe]
     );
-  }, [witnessTargetForMe, meta.matchPlay, scoresByEntry, pendingByEntry]);
+  }, [
+    witnessTargetForMe,
+    meta.matchPlay,
+    scoresByEntry,
+    pendingByEntry,
+    pickedUpByEntry,
+  ]);
 
   const mySignatures = meta.myEntryId
     ? signaturesByEntry[meta.myEntryId] ?? null
@@ -1254,6 +1296,7 @@ export default function TarjetaCaptureClient({
                   players={meta.players}
                   scoresByEntry={scoresByEntry}
                   pendingByEntry={pendingByEntry}
+                  pickedUpByEntry={pickedUpByEntry}
                   activeCell={activeCell}
                   savingKey={savingKey}
                   onCellTap={openCell}
@@ -1268,6 +1311,7 @@ export default function TarjetaCaptureClient({
                   players={meta.players}
                   scoresByEntry={scoresByEntry}
                   pendingByEntry={pendingByEntry}
+                  pickedUpByEntry={pickedUpByEntry}
                   activeCell={activeCell}
                   savingKey={savingKey}
                   onCellTap={openCell}
@@ -1299,6 +1343,7 @@ export default function TarjetaCaptureClient({
                       players={meta.players}
                       scoresByEntry={scoresByEntry}
                       pendingByEntry={pendingByEntry}
+                      pickedUpByEntry={pickedUpByEntry}
                       activeCell={activeCell}
                       savingKey={savingKey}
                       onCellTap={openCell}

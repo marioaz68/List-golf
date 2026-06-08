@@ -38,11 +38,12 @@ import {
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
-import type {
-  GroupCapturePayload,
-  GroupCapturePlayer,
-  HoleNumber,
-  HoleScores,
+import {
+  PICKED_UP_STROKES,
+  type GroupCapturePayload,
+  type GroupCapturePlayer,
+  type HoleNumber,
+  type HoleScores,
 } from "@/lib/captura/types";
 
 type ScoresByEntry = Record<string, HoleScores>;
@@ -911,7 +912,7 @@ export default function GrupoCaptureClient({
       ...prev,
       [entryId]: {
         ...(prev[entryId] ?? {}),
-        [hole]: isPickedUp ? null : strokes,
+        [hole]: isPickedUp ? PICKED_UP_STROKES : strokes,
       } as HoleScores,
     }));
     setPickedUpByEntry((prev) => {

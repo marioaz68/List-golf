@@ -572,6 +572,9 @@ export default function RitmoLiveView({
         groups={mapGroups}
         selectedId={selectedId}
         rotate={vp.shouldRotateMap}
+        onSelectGroup={(id) =>
+          setSelectedId((prev) => (prev === id ? null : id))
+        }
       />
       {mapUnsupported ? (
         <div
