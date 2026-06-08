@@ -1201,6 +1201,20 @@ export default function GrupoCaptureClient({
                 groupId={meta.groupId}
               />
               <Link
+                href={`/captura/menu?${[
+                  meEntryIdParam ? `me=${meEntryIdParam}` : null,
+                  caddieIdParam ? `caddie=${caddieIdParam}` : null,
+                  `back=${encodeURIComponent(
+                    `/captura/grupo?group_id=${meta.groupId}${backQs}`
+                  )}`,
+                ]
+                  .filter(Boolean)
+                  .join("&")}`}
+                className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                🍔 Menú
+              </Link>
+              <Link
                 href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
               >

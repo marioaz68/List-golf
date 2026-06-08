@@ -1441,6 +1441,17 @@ function MobileScoreEntryContent() {
               caddieId={caddieFromUrl}
               groupId={groupId}
             />
+            <a
+              href={`/captura/menu?${[
+                viewerEntryId ? `me=${viewerEntryId}` : null,
+                caddieFromUrl ? `caddie=${caddieFromUrl}` : null,
+              ]
+                .filter(Boolean)
+                .join("&")}`}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-300/60 bg-amber-400/20 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-400/30"
+            >
+              🍔 Menú
+            </a>
             <BackButton
               fallbackHref={
                 tournamentId

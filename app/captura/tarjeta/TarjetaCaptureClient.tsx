@@ -1087,6 +1087,17 @@ export default function TarjetaCaptureClient({
                 caddieId={caddieIdParam}
                 groupId={meta.groupId}
               />
+              <Link
+                href={`/captura/menu?${[
+                  meta.myEntryId ? `me=${meta.myEntryId}` : null,
+                  caddieIdParam ? `caddie=${caddieIdParam}` : null,
+                ]
+                  .filter(Boolean)
+                  .join("&")}`}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-300/60 bg-amber-400/20 px-2 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-400/30"
+              >
+                🍔 Menú
+              </Link>
               <BackButton
                 fallbackHref={scoreEntryBackHref}
                 className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
