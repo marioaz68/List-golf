@@ -185,9 +185,17 @@ export default async function RitmoPage({
     .order("round_no", { ascending: true });
   const rounds = (roundsRaw ?? []) as RoundRow[];
 
-  // Elegir ronda: query > ronda de la última posición > ronda de hoy > última.
+  // Elegir ronda: query > ronda de hoy > ronda de la última posición > última.
+  // La ronda con fecha = hoy manda sobre el último ping para que, al cambiar
+  // de día, el mapa salte de inmediato a la ronda del día aunque todavía no
+  // haya GPS (en vez de quedarse anclado a la ronda de ayer).
+  const today = todayMexicoDate();
   let round: RoundRow | null =
     rounds.find((r) => r.id === queryRoundId) ?? null;
+
+  if (!round) {
+    round = rounds.find((r) => r.round_date === today) ?? null;
+  }
 
   if (!round) {
     const { data: lastPos } = await admin
@@ -205,9 +213,7 @@ export default async function RitmoPage({
   }
 
   if (!round) {
-    const today = todayMexicoDate();
     round =
-      rounds.find((r) => r.round_date === today) ??
       [...rounds]
         .filter((r) => (r.round_date ?? "") <= today)
         .sort((a, b) => (b.round_date ?? "").localeCompare(a.round_date ?? ""))[0] ??
