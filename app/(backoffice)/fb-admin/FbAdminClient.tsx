@@ -47,12 +47,20 @@ export default function FbAdminClient({
               Edita venues, categorías y menú. Los cambios aparecen en la Mini App de inmediato.
             </p>
           </div>
-          <a
-            href="/fb-admin/emojis"
-            className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-          >
-            😀 Revisar emojis del menú →
-          </a>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/fb-admin/emojis"
+              className="rounded-md border border-amber-400 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              😀 Revisar emojis del menú →
+            </a>
+            <a
+              href="/fb-admin/mesas-qr"
+              className="rounded-md border border-indigo-400 bg-indigo-50 px-3 py-1.5 text-sm font-semibold text-indigo-800 hover:bg-indigo-100"
+            >
+              🪑 QR por mesa →
+            </a>
+          </div>
         </header>
 
         <div className="mb-4 flex gap-2 border-b border-slate-300">
