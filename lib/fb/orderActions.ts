@@ -75,6 +75,15 @@ export async function markOrderReady(orderId: string): Promise<UpdateResult> {
   return updateOrderStatus(orderId, "ready");
 }
 
+/** Pedido redirigido desde un carrito: el restaurante terminó y avisa al
+ *  carrito 'pásame a recoger esto'. El carrito lo verá en su cola con
+ *  prioridad alta y luego lo entrega al cliente. */
+export async function markOrderAwaitingCartPickup(
+  orderId: string
+): Promise<UpdateResult> {
+  return updateOrderStatus(orderId, "awaiting_cart_pickup");
+}
+
 /** Carrito sale en camino al hoyo del cliente. */
 export async function markOrderOnTheWay(orderId: string): Promise<UpdateResult> {
   return updateOrderStatus(orderId, "on_the_way");

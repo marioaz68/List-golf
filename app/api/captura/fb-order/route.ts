@@ -161,6 +161,61 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+
+  // AUTO-REDIRECCIÓN POR INVENTARIO:
+  // Si el venue es carrito y no tiene stock de alguno de los items, el
+  // pedido se redirige al restaurante (Hoyo 6) para que se prepare allá
+  // y el carrito vaya a recogerlo cuando esté listo. Esto es transparente
+  // al cliente — su pedido entra normal, solo cambia de venue interno.
+  let effectiveVenueId = venueId;
+  let sourceVenueId: string | null = null;
+  {
+    const { data: venueData } = await admin
+      .from("fb_venues")
+      .select("id, type, code")
+      .eq("id", venueId)
+      .maybeSingle();
+    const venueRow = venueData as { type?: string; code?: string } | null;
+    if (venueRow?.type === "cart") {
+      // Buscar stock del carrito para todos los items pedidos
+      const { data: stockRows } = await admin
+        .from("fb_venue_stock")
+        .select("menu_item_id, qty_available")
+        .eq("venue_id", venueId)
+        .in("menu_item_id", itemIds);
+      const stockMap = new Map<string, number>();
+      for (const s of (stockRows ?? []) as Array<{ menu_item_id: string; qty_available: number }>) {
+        stockMap.set(s.menu_item_id, s.qty_available);
+      }
+      // Si CUALQUIER item tiene fila con stock 0 → redirigir todo al restaurante
+      // (decisión simple: o todo lo entrega el carrito o todo el restaurante)
+      let needsRedirect = false;
+      for (const it of itemsInput) {
+        const id = String(it.menu_item_id ?? "");
+        const wanted = Number(it.qty ?? 0);
+        const available = stockMap.get(id);
+        // Solo redirige si tiene fila Y el stock es insuficiente
+        // (sin fila = stock infinito, default)
+        if (available != null && available < wanted) {
+          needsRedirect = true;
+          break;
+        }
+      }
+      if (needsRedirect) {
+        const { data: h6 } = await admin
+          .from("fb_venues")
+          .select("id")
+          .eq("code", "h6")
+          .eq("is_active", true)
+          .maybeSingle();
+        if (h6) {
+          sourceVenueId = venueId;
+          effectiveVenueId = (h6 as { id: string }).id;
+        }
+      }
+    }
+  }
+
   const { data: priceRows, error: priceErr } = await admin
     .from("fb_menu_items")
     .select("id, name, price_cents, available_venue_ids, is_active")
@@ -204,6 +259,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    // Validar disponibilidad contra el venue ELEGIDO POR EL CLIENTE
+    // (no el effectiveVenueId; queremos que el menú del carrito sea válido
+    // aunque el sistema acabe redirigiendo al restaurante por stock).
     if (!ref.venues.includes(venueId)) {
       return NextResponse.json(
         { ok: false, error: `"${ref.name}" no se sirve en este venue.` },
@@ -221,6 +279,8 @@ export async function POST(req: Request) {
   }
 
   // Insertar la orden + items en una transacción lógica
+  // venue_id = donde se prepara (puede ser el restaurante si hubo redirección)
+  // source_venue_id = el venue ORIGINAL al que pidió (carrito), si fue redirigido
   const { data: orderRow, error: orderErr } = await admin
     .from("fb_orders")
     .insert({
@@ -228,7 +288,8 @@ export async function POST(req: Request) {
       entry_id: entryId,
       caddie_id: caddieId,
       client_label: clientLabel,
-      venue_id: venueId,
+      venue_id: effectiveVenueId,
+      source_venue_id: sourceVenueId,
       delivery_type: deliveryType,
       status: "pending",
       requested_hole:
