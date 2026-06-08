@@ -58,6 +58,7 @@ interface FavoriteItem {
   categoryCode: string;
   timesOrdered: number;
   lastOrderedAt: string;
+  source: "pinned" | "auto";
 }
 
 interface MyOrderLine {
@@ -256,32 +257,53 @@ export default function MenuClient() {
   }, [meEntryId, caddieId, pullOrders]);
 
   // Cargar favoritos del cliente (filtrados por venue seleccionado)
-  useEffect(() => {
+  const pullFavorites = useCallback(async () => {
     if (!meEntryId && !caddieId) return;
-    let cancelled = false;
-    async function pull() {
-      const sp = new URLSearchParams();
-      if (meEntryId) sp.set("entry_id", meEntryId);
-      if (caddieId) sp.set("caddie_id", caddieId);
-      if (selectedVenueId) sp.set("venue_id", selectedVenueId);
-      try {
-        const res = await fetch(`/api/captura/fb-favorites?${sp.toString()}`, {
-          cache: "no-store",
-        });
-        const json = (await res.json()) as {
-          ok: boolean;
-          favorites: FavoriteItem[];
-        };
-        if (!cancelled && json.ok) setFavorites(json.favorites);
-      } catch {
-        if (!cancelled) setFavorites([]);
-      }
+    const sp = new URLSearchParams();
+    if (meEntryId) sp.set("entry_id", meEntryId);
+    if (caddieId) sp.set("caddie_id", caddieId);
+    if (selectedVenueId) sp.set("venue_id", selectedVenueId);
+    try {
+      const res = await fetch(`/api/captura/fb-favorites?${sp.toString()}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        favorites: FavoriteItem[];
+      };
+      if (json.ok) setFavorites(json.favorites);
+    } catch {
+      // ignore
     }
-    void pull();
-    return () => {
-      cancelled = true;
-    };
   }, [meEntryId, caddieId, selectedVenueId]);
+
+  useEffect(() => {
+    void pullFavorites();
+  }, [pullFavorites]);
+
+  // Toggle pin / hide para un item
+  const toggleFavorite = useCallback(
+    async (menuItemId: string, action: "pin" | "unpin" | "hide" | "unhide") => {
+      if (!meEntryId && !caddieId) return;
+      await fetch("/api/captura/fb-favorites/toggle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          entry_id: meEntryId,
+          caddie_id: caddieId,
+          menu_item_id: menuItemId,
+          action,
+        }),
+      });
+      void pullFavorites();
+    },
+    [meEntryId, caddieId, pullFavorites]
+  );
+
+  const pinnedIds = useMemo(
+    () => new Set(favorites.filter((f) => f.source === "pinned").map((f) => f.menuItem.id)),
+    [favorites]
+  );
 
   // ============ Render ============
   return (
@@ -352,60 +374,100 @@ export default function MenuClient() {
                 const icon =
                   fav.menuItem.displayEmoji ??
                   iconForMenuItem(fav.menuItem.name, fav.categoryCode);
+                const isPinned = fav.source === "pinned";
                 return (
-                  <button
+                  <div
                     key={fav.menuItem.id}
-                    type="button"
-                    onClick={() =>
-                      addToCart({
-                        id: fav.menuItem.id,
-                        name: fav.menuItem.name,
-                        description: null,
-                        priceCents: fav.menuItem.priceCents,
-                        imageUrl: fav.menuItem.imageUrl,
-                        prepMinutes: null,
-                        displayEmoji: fav.menuItem.displayEmoji,
-                      })
-                    }
                     className={[
-                      "flex w-[120px] shrink-0 flex-col items-center gap-1 rounded-lg border bg-white p-2 text-center transition",
+                      "relative flex w-[120px] shrink-0 flex-col items-center gap-1 rounded-lg border bg-white p-2 text-center",
                       inCart
                         ? "border-emerald-500 ring-2 ring-emerald-200"
                         : "border-amber-300",
                     ].join(" ")}
-                    title={`Pedido ${fav.timesOrdered}× antes`}
                   >
-                    {fav.menuItem.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={fav.menuItem.imageUrl}
-                        alt={fav.menuItem.name}
-                        className="h-12 w-12 rounded-lg object-cover"
-                      />
-                    ) : (
-                      <span className="text-3xl leading-none">{icon}</span>
-                    )}
-                    <span className="line-clamp-2 text-[11px] font-semibold text-slate-900">
-                      {fav.menuItem.name}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] font-bold text-emerald-700">
-                        {formatPrice(fav.menuItem.priceCents)}
+                    {/* Botón ✕ para ocultar este favorito */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isPinned) {
+                          // Si está pinned, quitarlo del pin
+                          void toggleFavorite(fav.menuItem.id, "unpin");
+                        } else {
+                          // Si es auto, ocultarlo
+                          void toggleFavorite(fav.menuItem.id, "hide");
+                        }
+                      }}
+                      className="absolute -right-1 -top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-[10px] font-bold text-white shadow hover:bg-red-600"
+                      title={isPinned ? "Quitar del favoritos" : "Ocultar de favoritos"}
+                    >
+                      ✕
+                    </button>
+
+                    {/* Indicador ⭐ si está pinned */}
+                    {isPinned ? (
+                      <span
+                        className="absolute -left-1 -top-1 z-10 text-[14px] drop-shadow"
+                        title="Fijado manualmente"
+                      >
+                        ⭐
                       </span>
-                      {inCart ? (
-                        <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
-                          {inCart.qty}
-                        </span>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        addToCart({
+                          id: fav.menuItem.id,
+                          name: fav.menuItem.name,
+                          description: null,
+                          priceCents: fav.menuItem.priceCents,
+                          imageUrl: fav.menuItem.imageUrl,
+                          prepMinutes: null,
+                          displayEmoji: fav.menuItem.displayEmoji,
+                        })
+                      }
+                      className="flex w-full flex-col items-center gap-1"
+                      title={
+                        isPinned
+                          ? "Favorito fijado"
+                          : `Pedido ${fav.timesOrdered}× antes`
+                      }
+                    >
+                      {fav.menuItem.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={fav.menuItem.imageUrl}
+                          alt={fav.menuItem.name}
+                          className="h-12 w-12 rounded-lg object-cover"
+                        />
                       ) : (
-                        <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
-                          +
-                        </span>
+                        <span className="text-3xl leading-none">{icon}</span>
                       )}
-                    </div>
-                    <span className="text-[9px] text-slate-500">
-                      pedido {fav.timesOrdered}×
-                    </span>
-                  </button>
+                      <span className="line-clamp-2 text-[11px] font-semibold text-slate-900">
+                        {fav.menuItem.name}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-emerald-700">
+                          {formatPrice(fav.menuItem.priceCents)}
+                        </span>
+                        {inCart ? (
+                          <span className="rounded-full bg-emerald-600 px-1.5 text-[10px] font-bold text-white">
+                            {inCart.qty}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                            +
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-slate-500">
+                        {isPinned
+                          ? "fijado ⭐"
+                          : `pedido ${fav.timesOrdered}×`}
+                      </span>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -469,35 +531,62 @@ export default function MenuClient() {
                             </p>
                           ) : null}
                         </div>
-                        {inCart ? (
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {/* Botón ⭐ para fijar/quitar de favoritos */}
+                          {(meEntryId || caddieId) ? (
                             <button
                               type="button"
-                              onClick={() => decFromCart(it.id)}
-                              className="h-7 w-7 rounded-full border border-slate-300 bg-white text-[14px] font-bold text-slate-700"
+                              onClick={() =>
+                                toggleFavorite(
+                                  it.id,
+                                  pinnedIds.has(it.id) ? "unpin" : "pin"
+                                )
+                              }
+                              className={[
+                                "h-7 w-7 shrink-0 rounded-full border text-[14px] transition",
+                                pinnedIds.has(it.id)
+                                  ? "border-amber-400 bg-amber-50"
+                                  : "border-slate-300 bg-white opacity-50 hover:opacity-100",
+                              ].join(" ")}
+                              title={
+                                pinnedIds.has(it.id)
+                                  ? "Quitar de favoritos"
+                                  : "Fijar como favorito"
+                              }
                             >
-                              −
+                              {pinnedIds.has(it.id) ? "⭐" : "☆"}
                             </button>
-                            <span className="min-w-[16px] text-center text-sm font-bold">
-                              {inCart.qty}
-                            </span>
+                          ) : null}
+                          {inCart ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => decFromCart(it.id)}
+                                className="h-7 w-7 rounded-full border border-slate-300 bg-white text-[14px] font-bold text-slate-700"
+                              >
+                                −
+                              </button>
+                              <span className="min-w-[16px] text-center text-sm font-bold">
+                                {inCart.qty}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addToCart(it)}
+                                className="h-7 w-7 rounded-full border border-emerald-500 bg-emerald-50 text-[14px] font-bold text-emerald-700"
+                              >
+                                +
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               type="button"
                               onClick={() => addToCart(it)}
-                              className="h-7 w-7 rounded-full border border-emerald-500 bg-emerald-50 text-[14px] font-bold text-emerald-700"
+                              className="rounded-md border border-emerald-500 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700"
                             >
-                              +
+                              + Agregar
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => addToCart(it)}
-                            className="rounded-md border border-emerald-500 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700"
-                          >
-                            + Agregar
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -506,45 +595,12 @@ export default function MenuClient() {
             ))
           )}
 
-          {/* Mis pedidos del torneo */}
+          {/* Mi ticket / cuenta del torneo */}
           {myOrders.length > 0 ? (
-            <section className="mt-6">
-              <div className="mb-1 flex items-baseline justify-between px-1">
-                <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Mi cuenta del torneo
-                </h2>
-                <span className="text-sm font-bold text-emerald-700">
-                  {formatPrice(accountCents)}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {myOrders.slice(0, 8).map((o) => (
-                  <div
-                    key={o.id}
-                    className="rounded-lg bg-white p-3 shadow-sm"
-                  >
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-[11px] font-bold uppercase text-slate-500">
-                        {ORDER_STATUS_LABELS[o.status as keyof typeof ORDER_STATUS_LABELS] ?? o.status}
-                        {o.requested_hole != null
-                          ? ` · Hoyo ${o.requested_hole}`
-                          : ""}
-                      </span>
-                      <span className="text-sm font-bold text-slate-900">
-                        {formatPrice(o.total_cents)}
-                      </span>
-                    </div>
-                    <ul className="mt-1 text-[12px] text-slate-700">
-                      {o.fb_order_items.map((l) => (
-                        <li key={l.id}>
-                          {l.qty}× {l.item_name_snapshot}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <MiTicket
+              orders={myOrders}
+              accountCents={accountCents}
+            />
           ) : null}
         </main>
 
@@ -601,6 +657,140 @@ export default function MenuClient() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/**
+ * Mi ticket de consumos del torneo.
+ * Lista todos los pedidos del cliente con su status, items y total.
+ * El total grande arriba SOLO suma los confirmados (delivered).
+ */
+function MiTicket({
+  orders,
+  accountCents,
+}: {
+  orders: MyOrder[];
+  accountCents: number;
+}) {
+  const [open, setOpen] = useState(false);
+
+  // Agrupar por status para resumen
+  const counts = useMemo(() => {
+    const c = { delivered: 0, pending: 0, disputed: 0, cancelled: 0 };
+    for (const o of orders) {
+      if (o.status === "delivered") c.delivered++;
+      else if (o.status === "cancelled") c.cancelled++;
+      else if (o.status === "disputed") c.disputed++;
+      else c.pending++; // pending, accepted, preparing, ready, on_the_way, pending_acceptance
+    }
+    return c;
+  }, [orders]);
+
+  return (
+    <section className="mt-6 overflow-hidden rounded-xl bg-white shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-3 text-left"
+      >
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            🧾 Mi ticket del torneo
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-slate-600">
+            {counts.delivered > 0 ? (
+              <span>{counts.delivered} cobrados</span>
+            ) : null}
+            {counts.pending > 0 ? (
+              <span className="text-amber-700">{counts.pending} en proceso</span>
+            ) : null}
+            {counts.disputed > 0 ? (
+              <span className="text-red-700">{counts.disputed} en disputa</span>
+            ) : null}
+            {counts.cancelled > 0 ? (
+              <span className="text-slate-400">{counts.cancelled} cancelados</span>
+            ) : null}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-base font-bold text-emerald-700">
+            {formatPrice(accountCents)}
+          </div>
+          <div className="text-[10px] text-slate-500">
+            {open ? "▲ ocultar" : "▼ ver detalle"}
+          </div>
+        </div>
+      </button>
+
+      {open ? (
+        <ul className="divide-y divide-slate-100 text-[12px]">
+          {orders.map((o) => {
+            const isPending = ![
+              "delivered",
+              "cancelled",
+              "disputed",
+            ].includes(o.status);
+            const isCobrado = o.status === "delivered";
+            const isCancelled = o.status === "cancelled";
+            const isDisputed = o.status === "disputed";
+            const colorClass = isCobrado
+              ? "text-emerald-800"
+              : isPending
+                ? "text-amber-800"
+                : isDisputed
+                  ? "text-red-800"
+                  : "text-slate-400 line-through";
+            return (
+              <li key={o.id} className="px-3 py-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className={`text-[10px] font-bold uppercase ${colorClass}`}>
+                    {isCobrado
+                      ? "✅ Cobrado"
+                      : isCancelled
+                        ? "✕ Cancelado"
+                        : isDisputed
+                          ? "⚠ En disputa"
+                          : ORDER_STATUS_LABELS[
+                              o.status as keyof typeof ORDER_STATUS_LABELS
+                            ] ?? o.status}
+                    {o.requested_hole != null ? ` · Hoyo ${o.requested_hole}` : ""}
+                  </span>
+                  <span
+                    className={[
+                      "text-sm font-bold",
+                      isCancelled ? "text-slate-400 line-through" : "text-slate-900",
+                    ].join(" ")}
+                  >
+                    {formatPrice(o.total_cents)}
+                  </span>
+                </div>
+                <ul className="mt-0.5 text-[11px] text-slate-600">
+                  {o.fb_order_items.map((l) => (
+                    <li key={l.id}>
+                      {l.qty}× {l.item_name_snapshot}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            );
+          })}
+          <li className="bg-emerald-50 px-3 py-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[11px] font-bold uppercase text-emerald-700">
+                Total cobrado
+              </span>
+              <span className="text-base font-bold text-emerald-700">
+                {formatPrice(accountCents)}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-emerald-700">
+              Total final al cerrar el torneo. Los pedidos en proceso o en
+              disputa no se han sumado todavía.
+            </p>
+          </li>
+        </ul>
+      ) : null}
+    </section>
   );
 }
 

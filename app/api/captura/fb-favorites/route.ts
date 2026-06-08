@@ -29,6 +29,8 @@ interface FavoriteResponse {
   categoryCode: string;
   timesOrdered: number;
   lastOrderedAt: string;
+  /** 'pinned' = fijado manual por el cliente; 'auto' = inferido del historial */
+  source: "pinned" | "auto";
 }
 
 export async function GET(req: Request) {
@@ -45,6 +47,29 @@ export async function GET(req: Request) {
   }
 
   const admin = createAdminClient();
+
+  // 0) Cargar acciones manuales del cliente (pin / hide)
+  const ownerCol = entryId ? "entry_id" : "caddie_id";
+  const ownerVal = (entryId ?? caddieId) as string;
+  const { data: actionsRaw } = await admin
+    .from("fb_favorite_actions")
+    .select("menu_item_id, action, created_at")
+    .eq(ownerCol, ownerVal);
+  const pinnedSet = new Set<string>();
+  const hiddenSet = new Set<string>();
+  const pinnedTsByItem = new Map<string, string>();
+  for (const a of (actionsRaw ?? []) as Array<{
+    menu_item_id: string;
+    action: string;
+    created_at: string;
+  }>) {
+    if (a.action === "pinned") {
+      pinnedSet.add(a.menu_item_id);
+      pinnedTsByItem.set(a.menu_item_id, a.created_at);
+    } else if (a.action === "hidden") {
+      hiddenSet.add(a.menu_item_id);
+    }
+  }
 
   // 1) Traer todos los items de pedidos NO cancelados/disputed del cliente
   //    junto con la fecha del pedido. Limitamos a últimos 6 meses para que
@@ -73,39 +98,58 @@ export async function GET(req: Request) {
     id: string;
     created_at: string;
   }>;
-  if (orders.length === 0) {
+  // Si NO hay pedidos pero hay items pinneados, igual los mostramos.
+  // Si NO hay nada, devolvemos vacío.
+  if (orders.length === 0 && pinnedSet.size === 0) {
     return NextResponse.json({ ok: true, favorites: [] });
   }
   const orderIds = orders.map((o) => o.id);
   const tsByOrder = new Map(orders.map((o) => [o.id, o.created_at]));
 
-  // 2) Traer todas las líneas de esos pedidos
-  const { data: linesRaw, error: linesErr } = await admin
-    .from("fb_order_items")
-    .select("menu_item_id, qty, order_id")
-    .in("order_id", orderIds);
-  if (linesErr) {
-    console.error("FB FAVORITES lines:", linesErr);
-    return NextResponse.json(
-      { ok: false, error: linesErr.message },
-      { status: 500 }
-    );
-  }
-
-  // 3) Agregar por menu_item_id
+  // 2) Traer todas las líneas de esos pedidos (si hay)
   type Agg = { times: number; last: string };
   const aggByItem = new Map<string, Agg>();
-  for (const l of (linesRaw ?? []) as Array<Record<string, unknown>>) {
-    const itemId = String(l.menu_item_id);
-    const ts = tsByOrder.get(String(l.order_id)) ?? "";
-    const prev = aggByItem.get(itemId);
-    if (prev) {
-      prev.times += 1;
-      if (ts > prev.last) prev.last = ts;
-    } else {
-      aggByItem.set(itemId, { times: 1, last: ts });
+  if (orderIds.length > 0) {
+    const { data: linesRaw, error: linesErr } = await admin
+      .from("fb_order_items")
+      .select("menu_item_id, qty, order_id")
+      .in("order_id", orderIds);
+    if (linesErr) {
+      console.error("FB FAVORITES lines:", linesErr);
+      return NextResponse.json(
+        { ok: false, error: linesErr.message },
+        { status: 500 }
+      );
+    }
+    for (const l of (linesRaw ?? []) as Array<Record<string, unknown>>) {
+      const itemId = String(l.menu_item_id);
+      const ts = tsByOrder.get(String(l.order_id)) ?? "";
+      const prev = aggByItem.get(itemId);
+      if (prev) {
+        prev.times += 1;
+        if (ts > prev.last) prev.last = ts;
+      } else {
+        aggByItem.set(itemId, { times: 1, last: ts });
+      }
     }
   }
+
+  // Asegurar que cada item pinneado esté en aggByItem (con times=0 si no ha
+  // pedido nunca) — así aparecen aunque sea su primer favorito.
+  for (const pinnedId of pinnedSet) {
+    if (!aggByItem.has(pinnedId)) {
+      aggByItem.set(pinnedId, {
+        times: 0,
+        last: pinnedTsByItem.get(pinnedId) ?? "",
+      });
+    }
+  }
+
+  // Filtrar los hidden
+  for (const hiddenId of hiddenSet) {
+    aggByItem.delete(hiddenId);
+  }
+
   if (aggByItem.size === 0) {
     return NextResponse.json({ ok: true, favorites: [] });
   }
@@ -159,11 +203,13 @@ export async function GET(req: Request) {
       categoryCode: catCodeById.get(String(row.category_id)) ?? "",
       timesOrdered: agg.times,
       lastOrderedAt: agg.last,
+      source: pinnedSet.has(id) ? "pinned" : "auto",
     });
   }
 
-  // Ordenar por frecuencia desc, desempate por más reciente
+  // Ordenar: pinned primero (orden por más reciente pinned), luego auto por frecuencia
   favorites.sort((a, b) => {
+    if (a.source !== b.source) return a.source === "pinned" ? -1 : 1;
     if (b.timesOrdered !== a.timesOrdered) return b.timesOrdered - a.timesOrdered;
     return b.lastOrderedAt.localeCompare(a.lastOrderedAt);
   });
