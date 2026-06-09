@@ -36,6 +36,10 @@ import {
   isMisRondasCommand,
   buildMisRondasReply,
 } from "@/lib/telegram/handicap/misRondasCommand";
+import {
+  isDistancesCommand,
+  buildDistancesReply,
+} from "@/lib/telegram/distancesCommand";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -206,6 +210,17 @@ export async function POST(req: Request) {
         buttons: reply.buttons,
       });
       return NextResponse.json({ ok: true, mis_rondas: "link_sent" });
+    }
+
+    // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===
+    if (text && isDistancesCommand(text)) {
+      const reply = buildDistancesReply();
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, distances: "link_sent" });
     }
 
     // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===

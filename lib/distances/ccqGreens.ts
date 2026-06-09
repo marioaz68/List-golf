@@ -1,0 +1,94 @@
+/**
+ * Centro del green de cada hoyo del CCQ.
+ *
+ * Calculado a partir del PDF de coordenadas (lado "Arriba" del polígono =
+ * green), promediando "Arriba izq" + "Arriba der" para obtener el centro.
+ *
+ * Precisión esperada: ±5-10m. Suficiente para mostrar yardas a green
+ * (que típicamente se reportan en frente / centro / fondo con ~20 yds
+ * de diferencia entre cada uno).
+ *
+ * Para mayor precisión en el futuro: capturar 3 puntos por green (front,
+ * center, back) y guardarlos en tabla course_holes.
+ */
+
+export interface GreenPoint {
+  lat: number;
+  lon: number;
+  /** Par del hoyo (referencia). */
+  par: number;
+}
+
+export const CCQ_GREEN_CENTERS: Record<number, GreenPoint> = {
+  // Datos parseados del PDF Cordenadas-ccq.pdf
+  1: { lat: 20.565451, lon: -100.409022, par: 4 },
+  2: { lat: 20.569517, lon: -100.407269, par: 5 },
+  3: { lat: 20.567710, lon: -100.406221, par: 3 },
+  4: { lat: 20.564200, lon: -100.408585, par: 4 },
+  5: { lat: 20.560940, lon: -100.408171, par: 4 },
+  6: { lat: 20.557369, lon: -100.407929, par: 4 },
+  7: { lat: 20.560997, lon: -100.407719, par: 4 },
+  8: { lat: 20.562842, lon: -100.407483, par: 3 },
+  9: { lat: 20.566581, lon: -100.405926, par: 5 },
+  10: { lat: 20.568861, lon: -100.406837, par: 4 },
+  // Hoyo 11: el PDF tenía un typo ("20°33'88.01''" con 88 segundos inválido).
+  // Uso el centroide del polígono CCQ_HOLES como fallback (cerca, no perfecto).
+  11: { lat: 20.55964, lon: -100.40718, par: 4 },
+  12: { lat: 20.557063, lon: -100.407164, par: 3 },
+  13: { lat: 20.557464, lon: -100.411065, par: 5 },
+  14: { lat: 20.555639, lon: -100.407899, par: 5 },
+  15: { lat: 20.558924, lon: -100.405256, par: 3 },
+  16: { lat: 20.561392, lon: -100.404178, par: 4 },
+  17: { lat: 20.562731, lon: -100.405101, par: 4 },
+  18: { lat: 20.565801, lon: -100.405361, par: 4 },
+};
+
+/** Distancia en metros entre dos puntos (Haversine). */
+export function haversineMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+export function metersToYards(m: number): number {
+  return m * 1.09361;
+}
+
+export interface DistanceToHole {
+  holeNo: number;
+  par: number;
+  distanceMeters: number;
+  distanceYards: number;
+}
+
+/** Devuelve la distancia del jugador a CADA green del CCQ, ordenadas por
+ *  proximidad. Sirve para sugerir "estás cerca del hoyo X". */
+export function computeAllHoleDistances(
+  playerLat: number,
+  playerLon: number
+): DistanceToHole[] {
+  const out: DistanceToHole[] = [];
+  for (const k of Object.keys(CCQ_GREEN_CENTERS)) {
+    const holeNo = Number(k);
+    const g = CCQ_GREEN_CENTERS[holeNo];
+    const m = haversineMeters(playerLat, playerLon, g.lat, g.lon);
+    out.push({
+      holeNo,
+      par: g.par,
+      distanceMeters: m,
+      distanceYards: metersToYards(m),
+    });
+  }
+  out.sort((a, b) => a.distanceMeters - b.distanceMeters);
+  return out;
+}
