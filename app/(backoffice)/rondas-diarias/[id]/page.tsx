@@ -12,6 +12,7 @@ import { redirect, notFound } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
 import SalidasClient, { type SalidaRow } from "./SalidasClient";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,13 @@ export default async function RondaDiariaDetailPage({
     // No es una ronda del día — mandar al editor de torneos normal.
     redirect(`/tournaments/edit?id=${id}`);
   }
+
+  // Salidas predefinidas: si la ronda aún no tiene salidas, generarlas
+  // automáticamente (3 tandas saliendo del 1 y del 10). Idempotente.
+  const seedDate =
+    (tournament as { start_date: string | null }).start_date ??
+    new Date().toISOString().slice(0, 10);
+  await seedDailyRoundSchedule(admin, id, seedDate);
 
   // Ronda principal (la ronda del día tiene una sola ronda).
   const { data: roundsRaw } = await admin

@@ -17,9 +17,6 @@ import {
   assignCaddieToSalida,
   removeCaddieFromSalida,
   startAndNotifySalida,
-  generateDailySalidas,
-  addSalida,
-  removeSalida,
 } from "../actions";
 
 export type SalidaPlayer = {
@@ -85,9 +82,6 @@ export default function SalidasClient({
   const [tab, setTab] = useState<"salidas" | "jugando">("salidas");
   const [onlyWithPlayers, setOnlyWithPlayers] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newTime, setNewTime] = useState("07:00");
-  const [newHole, setNewHole] = useState(1);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
   );
@@ -131,37 +125,6 @@ export default function SalidasClient({
     setFlash({ kind, text });
     window.setTimeout(() => setFlash(null), 5000);
   }, []);
-
-  const handleGenerate = () => {
-    startTransition(async () => {
-      const res = await generateDailySalidas({ tournamentId });
-      if (!res.ok) return showFlash("err", res.error ?? "No se pudo generar.");
-      showFlash("ok", `Salidas generadas (${res.created ?? 0}).`);
-      router.refresh();
-    });
-  };
-
-  const handleAddSalida = () => {
-    startTransition(async () => {
-      const res = await addSalida({
-        tournamentId,
-        teeTime: newTime,
-        startingHole: newHole,
-      });
-      if (!res.ok) return showFlash("err", res.error ?? "No se pudo agregar.");
-      setShowAdd(false);
-      showFlash("ok", `Salida ${newTime} (hoyo ${newHole}) agregada.`);
-      router.refresh();
-    });
-  };
-
-  const handleRemoveSalida = (groupId: string) => {
-    startTransition(async () => {
-      const res = await removeSalida({ tournamentId, groupId });
-      if (!res.ok) return showFlash("err", res.error ?? "No se pudo eliminar.");
-      router.refresh();
-    });
-  };
 
   const handleAdd = (groupId: string, playerId: string) => {
     startTransition(async () => {
@@ -272,33 +235,14 @@ export default function SalidasClient({
         {tab === "salidas" && (
           <>
             <div className="mb-3 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
-              Agenda de salidas. Toca una hora para agregar jugadores y caddies.
-              Cuando esté lista, <strong>Avisar Telegram</strong> manda el link
-              de captura. Todo se guarda al instante.
+              Toca una salida para agregar jugadores y caddies. Cuando esté
+              lista, <strong>Avisar Telegram</strong> manda el link de captura.
+              Todo se guarda al instante.
             </div>
 
-            {/* Controles: generar / agregar salida */}
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              {salidas.length === 0 && (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={handleGenerate}
-                  className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  ⚡ Generar salidas del día
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => setShowAdd((v) => !v)}
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                + Agregar salida
-              </button>
-              {salidas.length > 0 && (
-                <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+            {salidas.length > 0 && (
+              <div className="mb-3 flex items-center justify-end">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
                   <input
                     type="checkbox"
                     checked={onlyWithPlayers}
@@ -307,46 +251,12 @@ export default function SalidasClient({
                   />
                   Solo con jugadores
                 </label>
-              )}
-            </div>
-
-            {showAdd && (
-              <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg bg-white p-3 shadow ring-1 ring-slate-200">
-                <label className="flex flex-col text-xs font-semibold text-slate-600">
-                  Hora
-                  <input
-                    type="time"
-                    value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    className="mt-0.5 rounded border border-slate-300 px-2 py-1.5 text-sm"
-                  />
-                </label>
-                <label className="flex flex-col text-xs font-semibold text-slate-600">
-                  Hoyo
-                  <select
-                    value={newHole}
-                    onChange={(e) => setNewHole(Number(e.target.value))}
-                    className="mt-0.5 rounded border border-slate-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value={1}>1</option>
-                    <option value={10}>10</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={handleAddSalida}
-                  className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  Agregar
-                </button>
               </div>
             )}
 
             {salidas.length === 0 ? (
               <div className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow ring-1 ring-slate-200">
-                Aún no hay salidas. Genera la rejilla del día o agrega una salida
-                manual con los botones de arriba.
+                No hay salidas configuradas para este día.
               </div>
             ) : (
               <div className="space-y-4">
@@ -374,7 +284,6 @@ export default function SalidasClient({
                           onAssignCaddie={handleAssignCaddie}
                           onRemoveCaddie={handleRemoveCaddie}
                           onStart={handleStart}
-                          onRemoveSalida={handleRemoveSalida}
                         />
                       ))}
                     </div>
@@ -502,7 +411,6 @@ function SalidaItem({
   onAssignCaddie,
   onRemoveCaddie,
   onStart,
-  onRemoveSalida,
 }: {
   salida: SalidaRow;
   groupSize: number;
@@ -515,7 +423,6 @@ function SalidaItem({
   onAssignCaddie: (groupId: string, entryId: string, caddieId: string) => void;
   onRemoveCaddie: (entryId: string) => void;
   onStart: (groupId: string) => void;
-  onRemoveSalida: (groupId: string) => void;
 }) {
   const started = Boolean(salida.startedAt);
   const count = salida.players.length;
@@ -590,19 +497,7 @@ function SalidaItem({
             </p>
           )}
 
-          <div className="mt-3 flex items-center justify-between">
-            {count === 0 ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onRemoveSalida(salida.groupId)}
-                className="rounded-md px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 disabled:opacity-50"
-              >
-                Eliminar salida
-              </button>
-            ) : (
-              <span />
-            )}
+          <div className="mt-3 flex justify-end">
             <button
               type="button"
               disabled={busy || count === 0}
@@ -773,6 +668,7 @@ function PlayerSearch({
   return (
     <div className="relative mt-2">
       <input
+        autoFocus
         type="text"
         value={query}
         onChange={(e) => onChange(e.target.value)}
