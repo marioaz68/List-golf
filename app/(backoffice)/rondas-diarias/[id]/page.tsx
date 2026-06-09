@@ -13,6 +13,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
+import { maxPlayersForDate } from "@/lib/dailyRounds/salidaCapacity";
 import SalidasClient, { type SalidaRow } from "./SalidasClient";
 
 export const dynamic = "force-dynamic";
@@ -74,12 +75,14 @@ export default async function RondaDiariaDetailPage({
   let salidas: SalidaRow[] = [];
   let roundId = "";
   let roundDate: string | null = null;
-  let groupSize = 4;
+  // Cupo por salida según el día (L-V: 7, S-D: 5). Se basa en la fecha de la
+  // ronda diaria, no en round.group_size (que es para torneos).
+  let groupSize = maxPlayersForDate(seedDate);
 
   if (round?.id) {
     roundId = String(round.id);
     roundDate = round.round_date ?? null;
-    groupSize = round.group_size ?? 4;
+    groupSize = maxPlayersForDate(roundDate ?? seedDate);
 
     const { data: groupsRaw } = await admin
       .from("pairing_groups")

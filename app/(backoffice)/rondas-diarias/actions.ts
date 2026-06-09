@@ -9,6 +9,7 @@ import {
   seedDailyRoundSchedule,
   ensureDailyRoundBase,
 } from "@/lib/dailyRounds/seedSchedule";
+import { maxPlayersForDate } from "@/lib/dailyRounds/salidaCapacity";
 import { markGroupStarted } from "@/lib/ritmo/groupStart";
 import { assignCaddieToEntry } from "@/lib/caddies/assignCaddieToEntry";
 import {
@@ -346,12 +347,23 @@ export async function addPlayerToSalida(input: {
     return { ok: true };
   }
 
-  // Siguiente posición dentro del grupo.
+  // Cupo por día (L-V: 7, S-D: 5). Validamos en servidor para no exceder.
+  const roundDate = await dailyRoundDate(admin, tournamentId);
+  const cap = maxPlayersForDate(roundDate);
+
+  // Siguiente posición dentro del grupo + conteo actual.
   const { data: members } = await admin
     .from("pairing_group_members")
     .select("position")
     .eq("group_id", groupId);
-  const maxPos = ((members ?? []) as Array<{ position: number | null }>).reduce(
+  const memberList = (members ?? []) as Array<{ position: number | null }>;
+  if (memberList.length >= cap) {
+    return {
+      ok: false,
+      error: `Salida llena: máximo ${cap} jugadores este día.`,
+    };
+  }
+  const maxPos = memberList.reduce(
     (acc, m) => Math.max(acc, m.position ?? 0),
     0
   );
