@@ -4,9 +4,10 @@
  * Convención:
  *   - 1 categoría "ABIERTA" mixta (gender='X') con HCP 0-54
  *   - 1 round vinculada a esa categoría
- *   - Pairing groups vacíos cada 10 min:
- *       tanda mañana:  07:00-08:50 en hoyo 1 y hoyo 10
- *       tanda media:   12:00-13:50 en hoyo 1 y hoyo 10
+ *   - Pairing groups vacíos cada 10 min (hoyo 1 y hoyo 10 por cada hora):
+ *       tanda mañana:  07:00-09:10
+ *       tanda media:   11:40-13:50
+ *       tanda tarde:   16:00-18:00
  *
  * Idempotente: si ya existe categoría o ya hay pairing_groups, no duplica.
  */
@@ -282,20 +283,22 @@ interface TeeSlot {
 function buildTeeSlots(): TeeSlot[] {
   const slots: TeeSlot[] = [];
 
+  // Inclusivo en el extremo final (m <= endMin) para incluir la última hora.
   function addBand(startHHMM: string, endHHMM: string, label: string) {
     const [sh, sm] = startHHMM.split(":").map(Number);
     const [eh, em] = endHHMM.split(":").map(Number);
     const startMin = sh * 60 + sm;
     const endMin = eh * 60 + em;
-    for (let m = startMin; m < endMin; m += 10) {
+    for (let m = startMin; m <= endMin; m += 10) {
       const t = formatHHMM(m);
       slots.push({ tee_time: t, hole: 1, label: `${label} · Hoyo 1` });
       slots.push({ tee_time: t, hole: 10, label: `${label} · Hoyo 10` });
     }
   }
 
-  addBand("07:00", "09:00", "Mañana");
-  addBand("12:00", "14:00", "Mediodía");
+  addBand("07:00", "09:10", "Mañana");
+  addBand("11:40", "13:50", "Mediodía");
+  addBand("16:00", "18:00", "Tarde");
 
   return slots;
 }
