@@ -36,14 +36,14 @@ function TeeDot({ color, name }: { color: string | null; name: string | null }) 
 
 function PlayerLine({ p }: { p: PrintablePlayerRow }) {
   return (
-    <div className="flex items-center gap-1 text-[8px] leading-tight">
+    <div className="flex items-center gap-1 text-[10px] leading-tight">
       <GenderIcon g={p.gender} />
       <TeeDot color={p.teeColor} name={p.teeName} />
       <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
-      <span className="shrink-0 tabular-nums text-[7px]">
+      <span className="shrink-0 tabular-nums text-[9px]">
         HI {p.hi.toFixed(1)} · PH {p.ph ?? "—"}
       </span>
-      <span className="shrink-0 rounded bg-black/5 px-0.5 text-[6px] font-bold uppercase">
+      <span className="shrink-0 rounded bg-black/5 px-1 text-[8px] font-bold uppercase">
         {p.ballRole}
       </span>
     </div>
@@ -57,15 +57,15 @@ type ExtraRow = {
   dotsByHole?: Record<number, number>;
 };
 
-function AdvantageCell({ dots }: { dots: number }) {
+function AdvantageCell({ dots, rowH }: { dots: number; rowH: string }) {
   return (
-    <td className="relative h-3 border border-black/40">
+    <td className="relative border border-black/40" style={{ height: rowH }}>
       {dots > 0 ? (
-        <span className="pointer-events-none absolute right-[1px] top-[1px] flex gap-[1px]">
+        <span className="pointer-events-none absolute right-[1.5px] top-[1.5px] flex gap-[1px]">
           {Array.from({ length: Math.min(dots, 2) }).map((_, i) => (
             <span
               key={i}
-              className="inline-block h-[3px] w-[3px] rounded-full bg-black"
+              className="inline-block h-[4px] w-[4px] rounded-full bg-black"
             />
           ))}
         </span>
@@ -78,16 +78,18 @@ function HoleGrid({
   parByHole,
   siByHole,
   extraRows,
+  rowH,
 }: {
   parByHole: Record<number, number>;
   siByHole: Record<number, number>;
   extraRows: ExtraRow[];
+  rowH: string;
 }) {
   return (
-    <table className="w-full border-collapse text-[6px]">
+    <table className="w-full border-collapse text-[9px]">
       <thead>
         <tr>
-          <th className="w-8 border border-black/40 bg-black/5 px-0.5 text-left">
+          <th className="w-14 border border-black/40 bg-black/5 px-1 text-left">
             Hoyo
           </th>
           {HOLES.slice(0, 9).map((h) => (
@@ -105,7 +107,7 @@ function HoleGrid({
           <th className="border border-black/40 bg-black/5 px-0.5">TOT</th>
         </tr>
         <tr>
-          <td className="border border-black/40 px-0.5 font-semibold">Par</td>
+          <td className="border border-black/40 px-1 font-semibold">Par</td>
           {HOLES.slice(0, 9).map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {parByHole[h] ?? "—"}
@@ -127,7 +129,7 @@ function HoleGrid({
           </td>
         </tr>
         <tr>
-          <td className="border border-black/40 px-0.5 font-semibold">HCP</td>
+          <td className="border border-black/40 px-1 font-semibold">HCP</td>
           {HOLES.slice(0, 9).map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {siByHole[h] ?? "—"}
@@ -146,16 +148,17 @@ function HoleGrid({
         {extraRows.map((row) => (
           <tr key={row.label}>
             <td
-              className={`border border-black/40 px-0.5 font-semibold ${row.className ?? ""}`}
+              className={`border border-black/40 px-1 font-semibold ${row.className ?? ""}`}
+              style={{ height: rowH }}
             >
               {row.label}
             </td>
             {HOLES.slice(0, 9).map((h) => (
-              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} />
+              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} rowH={rowH} />
             ))}
             <td className="border border-black/40" />
             {HOLES.slice(9).map((h) => (
-              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} />
+              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} rowH={rowH} />
             ))}
             <td className="border border-black/40" />
             <td className="border border-black/40" />
@@ -176,38 +179,38 @@ function CardHeader({
   groupLine: string;
 }) {
   return (
-    <header className="border-b border-black/30 pb-1">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
+    <header className="border-b border-black/40 pb-1">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           {meta.clubId ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={`/api/club-logo?club_id=${encodeURIComponent(meta.clubId)}`}
               alt={meta.clubName}
-              className="h-7 w-7 shrink-0 rounded-full object-contain"
+              className="h-9 w-9 shrink-0 rounded-full object-contain"
             />
           ) : null}
           <div className="min-w-0">
-            <div className="text-[7px] font-bold uppercase tracking-wide">
+            <div className="text-[9px] font-bold uppercase tracking-wide">
               {meta.clubName}
             </div>
-            <div className="truncate text-[9px] font-extrabold">
+            <div className="truncate text-[12px] font-extrabold leading-tight">
               {meta.tournamentName}
             </div>
           </div>
         </div>
-        <div className="shrink-0 text-right text-[7px]">
+        <div className="shrink-0 text-right text-[10px] leading-tight">
           <div className="font-bold">{subtitle}</div>
           <div>{groupLine}</div>
         </div>
       </div>
-      <div className="mt-0.5 flex items-center justify-between text-[6px] text-black/70">
+      <div className="mt-0.5 flex items-center justify-between text-[8px] text-black/70">
         <span>
           {meta.pairFormatLabel} · {meta.allowancePct}% HI · 2 pts/hoyo (baja vs
           baja, alta vs alta)
         </span>
-        <span className="flex items-center gap-0.5">
-          <span className="inline-block h-[3px] w-[3px] rounded-full bg-black" />
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-[4px] w-[4px] rounded-full bg-black" />
           = golpe de ventaja
         </span>
       </div>
@@ -250,11 +253,11 @@ export function MatchPlayScorecardSheet({
   scoreRows.push({ label: "Match", className: "bg-amber-50 font-bold" });
 
   return (
-    <article className="scorecard-half flex h-[138mm] flex-col overflow-hidden border border-black/50 bg-white p-2 text-black">
+    <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
       <CardHeader meta={meta} subtitle={subtitle} groupLine={groupLine} />
-      <div className="mt-1 grid grid-cols-2 gap-2">
+      <div className="mt-1 grid grid-cols-2 gap-3">
         <div>
-          <div className="mb-0.5 text-[7px] font-bold uppercase text-cyan-800">
+          <div className="mb-0.5 text-[9px] font-bold uppercase text-cyan-800">
             Pareja A — {card.topLabel}
           </div>
           {card.topPlayers.map((p, i) => (
@@ -262,7 +265,7 @@ export function MatchPlayScorecardSheet({
           ))}
         </div>
         <div>
-          <div className="mb-0.5 text-[7px] font-bold uppercase text-violet-800">
+          <div className="mb-0.5 text-[9px] font-bold uppercase text-violet-800">
             Pareja B — {card.bottomLabel}
           </div>
           {card.bottomPlayers.map((p, i) => (
@@ -270,17 +273,19 @@ export function MatchPlayScorecardSheet({
           ))}
         </div>
       </div>
-      <div className="mt-1 min-h-0 flex-1 overflow-hidden">
+      <div className="mt-1 min-h-0 flex-1">
         <HoleGrid
           parByHole={meta.parByHole}
           siByHole={meta.strokeIndexByHole}
           extraRows={scoreRows}
+          rowH="6.2mm"
         />
       </div>
-      <footer className="mt-1 flex gap-3 border-t border-black/20 pt-1 text-[6px]">
+      <footer className="mt-1 flex gap-4 border-t border-black/30 pt-1 text-[9px] font-semibold">
         <span>Ganador: ☐ A ☐ B</span>
-        <span>Resultado: __________</span>
-        <span>Firma A: ______ Firma B: ______</span>
+        <span>Resultado: ____________</span>
+        <span>Firma A: __________</span>
+        <span>Firma B: __________</span>
       </footer>
     </article>
   );
@@ -300,28 +305,29 @@ export function StrokeAggregateScorecardSheet({
     label: `J${i + 1} ${p.name.split(" ")[0]}`,
     dotsByHole: p.strokesByHole,
   }));
-  scoreRows.push({ label: "Neto pareja 1" });
-  scoreRows.push({ label: "Neto pareja 2" });
+  scoreRows.push({ label: "Neto pareja 1", className: "bg-emerald-50 font-bold" });
+  scoreRows.push({ label: "Neto pareja 2", className: "bg-emerald-50 font-bold" });
 
   return (
-    <article className="scorecard-half flex h-[138mm] flex-col overflow-hidden border border-black/50 bg-white p-2 text-black">
+    <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
       <CardHeader meta={meta} subtitle={subtitle} groupLine={groupLine} />
-      <div className="mt-1 space-y-0.5">
+      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5">
         {card.players.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-[8px]">
+          <div key={i} className="flex items-center gap-2 text-[10px]">
             <span className="w-4 font-bold">{i + 1}.</span>
             <PlayerLine p={p} />
           </div>
         ))}
       </div>
-      <div className="mt-1 min-h-0 flex-1 overflow-hidden">
+      <div className="mt-1 min-h-0 flex-1">
         <HoleGrid
           parByHole={meta.parByHole}
           siByHole={meta.strokeIndexByHole}
           extraRows={scoreRows}
+          rowH="6.2mm"
         />
       </div>
-      <footer className="mt-1 border-t border-black/20 pt-1 text-[6px]">
+      <footer className="mt-1 border-t border-black/30 pt-1 text-[8px]">
         Suma neto de los 2 jugadores de cada pareja · Desempate según convocatoria
         CCQ
       </footer>
@@ -350,7 +356,7 @@ export function ScorecardPrintPages({
       {pages.map((pair, pi) => (
         <div
           key={pi}
-          className="print-page mx-auto flex max-w-[210mm] flex-col gap-2 bg-white p-2 print:min-h-[297mm] print:max-h-[297mm] print:break-after-page"
+          className="print-page mx-auto flex w-full max-w-[287mm] flex-col gap-3 bg-white p-2 print:break-after-page"
         >
           {pair.map((item) =>
             item.type === "mp" ? (
@@ -372,8 +378,8 @@ export function ScorecardPrintPages({
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 8mm;
+            size: A4 landscape;
+            margin: 6mm;
           }
           body * {
             visibility: hidden;
@@ -387,6 +393,10 @@ export function ScorecardPrintPages({
             left: 0;
             top: 0;
             width: 100%;
+          }
+          .print-page {
+            gap: 4mm;
+            padding: 0;
           }
           .print-page:last-child {
             break-after: auto;

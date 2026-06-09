@@ -98,8 +98,8 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
       <div className="print:hidden rounded-xl border border-white/10 bg-[#0c1728] p-4">
         <p className="text-[12px] text-slate-300">{bundle.message}</p>
         <p className="mt-1 text-[11px] text-slate-500">
-          Formato: media A4 (2 tarjetas por hoja) · campos en blanco para anotar
-          a mano · HI/PH/tees preimpresos
+          Formato: A4 horizontal, 2 tarjetas por hoja (mitad superior/inferior) ·
+          campos en blanco para anotar a mano · HI/PH/tees preimpresos
         </p>
 
         <div className="mt-3 flex flex-wrap items-end gap-3">
