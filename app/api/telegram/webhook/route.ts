@@ -32,6 +32,10 @@ import {
   buildMobileCodeReply,
 } from "@/lib/telegram/ritmo/mobileCode";
 import { isCartCommand, buildCartReply } from "@/lib/telegram/fb/cartCommand";
+import {
+  isMisRondasCommand,
+  buildMisRondasReply,
+} from "@/lib/telegram/handicap/misRondasCommand";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -191,6 +195,17 @@ export async function POST(req: Request) {
         buttons: cartReply.buttons,
       });
       return NextResponse.json({ ok: true, cart: "menu_sent" });
+    }
+
+    // === HANDICAP: /RONDAS o /MISRONDAS — histórico personal del socio ===
+    if (text && isMisRondasCommand(text) && userId) {
+      const reply = buildMisRondasReply(userId);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, mis_rondas: "link_sent" });
     }
 
     // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===

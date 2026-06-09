@@ -175,17 +175,31 @@ async function loadPublicTournaments(supabase: SupabaseClient) {
   const select =
     "id,name,start_date,end_date,poster_path,club_id,course_id" as const;
 
+  // Filtros públicos:
+  //   is_public=true     → admite visitantes anónimos
+  //   is_archived=false  → no terminó hace mucho
+  //   is_private=false   → no es una "ronda diaria" del club (privada)
   const withArchive = await supabase
     .from("tournaments")
     .select(select)
     .eq("is_public", true)
-    .eq("is_archived", false);
+    .eq("is_archived", false)
+    .eq("is_private", false);
 
   if (!withArchive.error) {
     return withArchive;
   }
 
   const msg = withArchive.error.message ?? "";
+  // is_private aún no migrado → reintentar sin ese filtro
+  if (/is_private/i.test(msg)) {
+    const noPrivate = await supabase
+      .from("tournaments")
+      .select(select)
+      .eq("is_public", true)
+      .eq("is_archived", false);
+    if (!noPrivate.error) return noPrivate;
+  }
   if (!/is_archived/i.test(msg)) {
     return withArchive;
   }

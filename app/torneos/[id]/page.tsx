@@ -199,6 +199,8 @@ export default async function PublicTournamentPage({
         .select("id,name,start_date,is_public,poster_path,settings")
         .eq("id", id)
         .eq("is_public", true)
+        // Rondas privadas (kind='daily_round' del club) nunca por URL pública
+        .eq("is_private", false)
         .maybeSingle();
 
   const { data: tournament, error: tournamentError } = tournamentResponse;

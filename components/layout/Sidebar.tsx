@@ -289,6 +289,11 @@ export default function Sidebar() {
         href: "/fb-inventario",
         icon: ClipboardList,
       },
+      {
+        nameKey: "dailyRounds",
+        href: "/rondas-diarias",
+        icon: CalendarDays,
+      },
     ],
     []
   );

@@ -35,7 +35,8 @@ export type AppModule =
   | "fb-manage"      // panel manager: admin, cuentas, reportes, disputas, mesas-qr
   | "fb-kitchen"     // vista cocina
   | "fb-waiter"      // vista mesero · restaurante
-  | "fb-cart";       // mini app operador de carrito
+  | "fb-cart"        // mini app operador de carrito
+  | "daily-rounds";  // rondas diarias del club (privadas — handicap WHS)
 
 const ENTRIES_ROLES: AppRole[] = [
   "super_admin",
@@ -205,6 +206,14 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "restaurante",
     "operador_carrito",
   ],
+
+  // Rondas diarias del club: comité de handicap y staff del club.
+  "daily-rounds": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "handicap_committee",
+  ],
 };
 
 /** Rutas del backoffice que exigen sesión (cualquier módulo). */
@@ -245,6 +254,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/fb-disputas",
   "/fb-mesero",
   "/fb-inventario",
+  "/rondas-diarias",
 ] as const;
 
 export function isBackofficePath(pathname: string): boolean {
@@ -306,6 +316,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   ) {
     return "fb";
   }
+  if (pathname.startsWith("/rondas-diarias")) return "daily-rounds";
   if (pathname.startsWith("/dashboard")) return "tournaments";
 
   if (
