@@ -146,16 +146,25 @@ export default async function RondasDiariasPage() {
   const isSuperAdmin = roles.includes("super_admin");
   let allowedClubIds: Set<string> | null = null;
   if (!isSuperAdmin) {
-    const { data: ucr } = await admin
-      .from("user_club_roles")
-      .select("club_id")
-      .eq("user_id", user.id)
-      .eq("is_active", true);
-    allowedClubIds = new Set(
-      ((ucr ?? []) as Array<{ club_id: string | null }>)
-        .map((r) => (r.club_id ? String(r.club_id) : null))
-        .filter((id): id is string => Boolean(id))
-    );
+    try {
+      const { data: ucr, error: ucrErr } = await admin
+        .from("user_club_roles")
+        .select("club_id")
+        .eq("user_id", user.id)
+        .eq("is_active", true);
+      if (ucrErr) {
+        console.error("rondas-diarias user_club_roles:", ucrErr.message);
+      } else {
+        allowedClubIds = new Set(
+          ((ucr ?? []) as Array<{ club_id: string | null }>)
+            .map((r) => (r.club_id ? String(r.club_id) : null))
+            .filter((id): id is string => Boolean(id))
+        );
+      }
+    } catch (e) {
+      console.error("rondas-diarias user_club_roles exception:", e);
+      // No filtramos — comportamiento legacy (ve todo)
+    }
   }
 
   const allClubs = ((clubsRaw ?? []) as Array<Record<string, unknown>>).map(

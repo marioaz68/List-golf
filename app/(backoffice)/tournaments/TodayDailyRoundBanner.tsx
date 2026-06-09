@@ -44,7 +44,13 @@ function formatHumanDate(iso: string): string {
 export default async function TodayDailyRoundBanner({ userRoles }: Props) {
   if (!userRoles.some((r) => ALLOWED_ROLES.has(r))) return null;
 
-  const admin = createAdminClient();
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return null;
+  }
+
   const date = todayMexico();
 
   let todayRound: {
@@ -53,6 +59,7 @@ export default async function TodayDailyRoundBanner({ userRoles }: Props) {
     status: string;
     entriesCount: number;
   } | null = null;
+  let migrationMissing = false;
 
   try {
     const { data: round, error } = await admin
@@ -64,24 +71,64 @@ export default async function TodayDailyRoundBanner({ userRoles }: Props) {
       .maybeSingle();
 
     if (error) {
-      // Migración aún no aplicada → no romper la página, solo ocultar el banner
-      if (/(kind|is_private)/i.test(error.message)) return null;
+      // Migración 20260608300000 aún no aplicada (faltan cols kind/is_private)
+      // → no rompemos la página, ocultamos el banner y avisamos al usuario.
+      if (/(kind|is_private|column .* does not exist)/i.test(error.message)) {
+        migrationMissing = true;
+      } else {
+        console.error("TodayDailyRoundBanner round query:", error.message);
+        return null;
+      }
     }
 
     if (round) {
-      const { data: entries } = await admin
-        .from("tournament_entries")
-        .select("id", { count: "exact", head: false })
-        .eq("tournament_id", round.id);
-      todayRound = {
-        id: String(round.id),
-        name: String(round.name),
-        status: String(round.status ?? ""),
-        entriesCount: Array.isArray(entries) ? entries.length : 0,
-      };
+      try {
+        const { data: entries } = await admin
+          .from("tournament_entries")
+          .select("id")
+          .eq("tournament_id", String((round as { id: string }).id));
+        todayRound = {
+          id: String((round as { id: string }).id),
+          name: String((round as { name: string }).name),
+          status: String((round as { status?: string }).status ?? ""),
+          entriesCount: Array.isArray(entries) ? entries.length : 0,
+        };
+      } catch (e) {
+        console.error("TodayDailyRoundBanner entries query:", e);
+        todayRound = {
+          id: String((round as { id: string }).id),
+          name: String((round as { name: string }).name),
+          status: String((round as { status?: string }).status ?? ""),
+          entriesCount: 0,
+        };
+      }
     }
-  } catch {
+  } catch (e) {
+    console.error("TodayDailyRoundBanner:", e);
     return null;
+  }
+
+  if (migrationMissing) {
+    // Banner discreto avisando al admin que falta aplicar migración SQL
+    return (
+      <div
+        style={{
+          borderRadius: 12,
+          padding: "12px 16px",
+          border: "2px dashed #cbd5e1",
+          background: "#f8fafc",
+          color: "#475569",
+          fontSize: 13,
+        }}
+      >
+        💡 Para usar <strong>Rondas diarias del club</strong>, aplica la
+        migración SQL{" "}
+        <code style={{ background: "#e2e8f0", padding: "1px 6px", borderRadius: 4 }}>
+          20260608300000_tournaments_private_kind
+        </code>{" "}
+        en Supabase.
+      </div>
+    );
   }
 
   // --- Estilos inline para no chocar con el resto del page ---
