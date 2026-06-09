@@ -198,14 +198,14 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
 
         {/* Captura manual rápida — pedido verbal */}
         <Link
-          href="/fb-nuevo-pedido"
+          href={`/fb-nuevo-pedido?venue=${encodeURIComponent(venue.code)}`}
           className="mx-3 mt-3 flex items-center justify-between rounded-lg border-2 border-amber-500/50 bg-amber-950/40 px-3 py-2.5 text-amber-100 hover:bg-amber-950/60"
         >
           <span className="flex items-center gap-2 text-sm font-bold">
             ✍️ Capturar pedido verbal
           </span>
           <span className="text-[10px] text-amber-300/80">
-            Cliente pidió de palabra →
+            📍 Jugadores cerca →
           </span>
         </Link>
 

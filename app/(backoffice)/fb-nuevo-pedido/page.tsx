@@ -10,6 +10,7 @@ import {
   listMenuItems,
   listVenues,
 } from "@/lib/fb/queries";
+import { loadNearbyClients, type NearbyClient } from "@/lib/fb/nearbyClients";
 import NuevoPedidoClient from "./NuevoPedidoClient";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,13 @@ interface ClientOption {
   groupNo: number | null;
 }
 
-export default async function FbNuevoPedidoPage() {
+interface PageProps {
+  searchParams: Promise<{ venue?: string }>;
+}
+
+export default async function FbNuevoPedidoPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const venueCodeFromUrl = sp.venue?.trim() ?? null;
   const admin = createAdminClient();
 
   const [venues, categories, items] = await Promise.all([
@@ -103,8 +110,42 @@ export default async function FbNuevoPedidoPage() {
     });
   }
 
+  // Si vino ?venue=XXX en la URL (link desde mini app del carrito), calcular
+  // jugadores cercanos al carrito usando GPS.
+  let nearby: NearbyClient[] = [];
+  let nearbyMeta: {
+    venueCode: string;
+    cartLocated: boolean;
+    cartHole: number | null;
+    cartLastSeenAgoMin: number | null;
+  } | null = null;
+  if (venueCodeFromUrl) {
+    const res = await loadNearbyClients(admin, venueCodeFromUrl, {
+      maxMeters: 300,
+      maxResults: 10,
+      maxAgeMinutes: 30,
+    });
+    nearby = res.clients;
+    nearbyMeta = {
+      venueCode: venueCodeFromUrl,
+      cartLocated: res.cartLocated,
+      cartHole: res.cartHole,
+      cartLastSeenAgoMin: res.cartLastSeenAgoMin,
+    };
+  }
+
+  // Default venue: si vino ?venue=XXX, preseleccionarlo
+  const defaultVenueCode = venueCodeFromUrl;
+
   return (
-    <NuevoPedidoClient venues={venues} menu={menu} clients={clients} />
+    <NuevoPedidoClient
+      venues={venues}
+      menu={menu}
+      clients={clients}
+      nearby={nearby}
+      nearbyMeta={nearbyMeta}
+      defaultVenueCode={defaultVenueCode}
+    />
   );
 }
 

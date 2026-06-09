@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createOrderForClient } from "@/lib/fb/orderActions";
 import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
 import { formatPrice, type FbCategory, type FbMenuItem, type FbVenue } from "@/lib/fb/types";
+import type { NearbyClient } from "@/lib/fb/nearbyClients";
 import type { ClientOption } from "./page";
 
 interface MenuGroup {
@@ -12,10 +13,20 @@ interface MenuGroup {
   items: FbMenuItem[];
 }
 
+interface NearbyMeta {
+  venueCode: string;
+  cartLocated: boolean;
+  cartHole: number | null;
+  cartLastSeenAgoMin: number | null;
+}
+
 interface Props {
   venues: FbVenue[];
   menu: MenuGroup[];
   clients: ClientOption[];
+  nearby?: NearbyClient[];
+  nearbyMeta?: NearbyMeta | null;
+  defaultVenueCode?: string | null;
 }
 
 interface CartLine {
@@ -25,14 +36,33 @@ interface CartLine {
   qty: number;
 }
 
-export default function NuevoPedidoClient({ venues, menu, clients }: Props) {
+export default function NuevoPedidoClient({
+  venues,
+  menu,
+  clients,
+  nearby = [],
+  nearbyMeta = null,
+  defaultVenueCode = null,
+}: Props) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null);
   const [selectedVenueId, setSelectedVenueId] = useState<string>(
-    venues[0]?.id ?? ""
+    // Preseleccionar venue del URL si vino (?venue=cart_front)
+    (defaultVenueCode &&
+      venues.find((v) => v.code === defaultVenueCode)?.id) ||
+      venues[0]?.id ||
+      ""
   );
+
+  // Si vino con ?venue=XXX (operador del carrito), refrescar la lista de
+  // cercanos cada 20s para ver clientes que se acaban de acercar.
+  useEffect(() => {
+    if (!nearbyMeta?.venueCode) return;
+    const id = setInterval(() => router.refresh(), 20000);
+    return () => clearInterval(id);
+  }, [nearbyMeta?.venueCode, router]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [requestedHole, setRequestedHole] = useState<string>("");
   const [notes, setNotes] = useState("");
@@ -181,6 +211,35 @@ export default function NuevoPedidoClient({ venues, menu, clients }: Props) {
             <h2 className="mb-2 text-sm font-semibold text-slate-700">
               ¿Quién es el cliente?
             </h2>
+
+            {/* Sección: cercanos al carrito (si el GPS del carrito está activo) */}
+            {nearbyMeta ? (
+              <NearbySection
+                nearby={nearby}
+                meta={nearbyMeta}
+                selectedKey={selectedClient?.key ?? null}
+                onPick={(n) => {
+                  const c = clients.find((c) => c.key === n.key);
+                  if (c) {
+                    setSelectedClient(c);
+                    setStep(2);
+                  } else {
+                    // Si el cliente cercano no está en la lista pre-cargada
+                    // (puede pasar si llegó hace muy poco), lo creamos al vuelo
+                    setSelectedClient({
+                      key: n.key,
+                      kind: n.kind,
+                      id: (n.entryId ?? n.caddieId) as string,
+                      name: n.name,
+                      tournamentName: n.tournamentName,
+                      groupNo: n.groupNo,
+                    });
+                    setStep(2);
+                  }
+                }}
+              />
+            ) : null}
+
             <input
               value={clientSearch}
               onChange={(e) => setClientSearch(e.target.value)}
@@ -502,6 +561,99 @@ export default function NuevoPedidoClient({ venues, menu, clients }: Props) {
           </section>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Sección "📍 Cerca del carrito" — solo si vino ?venue=XXX
+// ============================================================
+function NearbySection({
+  nearby,
+  meta,
+  selectedKey,
+  onPick,
+}: {
+  nearby: NearbyClient[];
+  meta: NearbyMeta;
+  selectedKey: string | null;
+  onPick: (n: NearbyClient) => void;
+}) {
+  // Sin GPS del carrito → mensaje sutil
+  if (!meta.cartLocated) {
+    return (
+      <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+        📡 El GPS del carrito no está activo o aún no manda señal. Activa el chip
+        GPS en tu Mini App del carrito para ver clientes cerca de ti automáticamente.
+      </div>
+    );
+  }
+
+  // Carrito ubicado pero nadie cerca
+  if (nearby.length === 0) {
+    return (
+      <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-700">
+        📍 Nadie con GPS activo cerca del carrito en este momento
+        {meta.cartHole != null ? ` (carrito en hoyo ${meta.cartHole})` : ""}.
+        Búscalo por nombre abajo.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <h3 className="text-[12px] font-bold text-emerald-800">
+          📍 Cerca del carrito
+        </h3>
+        <span className="text-[10px] text-emerald-700">
+          {meta.cartHole != null ? `Hoyo ${meta.cartHole} · ` : ""}
+          {nearby.length} {nearby.length === 1 ? "cliente" : "clientes"}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {nearby.map((n) => {
+          const isSelected = selectedKey === n.key;
+          return (
+            <button
+              key={n.key}
+              type="button"
+              onClick={() => onPick(n)}
+              className={[
+                "flex items-center justify-between gap-2 rounded-md border bg-white p-2 text-left transition",
+                isSelected
+                  ? "border-emerald-600 ring-2 ring-emerald-400"
+                  : "border-emerald-200 hover:border-emerald-400 active:bg-emerald-50",
+              ].join(" ")}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-base leading-none">
+                    {n.kind === "player" ? "🏌️" : "🎒"}
+                  </span>
+                  <span className="truncate text-[13px] font-bold text-slate-900">
+                    {n.name}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  {n.distanceMeters < 50
+                    ? `📍 ~${n.distanceMeters}m (a tu lado)`
+                    : `📍 ~${n.distanceMeters}m`}
+                  {n.currentHole != null ? ` · hoyo ${n.currentHole}` : ""}
+                  {n.groupNo != null ? ` · grupo ${n.groupNo}` : ""}
+                  {n.lastSeenAgoMin > 1
+                    ? ` · hace ${n.lastSeenAgoMin}m`
+                    : ""}
+                </div>
+              </div>
+              <span className="shrink-0 text-lg text-emerald-600">→</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 text-center text-[9px] text-emerald-700">
+        Toca a un cliente para crear pedido al instante · refresco cada 20s
+      </p>
     </div>
   );
 }
