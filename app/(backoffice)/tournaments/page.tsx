@@ -4,6 +4,7 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { togglePublic, toggleArchive, deleteTournament } from "./actions";
 import DeleteTournamentButton from "./DeleteTournamentButton";
 import PosterUploadInline from "./PosterUploadInline";
+import TodayDailyRoundBanner from "./TodayDailyRoundBanner";
 import SubmitButton from "@/components/ui/SubmitButton";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
@@ -739,6 +740,10 @@ export default async function TournamentsPage({
   return (
     <div style={pageWrap}>
       <style dangerouslySetInnerHTML={{ __html: tournamentsFilterExtraCss }} />
+
+      {/* Banner de "ronda de hoy" para staff con permisos de daily-rounds */}
+      <TodayDailyRoundBanner userRoles={roles} />
+
       <div style={cardStyle}>
         <div style={cardHeader}>
           <div>
