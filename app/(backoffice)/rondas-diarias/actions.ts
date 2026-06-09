@@ -1,10 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
+import { markGroupStarted } from "@/lib/ritmo/groupStart";
+import {
+  notifyDailyRoundGroupStart,
+  type DailyNotifyResult,
+} from "@/lib/dailyRounds/notifyGroupStart";
 
 const ALLOWED_ROLES = new Set([
   "super_admin",
@@ -115,4 +121,196 @@ export async function createDailyRound(
 
   revalidatePath("/rondas-diarias");
   return { ok: true, tournamentId: newTournamentId };
+}
+
+/** Verifica sesión + rol y devuelve el cliente admin. */
+async function requireDailyAccess(): Promise<
+  | { ok: true; admin: SupabaseClient; userId: string }
+  | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Sin sesión." };
+  const admin = createAdminClient();
+  const roles = await getUserRoles(admin, user.id);
+  if (!roles.some((r) => ALLOWED_ROLES.has(r))) {
+    return { ok: false, error: "Sin permisos." };
+  }
+  return { ok: true, admin, userId: user.id };
+}
+
+/**
+ * Agrega un jugador del módulo de jugadores a una salida de la ronda del día.
+ * No requiere "inscripción" manual: si el jugador aún no tiene entry en esta
+ * ronda, se crea automáticamente (categoría ABIERTA + handicap del jugador) y
+ * se enlaza al grupo. Es idempotente: si ya está en el grupo, no duplica.
+ */
+export async function addPlayerToSalida(input: {
+  tournamentId: string;
+  groupId: string;
+  playerId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  const groupId = String(input.groupId ?? "").trim();
+  const playerId = String(input.playerId ?? "").trim();
+  if (!tournamentId || !groupId || !playerId) {
+    return { ok: false, error: "Faltan datos (torneo, salida o jugador)." };
+  }
+
+  // Datos del jugador (handicap para la entry).
+  const { data: player, error: pErr } = await admin
+    .from("players")
+    .select("id, handicap_index")
+    .eq("id", playerId)
+    .maybeSingle();
+  if (pErr || !player) {
+    return { ok: false, error: pErr?.message ?? "Jugador no encontrado." };
+  }
+  const handicapIndex =
+    (player as { handicap_index: number | null }).handicap_index ?? null;
+
+  // Resolver categoría del torneo (preferir ABIERTA).
+  const { data: cats } = await admin
+    .from("categories")
+    .select("id, code")
+    .eq("tournament_id", tournamentId);
+  const catList = (cats ?? []) as Array<{ id: string; code: string | null }>;
+  const categoryId =
+    catList.find((c) => c.code === "ABIERTA")?.id ?? catList[0]?.id ?? null;
+  if (!categoryId) {
+    return {
+      ok: false,
+      error: "La ronda no tiene categoría. Vuelve a crear la ronda del día.",
+    };
+  }
+
+  // Buscar (o crear) la entry del jugador en esta ronda.
+  let entryId: string | null = null;
+  const { data: existingEntry } = await admin
+    .from("tournament_entries")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("player_id", playerId)
+    .maybeSingle();
+  if (existingEntry) {
+    entryId = String((existingEntry as { id: string }).id);
+  } else {
+    const { data: insEntry, error: eErr } = await admin
+      .from("tournament_entries")
+      .insert({
+        tournament_id: tournamentId,
+        player_id: playerId,
+        category_id: categoryId,
+        handicap_index: handicapIndex,
+        handicap: handicapIndex,
+        status: "confirmed",
+      })
+      .select("id")
+      .single();
+    if (eErr || !insEntry) {
+      return { ok: false, error: eErr?.message ?? "No pude inscribir al jugador." };
+    }
+    entryId = String((insEntry as { id: string }).id);
+  }
+
+  // ¿Ya está en este grupo?
+  const { data: alreadyMember } = await admin
+    .from("pairing_group_members")
+    .select("id")
+    .eq("group_id", groupId)
+    .eq("entry_id", entryId)
+    .maybeSingle();
+  if (alreadyMember) {
+    revalidatePath(`/rondas-diarias/${tournamentId}`);
+    return { ok: true };
+  }
+
+  // Siguiente posición dentro del grupo.
+  const { data: members } = await admin
+    .from("pairing_group_members")
+    .select("position")
+    .eq("group_id", groupId);
+  const maxPos = ((members ?? []) as Array<{ position: number | null }>).reduce(
+    (acc, m) => Math.max(acc, m.position ?? 0),
+    0
+  );
+
+  const { error: mErr } = await admin.from("pairing_group_members").insert({
+    group_id: groupId,
+    entry_id: entryId,
+    position: maxPos + 1,
+  });
+  if (mErr) {
+    return { ok: false, error: mErr.message };
+  }
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
+  return { ok: true };
+}
+
+/** Quita un jugador de una salida (no borra al jugador del módulo). */
+export async function removePlayerFromSalida(input: {
+  tournamentId: string;
+  memberId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const memberId = String(input.memberId ?? "").trim();
+  if (!memberId) return { ok: false, error: "Falta el miembro." };
+
+  const { error } = await admin
+    .from("pairing_group_members")
+    .delete()
+    .eq("id", memberId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/rondas-diarias/${input.tournamentId}`);
+  return { ok: true };
+}
+
+/**
+ * Marca el arranque real de la salida y envía Telegram a jugadores y caddies
+ * con el link de captura. Devuelve un resumen del envío.
+ */
+export async function startAndNotifySalida(input: {
+  tournamentId: string;
+  roundId: string;
+  groupId: string;
+}): Promise<
+  { ok: boolean; error?: string } & Partial<DailyNotifyResult>
+> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  const roundId = String(input.roundId ?? "").trim();
+  const groupId = String(input.groupId ?? "").trim();
+  if (!tournamentId || !roundId || !groupId) {
+    return { ok: false, error: "Faltan datos de la salida." };
+  }
+
+  await markGroupStarted(admin, groupId);
+  const notify = await notifyDailyRoundGroupStart(admin, {
+    tournamentId,
+    roundId,
+    groupId,
+  });
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
+  return {
+    ok: true,
+    sent: notify.sent,
+    failed: notify.failed,
+    skipped: notify.skipped,
+    skippedNames: notify.skippedNames,
+  };
 }

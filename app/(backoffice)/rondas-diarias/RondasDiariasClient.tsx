@@ -96,9 +96,8 @@ export default function RondasDiariasClient({
         return;
       }
       setShowNew(false);
-      // Llevar al usuario al detalle del torneo recién creado (re-usa el
-      // backoffice existente de torneos)
-      router.push(`/tournaments/edit?tournament_id=${res.tournamentId}`);
+      // Llevar al usuario a la pantalla simple de salidas de la ronda del día.
+      router.push(`/rondas-diarias/${res.tournamentId}`);
     });
   }
 
@@ -150,10 +149,10 @@ export default function RondasDiariasClient({
               {todayRound ? (
                 <>
                   <Link
-                    href={`/tournaments/edit?tournament_id=${todayRound.id}`}
+                    href={`/rondas-diarias/${todayRound.id}`}
                     className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-emerald-700"
                   >
-                    Abrir hoy →
+                    Abrir salidas →
                   </Link>
                   <Link
                     href={`/tee-sheet?tournament_id=${todayRound.id}`}
@@ -243,7 +242,7 @@ export default function RondasDiariasClient({
                       </td>
                       <td className="py-1.5 pr-2 text-right">
                         <Link
-                          href={`/tournaments/edit?tournament_id=${r.id}`}
+                          href={`/rondas-diarias/${r.id}`}
                           className="text-indigo-600 underline"
                         >
                           Abrir
