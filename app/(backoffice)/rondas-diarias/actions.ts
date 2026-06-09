@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
 
 const ALLOWED_ROLES = new Set([
   "super_admin",
@@ -87,6 +88,20 @@ export async function createDailyRound(
     return { ok: false, error: error?.message ?? "Error creando ronda." };
   }
 
+  const newTournamentId = String((inserted as { id: string }).id);
+
+  // Auto-seeding: 1 categoría ABIERTA + 1 round + salidas cada 10 min
+  // (mañana 7-9 y mediodía 12-14, hoyos 1 y 10). Es idempotente y no
+  // bloquea el flujo si falla — el comité puede agregar manualmente.
+  try {
+    const seed = await seedDailyRoundSchedule(admin, newTournamentId, input.date);
+    if (!seed.ok) {
+      console.error("seedDailyRoundSchedule:", seed.error);
+    }
+  } catch (e) {
+    console.error("seedDailyRoundSchedule exception:", e);
+  }
+
   revalidatePath("/rondas-diarias");
-  return { ok: true, tournamentId: String((inserted as { id: string }).id) };
+  return { ok: true, tournamentId: newTournamentId };
 }
