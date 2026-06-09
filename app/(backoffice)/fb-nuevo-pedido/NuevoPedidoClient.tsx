@@ -325,34 +325,38 @@ export default function NuevoPedidoClient({ venues, menu, clients }: Props) {
                           <div
                             key={it.id}
                             className={[
-                              "flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-[12px]",
+                              "flex items-center justify-between gap-2 rounded-md border px-2 py-1.5",
                               inCart ? "border-emerald-400 bg-emerald-50" : "border-slate-200",
                             ].join(" ")}
                           >
-                            <span className="truncate">
-                              <span className="mr-1">{ic}</span>
-                              {it.name}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-[11px] font-bold text-emerald-700">
-                                {formatPrice(it.priceCents)}
-                              </span>
+                            <div className="flex min-w-0 flex-1 items-start gap-1.5">
+                              <span className="shrink-0 text-base leading-tight">{ic}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="line-clamp-2 text-[12px] font-semibold text-slate-800">
+                                  {it.name}
+                                </div>
+                                <div className="text-[11px] font-bold text-emerald-700">
+                                  {formatPrice(it.priceCents)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
                               {inCart ? (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => decOne(it.id)}
-                                    className="h-6 w-6 rounded-full border border-slate-300 text-[12px] font-bold"
+                                    className="h-7 w-7 rounded-full border border-slate-300 text-base font-bold"
                                   >
                                     −
                                   </button>
-                                  <span className="min-w-[14px] text-center text-[11px] font-bold">
+                                  <span className="min-w-[18px] text-center text-sm font-bold">
                                     {inCart.qty}
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => addOne(it)}
-                                    className="h-6 w-6 rounded-full border border-emerald-500 bg-white text-[12px] font-bold text-emerald-700"
+                                    className="h-7 w-7 rounded-full border border-emerald-500 bg-white text-base font-bold text-emerald-700"
                                   >
                                     +
                                   </button>
@@ -361,9 +365,9 @@ export default function NuevoPedidoClient({ venues, menu, clients }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => addOne(it)}
-                                  className="rounded-md border border-emerald-500 bg-white px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+                                  className="rounded-md border border-emerald-500 bg-white px-3 py-1 text-xs font-bold text-emerald-700"
                                 >
-                                  +
+                                  + Agregar
                                 </button>
                               )}
                             </div>

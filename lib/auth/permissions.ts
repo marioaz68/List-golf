@@ -195,7 +195,8 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "tournament_director",
     "restaurante",
     "mesero",
-    "cocinero", // cocinero también puede mandar a entregar a la mesa
+    "cocinero",         // cocinero también puede mandar a entregar a la mesa
+    "operador_carrito", // operador captura pedidos verbales desde su carrito
   ],
   "fb-cart": [
     "super_admin",
