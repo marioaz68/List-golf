@@ -50,6 +50,30 @@ function PlayerLine({ p }: { p: PrintablePlayerRow }) {
   );
 }
 
+type ExtraRow = {
+  label: string;
+  className?: string;
+  /** Golpes de ventaja por hoyo → punto en la esquina de la celda. */
+  dotsByHole?: Record<number, number>;
+};
+
+function AdvantageCell({ dots }: { dots: number }) {
+  return (
+    <td className="relative h-3 border border-black/40">
+      {dots > 0 ? (
+        <span className="pointer-events-none absolute right-[1px] top-[1px] flex gap-[1px]">
+          {Array.from({ length: Math.min(dots, 2) }).map((_, i) => (
+            <span
+              key={i}
+              className="inline-block h-[3px] w-[3px] rounded-full bg-black"
+            />
+          ))}
+        </span>
+      ) : null}
+    </td>
+  );
+}
+
 function HoleGrid({
   parByHole,
   siByHole,
@@ -57,7 +81,7 @@ function HoleGrid({
 }: {
   parByHole: Record<number, number>;
   siByHole: Record<number, number>;
-  extraRows: { label: string; className?: string }[];
+  extraRows: ExtraRow[];
 }) {
   return (
     <table className="w-full border-collapse text-[6px]">
@@ -127,11 +151,11 @@ function HoleGrid({
               {row.label}
             </td>
             {HOLES.slice(0, 9).map((h) => (
-              <td key={h} className="h-3 border border-black/40" />
+              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} />
             ))}
             <td className="border border-black/40" />
             {HOLES.slice(9).map((h) => (
-              <td key={h} className="h-3 border border-black/40" />
+              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} />
             ))}
             <td className="border border-black/40" />
             <td className="border border-black/40" />
@@ -154,12 +178,22 @@ function CardHeader({
   return (
     <header className="border-b border-black/30 pb-1">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[7px] font-bold uppercase tracking-wide">
-            {meta.clubName}
-          </div>
-          <div className="truncate text-[9px] font-extrabold">
-            {meta.tournamentName}
+        <div className="flex min-w-0 items-center gap-1.5">
+          {meta.clubId ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={`/api/club-logo?club_id=${encodeURIComponent(meta.clubId)}`}
+              alt={meta.clubName}
+              className="h-7 w-7 shrink-0 rounded-full object-contain"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <div className="text-[7px] font-bold uppercase tracking-wide">
+              {meta.clubName}
+            </div>
+            <div className="truncate text-[9px] font-extrabold">
+              {meta.tournamentName}
+            </div>
           </div>
         </div>
         <div className="shrink-0 text-right text-[7px]">
@@ -167,9 +201,15 @@ function CardHeader({
           <div>{groupLine}</div>
         </div>
       </div>
-      <div className="mt-0.5 text-[6px] text-black/70">
-        {meta.pairFormatLabel} · {meta.allowancePct}% HI · 2 pts/hoyo (baja vs
-        baja, alta vs alta)
+      <div className="mt-0.5 flex items-center justify-between text-[6px] text-black/70">
+        <span>
+          {meta.pairFormatLabel} · {meta.allowancePct}% HI · 2 pts/hoyo (baja vs
+          baja, alta vs alta)
+        </span>
+        <span className="flex items-center gap-0.5">
+          <span className="inline-block h-[3px] w-[3px] rounded-full bg-black" />
+          = golpe de ventaja
+        </span>
       </div>
     </header>
   );
@@ -192,15 +232,17 @@ export function MatchPlayScorecardSheet({
     .filter(Boolean)
     .join(" · ");
 
-  const scoreRows: { label: string; className?: string }[] = [];
+  const scoreRows: ExtraRow[] = [];
   for (const p of card.topPlayers) {
     scoreRows.push({
       label: `A ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+      dotsByHole: p.strokesByHole,
     });
   }
   for (const p of card.bottomPlayers) {
     scoreRows.push({
       label: `B ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+      dotsByHole: p.strokesByHole,
     });
   }
   scoreRows.push({ label: "Pts baja", className: "bg-cyan-50" });
@@ -254,8 +296,9 @@ export function StrokeAggregateScorecardSheet({
   const subtitle = `Stroke Agregado · R${card.roundNo}`;
   const groupLine = `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`;
 
-  const scoreRows = card.players.map((p, i) => ({
+  const scoreRows: ExtraRow[] = card.players.map((p, i) => ({
     label: `J${i + 1} ${p.name.split(" ")[0]}`,
+    dotsByHole: p.strokesByHole,
   }));
   scoreRows.push({ label: "Neto pareja 1" });
   scoreRows.push({ label: "Neto pareja 2" });

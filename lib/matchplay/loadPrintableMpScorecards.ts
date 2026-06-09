@@ -11,6 +11,12 @@ import {
   type MatchEntryPhRow,
 } from "@/lib/matchplay/resolveEntryPhForMatch";
 import { roundLabel } from "@/lib/matchplay/bracketUtils";
+import { pairLowHighStrokes } from "@/lib/matchplay/scoring/lowHigh";
+import {
+  strokeIndexForHole,
+  strokesReceivedOnHole,
+  type StrokeIndexByHole,
+} from "@/lib/leaderboard/handicapStrokes";
 import { getConsolationBracketId } from "@/lib/matchplay/consolationMatchPlay";
 import { loadStrokeAggregateStandings } from "@/lib/matchplay/strokeAggregateStandings";
 import { MATCHPLAY_PAIR_FORMAT_LABELS } from "@/lib/matchplay/types";
@@ -25,6 +31,8 @@ export type PrintablePlayerRow = {
   teeColor: string | null;
   /** Bola baja o alta dentro de la pareja (formato low_high). */
   ballRole: "baja" | "alta";
+  /** Golpes de ventaja recibidos por hoyo (0, 1, 2). Marca el punto en la tarjeta. */
+  strokesByHole: Record<number, number>;
 };
 
 export type PrintableMatchPlayCard = {
@@ -59,6 +67,7 @@ export type PrintableScorecardsBundle = {
   tournamentId: string;
   tournamentName: string;
   clubName: string;
+  clubId: string | null;
   allowancePct: number;
   pairFormatLabel: string;
   parByHole: Record<number, number>;
@@ -171,8 +180,44 @@ function teamToPrintablePlayers(
     ph: r.ph,
     teeName: r.teeName,
     teeColor: r.teeColor,
-    ballRole: i === 0 ? "baja" : "alta",
+    ballRole: i === 0 ? ("baja" as const) : ("alta" as const),
+    strokesByHole: {},
   }));
+}
+
+/**
+ * Calcula las ventajas (golpes recibidos) por hoyo para un match Bola Baja +
+ * Alta y las escribe en `strokesByHole` de cada jugador. Las ventajas son
+ * relativas entre las dos parejas (carril bajo vs bajo, alto vs alto).
+ */
+function fillLowHighStrokes(
+  topPlayers: PrintablePlayerRow[],
+  bottomPlayers: PrintablePlayerRow[],
+  strokeIndexByHole: StrokeIndexByHole
+) {
+  if (topPlayers.length < 2 || bottomPlayers.length < 2) return;
+  const ph: [number, number, number, number] = [
+    Number(topPlayers[0].ph ?? 0),
+    Number(topPlayers[1].ph ?? 0),
+    Number(bottomPlayers[0].ph ?? 0),
+    Number(bottomPlayers[1].ph ?? 0),
+  ];
+  const relative = pairLowHighStrokes(ph);
+  const targets = [
+    topPlayers[0],
+    topPlayers[1],
+    bottomPlayers[0],
+    bottomPlayers[1],
+  ];
+  targets.forEach((player, i) => {
+    const byHole: Record<number, number> = {};
+    for (let hole = 1; hole <= 18; hole++) {
+      const si = strokeIndexForHole(hole, strokeIndexByHole);
+      const received = strokesReceivedOnHole(relative[i], si);
+      if (received > 0) byHole[hole] = received;
+    }
+    player.strokesByHole = byHole;
+  });
 }
 
 async function loadTeeContext(admin: SupabaseClient, tournamentId: string) {
@@ -270,9 +315,21 @@ function buildMatchCard(params: {
   bottomLabel: string;
   resolveTee: ReturnType<typeof buildResolveTee>;
   handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>;
+  strokeIndexByHole: StrokeIndexByHole;
   teeTime: string | null;
 }): PrintableMatchPlayCard | null {
   if (!params.topTeam || !params.bottomTeam) return null;
+  const topPlayers = teamToPrintablePlayers(
+    params.topTeam,
+    params.resolveTee,
+    params.handicapCtx
+  );
+  const bottomPlayers = teamToPrintablePlayers(
+    params.bottomTeam,
+    params.resolveTee,
+    params.handicapCtx
+  );
+  fillLowHighStrokes(topPlayers, bottomPlayers, params.strokeIndexByHole);
   return {
     cardId: `${params.kind}-${params.matchId}`,
     kind: params.kind,
@@ -288,16 +345,8 @@ function buildMatchCard(params: {
     teeTime: params.teeTime,
     topLabel: params.topLabel,
     bottomLabel: params.bottomLabel,
-    topPlayers: teamToPrintablePlayers(
-      params.topTeam,
-      params.resolveTee,
-      params.handicapCtx
-    ),
-    bottomPlayers: teamToPrintablePlayers(
-      params.bottomTeam,
-      params.resolveTee,
-      params.handicapCtx
-    ),
+    topPlayers,
+    bottomPlayers,
   };
 }
 
@@ -311,6 +360,7 @@ export async function loadPrintableMpScorecards(
     tournamentId,
     tournamentName: "",
     clubName: "",
+    clubId: null,
     allowancePct: 80,
     pairFormatLabel: "",
     parByHole: {},
@@ -322,7 +372,7 @@ export async function loadPrintableMpScorecards(
 
   const { data: tournament } = await admin
     .from("tournaments")
-    .select("name, club_name")
+    .select("name, club_name, club_id")
     .eq("id", tournamentId)
     .maybeSingle();
   if (!tournament) return empty("Torneo no encontrado.");
@@ -383,6 +433,7 @@ export async function loadPrintableMpScorecards(
         bottomLabel: m.bottom_label,
         resolveTee: teeCtx.resolveTee,
         handicapCtx,
+        strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
       });
       if (card) matchPlayCards.push(card);
@@ -425,6 +476,7 @@ export async function loadPrintableMpScorecards(
           bottom?.team_name ?? formatPlayerName(bottom?.player_a?.player ?? {}),
         resolveTee: teeCtx.resolveTee,
         handicapCtx,
+        strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
       });
       if (card) matchPlayCards.push(card);
@@ -435,18 +487,28 @@ export async function loadPrintableMpScorecards(
   const strokeData = await loadStrokeAggregateStandings(admin, tournamentId);
   if (strokeData.ok && strokeData.groups.length > 0) {
     for (const g of strokeData.groups) {
-      const players: PrintablePlayerRow[] = g.members.map((m) => ({
-        name: m.name,
-        gender: (m.gender === "F" ? "F" : m.gender === "M" ? "M" : "X") as
-          | "M"
-          | "F"
-          | "X",
-        hi: m.handicapIndex ?? 0,
-        ph: m.playingHandicap,
-        teeName: null,
-        teeColor: null,
-        ballRole: "baja",
-      }));
+      const players: PrintablePlayerRow[] = g.members.map((m) => {
+        const ph = Number(m.playingHandicap ?? 0);
+        const byHole: Record<number, number> = {};
+        for (let hole = 1; hole <= 18; hole++) {
+          const si = strokeIndexForHole(hole, layout.strokeIndexByHole);
+          const received = strokesReceivedOnHole(ph, si);
+          if (received > 0) byHole[hole] = received;
+        }
+        return {
+          name: m.name,
+          gender: (m.gender === "F" ? "F" : m.gender === "M" ? "M" : "X") as
+            | "M"
+            | "F"
+            | "X",
+          hi: m.handicapIndex ?? 0,
+          ph: m.playingHandicap,
+          teeName: null,
+          teeColor: null,
+          ballRole: "baja" as const,
+          strokesByHole: byHole,
+        };
+      });
       strokeCards.push({
         cardId: `stroke-${g.groupId}`,
         kind: "stroke_aggregate",
@@ -476,6 +538,7 @@ export async function loadPrintableMpScorecards(
     tournamentId,
     tournamentName: tournament.name ?? "Torneo",
     clubName: tournament.club_name ?? "Club Campestre de Querétaro",
+    clubId: (tournament as { club_id: string | null }).club_id ?? null,
     allowancePct,
     pairFormatLabel:
       MATCHPLAY_PAIR_FORMAT_LABELS.low_high ??
