@@ -37,7 +37,7 @@ export type PrintablePlayerRow = {
 
 export type PrintableMatchPlayCard = {
   cardId: string;
-  kind: "main" | "consolation_mp";
+  kind: "main" | "consolation_mp" | "third_place";
   matchId: string;
   roundNo: number;
   roundLabel: string;
@@ -303,7 +303,7 @@ async function loadTeeTimesByRound(
 }
 
 function buildMatchCard(params: {
-  kind: "main" | "consolation_mp";
+  kind: "main" | "consolation_mp" | "third_place";
   matchId: string;
   roundNo: number;
   roundCount: number;
@@ -335,11 +335,10 @@ function buildMatchCard(params: {
     kind: params.kind,
     matchId: params.matchId,
     roundNo: params.roundNo,
-    roundLabel: roundLabel(
-      params.roundNo,
-      params.roundCount,
-      params.bracketSize
-    ),
+    roundLabel:
+      params.kind === "third_place"
+        ? "Perdedores de semifinal"
+        : roundLabel(params.roundNo, params.roundCount, params.bracketSize),
     positionNo: params.positionNo,
     groupNo: params.positionNo,
     teeTime: params.teeTime,
@@ -435,6 +434,55 @@ export async function loadPrintableMpScorecards(
         handicapCtx,
         strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
+      });
+      if (card) matchPlayCards.push(card);
+    }
+
+    // Definición de 3er/4to lugar: perdedores de las dos semifinales del cuadro
+    // principal. No existe como match en la BD, por eso sintetizamos la tarjeta
+    // (en blanco) para poder imprimirla y jugar ese partido.
+    const finalRound = roundCount;
+    const semiRound = finalRound - 1;
+    const semis = bracketView.matches
+      .filter(
+        (m) =>
+          m.round_no === semiRound &&
+          m.status === "completed" &&
+          m.winner_pair_id &&
+          m.top_pair_id &&
+          m.bottom_pair_id
+      )
+      .sort((a, b) => a.position_no - b.position_no);
+    if (semis.length === 2) {
+      const loserA =
+        semis[0].winner_pair_id === semis[0].top_pair_id
+          ? semis[0].bottom_pair_id
+          : semis[0].top_pair_id;
+      const loserB =
+        semis[1].winner_pair_id === semis[1].top_pair_id
+          ? semis[1].bottom_pair_id
+          : semis[1].top_pair_id;
+      const topTeam = loserA ? teamById.get(loserA) : null;
+      const bottomTeam = loserB ? teamById.get(loserB) : null;
+      const card = buildMatchCard({
+        kind: "third_place",
+        matchId: `${semis[0].id}-${semis[1].id}`,
+        roundNo: finalRound,
+        roundCount,
+        bracketSize,
+        positionNo: 1,
+        topTeam,
+        bottomTeam,
+        topLabel:
+          topTeam?.team_name ??
+          formatPlayerName(topTeam?.player_a?.player ?? {}),
+        bottomLabel:
+          bottomTeam?.team_name ??
+          formatPlayerName(bottomTeam?.player_a?.player ?? {}),
+        resolveTee: teeCtx.resolveTee,
+        handicapCtx,
+        strokeIndexByHole: layout.strokeIndexByHole,
+        teeTime: teeTimes.get(`${finalRound}-3`)?.teeTime ?? null,
       });
       if (card) matchPlayCards.push(card);
     }

@@ -17,6 +17,7 @@ type Props = {
 function kindLabel(kind: PrintableMatchPlayCard["kind"] | "stroke") {
   if (kind === "main") return "Cuadro principal";
   if (kind === "consolation_mp") return "Consolación MP";
+  if (kind === "third_place") return "3er / 4to Lugar";
   return "Consolación Stroke Play";
 }
 
@@ -34,7 +35,12 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
     return bundle.matchPlayCards.filter((c) => {
       if (roundFilter !== "all" && c.roundNo !== roundFilter) return false;
       if (kindFilter === "stroke_aggregate") return false;
-      if (kindFilter === "main" && c.kind !== "main") return false;
+      if (
+        kindFilter === "main" &&
+        c.kind !== "main" &&
+        c.kind !== "third_place"
+      )
+        return false;
       if (kindFilter === "consolation_mp" && c.kind !== "consolation_mp")
         return false;
       return true;

@@ -230,14 +230,26 @@ export function MatchPlayScorecardSheet({
   meta: PrintableScorecardsBundle;
 }) {
   const kindLabel =
-    card.kind === "consolation_mp" ? "Consolación Match Play" : "Cuadro principal";
-  const subtitle = `${kindLabel} · ${card.roundLabel} · G${card.groupNo ?? card.positionNo}`;
-  const groupLine = [
-    card.teeTime ? `Salida ${card.teeTime}` : null,
-    `Match #${card.positionNo}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+    card.kind === "consolation_mp"
+      ? "Consolación Match Play"
+      : card.kind === "third_place"
+        ? "Match por 3er / 4to Lugar"
+        : "Cuadro principal";
+  const subtitle =
+    card.kind === "third_place"
+      ? `${kindLabel} · ${card.roundLabel}`
+      : `${kindLabel} · ${card.roundLabel} · G${card.groupNo ?? card.positionNo}`;
+  const groupLine =
+    card.kind === "third_place"
+      ? card.teeTime
+        ? `Salida ${card.teeTime}`
+        : "Salida por definir"
+      : [
+          card.teeTime ? `Salida ${card.teeTime}` : null,
+          `Match #${card.positionNo}`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   const scoreRows: ExtraRow[] = [];
   for (const p of card.topPlayers) {
