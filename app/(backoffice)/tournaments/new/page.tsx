@@ -143,6 +143,7 @@ export default function NewTournamentPage() {
         supabase
           .from("tournaments")
           .select("id, name, created_at")
+          .neq("kind", "daily_round")
           .order("created_at", { ascending: false })
           .limit(100),
 

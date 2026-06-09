@@ -624,6 +624,7 @@ export default async function TournamentsPage({
   const { data: hostClubRows, error: hostClubErr } = await supabase
     .from("tournaments")
     .select("club_name")
+    .neq("kind", "daily_round")
     .not("club_name", "is", null);
 
   if (hostClubErr) {
@@ -641,6 +642,7 @@ export default async function TournamentsPage({
     .select(
       "id, name, short_name, status, created_at, start_date, course_name, club_name, is_public, is_archived, poster_path"
     )
+    .neq("kind", "daily_round")
     .order("start_date", { ascending: false })
     .order("created_at", { ascending: false });
 
