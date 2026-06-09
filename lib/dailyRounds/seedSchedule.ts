@@ -5,9 +5,9 @@
  *   - 1 categoría "ABIERTA" mixta (gender='X') con HCP 0-54
  *   - 1 round vinculada a esa categoría
  *   - Pairing groups vacíos cada 10 min (hoyo 1 y hoyo 10 por cada hora):
- *       tanda mañana:  07:00-09:10
- *       tanda media:   11:40-13:50
- *       tanda tarde:   16:00-18:00
+ *       tanda mañana:  07:00-09:10  (14 salidas)
+ *       tanda media:   11:40-13:50  (14 salidas)
+ *       tanda tarde:   16:00-17:50  (12 salidas)
  *
  * Idempotente: si ya existe categoría o ya hay pairing_groups, no duplica.
  */
@@ -298,7 +298,7 @@ function buildTeeSlots(): TeeSlot[] {
 
   addBand("07:00", "09:10", "Mañana");
   addBand("11:40", "13:50", "Mediodía");
-  addBand("16:00", "18:00", "Tarde");
+  addBand("16:00", "17:50", "Tarde");
 
   return slots;
 }
