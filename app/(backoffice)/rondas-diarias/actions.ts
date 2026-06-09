@@ -26,6 +26,22 @@ interface Result {
   error?: string;
 }
 
+/**
+ * Nombre de una ronda diaria: día de la semana capitalizado + fecha.
+ * Ej. "Martes 9 Jun 2026". Se deriva de la fecha (YYYY-MM-DD) para que
+ * cambie solo según el día de la ronda.
+ */
+function dailyRoundName(dateIso: string): string {
+  const dt = new Date(dateIso + "T12:00:00");
+  const cap = (s: string) =>
+    s.charAt(0).toUpperCase() + s.slice(1).replace(/\.$/, "");
+  const weekday = cap(dt.toLocaleDateString("es-MX", { weekday: "long" }));
+  const day = dt.getDate();
+  const month = cap(dt.toLocaleDateString("es-MX", { month: "short" }));
+  const year = dt.getFullYear();
+  return `${weekday} ${day} ${month} ${year}`;
+}
+
 /** Crear (o reutilizar) el "torneo perpetuo del día" para rondas diarias. */
 export async function createDailyRound(
   input: CreateDailyRoundInput
@@ -58,14 +74,9 @@ export async function createDailyRound(
     return { ok: true, tournamentId: String((existing as { id: string }).id) };
   }
 
-  // Nombre default amigable: "Ronda del día — 8 jun 2026"
-  const dt = new Date(input.date + "T12:00:00");
-  const labelFecha = dt.toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  const name = input.name?.trim() || `Ronda del día — ${labelFecha}`;
+  // Nombre = día de la semana + fecha (ej. "Martes 9 Jun 2026"). Cambia
+  // automáticamente según la fecha de la ronda.
+  const name = input.name?.trim() || dailyRoundName(input.date);
 
   // Insertar torneo privado tipo daily_round
   const { data: inserted, error } = await admin
