@@ -144,12 +144,22 @@ export default function MesaCliente({ snapshot }: Props) {
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-900/95 px-3 py-2 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
-          <Link
-            href="/fb-mesero"
-            className="text-[11px] font-semibold text-slate-300 underline"
-          >
-            ← Mesas
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/fb-mesero"
+              className="text-[11px] font-semibold text-slate-300 underline"
+            >
+              ← Mesas
+            </Link>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-100 hover:bg-red-500/30"
+              >
+                🚪 Salir
+              </button>
+            </form>
+          </div>
           <h1 className="text-base font-bold">
             🪑 {snapshot.table.code}{" "}
             {snapshot.table.name && snapshot.table.name !== snapshot.table.code ? (

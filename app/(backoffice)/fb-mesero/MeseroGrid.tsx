@@ -87,9 +87,19 @@ export default function MeseroGrid({ venues: initial }: Props) {
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/95 px-3 py-2 backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-base font-bold">🍽️ Mesero · {activeVenue.name}</h1>
-          {refreshing ? (
-            <span className="text-[10px] text-slate-400">actualizando…</span>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {refreshing ? (
+              <span className="text-[10px] text-slate-400">actualizando…</span>
+            ) : null}
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="rounded-md border border-red-400/40 bg-red-500/20 px-3 py-1 text-[11px] font-bold text-red-100 hover:bg-red-500/30"
+              >
+                🚪 Salir
+              </button>
+            </form>
+          </div>
         </div>
         {venues.length > 1 ? (
           <div className="mt-2 flex gap-1 overflow-x-auto">

@@ -36,3 +36,9 @@ export async function POST(request: Request) {
 
   return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
 }
+
+/** Permitir cerrar sesión también con GET (tecleando la URL desde el celular
+ *  o desde un link tradicional, sin formulario). */
+export async function GET(request: Request) {
+  return POST(request);
+}
