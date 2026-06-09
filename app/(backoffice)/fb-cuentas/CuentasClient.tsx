@@ -277,6 +277,12 @@ function AccountCard({
         <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
           {hasOpen ? (
             <>
+              {/* Resumen consolidado: items agrupados con cantidad total */}
+              <AccountSummary
+                orders={account.openOrders}
+                clientName={account.name}
+              />
+
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
                   Pedidos por cobrar
@@ -392,5 +398,146 @@ function AccountCard({
         </div>
       ) : null}
     </article>
+  );
+}
+
+// ============================================================
+// Resumen consolidado: agrupa items repetidos a través de todos los pedidos
+// abiertos del cliente. Ej: si pidió 3 Bacardís en 3 pedidos distintos,
+// muestra una sola línea "3× Bacardi $360".
+// ============================================================
+function AccountSummary({
+  orders,
+  clientName,
+}: {
+  orders: AccountOrder[];
+  clientName: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const summary = useMemo(() => {
+    type Row = {
+      name: string;
+      unitPriceCents: number;
+      qty: number;
+      lineTotal: number;
+    };
+    const byKey = new Map<string, Row>();
+    let grandTotal = 0;
+    for (const o of orders) {
+      for (const it of o.items) {
+        // Clave por nombre + precio (mismo nombre con distinto precio = filas
+        // separadas, por si cambiaron precios entre pedidos)
+        const key = `${it.name}__${it.unitPriceCents}`;
+        const prev = byKey.get(key);
+        const lineTotal = it.qty * it.unitPriceCents;
+        if (prev) {
+          prev.qty += it.qty;
+          prev.lineTotal += lineTotal;
+        } else {
+          byKey.set(key, {
+            name: it.name,
+            unitPriceCents: it.unitPriceCents,
+            qty: it.qty,
+            lineTotal,
+          });
+        }
+        grandTotal += lineTotal;
+      }
+    }
+    const rows = Array.from(byKey.values()).sort((a, b) =>
+      // Más caros primero (más relevantes para el total)
+      b.lineTotal - a.lineTotal
+    );
+    return { rows, grandTotal };
+  }, [orders]);
+
+  if (summary.rows.length === 0) return null;
+
+  function buildPlainText(): string {
+    const lines: string[] = [`Cuenta de ${clientName}`, ""];
+    for (const r of summary.rows) {
+      lines.push(
+        `${r.qty}× ${r.name} — ${formatPrice(r.lineTotal)}`
+      );
+    }
+    lines.push("");
+    lines.push(`TOTAL: ${formatPrice(summary.grandTotal)}`);
+    return lines.join("\n");
+  }
+
+  async function copyToClipboard() {
+    try {
+      await navigator.clipboard.writeText(buildPlainText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback: select + execCommand (navegadores viejos)
+      const ta = document.createElement("textarea");
+      ta.value = buildPlainText();
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3 shadow-sm">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+          📋 Resumen consolidado · estado de cuenta
+        </h3>
+        <button
+          type="button"
+          onClick={copyToClipboard}
+          className="rounded-md border border-emerald-400 bg-white px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
+        >
+          {copied ? "✓ Copiado" : "📋 Copiar"}
+        </button>
+      </div>
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="border-b border-emerald-200 text-left text-[10px] uppercase text-emerald-700">
+            <th className="py-1 pr-2">Qty</th>
+            <th className="py-1">Producto</th>
+            <th className="py-1 pl-2 text-right">Unit</th>
+            <th className="py-1 pl-2 text-right">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summary.rows.map((r, i) => (
+            <tr
+              key={i}
+              className="border-b border-emerald-100 last:border-b-0"
+            >
+              <td className="py-1 pr-2 font-bold text-emerald-900">
+                {r.qty}×
+              </td>
+              <td className="py-1 text-slate-800">{r.name}</td>
+              <td className="py-1 pl-2 text-right text-slate-600">
+                {formatPrice(r.unitPriceCents)}
+              </td>
+              <td className="py-1 pl-2 text-right font-semibold text-slate-900">
+                {formatPrice(r.lineTotal)}
+              </td>
+            </tr>
+          ))}
+          <tr className="bg-emerald-100">
+            <td colSpan={3} className="py-1.5 pl-2 text-right font-bold text-emerald-900">
+              TOTAL
+            </td>
+            <td className="py-1.5 pl-2 text-right text-base font-bold text-emerald-900">
+              {formatPrice(summary.grandTotal)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-1.5 text-center text-[9px] text-emerald-700">
+        {summary.rows.length} {summary.rows.length === 1 ? "producto" : "productos"} distintos ·{" "}
+        {orders.length} {orders.length === 1 ? "pedido" : "pedidos"} acumulados
+      </p>
+    </div>
   );
 }

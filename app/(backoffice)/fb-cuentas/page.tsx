@@ -36,7 +36,12 @@ interface AccountOrder {
   createdAt: string;
   deliveredAt: string | null;
   paidAt: string | null;
-  items: { id: string; qty: number; name: string }[];
+  items: {
+    id: string;
+    qty: number;
+    name: string;
+    unitPriceCents: number;
+  }[];
   venueName: string;
 }
 
@@ -84,12 +89,12 @@ export default async function FbCuentasPage() {
 
   const linesByOrder = new Map<
     string,
-    { id: string; qty: number; name: string }[]
+    { id: string; qty: number; name: string; unitPriceCents: number }[]
   >();
   if (orderIds.length > 0) {
     const { data: linesRaw } = await admin
       .from("fb_order_items")
-      .select("id, order_id, qty, item_name_snapshot")
+      .select("id, order_id, qty, item_name_snapshot, unit_price_cents")
       .in("order_id", orderIds);
     for (const l of (linesRaw ?? []) as Array<Record<string, unknown>>) {
       const oid = String(l.order_id);
@@ -98,6 +103,7 @@ export default async function FbCuentasPage() {
         id: String(l.id),
         qty: Number(l.qty ?? 0),
         name: String(l.item_name_snapshot ?? ""),
+        unitPriceCents: Number(l.unit_price_cents ?? 0),
       });
       linesByOrder.set(oid, arr);
     }
