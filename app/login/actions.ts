@@ -156,7 +156,14 @@ async function resolveLandingForUser(email: string): Promise<string> {
   for (const r of ADMIN_ROLES) {
     if (roles.has(r)) return "/dashboard";
   }
+  // Restaurante (manager) → grid de mesas
   if (roles.has("restaurante")) return "/fb-mesero";
+  // Mesero → grid de mesas (su pantalla principal)
+  if (roles.has("mesero")) return "/fb-mesero";
+  // Cocinero → cocina
+  if (roles.has("cocinero")) return "/fb-cocina";
+  // Operador de carrito → mini app del carrito (sin venue param: pick automático)
+  if (roles.has("operador_carrito")) return "/captura/carrito";
   if (roles.has("handicap_committee")) return "/comite-handicap";
   if (roles.has("marshal")) return "/tee-sheet";
   return "/dashboard";

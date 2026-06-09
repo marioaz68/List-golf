@@ -6,12 +6,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Reglas:
  *  - super_admin / club_admin / tournament_director → ven TODOS los venues
  *    (sin filtro, retorna null = "todos")
- *  - rol 'restaurante' con asignaciones en fb_user_venues → ven solo esos
- *    (a menos que tengan is_owner=true que también ve todos)
- *  - rol 'restaurante' sin asignaciones → no ve ningún pedido (array vacío)
+ *  - 'restaurante' (MANAGER del restaurante) → ven TODOS los venues F&B
+ *    (sin filtro), porque son el dueño / encargado general.
+ *  - 'mesero' / 'cocinero' / 'operador_carrito' (staff de piso) →
+ *    SOLO los venues que les asignen en fb_user_venues.
+ *  - Cualquier rol staff con is_owner=true en fb_user_venues → también
+ *    ve todos (override por venue específico).
  *
- * Esto es defensa por defecto: si te dan rol restaurante pero nadie te
- * asigna un venue, no puedes ver datos de otros restaurantes.
+ * Sin asignaciones para staff = no ve ningún pedido (array vacío).
  */
 
 export interface FbScope {
@@ -25,6 +27,7 @@ const FULL_ACCESS_ROLES = new Set([
   "super_admin",
   "club_admin",
   "tournament_director",
+  "restaurante", // manager del restaurante = ve todo
 ]);
 
 export async function resolveFbScope(
@@ -32,12 +35,12 @@ export async function resolveFbScope(
   userId: string,
   userRoles: string[]
 ): Promise<FbScope> {
-  // Admin del club / director del torneo → acceso total + dueño implícito
+  // Manager / admin → acceso total + dueño implícito
   if (userRoles.some((r) => FULL_ACCESS_ROLES.has(r))) {
     return { allowedVenueIds: null, isOwner: true };
   }
 
-  // Buscar asignaciones del usuario en fb_user_venues
+  // Staff (mesero, cocinero, operador_carrito) → filtrado por fb_user_venues
   const { data, error } = await admin
     .from("fb_user_venues")
     .select("venue_id, is_owner")

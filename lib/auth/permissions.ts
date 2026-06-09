@@ -9,7 +9,10 @@ export type AppRole =
   | "viewer"
   | "handicap_committee"
   | "marshal"
-  | "restaurante";
+  | "restaurante"        // MANAGER del restaurante — todo F&B sin filtrar
+  | "mesero"             // staff de piso — /fb-mesero
+  | "cocinero"           // staff de cocina — /fb-cocina + /fb-mesero
+  | "operador_carrito";  // operador del cart bar — /captura/carrito
 
 export type AppModule =
   | "users"
@@ -28,7 +31,11 @@ export type AppModule =
   | "reports"
   | "comite-handicap"
   | "captura-telegram"
-  | "fb";
+  | "fb"             // gate global — cualquier rol F&B pasa
+  | "fb-manage"      // panel manager: admin, cuentas, reportes, disputas, mesas-qr
+  | "fb-kitchen"     // vista cocina
+  | "fb-waiter"      // vista mesero · restaurante
+  | "fb-cart";       // mini app operador de carrito
 
 const ENTRIES_ROLES: AppRole[] = [
   "super_admin",
@@ -156,13 +163,46 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
   ],
 
   // F&B (Food & Beverage): backoffice del menú + cocina + carrito bar.
-  // El rol 'restaurante' SOLO ve este módulo (rutas /fb-admin, /fb-cocina,
-  // /fb-carrito-bar). Los admins del club también lo pueden ver.
+  // Gate global — cualquier rol F&B autoriza entrar al backoffice; cada
+  // pantalla se gatea con un sub-módulo más estricto (ver abajo).
   fb: [
     "super_admin",
     "club_admin",
     "tournament_director",
     "restaurante",
+    "mesero",
+    "cocinero",
+    "operador_carrito",
+  ],
+
+  // Sub-módulos del F&B (cada item del sidebar usa uno).
+  "fb-manage": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "restaurante",
+  ],
+  "fb-kitchen": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "restaurante",
+    "cocinero",
+  ],
+  "fb-waiter": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "restaurante",
+    "mesero",
+    "cocinero", // cocinero también puede mandar a entregar a la mesa
+  ],
+  "fb-cart": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "restaurante",
+    "operador_carrito",
   ],
 };
 
@@ -226,6 +266,9 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "handicap_committee",
     "marshal",
     "restaurante",
+    "mesero",
+    "cocinero",
+    "operador_carrito",
   ];
 
   return valid.includes(role as AppRole) ? (role as AppRole) : null;
