@@ -511,7 +511,14 @@ function SalidaItem({
             </p>
           )}
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              ✓ Listo (cerrar)
+            </button>
             <button
               type="button"
               disabled={busy || count === 0}
