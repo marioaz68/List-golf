@@ -28,6 +28,7 @@ export type SalidaPlayer = {
   hasTelegram: boolean;
   caddieId: string | null;
   caddieName: string | null;
+  caddieLinked: boolean;
 };
 
 export type SalidaRow = {
@@ -450,6 +451,18 @@ function PlayerRow({
         {player.caddieName ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
             {player.caddieName}
+            <span
+              title={
+                player.caddieLinked
+                  ? "Recibirá Telegram"
+                  : "Caddie sin Telegram vinculado"
+              }
+              className={
+                player.caddieLinked ? "text-sky-500" : "text-slate-300"
+              }
+            >
+              ✈
+            </span>
             <button
               type="button"
               disabled={busy}

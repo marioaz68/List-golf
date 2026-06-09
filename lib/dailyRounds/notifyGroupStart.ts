@@ -125,7 +125,9 @@ export async function notifyDailyRoundGroupStart(
     players.push({ chatId, name, entryId: String(m.entry_id ?? entry.id) });
   }
 
-  // Caddies asignados a estos jugadores en esta ronda.
+  // Caddies asignados a estos jugadores — igual que en torneos: se cruzan por
+  // entry_id (las asignaciones suelen guardarse sin pairing_group_id) y el ID
+  // de Telegram del caddie vive en la columna `telegram` (numérico).
   const playerEntryIds = players.map((p) => p.entryId);
   const caddieRecipients: Array<{
     chatId: string;
@@ -137,32 +139,38 @@ export async function notifyDailyRoundGroupStart(
       .from("caddie_assignments")
       .select("caddie_id, entry_id, round_id, is_active")
       .eq("tournament_id", args.tournamentId)
-      .eq("round_id", args.roundId)
       .in("entry_id", playerEntryIds);
     const caddieIds = Array.from(
       new Set(
-        (assignsRaw ?? [])
-          .filter((a) => a.is_active !== false && a.caddie_id)
+        ((assignsRaw ?? []) as Array<{
+          caddie_id: string | null;
+          entry_id: string | null;
+          round_id: string | null;
+          is_active: boolean | null;
+        }>)
+          .filter(
+            (a) =>
+              a.is_active !== false &&
+              a.caddie_id &&
+              (a.round_id == null || a.round_id === args.roundId)
+          )
           .map((a) => String(a.caddie_id))
       )
     );
     if (caddieIds.length > 0) {
       const { data: caddieRows } = await admin
         .from("caddies")
-        .select("id, first_name, last_name, telegram_user_id, telegram_chat_id")
+        .select("id, first_name, last_name, telegram")
         .in("id", caddieIds);
       for (const c of (caddieRows ?? []) as Array<{
         id: string;
         first_name: string | null;
         last_name: string | null;
-        telegram_user_id?: string | null;
-        telegram_chat_id?: string | null;
+        telegram?: string | null;
       }>) {
-        const chatId = String(
-          c.telegram_chat_id ?? c.telegram_user_id ?? ""
-        ).trim();
+        const chatId = String(c.telegram ?? "").trim();
         const name = fullName(c.first_name, c.last_name);
-        if (!chatId) {
+        if (!/^\d+$/.test(chatId)) {
           result.skipped += 1;
           result.skippedNames.push({ role: "caddie", name });
           continue;
