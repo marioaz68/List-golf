@@ -235,6 +235,44 @@ export default async function RondaDiariaDetailPage({
     }));
   }
 
+  const clubId = (tournament as { club_id: string | null }).club_id;
+
+  // Catálogo de jugadores y caddies (servidor/admin) para el buscador de la
+  // salida — evita depender del cliente anon y herencia text-white del layout.
+  const [{ data: playersRaw }, caddiesQuery] = await Promise.all([
+    admin
+      .from("players")
+      .select("id, first_name, last_name, handicap_index")
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true }),
+    clubId
+      ? admin
+          .from("caddies")
+          .select("id, first_name, last_name, nickname")
+          .eq("club_id", clubId)
+          .eq("is_active", true)
+          .order("first_name", { ascending: true })
+      : admin
+          .from("caddies")
+          .select("id, first_name, last_name, nickname")
+          .eq("is_active", true)
+          .order("first_name", { ascending: true }),
+  ]);
+  const { data: caddiesRaw } = await caddiesQuery;
+
+  const playersCatalog = (playersRaw ?? []) as Array<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    handicap_index: number | null;
+  }>;
+  const caddiesCatalog = (caddiesRaw ?? []) as Array<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    nickname: string | null;
+  }>;
+
   return (
     <SalidasClient
       tournamentId={id}
@@ -242,8 +280,10 @@ export default async function RondaDiariaDetailPage({
       roundId={roundId}
       roundDate={roundDate}
       groupSize={groupSize}
-      clubId={(tournament as { club_id: string | null }).club_id}
+      clubId={clubId}
       salidas={salidas}
+      playersCatalog={playersCatalog}
+      caddiesCatalog={caddiesCatalog}
     />
   );
 }

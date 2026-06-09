@@ -1,16 +1,8 @@
 "use client";
 
-import {
-  useState,
-  useTransition,
-  useRef,
-  useCallback,
-  useMemo,
-  useEffect,
-} from "react";
+import { useState, useTransition, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
 import {
   addPlayerToSalida,
   removePlayerFromSalida,
@@ -41,19 +33,30 @@ export type SalidaRow = {
   players: SalidaPlayer[];
 };
 
-type PlayerSearchResult = {
+export type PlayerCatalogRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
 };
 
-type CaddieSearchResult = {
+export type CaddieCatalogRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
   nickname: string | null;
 };
+
+const searchInputClass =
+  "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 caret-emerald-600 placeholder:text-slate-400 outline-none focus:border-emerald-500";
+
+function normSearch(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
 
 function fmtHi(hi: number | null): string {
   if (hi == null) return "S/H";
@@ -68,6 +71,8 @@ export default function SalidasClient({
   groupSize,
   clubId,
   salidas,
+  playersCatalog,
+  caddiesCatalog,
 }: {
   tournamentId: string;
   tournamentName: string;
@@ -76,6 +81,8 @@ export default function SalidasClient({
   groupSize: number;
   clubId: string | null;
   salidas: SalidaRow[];
+  playersCatalog: PlayerCatalogRow[];
+  caddiesCatalog: CaddieCatalogRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -188,7 +195,7 @@ export default function SalidasClient({
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-3 sm:p-6">
+    <div className="min-h-screen bg-slate-100 p-3 text-slate-900 sm:p-6">
       <div className="mx-auto max-w-3xl">
         <div className="mb-3">
           <Link
@@ -272,6 +279,8 @@ export default function SalidasClient({
                           salida={s}
                           groupSize={groupSize}
                           clubId={clubId}
+                          playersCatalog={playersCatalog}
+                          caddiesCatalog={caddiesCatalog}
                           busy={pending}
                           open={openId === s.groupId}
                           onToggle={() =>
@@ -403,6 +412,8 @@ function SalidaItem({
   salida,
   groupSize,
   clubId,
+  playersCatalog,
+  caddiesCatalog,
   busy,
   open,
   onToggle,
@@ -415,6 +426,8 @@ function SalidaItem({
   salida: SalidaRow;
   groupSize: number;
   clubId: string | null;
+  playersCatalog: PlayerCatalogRow[];
+  caddiesCatalog: CaddieCatalogRow[];
   busy: boolean;
   open: boolean;
   onToggle: () => void;
@@ -475,7 +488,7 @@ function SalidaItem({
                 player={p}
                 idx={idx}
                 groupId={salida.groupId}
-                clubId={clubId}
+                caddiesCatalog={caddiesCatalog}
                 busy={busy}
                 onRemove={onRemove}
                 onAssignCaddie={onAssignCaddie}
@@ -487,6 +500,7 @@ function SalidaItem({
           {!full ? (
             <PlayerSearch
               groupId={salida.groupId}
+              playersCatalog={playersCatalog}
               existingPlayerIds={salida.players.map((p) => p.playerId)}
               busy={busy}
               onAdd={onAdd}
@@ -517,7 +531,7 @@ function PlayerRow({
   player,
   idx,
   groupId,
-  clubId,
+  caddiesCatalog,
   busy,
   onRemove,
   onAssignCaddie,
@@ -526,7 +540,7 @@ function PlayerRow({
   player: SalidaPlayer;
   idx: number;
   groupId: string;
-  clubId: string | null;
+  caddiesCatalog: CaddieCatalogRow[];
   busy: boolean;
   onRemove: (memberId: string) => void;
   onAssignCaddie: (groupId: string, entryId: string, caddieId: string) => void;
@@ -598,7 +612,7 @@ function PlayerRow({
           </span>
         ) : showCaddie ? (
           <CaddieSearch
-            clubId={clubId}
+            caddiesCatalog={caddiesCatalog}
             busy={busy}
             onPick={(caddieId) => {
               onAssignCaddie(groupId, player.entryId, caddieId);
@@ -622,52 +636,33 @@ function PlayerRow({
 
 function PlayerSearch({
   groupId,
+  playersCatalog,
   existingPlayerIds,
   busy,
   onAdd,
 }: {
   groupId: string;
+  playersCatalog: PlayerCatalogRow[];
   existingPlayerIds: string[];
   busy: boolean;
   onAdd: (groupId: string, playerId: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<PlayerSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [open, setOpen] = useState(false);
-  const debounceRef = useRef<number | null>(null);
   const existing = new Set(existingPlayerIds);
 
-  const runSearch = useCallback((raw: string) => {
-    const q = raw.replace(/[%,]/g, "").trim();
-    setSearching(true);
-    setOpen(true);
-    void (async () => {
-      let qb = supabase
-        .from("players")
-        .select("id, first_name, last_name, handicap_index");
-      if (q.length >= 1) {
-        qb = qb.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
-      }
-      const { data } = await qb
-        .order("last_name", { ascending: true })
-        .limit(20);
-      setResults((data ?? []) as PlayerSearchResult[]);
-      setSearching(false);
-    })();
-  }, []);
-
-  // Cargar lista inicial de jugadores al abrir la salida.
-  useEffect(() => {
-    runSearch("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const onChange = (v: string) => {
-    setQuery(v);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => runSearch(v), 250);
-  };
+  const results = useMemo(() => {
+    const q = normSearch(query);
+    let list = playersCatalog;
+    if (q) {
+      list = list.filter((p) => {
+        const full = normSearch(`${p.first_name ?? ""} ${p.last_name ?? ""}`);
+        const first = normSearch(p.first_name ?? "");
+        const last = normSearch(p.last_name ?? "");
+        return full.includes(q) || first.includes(q) || last.includes(q);
+      });
+    }
+    return list.slice(0, 25);
+  }, [query, playersCatalog]);
 
   return (
     <div className="relative mt-2">
@@ -675,22 +670,19 @@ function PlayerSearch({
         autoFocus
         type="text"
         value={query}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setOpen(true)}
+        onChange={(e) => setQuery(e.target.value)}
         placeholder="Buscar jugador del sistema por nombre…"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+        className={searchInputClass}
       />
-      {open && (
-        <div className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-          {searching && (
-            <div className="px-3 py-2 text-xs text-slate-400">Buscando…</div>
-          )}
-          {!searching && results.length === 0 && (
-            <div className="px-3 py-2 text-xs text-slate-400">
-              Sin resultados.
-            </div>
-          )}
-          {results.map((r) => {
+      <div className="mt-1 max-h-64 overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+        {results.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-slate-500">
+            {playersCatalog.length === 0
+              ? "No hay jugadores en el sistema."
+              : "Sin resultados para esa búsqueda."}
+          </div>
+        ) : (
+          results.map((r) => {
             const already = existing.has(r.id);
             const name =
               [r.first_name, r.last_name].filter(Boolean).join(" ") ||
@@ -703,10 +695,8 @@ function PlayerSearch({
                 onClick={() => {
                   onAdd(groupId, r.id);
                   setQuery("");
-                  setResults([]);
-                  setOpen(false);
                 }}
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-emerald-50 disabled:opacity-40"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-slate-900 hover:bg-emerald-50 disabled:opacity-40"
               >
                 <span className="truncate">{name}</span>
                 <span className="shrink-0 text-xs text-slate-500">
@@ -714,65 +704,38 @@ function PlayerSearch({
                 </span>
               </button>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   );
 }
 
 function CaddieSearch({
-  clubId,
+  caddiesCatalog,
   busy,
   onPick,
   onCancel,
 }: {
-  clubId: string | null;
+  caddiesCatalog: CaddieCatalogRow[];
   busy: boolean;
   onPick: (caddieId: string) => void;
   onCancel: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<CaddieSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<number | null>(null);
 
-  const runSearch = useCallback(
-    (raw: string) => {
-      const q = raw.replace(/[%,]/g, "").trim();
-      setSearching(true);
-      void (async () => {
-        let qb = supabase
-          .from("caddies")
-          .select("id, first_name, last_name, nickname")
-          .eq("is_active", true);
-        if (clubId) qb = qb.eq("club_id", clubId);
-        if (q.length >= 1) {
-          qb = qb.or(
-            `first_name.ilike.%${q}%,last_name.ilike.%${q}%,nickname.ilike.%${q}%`
-          );
-        }
-        const { data } = await qb
-          .order("first_name", { ascending: true })
-          .limit(15);
-        setResults((data ?? []) as CaddieSearchResult[]);
-        setSearching(false);
-      })();
-    },
-    [clubId]
-  );
-
-  // Cargar lista inicial al montar.
-  useEffect(() => {
-    runSearch("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const onChange = (v: string) => {
-    setQuery(v);
-    if (debounceRef.current) window.clearTimeout(debounceRef.current);
-    debounceRef.current = window.setTimeout(() => runSearch(v), 250);
-  };
+  const results = useMemo(() => {
+    const q = normSearch(query);
+    let list = caddiesCatalog;
+    if (q) {
+      list = list.filter((c) => {
+        const full = normSearch(`${c.first_name ?? ""} ${c.last_name ?? ""}`);
+        const nick = normSearch(c.nickname ?? "");
+        return full.includes(q) || nick.includes(q);
+      });
+    }
+    return list.slice(0, 15);
+  }, [query, caddiesCatalog]);
 
   return (
     <div className="relative flex-1">
@@ -781,47 +744,45 @@ function CaddieSearch({
           autoFocus
           type="text"
           value={query}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Buscar caddie…"
-          className="w-full rounded-md border border-indigo-300 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+          className="w-full rounded-md border border-indigo-300 bg-white px-2 py-1 text-xs text-slate-900 caret-indigo-600 placeholder:text-slate-400 outline-none focus:border-indigo-500"
         />
         <button
           type="button"
           onClick={onCancel}
-          className="rounded px-1 text-xs text-slate-400 hover:text-slate-700"
+          className="rounded px-1 text-xs text-slate-500 hover:text-slate-700"
         >
           cancelar
         </button>
       </div>
       <div className="absolute z-10 mt-1 max-h-48 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
-        {searching && (
-          <div className="px-3 py-2 text-xs text-slate-400">Buscando…</div>
+        {results.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-slate-500">Sin caddies.</div>
+        ) : (
+          results.map((c) => {
+            const name =
+              [c.first_name, c.last_name].filter(Boolean).join(" ") ||
+              c.nickname ||
+              "Caddie";
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={busy}
+                onClick={() => onPick(c.id)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-900 hover:bg-indigo-50 disabled:opacity-40"
+              >
+                <span className="truncate">{name}</span>
+                {c.nickname && (
+                  <span className="shrink-0 text-[10px] text-slate-400">
+                    {c.nickname}
+                  </span>
+                )}
+              </button>
+            );
+          })
         )}
-        {!searching && results.length === 0 && (
-          <div className="px-3 py-2 text-xs text-slate-400">Sin caddies.</div>
-        )}
-        {results.map((c) => {
-          const name =
-            [c.first_name, c.last_name].filter(Boolean).join(" ") ||
-            c.nickname ||
-            "Caddie";
-          return (
-            <button
-              key={c.id}
-              type="button"
-              disabled={busy}
-              onClick={() => onPick(c.id)}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-indigo-50 disabled:opacity-40"
-            >
-              <span className="truncate">{name}</span>
-              {c.nickname && (
-                <span className="shrink-0 text-[10px] text-slate-400">
-                  {c.nickname}
-                </span>
-              )}
-            </button>
-          );
-        })}
       </div>
     </div>
   );
