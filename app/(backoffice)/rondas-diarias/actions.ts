@@ -7,6 +7,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
 import { markGroupStarted } from "@/lib/ritmo/groupStart";
+import { assignCaddieToEntry } from "@/lib/caddies/assignCaddieToEntry";
 import {
   notifyDailyRoundGroupStart,
   type DailyNotifyResult,
@@ -273,6 +274,70 @@ export async function removePlayerFromSalida(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/rondas-diarias/${input.tournamentId}`);
+  return { ok: true };
+}
+
+/** Asigna un caddie a un jugador (entry) dentro de una salida. */
+export async function assignCaddieToSalida(input: {
+  tournamentId: string;
+  roundId: string;
+  groupId: string;
+  entryId: string;
+  caddieId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  const roundId = String(input.roundId ?? "").trim();
+  const groupId = String(input.groupId ?? "").trim();
+  const entryId = String(input.entryId ?? "").trim();
+  const caddieId = String(input.caddieId ?? "").trim();
+  if (!tournamentId || !roundId || !entryId || !caddieId) {
+    return { ok: false, error: "Faltan datos (jugador o caddie)." };
+  }
+
+  const res = await assignCaddieToEntry(admin, {
+    tournamentId,
+    entryId,
+    caddieId,
+    roundId,
+    pairingGroupId: groupId || null,
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
+  return { ok: true };
+}
+
+/** Quita el caddie asignado a un jugador (entry) en esta ronda. */
+export async function removeCaddieFromSalida(input: {
+  tournamentId: string;
+  roundId: string;
+  entryId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  const roundId = String(input.roundId ?? "").trim();
+  const entryId = String(input.entryId ?? "").trim();
+  if (!tournamentId || !roundId || !entryId) {
+    return { ok: false, error: "Faltan datos." };
+  }
+
+  const { error } = await admin
+    .from("caddie_assignments")
+    .update({ is_active: false })
+    .eq("tournament_id", tournamentId)
+    .eq("round_id", roundId)
+    .eq("entry_id", entryId)
+    .eq("is_active", true);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
   return { ok: true };
 }
 

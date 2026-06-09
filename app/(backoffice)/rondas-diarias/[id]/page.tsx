@@ -91,6 +91,10 @@ export default async function RondaDiariaDetailPage({
 
     const groupIds = groups.map((g) => g.id);
     const membersByGroup = new Map<string, SalidaRow["players"]>();
+    const caddieByEntry = new Map<
+      string,
+      { caddieId: string; caddieName: string }
+    >();
 
     if (groupIds.length > 0) {
       const { data: membersRaw } = await admin
@@ -104,6 +108,42 @@ export default async function RondaDiariaDetailPage({
         )
         .in("group_id", groupIds)
         .order("position", { ascending: true });
+
+      // Caddies activos asignados en esta ronda (por entry).
+      const { data: caddieRows } = await admin
+        .from("caddie_assignments")
+        .select(
+          `entry_id, caddie_id, is_active,
+           caddies ( id, first_name, last_name )`
+        )
+        .eq("tournament_id", id)
+        .eq("round_id", roundId)
+        .eq("is_active", true);
+      type CaddieAssignRaw = {
+        entry_id: string | null;
+        caddie_id: string | null;
+        caddies:
+          | { id: string; first_name: string | null; last_name: string | null }
+          | Array<{
+              id: string;
+              first_name: string | null;
+              last_name: string | null;
+            }>
+          | null;
+      };
+      for (const c of (caddieRows ?? []) as unknown as CaddieAssignRaw[]) {
+        if (!c.entry_id) continue;
+        const cad = Array.isArray(c.caddies) ? c.caddies[0] : c.caddies;
+        const cn =
+          [cad?.first_name, cad?.last_name]
+            .map((p) => String(p ?? "").trim())
+            .filter(Boolean)
+            .join(" ") || "Caddie";
+        caddieByEntry.set(String(c.entry_id), {
+          caddieId: String(c.caddie_id ?? cad?.id ?? ""),
+          caddieName: cn,
+        });
+      }
 
       type MemberRaw = {
         id: string;
@@ -149,13 +189,18 @@ export default async function RondaDiariaDetailPage({
             .toString()
             .trim()
         );
+        const entryId = entry?.id ? String(entry.id) : "";
+        const caddie = entryId ? caddieByEntry.get(entryId) : undefined;
         const list = membersByGroup.get(m.group_id) ?? [];
         list.push({
           memberId: m.id,
+          entryId,
           playerId: entry?.player_id ? String(entry.player_id) : "",
           name,
           handicapIndex: hi,
           hasTelegram,
+          caddieId: caddie?.caddieId ?? null,
+          caddieName: caddie?.caddieName ?? null,
         });
         membersByGroup.set(m.group_id, list);
       }
