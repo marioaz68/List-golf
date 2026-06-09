@@ -173,10 +173,12 @@ function CardHeader({
   meta,
   subtitle,
   groupLine,
+  showAdvantageLegend = true,
 }: {
   meta: PrintableScorecardsBundle;
   subtitle: string;
   groupLine: string;
+  showAdvantageLegend?: boolean;
 }) {
   return (
     <header className="border-b border-black/40 pb-1">
@@ -209,10 +211,12 @@ function CardHeader({
           {meta.pairFormatLabel} · {meta.allowancePct}% HI · 2 pts/hoyo (baja vs
           baja, alta vs alta)
         </span>
-        <span className="flex items-center gap-1">
-          <span className="inline-block h-[4px] w-[4px] rounded-full bg-black" />
-          = golpe de ventaja
-        </span>
+        {showAdvantageLegend ? (
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-[4px] w-[4px] rounded-full bg-black" />
+            = golpe de ventaja
+          </span>
+        ) : null}
       </div>
     </header>
   );
@@ -298,19 +302,23 @@ export function StrokeAggregateScorecardSheet({
   card: PrintableStrokeCard;
   meta: PrintableScorecardsBundle;
 }) {
-  const subtitle = `Stroke Agregado · R${card.roundNo}`;
+  const subtitle = `Consolación Stroke Play · R${card.roundNo}`;
   const groupLine = `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`;
 
   const scoreRows: ExtraRow[] = card.players.map((p, i) => ({
     label: `J${i + 1} ${p.name.split(" ")[0]}`,
-    dotsByHole: p.strokesByHole,
   }));
   scoreRows.push({ label: "Neto pareja 1", className: "bg-emerald-50 font-bold" });
   scoreRows.push({ label: "Neto pareja 2", className: "bg-emerald-50 font-bold" });
 
   return (
     <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
-      <CardHeader meta={meta} subtitle={subtitle} groupLine={groupLine} />
+      <CardHeader
+        meta={meta}
+        subtitle={subtitle}
+        groupLine={groupLine}
+        showAdvantageLegend={false}
+      />
       <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5">
         {card.players.map((p, i) => (
           <div key={i} className="flex items-center gap-2 text-[10px]">

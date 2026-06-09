@@ -29,6 +29,21 @@ interface Props {
   defaultVenueCode?: string | null;
 }
 
+interface FavoriteItem {
+  menuItem: {
+    id: string;
+    name: string;
+    priceCents: number;
+    imageUrl: string | null;
+    displayEmoji: string | null;
+    categoryId: string;
+  };
+  categoryCode: string;
+  timesOrdered: number;
+  lastOrderedAt: string;
+  source: "pinned" | "auto";
+}
+
 interface CartLine {
   menuItemId: string;
   name: string;
@@ -63,6 +78,35 @@ export default function NuevoPedidoClient({
     const id = setInterval(() => router.refresh(), 20000);
     return () => clearInterval(id);
   }, [nearbyMeta?.venueCode, router]);
+
+  // Favoritos del cliente seleccionado para el venue activo
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  useEffect(() => {
+    if (!selectedClient || !selectedVenueId) {
+      setFavorites([]);
+      return;
+    }
+    const idParam = selectedClient.kind === "player" ? "entry_id" : "caddie_id";
+    const url = `/api/captura/fb-favorites?${idParam}=${encodeURIComponent(selectedClient.id)}&venue_id=${encodeURIComponent(selectedVenueId)}`;
+    let cancelled = false;
+    setFavoritesLoading(true);
+    fetch(url, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { ok: boolean; favorites?: FavoriteItem[] }) => {
+        if (cancelled) return;
+        setFavorites(j.ok ? j.favorites ?? [] : []);
+      })
+      .catch(() => {
+        if (!cancelled) setFavorites([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFavoritesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedClient, selectedVenueId]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [requestedHole, setRequestedHole] = useState<string>("");
   const [notes, setNotes] = useState("");
@@ -359,6 +403,31 @@ export default function NuevoPedidoClient({
               ) : null}
             </div>
 
+            {/* Favoritos del cliente (lo que más pide) */}
+            {favorites.length > 0 ? (
+              <FavoritesSection
+                favorites={favorites}
+                clientName={selectedClient?.name ?? ""}
+                cart={cart}
+                onAdd={(it) =>
+                  addOne({
+                    id: it.menuItem.id,
+                    name: it.menuItem.name,
+                    priceCents: it.menuItem.priceCents,
+                  } as FbMenuItem)
+                }
+                onDec={(it) => decOne(it.menuItem.id)}
+              />
+            ) : favoritesLoading ? (
+              <div className="rounded-lg bg-amber-50 p-2 text-center text-[11px] text-amber-700">
+                Cargando favoritos de {selectedClient?.name}…
+              </div>
+            ) : selectedClient ? (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-2 text-center text-[11px] text-slate-500">
+                ⭐ {selectedClient.name} aún no tiene historial de pedidos
+              </div>
+            ) : null}
+
             <div className="rounded-lg bg-white p-3 shadow-sm">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 Items disponibles en {selectedVenue?.name}
@@ -654,6 +723,115 @@ function NearbySection({
       <p className="mt-1.5 text-center text-[9px] text-emerald-700">
         Toca a un cliente para crear pedido al instante · refresco cada 20s
       </p>
+    </div>
+  );
+}
+
+// ============================================================
+// Sección "⭐ Favoritos de <cliente>"
+// ============================================================
+function FavoritesSection({
+  favorites,
+  clientName,
+  cart,
+  onAdd,
+  onDec,
+}: {
+  favorites: FavoriteItem[];
+  clientName: string;
+  cart: CartLine[];
+  onAdd: (f: FavoriteItem) => void;
+  onDec: (f: FavoriteItem) => void;
+}) {
+  const cartByItem = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of cart) map.set(c.menuItemId, c.qty);
+    return map;
+  }, [cart]);
+
+  return (
+    <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-3 shadow-sm">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h3 className="text-[12px] font-bold text-amber-800">
+          ⭐ Lo que más pide {clientName}
+        </h3>
+        <span className="text-[9px] text-amber-700">
+          Toca para agregar al pedido
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {favorites.map((f) => {
+          const inCart = cartByItem.get(f.menuItem.id) ?? 0;
+          return (
+            <div
+              key={f.menuItem.id}
+              className={[
+                "flex items-center justify-between gap-2 rounded-md border bg-white p-2",
+                inCart > 0
+                  ? "border-emerald-400 ring-2 ring-emerald-200"
+                  : "border-amber-200",
+              ].join(" ")}
+            >
+              <button
+                type="button"
+                onClick={() => onAdd(f)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              >
+                <span className="shrink-0 text-2xl leading-none">
+                  {f.menuItem.displayEmoji ?? "🍽️"}
+                </span>
+                <div className="min-w-0">
+                  <div className="line-clamp-2 text-[12px] font-bold text-slate-900">
+                    {f.menuItem.name}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {formatPrice(f.menuItem.priceCents)} ·{" "}
+                    {f.source === "pinned" ? (
+                      <span className="text-amber-700">📌 Fijado</span>
+                    ) : (
+                      <span>
+                        Pedido {f.timesOrdered}{" "}
+                        {f.timesOrdered === 1 ? "vez" : "veces"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                {inCart > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onDec(f)}
+                      className="h-7 w-7 rounded-full border border-slate-300 text-base font-bold"
+                    >
+                      −
+                    </button>
+                    <span className="min-w-[18px] text-center text-sm font-bold">
+                      {inCart}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onAdd(f)}
+                      className="h-7 w-7 rounded-full border border-emerald-500 bg-white text-base font-bold text-emerald-700"
+                    >
+                      +
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onAdd(f)}
+                    className="rounded-md border border-emerald-500 bg-white px-3 py-1 text-xs font-bold text-emerald-700"
+                  >
+                    + Agregar
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

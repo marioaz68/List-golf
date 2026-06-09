@@ -17,7 +17,7 @@ type Props = {
 function kindLabel(kind: PrintableMatchPlayCard["kind"] | "stroke") {
   if (kind === "main") return "Cuadro principal";
   if (kind === "consolation_mp") return "Consolación MP";
-  return "Stroke agregado";
+  return "Consolación Stroke Play";
 }
 
 export default function PrintableScorecardsClient({ bundle }: Props) {
