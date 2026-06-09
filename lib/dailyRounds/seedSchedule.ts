@@ -20,6 +20,102 @@ interface SeedResult {
   error?: string;
 }
 
+/**
+ * Asegura la estructura base de una ronda diaria (categoría ABIERTA + 1 round)
+ * SIN generar las 48 salidas. Útil para agregar salidas individuales a mano.
+ * Idempotente.
+ */
+export async function ensureDailyRoundBase(
+  admin: SupabaseClient,
+  tournamentId: string,
+  roundDate: string
+): Promise<{ ok: boolean; categoryId?: string; roundId?: string; error?: string }> {
+  if (!tournamentId) return { ok: false, error: "Falta tournamentId" };
+
+  const { data: tour } = await admin
+    .from("tournaments")
+    .select("id, club_id")
+    .eq("id", tournamentId)
+    .maybeSingle();
+  const clubId = (tour as { club_id: string | null } | null)?.club_id ?? null;
+  let orgId: string | null = null;
+  if (clubId) {
+    const { data: club } = await admin
+      .from("clubs")
+      .select("org_id")
+      .eq("id", clubId)
+      .maybeSingle();
+    if (club) orgId = (club as { org_id: string | null }).org_id;
+  }
+
+  // Categoría
+  const { data: existingCats } = await admin
+    .from("categories")
+    .select("id, code")
+    .eq("tournament_id", tournamentId);
+  const cats = (existingCats ?? []) as Array<{ id: string; code: string }>;
+  let categoryId: string | null =
+    cats.find((c) => c.code === "ABIERTA")?.id ?? cats[0]?.id ?? null;
+  if (!categoryId) {
+    const { data: catRow, error: catErr } = await admin
+      .from("categories")
+      .insert({
+        org_id: orgId,
+        tournament_id: tournamentId,
+        gender: "X",
+        category_group: "main",
+        code: "ABIERTA",
+        name: "Abierta · Ronda del día",
+        handicap_min: 0,
+        handicap_max: 54,
+        is_active: true,
+        allow_multiple_prizes_per_player: false,
+        sort_order: 1,
+      })
+      .select("id")
+      .single();
+    if (catErr || !catRow) {
+      return { ok: false, error: catErr?.message ?? "No pude crear categoría" };
+    }
+    categoryId = String((catRow as { id: string }).id);
+  }
+
+  // Round
+  const { data: existingRounds } = await admin
+    .from("rounds")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .eq("category_id", categoryId)
+    .limit(1);
+  let roundId: string | null =
+    existingRounds && existingRounds.length > 0
+      ? String((existingRounds[0] as { id: string }).id)
+      : null;
+  if (!roundId) {
+    const { data: rRow, error: rErr } = await admin
+      .from("rounds")
+      .insert({
+        tournament_id: tournamentId,
+        round_no: 1,
+        category_id: categoryId,
+        round_date: roundDate,
+        wave: "AM",
+        start_type: "tee_time",
+        start_time: "07:00",
+        interval_minutes: 10,
+        group_size: 4,
+      })
+      .select("id")
+      .single();
+    if (rErr || !rRow) {
+      return { ok: false, error: rErr?.message ?? "No pude crear round" };
+    }
+    roundId = String((rRow as { id: string }).id);
+  }
+
+  return { ok: true, categoryId, roundId };
+}
+
 export async function seedDailyRoundSchedule(
   admin: SupabaseClient,
   tournamentId: string,

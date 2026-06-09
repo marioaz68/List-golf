@@ -17,6 +17,9 @@ import {
   assignCaddieToSalida,
   removeCaddieFromSalida,
   startAndNotifySalida,
+  generateDailySalidas,
+  addSalida,
+  removeSalida,
 } from "../actions";
 
 export type SalidaPlayer = {
@@ -79,8 +82,12 @@ export default function SalidasClient({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [tab, setTab] = useState<"salidas" | "jugando">("salidas");
   const [onlyWithPlayers, setOnlyWithPlayers] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newTime, setNewTime] = useState("07:00");
+  const [newHole, setNewHole] = useState(1);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
   );
@@ -106,10 +113,49 @@ export default function SalidasClient({
     return Array.from(map.entries());
   }, [visible]);
 
+  const playing = useMemo(
+    () =>
+      salidas
+        .filter((s) => s.players.length > 0)
+        .sort((a, b) => (a.teeTime ?? "").localeCompare(b.teeTime ?? "")),
+    [salidas]
+  );
+
   const showFlash = useCallback((kind: "ok" | "err", text: string) => {
     setFlash({ kind, text });
     window.setTimeout(() => setFlash(null), 5000);
   }, []);
+
+  const handleGenerate = () => {
+    startTransition(async () => {
+      const res = await generateDailySalidas({ tournamentId });
+      if (!res.ok) return showFlash("err", res.error ?? "No se pudo generar.");
+      showFlash("ok", `Salidas generadas (${res.created ?? 0}).`);
+      router.refresh();
+    });
+  };
+
+  const handleAddSalida = () => {
+    startTransition(async () => {
+      const res = await addSalida({
+        tournamentId,
+        teeTime: newTime,
+        startingHole: newHole,
+      });
+      if (!res.ok) return showFlash("err", res.error ?? "No se pudo agregar.");
+      setShowAdd(false);
+      showFlash("ok", `Salida ${newTime} (hoyo ${newHole}) agregada.`);
+      router.refresh();
+    });
+  };
+
+  const handleRemoveSalida = (groupId: string) => {
+    startTransition(async () => {
+      const res = await removeSalida({ tournamentId, groupId });
+      if (!res.ok) return showFlash("err", res.error ?? "No se pudo eliminar.");
+      router.refresh();
+    });
+  };
 
   const handleAdd = (groupId: string, playerId: string) => {
     startTransition(async () => {
@@ -191,12 +237,6 @@ export default function SalidasClient({
           </p>
         </div>
 
-        <div className="mb-3 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
-          Agenda de salidas. Toca una hora para agregar jugadores y caddies.
-          Cuando esté lista, <strong>Avisar Telegram</strong> manda el link de
-          captura. Todo se guarda al instante.
-        </div>
-
         {flash && (
           <div
             className={`mb-3 rounded-lg p-3 text-sm ring-1 ${
@@ -209,69 +249,237 @@ export default function SalidasClient({
           </div>
         )}
 
-        {!roundId && (
-          <div className="rounded-lg bg-white p-6 text-sm text-red-600 shadow ring-1 ring-slate-200">
-            Esta ronda no tiene salidas configuradas. Vuelve a crear la ronda
-            del día desde el panel.
-          </div>
-        )}
+        {/* Pestañas */}
+        <div className="mb-3 flex gap-1 border-b border-slate-200">
+          <TabButton
+            active={tab === "salidas"}
+            onClick={() => setTab("salidas")}
+            label="Salidas"
+          />
+          <TabButton
+            active={tab === "jugando"}
+            onClick={() => setTab("jugando")}
+            label={`Jugando hoy${playing.length ? ` (${playing.length})` : ""}`}
+          />
+        </div>
 
-        {roundId && (
+        {tab === "salidas" && (
           <>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs text-slate-500">
-                {visible.length} de {salidas.length} horas
-              </span>
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={onlyWithPlayers}
-                  onChange={(e) => setOnlyWithPlayers(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                Solo salidas con jugadores
-              </label>
+            <div className="mb-3 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
+              Agenda de salidas. Toca una hora para agregar jugadores y caddies.
+              Cuando esté lista, <strong>Avisar Telegram</strong> manda el link
+              de captura. Todo se guarda al instante.
             </div>
 
-            <div className="space-y-4">
-              {bands.map(([band, rows]) => (
-                <div key={band}>
-                  <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                    {band}
-                  </div>
-                  <div className="divide-y divide-slate-100 overflow-hidden rounded-lg bg-white shadow ring-1 ring-slate-200">
-                    {rows.map((s) => (
-                      <SalidaItem
-                        key={s.groupId}
-                        salida={s}
-                        groupSize={groupSize}
-                        clubId={clubId}
-                        busy={pending}
-                        open={openId === s.groupId}
-                        onToggle={() =>
-                          setOpenId((cur) =>
-                            cur === s.groupId ? null : s.groupId
-                          )
-                        }
-                        onAdd={handleAdd}
-                        onRemove={handleRemove}
-                        onAssignCaddie={handleAssignCaddie}
-                        onRemoveCaddie={handleRemoveCaddie}
-                        onStart={handleStart}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {visible.length === 0 && (
-                <div className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow ring-1 ring-slate-200">
-                  No hay salidas para mostrar.
-                </div>
+            {/* Controles: generar / agregar salida */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              {salidas.length === 0 && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={handleGenerate}
+                  className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  ⚡ Generar salidas del día
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setShowAdd((v) => !v)}
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                + Agregar salida
+              </button>
+              {salidas.length > 0 && (
+                <label className="ml-auto flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={onlyWithPlayers}
+                    onChange={(e) => setOnlyWithPlayers(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  Solo con jugadores
+                </label>
               )}
             </div>
+
+            {showAdd && (
+              <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg bg-white p-3 shadow ring-1 ring-slate-200">
+                <label className="flex flex-col text-xs font-semibold text-slate-600">
+                  Hora
+                  <input
+                    type="time"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="mt-0.5 rounded border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="flex flex-col text-xs font-semibold text-slate-600">
+                  Hoyo
+                  <select
+                    value={newHole}
+                    onChange={(e) => setNewHole(Number(e.target.value))}
+                    className="mt-0.5 rounded border border-slate-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value={1}>1</option>
+                    <option value={10}>10</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={handleAddSalida}
+                  className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Agregar
+                </button>
+              </div>
+            )}
+
+            {salidas.length === 0 ? (
+              <div className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow ring-1 ring-slate-200">
+                Aún no hay salidas. Genera la rejilla del día o agrega una salida
+                manual con los botones de arriba.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {bands.map(([band, rows]) => (
+                  <div key={band}>
+                    <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                      {band}
+                    </div>
+                    <div className="divide-y divide-slate-100 overflow-hidden rounded-lg bg-white shadow ring-1 ring-slate-200">
+                      {rows.map((s) => (
+                        <SalidaItem
+                          key={s.groupId}
+                          salida={s}
+                          groupSize={groupSize}
+                          clubId={clubId}
+                          busy={pending}
+                          open={openId === s.groupId}
+                          onToggle={() =>
+                            setOpenId((cur) =>
+                              cur === s.groupId ? null : s.groupId
+                            )
+                          }
+                          onAdd={handleAdd}
+                          onRemove={handleRemove}
+                          onAssignCaddie={handleAssignCaddie}
+                          onRemoveCaddie={handleRemoveCaddie}
+                          onStart={handleStart}
+                          onRemoveSalida={handleRemoveSalida}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {visible.length === 0 && (
+                  <div className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow ring-1 ring-slate-200">
+                    No hay salidas con jugadores.
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
+
+        {tab === "jugando" && (
+          <PlayingToday playing={playing} groupSize={groupSize} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${
+        active
+          ? "border-emerald-600 text-emerald-700"
+          : "border-transparent text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function PlayingToday({
+  playing,
+  groupSize,
+}: {
+  playing: SalidaRow[];
+  groupSize: number;
+}) {
+  if (playing.length === 0) {
+    return (
+      <div className="rounded-lg bg-white p-6 text-center text-sm text-slate-500 shadow ring-1 ring-slate-200">
+        Aún no hay grupos con jugadores hoy. Arma salidas en la pestaña{" "}
+        <strong>Salidas</strong>.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-lg bg-white shadow ring-1 ring-slate-200">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-left text-[11px] uppercase tracking-wide text-slate-400">
+            <th className="px-3 py-2">Hora</th>
+            <th className="px-2 py-2">Hoyo</th>
+            <th className="px-2 py-2">Jugadores</th>
+            <th className="px-2 py-2 text-right">Estado</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {playing.map((s) => (
+            <tr key={s.groupId} className={s.startedAt ? "bg-emerald-50/50" : ""}>
+              <td className="whitespace-nowrap px-3 py-2 font-bold text-slate-900">
+                {s.teeTime ?? "--:--"}
+              </td>
+              <td className="px-2 py-2 text-slate-500">
+                H{s.startingHole ?? "?"}
+              </td>
+              <td className="px-2 py-2">
+                <div className="flex flex-col gap-0.5">
+                  {s.players.map((p) => (
+                    <span key={p.memberId} className="text-slate-700">
+                      {p.name}
+                      {p.caddieName && (
+                        <span className="text-xs text-indigo-500">
+                          {" "}· 🎒 {p.caddieName}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </td>
+              <td className="px-2 py-2 text-right">
+                {s.startedAt ? (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                    ● En juego
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-400">
+                    {s.players.length}/{groupSize} listo
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -288,6 +496,7 @@ function SalidaItem({
   onAssignCaddie,
   onRemoveCaddie,
   onStart,
+  onRemoveSalida,
 }: {
   salida: SalidaRow;
   groupSize: number;
@@ -300,6 +509,7 @@ function SalidaItem({
   onAssignCaddie: (groupId: string, entryId: string, caddieId: string) => void;
   onRemoveCaddie: (entryId: string) => void;
   onStart: (groupId: string) => void;
+  onRemoveSalida: (groupId: string) => void;
 }) {
   const started = Boolean(salida.startedAt);
   const count = salida.players.length;
@@ -374,7 +584,19 @@ function SalidaItem({
             </p>
           )}
 
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex items-center justify-between">
+            {count === 0 ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onRemoveSalida(salida.groupId)}
+                className="rounded-md px-2 py-1 text-xs font-semibold text-red-500 hover:bg-red-50 disabled:opacity-50"
+              >
+                Eliminar salida
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               type="button"
               disabled={busy || count === 0}

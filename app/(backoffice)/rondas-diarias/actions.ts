@@ -5,7 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
-import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
+import {
+  seedDailyRoundSchedule,
+  ensureDailyRoundBase,
+} from "@/lib/dailyRounds/seedSchedule";
 import { markGroupStarted } from "@/lib/ritmo/groupStart";
 import { assignCaddieToEntry } from "@/lib/caddies/assignCaddieToEntry";
 import {
@@ -140,6 +143,117 @@ async function requireDailyAccess(): Promise<
     return { ok: false, error: "Sin permisos." };
   }
   return { ok: true, admin, userId: user.id };
+}
+
+/** Fecha (YYYY-MM-DD) de la ronda del día. */
+async function dailyRoundDate(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<string> {
+  const { data } = await admin
+    .from("tournaments")
+    .select("start_date")
+    .eq("id", tournamentId)
+    .maybeSingle();
+  const d = (data as { start_date: string | null } | null)?.start_date;
+  return d ?? new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Genera la rejilla estándar de salidas (mañana 7-9 + mediodía 12-14, hoyos
+ * 1 y 10 cada 10 min) para una ronda del día que aún no tiene salidas.
+ */
+export async function generateDailySalidas(input: {
+  tournamentId: string;
+}): Promise<{ ok: boolean; created?: number; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  if (!tournamentId) return { ok: false, error: "Falta el torneo." };
+
+  const roundDate = await dailyRoundDate(admin, tournamentId);
+  const seed = await seedDailyRoundSchedule(admin, tournamentId, roundDate);
+  if (!seed.ok) return { ok: false, error: seed.error };
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
+  return { ok: true, created: seed.groupsCreated };
+}
+
+/** Agrega una salida individual (hora + hoyo) a la ronda del día. */
+export async function addSalida(input: {
+  tournamentId: string;
+  teeTime: string; // HH:MM
+  startingHole: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const tournamentId = String(input.tournamentId ?? "").trim();
+  const teeTime = String(input.teeTime ?? "").trim();
+  const startingHole = Number(input.startingHole) || 1;
+  if (!tournamentId || !/^\d{2}:\d{2}$/.test(teeTime)) {
+    return { ok: false, error: "Datos inválidos (hora HH:MM)." };
+  }
+
+  const roundDate = await dailyRoundDate(admin, tournamentId);
+  const base = await ensureDailyRoundBase(admin, tournamentId, roundDate);
+  if (!base.ok || !base.roundId) {
+    return { ok: false, error: base.error ?? "No pude preparar la ronda." };
+  }
+
+  const { data: groups } = await admin
+    .from("pairing_groups")
+    .select("group_no")
+    .eq("round_id", base.roundId);
+  const maxNo = ((groups ?? []) as Array<{ group_no: number | null }>).reduce(
+    (acc, g) => Math.max(acc, g.group_no ?? 0),
+    0
+  );
+
+  const { error } = await admin.from("pairing_groups").insert({
+    round_id: base.roundId,
+    group_no: maxNo + 1,
+    tee_time: teeTime,
+    starting_hole: startingHole,
+    notes: "Manual",
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/rondas-diarias/${tournamentId}`);
+  return { ok: true };
+}
+
+/** Elimina una salida vacía (sin jugadores) de la ronda del día. */
+export async function removeSalida(input: {
+  tournamentId: string;
+  groupId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const access = await requireDailyAccess();
+  if (!access.ok) return { ok: false, error: access.error };
+  const { admin } = access;
+
+  const groupId = String(input.groupId ?? "").trim();
+  if (!groupId) return { ok: false, error: "Falta la salida." };
+
+  const { count } = await admin
+    .from("pairing_group_members")
+    .select("id", { count: "exact", head: true })
+    .eq("group_id", groupId);
+  if ((count ?? 0) > 0) {
+    return { ok: false, error: "La salida tiene jugadores. Quítalos primero." };
+  }
+
+  const { error } = await admin
+    .from("pairing_groups")
+    .delete()
+    .eq("id", groupId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/rondas-diarias/${input.tournamentId}`);
+  return { ok: true };
 }
 
 /**
