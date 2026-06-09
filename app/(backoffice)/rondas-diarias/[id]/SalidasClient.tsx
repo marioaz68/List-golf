@@ -640,23 +640,27 @@ function PlayerSearch({
 
   const runSearch = useCallback((raw: string) => {
     const q = raw.replace(/[%,]/g, "").trim();
-    if (q.length < 2) {
-      setResults([]);
-      setOpen(false);
-      return;
-    }
     setSearching(true);
     setOpen(true);
     void (async () => {
-      const { data } = await supabase
+      let qb = supabase
         .from("players")
-        .select("id, first_name, last_name, handicap_index")
-        .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`)
+        .select("id, first_name, last_name, handicap_index");
+      if (q.length >= 1) {
+        qb = qb.or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%`);
+      }
+      const { data } = await qb
         .order("last_name", { ascending: true })
-        .limit(15);
+        .limit(20);
       setResults((data ?? []) as PlayerSearchResult[]);
       setSearching(false);
     })();
+  }, []);
+
+  // Cargar lista inicial de jugadores al abrir la salida.
+  useEffect(() => {
+    runSearch("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onChange = (v: string) => {
@@ -672,8 +676,8 @@ function PlayerSearch({
         type="text"
         value={query}
         onChange={(e) => onChange(e.target.value)}
-        onFocus={() => query.length >= 2 && setOpen(true)}
-        placeholder="Agregar jugador por nombre…"
+        onFocus={() => setOpen(true)}
+        placeholder="Buscar jugador del sistema por nombre…"
         className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
       {open && (
