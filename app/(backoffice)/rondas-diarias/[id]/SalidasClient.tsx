@@ -99,18 +99,24 @@ export default function SalidasClient({
     ? salidas.filter((s) => s.players.length > 0)
     : salidas;
 
-  // Agrupar por banda (texto antes de "·" en notes), ej. "Mañana", "Mediodía".
+  // Agrupar por hoyo de salida: todas las del hoyo 1 juntas y las del 10
+  // juntas. Cada grupo se ordena por hora.
   const bands = useMemo(() => {
-    const map = new Map<string, SalidaRow[]>();
+    const map = new Map<number, SalidaRow[]>();
     for (const s of visible) {
-      const band =
-        (s.notes ?? "").split("·")[0].trim() ||
-        (s.teeTime && s.teeTime < "11:00" ? "Mañana" : "Mediodía");
-      const arr = map.get(band) ?? [];
+      const hole = s.startingHole ?? 0;
+      const arr = map.get(hole) ?? [];
       arr.push(s);
-      map.set(band, arr);
+      map.set(hole, arr);
     }
-    return Array.from(map.entries());
+    return Array.from(map.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([hole, rows]): [string, SalidaRow[]] => [
+        hole ? `Hoyo ${hole}` : "Sin hoyo",
+        rows
+          .slice()
+          .sort((x, y) => (x.teeTime ?? "").localeCompare(y.teeTime ?? "")),
+      ]);
   }, [visible]);
 
   const playing = useMemo(
