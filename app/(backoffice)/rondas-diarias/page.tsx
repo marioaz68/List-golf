@@ -141,15 +141,43 @@ export default async function RondasDiariasPage() {
     .select("id, name, club_id")
     .order("name");
 
-  const clubs = ((clubsRaw ?? []) as Array<Record<string, unknown>>).map((c) => ({
-    id: String(c.id),
-    name: String(c.name),
-  }));
-  const courses = ((coursesRaw ?? []) as Array<Record<string, unknown>>).map((c) => ({
-    id: String(c.id),
-    name: String(c.name),
-    clubId: c.club_id ? String(c.club_id) : null,
-  }));
+  // Si el usuario NO es super_admin, restringir los clubs visibles a los que
+  // tiene un rol activo asignado (user_club_roles). Si super_admin, ve todos.
+  const isSuperAdmin = roles.includes("super_admin");
+  let allowedClubIds: Set<string> | null = null;
+  if (!isSuperAdmin) {
+    const { data: ucr } = await admin
+      .from("user_club_roles")
+      .select("club_id")
+      .eq("user_id", user.id)
+      .eq("is_active", true);
+    allowedClubIds = new Set(
+      ((ucr ?? []) as Array<{ club_id: string | null }>)
+        .map((r) => (r.club_id ? String(r.club_id) : null))
+        .filter((id): id is string => Boolean(id))
+    );
+  }
+
+  const allClubs = ((clubsRaw ?? []) as Array<Record<string, unknown>>).map(
+    (c) => ({
+      id: String(c.id),
+      name: String(c.name),
+    })
+  );
+  const clubs = allowedClubIds
+    ? allClubs.filter((c) => allowedClubIds!.has(c.id))
+    : allClubs;
+
+  const allCourses = ((coursesRaw ?? []) as Array<Record<string, unknown>>).map(
+    (c) => ({
+      id: String(c.id),
+      name: String(c.name),
+      clubId: c.club_id ? String(c.club_id) : null,
+    })
+  );
+  const courses = allowedClubIds
+    ? allCourses.filter((c) => !c.clubId || allowedClubIds!.has(c.clubId))
+    : allCourses;
 
   return (
     <RondasDiariasClient

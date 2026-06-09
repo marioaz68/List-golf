@@ -53,14 +53,34 @@ export default function RondasDiariasClient({
     return firstCourse?.id ?? "";
   });
 
-  const filteredCourses = useMemo(
-    () => courses.filter((c) => !clubId || c.clubId === clubId),
-    [courses, clubId]
+  // Buscamos cursos del club seleccionado; si no hay match (porque algún
+  // curso quedó sin club_id en BD), caemos a mostrar TODOS para no bloquear
+  // al usuario.
+  const filteredCourses = useMemo(() => {
+    if (!clubId) return courses;
+    const matched = courses.filter((c) => c.clubId === clubId);
+    return matched.length > 0 ? matched : courses;
+  }, [courses, clubId]);
+
+  // Map id → club name para mostrar contexto en cada opción
+  const clubNameById = useMemo(
+    () => new Map(clubs.map((c) => [c.id, c.name])),
+    [clubs]
   );
+
+  // Si el filtro cayó al "mostrar todos", lo señalamos arriba del select
+  const filterFellBack = useMemo(() => {
+    if (!clubId) return false;
+    return (
+      courses.filter((c) => c.clubId === clubId).length === 0 &&
+      courses.length > 0
+    );
+  }, [courses, clubId]);
 
   function changeClub(newClubId: string) {
     setClubId(newClubId);
-    const firstCourse = courses.find((c) => c.clubId === newClubId);
+    const firstCourse =
+      courses.find((c) => c.clubId === newClubId) ?? courses[0];
     if (firstCourse) setCourseId(firstCourse.id);
   }
 
@@ -266,17 +286,23 @@ export default function RondasDiariasClient({
 
               <label className="mt-3 block text-[11px] font-bold text-slate-700">
                 Club
-                <select
-                  value={clubId}
-                  onChange={(e) => changeClub(e.target.value)}
-                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-                >
-                  {clubs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                {clubs.length === 1 ? (
+                  <div className="mt-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700">
+                    {clubs[0].name}
+                  </div>
+                ) : (
+                  <select
+                    value={clubId}
+                    onChange={(e) => changeClub(e.target.value)}
+                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                  >
+                    {clubs.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </label>
 
               <label className="mt-3 block text-[11px] font-bold text-slate-700">
@@ -286,12 +312,33 @@ export default function RondasDiariasClient({
                   onChange={(e) => setCourseId(e.target.value)}
                   className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
                 >
-                  {filteredCourses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
+                  {filteredCourses.length === 0 ? (
+                    <option value="">⚠ No hay cursos dados de alta</option>
+                  ) : null}
+                  {filteredCourses.map((c) => {
+                    const clubLabel = c.clubId
+                      ? clubNameById.get(c.clubId) ?? "—"
+                      : "sin club";
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} · {clubLabel}
+                      </option>
+                    );
+                  })}
                 </select>
+                {filterFellBack ? (
+                  <p className="mt-1 text-[10px] text-amber-700">
+                    ⚠ Ningún curso tiene asignado este club. Te muestro todos
+                    los cursos del sistema. Si el correcto está aquí, elígelo y
+                    avísame para asignarle el club permanentemente.
+                  </p>
+                ) : null}
+                {filteredCourses.length === 0 ? (
+                  <p className="mt-1 text-[10px] text-red-700">
+                    No hay cursos en el sistema. Crea uno desde el menú Cursos
+                    antes de iniciar una ronda.
+                  </p>
+                ) : null}
               </label>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
