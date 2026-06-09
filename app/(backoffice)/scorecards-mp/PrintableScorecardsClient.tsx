@@ -201,7 +201,7 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
                   ) : (
                     <>
                       <span className="font-bold text-emerald-200">
-                        Stroke agregado · R
+                        Consolación Stroke Play · R
                         {(card as PrintableStrokeCard).roundNo} · G
                         {(card as PrintableStrokeCard).groupNo}
                       </span>
