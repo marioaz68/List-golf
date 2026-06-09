@@ -8,6 +8,7 @@ import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import { roundLabel } from "@/lib/matchplay/bracketUtils";
+import { isThirdPlaceMatch } from "@/lib/matchplay/thirdPlaceMatch";
 import MatchDetailModal from "./MatchDetailModal";
 
 type MatchRow = {
@@ -656,6 +657,7 @@ export default function MatchesLiveGrid({
                       bottomTeam={bottomTeam}
                       holes={holesByMatch.get(m.id) ?? []}
                       holesPerMatch={holesPerMatch}
+                      roundCount={roundCount}
                       teeTime={sched?.teeTime ?? null}
                       groupNo={sched?.groupNo ?? null}
                       behindOnCapture={round.behindSet.has(m.id)}
@@ -730,6 +732,7 @@ function MatchCard({
   bottomTeam,
   holes,
   holesPerMatch,
+  roundCount,
   teeTime,
   groupNo,
   behindOnCapture = false,
@@ -740,11 +743,13 @@ function MatchCard({
   bottomTeam: MatchPlayTeamRow | null;
   holes: HoleRow[];
   holesPerMatch: number;
+  roundCount: number;
   teeTime?: string | null;
   groupNo?: number | null;
   behindOnCapture?: boolean;
   onOpen?: () => void;
 }) {
+  const isThirdPlace = isThirdPlaceMatch(match, roundCount);
   const isBye = match.status === "bye";
   const isDone = match.status === "completed";
   const isScheduled = !isBye && match.status !== "in_progress" && !isDone;
@@ -905,7 +910,7 @@ function MatchCard({
       <div className="mb-1.5 flex items-center justify-between gap-1 text-[9px] uppercase tracking-wider">
         <span className="flex items-center gap-1">
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-400">
-            R{match.round_no} · M{match.position_no}
+            {isThirdPlace ? "3er / 4to" : `R${match.round_no} · M${match.position_no}`}
           </span>
           {teeTime ? (
             <span className="inline-flex items-center gap-1 rounded bg-cyan-500/10 px-1.5 py-0.5 font-bold text-cyan-200">

@@ -11,6 +11,7 @@ import {
   getMainBracketSize,
   routeLoserToConsolationMp,
 } from "@/lib/matchplay/consolationMatchPlay";
+import { routeLoserToThirdPlace } from "@/lib/matchplay/thirdPlaceMatch";
 
 /**
  * Cierra un match (formato Bola Baja + Alta) cuando ya está
@@ -348,7 +349,54 @@ export async function closeMatchAndAdvanceForGroup(
     });
     if (consol.routed) {
       consolationNote = ` ${consol.message}`;
-      if (consol.groupCreated && consol.groupNo != null) {
+    }
+
+    const third = await routeLoserToThirdPlace(admin, {
+      tournamentId,
+      mainBracketId: bracketId,
+      closedRoundNo: Number(realMatch.round_no),
+      closedPositionNo: Number(realMatch.position_no),
+      loserPairId,
+      mainBracketSize: mainSize,
+    });
+    if (third.routed) {
+      consolationNote += ` ${third.message}`;
+      if (third.groupCreated && third.groupNo != null) {
+        nextGroupCreated = true;
+        nextGroupNo = third.groupNo;
+        const nextRoundNo = Number(realMatch.round_no) + 1;
+        const { data: rr } = await admin
+          .from("rounds")
+          .select("id, start_time, interval_minutes")
+          .eq("tournament_id", tournamentId)
+          .eq("round_no", nextRoundNo)
+          .maybeSingle();
+        if (rr?.id) {
+          nextRoundId = String(rr.id);
+          if (rr.start_time && third.groupNo != null) {
+            const parseHHMM = (raw: string): number | null => {
+              const m = /^(\d{1,2}):(\d{2})/.exec(String(raw).trim());
+              if (!m) return null;
+              return Number(m[1]) * 60 + Number(m[2]);
+            };
+            const formatHHMM = (total: number): string => {
+              const m = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+              return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+            };
+            const base = parseHHMM(String(rr.start_time));
+            const interval =
+              typeof rr.interval_minutes === "number" && rr.interval_minutes > 0
+                ? rr.interval_minutes
+                : 10;
+            if (base != null) {
+              nextTeeTime = formatHHMM(base + (third.groupNo - 1) * interval);
+            }
+          }
+        }
+      }
+    }
+
+    if (consol.routed && consol.groupCreated && consol.groupNo != null) {
         nextGroupCreated = true;
         nextGroupNo = consol.groupNo;
         const nextRoundNo = Number(realMatch.round_no) + 1;
@@ -382,7 +430,6 @@ export async function closeMatchAndAdvanceForGroup(
             }
           }
         }
-      }
     }
   }
 

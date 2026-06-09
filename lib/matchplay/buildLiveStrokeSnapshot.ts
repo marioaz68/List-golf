@@ -3,6 +3,10 @@ import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import { getConsolationBracketId } from "@/lib/matchplay/consolationMatchPlay";
 import {
+  isThirdPlaceMatch,
+  syncThirdPlaceMatchFromSemis,
+} from "@/lib/matchplay/thirdPlaceMatch";
+import {
   deriveMatchHolesFromStrokes,
   type DerivedMatchHolesResult,
 } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
@@ -178,6 +182,8 @@ export async function buildLiveStrokeSnapshot(
 
   if (bracket?.id) {
     const bracketId = String(bracket.id);
+    await syncThirdPlaceMatchFromSemis(admin, tournamentId);
+
     const { data: matchesRaw } = await admin
       .from("matchplay_matches")
       .select(
@@ -188,6 +194,12 @@ export async function buildLiveStrokeSnapshot(
     let matches: LiveMatchPlayMatchRow[] = (matchesRaw ?? []).map((m) => ({
       ...m,
       bracket_id: String(m.bracket_id),
+      result_text:
+        isThirdPlaceMatch(m, roundCount) && m.result_text
+          ? `3er/4to · ${m.result_text}`
+          : isThirdPlaceMatch(m, roundCount)
+            ? "Match por 3er / 4to lugar"
+            : m.result_text,
     }));
 
     const consolBracketId = await getConsolationBracketId(admin, tournamentId);
