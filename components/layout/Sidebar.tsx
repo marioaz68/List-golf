@@ -209,6 +209,12 @@ export default function Sidebar() {
         requiresTournament: true,
       },
       {
+        nameKey: "scorecardsMp",
+        href: "/scorecards-mp",
+        icon: FilePenLine,
+        requiresTournament: true,
+      },
+      {
         nameKey: "leaderboard",
         href: "/leaderboard",
         icon: ListOrdered,
@@ -277,6 +283,11 @@ export default function Sidebar() {
         nameKey: "fbMesero",
         href: "/fb-mesero",
         icon: UtensilsCrossed,
+      },
+      {
+        nameKey: "fbInventario",
+        href: "/fb-inventario",
+        icon: ClipboardList,
       },
     ],
     []

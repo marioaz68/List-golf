@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { OrderStatus } from "./types";
+import { applyStockDecrement, revertStockDecrement } from "./stockMovements";
 
 /**
  * Server actions para que cocina y operadores de carrito bar avancen el
@@ -100,7 +101,12 @@ export async function markOrderDelivered(orderId: string): Promise<UpdateResult>
  *  (se carga a su cuenta del torneo). Solo el dueño del pedido puede llamar
  *  esto desde la Mini App. */
 export async function clientAcceptDelivery(orderId: string): Promise<UpdateResult> {
-  return updateOrderStatus(orderId, "delivered");
+  const r = await updateOrderStatus(orderId, "delivered");
+  if (r.ok) {
+    const admin = createAdminClient();
+    await applyStockDecrement(admin, orderId);
+  }
+  return r;
 }
 
 /** El CLIENTE rechaza la entrega (no le llegó, le dieron incorrecto, etc.).
@@ -121,10 +127,17 @@ export async function markOrderPaid(
   method?: string,
   notes?: string
 ): Promise<UpdateResult> {
-  return updateOrderStatus(orderId, "paid", {
+  const r = await updateOrderStatus(orderId, "paid", {
     paid_method: method?.trim() || null,
     paid_notes: notes?.trim() || null,
   });
+  if (r.ok) {
+    // Por si la orden saltó directo a paid sin pasar por delivered
+    // (típico en mesas: la comanda mesero va aceptado → preparing → ready → paid)
+    const admin = createAdminClient();
+    await applyStockDecrement(admin, orderId);
+  }
+  return r;
 }
 
 /** Deshacer pago (error al cobrar, devolución). Solo vuelve a 'delivered'. */
@@ -350,9 +363,15 @@ export async function cancelOrder(
   orderId: string,
   reason?: string
 ): Promise<UpdateResult> {
-  return updateOrderStatus(orderId, "cancelled", {
+  const r = await updateOrderStatus(orderId, "cancelled", {
     cancelled_reason: reason?.trim() || null,
   });
+  if (r.ok) {
+    // Si el pedido ya había decrementado stock, devolverlo
+    const admin = createAdminClient();
+    await revertStockDecrement(admin, orderId);
+  }
+  return r;
 }
 
 /** COMITÉ resuelve una disputa cargando el pedido al cliente (acepta el
@@ -381,6 +400,11 @@ export async function committeeRefundDispute(
     dispute_resolution: resolutionNote?.trim() || "Cancelado por comité",
     dispute_resolved_at: new Date().toISOString(),
   });
+  if (r.ok) {
+    // Devolver al stock lo que se había descontado
+    const admin = createAdminClient();
+    await revertStockDecrement(admin, orderId);
+  }
   revalidatePath("/fb-disputas");
   return r;
 }

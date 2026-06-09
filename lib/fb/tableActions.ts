@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type { OrderStatus } from "./types";
+import { applyStockDecrement } from "./stockMovements";
 
 /**
  * Server actions del módulo MESA (operador del restaurante).
@@ -264,8 +265,15 @@ export async function payTableOrders(args: {
     .eq("id", firstId);
   if (e2) return { ok: false, updated: 0, error: e2.message };
 
+  // Descontar inventario de cada orden cobrada (idempotente: si ya estaba
+  // decrementada porque pasó por delivered, no hace nada)
+  for (const o of open) {
+    await applyStockDecrement(admin, o.id);
+  }
+
   revalidatePath("/fb-mesero");
   revalidatePath("/fb-cuentas");
   revalidatePath("/fb-reportes");
+  revalidatePath("/fb-inventario");
   return { ok: true, updated: open.length };
 }

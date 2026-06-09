@@ -38,6 +38,7 @@ const es = {
       teeSheet: "Salidas/Grupos",
       scoreEntry: "Captura de tarjetas",
       scorecards: "Tarjetas",
+      scorecardsMp: "Tarjetas MP (imprimir)",
       leaderboard: "Clasificación",
       caddies: "Caddies",
       ritmo: "Ritmo del campo",
@@ -66,6 +67,7 @@ const es = {
       fbReportes: "Reportes del día",
       fbDisputas: "Disputas (comité)",
       fbMesero: "Mesero · Restaurante",
+      fbInventario: "Inventario",
     },
   },
   common: {
@@ -1714,6 +1716,7 @@ const en: Messages = {
       teeSheet: "Starters / Groups",
       scoreEntry: "Score entry",
       scorecards: "Scorecards",
+      scorecardsMp: "MP scorecards (print)",
       leaderboard: "Leaderboard",
       caddies: "Caddies",
       ritmo: "Pace of play",
@@ -1742,6 +1745,7 @@ const en: Messages = {
       fbReportes: "Daily reports",
       fbDisputas: "Disputes (committee)",
       fbMesero: "Waiter · Restaurant",
+      fbInventario: "Inventory",
     },
   },
   common: {

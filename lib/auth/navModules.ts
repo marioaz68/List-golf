@@ -12,6 +12,7 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   teeSheet: "tee-sheet",
   scoreEntry: "score-entry",
   scorecards: "scorecards",
+  scorecardsMp: "scorecards",
   leaderboard: "leaderboard",
   caddies: "caddies",
   ritmo: "ritmo",
@@ -40,4 +41,5 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   fbReportes: "fb-manage",
   fbDisputas: "fb-manage",
   fbMesero: "fb-waiter",
+  fbInventario: "fb-manage",
 };
