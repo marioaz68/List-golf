@@ -182,7 +182,7 @@ export default async function EditTournamentPage({
       supabase
         .from("tournaments")
         .select(
-          "id, name, short_name, status, club_id, club_name, course_id, course_name, start_date"
+          "id, name, short_name, status, club_id, club_name, course_id, course_name, start_date, kind"
         )
         .eq("id", tournament_id)
         .single(),
@@ -203,6 +203,12 @@ export default async function EditTournamentPage({
     throw new Error(
       `Error leyendo torneo: ${tournamentError?.message ?? "No encontrado"}`
     );
+  }
+
+  // Las rondas del día no usan el editor de torneos: van directo a la agenda
+  // de salidas (alta de grupos + Telegram).
+  if ((tournament as { kind?: string | null }).kind === "daily_round") {
+    redirect(`/rondas-diarias/${tournament_id}`);
   }
 
   const row = tournament as TournamentRow;
