@@ -98,14 +98,6 @@ function normalizeName(p: Player) {
   return `${ln} ${fn}`.trim().toLowerCase();
 }
 
-function normalizeText(value: string | null | undefined) {
-  return (value ?? "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
 function normalizeGender(g: unknown): "M" | "F" {
   return g === "F" ? "F" : "M";
 }
@@ -120,14 +112,6 @@ function clubLabelFromClub(clubs: ClubRef | ClubRef[] | null | undefined) {
   const club = firstClub(clubs);
   const v = (club?.short_name ?? club?.name ?? "").trim();
   return v || "—";
-}
-
-function findPreferredTournament(tournaments: Tournament[]) {
-  const withoutPrueba2 = tournaments.filter(
-    (t) => !normalizeText(t.name).includes("torneo prueba 2")
-  );
-
-  return withoutPrueba2[0] ?? tournaments[0] ?? null;
 }
 
 function displayCell(value: string | number | null | undefined) {
@@ -247,6 +231,7 @@ export default async function PlayersPage(props: {
   const { data: tData, error: tErr } = await supabase
     .from("tournaments")
     .select("id, name")
+    .neq("kind", "daily_round")
     .order("created_at", { ascending: false });
 
   if (tErr) {
@@ -259,10 +244,10 @@ export default async function PlayersPage(props: {
   }
 
   const tournaments: Tournament[] = (tData ?? []) as Tournament[];
-  const preferredTournament = findPreferredTournament(tournaments);
 
-  const effectiveTournamentId =
-    tournamentIdParam || preferredTournament?.id || "";
+  // No autoseleccionamos torneo: por defecto los jugadores se muestran sin
+  // categoría. La categoría solo se calcula si el usuario elige un torneo.
+  const effectiveTournamentId = tournamentIdParam || "";
 
   const tournamentLabel = (t: Tournament) =>
     (t.name ?? "").trim() || `Torneo ${t.id.slice(0, 8)}`;
@@ -500,15 +485,12 @@ export default async function PlayersPage(props: {
               defaultValue={effectiveTournamentId}
               className={inputClass}
             >
-              {tournaments.length === 0 ? (
-                <option value="">Sin torneos</option>
-              ) : (
-                tournaments.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {tournamentLabel(t)}
-                  </option>
-                ))
-              )}
+              <option value="">Sin torneo (sin categoría)</option>
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {tournamentLabel(t)}
+                </option>
+              ))}
             </select>
 
             <select
