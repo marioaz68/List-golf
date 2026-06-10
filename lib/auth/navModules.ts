@@ -44,5 +44,6 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   fbInventario: "fb-manage",
   fbFraccionamiento: "fb-manage",
   fbCuentasDeposito: "fb-manage",
+  fbRestaurante: "fb-manage",
   dailyRounds: "daily-rounds",
 };

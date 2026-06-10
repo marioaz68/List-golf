@@ -302,6 +302,11 @@ export default function Sidebar() {
         icon: Landmark,
       },
       {
+        nameKey: "fbRestaurante",
+        href: "/fb-restaurante",
+        icon: UtensilsCrossed,
+      },
+      {
         nameKey: "dailyRounds",
         href: "/rondas-diarias",
         icon: CalendarDays,

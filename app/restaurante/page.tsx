@@ -18,6 +18,10 @@ import {
 } from "@/lib/fb/queries";
 import { formatPrice } from "@/lib/fb/types";
 import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
+import {
+  DEFAULT_BUSINESS_PROFILE,
+  rowToBusinessProfile,
+} from "@/lib/fb/businessProfile";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,22 +32,25 @@ export const metadata: Metadata = {
     "Menú del Restaurante Hoyo 6: comida, bebidas y snacks. Pide y paga con tarjeta desde tu celular: recoger en el restaurante, carrito bar en el campo o reparto a domicilio en el fraccionamiento.",
 };
 
-// Datos de contacto del negocio (mostrados públicamente para Stripe).
-const CONTACT_EMAIL =
-  process.env.NEXT_PUBLIC_FB_CONTACT_EMAIL?.trim() || "contacto@listgolf.club";
-const CONTACT_PHONE =
-  process.env.NEXT_PUBLIC_FB_CONTACT_PHONE?.trim() || "+52 442 000 0000";
-const BUSINESS_NAME =
-  process.env.NEXT_PUBLIC_FB_BUSINESS_NAME?.trim() || "Restaurante Hoyo 6";
-
 export default async function RestaurantePublicPage() {
   const admin = createAdminClient();
-  const [venues, categories, items] = await Promise.all([
+  const [venues, categories, items, profileRes] = await Promise.all([
     listVenues(admin, { onlyActive: true }),
     listCategories(admin, { onlyActive: true }),
     listMenuItems(admin, { onlyActive: true }),
+    admin.from("fb_business_profile").select("*").limit(1).maybeSingle(),
   ]);
   const menu = groupMenuByCategory(categories, items);
+
+  const profile = profileRes.data
+    ? rowToBusinessProfile(profileRes.data as Record<string, unknown>)
+    : DEFAULT_BUSINESS_PROFILE;
+  const BUSINESS_NAME = profile.businessName;
+  const CONTACT_EMAIL = profile.contactEmail ?? DEFAULT_BUSINESS_PROFILE.contactEmail!;
+  const CONTACT_PHONE = profile.contactPhone ?? DEFAULT_BUSINESS_PROFILE.contactPhone!;
+  const INTRO = profile.intro ?? DEFAULT_BUSINESS_PROFILE.intro!;
+  const ADDRESS = profile.address ?? DEFAULT_BUSINESS_PROFILE.address!;
+  const REFUND = profile.refundPolicy ?? DEFAULT_BUSINESS_PROFILE.refundPolicy!;
 
   return (
     <main className="min-h-screen bg-[#08111f] text-white">
@@ -68,9 +75,7 @@ export default async function RestaurantePublicPage() {
             {BUSINESS_NAME}
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-300 sm:text-base">
-            Comida, bebidas y snacks del club. Pide desde tu celular y recibe en
-            el restaurante, en el campo con el carrito bar, o a domicilio dentro
-            del fraccionamiento.
+            {INTRO}
           </p>
           <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
             <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
@@ -197,21 +202,8 @@ export default async function RestaurantePublicPage() {
       <section className="border-t border-white/10 bg-[#0b1526]">
         <div className="mx-auto max-w-4xl px-5 py-8">
           <h2 className="text-lg font-bold">Cancelaciones y reembolsos</h2>
-          <div className="mt-3 space-y-2 text-xs text-slate-400">
-            <p>
-              Los pedidos para recoger y a domicilio se pagan por adelantado con
-              tarjeta. Si un pedido no puede prepararse o entregarse, se realiza
-              el reembolso íntegro al mismo método de pago.
-            </p>
-            <p>
-              Si recibes un producto incorrecto o tu pedido no llega, puedes
-              reportarlo desde la app o contactando al club; revisaremos el caso
-              y aplicaremos el reembolso o reposición que corresponda.
-            </p>
-            <p>
-              Los reembolsos se procesan a través de Stripe y pueden tardar de 5
-              a 10 días hábiles en reflejarse, según tu banco.
-            </p>
+          <div className="mt-3 space-y-2 whitespace-pre-line text-xs text-slate-400">
+            {REFUND}
           </div>
         </div>
       </section>
@@ -241,8 +233,8 @@ export default async function RestaurantePublicPage() {
             </p>
           </div>
           <p className="mt-6 text-[11px] text-slate-500">
-            Pagos procesados de forma segura por Stripe. {BUSINESS_NAME} ·
-            Querétaro, México.
+            Pagos procesados de forma segura por Stripe. {BUSINESS_NAME} ·{" "}
+            {ADDRESS}.
           </p>
         </div>
       </section>
