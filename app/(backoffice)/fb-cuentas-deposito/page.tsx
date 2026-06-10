@@ -9,7 +9,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
   rowToDepositAccount,
   type DepositAccount,
-} from "@/lib/fb/depositAccountActions";
+} from "@/lib/fb/depositAccounts";
 import CuentasDepositoClient from "./CuentasDepositoClient";
 
 export const dynamic = "force-dynamic";

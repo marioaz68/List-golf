@@ -6,10 +6,12 @@ import {
   deleteDepositAccount,
   setDefaultDepositAccount,
   updateDepositAccount,
-  type DepositAccount,
-  type DepositAccountInput,
-  type DepositAccountKind,
 } from "@/lib/fb/depositAccountActions";
+import type {
+  DepositAccount,
+  DepositAccountInput,
+  DepositAccountKind,
+} from "@/lib/fb/depositAccounts";
 
 interface Props {
   initialAccounts: DepositAccount[];
