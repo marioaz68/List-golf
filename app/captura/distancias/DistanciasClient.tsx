@@ -1,14 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+import { computeAllHoleDistances } from "@/lib/distances/ccqGreens";
 import {
-  CCQ_GREEN_CENTERS,
-  computeAllHoleDistances,
-  type DistanceToHole,
-} from "@/lib/distances/ccqGreens";
+  CCQ_HOLE_POINTS,
+  greenDistances,
+  referenceDistances,
+  yardsBetween,
+} from "@/lib/distances/ccqHolePoints";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
+import type { TapPoint } from "@/components/captura/HoleYardageMap";
+
+function MapSkeleton() {
+  return (
+    <div className="flex h-full min-h-[280px] items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-sm text-slate-400">
+      Cargando mapa…
+    </div>
+  );
+}
+
+const HoleYardageMap = dynamic(
+  () =>
+    import("@/components/captura/HoleYardageMap").then((m) => m.HoleYardageMap),
+  { ssr: false, loading: () => <MapSkeleton /> }
+);
 
 type GeoState =
   | { status: "idle" }
@@ -16,10 +34,6 @@ type GeoState =
   | { status: "denied"; message: string }
   | { status: "error"; message: string }
   | { status: "ok"; lat: number; lon: number; accuracy: number; ts: number };
-
-function formatYds(yd: number): string {
-  return `${Math.round(yd)}`;
-}
 
 function timeAgo(ms: number): string {
   const sec = Math.round((Date.now() - ms) / 1000);
@@ -31,9 +45,10 @@ function timeAgo(ms: number): string {
 
 export default function DistanciasClient() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
+  const [manualHole, setManualHole] = useState<number | null>(null);
+  const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
-  // Pedir GPS al cargar la página
   useEffect(() => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       setGeo({
@@ -57,7 +72,7 @@ export default function DistanciasClient() {
           setGeo({
             status: "denied",
             message:
-              "Permiso de ubicación bloqueado. Habilita el GPS para esta página en los ajustes del navegador.",
+              "Permiso de ubicación bloqueado. Habilita el GPS para esta página.",
           });
         } else {
           setGeo({
@@ -76,37 +91,64 @@ export default function DistanciasClient() {
     };
   }, []);
 
-  // Distancias calculadas en cliente cada vez que cambia la posición
-  const distances: DistanceToHole[] = useMemo(() => {
-    if (geo.status !== "ok") return [];
-    return computeAllHoleDistances(geo.lat, geo.lon);
-  }, [geo]);
-
-  // Hoyo en el que está parado el jugador (según polígonos del CCQ)
-  const currentHole = useMemo(() => {
+  const detectedHole = useMemo(() => {
     if (geo.status !== "ok") return null;
     return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES);
   }, [geo]);
 
-  // Top 3 hoyos por proximidad (excluyendo el actual)
-  const topNear = useMemo(() => {
-    if (distances.length === 0) return [];
-    return distances
-      .filter((d) => d.holeNo !== currentHole)
-      .slice(0, 3);
-  }, [distances, currentHole]);
+  const nearestHole = useMemo(() => {
+    if (geo.status !== "ok") return 1;
+    const sorted = computeAllHoleDistances(geo.lat, geo.lon);
+    return sorted[0]?.holeNo ?? 1;
+  }, [geo]);
 
-  const currentDistance = useMemo(() => {
-    if (currentHole == null) return null;
-    return distances.find((d) => d.holeNo === currentHole) ?? null;
-  }, [distances, currentHole]);
+  const activeHole = manualHole ?? detectedHole ?? nearestHole;
+
+  const greenYds = useMemo(() => {
+    if (geo.status !== "ok") return null;
+    return greenDistances(geo.lat, geo.lon, activeHole);
+  }, [geo, activeHole]);
+
+  const refPoints = useMemo(() => {
+    if (geo.status !== "ok") return [];
+    return referenceDistances(geo.lat, geo.lon, activeHole);
+  }, [geo, activeHole]);
+
+  const holeMeta = CCQ_HOLE_POINTS[activeHole];
+
+  const onMapTap = useCallback(
+    (lat: number, lon: number) => {
+      if (geo.status !== "ok") return;
+      setTapPoint({
+        lat,
+        lon,
+        yards: yardsBetween(geo.lat, geo.lon, lat, lon),
+      });
+    },
+    [geo]
+  );
+
+  const changeHole = (delta: number) => {
+    setManualHole(((prev) => {
+      const base = prev ?? detectedHole ?? nearestHole;
+      let next = base + delta;
+      if (next < 1) next = 18;
+      if (next > 18) next = 1;
+      return next;
+    })());
+    setTapPoint(null);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 pb-8 text-slate-100">
-      {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900 px-4 py-3">
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-base font-bold">📏 Distancias · CCQ</h1>
+    <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
+      <header className="shrink-0 border-b border-slate-800 bg-slate-900 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-sm font-bold">📏 Yardas · CCQ</h1>
+            <p className="text-[10px] text-slate-400">
+              Mapa del campo · misma base que ritmo del campo
+            </p>
+          </div>
           <Link
             href="/"
             className="text-[11px] font-semibold text-slate-400 underline"
@@ -114,189 +156,159 @@ export default function DistanciasClient() {
             cerrar
           </Link>
         </div>
-        <p className="mt-0.5 text-[11px] text-slate-400">
-          Distancia en yardas al centro del green
-        </p>
       </header>
 
-      {/* GPS status */}
-      <section className="mx-3 mt-3 rounded-lg border border-slate-800 bg-slate-900 p-3">
+      {/* GPS */}
+      <section className="shrink-0 border-b border-slate-800 px-3 py-2">
         {geo.status === "idle" || geo.status === "requesting" ? (
-          <p className="text-center text-sm text-slate-300">
-            📡 Esperando posición GPS…
+          <p className="text-center text-xs text-slate-300">
+            📡 Esperando GPS…
           </p>
-        ) : geo.status === "denied" ? (
-          <div className="text-center">
-            <p className="text-sm font-bold text-amber-300">
-              ⚠ {geo.message}
-            </p>
-            <p className="mt-1 text-[11px] text-slate-400">
-              En iPhone: Ajustes → Safari → Ubicación → Permitir. En Android:
-              candado en la barra → Permisos → Ubicación → Permitir.
-            </p>
-          </div>
-        ) : geo.status === "error" ? (
-          <p className="text-center text-sm text-red-300">
-            ⚠ {geo.message}
+        ) : geo.status === "denied" || geo.status === "error" ? (
+          <p className="text-center text-xs text-amber-300">
+            ⚠ {geo.status === "denied" ? geo.message : geo.message}
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="GPS" value="✓" />
-            <Stat
-              label="Precisión"
-              value={`${Math.round(geo.accuracy)}m`}
-              warn={geo.accuracy > 25}
-            />
-            <Stat label="Última" value={timeAgo(geo.ts)} />
+          <div className="flex items-center justify-between text-[10px] text-slate-400">
+            <span>GPS ✓ · ±{Math.round(geo.accuracy)}m</span>
+            <span>Hace {timeAgo(geo.ts)}</span>
+            {detectedHole == null ? (
+              <span className="text-amber-300">Fuera de hoyo</span>
+            ) : (
+              <span className="text-emerald-400">Hoyo {detectedHole}</span>
+            )}
           </div>
         )}
       </section>
 
-      {/* Hoyo actual */}
-      {currentDistance ? (
-        <section className="mx-3 mt-3 rounded-xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-900/40 to-emerald-950/60 p-4">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-              Estás en
+      {/* Selector de hoyo + F/C/B */}
+      <section className="shrink-0 border-b border-slate-800 px-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => changeHole(-1)}
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs font-bold"
+          >
+            ‹
+          </button>
+          <div className="text-center">
+            <div className="text-lg font-black text-emerald-100">
+              Hoyo {activeHole}
             </div>
-            <div className="text-[10px] text-emerald-400">
-              par {currentDistance.par}
-            </div>
-          </div>
-          <div className="mt-1 flex items-baseline justify-between gap-3">
-            <div className="text-5xl font-black text-emerald-100">
-              Hoyo {currentDistance.holeNo}
-            </div>
-            <div className="text-right">
-              <div className="text-[10px] font-bold uppercase text-emerald-300">
-                Al green
-              </div>
-              <div className="text-4xl font-black text-emerald-100">
-                {formatYds(currentDistance.distanceYards)}
-              </div>
-              <div className="text-[10px] text-emerald-300">yardas</div>
+            <div className="text-[10px] text-slate-400">
+              par {holeMeta?.par ?? "—"}
+              {manualHole != null ? " · manual" : ""}
             </div>
           </div>
-        </section>
-      ) : geo.status === "ok" && currentHole == null ? (
-        <section className="mx-3 mt-3 rounded-lg border border-amber-700 bg-amber-950/50 p-3 text-center text-[12px] text-amber-200">
-          📍 No estás dentro de ningún polígono de hoyo del CCQ. ¿Vas caminando
-          entre hoyos? Te muestro los más cercanos abajo.
-        </section>
-      ) : null}
+          <button
+            type="button"
+            onClick={() => changeHole(1)}
+            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs font-bold"
+          >
+            ›
+          </button>
+        </div>
 
-      {/* Próximos hoyos por proximidad */}
-      {topNear.length > 0 ? (
-        <section className="mx-3 mt-3">
-          <h2 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            Hoyos cercanos
-          </h2>
-          <div className="space-y-1.5">
-            {topNear.map((d) => (
-              <div
-                key={d.holeNo}
-                className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900 px-3 py-2"
-              >
-                <div>
-                  <div className="text-lg font-bold text-slate-100">
-                    Hoyo {d.holeNo}
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    par {d.par}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-slate-200">
-                    {formatYds(d.distanceYards)}
-                  </div>
-                  <div className="text-[10px] text-slate-400">yardas</div>
-                </div>
+        {greenYds ? (
+          <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+            <GreenChip label="Frente" yards={greenYds.front} />
+            <GreenChip label="Centro" yards={greenYds.center} highlight />
+            <GreenChip label="Fondo" yards={greenYds.back} />
+          </div>
+        ) : null}
+      </section>
+
+      {/* Mapa */}
+      <section className="min-h-0 flex-1 px-2 py-2">
+        {geo.status === "ok" && greenYds ? (
+          <HoleYardageMap
+            holeNo={activeHole}
+            playerLat={geo.lat}
+            playerLon={geo.lon}
+            yardsToCenter={greenYds.center}
+            referencePoints={refPoints}
+            tapPoint={tapPoint}
+            onMapTap={onMapTap}
+          />
+        ) : (
+          <MapSkeleton />
+        )}
+      </section>
+
+      {/* Tap + puntos de referencia */}
+      <section className="shrink-0 border-t border-slate-800 px-3 py-2 pb-4">
+        {tapPoint ? (
+          <div className="mb-2 flex items-center justify-between rounded-lg border border-pink-700/50 bg-pink-950/40 px-3 py-2">
+            <div>
+              <div className="text-[10px] font-bold uppercase text-pink-300">
+                Punto tocado
               </div>
-            ))}
+              <div className="text-2xl font-black text-pink-100">
+                {tapPoint.yards}{" "}
+                <span className="text-sm font-bold">yds</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTapPoint(null)}
+              className="rounded-md border border-pink-600/50 px-2 py-1 text-[10px] text-pink-200"
+            >
+              Quitar
+            </button>
           </div>
-        </section>
-      ) : null}
+        ) : null}
 
-      {/* Tabla completa */}
-      {distances.length > 0 ? (
-        <section className="mx-3 mt-4">
-          <h2 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            Todos los hoyos
-          </h2>
-          <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="border-b border-slate-800 bg-slate-800/50 text-left text-[9px] uppercase text-slate-500">
-                  <th className="px-2 py-1.5">Hoyo</th>
-                  <th className="px-2 py-1.5">Par</th>
-                  <th className="px-2 py-1.5 text-right">Yardas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.keys(CCQ_GREEN_CENTERS)
-                  .map((k) => Number(k))
-                  .sort((a, b) => a - b)
-                  .map((n) => {
-                    const d = distances.find((x) => x.holeNo === n);
-                    const isCurrent = n === currentHole;
-                    return (
-                      <tr
-                        key={n}
-                        className={[
-                          "border-b border-slate-800/60 last:border-b-0",
-                          isCurrent ? "bg-emerald-900/40" : "",
-                        ].join(" ")}
-                      >
-                        <td className="px-2 py-1.5 font-bold text-slate-200">
-                          {n}
-                          {isCurrent ? (
-                            <span className="ml-1 text-[9px] text-emerald-400">
-                              ●
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-1.5 text-slate-400">
-                          {CCQ_GREEN_CENTERS[n].par}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-bold text-slate-100">
-                          {d ? formatYds(d.distanceYards) : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      <p className="mx-3 mt-4 text-center text-[10px] text-slate-600">
-        Distancia al centro del green. Para acercamientos cortos, considera
-        el viento y la elevación.
-      </p>
+        <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Puntos del hoyo
+        </h2>
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+          {refPoints.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-900 px-2 py-1.5"
+            >
+              <span className="truncate text-[11px] text-slate-300">
+                {p.label}
+              </span>
+              <span className="ml-1 shrink-0 text-sm font-bold text-slate-100">
+                {p.yards}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
 
-function Stat({
+function GreenChip({
   label,
-  value,
-  warn,
+  yards,
+  highlight,
 }: {
   label: string;
-  value: string;
-  warn?: boolean;
+  yards: number;
+  highlight?: boolean;
 }) {
   return (
-    <div className="rounded-md bg-slate-800/60 px-1.5 py-1">
-      <div className="text-[9px] font-bold uppercase text-slate-400">{label}</div>
+    <div
+      className={[
+        "rounded-lg border px-1 py-1.5",
+        highlight
+          ? "border-emerald-500 bg-emerald-900/50"
+          : "border-slate-700 bg-slate-900",
+      ].join(" ")}
+    >
+      <div className="text-[9px] font-bold uppercase text-slate-400">
+        {label}
+      </div>
       <div
         className={[
-          "text-sm font-bold",
-          warn ? "text-amber-300" : "text-slate-100",
+          "text-xl font-black",
+          highlight ? "text-emerald-100" : "text-slate-200",
         ].join(" ")}
       >
-        {value}
+        {yards}
       </div>
     </div>
   );

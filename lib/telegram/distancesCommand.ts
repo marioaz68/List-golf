@@ -21,12 +21,13 @@ export function buildDistancesReply(): {
 } {
   return {
     text: [
-      "📏 Distancias al green del CCQ",
+      "📏 Yardas al green del CCQ",
       "",
-      "Abre la pantalla, da permiso de ubicación y verás:",
-      "  • En qué hoyo estás parado",
-      "  • Yardas al centro del green",
-      "  • Tabla de los 18 hoyos cercanos",
+      "Abre la pantalla con mapa satélite del campo:",
+      "  • Frente, centro y fondo del green",
+      "  • Yardas a todos los puntos del hoyo",
+      "  • Toca el mapa para medir a cualquier punto",
+      "  • Zoom automático al acercarte al green",
     ].join("\n"),
     buttons: [[{ text: "📏 Abrir distancias", url: `${appUrl()}/captura/distancias` }]],
   };
