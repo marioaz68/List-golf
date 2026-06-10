@@ -1,6 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  CCQ_DISPLAY_NAME,
+  CCQ_NORMALIZED_NAME,
+  isCcqNormalizedName,
+  normalizeClubText,
+  resolveClubLookupNormalized,
+  validateClubIdentity,
+} from "@/lib/clubs/clubIdentity";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 function reqStr(fd: FormData, key: string) {
@@ -20,12 +28,7 @@ function boolFromForm(fd: FormData, key: string) {
 }
 
 function normalizeText(value: string) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
+  return normalizeClubText(value);
 }
 
 function normalizeShortName(value: string | null) {
@@ -59,6 +62,7 @@ const CLUB_SHORT_OVERRIDES: Record<string, string> = {
   "CLUB CAMPESTRE CHILUCA": "CHI",
   "CLUB CAMPESTRE DE CELAYA": "CCC",
   "CLUB CAMPESTRE DE LEON": "CCL",
+  "CLUB CAMPESTRE DE QUERETARO": "CCQ",
 };
 
 function buildSmartClubShortName(name: string) {
@@ -310,16 +314,15 @@ export async function createClub(formData: FormData) {
   const supabase = createAdminClient();
 
   const name = reqStr(formData, "name");
-  const short_name = getFinalClubShortName(name, optStr(formData, "short_name"));
+  const submittedShort = optStr(formData, "short_name");
+  const short_name = isCcqNormalizedName(normalizeText(name))
+    ? "CCQ"
+    : getFinalClubShortName(name, submittedShort);
   const is_active = boolFromForm(formData, "is_active");
-  const normalized_name = normalizeText(name);
+  const { normalized_name } = validateClubIdentity({ name, short_name });
   const primary_color =
     optStr(formData, "primary_color") || colorFromShortName(short_name, name);
   const logo_url = normalizeDropboxUrl(optStr(formData, "logo_url"));
-
-  if (!normalized_name) {
-    throw new Error("Falta nombre válido del club.");
-  }
 
   await ensureUniqueNormalizedName(null, normalized_name);
 
@@ -358,9 +361,12 @@ export async function updateClub(formData: FormData) {
 
   const club_id = reqStr(formData, "club_id");
   const name = reqStr(formData, "name");
-  const short_name = getFinalClubShortName(name, optStr(formData, "short_name"));
+  const submittedShort = optStr(formData, "short_name");
+  const short_name = isCcqNormalizedName(normalizeText(name))
+    ? "CCQ"
+    : getFinalClubShortName(name, submittedShort);
   const is_active = boolFromForm(formData, "is_active");
-  const normalized_name = normalizeText(name);
+  const { normalized_name } = validateClubIdentity({ name, short_name });
   const existingClub = await getClubById(club_id);
 
   if (!existingClub) {
@@ -375,10 +381,6 @@ export async function updateClub(formData: FormData) {
     optStr(formData, "primary_color") ||
     existingClub.primary_color ||
     colorFromShortName(short_name, name);
-
-  if (!normalized_name) {
-    throw new Error("Falta nombre válido del club.");
-  }
 
   const previousNormalized = normalizeText(existingClub.name || "");
   const normalizedChanged = normalized_name !== previousNormalized;
@@ -545,6 +547,96 @@ export async function toggleClubActive(formData: FormData) {
   revalidateAll();
 
   return data;
+}
+
+type ClubLookupRow = {
+  id: string;
+  name: string | null;
+  short_name: string | null;
+};
+
+/** Busca un club por nombre o lo crea con las mismas reglas del módulo de clubs. */
+export async function findOrCreateClubByName(
+  rawName: string
+): Promise<ClubLookupRow | null> {
+  const name = rawName.trim();
+  if (!name) return null;
+
+  const lookupNorm = resolveClubLookupNormalized(name);
+  const displayName = isCcqNormalizedName(lookupNorm) ? CCQ_DISPLAY_NAME : name;
+  const short_name = isCcqNormalizedName(lookupNorm)
+    ? "CCQ"
+    : getFinalClubShortName(displayName, displayName);
+  const { normalized_name } = validateClubIdentity({
+    name: displayName,
+    short_name,
+  });
+
+  const supabase = createAdminClient();
+
+  if (isCcqNormalizedName(lookupNorm)) {
+    const { data: ccq, error: ccqErr } = await supabase
+      .from("clubs")
+      .select("id, name, short_name")
+      .eq("normalized_name", CCQ_NORMALIZED_NAME)
+      .eq("short_name", "CCQ")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (ccqErr) throw new Error(ccqErr.message);
+    if (ccq?.id) return ccq as ClubLookupRow;
+  }
+
+  const { data: existing, error: existingErr } = await supabase
+    .from("clubs")
+    .select("id, name, short_name")
+    .eq("normalized_name", normalized_name)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (existingErr) throw new Error(existingErr.message);
+  if (existing?.id) return existing as ClubLookupRow;
+
+  await ensureUniqueNormalizedName(null, normalized_name);
+
+  const primary_color = colorFromShortName(short_name, displayName);
+  const generated_logo_url = buildGeneratedLogoDataUrl({
+    short_name,
+    name: displayName,
+    primary_color,
+  });
+
+  const { data: created, error: insertErr } = await supabase
+    .from("clubs")
+    .insert({
+      name: displayName,
+      short_name,
+      normalized_name,
+      generated_logo_url,
+      primary_color,
+      is_verified_logo: false,
+      is_active: true,
+    })
+    .select("id, name, short_name")
+    .single();
+
+  if (insertErr?.code === "23505") {
+    const { data: retry, error: retryErr } = await supabase
+      .from("clubs")
+      .select("id, name, short_name")
+      .eq("normalized_name", normalized_name)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (retryErr) throw new Error(retryErr.message);
+    if (retry?.id) return retry as ClubLookupRow;
+  }
+
+  if (insertErr) throw new Error(insertErr.message);
+  if (!created?.id) return null;
+
+  revalidateAll();
+  return created as ClubLookupRow;
 }
 
 export async function mergeClubIntoWinner(formData: FormData) {

@@ -1,5 +1,10 @@
 "use server";
 
+import {
+  isCcqNormalizedName,
+  normalizeClubText,
+  validateClubIdentity,
+} from "@/lib/clubs/clubIdentity";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -27,12 +32,7 @@ function normalizeCode(v: string) {
 }
 
 function normalizeText(value: string | null | undefined) {
-  return (value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
+  return normalizeClubText(value);
 }
 
 type TeeSetRow = {
@@ -149,11 +149,13 @@ async function resolveClubForCreateCourse(
   if (club_mode === "new") {
     const new_club_name = reqStr(formData, "new_club_name");
     const new_club_short_name = optStr(formData, "new_club_short_name");
-    const normalized_name = normalizeText(new_club_name);
-
-    if (!normalized_name) {
-      throw new Error("Falta new_club_name");
-    }
+    const short_name = isCcqNormalizedName(normalizeText(new_club_name))
+      ? "CCQ"
+      : new_club_short_name;
+    const { normalized_name } = validateClubIdentity({
+      name: new_club_name,
+      short_name,
+    });
 
     const existing = await findClubByNormalizedName(supabase, normalized_name);
 
@@ -183,7 +185,7 @@ async function resolveClubForCreateCourse(
       .from("clubs")
       .insert({
         name: new_club_name,
-        short_name: new_club_short_name,
+        short_name: short_name ?? new_club_short_name,
         normalized_name,
         is_active: true,
       })

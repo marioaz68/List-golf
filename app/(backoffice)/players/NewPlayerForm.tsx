@@ -5,6 +5,7 @@ import type { CSSProperties, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { normalizePhoneToE164 } from "@/utils/phone";
+import { findOrCreateClubByName } from "@/app/(backoffice)/clubs/actions";
 import { deletePlayerAction, savePlayerAction } from "@/app/(backoffice)/players/actions";
 import StealthTextInput from "@/components/ui/StealthTextInput";
 
@@ -584,79 +585,16 @@ export default function NewPlayerForm({
     const trimmed = rawClub.trim();
     if (!trimmed) return null;
 
-    const normalized_name = normalizeClubName(trimmed);
-
-    const { data: existing, error: existingError } = await supabase
-      .from("clubs")
-      .select("id,name,short_name,is_active")
-      .eq("normalized_name", normalized_name)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (existingError) {
-      throw new Error(existingError.message);
+    const resolved = await findOrCreateClubByName(trimmed);
+    if (!resolved?.id) {
+      return { id: null, name: trimmed };
     }
 
-    if (existing?.id) {
-      setClub(existing.name ?? trimmed);
-      setClubId(existing.id);
-      return {
-        id: existing.id,
-        name: existing.name ?? trimmed,
-      };
-    }
-
-    const insertPayload = {
-      name: trimmed,
-      short_name: trimmed,
-      normalized_name,
-      is_active: true,
-    };
-
-    const { data: inserted, error: insertClubError } = await supabase
-      .from("clubs")
-      .insert(insertPayload)
-      .select("id,name,short_name,is_active")
-      .single();
-
-    if (insertClubError && insertClubError.code !== "23505") {
-      throw new Error(insertClubError.message);
-    }
-
-    if (inserted?.id) {
-      setClub(inserted.name ?? trimmed);
-      setClubId(inserted.id);
-      return {
-        id: inserted.id,
-        name: inserted.name ?? trimmed,
-      };
-    }
-
-    if (insertClubError?.code === "23505") {
-      const { data: retryExisting, error: retryError } = await supabase
-        .from("clubs")
-        .select("id,name,short_name,is_active")
-        .eq("normalized_name", normalized_name)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (retryError) {
-        throw new Error(retryError.message);
-      }
-
-      if (retryExisting?.id) {
-        setClub(retryExisting.name ?? trimmed);
-        setClubId(retryExisting.id);
-        return {
-          id: retryExisting.id,
-          name: retryExisting.name ?? trimmed,
-        };
-      }
-    }
-
+    setClub(resolved.name ?? trimmed);
+    setClubId(resolved.id);
     return {
-      id: null,
-      name: trimmed,
+      id: resolved.id,
+      name: resolved.name ?? trimmed,
     };
   };
 

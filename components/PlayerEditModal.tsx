@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { normalizePhoneToE164 } from "@/utils/phone";
+import { findOrCreateClubByName } from "@/app/(backoffice)/clubs/actions";
 import { savePlayerAction } from "@/app/(backoffice)/players/actions";
 import {
   updateEntryCategory,
@@ -452,78 +453,16 @@ export default function PlayerEditModal({
     const trimmed = rawClub.trim();
     if (!trimmed) return null;
 
-    const normalized_name = normalizeClubName(trimmed);
-    const supabase = createClient();
-
-    const { data: existing, error: existingError } = await supabase
-      .from("clubs")
-      .select("id,name,short_name,is_active")
-      .eq("normalized_name", normalized_name)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (existingError) {
-      throw new Error(existingError.message);
+    const resolved = await findOrCreateClubByName(trimmed);
+    if (!resolved?.id) {
+      return { id: null, name: trimmed };
     }
 
-    if (existing?.id) {
-      setClub(existing.name);
-      setClubId(existing.id);
-      return {
-        id: existing.id,
-        name: existing.name,
-      };
-    }
-
-    const { data: inserted, error: insertClubError } = await supabase
-      .from("clubs")
-      .insert({
-        name: trimmed,
-        short_name: trimmed,
-        normalized_name,
-        is_active: true,
-      })
-      .select("id,name,short_name,is_active")
-      .single();
-
-    if (insertClubError && insertClubError.code !== "23505") {
-      throw new Error(insertClubError.message);
-    }
-
-    if (inserted?.id) {
-      setClub(inserted.name);
-      setClubId(inserted.id);
-      return {
-        id: inserted.id,
-        name: inserted.name,
-      };
-    }
-
-    if (insertClubError?.code === "23505") {
-      const { data: retryExisting, error: retryError } = await supabase
-        .from("clubs")
-        .select("id,name,short_name,is_active")
-        .eq("normalized_name", normalized_name)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (retryError) {
-        throw new Error(retryError.message);
-      }
-
-      if (retryExisting?.id) {
-        setClub(retryExisting.name);
-        setClubId(retryExisting.id);
-        return {
-          id: retryExisting.id,
-          name: retryExisting.name,
-        };
-      }
-    }
-
+    setClub(resolved.name ?? trimmed);
+    setClubId(resolved.id);
     return {
-      id: null,
-      name: trimmed,
+      id: resolved.id,
+      name: resolved.name ?? trimmed,
     };
   };
 
