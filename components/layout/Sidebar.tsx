@@ -39,6 +39,8 @@ import {
   Scale,
   Send,
   UtensilsCrossed,
+  Home,
+  Landmark,
   X,
 } from "lucide-react";
 
@@ -288,6 +290,16 @@ export default function Sidebar() {
         nameKey: "fbInventario",
         href: "/fb-inventario",
         icon: ClipboardList,
+      },
+      {
+        nameKey: "fbFraccionamiento",
+        href: "/fb-fraccionamiento",
+        icon: Home,
+      },
+      {
+        nameKey: "fbCuentasDeposito",
+        href: "/fb-cuentas-deposito",
+        icon: Landmark,
       },
       {
         nameKey: "dailyRounds",

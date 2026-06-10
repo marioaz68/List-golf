@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   const reason = o.reason ? String(o.reason) : undefined;
   const entryId = o.entry_id ? String(o.entry_id).trim() : null;
   const caddieId = o.caddie_id ? String(o.caddie_id).trim() : null;
+  const playerId = o.player_id ? String(o.player_id).trim() : null;
 
   if (!orderId) {
     return NextResponse.json({ ok: false, error: "Falta order_id." }, { status: 400 });
@@ -49,9 +50,9 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (!entryId && !caddieId) {
+  if (!entryId && !caddieId && !playerId) {
     return NextResponse.json(
-      { ok: false, error: "Falta entry_id o caddie_id del cliente." },
+      { ok: false, error: "Falta entry_id, caddie_id o player_id del cliente." },
       { status: 400 }
     );
   }
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: ord, error } = await admin
     .from("fb_orders")
-    .select("id, entry_id, caddie_id, status")
+    .select("id, entry_id, caddie_id, player_id, status")
     .eq("id", orderId)
     .maybeSingle();
   if (error) {
@@ -72,7 +73,8 @@ export async function POST(req: Request) {
 
   const owns =
     (entryId && (ord as { entry_id?: string }).entry_id === entryId) ||
-    (caddieId && (ord as { caddie_id?: string }).caddie_id === caddieId);
+    (caddieId && (ord as { caddie_id?: string }).caddie_id === caddieId) ||
+    (playerId && (ord as { player_id?: string }).player_id === playerId);
   if (!owns) {
     return NextResponse.json(
       { ok: false, error: "Este pedido no es tuyo." },

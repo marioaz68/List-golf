@@ -45,7 +45,7 @@ export interface FbMenuItem {
   displayEmoji: string | null;
 }
 
-export type DeliveryType = "pickup" | "on_course" | "dine_in";
+export type DeliveryType = "pickup" | "on_course" | "dine_in" | "home";
 
 /** Canal por el que entró el pedido. Solo informativo (reportes/analytics). */
 export type SourceChannel = "app" | "mesero" | "qr_table";
@@ -92,11 +92,14 @@ export interface FbOrder {
   tournamentId: string | null;
   entryId: string | null;
   caddieId: string | null;
+  playerId: string | null;
   clientLabel: string | null;
   venueId: string;
   deliveryType: DeliveryType;
   status: OrderStatus;
   requestedHole: number | null;
+  /** Domicilio de entrega dentro del fraccionamiento (delivery_type='home'). */
+  deliveryAddress: string | null;
   currentHoleAtOrder: number | null;
   totalCents: number;
   notes: string | null;

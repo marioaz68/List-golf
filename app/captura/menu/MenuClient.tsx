@@ -79,20 +79,37 @@ interface MyOrder {
   fb_order_items: MyOrderLine[];
 }
 
-export default function MenuClient() {
-  // ============ Identidad del cliente desde URL ============
-  const [meEntryId, setMeEntryId] = useState<string | null>(null);
-  const [caddieId, setCaddieId] = useState<string | null>(null);
-  const [backHref, setBackHref] = useState<string>("/score-entry");
+interface MenuClientProps {
+  initialEntryId: string | null;
+  initialCaddieId: string | null;
+  initialPlayerId: string | null;
+  clientName: string | null;
+  savedAddress: string | null;
+  backHref: string | null;
+  unlinkedTelegram: boolean;
+  telegramUserId: string | null;
+}
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sp = new URLSearchParams(window.location.search);
-    setMeEntryId(sp.get("me")?.trim() || null);
-    setCaddieId(sp.get("caddie")?.trim() || null);
-    const back = sp.get("back");
-    if (back) setBackHref(back);
-  }, []);
+export default function MenuClient({
+  initialEntryId,
+  initialCaddieId,
+  initialPlayerId,
+  clientName,
+  savedAddress,
+  backHref: backHrefProp,
+  unlinkedTelegram,
+  telegramUserId,
+}: MenuClientProps) {
+  // ============ Identidad del cliente (resuelta en el server) ============
+  const meEntryId = initialEntryId;
+  const caddieId = initialCaddieId;
+  const playerId = initialPlayerId;
+  const backHref = backHrefProp || "/score-entry";
+  const hasIdentity = Boolean(meEntryId || caddieId || playerId);
+
+  // Domicilio para entregas a casa en el fraccionamiento (delivery_type=home).
+  // Se autollena con el domicilio guardado en el perfil del cliente.
+  const [homeAddress, setHomeAddress] = useState(savedAddress ?? "");
 
   // ============ Carga inicial de venues + menú ============
   const [venues, setVenues] = useState<FbVenue[]>([]);
@@ -184,25 +201,38 @@ export default function MenuClient() {
   const clearCart = useCallback(() => setCart([]), []);
 
   // ============ Confirmar pedido ============
+  // Venue de reparto a domicilio en el fraccionamiento
+  const isHomeDelivery = selectedVenue?.code === "cart_fracc";
+
   const confirmOrder = useCallback(async () => {
     if (cart.length === 0 || !selectedVenue) return;
-    if (!meEntryId && !caddieId) {
-      setSubmitError("No te tengo identificado en la captura. Reabre el link del bot.");
+    if (!meEntryId && !caddieId && !playerId) {
+      setSubmitError("No te tengo identificado. Reabre el link del bot (escribe MENU).");
+      return;
+    }
+    const homeDelivery = selectedVenue.code === "cart_fracc";
+    if (homeDelivery && !homeAddress.trim()) {
+      setSubmitError("Escribe tu domicilio de entrega (calle, número/lote).");
       return;
     }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const deliveryType: DeliveryType =
-        selectedVenue.type === "restaurant" ? "pickup" : "on_course";
+      const deliveryType: DeliveryType = homeDelivery
+        ? "home"
+        : selectedVenue.type === "restaurant"
+          ? "pickup"
+          : "on_course";
       const res = await fetch("/api/captura/fb-order", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           entry_id: meEntryId,
           caddie_id: caddieId,
+          player_id: playerId,
           venue_id: selectedVenue.id,
           delivery_type: deliveryType,
+          delivery_address: homeDelivery ? homeAddress.trim() : null,
           notes: orderNotes || null,
           items: cart.map((l) => ({
             menu_item_id: l.menuItemId,
@@ -223,7 +253,7 @@ export default function MenuClient() {
     } finally {
       setSubmitting(false);
     }
-  }, [cart, selectedVenue, meEntryId, caddieId, orderNotes, clearCart]);
+  }, [cart, selectedVenue, meEntryId, caddieId, playerId, homeAddress, orderNotes, clearCart]);
 
   // ============ Mis pedidos + estado de cuenta + favoritos ============
   const [myOrders, setMyOrders] = useState<MyOrder[]>([]);
@@ -231,10 +261,11 @@ export default function MenuClient() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
 
   const pullOrders = useCallback(async () => {
-    if (!meEntryId && !caddieId) return;
+    if (!meEntryId && !caddieId && !playerId) return;
     const sp = new URLSearchParams();
     if (meEntryId) sp.set("entry_id", meEntryId);
-    if (caddieId) sp.set("caddie_id", caddieId);
+    else if (caddieId) sp.set("caddie_id", caddieId);
+    else if (playerId) sp.set("player_id", playerId);
     const res = await fetch(`/api/captura/fb-order?${sp.toString()}`, {
       cache: "no-store",
     });
@@ -247,21 +278,22 @@ export default function MenuClient() {
       setMyOrders(json.orders);
       setAccountCents(json.account.total_cents);
     }
-  }, [meEntryId, caddieId]);
+  }, [meEntryId, caddieId, playerId]);
 
   useEffect(() => {
-    if (!meEntryId && !caddieId) return;
+    if (!meEntryId && !caddieId && !playerId) return;
     void pullOrders();
     const id = window.setInterval(pullOrders, 15_000);
     return () => window.clearInterval(id);
-  }, [meEntryId, caddieId, pullOrders]);
+  }, [meEntryId, caddieId, playerId, pullOrders]);
 
   // Cargar favoritos del cliente (filtrados por venue seleccionado)
   const pullFavorites = useCallback(async () => {
-    if (!meEntryId && !caddieId) return;
+    if (!meEntryId && !caddieId && !playerId) return;
     const sp = new URLSearchParams();
     if (meEntryId) sp.set("entry_id", meEntryId);
-    if (caddieId) sp.set("caddie_id", caddieId);
+    else if (caddieId) sp.set("caddie_id", caddieId);
+    else if (playerId) sp.set("player_id", playerId);
     if (selectedVenueId) sp.set("venue_id", selectedVenueId);
     try {
       const res = await fetch(`/api/captura/fb-favorites?${sp.toString()}`, {
@@ -275,7 +307,7 @@ export default function MenuClient() {
     } catch {
       // ignore
     }
-  }, [meEntryId, caddieId, selectedVenueId]);
+  }, [meEntryId, caddieId, playerId, selectedVenueId]);
 
   useEffect(() => {
     void pullFavorites();
@@ -284,20 +316,21 @@ export default function MenuClient() {
   // Toggle pin / hide para un item
   const toggleFavorite = useCallback(
     async (menuItemId: string, action: "pin" | "unpin" | "hide" | "unhide") => {
-      if (!meEntryId && !caddieId) return;
+      if (!meEntryId && !caddieId && !playerId) return;
       await fetch("/api/captura/fb-favorites/toggle", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           entry_id: meEntryId,
           caddie_id: caddieId,
+          player_id: playerId,
           menu_item_id: menuItemId,
           action,
         }),
       });
       void pullFavorites();
     },
-    [meEntryId, caddieId, pullFavorites]
+    [meEntryId, caddieId, playerId, pullFavorites]
   );
 
   const pinnedIds = useMemo(
@@ -317,7 +350,7 @@ export default function MenuClient() {
   const [myCurrentHole, setMyCurrentHole] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!selectedVenue || selectedVenue.type !== "cart") {
+    if (!selectedVenue || selectedVenue.type !== "cart" || isHomeDelivery) {
       setCartLocations([]);
       return;
     }
@@ -397,8 +430,50 @@ export default function MenuClient() {
           </div>
         </div>
 
+        {/* Aviso: Telegram no vinculado (abrió con MENU pero no es socio) */}
+        {unlinkedTelegram ? (
+          <div className="m-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-[12px] text-amber-900">
+            <div className="font-bold">⚠️ Tu Telegram no está vinculado</div>
+            <p className="mt-1">
+              Puedes ver el menú, pero para pedir, el club debe darte de alta como
+              socio. Pásale tu ID de Telegram al comité:
+            </p>
+            {telegramUserId ? (
+              <code className="mt-1 block rounded bg-amber-100 px-2 py-1 font-mono text-[11px]">
+                {telegramUserId}
+              </code>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Saludo al socio identificado */}
+        {clientName && !unlinkedTelegram ? (
+          <div className="border-b border-slate-200 bg-white px-3 py-1.5 text-[11px] text-slate-500">
+            👋 Hola <span className="font-semibold text-slate-700">{clientName}</span>
+          </div>
+        ) : null}
+
+        {/* Captura de domicilio — reparto al fraccionamiento */}
+        {isHomeDelivery ? (
+          <div className="border-b border-emerald-200 bg-emerald-50 px-3 py-3">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-800">
+              🏡 Domicilio de entrega (fraccionamiento)
+            </label>
+            <input
+              value={homeAddress}
+              onChange={(e) => setHomeAddress(e.target.value)}
+              placeholder="Calle, número/lote, color de casa, referencias…"
+              className="mt-1.5 w-full rounded-md border border-emerald-300 bg-white px-3 py-2 text-[13px] text-slate-900 placeholder:text-slate-400"
+            />
+            <p className="mt-1 text-[10px] text-emerald-700">
+              Entregamos dentro del fraccionamiento. Tu domicilio se guarda en tu
+              perfil para la próxima vez.
+            </p>
+          </div>
+        ) : null}
+
         {/* Banner: ubicación del carrito bar seleccionado (si aplica) */}
-        {selectedVenue?.type === "cart" && cartLocForSelected ? (
+        {selectedVenue?.type === "cart" && !isHomeDelivery && cartLocForSelected ? (
           <div className="border-b border-cyan-200 bg-cyan-50 px-3 py-2 text-[12px] text-cyan-900">
             {cartLocForSelected.currentHole != null ? (
               <div className="flex items-center justify-between gap-2">
@@ -441,6 +516,7 @@ export default function MenuClient() {
               order={o}
               meEntryId={meEntryId}
               caddieId={caddieId}
+              playerId={playerId}
               onResolved={() => void pullOrders()}
             />
           ))}
@@ -616,7 +692,7 @@ export default function MenuClient() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           {/* Botón ⭐ para fijar/quitar de favoritos */}
-                          {(meEntryId || caddieId) ? (
+                          {hasIdentity ? (
                             <button
                               type="button"
                               onClick={() =>
@@ -886,11 +962,13 @@ function PendingAcceptanceBanner({
   order,
   meEntryId,
   caddieId,
+  playerId,
   onResolved,
 }: {
   order: MyOrder;
   meEntryId: string | null;
   caddieId: string | null;
+  playerId: string | null;
   onResolved: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -914,6 +992,7 @@ function PendingAcceptanceBanner({
           reason,
           entry_id: meEntryId,
           caddie_id: caddieId,
+          player_id: playerId,
         }),
       });
       const json = (await res.json()) as { ok: boolean; error?: string };

@@ -32,6 +32,7 @@ import {
   buildMobileCodeReply,
 } from "@/lib/telegram/ritmo/mobileCode";
 import { isCartCommand, buildCartReply } from "@/lib/telegram/fb/cartCommand";
+import { isMenuCommand, buildMenuReply } from "@/lib/telegram/fb/menuCommand";
 import {
   isMisRondasCommand,
   buildMisRondasReply,
@@ -188,6 +189,17 @@ export async function POST(req: Request) {
       const codeReply = await buildMobileCodeReply(supabase, userId);
       await sendTelegramMessage({ chatId: chatId || userId, text: codeReply });
       return NextResponse.json({ ok: true, mobile_code: "sent" });
+    }
+
+    // === F&B: comando MENU (Mini App del menú para socios/clientes) ===
+    if (text && isMenuCommand(text) && userId) {
+      const menuReply = buildMenuReply(userId);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: menuReply.text,
+        buttons: menuReply.buttons,
+      });
+      return NextResponse.json({ ok: true, menu: "link_sent" });
     }
 
     // === F&B: comando /CARRITO o /BAR (Mini App para operador del carrito bar) ===

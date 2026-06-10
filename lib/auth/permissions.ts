@@ -254,6 +254,8 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/fb-disputas",
   "/fb-mesero",
   "/fb-inventario",
+  "/fb-fraccionamiento",
+  "/fb-cuentas-deposito",
   "/rondas-diarias",
 ] as const;
 
@@ -312,7 +314,9 @@ export function getModuleFromPath(pathname: string): AppModule | null {
     pathname.startsWith("/fb-reportes") ||
     pathname.startsWith("/fb-disputas") ||
     pathname.startsWith("/fb-mesero") ||
-    pathname.startsWith("/fb-inventario")
+    pathname.startsWith("/fb-inventario") ||
+    pathname.startsWith("/fb-fraccionamiento") ||
+    pathname.startsWith("/fb-cuentas-deposito")
   ) {
     return "fb";
   }

@@ -26,13 +26,15 @@ export interface OrderForKitchen {
   notes: string | null;
   requestedHole: number | null;
   currentHoleAtOrder: number | null;
+  /** Domicilio de entrega dentro del fraccionamiento (delivery_type='home'). */
+  deliveryAddress: string | null;
   createdAt: string;
   acceptedAt: string | null;
   readyAt: string | null;
   /** Quién pidió: 'Mario Pérez (jugador)' o 'Juan Caddie' */
   clientLabel: string;
-  /** 'jugador' | 'caddie' | 'desconocido' — para diferenciar en la UI */
-  clientKind: "player" | "caddie" | "table" | "unknown";
+  /** Tipo de cliente — para diferenciar en la UI */
+  clientKind: "player" | "caddie" | "table" | "resident" | "unknown";
   /** Grupo del cliente, si lo tiene */
   groupNo: number | null;
   /** UUID del grupo (para link al mapa /ritmo?group_id=...) */
@@ -75,12 +77,14 @@ interface OrderRow {
   notes: string | null;
   requested_hole: number | null;
   current_hole_at_order: number | null;
+  delivery_address: string | null;
   created_at: string;
   accepted_at: string | null;
   ready_at: string | null;
   client_label: string | null;
   entry_id: string | null;
   caddie_id: string | null;
+  player_id: string | null;
   table_id: string | null;
   diner_name: string | null;
 }
@@ -100,7 +104,7 @@ export async function loadActiveOrders(
   let q = admin
     .from("fb_orders")
     .select(
-      "id, venue_id, status, delivery_type, total_cents, notes, requested_hole, current_hole_at_order, created_at, accepted_at, ready_at, client_label, entry_id, caddie_id, table_id, diner_name"
+      "id, venue_id, status, delivery_type, total_cents, notes, requested_hole, current_hole_at_order, delivery_address, created_at, accepted_at, ready_at, client_label, entry_id, caddie_id, player_id, table_id, diner_name"
     )
     .order("created_at", { ascending: true });
 
@@ -127,6 +131,29 @@ export async function loadActiveOrders(
   const entryIds = Array.from(new Set(rows.map((r) => r.entry_id).filter(Boolean) as string[]));
   const caddieIds = Array.from(new Set(rows.map((r) => r.caddie_id).filter(Boolean) as string[]));
   const tableIds = Array.from(new Set(rows.map((r) => r.table_id).filter(Boolean) as string[]));
+  // Socios/residentes (pedidos a domicilio sin entry de torneo).
+  const playerIds = Array.from(
+    new Set(
+      rows
+        .filter((r) => !r.entry_id && !r.caddie_id && r.player_id)
+        .map((r) => r.player_id)
+        .filter(Boolean) as string[]
+    )
+  );
+  const playerNameById = new Map<string, string>();
+  if (playerIds.length) {
+    const { data: players } = await admin
+      .from("players")
+      .select("id, first_name, last_name")
+      .in("id", playerIds);
+    for (const p of (players ?? []) as Array<Record<string, unknown>>) {
+      const full = [p.first_name, p.last_name]
+        .map((s) => String(s ?? "").trim())
+        .filter(Boolean)
+        .join(" ");
+      if (full) playerNameById.set(String(p.id), full);
+    }
+  }
 
   // Tabla → code/name para mostrar "🪑 Mesa M3" en cocina
   const tableInfoById = new Map<string, { code: string; name: string | null }>();
@@ -341,6 +368,11 @@ export async function loadActiveOrders(
       clientLabel = r.diner_name
         ? `🪑 Mesa ${code} · ${r.diner_name}`
         : `🪑 Mesa ${code}`;
+    } else if (r.player_id) {
+      // Socio/residente pidiendo a domicilio en el fraccionamiento.
+      clientKind = "resident";
+      clientLabel =
+        playerNameById.get(r.player_id) || clientLabel || "Socio";
     }
 
     // Ubicación en vivo del cliente
@@ -380,6 +412,7 @@ export async function loadActiveOrders(
       notes: r.notes,
       requestedHole: r.requested_hole,
       currentHoleAtOrder: r.current_hole_at_order,
+      deliveryAddress: r.delivery_address,
       createdAt: r.created_at,
       acceptedAt: r.accepted_at,
       readyAt: r.ready_at,

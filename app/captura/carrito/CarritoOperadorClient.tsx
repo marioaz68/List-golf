@@ -440,7 +440,15 @@ function OrderCard({
           </span>
         </div>
         <div className="mt-0.5 text-[11px] text-slate-400">
-          {order.clientKind === "player" ? "🏌️ Jugador" : "🎒 Caddie"}
+          {order.clientKind === "player"
+            ? "🏌️ Jugador"
+            : order.clientKind === "caddie"
+              ? "🎒 Caddie"
+              : order.clientKind === "resident"
+                ? "🏡 Socio"
+                : order.clientKind === "table"
+                  ? "🪑 Mesa"
+                  : "Cliente"}
           {order.groupNo != null ? ` · Grupo ${order.groupNo}` : ""}
           {order.requestedHole != null
             ? ` · 🎯 Entregar en hoyo ${order.requestedHole}`
@@ -448,8 +456,16 @@ function OrderCard({
         </div>
       </div>
 
-      {/* Ubicación del cliente — crítico para el operador */}
-      {order.liveLocation.currentHole != null ? (
+      {/* Domicilio de entrega — reparto al fraccionamiento */}
+      {order.deliveryType === "home" && order.deliveryAddress ? (
+        <div className="border-b border-emerald-800 bg-emerald-950 px-3 py-2 text-[12px] text-emerald-200">
+          🏡 <strong className="text-white">Entregar en:</strong>{" "}
+          {order.deliveryAddress}
+        </div>
+      ) : null}
+
+      {/* Ubicación del cliente — crítico para el operador (solo en campo) */}
+      {order.deliveryType !== "home" && order.liveLocation.currentHole != null ? (
         <div className="border-b border-slate-700 bg-sky-950 px-3 py-2 text-[12px] text-sky-200">
           <div className="flex items-center justify-between gap-2">
             <span>
@@ -471,11 +487,11 @@ function OrderCard({
             ) : null}
           </div>
         </div>
-      ) : (
+      ) : order.deliveryType !== "home" ? (
         <div className="border-b border-slate-700 bg-slate-900 px-3 py-2 text-[11px] text-slate-500">
           📍 Sin GPS del cliente
         </div>
-      )}
+      ) : null}
 
       <ul className="border-b border-slate-700 px-3 py-2 text-[13px]">
         {order.items.map((l) => (

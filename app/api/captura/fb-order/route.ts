@@ -48,18 +48,20 @@ export async function POST(req: Request) {
 
   const entryId = norm(o.entry_id);
   const caddieId = norm(o.caddie_id);
+  const playerId = norm(o.player_id);
   const venueId = norm(o.venue_id);
   const deliveryType = String(o.delivery_type ?? "").trim() as DeliveryType;
   const requestedHole =
     typeof o.requested_hole === "number" ? o.requested_hole : null;
+  const deliveryAddress = norm(o.delivery_address);
   const notes = norm(o.notes);
   const itemsInput = Array.isArray(o.items)
     ? (o.items as Array<Record<string, unknown>>)
     : [];
 
-  if (!entryId && !caddieId) {
+  if (!entryId && !caddieId && !playerId) {
     return NextResponse.json(
-      { ok: false, error: "Falta entry_id o caddie_id." },
+      { ok: false, error: "Falta entry_id, caddie_id o player_id." },
       { status: 400 }
     );
   }
@@ -69,9 +71,22 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  if (deliveryType !== "pickup" && deliveryType !== "on_course") {
+  if (
+    deliveryType !== "pickup" &&
+    deliveryType !== "on_course" &&
+    deliveryType !== "home"
+  ) {
     return NextResponse.json(
-      { ok: false, error: "delivery_type inválido (pickup | on_course)." },
+      { ok: false, error: "delivery_type inválido (pickup | on_course | home)." },
+      { status: 400 }
+    );
+  }
+  if (deliveryType === "home" && !deliveryAddress) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Para entregas a domicilio indica el domicilio (calle, número/lote).",
+      },
       { status: 400 }
     );
   }
@@ -113,6 +128,21 @@ export async function POST(req: Request) {
         .eq("entry_id", entryId)
         .maybeSingle();
       groupId = (gm as { group_id?: string } | null)?.group_id ?? null;
+    }
+  } else if (playerId) {
+    // Socio/residente pidiendo a domicilio (sin entry de torneo activo).
+    const { data } = await admin
+      .from("players")
+      .select("id, first_name, last_name")
+      .eq("id", playerId)
+      .maybeSingle();
+    if (data) {
+      const p = data as { first_name?: string; last_name?: string };
+      clientLabel =
+        [p.first_name, p.last_name]
+          .map((s) => String(s ?? "").trim())
+          .filter(Boolean)
+          .join(" ") || null;
     }
   } else if (caddieId) {
     const { data } = await admin
@@ -287,6 +317,7 @@ export async function POST(req: Request) {
       tournament_id: tournamentId,
       entry_id: entryId,
       caddie_id: caddieId,
+      player_id: playerId,
       client_label: clientLabel,
       venue_id: effectiveVenueId,
       source_venue_id: sourceVenueId,
@@ -294,6 +325,7 @@ export async function POST(req: Request) {
       status: "pending",
       requested_hole:
         deliveryType === "on_course" ? requestedHole ?? currentHole : null,
+      delivery_address: deliveryType === "home" ? deliveryAddress : null,
       current_hole_at_order: currentHole,
       total_cents: totalCents,
       notes,
@@ -333,6 +365,29 @@ export async function POST(req: Request) {
     );
   }
 
+  // Reparto a domicilio: guardar el domicilio en el perfil del cliente y
+  // marcarlo como residente del fraccionamiento (para reusarlo y que aparezca
+  // en la pantalla "Fraccionamiento" del backoffice).
+  if (deliveryType === "home" && deliveryAddress) {
+    const targetPlayerId =
+      playerId ??
+      (entryId
+        ? (
+            await admin
+              .from("tournament_entries")
+              .select("player_id")
+              .eq("id", entryId)
+              .maybeSingle()
+          ).data?.player_id ?? null
+        : null);
+    if (targetPlayerId) {
+      await admin
+        .from("players")
+        .update({ address: deliveryAddress, is_resident: true })
+        .eq("id", targetPlayerId);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     order_id: orderId,
@@ -350,10 +405,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const entryId = url.searchParams.get("entry_id")?.trim() || null;
   const caddieId = url.searchParams.get("caddie_id")?.trim() || null;
+  const playerId = url.searchParams.get("player_id")?.trim() || null;
 
-  if (!entryId && !caddieId) {
+  if (!entryId && !caddieId && !playerId) {
     return NextResponse.json(
-      { ok: false, error: "Falta entry_id o caddie_id." },
+      { ok: false, error: "Falta entry_id, caddie_id o player_id." },
       { status: 400 }
     );
   }
@@ -362,12 +418,13 @@ export async function GET(req: Request) {
   let q = admin
     .from("fb_orders")
     .select(
-      "id, venue_id, delivery_type, status, requested_hole, total_cents, notes, created_at, ready_at, delivered_at, tournament_id, fb_order_items ( id, menu_item_id, qty, unit_price_cents, item_name_snapshot, notes )"
+      "id, venue_id, delivery_type, status, requested_hole, delivery_address, total_cents, notes, created_at, ready_at, delivered_at, tournament_id, fb_order_items ( id, menu_item_id, qty, unit_price_cents, item_name_snapshot, notes )"
     )
     .order("created_at", { ascending: false })
     .limit(50);
   if (entryId) q = q.eq("entry_id", entryId);
-  if (caddieId) q = q.eq("caddie_id", caddieId);
+  else if (caddieId) q = q.eq("caddie_id", caddieId);
+  else if (playerId) q = q.eq("player_id", playerId);
 
   const { data, error } = await q;
   if (error) {
