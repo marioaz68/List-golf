@@ -339,6 +339,11 @@ export default function Sidebar() {
       { nameKey: "clubs", href: "/clubs", icon: Building2 },
       { nameKey: "courses", href: "/courses", icon: MapPinned },
       {
+        nameKey: "courseHolePoints",
+        href: "/course-hole-points",
+        icon: Map,
+      },
+      {
         nameKey: "categories",
         href: "/categories",
         icon: Layers3,

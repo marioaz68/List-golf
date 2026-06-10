@@ -242,6 +242,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/category-templates",
   "/category-tee-rules",
   "/course-holes",
+  "/course-hole-points",
   "/users",
   "/comite-handicap",
   "/captura-telegram",
@@ -329,7 +330,8 @@ export function getModuleFromPath(pathname: string): AppModule | null {
     pathname.startsWith("/clubs") ||
     pathname.startsWith("/courses") ||
     pathname.startsWith("/category-templates") ||
-    pathname.startsWith("/course-holes")
+    pathname.startsWith("/course-holes") ||
+    pathname.startsWith("/course-hole-points")
   ) {
     return "catalog";
   }

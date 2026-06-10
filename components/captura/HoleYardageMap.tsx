@@ -29,6 +29,12 @@ const KIND_COLOR: Record<string, string> = {
   "green-back": "#059669",
   tee: "#fbbf24",
   corner: "#94a3b8",
+  custom: "#f472b6",
+  bunker: "#eab308",
+  water: "#38bdf8",
+  dogleg: "#a78bfa",
+  hazard: "#f97316",
+  other: "#94a3b8",
 };
 
 async function loadLeaflet(): Promise<any> {
@@ -148,7 +154,10 @@ export function HoleYardageMap({
 
       // Líneas a puntos de referencia
       for (const p of referencePoints) {
-        const color = KIND_COLOR[p.kind] ?? "#94a3b8";
+        const color =
+          p.kind === "custom" && p.dbKind
+            ? (KIND_COLOR[p.dbKind] ?? KIND_COLOR.custom)
+            : (KIND_COLOR[p.kind] ?? "#94a3b8");
         L.polyline(
           [
             [playerLat, playerLon],

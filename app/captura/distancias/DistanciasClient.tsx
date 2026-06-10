@@ -9,7 +9,9 @@ import {
   greenDistances,
   referenceDistances,
   yardsBetween,
+  type ReferencePoint,
 } from "@/lib/distances/ccqHolePoints";
+import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
@@ -47,6 +49,7 @@ export default function DistanciasClient() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [manualHole, setManualHole] = useState<number | null>(null);
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
+  const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const watchIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -104,6 +107,45 @@ export default function DistanciasClient() {
 
   const activeHole = manualHole ?? detectedHole ?? nearestHole;
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/captura/distancias/points?hole=${activeHole}&course_id=${defaultDistanciasCourseId()}`
+        );
+        const data = (await res.json()) as {
+          ok?: boolean;
+          points?: Array<{
+            id: string;
+            label: string;
+            short_label: string;
+            kind: string;
+            lat: number;
+            lon: number;
+          }>;
+        };
+        if (cancelled || !data.ok || !data.points) return;
+        setCustomPoints(
+          data.points.map((p) => ({
+            id: p.id,
+            label: p.label,
+            shortLabel: p.short_label,
+            lat: p.lat,
+            lon: p.lon,
+            kind: "custom" as const,
+            dbKind: p.kind,
+          }))
+        );
+      } catch {
+        if (!cancelled) setCustomPoints([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeHole]);
+
   const greenYds = useMemo(() => {
     if (geo.status !== "ok") return null;
     return greenDistances(geo.lat, geo.lon, activeHole);
@@ -111,8 +153,8 @@ export default function DistanciasClient() {
 
   const refPoints = useMemo(() => {
     if (geo.status !== "ok") return [];
-    return referenceDistances(geo.lat, geo.lon, activeHole);
-  }, [geo, activeHole]);
+    return referenceDistances(geo.lat, geo.lon, activeHole, customPoints);
+  }, [geo, activeHole, customPoints]);
 
   const holeMeta = CCQ_HOLE_POINTS[activeHole];
 

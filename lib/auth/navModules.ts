@@ -23,6 +23,7 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   convocatoria: "tournaments-setup",
   clubs: "catalog",
   courses: "catalog",
+  courseHolePoints: "catalog",
   categories: "tournaments-setup",
   rounds: "rounds",
   teeSets: "tournaments-setup",

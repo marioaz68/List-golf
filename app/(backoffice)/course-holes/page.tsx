@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { saveCourseHoles, seedCourseHoles } from "./actions";
 import {
   backofficeTableStickyScroll,
@@ -117,6 +118,14 @@ export default async function CourseHolesPage(props: {
           </div>
 
           <div className="flex flex-col gap-1.5 lg:flex-row lg:flex-wrap lg:items-center">
+            {effectiveCourseId ? (
+              <Link
+                href={`/course-hole-points?course_id=${effectiveCourseId}`}
+                className="inline-flex h-7 items-center rounded border border-emerald-400/40 bg-emerald-500/20 px-2 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/30"
+              >
+                📏 Puntos yardas
+              </Link>
+            ) : null}
             {courses.length === 0 ? (
               <div className="text-[11px] text-red-200">
                 No hay campos. Crea uno primero en /courses.

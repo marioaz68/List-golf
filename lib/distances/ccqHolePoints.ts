@@ -18,7 +18,8 @@ export type ReferencePointKind =
   | "green-center"
   | "green-back"
   | "tee"
-  | "corner";
+  | "corner"
+  | "custom";
 
 export interface ReferencePoint {
   id: string;
@@ -27,6 +28,8 @@ export interface ReferencePoint {
   lat: number;
   lon: number;
   kind: ReferencePointKind;
+  /** Tipo BD cuando kind=custom (bunker, water, …) */
+  dbKind?: string;
 }
 
 export interface HoleGreenPoints {
@@ -193,14 +196,19 @@ export type ReferencePointWithYards = ReferencePoint & { yards: number };
 export function referenceDistances(
   playerLat: number,
   playerLon: number,
-  holeNo: number
+  holeNo: number,
+  extraPoints: ReferencePoint[] = []
 ): ReferencePointWithYards[] {
   const hp = CCQ_HOLE_POINTS[holeNo];
   if (!hp) return [];
-  return hp.referencePoints.map((p) => ({
-    ...p,
-    yards: yardsBetween(playerLat, playerLon, p.lat, p.lon),
-  }));
+  const system = hp.referencePoints.filter((p) => p.kind !== "corner");
+  const all = [...system, ...extraPoints];
+  return all
+    .map((p) => ({
+      ...p,
+      yards: yardsBetween(playerLat, playerLon, p.lat, p.lon),
+    }))
+    .sort((a, b) => a.yards - b.yards);
 }
 
 /** Zoom Leaflet según distancia al centro del green (más cerca = más zoom). */
