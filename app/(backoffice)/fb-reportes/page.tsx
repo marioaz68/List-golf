@@ -17,6 +17,8 @@ export const revalidate = 0;
 
 export interface DayReport {
   date: string;
+  fromDate: string;
+  toDate: string;
   totalCobradoCents: number;
   totalPorCobrarCents: number;
   totalCanceladoCents: number;
@@ -62,10 +64,20 @@ function todayMexicoDate(): string {
 export default async function FbReportesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; from?: string; to?: string }>;
 }) {
   const sp = await searchParams;
-  const dateParam = sp.date?.trim() || todayMexicoDate();
+  const today = todayMexicoDate();
+
+  // Soporta rango (from/to) y compat con el viejo ?date=. Si solo viene date,
+  // el rango es ese mismo día. Si no viene nada, es el día de hoy.
+  const fromDate = sp.from?.trim() || sp.date?.trim() || today;
+  const toDateRaw = sp.to?.trim() || sp.date?.trim() || today;
+
+  // Normalizar: asegurar from <= to (si los invierten, los acomodamos)
+  const [startDate, endDate] =
+    fromDate <= toDateRaw ? [fromDate, toDateRaw] : [toDateRaw, fromDate];
+  const dateParam = startDate;
 
   const admin = createAdminClient();
   const supabase = await createClient();
@@ -79,9 +91,9 @@ export default async function FbReportesPage({
     redirect("/fb-cocina");
   }
 
-  // Rango UTC para el día completo de México (UTC-6)
-  const startISO = new Date(`${dateParam}T00:00:00-06:00`).toISOString();
-  const endISO = new Date(`${dateParam}T23:59:59-06:00`).toISOString();
+  // Rango UTC: del inicio del primer día al fin del último día (México UTC-6)
+  const startISO = new Date(`${startDate}T00:00:00-06:00`).toISOString();
+  const endISO = new Date(`${endDate}T23:59:59-06:00`).toISOString();
 
   const { data: ordersRaw } = await admin
     .from("fb_orders")
@@ -219,6 +231,8 @@ export default async function FbReportesPage({
 
   const report: DayReport = {
     date: dateParam,
+    fromDate: startDate,
+    toDate: endDate,
     totalCobradoCents,
     totalPorCobrarCents,
     totalCanceladoCents,
