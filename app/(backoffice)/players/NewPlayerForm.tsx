@@ -268,6 +268,7 @@ export default function NewPlayerForm({
   const [club, setClub] = useState("");
   const [clubId, setClubId] = useState<string | null>(null);
   const [ghinNumber, setGhinNumber] = useState("");
+  const [actionNumber, setActionNumber] = useState("");
   const [shirtSize, setShirtSize] = useState("");
   const [shoeSize, setShoeSize] = useState("");
 
@@ -345,6 +346,7 @@ export default function NewPlayerForm({
     setClub("");
     setClubId(null);
     setGhinNumber("");
+    setActionNumber("");
     setShirtSize("");
     setShoeSize("");
     setClubSuggestions([]);
@@ -705,7 +707,7 @@ export default function NewPlayerForm({
       const { data, error } = await supabase
         .from("players")
         .select(
-          "id, first_name, last_name, initials, gender, handicap_index, handicap_torneo, birth_year, phone, email, club, club_id, ghin_number, shirt_size, shoe_size"
+          "id, first_name, last_name, initials, gender, handicap_index, handicap_torneo, birth_year, phone, email, club, club_id, ghin_number, action_number, shirt_size, shoe_size"
         )
         .eq("id", player.id)
         .single();
@@ -733,6 +735,9 @@ export default function NewPlayerForm({
       setClub(full.club || "");
       setClubId(full.club_id || null);
       setGhinNumber(full.ghin_number || "");
+      setActionNumber(
+        ((full as Record<string, unknown>).action_number as string | null) || ""
+      );
       setShirtSize(full.shirt_size || "");
       setShoeSize(full.shoe_size || "");
       setMsg("ℹ️ Jugador existente cargado. Puedes modificar y guardar.");
@@ -912,6 +917,7 @@ export default function NewPlayerForm({
         club: finalClubText,
         club_id: finalClubId,
         ghin_number: cleanGhin,
+        action_number: actionNumber.trim() || null,
       };
 
       if (shirtSize) payload.shirt_size = shirtSize;
@@ -1426,6 +1432,19 @@ export default function NewPlayerForm({
             {...antiSafariInputProps}
             value={ghinNumber}
             onChange={(e) => setGhinNumber(e.target.value)}
+            style={fieldStyle}
+          />
+        </label>
+
+        <label style={labelStyle}>
+          Número de acción
+          <input
+            type="text"
+            enterKeyHint="done"
+            {...antiSafariInputProps}
+            value={actionNumber}
+            onChange={(e) => setActionNumber(e.target.value)}
+            placeholder="A-145, SOC-001…"
             style={fieldStyle}
           />
         </label>

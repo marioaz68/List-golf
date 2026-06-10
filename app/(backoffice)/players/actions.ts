@@ -19,6 +19,7 @@ type SavePlayerInput = {
   club?: string | null;
   club_id?: string | null;
   ghin_number?: string | null;
+  action_number?: string | null;
   shirt_size?: string | null;
   shoe_size?: string | number | null;
   telegram_user_id?: string | null;
@@ -64,6 +65,7 @@ function buildPlayerPayload(input: SavePlayerInput) {
     club: toNullableString(input.club),
     club_id: toNullableString(input.club_id),
     ghin_number: toNullableString(input.ghin_number),
+    action_number: toNullableString(input.action_number),
   };
 
   const shirtSize = toNullableUpperString(input.shirt_size);
