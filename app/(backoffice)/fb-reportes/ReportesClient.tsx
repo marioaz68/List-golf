@@ -126,6 +126,12 @@ export default function ReportesClient({ report }: { report: DayReport }) {
               <PresetButton label="Últimos 30 días" onClick={presetLast30} />
               <PresetButton label="Este mes" onClick={presetThisMonth} />
             </div>
+            <a
+              href={`/api/fb-reportes/export?from=${report.fromDate}&to=${report.toDate}`}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700"
+            >
+              ⬇ Exportar a Excel
+            </a>
           </div>
         </header>
 
