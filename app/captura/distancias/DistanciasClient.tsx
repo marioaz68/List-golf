@@ -38,6 +38,10 @@ type GeoState =
   | { status: "error"; message: string }
   | { status: "ok"; lat: number; lon: number; accuracy: number; ts: number };
 
+/** Radio (m) desde el green más cercano dentro del cual la pantalla mide
+ *  yardas. Generoso para cubrir el campo + el fraccionamiento aledaño. */
+const MAX_DISTANCE_FROM_COURSE_M = 300;
+
 type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
 
 interface PaceState {
@@ -148,11 +152,21 @@ export default function DistanciasClient() {
     return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES);
   }, [geo]);
 
-  const nearestHole = useMemo(() => {
-    if (geo.status !== "ok") return 1;
+  const nearest = useMemo(() => {
+    if (geo.status !== "ok") return null;
     const sorted = computeAllHoleDistances(geo.lat, geo.lon);
-    return sorted[0]?.holeNo ?? 1;
+    return sorted[0] ?? null;
   }, [geo]);
+
+  const nearestHole = nearest?.holeNo ?? 1;
+
+  // Solo tiene sentido medir si estás en el club o el fraccionamiento aledaño.
+  // Si el GPS te ubica a más de este radio del green más cercano, no medimos
+  // (evita yardas absurdas cuando alguien abre la pantalla desde su casa lejos).
+  const farFromCourse =
+    geo.status === "ok" &&
+    nearest != null &&
+    nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
 
   const activeHole = manualHole ?? detectedHole ?? nearestHole;
 
@@ -293,7 +307,9 @@ export default function DistanciasClient() {
           <div className="flex items-center justify-between text-[10px] text-slate-400">
             <span>GPS ✓ · ±{Math.round(geo.accuracy)}m</span>
             <span>Hace {timeAgo(geo.ts)}</span>
-            {detectedHole == null ? (
+            {farFromCourse ? (
+              <span className="text-amber-300">Lejos del campo</span>
+            ) : detectedHole == null ? (
               <span className="text-amber-300">Fuera de hoyo</span>
             ) : (
               <span className="text-emerald-400">Hoyo {detectedHole}</span>
@@ -302,6 +318,26 @@ export default function DistanciasClient() {
         )}
       </section>
 
+      {/* Fuera del rango del club: no medimos */}
+      {farFromCourse ? (
+        <section className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <div className="text-5xl">📍</div>
+          <h2 className="mt-3 text-lg font-bold text-amber-200">
+            Estás lejos del campo
+          </h2>
+          <p className="mt-2 text-sm text-slate-400">
+            El medidor de yardas solo funciona en el club o el fraccionamiento
+            (a menos de {MAX_DISTANCE_FROM_COURSE_M} m del hoyo más cercano).
+          </p>
+          {nearest ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Estás a ~{Math.round(nearest.distanceMeters)} m del green más
+              cercano (hoyo {nearest.holeNo}).
+            </p>
+          ) : null}
+        </section>
+      ) : (
+      <>
       {/* Selector de hoyo + F/C/B */}
       <section className="shrink-0 border-b border-slate-800 px-3 py-2">
         <div className="flex items-center justify-between gap-2">
@@ -400,6 +436,8 @@ export default function DistanciasClient() {
 
         <PaceBanner pace={pace} />
       </section>
+      </>
+      )}
     </div>
   );
 }
