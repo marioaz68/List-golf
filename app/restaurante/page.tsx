@@ -8,6 +8,7 @@
  * Es pública (sin login). Lee el menú real de la base de datos.
  */
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   groupMenuByCategory,
@@ -46,6 +47,19 @@ export default async function RestaurantePublicPage() {
 
   return (
     <main className="min-h-screen bg-[#08111f] text-white">
+      {/* Barra superior: regreso al sistema de torneos */}
+      <div className="border-b border-white/10">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-2.5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-300 hover:text-cyan-200"
+          >
+            ← List.Golf · Torneos
+          </Link>
+          <span className="text-[11px] text-slate-500">Restaurante</span>
+        </div>
+      </div>
+
       {/* Hero */}
       <section className="border-b border-white/10">
         <div className="mx-auto max-w-4xl px-5 py-10">
