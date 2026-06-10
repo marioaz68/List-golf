@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { computeAllHoleDistances } from "@/lib/distances/ccqGreens";
 import {
   CCQ_HOLE_POINTS,
@@ -37,6 +38,41 @@ type GeoState =
   | { status: "error"; message: string }
   | { status: "ok"; lat: number; lon: number; accuracy: number; ts: number };
 
+type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
+
+interface PaceState {
+  ok: boolean;
+  status: string;
+  color: PaceColor;
+  deltaMinutes: number | null;
+}
+
+const PACE_STYLE: Record<
+  Exclude<PaceColor, "none">,
+  { box: string; title: string; label: string }
+> = {
+  red: {
+    box: "border-red-500 bg-red-600",
+    title: "ATRASADO",
+    label: "text-red-50",
+  },
+  yellow: {
+    box: "border-amber-400 bg-amber-500",
+    title: "CUIDADO",
+    label: "text-amber-950",
+  },
+  green: {
+    box: "border-emerald-400 bg-emerald-600",
+    title: "EN RITMO",
+    label: "text-emerald-50",
+  },
+  blue: {
+    box: "border-sky-400 bg-sky-600",
+    title: "ADELANTADO",
+    label: "text-sky-50",
+  },
+};
+
 function timeAgo(ms: number): string {
   const sec = Math.round((Date.now() - ms) / 1000);
   if (sec < 60) return `${sec}s`;
@@ -50,7 +86,20 @@ export default function DistanciasClient() {
   const [manualHole, setManualHole] = useState<number | null>(null);
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
+  const [pace, setPace] = useState<PaceState | null>(null);
   const watchIdRef = useRef<number | null>(null);
+
+  const searchParams = useSearchParams();
+  const actorQuery = useMemo(() => {
+    const me = searchParams.get("me") || searchParams.get("entry_id");
+    const caddie = searchParams.get("caddie") || searchParams.get("caddie_id");
+    const tg = searchParams.get("tg");
+    const parts: string[] = [];
+    if (me) parts.push(`me=${encodeURIComponent(me)}`);
+    if (caddie) parts.push(`caddie=${encodeURIComponent(caddie)}`);
+    if (tg) parts.push(`tg=${encodeURIComponent(tg)}`);
+    return parts.join("&");
+  }, [searchParams]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
@@ -169,6 +218,36 @@ export default function DistanciasClient() {
     },
     [geo]
   );
+
+  // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
+  useEffect(() => {
+    if (!actorQuery) {
+      setPace(null);
+      return;
+    }
+    let cancelled = false;
+    const fetchPace = async () => {
+      try {
+        const holeParam =
+          detectedHole != null ? `&hole=${detectedHole}` : "";
+        const res = await fetch(
+          `/api/captura/distancias/pace?${actorQuery}${holeParam}`
+        );
+        const data = (await res.json()) as PaceState;
+        if (cancelled) return;
+        if (data && data.ok) setPace(data);
+        else setPace(null);
+      } catch {
+        if (!cancelled) setPace(null);
+      }
+    };
+    fetchPace();
+    const interval = setInterval(fetchPace, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [actorQuery, detectedHole]);
 
   const changeHole = (delta: number) => {
     setManualHole(((prev) => {
@@ -318,7 +397,40 @@ export default function DistanciasClient() {
             </div>
           ))}
         </div>
+
+        <PaceBanner pace={pace} />
       </section>
+    </div>
+  );
+}
+
+function PaceBanner({ pace }: { pace: PaceState | null }) {
+  if (!pace || pace.color === "none" || pace.deltaMinutes == null) return null;
+  const style = PACE_STYLE[pace.color];
+  const delta = pace.deltaMinutes;
+  const mins = Math.abs(Math.round(delta));
+  const detail =
+    pace.color === "blue"
+      ? `${mins} min más rápido que el ritmo`
+      : pace.color === "green"
+        ? `±${mins} min · vas bien`
+        : `${mins} min más lento que el ritmo`;
+  return (
+    <div
+      className={[
+        "mt-3 rounded-xl border-2 px-4 py-3 text-center shadow-lg",
+        style.box,
+      ].join(" ")}
+    >
+      <div className={["text-3xl font-black tracking-wide", style.label].join(" ")}>
+        {style.title}
+      </div>
+      <div className={["mt-0.5 text-sm font-bold", style.label].join(" ")}>
+        {detail}
+      </div>
+      <div className={["mt-0.5 text-[10px] font-semibold uppercase opacity-80", style.label].join(" ")}>
+        Ritmo del campo
+      </div>
     </div>
   );
 }

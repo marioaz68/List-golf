@@ -226,7 +226,7 @@ export async function POST(req: Request) {
 
     // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===
     if (text && isDistancesCommand(text)) {
-      const reply = buildDistancesReply();
+      const reply = buildDistancesReply(userId);
       await sendTelegramMessage({
         chatId: chatId || userId,
         text: reply.text,

@@ -1077,7 +1077,21 @@ export default function TarjetaCaptureClient({
           <div className="flex items-center justify-between gap-2 bg-black px-2 py-2 text-white">
             <div className="flex items-center gap-2">
               <Link
-                href="/captura/distancias"
+                href={`/captura/distancias${
+                  [
+                    meta.myEntryId ? `me=${meta.myEntryId}` : null,
+                    caddieIdParam ? `caddie=${caddieIdParam}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join("&")
+                    ? `?${[
+                        meta.myEntryId ? `me=${meta.myEntryId}` : null,
+                        caddieIdParam ? `caddie=${caddieIdParam}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join("&")}`
+                    : ""
+                }`}
                 className="inline-flex items-center gap-1 rounded-md border border-cyan-300/60 bg-cyan-400/20 px-2 py-1 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-400/30"
                 title="Distancias al green"
               >

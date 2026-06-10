@@ -54,7 +54,7 @@ async function resolveTelegramUserId(
   return null;
 }
 
-async function resolveContextFromEntry(
+export async function resolveContextFromEntry(
   supabase: SupabaseClient,
   entryId: string
 ): Promise<ResolvedContext | null> {
@@ -82,7 +82,7 @@ async function resolveContextFromEntry(
   );
 }
 
-async function resolveContextFromCaddie(
+export async function resolveContextFromCaddie(
   supabase: SupabaseClient,
   caddieId: string
 ): Promise<ResolvedContext | null> {
