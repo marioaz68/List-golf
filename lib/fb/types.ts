@@ -75,6 +75,7 @@ export interface FbHouseAccount {
 }
 
 export type OrderStatus =
+  | "pending_payment"       // prepago con tarjeta pendiente (para llevar / domicilio)
   | "pending"               // recién creado, espera aceptación del restaurante
   | "accepted"              // restaurante/carrito aceptó
   | "preparing"             // en cocina
@@ -133,6 +134,7 @@ export function formatPrice(cents: number): string {
 
 /** Etiqueta humana del status de un pedido. */
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending_payment: "Esperando pago con tarjeta",
   pending: "Pendiente",
   accepted: "Aceptado",
   preparing: "En preparación",
@@ -147,6 +149,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 export const ORDER_STATUS_COLORS: Record<OrderStatus, { fg: string; bg: string }> = {
+  pending_payment: { fg: "#fde68a", bg: "#713f12" },
   pending: { fg: "#fde68a", bg: "#78350f" },
   accepted: { fg: "#bae6fd", bg: "#0c4a6e" },
   preparing: { fg: "#c7d2fe", bg: "#312e81" },

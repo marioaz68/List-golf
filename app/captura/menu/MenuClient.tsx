@@ -200,9 +200,40 @@ export default function MenuClient({
 
   const clearCart = useCallback(() => setCart([]), []);
 
+  const identityBody = useMemo(
+    () => ({
+      entry_id: meEntryId,
+      caddie_id: caddieId,
+      player_id: playerId,
+    }),
+    [meEntryId, caddieId, playerId]
+  );
+
+  const startCheckout = useCallback(
+    async (payload: { order_id?: string; pay_account?: boolean }) => {
+      const res = await fetch("/api/captura/fb-order/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...identityBody, ...payload }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        checkout_url?: string;
+        error?: string;
+      };
+      if (!json.ok || !json.checkout_url) {
+        throw new Error(json.error ?? "No se pudo abrir el pago con tarjeta.");
+      }
+      window.location.href = json.checkout_url;
+    },
+    [identityBody]
+  );
+
   // ============ Confirmar pedido ============
   // Venue de reparto a domicilio en el fraccionamiento
   const isHomeDelivery = selectedVenue?.code === "cart_fracc";
+  const isPickup = selectedVenue?.type === "restaurant";
+  const needsPrepay = isPickup || isHomeDelivery;
 
   const confirmOrder = useCallback(async () => {
     if (cart.length === 0 || !selectedVenue) return;
@@ -241,19 +272,37 @@ export default function MenuClient({
           })),
         }),
       });
-      const json = (await res.json()) as { ok: boolean; error?: string };
+      const json = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        order_id?: string;
+        needs_payment?: boolean;
+      };
       if (!json.ok) {
         setSubmitError(json.error ?? "No se pudo crear el pedido.");
         return;
       }
+      if (json.needs_payment && json.order_id) {
+        await startCheckout({ order_id: json.order_id });
+        return;
+      }
       clearCart();
       setOrderNotes("");
-      // Refrescar lista de pedidos
       void pullOrders();
     } finally {
       setSubmitting(false);
     }
-  }, [cart, selectedVenue, meEntryId, caddieId, playerId, homeAddress, orderNotes, clearCart]);
+  }, [
+    cart,
+    selectedVenue,
+    meEntryId,
+    caddieId,
+    playerId,
+    homeAddress,
+    orderNotes,
+    clearCart,
+    startCheckout,
+  ]);
 
   // ============ Mis pedidos + estado de cuenta + favoritos ============
   const [myOrders, setMyOrders] = useState<MyOrder[]>([]);
@@ -759,6 +808,11 @@ export default function MenuClient({
             <MiTicket
               orders={myOrders}
               accountCents={accountCents}
+              onPayAccount={
+                accountCents > 0
+                  ? () => startCheckout({ pay_account: true })
+                  : undefined
+              }
             />
           ) : null}
         </main>
@@ -807,8 +861,12 @@ export default function MenuClient({
                   className="rounded-md bg-emerald-600 px-4 py-2 text-[13px] font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {submitting
-                    ? "Enviando…"
-                    : `Confirmar · ${formatPrice(cartTotalCents)}`}
+                    ? needsPrepay
+                      ? "Abriendo pago…"
+                      : "Enviando…"
+                    : needsPrepay
+                      ? `Pagar con tarjeta · ${formatPrice(cartTotalCents)}`
+                      : `Confirmar · ${formatPrice(cartTotalCents)}`}
                 </button>
               </div>
             </div>
@@ -827,11 +885,15 @@ export default function MenuClient({
 function MiTicket({
   orders,
   accountCents,
+  onPayAccount,
 }: {
   orders: MyOrder[];
   accountCents: number;
+  onPayAccount?: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
 
   // Agrupar por status para resumen
   const counts = useMemo(() => {
@@ -858,7 +920,7 @@ function MiTicket({
           </div>
           <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] text-slate-600">
             {counts.delivered > 0 ? (
-              <span>{counts.delivered} cobrados</span>
+              <span>{counts.delivered} por cobrar</span>
             ) : null}
             {counts.pending > 0 ? (
               <span className="text-amber-700">{counts.pending} en proceso</span>
@@ -889,10 +951,13 @@ function MiTicket({
               "cancelled",
               "disputed",
             ].includes(o.status);
-            const isCobrado = o.status === "delivered";
+            const isPorCobrar = o.status === "delivered";
+            const isPagado = o.status === "paid";
             const isCancelled = o.status === "cancelled";
             const isDisputed = o.status === "disputed";
-            const colorClass = isCobrado
+            const colorClass = isPagado
+              ? "text-slate-600"
+              : isPorCobrar
               ? "text-emerald-800"
               : isPending
                 ? "text-amber-800"
@@ -903,8 +968,10 @@ function MiTicket({
               <li key={o.id} className="px-3 py-2.5">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className={`text-[10px] font-bold uppercase ${colorClass}`}>
-                    {isCobrado
-                      ? "✅ Cobrado"
+                    {isPagado
+                      ? "✅ Pagado"
+                      : isPorCobrar
+                      ? "🧾 Por cobrar"
                       : isCancelled
                         ? "✕ Cancelado"
                         : isDisputed
@@ -936,16 +1003,42 @@ function MiTicket({
           <li className="bg-emerald-50 px-3 py-3">
             <div className="flex items-baseline justify-between">
               <span className="text-[11px] font-bold uppercase text-emerald-700">
-                Total cobrado
+                Total por cobrar
               </span>
               <span className="text-base font-bold text-emerald-700">
                 {formatPrice(accountCents)}
               </span>
             </div>
             <p className="mt-1 text-[10px] text-emerald-700">
-              Total final al cerrar el torneo. Los pedidos en proceso o en
-              disputa no se han sumado todavía.
+              Consumos que ya confirmaste. Los pedidos en proceso o en disputa no
+              se han sumado todavía.
             </p>
+            {onPayAccount && accountCents > 0 ? (
+              <div className="mt-3">
+                {payError ? (
+                  <p className="mb-2 text-[11px] text-red-700">{payError}</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={paying}
+                  onClick={() => {
+                    setPayError(null);
+                    setPaying(true);
+                    void onPayAccount().catch((e: unknown) => {
+                      setPayError(
+                        e instanceof Error
+                          ? e.message
+                          : "No se pudo abrir el pago."
+                      );
+                      setPaying(false);
+                    });
+                  }}
+                  className="w-full rounded-md bg-indigo-600 px-3 py-2.5 text-[13px] font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {paying ? "Abriendo Stripe…" : "💳 Pagar con tarjeta"}
+                </button>
+              </div>
+            ) : null}
           </li>
         </ul>
       ) : null}

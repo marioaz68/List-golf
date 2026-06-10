@@ -23,6 +23,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { smoothedHoleForGroup } from "@/lib/telegram/ritmo/paceCalculator";
 import type { DeliveryType } from "@/lib/fb/types";
+import { requiresPrepay } from "@/lib/fb/prepayRequired";
 
 export const dynamic = "force-dynamic";
 
@@ -311,6 +312,8 @@ export async function POST(req: Request) {
   // Insertar la orden + items en una transacción lógica
   // venue_id = donde se prepara (puede ser el restaurante si hubo redirección)
   // source_venue_id = el venue ORIGINAL al que pidió (carrito), si fue redirigido
+  const needsPrepay = requiresPrepay(deliveryType);
+
   const { data: orderRow, error: orderErr } = await admin
     .from("fb_orders")
     .insert({
@@ -322,7 +325,7 @@ export async function POST(req: Request) {
       venue_id: effectiveVenueId,
       source_venue_id: sourceVenueId,
       delivery_type: deliveryType,
-      status: "pending",
+      status: needsPrepay ? "pending_payment" : "pending",
       requested_hole:
         deliveryType === "on_course" ? requestedHole ?? currentHole : null,
       delivery_address: deliveryType === "home" ? deliveryAddress : null,
@@ -392,6 +395,7 @@ export async function POST(req: Request) {
     ok: true,
     order_id: orderId,
     total_cents: totalCents,
+    needs_payment: needsPrepay,
     current_hole: currentHole,
     requested_hole:
       deliveryType === "on_course" ? requestedHole ?? currentHole : null,
