@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { loadCourseReferencePoints } from "@/lib/distances/loadCourseReferencePoints";
+import { loadGreenOverridesForCourse } from "@/lib/distances/loadGreenPoints";
 import CourseHolePointsClient from "./CourseHolePointsClient";
 
 export const dynamic = "force-dynamic";
@@ -39,12 +40,20 @@ export default async function CourseHolePointsPage(props: {
   }
 
   let initialPoints: Awaited<ReturnType<typeof loadCourseReferencePoints>> = [];
+  let initialGreenOverrides: Awaited<
+    ReturnType<typeof loadGreenOverridesForCourse>
+  > = [];
   if (effectiveCourseId) {
     try {
       initialPoints = await loadCourseReferencePoints(effectiveCourseId);
     } catch {
-      // Tabla aún no migrada en este entorno
       initialPoints = [];
+    }
+    try {
+      initialGreenOverrides =
+        await loadGreenOverridesForCourse(effectiveCourseId);
+    } catch {
+      initialGreenOverrides = [];
     }
   }
 
@@ -55,14 +64,16 @@ export default async function CourseHolePointsPage(props: {
           Puntos del campo (yardas)
         </h1>
         <p className="mt-1 text-xs text-slate-400">
-          Marca bunkers, agua, dogleg y otros puntos en el mapa. Aparecen en la
-          mini app 📏 Yardas de los jugadores con distancia en tiempo real.
+          Calibra los <strong className="text-emerald-300">puntos verdes</strong>{" "}
+          (entrada, centro, atrás del green) arrastrándolos en el mapa, o marca
+          bunkers, agua y otros puntos. Todo aparece en la mini app 📏 Yardas.
         </p>
       </div>
       <CourseHolePointsClient
         courses={courses}
         courseId={effectiveCourseId}
         initialPoints={initialPoints}
+        initialGreenOverrides={initialGreenOverrides}
       />
     </div>
   );

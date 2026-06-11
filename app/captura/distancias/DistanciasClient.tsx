@@ -7,11 +7,13 @@ import { useSearchParams } from "next/navigation";
 import { computeAllHoleDistances } from "@/lib/distances/ccqGreens";
 import {
   CCQ_HOLE_POINTS,
-  greenDistances,
-  referenceDistances,
+  greenDistancesForHole,
+  referenceDistancesForHole,
   yardsBetween,
+  type HoleGreenPoints,
   type ReferencePoint,
 } from "@/lib/distances/ccqHolePoints";
+import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
@@ -90,6 +92,7 @@ export default function DistanciasClient() {
   const [manualHole, setManualHole] = useState<number | null>(null);
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
+  const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -172,12 +175,18 @@ export default function DistanciasClient() {
 
   useEffect(() => {
     let cancelled = false;
+    const courseId = defaultDistanciasCourseId();
     (async () => {
       try {
-        const res = await fetch(
-          `/api/captura/distancias/points?hole=${activeHole}&course_id=${defaultDistanciasCourseId()}`
-        );
-        const data = (await res.json()) as {
+        const [ptsRes, greenRes] = await Promise.all([
+          fetch(
+            `/api/captura/distancias/points?hole=${activeHole}&course_id=${courseId}`
+          ),
+          fetch(
+            `/api/captura/distancias/greens?hole=${activeHole}&course_id=${courseId}`
+          ),
+        ]);
+        const ptsData = (await ptsRes.json()) as {
           ok?: boolean;
           points?: Array<{
             id: string;
@@ -188,20 +197,48 @@ export default function DistanciasClient() {
             lon: number;
           }>;
         };
-        if (cancelled || !data.ok || !data.points) return;
-        setCustomPoints(
-          data.points.map((p) => ({
-            id: p.id,
-            label: p.label,
-            shortLabel: p.short_label,
-            lat: p.lat,
-            lon: p.lon,
-            kind: "custom" as const,
-            dbKind: p.kind,
-          }))
-        );
+        const greenData = (await greenRes.json()) as {
+          ok?: boolean;
+          front?: { lat: number; lon: number };
+          center?: { lat: number; lon: number };
+          back?: { lat: number; lon: number };
+          source?: string;
+        };
+        if (cancelled) return;
+
+        if (ptsData.ok && ptsData.points) {
+          setCustomPoints(
+            ptsData.points.map((p) => ({
+              id: p.id,
+              label: p.label,
+              shortLabel: p.short_label,
+              lat: p.lat,
+              lon: p.lon,
+              kind: "custom" as const,
+              dbKind: p.kind,
+            }))
+          );
+        } else {
+          setCustomPoints([]);
+        }
+
+        if (greenData.ok && greenData.source === "db" && greenData.front && greenData.center && greenData.back) {
+          setHoleGreen(
+            resolveHoleGreenPoints(activeHole, {
+              holeNumber: activeHole,
+              front: greenData.front,
+              center: greenData.center,
+              back: greenData.back,
+            })
+          );
+        } else {
+          setHoleGreen(CCQ_HOLE_POINTS[activeHole] ?? null);
+        }
       } catch {
-        if (!cancelled) setCustomPoints([]);
+        if (!cancelled) {
+          setCustomPoints([]);
+          setHoleGreen(CCQ_HOLE_POINTS[activeHole] ?? null);
+        }
       }
     })();
     return () => {
@@ -209,17 +246,24 @@ export default function DistanciasClient() {
     };
   }, [activeHole]);
 
+  const activeHolePoints = holeGreen ?? CCQ_HOLE_POINTS[activeHole];
+
   const greenYds = useMemo(() => {
-    if (geo.status !== "ok") return null;
-    return greenDistances(geo.lat, geo.lon, activeHole);
-  }, [geo, activeHole]);
+    if (geo.status !== "ok" || !activeHolePoints) return null;
+    return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
+  }, [geo, activeHolePoints]);
 
   const refPoints = useMemo(() => {
-    if (geo.status !== "ok") return [];
-    return referenceDistances(geo.lat, geo.lon, activeHole, customPoints);
-  }, [geo, activeHole, customPoints]);
+    if (geo.status !== "ok" || !activeHolePoints) return [];
+    return referenceDistancesForHole(
+      geo.lat,
+      geo.lon,
+      activeHolePoints,
+      customPoints
+    );
+  }, [geo, activeHolePoints, customPoints]);
 
-  const holeMeta = CCQ_HOLE_POINTS[activeHole];
+  const holeMeta = activeHolePoints;
 
   const onMapTap = useCallback(
     (lat: number, lon: number) => {

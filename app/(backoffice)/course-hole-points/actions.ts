@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { DbReferencePointKind } from "@/lib/distances/courseReferencePoints";
+import { CCQ_HOLE_POINTS } from "@/lib/distances/ccqHolePoints";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -64,6 +65,47 @@ export async function saveCourseHolePoint(formData: FormData) {
       .insert(row);
     if (error) throw new Error(error.message);
   }
+
+  revalidatePath("/course-hole-points");
+}
+
+export async function saveHoleGreenPoints(formData: FormData) {
+  const supabase = await createClient();
+  const courseId = reqStr(formData, "course_id");
+  const holeNumber = Math.trunc(reqNum(formData, "hole_number"));
+  if (holeNumber < 1 || holeNumber > 18) throw new Error("Hoyo inválido");
+
+  const { data: existing } = await supabase
+    .from("course_holes")
+    .select("par, handicap_index")
+    .eq("course_id", courseId)
+    .eq("hole_number", holeNumber)
+    .maybeSingle();
+
+  const row = {
+    course_id: courseId,
+    hole_number: holeNumber,
+    par:
+      (existing as { par?: number } | null)?.par ??
+      CCQ_HOLE_POINTS[holeNumber]?.par ??
+      4,
+    handicap_index:
+      (existing as { handicap_index?: number } | null)?.handicap_index ??
+      holeNumber,
+    green_front_lat: reqNum(formData, "front_lat"),
+    green_front_lon: reqNum(formData, "front_lon"),
+    green_center_lat: reqNum(formData, "center_lat"),
+    green_center_lon: reqNum(formData, "center_lon"),
+    green_back_lat: reqNum(formData, "back_lat"),
+    green_back_lon: reqNum(formData, "back_lon"),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("course_holes").upsert(row, {
+    onConflict: "course_id,hole_number",
+    ignoreDuplicates: false,
+  });
+  if (error) throw new Error(error.message);
 
   revalidatePath("/course-hole-points");
 }

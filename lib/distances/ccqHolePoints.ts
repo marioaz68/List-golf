@@ -177,13 +177,11 @@ export function yardsBetween(
   return Math.round(metersToYards(haversineMeters(lat1, lon1, lat2, lon2)));
 }
 
-export function greenDistances(
+export function greenDistancesForHole(
   playerLat: number,
   playerLon: number,
-  holeNo: number
-): { front: number; center: number; back: number } | null {
-  const hp = CCQ_HOLE_POINTS[holeNo];
-  if (!hp) return null;
+  hp: HoleGreenPoints
+): { front: number; center: number; back: number } {
   return {
     front: yardsBetween(playerLat, playerLon, hp.front.lat, hp.front.lon),
     center: yardsBetween(playerLat, playerLon, hp.center.lat, hp.center.lon),
@@ -191,7 +189,33 @@ export function greenDistances(
   };
 }
 
+export function greenDistances(
+  playerLat: number,
+  playerLon: number,
+  holeNo: number
+): { front: number; center: number; back: number } | null {
+  const hp = CCQ_HOLE_POINTS[holeNo];
+  if (!hp) return null;
+  return greenDistancesForHole(playerLat, playerLon, hp);
+}
+
 export type ReferencePointWithYards = ReferencePoint & { yards: number };
+
+export function referenceDistancesForHole(
+  playerLat: number,
+  playerLon: number,
+  hp: HoleGreenPoints,
+  extraPoints: ReferencePoint[] = []
+): ReferencePointWithYards[] {
+  const system = hp.referencePoints.filter((p) => p.kind !== "corner");
+  const all = [...system, ...extraPoints];
+  return all
+    .map((p) => ({
+      ...p,
+      yards: yardsBetween(playerLat, playerLon, p.lat, p.lon),
+    }))
+    .sort((a, b) => a.yards - b.yards);
+}
 
 export function referenceDistances(
   playerLat: number,
@@ -201,14 +225,7 @@ export function referenceDistances(
 ): ReferencePointWithYards[] {
   const hp = CCQ_HOLE_POINTS[holeNo];
   if (!hp) return [];
-  const system = hp.referencePoints.filter((p) => p.kind !== "corner");
-  const all = [...system, ...extraPoints];
-  return all
-    .map((p) => ({
-      ...p,
-      yards: yardsBetween(playerLat, playerLon, p.lat, p.lon),
-    }))
-    .sort((a, b) => a.yards - b.yards);
+  return referenceDistancesForHole(playerLat, playerLon, hp, extraPoints);
 }
 
 /** Zoom Leaflet según distancia al centro del green (más cerca = más zoom). */
