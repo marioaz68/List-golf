@@ -27,6 +27,36 @@ function identityQuery(
   return q;
 }
 
+function isValidEmail(value: unknown): value is string {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+/** Resuelve el correo del cliente para precargarlo en Stripe Checkout.
+ *  Evita que Stripe Link muestre un correo viejo/equivocado guardado en el
+ *  dispositivo: si pasamos customer_email, Checkout usa ese. */
+async function resolveClientEmail(
+  admin: SupabaseClient,
+  id: ClientIdentity
+): Promise<string | undefined> {
+  let playerId = id.playerId;
+  if (!playerId && id.entryId) {
+    const { data } = await admin
+      .from("tournament_entries")
+      .select("player_id")
+      .eq("id", id.entryId)
+      .maybeSingle();
+    playerId = (data as { player_id?: string } | null)?.player_id ?? null;
+  }
+  if (!playerId) return undefined;
+  const { data } = await admin
+    .from("players")
+    .select("email")
+    .eq("id", playerId)
+    .maybeSingle();
+  const email = (data as { email?: string | null } | null)?.email?.trim();
+  return isValidEmail(email) ? email : undefined;
+}
+
 export async function verifyOrderOwnership(
   admin: SupabaseClient,
   orderId: string,
@@ -108,9 +138,11 @@ export async function createCheckoutForOrder(
   }
 
   const base = appBaseUrl();
+  const customerEmail = await resolveClientEmail(admin, id);
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: lineItems,
+    ...(customerEmail ? { customer_email: customerEmail } : {}),
     success_url: `${base}/captura/menu/pago-exitoso?session_id={CHECKOUT_SESSION_ID}&${returnQuery}`,
     cancel_url: `${base}/captura/menu/pago-cancelado?${returnQuery}`,
     metadata: {
@@ -178,8 +210,10 @@ export async function createCheckoutForAccount(
   const clientLabel = rows[0]?.client_label?.trim() || "Cuenta List.Golf";
 
   const base = appBaseUrl();
+  const customerEmail = await resolveClientEmail(admin, id);
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    ...(customerEmail ? { customer_email: customerEmail } : {}),
     line_items: [
       {
         price_data: {
