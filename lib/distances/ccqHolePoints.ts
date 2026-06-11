@@ -212,12 +212,11 @@ export function referenceDistances(
 }
 
 /** Zoom Leaflet según distancia al centro del green (más cerca = más zoom). */
+/** Zoom "de caminata": vista cercana al jugador, como si estuvieras parado
+ *  dentro del hoyo. Se acerca un poco más conforme te aproximas al green. */
 export function zoomForYardsToCenter(yards: number): number {
-  if (yards > 280) return 15;
-  if (yards > 200) return 16;
-  if (yards > 140) return 17;
-  if (yards > 90) return 18;
-  if (yards > 45) return 19;
+  if (yards > 220) return 18;
+  if (yards > 120) return 19;
   return 20;
 }
 

@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import {
   type ReferencePointWithYards,
   getHolePolygon,
-  zoomForYardsToCenter,
 } from "@/lib/distances/ccqHolePoints";
 
 export interface TapPoint {
@@ -248,8 +247,10 @@ export function HoleYardageMap({
         document.head.appendChild(style);
       }
 
-      // Zoom dinámico: más cerca del green = más zoom
-      const targetZoom = zoomForYardsToCenter(yardsToCenter);
+      // Encuadre "siempre de ti al green": en la salida se ve el hoyo
+      // completo (jugador lejos del green) y conforme avanzas el segmento se
+      // acorta y la vista se acerca sola. Solo incluimos jugador + green
+      // (no el tee ni esquinas, para no abrir la vista hacia atrás).
       const bounds = L.latLngBounds([
         [playerLat, playerLon],
         ...referencePoints
@@ -261,10 +262,7 @@ export function HoleYardageMap({
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
       map.invalidateSize();
-      map.fitBounds(bounds, { padding: [36, 36], animate: true, maxZoom: targetZoom });
-      if (map.getZoom() > targetZoom) {
-        map.setZoom(targetZoom, { animate: true });
-      }
+      map.fitBounds(bounds, { padding: [40, 50], animate: true, maxZoom: 20 });
     })();
   }, [
     holeNo,
