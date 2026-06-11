@@ -101,13 +101,14 @@ export function HoleYardageMap({
         keyboard: false,
       });
 
+      // Esri World Imagery: satélite más nítido y reciente que Google para
+      // esta zona. Al estar en tiles, queda perfectamente alineado con el GPS.
       L.tileLayer(
-        "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
-          subdomains: ["0", "1", "2", "3"],
           maxZoom: 21,
-          maxNativeZoom: 20,
-          attribution: "© Google",
+          maxNativeZoom: 19,
+          attribution: "© Esri",
         }
       ).addTo(map);
 

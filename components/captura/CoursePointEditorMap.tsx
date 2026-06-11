@@ -63,8 +63,8 @@ export function CoursePointEditorMap({
         maxZoom: 21,
       });
       L.tileLayer(
-        "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        { subdomains: ["0", "1", "2", "3"], maxZoom: 21, maxNativeZoom: 20 }
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 21, maxNativeZoom: 19, attribution: "© Esri" }
       ).addTo(map);
       map.on("click", (e: any) =>
         onClickRef.current(e.latlng.lat, e.latlng.lng)
