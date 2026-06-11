@@ -275,52 +275,88 @@ export default function DistanciasClient() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
-      <header className="shrink-0 border-b border-slate-800 bg-slate-900 px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-sm font-bold">📏 Yardas · CCQ</h1>
-            <p className="text-[10px] text-slate-400">
-              Mapa del campo · misma base que ritmo del campo
-            </p>
-          </div>
-          <Link
-            href="/"
-            className="text-[11px] font-semibold text-slate-400 underline"
-          >
-            cerrar
-          </Link>
-        </div>
-      </header>
-
-      {/* GPS */}
-      <section className="shrink-0 border-b border-slate-800 px-3 py-2">
-        {geo.status === "idle" || geo.status === "requesting" ? (
-          <p className="text-center text-xs text-slate-300">
-            📡 Esperando GPS…
-          </p>
-        ) : geo.status === "denied" || geo.status === "error" ? (
-          <p className="text-center text-xs text-amber-300">
-            ⚠ {geo.status === "denied" ? geo.message : geo.message}
-          </p>
+    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
+      {/* Mapa a pantalla completa */}
+      <div className="absolute inset-0">
+        {geo.status === "ok" && greenYds && !farFromCourse ? (
+          <HoleYardageMap
+            holeNo={activeHole}
+            playerLat={geo.lat}
+            playerLon={geo.lon}
+            yardsToCenter={greenYds.center}
+            referencePoints={refPoints}
+            tapPoint={tapPoint}
+            onMapTap={onMapTap}
+          />
         ) : (
-          <div className="flex items-center justify-between text-[10px] text-slate-400">
-            <span>GPS ✓ · ±{Math.round(geo.accuracy)}m</span>
-            <span>Hace {timeAgo(geo.ts)}</span>
-            {farFromCourse ? (
-              <span className="text-amber-300">Lejos del campo</span>
-            ) : detectedHole == null ? (
-              <span className="text-amber-300">Fuera de hoyo</span>
-            ) : (
-              <span className="text-emerald-400">Hoyo {detectedHole}</span>
-            )}
+          <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
+            {geo.status === "denied" || geo.status === "error"
+              ? `⚠ ${geo.message}`
+              : "📡 Esperando GPS…"}
           </div>
         )}
-      </section>
+      </div>
 
-      {/* Fuera del rango del club: no medimos */}
+      {/* Barra superior flotante: hoyo + distancias + cerrar */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
+        <div className="pointer-events-auto flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => changeHole(-1)}
+            className="rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
+          >
+            ‹
+          </button>
+          <div className="rounded-md bg-black/55 px-2 py-0.5 text-center leading-tight backdrop-blur-sm">
+            <div className="text-sm font-black text-emerald-100">
+              Hoyo {activeHole}
+            </div>
+            <div className="text-[8px] text-slate-300">
+              par {holeMeta?.par ?? "—"}
+              {manualHole != null ? " · manual" : ""}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => changeHole(1)}
+            className="rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
+          >
+            ›
+          </button>
+        </div>
+
+        {greenYds ? (
+          <div className="pointer-events-none flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 backdrop-blur-sm">
+            <MiniDist label="Ent" yards={greenYds.front} />
+            <MiniDist label="Cen" yards={greenYds.center} highlight />
+            <MiniDist label="Fon" yards={greenYds.back} />
+          </div>
+        ) : (
+          <span />
+        )}
+
+        <Link
+          href="/"
+          className="pointer-events-auto rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
+        >
+          ✕
+        </Link>
+      </div>
+
+      {/* Punto tocado: pastilla flotante */}
+      {tapPoint && !farFromCourse ? (
+        <button
+          type="button"
+          onClick={() => setTapPoint(null)}
+          className="absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
+        >
+          {tapPoint.yards} yds · tocar para quitar
+        </button>
+      ) : null}
+
+      {/* Fuera del rango del club */}
       {farFromCourse ? (
-        <section className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/92 px-6 text-center">
           <div className="text-5xl">📍</div>
           <h2 className="mt-3 text-lg font-bold text-amber-200">
             Estás lejos del campo
@@ -335,145 +371,51 @@ export default function DistanciasClient() {
               cercano (hoyo {nearest.holeNo}).
             </p>
           ) : null}
-        </section>
-      ) : (
-      <>
-      {/* Selector de hoyo + F/C/B */}
-      <section className="shrink-0 border-b border-slate-800 px-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => changeHole(-1)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs font-bold"
+          <Link
+            href="/"
+            className="mt-5 rounded-md border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200"
           >
-            ‹
-          </button>
-          <div className="text-center">
-            <div className="text-lg font-black text-emerald-100">
-              Hoyo {activeHole}
-            </div>
-            <div className="text-[10px] text-slate-400">
-              par {holeMeta?.par ?? "—"}
-              {manualHole != null ? " · manual" : ""}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => changeHole(1)}
-            className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs font-bold"
-          >
-            ›
-          </button>
+            Cerrar
+          </Link>
         </div>
+      ) : null}
 
-        {greenYds ? (
-          <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
-            <GreenChip label="Frente" yards={greenYds.front} />
-            <GreenChip label="Centro" yards={greenYds.center} highlight />
-            <GreenChip label="Fondo" yards={greenYds.back} />
-          </div>
-        ) : null}
-      </section>
-
-      {/* Mapa */}
-      <section className="min-h-0 flex-1 px-2 py-2">
-        {geo.status === "ok" && greenYds ? (
-          <HoleYardageMap
-            holeNo={activeHole}
-            playerLat={geo.lat}
-            playerLon={geo.lon}
-            yardsToCenter={greenYds.center}
-            referencePoints={refPoints}
-            tapPoint={tapPoint}
-            onMapTap={onMapTap}
-          />
-        ) : (
-          <MapSkeleton />
-        )}
-      </section>
-
-      {/* Tap + puntos de referencia */}
-      <section className="shrink-0 border-t border-slate-800 px-3 py-2 pb-4">
-        {tapPoint ? (
-          <div className="mb-2 flex items-center justify-between rounded-lg border border-pink-700/50 bg-pink-950/40 px-3 py-2">
-            <div>
-              <div className="text-[10px] font-bold uppercase text-pink-300">
-                Punto tocado
-              </div>
-              <div className="text-2xl font-black text-pink-100">
-                {tapPoint.yards}{" "}
-                <span className="text-sm font-bold">yds</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setTapPoint(null)}
-              className="rounded-md border border-pink-600/50 px-2 py-1 text-[10px] text-pink-200"
-            >
-              Quitar
-            </button>
-          </div>
-        ) : null}
-
-        <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Puntos del hoyo
-        </h2>
-        <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-          {refPoints.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-900 px-2 py-1.5"
-            >
-              <span className="truncate text-[11px] text-slate-300">
-                {p.label}
-              </span>
-              <span className="ml-1 shrink-0 text-sm font-bold text-slate-100">
-                {p.yards}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <PaceBanner pace={pace} />
-      </section>
-      </>
-      )}
+      {/* Barra de ritmo delgada abajo */}
+      {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
     </div>
   );
 }
 
-function PaceBanner({ pace }: { pace: PaceState | null }) {
+function PaceBannerThin({ pace }: { pace: PaceState | null }) {
   if (!pace || pace.color === "none" || pace.deltaMinutes == null) return null;
   const style = PACE_STYLE[pace.color];
-  const delta = pace.deltaMinutes;
-  const mins = Math.abs(Math.round(delta));
+  const mins = Math.abs(Math.round(pace.deltaMinutes));
   const detail =
     pace.color === "blue"
-      ? `${mins} min más rápido que el ritmo`
+      ? `${mins} min más rápido`
       : pace.color === "green"
         ? `±${mins} min · vas bien`
-        : `${mins} min más lento que el ritmo`;
+        : `${mins} min más lento`;
   return (
     <div
       className={[
-        "mt-3 rounded-xl border-2 px-4 py-3 text-center shadow-lg",
+        "absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
         style.box,
       ].join(" ")}
     >
-      <div className={["text-3xl font-black tracking-wide", style.label].join(" ")}>
+      <span
+        className={["text-base font-black tracking-wide", style.label].join(" ")}
+      >
         {style.title}
-      </div>
-      <div className={["mt-0.5 text-sm font-bold", style.label].join(" ")}>
-        {detail}
-      </div>
-      <div className={["mt-0.5 text-[10px] font-semibold uppercase opacity-80", style.label].join(" ")}>
-        Ritmo del campo
-      </div>
+      </span>
+      <span className={["text-xs font-bold", style.label].join(" ")}>
+        · {detail}
+      </span>
     </div>
   );
 }
 
-function GreenChip({
+function MiniDist({
   label,
   yards,
   highlight,
@@ -483,21 +425,19 @@ function GreenChip({
   highlight?: boolean;
 }) {
   return (
-    <div
-      className={[
-        "rounded-lg border px-1 py-1.5",
-        highlight
-          ? "border-emerald-500 bg-emerald-900/50"
-          : "border-slate-700 bg-slate-900",
-      ].join(" ")}
-    >
-      <div className="text-[9px] font-bold uppercase text-slate-400">
+    <div className="px-1 text-center leading-none">
+      <div
+        className={[
+          "text-[7px] font-bold uppercase",
+          highlight ? "text-emerald-300" : "text-slate-300",
+        ].join(" ")}
+      >
         {label}
       </div>
       <div
         className={[
-          "text-xl font-black",
-          highlight ? "text-emerald-100" : "text-slate-200",
+          "text-sm font-black",
+          highlight ? "text-emerald-100" : "text-white",
         ].join(" ")}
       >
         {yards}

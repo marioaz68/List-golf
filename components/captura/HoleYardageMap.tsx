@@ -276,11 +276,11 @@ export function HoleYardageMap({
   return (
     <div
       ref={containerRef}
-      className="relative h-full min-h-[280px] w-full overflow-hidden rounded-xl border border-slate-700 bg-black"
+      className="relative h-full w-full overflow-hidden bg-black"
     >
       <div ref={mapDivRef} className="absolute inset-0" />
-      <div className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
-        Toca el mapa para medir a un punto
+      <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
+        Toca el mapa para medir
       </div>
     </div>
   );
