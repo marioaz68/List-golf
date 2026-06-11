@@ -100,14 +100,17 @@ export function HoleYardageMap({
         keyboard: false,
       });
 
-      // Esri World Imagery: satélite más nítido y reciente que Google para
-      // esta zona. Al estar en tiles, queda perfectamente alineado con el GPS.
+      // Satélite Google con detectRetina: en pantallas de celular (alta
+      // densidad) carga los tiles al doble de resolución, así se ve nítido
+      // aun acercando al green. Queda alineado con el GPS por ser tiles.
       L.tileLayer(
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         {
+          subdomains: ["0", "1", "2", "3"],
           maxZoom: 21,
-          maxNativeZoom: 19,
-          attribution: "© Esri",
+          maxNativeZoom: 20,
+          detectRetina: true,
+          attribution: "© Google",
         }
       ).addTo(map);
 
@@ -247,9 +250,9 @@ export function HoleYardageMap({
         document.head.appendChild(style);
       }
 
-      // Encuadre "siempre de ti al green": en la salida se ve el hoyo
-      // completo (jugador lejos del green) y conforme avanzas el segmento se
-      // acorta y la vista se acerca sola. Solo incluimos jugador + green
+      // Encuadre "siempre de ti al fondo del green", llenando la pantalla:
+      // cerca = bordes (jugador) y fondo del green; en la salida se ve el
+      // hoyo completo y conforme avanzas se acerca solo. Solo jugador + green
       // (no el tee ni esquinas, para no abrir la vista hacia atrás).
       const bounds = L.latLngBounds([
         [playerLat, playerLon],
@@ -262,7 +265,14 @@ export function HoleYardageMap({
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
       map.invalidateSize();
-      map.fitBounds(bounds, { padding: [40, 50], animate: true, maxZoom: 20 });
+      // Padding asimétrico: deja hueco para la barra superior y la de ritmo,
+      // pero llena el resto de la pantalla.
+      map.fitBounds(bounds, {
+        paddingTopLeft: [16, 68],
+        paddingBottomRight: [16, 52],
+        animate: true,
+        maxZoom: 20,
+      });
     })();
   }, [
     holeNo,
