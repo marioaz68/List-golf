@@ -298,7 +298,7 @@ export default function DistanciasClient() {
       </div>
 
       {/* Barra superior flotante: hoyo + distancias + cerrar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
         <div className="pointer-events-auto flex items-center gap-1.5">
           <button
             type="button"
@@ -313,15 +313,17 @@ export default function DistanciasClient() {
             onClick={() => setManualHole(null)}
             disabled={manualHole == null}
             aria-label="Volver a detección automática"
-            className="rounded-lg bg-black/60 px-2.5 py-1 text-center leading-tight shadow-lg backdrop-blur-sm disabled:opacity-100"
+            className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm disabled:opacity-100"
           >
-            <div className="text-base font-black text-emerald-100">
-              Hoyo {activeHole}
+            <div className="text-xs font-black text-emerald-100">
+              H{activeHole}
+              <span className="ml-1 text-[9px] font-semibold text-slate-300">
+                par {holeMeta?.par ?? "—"}
+              </span>
             </div>
-            <div className="text-[8px] text-slate-300">
-              par {holeMeta?.par ?? "—"}
-              {manualHole != null ? " · tocar para auto" : ""}
-            </div>
+            {manualHole != null ? (
+              <div className="text-[8px] text-slate-300">tocar para auto</div>
+            ) : null}
           </button>
           <button
             type="button"
@@ -356,7 +358,7 @@ export default function DistanciasClient() {
         <button
           type="button"
           onClick={() => setTapPoint(null)}
-          className="absolute left-1/2 top-16 z-10 -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
+          className="absolute left-1/2 top-16 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
         >
           {tapPoint.yards} yds · tocar para quitar
         </button>
@@ -364,7 +366,7 @@ export default function DistanciasClient() {
 
       {/* Fuera del rango del club */}
       {farFromCourse ? (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/92 px-6 text-center">
+        <div className="absolute inset-0 z-[1100] flex flex-col items-center justify-center bg-slate-950/92 px-6 text-center">
           <div className="text-5xl">📍</div>
           <h2 className="mt-3 text-lg font-bold text-amber-200">
             Estás lejos del campo
@@ -407,7 +409,7 @@ function PaceBannerThin({ pace }: { pace: PaceState | null }) {
   return (
     <div
       className={[
-        "absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
+        "absolute inset-x-0 bottom-0 z-[1000] flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
         style.box,
       ].join(" ")}
     >
