@@ -299,27 +299,35 @@ export default function DistanciasClient() {
 
       {/* Barra superior flotante: hoyo + distancias + cerrar */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
-        <div className="pointer-events-auto flex items-center gap-1">
+        <div className="pointer-events-auto flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => changeHole(-1)}
-            className="rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
+            aria-label="Hoyo anterior"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
           >
             ‹
           </button>
-          <div className="rounded-md bg-black/55 px-2 py-0.5 text-center leading-tight backdrop-blur-sm">
-            <div className="text-sm font-black text-emerald-100">
+          <button
+            type="button"
+            onClick={() => setManualHole(null)}
+            disabled={manualHole == null}
+            aria-label="Volver a detección automática"
+            className="rounded-lg bg-black/60 px-2.5 py-1 text-center leading-tight shadow-lg backdrop-blur-sm disabled:opacity-100"
+          >
+            <div className="text-base font-black text-emerald-100">
               Hoyo {activeHole}
             </div>
             <div className="text-[8px] text-slate-300">
               par {holeMeta?.par ?? "—"}
-              {manualHole != null ? " · manual" : ""}
+              {manualHole != null ? " · tocar para auto" : ""}
             </div>
-          </div>
+          </button>
           <button
             type="button"
             onClick={() => changeHole(1)}
-            className="rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
+            aria-label="Hoyo siguiente"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
           >
             ›
           </button>
