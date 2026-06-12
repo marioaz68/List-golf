@@ -47,6 +47,11 @@ export async function loadGreenOverrideForHole(
   return {
     hole: holeNumber,
     source: override && hasGreenOverride(override) ? "db" : "default",
+    saved: {
+      front: !!override?.front,
+      center: !!override?.center,
+      back: !!override?.back,
+    },
     front: resolved.front,
     center: resolved.center,
     back: resolved.back,

@@ -41,6 +41,10 @@ import {
   isDistancesCommand,
   buildDistancesReply,
 } from "@/lib/telegram/distancesCommand";
+import {
+  isCalibrarCommand,
+  buildCalibrarReply,
+} from "@/lib/telegram/calibrarCommand";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -222,6 +226,17 @@ export async function POST(req: Request) {
         buttons: reply.buttons,
       });
       return NextResponse.json({ ok: true, mis_rondas: "link_sent" });
+    }
+
+    // === CALIBRACIÓN: /CALIBRAR — mini app para mover greens y puntos (admin) ===
+    if (text && isCalibrarCommand(text)) {
+      const reply = buildCalibrarReply(userId);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, calibrar: "link_sent" });
     }
 
     // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===

@@ -33,11 +33,13 @@ export function rowToGreenOverride(row: Record<string, unknown>): HoleGreenOverr
   };
 }
 
+/** Hay al menos un punto del green calibrado en BD. */
 export function hasGreenOverride(o: HoleGreenOverride): boolean {
-  return !!(o.front && o.center && o.back);
+  return !!(o.front || o.center || o.back);
 }
 
-/** Combina defaults del polígono con coordenadas guardadas en BD. */
+/** Combina defaults del polígono con coordenadas guardadas en BD, punto por
+ *  punto (permite calibrar entrada/centro/atrás de forma independiente). */
 export function resolveHoleGreenPoints(
   holeNo: number,
   override?: HoleGreenOverride | null
