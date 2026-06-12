@@ -1,6 +1,8 @@
 /**
  * Comandos /DISTANCIAS o /YARDAS — manda link a la Mini App rangefinder.
  */
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
+
 const COMMANDS = new Set(["DISTANCIAS", "/DISTANCIAS", "YARDAS", "/YARDAS"]);
 
 export function isDistancesCommand(text: string): boolean {
@@ -9,10 +11,7 @@ export function isDistancesCommand(text: string): boolean {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export function buildDistancesReply(telegramUserId?: string | null): {

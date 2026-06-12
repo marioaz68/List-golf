@@ -9,6 +9,7 @@
  *   /BAR             → alias de /CARRITO
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const COMMANDS = new Set(["CARRITO", "/CARRITO", "BAR", "/BAR"]);
 
@@ -18,10 +19,7 @@ export function isCartCommand(text: string): boolean {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export async function buildCartReply(

@@ -5,6 +5,7 @@
  * Restringido: solo usuarios autorizados (ver lib/distances/calibrationAccess).
  */
 import { isCalibrationAllowed } from "@/lib/distances/calibrationAccess";
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const COMMANDS = new Set([
   "CALIBRAR",
@@ -21,10 +22,7 @@ export function isCalibrarCommand(text: string): boolean {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export function buildCalibrarReply(telegramUserId?: string | null): {

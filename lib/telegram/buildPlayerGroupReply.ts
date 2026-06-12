@@ -1,15 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 function formatPlayerName(firstName: string | null, lastName: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ").trim() || "(sin nombre)";
 }
 
 function appBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export function buildScoreEntryHref(params: {

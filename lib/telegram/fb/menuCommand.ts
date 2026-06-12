@@ -9,6 +9,7 @@
  * El link se abre con ?u=<telegram_user_id> y la mini app resuelve en el
  * server al jugador/socio vinculado (y su entry más reciente si existe).
  */
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const COMMANDS = new Set([
   "MENU",
@@ -25,10 +26,7 @@ export function isMenuCommand(text: string): boolean {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export function buildMenuReply(telegramUserId: string): {

@@ -5,6 +5,7 @@ import {
   smoothedHoleForGroup,
 } from "./paceCalculator";
 import { resolveRitmoContext } from "./handleLocationUpdate";
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const RITMO_COMMANDS = new Set(["RITMO", "/RITMO", "MI RITMO"]);
 const RITMO_MAP_COMMANDS = new Set([
@@ -21,10 +22,7 @@ export function isRitmoMapCommand(command: string): boolean {
 }
 
 function ritmoMapAppUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 /** URL del mapa en vivo en backoffice (requiere sesión del comité). */

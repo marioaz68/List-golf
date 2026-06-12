@@ -2,6 +2,7 @@
  * Comandos /RONDAS o /MISRONDAS en el bot — manda al socio el link a su
  * Mini App de histórico personal de rondas con HI calculado.
  */
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const COMMANDS = new Set(["RONDAS", "/RONDAS", "MISRONDAS", "/MISRONDAS"]);
 
@@ -11,10 +12,7 @@ export function isMisRondasCommand(text: string): boolean {
 }
 
 function appUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "https://www.listgolf.club"
-  );
+  return telegramAppUrl();
 }
 
 export function buildMisRondasReply(telegramUserId: string): {
