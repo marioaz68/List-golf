@@ -71,9 +71,11 @@ export function HoleYardageMap({
   const bearingRef = useRef(0);
   const onMapTapRef = useRef(onMapTap);
   const sizeRef = useRef({ w: 0, h: 0 });
+  const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
   onMapTapRef.current = onMapTap;
   sizeRef.current = size;
+  playerPosRef.current = { lat: playerLat, lon: playerLon };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -94,7 +96,7 @@ export function HoleYardageMap({
     (async () => {
       const L = await loadLeaflet();
       const map = L.map(mapDivRef.current, {
-        center: [playerLat, playerLon],
+        center: [playerPosRef.current.lat, playerPosRef.current.lon],
         zoom: 17,
         maxZoom: 21,
         // zoomSnap 0 = zoom fraccional continuo: el acercamiento al green
@@ -156,7 +158,11 @@ export function HoleYardageMap({
     })();
 
     return () => cleanup();
-  }, [size.w, size.h, playerLat, playerLon]);
+    // Solo inicializa una vez que hay tamaño. La posición del jugador se
+    // actualiza en el efecto de markers; recrear el mapa en cada GPS rompía
+    // la rotación/encuadre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.w, size.h]);
 
   useEffect(() => {
     const map = mapRef.current;

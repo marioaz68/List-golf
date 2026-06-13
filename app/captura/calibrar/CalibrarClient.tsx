@@ -78,6 +78,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [newShort, setNewShort] = useState("");
 
   const watchIdRef = useRef<number | null>(null);
+  // Hoyo detectado cuando el usuario fijó el hoyo a mano; al entrar a otro
+  // hoyo se reanuda el automático.
+  const manualAtDetectedRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
@@ -125,6 +128,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   }, [geo]);
 
   const activeHole = manualHole ?? detectedHole ?? nearestHole;
+
+  useEffect(() => {
+    if (
+      manualHole != null &&
+      detectedHole != null &&
+      detectedHole !== manualAtDetectedRef.current
+    ) {
+      setManualHole(null);
+    }
+  }, [detectedHole, manualHole]);
 
   const refetch = useCallback(async () => {
     try {
@@ -292,6 +305,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   };
 
   const changeHole = (delta: number) => {
+    manualAtDetectedRef.current = detectedHole;
     const base = manualHole ?? detectedHole ?? nearestHole;
     let next = base + delta;
     if (next < 1) next = 18;

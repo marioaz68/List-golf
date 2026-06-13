@@ -95,6 +95,9 @@ export default function DistanciasClient() {
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  // Hoyo detectado en el momento que el usuario fijó el hoyo a mano. Al entrar
+  // a un hoyo distinto (el GPS detecta otro polígono), se reanuda el automático.
+  const manualAtDetectedRef = useRef<number | null>(null);
 
   const searchParams = useSearchParams();
   const actorQuery = useMemo(() => {
@@ -172,6 +175,19 @@ export default function DistanciasClient() {
     nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
 
   const activeHole = manualHole ?? detectedHole ?? nearestHole;
+
+  // Reanudar automático al caminar a otro hoyo: si fijaste el hoyo a mano y el
+  // GPS te detecta ya en un hoyo distinto al de cuando lo fijaste, vuelve a auto.
+  useEffect(() => {
+    if (
+      manualHole != null &&
+      detectedHole != null &&
+      detectedHole !== manualAtDetectedRef.current
+    ) {
+      setManualHole(null);
+      setTapPoint(null);
+    }
+  }, [detectedHole, manualHole]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,6 +324,7 @@ export default function DistanciasClient() {
   }, [actorQuery, detectedHole]);
 
   const changeHole = (delta: number) => {
+    manualAtDetectedRef.current = detectedHole;
     setManualHole(((prev) => {
       const base = prev ?? detectedHole ?? nearestHole;
       let next = base + delta;

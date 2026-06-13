@@ -41,7 +41,9 @@ export function CalibrarMap({
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
+  playerPosRef.current = { lat: playerLat, lon: playerLon };
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -60,7 +62,7 @@ export function CalibrarMap({
     (async () => {
       const L = await loadLeaflet();
       const map = L.map(mapDivRef.current, {
-        center: [playerLat, playerLon],
+        center: [playerPosRef.current.lat, playerPosRef.current.lon],
         zoom: 19,
         maxZoom: 21,
         zoomSnap: 0,
@@ -88,7 +90,10 @@ export function CalibrarMap({
       };
     })();
     return () => cleanup();
-  }, [size.w, size.h, playerLat, playerLon]);
+    // Solo inicializa una vez con el tamaño; la posición se actualiza en el
+    // efecto de markers (recrear el mapa en cada GPS rompía la rotación).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.w, size.h]);
 
   useEffect(() => {
     const map = mapRef.current;
