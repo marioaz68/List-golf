@@ -43,6 +43,7 @@ export function CalibrarMap({
   const layerRef = useRef<any>(null);
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [mapReady, setMapReady] = useState(false);
   playerPosRef.current = { lat: playerLat, lon: playerLon };
 
   useEffect(() => {
@@ -59,8 +60,10 @@ export function CalibrarMap({
     if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
     if (mapRef.current) return;
     let cleanup = () => {};
+    let cancelled = false;
     (async () => {
       const L = await loadLeaflet();
+      if (cancelled || !mapDivRef.current) return;
       const map = L.map(mapDivRef.current, {
         center: [playerPosRef.current.lat, playerPosRef.current.lon],
         zoom: 19,
@@ -83,13 +86,20 @@ export function CalibrarMap({
       }).addTo(map);
       mapRef.current = map;
       layerRef.current = L.layerGroup().addTo(map);
+      map.invalidateSize();
+      setMapReady(true);
       cleanup = () => {
+        cancelled = true;
         map.remove();
         mapRef.current = null;
         layerRef.current = null;
+        setMapReady(false);
       };
     })();
-    return () => cleanup();
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
     // Solo inicializa una vez con el tamaño; la posición se actualiza en el
     // efecto de markers (recrear el mapa en cada GPS rompía la rotación).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,7 +115,8 @@ export function CalibrarMap({
     const map = mapRef.current;
     const lg = layerRef.current;
     const rotator = rotatorRef.current;
-    if (!map || !lg || !rotator || size.w === 0 || size.h === 0) return;
+    if (!map || !lg || !rotator || size.w === 0 || size.h === 0 || !mapReady)
+      return;
 
     (async () => {
       const L = await loadLeaflet();
@@ -228,7 +239,7 @@ export function CalibrarMap({
         );
       }
     })();
-  }, [holeNo, playerLat, playerLon, markers, size.w, size.h]);
+  }, [holeNo, playerLat, playerLon, markers, size.w, size.h, mapReady]);
 
   const rotW = size.w * MAP_SCALE;
   const rotH = size.h * MAP_SCALE;

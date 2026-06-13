@@ -303,7 +303,7 @@ export default function DistanciasClient() {
     const fetchPace = async () => {
       try {
         const holeParam =
-          detectedHole != null ? `&hole=${detectedHole}` : "";
+          activeHole >= 1 && activeHole <= 18 ? `&hole=${activeHole}` : "";
         const res = await fetch(
           `/api/captura/distancias/pace?${actorQuery}${holeParam}`
         );
@@ -321,7 +321,7 @@ export default function DistanciasClient() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [actorQuery, detectedHole]);
+  }, [actorQuery, activeHole]);
 
   const changeHole = (delta: number) => {
     manualAtDetectedRef.current = detectedHole;

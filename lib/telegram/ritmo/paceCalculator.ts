@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { holesPlayedFromCurrentHole } from "@/lib/ritmo/startHole";
+
 // Fallback cuando un campo no tiene minutos por hoyo configurados en la tabla
-// course_holes.pace_minutes. 16 min × 18 = 288 min = 4:48 (ritmo de torneo).
-const MIN_POR_HOYO = 16;
+// course_holes.pace_minutes. 14 min × 18 ≈ 252 min (4:12); con variación por
+// hoyo suele acercarse a ~4:20 de ronda objetivo.
+const MIN_POR_HOYO = 14;
 const UMBRAL_ATRASO_MIN = 8;        // > 8 min atrasado = ⚠️
 const UMBRAL_ADELANTO_MIN = 5;      // < -5 min adelantado = 🟢
 
@@ -91,12 +94,14 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
     };
   }
 
-  // Hoyos jugados desde el tee de inicio (1 o 10), wrap a 18
-  let hoyosJugados = (hoyoActual - teeStartHole + 18) % 18;
-  if (hoyosJugados === 0 && hoyoActual !== teeStartHole) hoyosJugados = 18;
+  // Hoyos completados desde el tee de inicio (1 o 10), wrap a 18. El hoyo en
+  // juego también cuenta para el ritmo esperado (si no, en el tee de salida
+  // minutosEsperados=0 y todo el tiempo transcurrido sale como atraso).
+  const hoyosCompletados = holesPlayedFromCurrentHole(hoyoActual, teeStartHole);
+  const hoyosParaRitmo = Math.min(18, hoyosCompletados + 1);
 
   const minutosEsperados = expectedMinutesForHolesPlayed(
-    hoyosJugados,
+    hoyosParaRitmo,
     teeStartHole,
     perHoleMinutes
   );
@@ -105,20 +110,20 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
   if (delta > UMBRAL_ATRASO_MIN) {
     return {
       kind: "atrasado", hoyo: hoyoActual, deltaMinutes: delta,
-      hoyosJugados, minutosTranscurridos,
+      hoyosJugados: hoyosCompletados, minutosTranscurridos,
       msg: `⚠️ Atrasado ~${Math.round(delta)} min vs ritmo esperado (hoyo ${hoyoActual})`,
     };
   }
   if (delta < -UMBRAL_ADELANTO_MIN) {
     return {
       kind: "adelantado", hoyo: hoyoActual, deltaMinutes: delta,
-      hoyosJugados, minutosTranscurridos,
+      hoyosJugados: hoyosCompletados, minutosTranscurridos,
       msg: `🟢 Adelantado ~${Math.round(-delta)} min (hoyo ${hoyoActual})`,
     };
   }
   return {
     kind: "en_ritmo", hoyo: hoyoActual, deltaMinutes: delta,
-    hoyosJugados, minutosTranscurridos,
+    hoyosJugados: hoyosCompletados, minutosTranscurridos,
     msg: `✅ En ritmo (±${Math.abs(Math.round(delta))} min · hoyo ${hoyoActual})`,
   };
 }

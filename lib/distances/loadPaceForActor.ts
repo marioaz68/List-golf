@@ -6,6 +6,10 @@ import {
 import { resolveRitmoContext } from "@/lib/telegram/ritmo/handleLocationUpdate";
 import type { ResolvedContext } from "@/lib/telegram/ritmo/handleLocationUpdate";
 import {
+  currentHoleFromHolesPlayed,
+  loadGroupScoreProgress,
+} from "@/lib/ritmo/scoreProgress";
+import {
   computePace,
   loadPerHoleMinutes,
   smoothedHoleForGroup,
@@ -66,6 +70,49 @@ async function resolveContext(
   return null;
 }
 
+/** Hoyo actual para ritmo: escores capturados > GPS del cliente > moda del grupo. */
+async function resolvePaceHole(
+  supabase: SupabaseClient,
+  ctx: ResolvedContext,
+  clientHole: number | null
+): Promise<number | null> {
+  if (ctx.roundId && ctx.groupId) {
+    const { data: mems } = await supabase
+      .from("pairing_group_members")
+      .select("entry_id")
+      .eq("group_id", ctx.groupId);
+    const entryIds = (mems ?? [])
+      .map((m) => m.entry_id)
+      .filter((id): id is string => Boolean(id));
+    if (entryIds.length > 0) {
+      const byGroup = new Map([[ctx.groupId, entryIds]]);
+      const meta = new Map([
+        [ctx.groupId, { starting_hole: ctx.groupStartHole }],
+      ]);
+      const progress = await loadGroupScoreProgress(
+        supabase,
+        ctx.roundId,
+        byGroup,
+        meta
+      );
+      const p = progress.get(ctx.groupId);
+      if (p && p.holesPlayed > 0) {
+        const fromScores = currentHoleFromHolesPlayed(
+          p.holesPlayed,
+          p.startHole
+        );
+        if (fromScores != null) return fromScores;
+      }
+    }
+  }
+
+  if (clientHole != null && clientHole >= 1 && clientHole <= 18) {
+    return clientHole;
+  }
+  if (!ctx.groupId) return null;
+  return smoothedHoleForGroup(supabase, ctx.groupId);
+}
+
 export async function loadPaceForActor(
   supabase: SupabaseClient,
   input: LoadPaceInput
@@ -82,11 +129,8 @@ export async function loadPaceForActor(
     };
   }
 
-  // Hoyo: usa el que detectó el cliente; si no, la moda del grupo.
-  let hoyo = input.hole ?? null;
-  if (hoyo == null || hoyo < 1 || hoyo > 18) {
-    hoyo = await smoothedHoleForGroup(supabase, ctx.groupId);
-  }
+  // Hoyo: escores del grupo > el que mandó el cliente > moda GPS del grupo.
+  const hoyo = await resolvePaceHole(supabase, ctx, input.hole ?? null);
 
   const perHoleMinutes = await loadPerHoleMinutes(supabase, ctx.courseId);
   const pace = computePace({

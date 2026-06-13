@@ -73,6 +73,7 @@ export function HoleYardageMap({
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [mapReady, setMapReady] = useState(false);
   onMapTapRef.current = onMapTap;
   sizeRef.current = size;
   playerPosRef.current = { lat: playerLat, lon: playerLon };
@@ -92,9 +93,11 @@ export function HoleYardageMap({
     if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
     if (mapRef.current) return;
     let cleanup = () => {};
+    let cancelled = false;
 
     (async () => {
       const L = await loadLeaflet();
+      if (cancelled || !mapDivRef.current) return;
       const map = L.map(mapDivRef.current, {
         center: [playerPosRef.current.lat, playerPosRef.current.lon],
         zoom: 17,
@@ -121,6 +124,8 @@ export function HoleYardageMap({
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
+      map.invalidateSize();
+      setMapReady(true);
 
       const onTap = (e: MouseEvent | TouchEvent) => {
         if (!onMapTapRef.current || !mapRef.current) return;
@@ -150,14 +155,19 @@ export function HoleYardageMap({
       container?.addEventListener("click", onTap);
 
       cleanup = () => {
+        cancelled = true;
         container?.removeEventListener("click", onTap);
         mapRef.current = null;
         layersRef.current = null;
+        setMapReady(false);
         map.remove();
       };
     })();
 
-    return () => cleanup();
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
     // Solo inicializa una vez que hay tamaño. La posición del jugador se
     // actualiza en el efecto de markers; recrear el mapa en cada GPS rompía
     // la rotación/encuadre.
@@ -175,7 +185,8 @@ export function HoleYardageMap({
     const map = mapRef.current;
     const layerGroup = layersRef.current;
     const rotator = rotatorRef.current;
-    if (!map || !layerGroup || !rotator || size.w === 0 || size.h === 0) return;
+    if (!map || !layerGroup || !rotator || size.w === 0 || size.h === 0 || !mapReady)
+      return;
 
     (async () => {
       const L = await loadLeaflet();
@@ -382,6 +393,7 @@ export function HoleYardageMap({
     tapPoint,
     size.w,
     size.h,
+    mapReady,
   ]);
 
   const rotW = size.w * MAP_SCALE;
