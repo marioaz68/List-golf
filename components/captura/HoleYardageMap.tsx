@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
   getHolePolygon,
@@ -36,6 +37,9 @@ const KIND_COLOR: Record<string, string> = {
   other: "#94a3b8",
 };
 
+/** Escala del div del mapa vs. el viewport visible (evita esquinas negras al rotar). */
+const MAP_SCALE = 1.55;
+
 async function loadLeaflet(): Promise<any> {
   if (!(window as any).L) {
     if (!document.querySelector('link[data-leaflet]')) {
@@ -60,9 +64,75 @@ function yardLabel(yards: number): string {
   return `${yards}`;
 }
 
+function uprightHtml(html: string, bearing: number): string {
+  if (bearing === 0) return html;
+  return `<div style="transform:rotate(${bearing}deg);transform-origin:center center;">${html}</div>`;
+}
+
+function screenToLatLng(
+  clientX: number,
+  clientY: number,
+  containerRect: DOMRect,
+  bearing: number,
+  rotW: number,
+  rotH: number,
+  map: any,
+  L: any
+) {
+  const cx = containerRect.left + containerRect.width / 2;
+  const cy = containerRect.top + containerRect.height / 2;
+  let x = clientX - cx;
+  let y = clientY - cy;
+  const rad = (bearing * Math.PI) / 180;
+  const ux = x * Math.cos(rad) - y * Math.sin(rad);
+  const uy = x * Math.sin(rad) + y * Math.cos(rad);
+  return map.containerPointToLatLng(L.point(ux + rotW / 2, uy + rotH / 2));
+}
+
+function tuneRotatedFraming(
+  map: any,
+  bearing: number,
+  playerLat: number,
+  playerLon: number,
+  greenLat: number,
+  greenLon: number,
+  viewportW: number,
+  viewportH: number,
+  rotW: number,
+  rotH: number
+) {
+  const targetPlayerY = viewportH * 0.82;
+  const targetGreenY = viewportH * 0.18;
+  const targetCenterX = viewportW / 2;
+  const rotRad = (-bearing * Math.PI) / 180;
+  const panRad = (bearing * Math.PI) / 180;
+
+  const toScreen = (lat: number, lon: number) => {
+    const pt = map.latLngToContainerPoint([lat, lon]);
+    const x = pt.x - rotW / 2;
+    const y = pt.y - rotH / 2;
+    return {
+      x: viewportW / 2 + x * Math.cos(rotRad) - y * Math.sin(rotRad),
+      y: viewportH / 2 + x * Math.sin(rotRad) + y * Math.cos(rotRad),
+    };
+  };
+
+  for (let i = 0; i < 6; i++) {
+    const ps = toScreen(playerLat, playerLon);
+    const gs = toScreen(greenLat, greenLon);
+    const errX = targetCenterX - (ps.x + gs.x) / 2;
+    const errY = (targetPlayerY - ps.y + targetGreenY - gs.y) / 2;
+    if (Math.abs(errX) < 2 && Math.abs(errY) < 2) break;
+    const dpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
+    const dpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
+    map.panBy([dpx, dpy], { animate: false });
+  }
+}
+
 /**
  * Mapa satélite del hoyo con posición del jugador, puntos de referencia
- * y medición al tocar. Zoom automático según distancia al green.
+ * y medición al tocar. Rota el mapa para que el green quede arriba y el
+ * jugador abajo, sin importar la orientación del hoyo.
  */
 export function HoleYardageMap({
   holeNo,
@@ -74,15 +144,31 @@ export function HoleYardageMap({
   onMapTap,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const rotatorRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layersRef = useRef<any>(null);
+  const bearingRef = useRef(0);
   const onMapTapRef = useRef(onMapTap);
+  const sizeRef = useRef({ w: 0, h: 0 });
+  const [size, setSize] = useState({ w: 0, h: 0 });
   onMapTapRef.current = onMapTap;
+  sizeRef.current = size;
 
-  // Init map once
   useEffect(() => {
-    if (!mapDivRef.current) return;
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setSize({ w: Math.round(r.width), h: Math.round(r.height) });
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Init map once when we have dimensions
+  useEffect(() => {
+    if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
+    if (mapRef.current) return;
     let cleanup = () => {};
 
     (async () => {
@@ -100,28 +186,46 @@ export function HoleYardageMap({
         keyboard: false,
       });
 
-      // Satélite Google con detectRetina: en pantallas de celular (alta
-      // densidad) carga los tiles al doble de resolución, así se ve nítido
-      // aun acercando al green. Queda alineado con el GPS por ser tiles.
-      L.tileLayer(
-        "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-        {
-          subdomains: ["0", "1", "2", "3"],
-          maxZoom: 21,
-          maxNativeZoom: 20,
-          detectRetina: true,
-          attribution: "© Google",
-        }
-      ).addTo(map);
-
-      map.on("click", (e: any) => {
-        onMapTapRef.current?.(e.latlng.lat, e.latlng.lng);
-      });
+      L.tileLayer("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
+        subdomains: ["0", "1", "2", "3"],
+        maxZoom: 21,
+        maxNativeZoom: 20,
+        detectRetina: true,
+        attribution: "© Google",
+      }).addTo(map);
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
 
+      const onTap = (e: MouseEvent | TouchEvent) => {
+        if (!onMapTapRef.current || !mapRef.current) return;
+        const clientX =
+          "touches" in e ? e.changedTouches[0].clientX : e.clientX;
+        const clientY =
+          "touches" in e ? e.changedTouches[0].clientY : e.clientY;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const { w, h } = sizeRef.current;
+        const rotW = w * MAP_SCALE;
+        const rotH = h * MAP_SCALE;
+        const latlng = screenToLatLng(
+          clientX,
+          clientY,
+          rect,
+          bearingRef.current,
+          rotW,
+          rotH,
+          mapRef.current,
+          L
+        );
+        onMapTapRef.current(latlng.lat, latlng.lng);
+      };
+
+      const container = containerRef.current;
+      container?.addEventListener("click", onTap);
+
       cleanup = () => {
+        container?.removeEventListener("click", onTap);
         mapRef.current = null;
         layersRef.current = null;
         map.remove();
@@ -129,17 +233,40 @@ export function HoleYardageMap({
     })();
 
     return () => cleanup();
-  }, []);
+  }, [size.w, size.h, playerLat, playerLon]);
 
-  // Update markers, lines, zoom when data changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || size.w === 0 || size.h === 0) return;
+    map.invalidateSize();
+  }, [size.w, size.h]);
+
+  // Update markers, rotation, zoom when data changes
   useEffect(() => {
     const map = mapRef.current;
     const layerGroup = layersRef.current;
-    if (!map || !layerGroup) return;
+    const rotator = rotatorRef.current;
+    if (!map || !layerGroup || !rotator || size.w === 0 || size.h === 0) return;
 
     (async () => {
       const L = await loadLeaflet();
       layerGroup.clearLayers();
+
+      const greenCenter = referencePoints.find((p) => p.kind === "green-center");
+      const greenTarget =
+        greenCenter ??
+        referencePoints.find((p) => p.kind === "green-back") ??
+        referencePoints.find((p) => p.kind === "green-front");
+      const bearing = greenTarget
+        ? bearingDegrees(
+            playerLat,
+            playerLon,
+            greenTarget.lat,
+            greenTarget.lon
+          )
+        : 0;
+      bearingRef.current = bearing;
+      rotator.style.transform = `rotate(${-bearing}deg)`;
 
       const holeFeature = getHolePolygon(holeNo);
       if (holeFeature) {
@@ -155,7 +282,6 @@ export function HoleYardageMap({
         }).addTo(layerGroup);
       }
 
-      // Líneas a puntos de referencia
       for (const p of referencePoints) {
         const color =
           p.kind === "custom" && p.dbKind
@@ -174,7 +300,10 @@ export function HoleYardageMap({
         L.marker([midLat, midLon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="background:rgba(0,0,0,0.72);color:#fff;padding:1px 5px;border-radius:6px;font-size:10px;font-weight:700;font-family:Arial,sans-serif;border:1px solid ${color};">${yardLabel(p.yards)}</div>`,
+            html: uprightHtml(
+              `<div style="background:rgba(0,0,0,0.72);color:#fff;padding:1px 5px;border-radius:6px;font-size:10px;font-weight:700;font-family:Arial,sans-serif;border:1px solid ${color};">${yardLabel(p.yards)}</div>`,
+              bearing
+            ),
             iconSize: [36, 16],
             iconAnchor: [18, 8],
           }),
@@ -184,10 +313,13 @@ export function HoleYardageMap({
         L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+            html: uprightHtml(
+              `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
               <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>
               <div style="background:rgba(0,0,0,0.75);color:#fff;padding:1px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:Arial,sans-serif;">${p.shortLabel}</div>
             </div>`,
+              bearing
+            ),
             iconSize: [24, 32],
             iconAnchor: [12, 6],
           }),
@@ -195,7 +327,6 @@ export function HoleYardageMap({
         }).addTo(layerGroup);
       }
 
-      // Tap point
       if (tapPoint) {
         L.polyline(
           [
@@ -210,7 +341,10 @@ export function HoleYardageMap({
         L.marker([midLat, midLon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="background:#db2777;color:#fff;padding:2px 7px;border-radius:8px;font-size:12px;font-weight:800;font-family:Arial,sans-serif;">${yardLabel(tapPoint.yards)} yds</div>`,
+            html: uprightHtml(
+              `<div style="background:#db2777;color:#fff;padding:2px 7px;border-radius:8px;font-size:12px;font-weight:800;font-family:Arial,sans-serif;">${yardLabel(tapPoint.yards)} yds</div>`,
+              bearing
+            ),
             iconSize: [48, 20],
             iconAnchor: [24, 10],
           }),
@@ -220,7 +354,10 @@ export function HoleYardageMap({
         L.marker([tapPoint.lat, tapPoint.lon], {
           icon: L.divIcon({
             className: "",
-            html: `<div style="width:14px;height:14px;border-radius:50%;background:#ec4899;border:2px solid #fff;box-shadow:0 0 0 3px rgba(236,72,153,0.4);"></div>`,
+            html: uprightHtml(
+              `<div style="width:14px;height:14px;border-radius:50%;background:#ec4899;border:2px solid #fff;box-shadow:0 0 0 3px rgba(236,72,153,0.4);"></div>`,
+              bearing
+            ),
             iconSize: [14, 14],
             iconAnchor: [7, 7],
           }),
@@ -228,14 +365,16 @@ export function HoleYardageMap({
         }).addTo(layerGroup);
       }
 
-      // Jugador
       L.marker([playerLat, playerLon], {
         icon: L.divIcon({
           className: "",
-          html: `<div style="position:relative;width:20px;height:20px;">
+          html: uprightHtml(
+            `<div style="position:relative;width:20px;height:20px;">
             <div style="position:absolute;inset:-6px;border-radius:50%;background:rgba(59,130,246,0.25);animation:yardage-pulse 1.8s ease-out infinite;"></div>
             <div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
           </div>`,
+            bearing
+          ),
           iconSize: [20, 20],
           iconAnchor: [10, 10],
         }),
@@ -250,10 +389,6 @@ export function HoleYardageMap({
         document.head.appendChild(style);
       }
 
-      // Encuadre "siempre de ti al fondo del green", llenando la pantalla:
-      // cerca = bordes (jugador) y fondo del green; en la salida se ve el
-      // hoyo completo y conforme avanzas se acerca solo. Solo jugador + green
-      // (no el tee ni esquinas, para no abrir la vista hacia atrás).
       const bounds = L.latLngBounds([
         [playerLat, playerLon],
         ...referencePoints
@@ -264,15 +399,31 @@ export function HoleYardageMap({
       ]);
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
+      const rotW = size.w * MAP_SCALE;
+      const rotH = size.h * MAP_SCALE;
+
       map.invalidateSize();
-      // Padding asimétrico: deja hueco para la barra superior y la de ritmo,
-      // pero llena el resto de la pantalla.
       map.fitBounds(bounds, {
         paddingTopLeft: [16, 68],
         paddingBottomRight: [16, 52],
         animate: true,
         maxZoom: 20,
       });
+
+      if (greenTarget) {
+        tuneRotatedFraming(
+          map,
+          bearing,
+          playerLat,
+          playerLon,
+          greenTarget.lat,
+          greenTarget.lon,
+          size.w,
+          size.h,
+          rotW,
+          rotH
+        );
+      }
     })();
   }, [
     holeNo,
@@ -281,14 +432,35 @@ export function HoleYardageMap({
     yardsToCenter,
     referencePoints,
     tapPoint,
+    size.w,
+    size.h,
   ]);
+
+  const rotW = size.w * MAP_SCALE;
+  const rotH = size.h * MAP_SCALE;
 
   return (
     <div
       ref={containerRef}
       className="relative h-full w-full overflow-hidden bg-black"
     >
-      <div ref={mapDivRef} className="absolute inset-0" />
+      {size.w > 0 && size.h > 0 && (
+        <div
+          ref={rotatorRef}
+          className="absolute"
+          style={{
+            left: "50%",
+            top: "50%",
+            width: rotW,
+            height: rotH,
+            marginLeft: -rotW / 2,
+            marginTop: -rotH / 2,
+            transformOrigin: "center center",
+          }}
+        >
+          <div ref={mapDivRef} className="absolute inset-0" />
+        </div>
+      )}
       <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
         Toca el mapa para medir
       </div>
