@@ -130,6 +130,72 @@ function tuneRotatedFraming(
 }
 
 /**
+ * Encuadre por cercanía: ajusta el zoom para que la separación en pantalla
+ * jugador→green crezca conforme te acercas (acerca más rápido cerca del
+ * green), manteniendo siempre el green arriba y el punto azul abajo.
+ */
+function frameByProximity(
+  map: any,
+  bearing: number,
+  playerLat: number,
+  playerLon: number,
+  greenLat: number,
+  greenLon: number,
+  yardsToCenter: number,
+  viewportW: number,
+  viewportH: number,
+  rotW: number,
+  rotH: number
+) {
+  const topBar = 64;
+  const bottomBar = 52;
+  const usableH = Math.max(80, viewportH - topBar - bottomBar);
+
+  // t: 0 lejos (≥220 yds) … 1 muy cerca (≤25 yds). La fracción de pantalla
+  // que ocupa el tramo jugador→green sube de 0.6 a 0.95 → zoom progresivo.
+  const t = Math.max(0, Math.min(1, (220 - yardsToCenter) / (220 - 25)));
+  const spanFrac = 0.6 + 0.35 * t;
+  const desiredPx = spanFrac * usableH;
+
+  const curZoom = map.getZoom();
+  const p1 = map.project([playerLat, playerLon], curZoom);
+  const p2 = map.project([greenLat, greenLon], curZoom);
+  const d0 = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
+  let newZoom = curZoom + Math.log2(desiredPx / d0);
+  newZoom = Math.max(15, Math.min(21, newZoom));
+  map.setZoom(newZoom, { animate: false });
+
+  const leftover = Math.max(0, usableH - desiredPx);
+  const targetGreenY = topBar + leftover * 0.4;
+  const targetPlayerY = viewportH - bottomBar - leftover * 0.6;
+  const targetCenterX = viewportW / 2;
+  const targetMidY = (targetGreenY + targetPlayerY) / 2;
+  const rotRad = (-bearing * Math.PI) / 180;
+  const panRad = (bearing * Math.PI) / 180;
+
+  const toScreen = (lat: number, lon: number) => {
+    const pt = map.latLngToContainerPoint([lat, lon]);
+    const x = pt.x - rotW / 2;
+    const y = pt.y - rotH / 2;
+    return {
+      x: viewportW / 2 + x * Math.cos(rotRad) - y * Math.sin(rotRad),
+      y: viewportH / 2 + x * Math.sin(rotRad) + y * Math.cos(rotRad),
+    };
+  };
+
+  for (let i = 0; i < 8; i++) {
+    const ps = toScreen(playerLat, playerLon);
+    const gs = toScreen(greenLat, greenLon);
+    const errX = targetCenterX - (ps.x + gs.x) / 2;
+    const errY = targetMidY - (ps.y + gs.y) / 2;
+    if (Math.abs(errX) < 2 && Math.abs(errY) < 2) break;
+    const dpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
+    const dpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
+    map.panBy([dpx, dpy], { animate: false });
+  }
+}
+
+/**
  * Mapa satélite del hoyo con posición del jugador, puntos de referencia
  * y medición al tocar. Rota el mapa para que el green quede arriba y el
  * jugador abajo, sin importar la orientación del hoyo.
@@ -177,6 +243,9 @@ export function HoleYardageMap({
         center: [playerLat, playerLon],
         zoom: 17,
         maxZoom: 21,
+        // zoomSnap 0 = zoom fraccional continuo: el acercamiento al green
+        // es gradual y "más seguido", no en saltos de nivel entero.
+        zoomSnap: 0,
         zoomControl: false,
         dragging: true,
         scrollWheelZoom: false,
@@ -403,26 +472,45 @@ export function HoleYardageMap({
       const rotH = size.h * MAP_SCALE;
 
       map.invalidateSize();
-      map.fitBounds(bounds, {
-        paddingTopLeft: [16, 68],
-        paddingBottomRight: [16, 52],
-        animate: true,
-        maxZoom: 20,
-      });
 
-      if (greenTarget) {
-        tuneRotatedFraming(
+      if (greenTarget && !tapPoint) {
+        // Juego normal: zoom por cercanía (acerca más rápido cerca del green).
+        frameByProximity(
           map,
           bearing,
           playerLat,
           playerLon,
           greenTarget.lat,
           greenTarget.lon,
+          yardsToCenter,
           size.w,
           size.h,
           rotW,
           rotH
         );
+      } else {
+        // Con punto tocado: encuadra jugador + green + medición para que la
+        // distancia tocada quede siempre visible.
+        map.fitBounds(bounds, {
+          paddingTopLeft: [16, 68],
+          paddingBottomRight: [16, 52],
+          animate: true,
+          maxZoom: 20,
+        });
+        if (greenTarget) {
+          tuneRotatedFraming(
+            map,
+            bearing,
+            playerLat,
+            playerLon,
+            greenTarget.lat,
+            greenTarget.lon,
+            size.w,
+            size.h,
+            rotW,
+            rotH
+          );
+        }
       }
     })();
   }, [
