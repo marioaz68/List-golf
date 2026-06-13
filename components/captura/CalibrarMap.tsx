@@ -9,6 +9,8 @@ import {
 import { getHolePolygon } from "@/lib/distances/ccqHolePoints";
 import {
   MAP_SCALE,
+  SATELLITE_ATTRIBUTION,
+  SATELLITE_TILE_URL,
   frameByProximity,
   loadLeaflet,
   tuneRotatedFraming,
@@ -77,16 +79,21 @@ export function CalibrarMap({
         boxZoom: false,
         keyboard: false,
       });
-      L.tileLayer("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
-        subdomains: ["0", "1", "2", "3"],
+      L.tileLayer(SATELLITE_TILE_URL, {
         maxZoom: 21,
-        maxNativeZoom: 20,
+        maxNativeZoom: 19,
         detectRetina: true,
-        attribution: "© Google",
+        attribution: SATELLITE_ATTRIBUTION,
       }).addTo(map);
       mapRef.current = map;
       layerRef.current = L.layerGroup().addTo(map);
       map.invalidateSize();
+      requestAnimationFrame(() => {
+        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
+      });
+      setTimeout(() => {
+        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
+      }, 250);
       setMapReady(true);
       cleanup = () => {
         cancelled = true;

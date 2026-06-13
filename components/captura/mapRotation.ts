@@ -9,6 +9,15 @@
 /** Escala del div del mapa vs. el viewport visible (evita esquinas negras al rotar). */
 export const MAP_SCALE = 1.55;
 
+/**
+ * Capa satélite. Esri World Imagery es estable en cualquier dominio (los
+ * tiles no oficiales de Google a veces responden 403 según el referrer y el
+ * mapa quedaba en negro).
+ */
+export const SATELLITE_TILE_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+export const SATELLITE_ATTRIBUTION = "© Esri";
+
 /** Carga Leaflet desde CDN una sola vez. */
 export async function loadLeaflet(): Promise<any> {
   if (!(window as any).L) {

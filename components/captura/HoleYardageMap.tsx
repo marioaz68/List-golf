@@ -8,6 +8,8 @@ import {
 } from "@/lib/distances/ccqHolePoints";
 import {
   MAP_SCALE,
+  SATELLITE_ATTRIBUTION,
+  SATELLITE_TILE_URL,
   frameByProximity,
   loadLeaflet,
   screenToLatLng,
@@ -114,17 +116,24 @@ export function HoleYardageMap({
         keyboard: false,
       });
 
-      L.tileLayer("https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", {
-        subdomains: ["0", "1", "2", "3"],
+      L.tileLayer(SATELLITE_TILE_URL, {
         maxZoom: 21,
-        maxNativeZoom: 20,
+        maxNativeZoom: 19,
         detectRetina: true,
-        attribution: "© Google",
+        attribution: SATELLITE_ATTRIBUTION,
       }).addTo(map);
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
+      // invalidateSize diferido: tras crear el mapa el contenedor rotado puede
+      // no tener su tamaño final; sin esto los tiles a veces no se dibujan.
       map.invalidateSize();
+      requestAnimationFrame(() => {
+        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
+      });
+      setTimeout(() => {
+        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
+      }, 250);
       setMapReady(true);
 
       const onTap = (e: MouseEvent | TouchEvent) => {
@@ -344,44 +353,48 @@ export function HoleYardageMap({
 
       map.invalidateSize();
 
-      if (greenTarget && !tapPoint) {
-        // Juego normal: zoom por cercanía (acerca más rápido cerca del green).
-        frameByProximity(
-          map,
-          bearing,
-          playerLat,
-          playerLon,
-          greenTarget.lat,
-          greenTarget.lon,
-          yardsToCenter,
-          size.w,
-          size.h,
-          rotW,
-          rotH
-        );
-      } else {
-        // Con punto tocado: encuadra jugador + green + medición para que la
-        // distancia tocada quede siempre visible.
-        map.fitBounds(bounds, {
-          paddingTopLeft: [16, 68],
-          paddingBottomRight: [16, 52],
-          animate: true,
-          maxZoom: 20,
-        });
-        if (greenTarget) {
-          tuneRotatedFraming(
+      try {
+        if (greenTarget && !tapPoint) {
+          // Juego normal: zoom por cercanía (acerca más al acercarse al green).
+          frameByProximity(
             map,
             bearing,
             playerLat,
             playerLon,
             greenTarget.lat,
             greenTarget.lon,
+            yardsToCenter,
             size.w,
             size.h,
             rotW,
             rotH
           );
+        } else {
+          // Con punto tocado: encuadra jugador + green + medición.
+          map.fitBounds(bounds, {
+            paddingTopLeft: [16, 68],
+            paddingBottomRight: [16, 52],
+            animate: true,
+            maxZoom: 20,
+          });
+          if (greenTarget) {
+            tuneRotatedFraming(
+              map,
+              bearing,
+              playerLat,
+              playerLon,
+              greenTarget.lat,
+              greenTarget.lon,
+              size.w,
+              size.h,
+              rotW,
+              rotH
+            );
+          }
         }
+      } catch {
+        // Si el encuadre falla, al menos centra en el jugador (no dejar negro).
+        map.setView([playerLat, playerLon], 18, { animate: false });
       }
     })();
   }, [

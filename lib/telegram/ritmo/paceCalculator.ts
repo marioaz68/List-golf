@@ -69,13 +69,21 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
     return { kind: "sin_datos", msg: "Sin detectar hoyo todavía." };
   }
 
+  // Referencia de inicio. Usamos la salida real (actual_start_at) si existe,
+  // PERO nunca antes de la salida programada: un actual_start_at marcado por
+  // error más temprano que el tee inflaría el atraso (caso real: tee 7:40 con
+  // actual 7:08 → +32 min falsos). En cambio sí respetamos salidas tardías.
   let teeDate: Date | null = null;
+  const scheduled =
+    teeTimeISO && roundDate ? parseTeeDateTime(roundDate, teeTimeISO) : null;
   if (actualStartISO) {
     const d = new Date(actualStartISO);
-    if (!Number.isNaN(d.getTime())) teeDate = d;
-  } else if (teeTimeISO && roundDate) {
-    teeDate = parseTeeDateTime(roundDate, teeTimeISO);
+    if (!Number.isNaN(d.getTime())) {
+      teeDate =
+        scheduled && d.getTime() < scheduled.getTime() ? scheduled : d;
+    }
   }
+  if (!teeDate) teeDate = scheduled;
 
   if (!teeDate) {
     return {
