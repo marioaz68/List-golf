@@ -72,8 +72,10 @@ export function CalibrarMap({
         maxZoom: 21,
         zoomSnap: 0,
         zoomControl: false,
-        dragging: true,
+        // Mapa fijo: no se puede mover con los dedos (green arriba al centro).
+        dragging: false,
         scrollWheelZoom: false,
+        tap: false,
         doubleClickZoom: false,
         touchZoom: false,
         boxZoom: false,

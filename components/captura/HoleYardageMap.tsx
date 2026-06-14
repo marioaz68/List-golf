@@ -110,8 +110,11 @@ export function HoleYardageMap({
         // es gradual y "más seguido", no en saltos de nivel entero.
         zoomSnap: 0,
         zoomControl: false,
-        dragging: true,
+        // Mapa fijo: el encuadre lo controla la app (green arriba al centro).
+        // No se puede mover con los dedos para que no se desalinee.
+        dragging: false,
         scrollWheelZoom: false,
+        tap: false,
         doubleClickZoom: false,
         touchZoom: false,
         boxZoom: false,
