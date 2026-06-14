@@ -85,6 +85,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [newLabel, setNewLabel] = useState("");
   const [newShort, setNewShort] = useState("");
   const [editMode, setEditMode] = useState<CalibrarEditMode>("off");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [selectedVertex, setSelectedVertex] = useState<number | null>(null);
   const [boundaryRing, setBoundaryRing] = useState<LatLon[]>(() =>
     defaultHoleRing(1)
   );
@@ -249,7 +252,28 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   useEffect(() => {
     refetch();
     setEditMode("off");
+    setPanelOpen(false);
+    setSelectedMarkerId(null);
+    setSelectedVertex(null);
   }, [refetch]);
+
+  const enterEditMode = (mode: "points" | "boundary") => {
+    setEditMode(mode);
+    setPanelOpen(false);
+    if (mode === "points") {
+      setSelectedVertex(null);
+      setSelectedMarkerId("g-front");
+    } else {
+      setSelectedMarkerId(null);
+      setSelectedVertex(0);
+    }
+  };
+
+  const exitEditMode = () => {
+    setEditMode("off");
+    setSelectedMarkerId(null);
+    setSelectedVertex(null);
+  };
 
   const markers = useMemo<CalibrarMarker[]>(() => {
     const out: CalibrarMarker[] = [];
@@ -471,6 +495,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
+  const handleMapTap = (lat: number, lon: number) => {
+    if (editMode === "points" && selectedMarkerId) {
+      void saveMarkerPosition(selectedMarkerId, lat, lon);
+      return;
+    }
+    if (editMode === "boundary" && selectedVertex != null) {
+      void saveBoundaryVertex(selectedVertex, lat, lon);
+    }
+  };
+
   const changeHole = (delta: number) => {
     manualAtDetectedRef.current = insideHole;
     const base = manualHole ?? autoHole ?? nearestHole;
@@ -502,8 +536,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             markers={markers}
             boundaryRing={boundaryRing}
             editMode={editMode}
+            selectedId={selectedMarkerId}
+            selectedVertex={selectedVertex}
             onMarkerDrag={saveMarkerPosition}
             onBoundaryVertexDrag={saveBoundaryVertex}
+            onMapTap={handleMapTap}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -577,166 +614,215 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         </div>
       ) : null}
 
-      {/* Controles flotantes abajo */}
-      <div className="absolute inset-x-0 bottom-0 z-[1000] max-h-[46vh] overflow-y-auto border-t border-slate-800/80 bg-slate-900/90 px-3 py-3 backdrop-blur-sm">
-        <div className="mb-3 flex gap-1.5">
-          <button
-            type="button"
-            onClick={() =>
-              setEditMode((m) => (m === "points" ? "off" : "points"))
-            }
-            className={[
-              "flex-1 rounded-md px-2 py-2 text-[11px] font-bold",
-              editMode === "points"
-                ? "bg-amber-500 text-black"
-                : "bg-slate-800 text-slate-200",
-            ].join(" ")}
-          >
-            {editMode === "points" ? "✓ Ajustar puntos" : "Ajustar puntos"}
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setEditMode((m) => (m === "boundary" ? "off" : "boundary"))
-            }
-            className={[
-              "flex-1 rounded-md px-2 py-2 text-[11px] font-bold",
-              editMode === "boundary"
-                ? "bg-cyan-400 text-black"
-                : "bg-slate-800 text-slate-200",
-            ].join(" ")}
-          >
-            {editMode === "boundary"
-              ? "✓ Línea hoyo"
-              : `Línea hoyo${boundarySaved ? " ✓" : ""}`}
-          </button>
-        </div>
-        <p className="mb-2 text-[10px] text-slate-400">
-          {editMode === "points"
-            ? "Arrastra entrada, centro, atrás o trampas sobre la foto satelital. Las yardas se recalculan con la nueva posición."
-            : editMode === "boundary"
-              ? "Arrastra las esquinas cyan de la línea azul hasta las orillas del campo."
-              : "Marca con GPS o activa «Ajustar puntos» / «Línea hoyo» para corregir sobre la foto."}
-        </p>
-
-        <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Green del hoyo {activeHole}
-        </h2>
-        <div className="grid grid-cols-3 gap-1.5">
-          <GreenButton
-            label="Entrada"
-            color="#34d399"
-            saved={!!green?.saved.front}
-            busy={busy === "front"}
-            onClick={() => captureGreen("front")}
-          />
-          <GreenButton
-            label="Centro"
-            color="#10b981"
-            saved={!!green?.saved.center}
-            busy={busy === "center"}
-            onClick={() => captureGreen("center")}
-          />
-          <GreenButton
-            label="Atrás"
-            color="#059669"
-            saved={!!green?.saved.back}
-            busy={busy === "back"}
-            onClick={() => captureGreen("back")}
-          />
-        </div>
-        <p className="mt-1.5 text-[10px] text-slate-500">
-          Camina al borde del green y toca el botón estando parado ahí.
-        </p>
-
-        <div className="mt-4 flex items-center justify-between">
-          <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-            Trampas y obstáculos ({points.length})
-          </h2>
-          <button
-            type="button"
-            onClick={() => setShowAdd((s) => !s)}
-            className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white"
-          >
-            {showAdd ? "Cancelar" : "+ Agregar aquí"}
-          </button>
-        </div>
-
-        {showAdd ? (
-          <div className="mt-2 rounded-lg border border-slate-700 bg-slate-950 p-2.5">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-slate-300">
-                Tipo
-                <select
-                  value={newKind}
-                  onChange={(e) => setNewKind(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
-                >
-                  {KIND_OPTIONS.map((k) => (
-                    <option key={k.value} value={k.value}>
-                      {k.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-[11px] text-slate-300">
-                Etiqueta corta
-                <input
-                  value={newShort}
-                  onChange={(e) => setNewShort(e.target.value)}
-                  maxLength={6}
-                  placeholder="BK"
-                  className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
-                />
-              </label>
-              <label className="col-span-2 text-[11px] text-slate-300">
-                Nombre
-                <input
-                  value={newLabel}
-                  onChange={(e) => setNewLabel(e.target.value)}
-                  placeholder="Ej. Bunker derecho"
-                  className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
-                />
-              </label>
-            </div>
+      {/* Barra inferior: mínima en edición, expandible en modo normal */}
+      {editMode !== "off" ? (
+        <div className="absolute inset-x-0 bottom-0 z-[1000] border-t border-slate-700/80 bg-slate-950/95 px-2 py-2 backdrop-blur-md">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold leading-tight text-amber-200">
+              {editMode === "points"
+                ? "1) Elige punto  2) Toca el mapa donde va"
+                : "1) Elige esquina  2) Toca o arrastra en el mapa"}
+            </p>
             <button
               type="button"
-              disabled={busy === "point"}
-              onClick={capturePoint}
-              className="mt-2 w-full rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              onClick={exitEditMode}
+              className="shrink-0 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white"
             >
-              {busy === "point" ? "Guardando…" : "📍 Marcar en mi posición"}
+              Listo
             </button>
           </div>
-        ) : null}
+          {editMode === "points" ? (
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {markers.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectedMarkerId(m.id)}
+                  className={[
+                    "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold",
+                    selectedMarkerId === m.id
+                      ? "border-amber-400 bg-amber-500 text-black"
+                      : "border-slate-600 bg-slate-800 text-slate-200",
+                  ].join(" ")}
+                >
+                  {m.label.replace(" ✓", "").replace(" (auto)", "")}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {boundaryRing.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setSelectedVertex(i)}
+                  className={[
+                    "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold",
+                    selectedVertex === i
+                      ? "border-cyan-300 bg-cyan-400 text-black"
+                      : "border-slate-600 bg-slate-800 text-slate-200",
+                  ].join(" ")}
+                >
+                  Esq. {i + 1}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="absolute inset-x-0 bottom-0 z-[1000] flex items-center gap-1 border-t border-slate-800/80 bg-slate-950/92 px-2 py-2 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={() => enterEditMode("points")}
+              className="flex-1 rounded-md bg-amber-500 px-2 py-2.5 text-[11px] font-bold text-black"
+            >
+              Ajustar puntos
+            </button>
+            <button
+              type="button"
+              onClick={() => enterEditMode("boundary")}
+              className="flex-1 rounded-md bg-cyan-500 px-2 py-2.5 text-[11px] font-bold text-black"
+            >
+              Línea hoyo{boundarySaved ? " ✓" : ""}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPanelOpen((o) => !o)}
+              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-2.5 text-[11px] font-bold text-white"
+            >
+              {panelOpen ? "▾" : "GPS ▴"}
+            </button>
+          </div>
 
-        {points.length > 0 ? (
-          <ul className="mt-2 space-y-1">
-            {points.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1.5"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ background: kindColor(p.kind) }}
-                  />
-                  <span className="text-xs text-slate-200">{p.label}</span>
-                </div>
+          {panelOpen ? (
+            <div className="absolute inset-x-0 bottom-[52px] z-[1000] max-h-[38vh] overflow-y-auto border-t border-slate-800/80 bg-slate-900/95 px-3 py-3 backdrop-blur-sm">
+              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
+                <strong className="text-slate-200">Paso 1:</strong> camina al
+                borde del green y toca Entrada / Centro / Atrás.
+                <br />
+                <strong className="text-slate-200">Paso 2:</strong> si queda
+                mal, usa «Ajustar puntos» y toca el mapa en el lugar correcto.
+              </p>
+
+              <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Green del hoyo {activeHole}
+              </h2>
+              <div className="grid grid-cols-3 gap-1.5">
+                <GreenButton
+                  label="Entrada"
+                  color="#34d399"
+                  saved={!!green?.saved.front}
+                  busy={busy === "front"}
+                  onClick={() => captureGreen("front")}
+                />
+                <GreenButton
+                  label="Centro"
+                  color="#10b981"
+                  saved={!!green?.saved.center}
+                  busy={busy === "center"}
+                  onClick={() => captureGreen("center")}
+                />
+                <GreenButton
+                  label="Atrás"
+                  color="#059669"
+                  saved={!!green?.saved.back}
+                  busy={busy === "back"}
+                  onClick={() => captureGreen("back")}
+                />
+              </div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Trampas ({points.length})
+                </h2>
                 <button
                   type="button"
-                  disabled={busy === p.id}
-                  onClick={() => removePoint(p.id)}
-                  className="shrink-0 rounded border border-red-700/50 px-2 py-0.5 text-[10px] text-red-300 disabled:opacity-50"
+                  onClick={() => setShowAdd((s) => !s)}
+                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white"
                 >
-                  Eliminar
+                  {showAdd ? "Cancelar" : "+ Agregar"}
                 </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+              </div>
+
+              {showAdd ? (
+                <div className="mt-2 rounded-lg border border-slate-700 bg-slate-950 p-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] text-slate-300">
+                      Tipo
+                      <select
+                        value={newKind}
+                        onChange={(e) => setNewKind(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                      >
+                        {KIND_OPTIONS.map((k) => (
+                          <option key={k.value} value={k.value}>
+                            {k.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-300">
+                      Corta
+                      <input
+                        value={newShort}
+                        onChange={(e) => setNewShort(e.target.value)}
+                        maxLength={6}
+                        placeholder="BK"
+                        className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                      />
+                    </label>
+                    <label className="col-span-2 text-[11px] text-slate-300">
+                      Nombre
+                      <input
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                        placeholder="Ej. Bunker derecho"
+                        className="mt-1 w-full rounded-md border border-slate-600 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy === "point"}
+                    onClick={capturePoint}
+                    className="mt-2 w-full rounded-md bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+                  >
+                    {busy === "point" ? "Guardando…" : "📍 Marcar en mi posición"}
+                  </button>
+                </div>
+              ) : null}
+
+              {points.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {points.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 rounded-md border border-slate-800 bg-slate-950 px-2.5 py-1.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-3 w-3 rounded-full"
+                          style={{ background: kindColor(p.kind) }}
+                        />
+                        <span className="text-xs text-slate-200">{p.label}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy === p.id}
+                        onClick={() => removePoint(p.id)}
+                        className="shrink-0 rounded border border-red-700/50 px-2 py-0.5 text-[10px] text-red-300 disabled:opacity-50"
+                      >
+                        Eliminar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
