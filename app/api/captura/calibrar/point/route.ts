@@ -5,6 +5,7 @@ import { defaultDistanciasCourseId } from "@/lib/distances/loadGreenPoints";
 import {
   deleteReferencePoint,
   saveReferencePoint,
+  updateReferencePoint,
 } from "@/lib/distances/calibrationStore";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,40 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error eliminando punto";
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ ok: false, error: "JSON inválido" }, { status: 400 });
+  }
+
+  const tg = String(body.tg ?? "").trim();
+  if (!isCalibrationAllowed(tg)) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 403 });
+  }
+
+  const id = String(body.id ?? "").trim();
+  if (!id) {
+    return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
+  }
+
+  const lat = Number(body.lat);
+  const lon = Number(body.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return NextResponse.json({ ok: false, error: "lat/lon inválidos" }, { status: 400 });
+  }
+
+  try {
+    const admin = createAdminClient();
+    await updateReferencePoint(admin, { id, lat, lon });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error moviendo punto";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }

@@ -11,7 +11,14 @@ import {
 import { CCQ_COURSE_ID } from "@/lib/distances/courseReferencePoints";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
-import type { CalibrarMarker } from "@/components/captura/CalibrarMap";
+import type { CalibrarEditMode, CalibrarMarker } from "@/components/captura/CalibrarMap";
+import {
+  defaultHoleRing,
+  parseBoundaryGeoJson,
+  polygonFromRing,
+  ringFromPolygon,
+  type LatLon,
+} from "@/lib/distances/holeBoundary";
 
 const CalibrarMap = dynamic(
   () => import("@/components/captura/CalibrarMap").then((m) => m.CalibrarMap),
@@ -31,8 +38,6 @@ type GeoState =
   | { status: "denied"; message: string }
   | { status: "error"; message: string }
   | { status: "ok"; lat: number; lon: number; accuracy: number; ts: number };
-
-type LatLon = { lat: number; lon: number };
 
 interface GreenInfo {
   front: LatLon;
@@ -79,6 +84,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [newKind, setNewKind] = useState("bunker");
   const [newLabel, setNewLabel] = useState("");
   const [newShort, setNewShort] = useState("");
+  const [editMode, setEditMode] = useState<CalibrarEditMode>("off");
+  const [boundaryRing, setBoundaryRing] = useState<LatLon[]>(() =>
+    defaultHoleRing(1)
+  );
+  const [boundarySaved, setBoundarySaved] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
   // Última posición aceptada: ignora el micro-jitter del GPS (1-2 m parado)
@@ -194,16 +204,20 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, pRes] = await Promise.all([
+      const [gRes, pRes, bRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${activeHole}&course_id=${CCQ_COURSE_ID}`
         ),
         fetch(
           `/api/captura/distancias/points?hole=${activeHole}&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/distancias/boundary?hole=${activeHole}&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const pData = await pRes.json();
+      const bData = await bRes.json();
       if (gData?.ok) {
         setGreen({
           front: gData.front,
@@ -217,6 +231,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       } else {
         setPoints([]);
       }
+      if (bData?.ok) {
+        const poly = parseBoundaryGeoJson(bData.polygon);
+        setBoundaryRing(
+          poly ? ringFromPolygon(poly) : defaultHoleRing(activeHole)
+        );
+        setBoundarySaved(!!poly);
+      } else {
+        setBoundaryRing(defaultHoleRing(activeHole));
+        setBoundarySaved(false);
+      }
     } catch {
       // silencioso; reintenta al cambiar de hoyo
     }
@@ -224,6 +248,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   useEffect(() => {
     refetch();
+    setEditMode("off");
   }, [refetch]);
 
   const markers = useMemo<CalibrarMarker[]>(() => {
@@ -357,6 +382,95 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
+  const saveMarkerPosition = async (id: string, lat: number, lon: number) => {
+    if (id.startsWith("g-")) {
+      const key = id.replace("g-", "") as "front" | "center" | "back";
+      setGreen((prev) =>
+        prev
+          ? {
+              ...prev,
+              [key]: { lat, lon },
+              saved: { ...prev.saved, [key]: true },
+            }
+          : prev
+      );
+      setBusy(id);
+      try {
+        const res = await fetch("/api/captura/calibrar/green", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tg: tgId,
+            course_id: CCQ_COURSE_ID,
+            hole: activeHole,
+            key,
+            lat,
+            lon,
+          }),
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Error");
+        flash("ok", "Punto del green ajustado.");
+      } catch (e) {
+        flash("err", e instanceof Error ? e.message : "Error al guardar");
+        await refetch();
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+
+    setPoints((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, lat, lon } : p))
+    );
+    setBusy(id);
+    try {
+      const res = await fetch("/api/captura/calibrar/point", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tg: tgId, id, lat, lon }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Error");
+      flash("ok", "Punto ajustado.");
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "Error al guardar");
+      await refetch();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveBoundaryVertex = async (index: number, lat: number, lon: number) => {
+    const next = boundaryRing.map((v, i) =>
+      i === index ? { lat, lon } : v
+    );
+    setBoundaryRing(next);
+    setBusy("boundary");
+    try {
+      const polygon = polygonFromRing(activeHole, next).geometry;
+      const res = await fetch("/api/captura/calibrar/boundary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tg: tgId,
+          course_id: CCQ_COURSE_ID,
+          hole: activeHole,
+          polygon,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Error");
+      setBoundarySaved(true);
+      flash("ok", "Línea del hoyo ajustada.");
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "Error al guardar línea");
+      await refetch();
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const changeHole = (delta: number) => {
     manualAtDetectedRef.current = insideHole;
     const base = manualHole ?? autoHole ?? nearestHole;
@@ -386,6 +500,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             playerLat={geo.lat}
             playerLon={geo.lon}
             markers={markers}
+            boundaryRing={boundaryRing}
+            editMode={editMode}
+            onMarkerDrag={saveMarkerPosition}
+            onBoundaryVertexDrag={saveBoundaryVertex}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -461,6 +579,46 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
       {/* Controles flotantes abajo */}
       <div className="absolute inset-x-0 bottom-0 z-[1000] max-h-[46vh] overflow-y-auto border-t border-slate-800/80 bg-slate-900/90 px-3 py-3 backdrop-blur-sm">
+        <div className="mb-3 flex gap-1.5">
+          <button
+            type="button"
+            onClick={() =>
+              setEditMode((m) => (m === "points" ? "off" : "points"))
+            }
+            className={[
+              "flex-1 rounded-md px-2 py-2 text-[11px] font-bold",
+              editMode === "points"
+                ? "bg-amber-500 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            {editMode === "points" ? "✓ Ajustar puntos" : "Ajustar puntos"}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setEditMode((m) => (m === "boundary" ? "off" : "boundary"))
+            }
+            className={[
+              "flex-1 rounded-md px-2 py-2 text-[11px] font-bold",
+              editMode === "boundary"
+                ? "bg-cyan-400 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            {editMode === "boundary"
+              ? "✓ Línea hoyo"
+              : `Línea hoyo${boundarySaved ? " ✓" : ""}`}
+          </button>
+        </div>
+        <p className="mb-2 text-[10px] text-slate-400">
+          {editMode === "points"
+            ? "Arrastra entrada, centro, atrás o trampas sobre la foto satelital. Las yardas se recalculan con la nueva posición."
+            : editMode === "boundary"
+              ? "Arrastra las esquinas cyan de la línea azul hasta las orillas del campo."
+              : "Marca con GPS o activa «Ajustar puntos» / «Línea hoyo» para corregir sobre la foto."}
+        </p>
+
         <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           Green del hoyo {activeHole}
         </h2>

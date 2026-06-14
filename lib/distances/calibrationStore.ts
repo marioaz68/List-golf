@@ -95,3 +95,68 @@ export async function deleteReferencePoint(
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+/** Mueve un punto de referencia ya guardado (arrastre en mapa). */
+export async function updateReferencePoint(
+  admin: SupabaseClient,
+  args: { id: string; lat: number; lon: number }
+): Promise<void> {
+  const { error } = await admin
+    .from("course_hole_reference_points")
+    .update({ lat: args.lat, lon: args.lon })
+    .eq("id", args.id);
+  if (error) throw new Error(error.message);
+}
+
+/** Carga polígono calibrado del hoyo (null = usar el del código). */
+export async function loadHoleBoundary(
+  admin: SupabaseClient,
+  courseId: string,
+  hole: number
+): Promise<unknown | null> {
+  const { data, error } = await admin
+    .from("course_holes")
+    .select("boundary_geojson")
+    .eq("course_id", courseId)
+    .eq("hole_number", hole)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as { boundary_geojson?: unknown } | null)?.boundary_geojson ?? null;
+}
+
+/** Guarda el polígono calibrado del hoyo. */
+export async function saveHoleBoundary(
+  admin: SupabaseClient,
+  args: {
+    courseId: string;
+    hole: number;
+    boundaryGeojson: unknown;
+  }
+): Promise<void> {
+  const { courseId, hole, boundaryGeojson } = args;
+  const { data: existing, error: selErr } = await admin
+    .from("course_holes")
+    .select("id, par, handicap_index")
+    .eq("course_id", courseId)
+    .eq("hole_number", hole)
+    .maybeSingle();
+  if (selErr) throw new Error(selErr.message);
+
+  if (existing) {
+    const { error } = await admin
+      .from("course_holes")
+      .update({ boundary_geojson: boundaryGeojson })
+      .eq("id", (existing as { id: string }).id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await admin.from("course_holes").insert({
+    course_id: courseId,
+    hole_number: hole,
+    par: CCQ_HOLE_POINTS[hole]?.par ?? 4,
+    handicap_index: hole,
+    boundary_geojson: boundaryGeojson,
+  });
+  if (error) throw new Error(error.message);
+}

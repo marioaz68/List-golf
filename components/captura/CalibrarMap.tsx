@@ -6,7 +6,11 @@ import {
   haversineMeters,
   metersToYards,
 } from "@/lib/distances/ccqGreens";
-import { getHolePolygon } from "@/lib/distances/ccqHolePoints";
+import {
+  polygonFromRing,
+  resolveHolePolygonFeature,
+  type LatLon,
+} from "@/lib/distances/holeBoundary";
 import {
   MAP_SCALE,
   addSatelliteLayers,
@@ -25,11 +29,17 @@ export interface CalibrarMarker {
   color: string;
 }
 
+export type CalibrarEditMode = "off" | "points" | "boundary";
+
 interface CalibrarMapProps {
   holeNo: number;
   playerLat: number;
   playerLon: number;
   markers: CalibrarMarker[];
+  boundaryRing: LatLon[];
+  editMode?: CalibrarEditMode;
+  onMarkerDrag?: (id: string, lat: number, lon: number) => void;
+  onBoundaryVertexDrag?: (index: number, lat: number, lon: number) => void;
 }
 
 export function CalibrarMap({
@@ -37,6 +47,10 @@ export function CalibrarMap({
   playerLat,
   playerLon,
   markers,
+  boundaryRing,
+  editMode = "off",
+  onMarkerDrag,
+  onBoundaryVertexDrag,
 }: CalibrarMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -44,9 +58,15 @@ export function CalibrarMap({
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
+  const onMarkerDragRef = useRef(onMarkerDrag);
+  const onBoundaryVertexDragRef = useRef(onBoundaryVertexDrag);
+  const draggingRef = useRef(false);
+  const framedHoleRef = useRef(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [mapReady, setMapReady] = useState(false);
   playerPosRef.current = { lat: playerLat, lon: playerLon };
+  onMarkerDragRef.current = onMarkerDrag;
+  onBoundaryVertexDragRef.current = onBoundaryVertexDrag;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -72,7 +92,6 @@ export function CalibrarMap({
         maxZoom: 21,
         zoomSnap: 0,
         zoomControl: false,
-        // Mapa fijo: no se puede mover con los dedos (green arriba al centro).
         dragging: false,
         scrollWheelZoom: false,
         tap: false,
@@ -104,7 +123,6 @@ export function CalibrarMap({
       cancelled = true;
       cleanup();
     };
-    // Solo al montar; la posición se actualiza en el efecto de markers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -113,6 +131,10 @@ export function CalibrarMap({
     if (!map || size.w === 0 || size.h === 0) return;
     map.invalidateSize();
   }, [size.w, size.h]);
+
+  useEffect(() => {
+    framedHoleRef.current = 0;
+  }, [holeNo, editMode]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -124,13 +146,12 @@ export function CalibrarMap({
     );
     if (!map || !lg || !rotator || !mapReady || viewportW === 0 || viewportH === 0)
       return;
+    if (draggingRef.current) return;
 
     (async () => {
       const L = await loadLeaflet();
       lg.clearLayers();
 
-      // Referencia para rotar: punto "Atrás" del green; si no, centro o
-      // cualquier marcador del green.
       const backMarker =
         markers.find((m) => m.id === "g-back") ??
         markers.find((m) => m.id === "g-center") ??
@@ -140,12 +161,15 @@ export function CalibrarMap({
         : 0;
       rotator.style.transform = `rotate(${-bearing}deg)`;
 
-      const holeFeature = getHolePolygon(holeNo);
+      const holeFeature = resolveHolePolygonFeature(
+        holeNo,
+        polygonFromRing(holeNo, boundaryRing).geometry
+      );
       if (holeFeature) {
         L.geoJSON(holeFeature, {
           style: {
             color: "#22d3ee",
-            weight: 2,
+            weight: editMode === "boundary" ? 3 : 2,
             fillColor: "#0891b2",
             fillOpacity: 0.1,
           },
@@ -153,12 +177,41 @@ export function CalibrarMap({
         }).addTo(lg);
       }
 
+      if (editMode === "boundary") {
+        for (let i = 0; i < boundaryRing.length; i++) {
+          const v = boundaryRing[i];
+          const marker = L.marker([v.lat, v.lon], {
+            draggable: true,
+            icon: L.divIcon({
+              className: "",
+              html: uprightHtml(
+                `<div style="width:14px;height:14px;border-radius:3px;background:#22d3ee;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,0.7);cursor:grab;"></div>`,
+                bearing
+              ),
+              iconSize: [14, 14],
+              iconAnchor: [7, 7],
+            }),
+            zIndexOffset: 900,
+          }).addTo(lg);
+          marker.on("dragstart", () => {
+            draggingRef.current = true;
+          });
+          marker.on("dragend", (e: any) => {
+            draggingRef.current = false;
+            const ll = e.target.getLatLng();
+            onBoundaryVertexDragRef.current?.(i, ll.lat, ll.lng);
+          });
+        }
+      }
+
+      const pointsEditable = editMode === "points";
       for (const m of markers) {
-        L.marker([m.lat, m.lon], {
+        const marker = L.marker([m.lat, m.lon], {
+          draggable: pointsEditable,
           icon: L.divIcon({
             className: "",
             html: uprightHtml(
-              `<div style="display:flex;flex-direction:column;align-items:center;">
+              `<div style="display:flex;flex-direction:column;align-items:center;${pointsEditable ? "cursor:grab;" : ""}">
               <div style="width:16px;height:16px;border-radius:50%;background:${m.color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.6);"></div>
               <div style="margin-top:2px;background:rgba(0,0,0,0.8);color:#fff;padding:1px 5px;border-radius:5px;font-size:10px;font-weight:700;font-family:Arial,sans-serif;white-space:nowrap;">${m.label}</div>
             </div>`,
@@ -167,11 +220,20 @@ export function CalibrarMap({
             iconSize: [80, 38],
             iconAnchor: [40, 8],
           }),
-          interactive: false,
+          interactive: pointsEditable,
         }).addTo(lg);
+        if (pointsEditable) {
+          marker.on("dragstart", () => {
+            draggingRef.current = true;
+          });
+          marker.on("dragend", (e: any) => {
+            draggingRef.current = false;
+            const ll = e.target.getLatLng();
+            onMarkerDragRef.current?.(m.id, ll.lat, ll.lng);
+          });
+        }
       }
 
-      // Posición del jugador (tú)
       L.marker([playerLat, playerLon], {
         icon: L.divIcon({
           className: "",
@@ -197,7 +259,9 @@ export function CalibrarMap({
         document.head.appendChild(style);
       }
 
-      if (backMarker) {
+      const editing = editMode !== "off";
+      const holeChanged = framedHoleRef.current !== holeNo;
+      if (!editing && backMarker) {
         const yards = Math.round(
           metersToYards(
             haversineMeters(
@@ -223,9 +287,11 @@ export function CalibrarMap({
           rotH,
           64,
           52,
-          markers.map((m) => [m.lat, m.lon] as [number, number])
+          markers.map((m) => [m.lat, m.lon] as [number, number]),
+          holeChanged
         );
-      } else {
+        framedHoleRef.current = holeNo;
+      } else if (!editing && !backMarker) {
         map.setView([playerLat, playerLon], 19, { animate: false });
         tuneRotatedFraming(
           map,
@@ -239,15 +305,51 @@ export function CalibrarMap({
           rotW,
           rotH
         );
+      } else if (editing && holeChanged && backMarker) {
+        map.setView(
+          [(playerLat + backMarker.lat) / 2, (playerLon + backMarker.lon) / 2],
+          18,
+          { animate: false }
+        );
+        tuneRotatedFraming(
+          map,
+          bearing,
+          playerLat,
+          playerLon,
+          backMarker.lat,
+          backMarker.lon,
+          viewportW,
+          viewportH,
+          rotW,
+          rotH
+        );
+        framedHoleRef.current = holeNo;
       }
     })();
-  }, [holeNo, playerLat, playerLon, markers, size.w, size.h, mapReady]);
+  }, [
+    holeNo,
+    playerLat,
+    playerLon,
+    markers,
+    boundaryRing,
+    editMode,
+    size.w,
+    size.h,
+    mapReady,
+  ]);
 
   const sizePct = MAP_SCALE * 100;
   const offsetPct = ((MAP_SCALE - 1) / 2) * 100;
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-black">
+      {editMode !== "off" ? (
+        <div className="pointer-events-none absolute left-1/2 top-14 z-[500] -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[10px] font-bold text-black shadow-lg">
+          {editMode === "points"
+            ? "Arrastra los puntos sobre la foto"
+            : "Arrastra las esquinas de la línea azul"}
+        </div>
+      ) : null}
       <div
         ref={rotatorRef}
         className="absolute"
