@@ -71,6 +71,9 @@ export function HoleYardageMap({
   const mapRef = useRef<any>(null);
   const layersRef = useRef<any>(null);
   const bearingRef = useRef(0);
+  // Último hoyo encuadrado: al cambiar de hoyo recolocamos la vista; en
+  // actualizaciones de posición no, para no recargar tiles (evita parpadeo).
+  const framedHoleRef = useRef<number | null>(null);
   const onMapTapRef = useRef(onMapTap);
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
@@ -360,6 +363,8 @@ export function HoleYardageMap({
               ["green-front", "green-center", "green-back"].includes(p.kind)
             )
             .map((p) => [p.lat, p.lon] as [number, number]);
+          const recenter = framedHoleRef.current !== holeNo;
+          framedHoleRef.current = holeNo;
           frameByProximity(
             map,
             L,
@@ -375,7 +380,8 @@ export function HoleYardageMap({
             rotH,
             64,
             52,
-            greenBounds
+            greenBounds,
+            recenter
           );
         } else {
           map.fitBounds(bounds, {

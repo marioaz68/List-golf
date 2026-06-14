@@ -221,7 +221,8 @@ export function frameByProximity(
   rotH: number,
   topBar = 64,
   bottomBar = 52,
-  _extraBounds?: Array<[number, number]>
+  _extraBounds?: Array<[number, number]>,
+  recenter = true
 ) {
   // Distancia jugador→green (m). La queremos representar como ~66% del alto
   // útil de la pantalla, así el jugador cae cerca del borde inferior.
@@ -229,14 +230,27 @@ export function frameByProximity(
   const usableH = Math.max(160, viewportH - topBar - bottomBar);
   const targetSpanPx = usableH * 0.66;
 
-  // metros por pixel deseados → nivel de zoom Leaflet.
+  // metros por pixel deseados → nivel de zoom Leaflet, CUANTIZADO en pasos de
+  // 0.5 para que pequeños cambios de distancia NO recarguen los tiles del
+  // satélite (eso causaba el parpadeo). El zoom solo cambia por escalones.
   const mpp = Math.max(distM, 10) / targetSpanPx;
   const latRad = (greenLat * Math.PI) / 180;
-  let zoom =
-    Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos(latRad)) / mpp) - 8;
+  let zoom = Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos(latRad)) / mpp) - 8;
   zoom = Math.max(16, Math.min(20.5, zoom));
+  const qZoom = Math.round(zoom * 2) / 2;
 
-  map.setView([greenLat, greenLon], zoom, { animate: false });
+  const currentZoom = map.getZoom();
+  const zoomChanged = Math.abs(currentZoom - qZoom) > 0.01;
+
+  // El zoom (cambio de escala) es lo que recarga TODOS los tiles y provoca el
+  // parpadeo, así que solo se aplica cuando cambia el escalón cuantizado o al
+  // cambiar de hoyo. El re-anclado del green (abajo) usa paneo, que no
+  // recarga el satélite, así que se ejecuta siempre para mantenerlo fijo.
+  if (recenter) {
+    map.setView([greenLat, greenLon], qZoom, { animate: false });
+  } else if (zoomChanged) {
+    map.setZoomAround([greenLat, greenLon], qZoom, { animate: false });
+  }
 
   // El green queda fijo arriba al centro; el jugador, abajo.
   tuneRotatedFraming(
