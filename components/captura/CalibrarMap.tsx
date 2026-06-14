@@ -197,8 +197,6 @@ export function CalibrarMap({
         document.head.appendChild(style);
       }
 
-      map.invalidateSize();
-
       if (backMarker) {
         const yards = Math.round(
           metersToYards(

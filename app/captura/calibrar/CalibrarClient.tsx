@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { computeAllHoleDistances } from "@/lib/distances/ccqGreens";
+import {
+  computeAllHoleDistances,
+  haversineMeters,
+} from "@/lib/distances/ccqGreens";
 import { CCQ_COURSE_ID } from "@/lib/distances/courseReferencePoints";
 import { detectHole } from "@/lib/telegram/ritmo/geometry";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
@@ -78,6 +81,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [newShort, setNewShort] = useState("");
 
   const watchIdRef = useRef<number | null>(null);
+  // Última posición aceptada: ignora el micro-jitter del GPS (1-2 m parado)
+  // para que la foto no parpadee. Umbral pequeño (3 m) para no perder
+  // precisión al calibrar.
+  const lastPosRef = useRef<{ lat: number; lon: number } | null>(null);
   // Hoyo detectado cuando el usuario fijó el hoyo a mano; al entrar a otro
   // hoyo se reanuda el automático.
   const manualAtDetectedRef = useRef<number | null>(null);
@@ -89,14 +96,22 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
     setGeo({ status: "requesting" });
     const id = navigator.geolocation.watchPosition(
-      (pos) =>
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const last = lastPosRef.current;
+        if (last && haversineMeters(last.lat, last.lon, lat, lon) < 3) {
+          return;
+        }
+        lastPosRef.current = { lat, lon };
         setGeo({
           status: "ok",
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
+          lat,
+          lon,
           accuracy: pos.coords.accuracy ?? 0,
           ts: Date.now(),
-        }),
+        });
+      },
       (err) => {
         if (err.code === 1) {
           setGeo({

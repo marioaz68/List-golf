@@ -353,8 +353,6 @@ export function HoleYardageMap({
       ]);
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
-      map.invalidateSize();
-
       try {
         if (greenTarget && !tapPoint) {
           const greenBounds = referencePoints

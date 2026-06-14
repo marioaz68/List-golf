@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
-import { computeAllHoleDistances } from "@/lib/distances/ccqGreens";
+import { computeAllHoleDistances, haversineMeters } from "@/lib/distances/ccqGreens";
 import {
   CCQ_HOLE_POINTS,
   greenDistancesForHole,
@@ -95,6 +95,10 @@ export default function DistanciasClient() {
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  // Última posición aceptada. Sirve para ignorar el micro-jitter del GPS
+  // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
+  // re-encuadrar el mapa constantemente.
+  const lastPosRef = useRef<{ lat: number; lon: number } | null>(null);
   // Hoyo detectado en el momento que el usuario fijó el hoyo a mano. Al entrar
   // a un hoyo distinto (el GPS detecta otro polígono), se reanuda el automático.
   const manualAtDetectedRef = useRef<number | null>(null);
@@ -121,14 +125,24 @@ export default function DistanciasClient() {
     }
     setGeo({ status: "requesting" });
     const id = navigator.geolocation.watchPosition(
-      (pos) =>
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const last = lastPosRef.current;
+        // Solo actualiza si te moviste de verdad (> 4 m). Estando parado, el
+        // GPS salta 1-2 m por segundo; ignorarlo mantiene la foto fija.
+        if (last && haversineMeters(last.lat, last.lon, lat, lon) < 4) {
+          return;
+        }
+        lastPosRef.current = { lat, lon };
         setGeo({
           status: "ok",
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
+          lat,
+          lon,
           accuracy: pos.coords.accuracy ?? 0,
           ts: Date.now(),
-        }),
+        });
+      },
       (err) => {
         if (err.code === 1) {
           setGeo({

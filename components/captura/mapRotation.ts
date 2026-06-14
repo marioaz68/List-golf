@@ -6,6 +6,8 @@
  * cercanía acerca progresivamente conforme el jugador avanza hacia el green.
  */
 
+import { haversineMeters } from "@/lib/distances/ccqGreens";
+
 /** Escala del div del mapa vs. el viewport visible (evita esquinas negras al rotar). */
 export const MAP_SCALE = 1.55;
 
@@ -193,50 +195,48 @@ export function tuneRotatedFraming(
   }
 }
 
+/** Circunferencia de la Tierra (m) en el ecuador, para metros/pixel. */
+const EARTH_CIRCUMFERENCE_M = 40075016.686;
+
 /**
- * Encuadre por cercanía: primero fitBounds jugador→green (siempre se ve el
- * hoyo), luego acerca según yardas y ajusta green arriba / jugador abajo.
+ * Encuadre estilo Waze, determinista (sin fitBounds, que provocaba saltos y
+ * parpadeo). El zoom se calcula a partir de la distancia jugador→green para
+ * que el jugador quede a una fracción fija bajo el green; el green se ancla
+ * arriba al centro. Como el zoom depende solo de la distancia, la vista es
+ * estable (misma posición ⇒ misma vista, sin flashear) y se acerca solo
+ * conforme te aproximas al green.
  */
 export function frameByProximity(
   map: any,
-  L: any,
+  _L: any,
   bearing: number,
   playerLat: number,
   playerLon: number,
   greenLat: number,
   greenLon: number,
-  yardsToGreen: number,
+  _yardsToGreen: number,
   viewportW: number,
   viewportH: number,
   rotW: number,
   rotH: number,
   topBar = 64,
   bottomBar = 52,
-  extraBounds?: Array<[number, number]>
+  _extraBounds?: Array<[number, number]>
 ) {
-  const bounds = L.latLngBounds(
-    [playerLat, playerLon],
-    [greenLat, greenLon]
-  );
-  if (extraBounds) {
-    for (const pt of extraBounds) bounds.extend(pt);
-  }
+  // Distancia jugador→green (m). La queremos representar como ~66% del alto
+  // útil de la pantalla, así el jugador cae cerca del borde inferior.
+  const distM = haversineMeters(playerLat, playerLon, greenLat, greenLon);
+  const usableH = Math.max(160, viewportH - topBar - bottomBar);
+  const targetSpanPx = usableH * 0.66;
 
-  map.fitBounds(bounds, {
-    paddingTopLeft: [24, topBar + 24],
-    paddingBottomRight: [24, bottomBar + 24],
-    animate: false,
-    maxZoom: 19,
-  });
+  // metros por pixel deseados → nivel de zoom Leaflet.
+  const mpp = Math.max(distM, 10) / targetSpanPx;
+  const latRad = (greenLat * Math.PI) / 180;
+  let zoom =
+    Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos(latRad)) / mpp) - 8;
+  zoom = Math.max(16, Math.min(20.5, zoom));
 
-  // Acercar progresivamente conforme bajan las yardas. El zoom se hace
-  // ALREDEDOR del green para que el green no se mueva al acercar.
-  const t = Math.max(0, Math.min(1, (220 - yardsToGreen) / (220 - 25)));
-  if (t > 0.08) {
-    const extra = Math.min(1.8, t * 1.8);
-    const targetZoom = Math.min(20, map.getZoom() + extra);
-    map.setZoomAround([greenLat, greenLon], targetZoom, { animate: false });
-  }
+  map.setView([greenLat, greenLon], zoom, { animate: false });
 
   // El green queda fijo arriba al centro; el jugador, abajo.
   tuneRotatedFraming(
