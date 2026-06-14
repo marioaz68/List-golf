@@ -58,7 +58,7 @@ export function CalibrarMap({
   }, []);
 
   useEffect(() => {
-    if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
+    if (!mapDivRef.current) return;
     if (mapRef.current) return;
     let cleanup = () => {};
     let cancelled = false;
@@ -101,10 +101,9 @@ export function CalibrarMap({
       cancelled = true;
       cleanup();
     };
-    // Solo inicializa una vez con el tamaño; la posición se actualiza en el
-    // efecto de markers (recrear el mapa en cada GPS rompía la rotación).
+    // Solo al montar; la posición se actualiza en el efecto de markers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.w, size.h]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -242,28 +241,24 @@ export function CalibrarMap({
     })();
   }, [holeNo, playerLat, playerLon, markers, size.w, size.h, mapReady]);
 
-  const rotW = size.w * MAP_SCALE;
-  const rotH = size.h * MAP_SCALE;
+  const sizePct = MAP_SCALE * 100;
+  const offsetPct = ((MAP_SCALE - 1) / 2) * 100;
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden bg-black">
-      {size.w > 0 && size.h > 0 && (
-        <div
-          ref={rotatorRef}
-          className="absolute"
-          style={{
-            left: "50%",
-            top: "50%",
-            width: rotW,
-            height: rotH,
-            marginLeft: -rotW / 2,
-            marginTop: -rotH / 2,
-            transformOrigin: "center center",
-          }}
-        >
-          <div ref={mapDivRef} className="absolute inset-0" />
-        </div>
-      )}
+      <div
+        ref={rotatorRef}
+        className="absolute"
+        style={{
+          left: `-${offsetPct}%`,
+          top: `-${offsetPct}%`,
+          width: `${sizePct}%`,
+          height: `${sizePct}%`,
+          transformOrigin: "center center",
+        }}
+      >
+        <div ref={mapDivRef} className="absolute inset-0" />
+      </div>
     </div>
   );
 }

@@ -89,9 +89,11 @@ export function HoleYardageMap({
     return () => ro.disconnect();
   }, []);
 
-  // Init map once when we have dimensions
+  // Init map once al montar. El contenedor del mapa tiene tamaño por CSS
+  // (155% del viewport), así que no esperamos a medir con JS: crearlo de una
+  // evita el caso en que el satélite quedaba en blanco.
   useEffect(() => {
-    if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
+    if (!mapDivRef.current) return;
     if (mapRef.current) return;
     let cleanup = () => {};
     let cancelled = false;
@@ -171,11 +173,10 @@ export function HoleYardageMap({
       cancelled = true;
       cleanup();
     };
-    // Solo inicializa una vez que hay tamaño. La posición del jugador se
-    // actualiza en el efecto de markers; recrear el mapa en cada GPS rompía
-    // la rotación/encuadre.
+    // Solo al montar. La posición del jugador se actualiza en el efecto de
+    // markers; recrear el mapa en cada GPS rompía la rotación/encuadre.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.w, size.h]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -403,31 +404,29 @@ export function HoleYardageMap({
     mapReady,
   ]);
 
-  const rotW = size.w * MAP_SCALE;
-  const rotH = size.h * MAP_SCALE;
+  // Contenedor del mapa más grande que el viewport (para cubrir las esquinas
+  // al rotar), dimensionado por CSS para que siempre tenga tamaño real.
+  const sizePct = MAP_SCALE * 100;
+  const offsetPct = ((MAP_SCALE - 1) / 2) * 100;
 
   return (
     <div
       ref={containerRef}
       className="relative h-full w-full overflow-hidden bg-black"
     >
-      {size.w > 0 && size.h > 0 && (
-        <div
-          ref={rotatorRef}
-          className="absolute"
-          style={{
-            left: "50%",
-            top: "50%",
-            width: rotW,
-            height: rotH,
-            marginLeft: -rotW / 2,
-            marginTop: -rotH / 2,
-            transformOrigin: "center center",
-          }}
-        >
-          <div ref={mapDivRef} className="absolute inset-0" />
-        </div>
-      )}
+      <div
+        ref={rotatorRef}
+        className="absolute"
+        style={{
+          left: `-${offsetPct}%`,
+          top: `-${offsetPct}%`,
+          width: `${sizePct}%`,
+          height: `${sizePct}%`,
+          transformOrigin: "center center",
+        }}
+      >
+        <div ref={mapDivRef} className="absolute inset-0" />
+      </div>
       <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
         Toca el mapa para medir
       </div>
