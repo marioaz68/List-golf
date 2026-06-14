@@ -358,60 +358,68 @@ export default function DistanciasClient() {
         )}
       </div>
 
-      {/* Barra superior flotante: hoyo + distancias + cerrar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
-        <div className="pointer-events-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => changeHole(-1)}
-            aria-label="Hoyo anterior"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            onClick={() => setManualHole(null)}
-            disabled={manualHole == null}
-            aria-label="Volver a detección automática"
-            className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm disabled:opacity-100"
-          >
-            <div className="text-xs font-black text-emerald-100">
-              H{activeHole}
-              <span className="ml-1 text-[9px] font-semibold text-slate-300">
-                par {holeMeta?.par ?? "—"}
-              </span>
+      {/* Solo una ✕ para cerrar, en la esquina superior derecha (no tapa el
+          green, que ahora va arriba al centro). */}
+      <Link
+        href="/"
+        aria-label="Cerrar"
+        className="absolute right-2 top-2 z-[1000] flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+      >
+        ✕
+      </Link>
+
+      {/* Controles abajo: selector de hoyo + distancias al green. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
+        <div className="pointer-events-none flex items-center justify-between gap-1.5 px-2 pb-2">
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => changeHole(-1)}
+              aria-label="Hoyo anterior"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualHole(null)}
+              disabled={manualHole == null}
+              aria-label="Volver a detección automática"
+              className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm disabled:opacity-100"
+            >
+              <div className="text-xs font-black text-emerald-100">
+                H{activeHole}
+                <span className="ml-1 text-[9px] font-semibold text-slate-300">
+                  par {holeMeta?.par ?? "—"}
+                </span>
+              </div>
+              {manualHole != null ? (
+                <div className="text-[8px] text-slate-300">tocar para auto</div>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              onClick={() => changeHole(1)}
+              aria-label="Hoyo siguiente"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+            >
+              ›
+            </button>
+          </div>
+
+          {greenYds ? (
+            <div className="pointer-events-none flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 backdrop-blur-sm">
+              <MiniDist label="Ent" yards={greenYds.front} />
+              <MiniDist label="Cen" yards={greenYds.center} highlight />
+              <MiniDist label="Fon" yards={greenYds.back} />
             </div>
-            {manualHole != null ? (
-              <div className="text-[8px] text-slate-300">tocar para auto</div>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={() => changeHole(1)}
-            aria-label="Hoyo siguiente"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
-          >
-            ›
-          </button>
+          ) : (
+            <span />
+          )}
         </div>
 
-        {greenYds ? (
-          <div className="pointer-events-none flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 backdrop-blur-sm">
-            <MiniDist label="Ent" yards={greenYds.front} />
-            <MiniDist label="Cen" yards={greenYds.center} highlight />
-            <MiniDist label="Fon" yards={greenYds.back} />
-          </div>
-        ) : (
-          <span />
-        )}
-
-        <Link
-          href="/"
-          className="pointer-events-auto rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
-        >
-          ✕
-        </Link>
+        {/* Barra de ritmo delgada, pegada al borde inferior */}
+        {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
       </div>
 
       {/* Punto tocado: pastilla flotante */}
@@ -419,7 +427,7 @@ export default function DistanciasClient() {
         <button
           type="button"
           onClick={() => setTapPoint(null)}
-          className="absolute left-1/2 top-16 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
+          className="absolute left-1/2 top-2 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
         >
           {tapPoint.yards} yds · tocar para quitar
         </button>
@@ -450,9 +458,6 @@ export default function DistanciasClient() {
           </Link>
         </div>
       ) : null}
-
-      {/* Barra de ritmo delgada abajo */}
-      {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
     </div>
   );
 }
@@ -470,7 +475,7 @@ function PaceBannerThin({ pace }: { pace: PaceState | null }) {
   return (
     <div
       className={[
-        "absolute inset-x-0 bottom-0 z-[1000] flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
+        "pointer-events-none flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
         style.box,
       ].join(" ")}
     >

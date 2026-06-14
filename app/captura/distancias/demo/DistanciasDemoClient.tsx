@@ -95,65 +95,66 @@ export default function DistanciasDemoClient() {
         )}
       </div>
 
-      {/* Barra superior: vuelta + hoyo + cerrar */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-between gap-1.5 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-2 pb-6 pt-2">
-        <div className="pointer-events-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => goStop(-1)}
-            disabled={stopIdx === 0}
-            aria-label="Hoyo anterior"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-40"
-          >
-            ‹
-          </button>
-          <div className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm">
-            <div className="text-xs font-black text-emerald-100">
-              H{holeNo}
-              <span className="ml-1 text-[9px] font-semibold text-slate-300">
-                par {hp?.par ?? "—"}
-              </span>
-            </div>
-            <div className="text-[8px] text-slate-300">
-              parada {stopIdx + 1}/{route.holes.length}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => goStop(1)}
-            disabled={stopIdx === route.holes.length - 1}
-            aria-label="Hoyo siguiente"
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-40"
-          >
-            ›
-          </button>
-        </div>
+      {/* Solo ✕ para cerrar (no tapa el green, que va arriba al centro). */}
+      <Link
+        href="/captura/distancias"
+        aria-label="Cerrar"
+        className="absolute right-2 top-2 z-[1000] flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+      >
+        ✕
+      </Link>
 
-        {greenYds ? (
-          <div className="pointer-events-none flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 backdrop-blur-sm">
-            <MiniDist label="Ent" yards={greenYds.front} />
-            <MiniDist label="Cen" yards={greenYds.center} highlight />
-            <MiniDist label="Fon" yards={greenYds.back} />
-          </div>
-        ) : (
-          <span />
-        )}
-
-        <Link
-          href="/captura/distancias"
-          className="pointer-events-auto rounded-md bg-black/55 px-2 py-1 text-sm font-bold backdrop-blur-sm"
-        >
-          ✕
-        </Link>
-      </div>
-
-      {/* Etiqueta de modo prueba */}
-      <div className="pointer-events-none absolute left-1/2 top-16 z-[1000] -translate-x-1/2 rounded-full bg-amber-500/90 px-3 py-1 text-[11px] font-black text-amber-950 shadow-lg">
+      {/* Etiqueta de modo prueba, arriba a la izquierda (fuera del green). */}
+      <div className="pointer-events-none absolute left-2 top-2 z-[1000] rounded-full bg-amber-500/90 px-3 py-1 text-[11px] font-black text-amber-950 shadow-lg">
         MODO PRUEBA · sin GPS
       </div>
 
-      {/* Controles inferiores: vuelta + caminar tee→green */}
+      {/* Controles inferiores: hoyo + distancias + vuelta + caminar tee→green */}
       <div className="absolute inset-x-0 bottom-0 z-[1000] space-y-2 bg-gradient-to-t from-black/80 via-black/50 to-transparent px-3 pb-3 pt-6">
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => goStop(-1)}
+              disabled={stopIdx === 0}
+              aria-label="Hoyo anterior"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
+              ‹
+            </button>
+            <div className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm">
+              <div className="text-xs font-black text-emerald-100">
+                H{holeNo}
+                <span className="ml-1 text-[9px] font-semibold text-slate-300">
+                  par {hp?.par ?? "—"}
+                </span>
+              </div>
+              <div className="text-[8px] text-slate-300">
+                parada {stopIdx + 1}/{route.holes.length}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => goStop(1)}
+              disabled={stopIdx === route.holes.length - 1}
+              aria-label="Hoyo siguiente"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
+              ›
+            </button>
+          </div>
+
+          {greenYds ? (
+            <div className="flex items-center gap-0.5 rounded-md bg-black/55 px-1.5 py-0.5 backdrop-blur-sm">
+              <MiniDist label="Ent" yards={greenYds.front} />
+              <MiniDist label="Cen" yards={greenYds.center} highlight />
+              <MiniDist label="Fon" yards={greenYds.back} />
+            </div>
+          ) : (
+            <span />
+          )}
+        </div>
+
         <div className="flex justify-center gap-2">
           {ROUTES.map((r) => (
             <button
