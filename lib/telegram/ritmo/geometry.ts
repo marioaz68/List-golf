@@ -108,7 +108,8 @@ function centroidDistanceMeters(p: LatLon, poly: Polygon): number {
  *  borde más cercano si está a ≤30 m, o null si está fuera del campo. */
 export function detectHole(
   p: LatLon,
-  holes: FeatureCollection<Polygon, { hoyo: number }>
+  holes: FeatureCollection<Polygon, { hoyo: number }>,
+  nearThresholdM: number = NEAR_THRESHOLD_M
 ): number | null {
   const containing = holes.features.filter((f) =>
     pointInPolygon(p, f.geometry)
@@ -127,6 +128,9 @@ export function detectHole(
     return best.properties.hoyo;
   }
 
+  // Fuera de todo polígono: el del borde más cercano si está a ≤ umbral.
+  // Con nearThresholdM = 0 solo cuenta estar DENTRO de un polígono.
+  if (nearThresholdM <= 0) return null;
   let best: number | null = null;
   let bestD = Infinity;
   for (const f of holes.features) {
@@ -136,7 +140,7 @@ export function detectHole(
       best = f.properties.hoyo;
     }
   }
-  return bestD <= NEAR_THRESHOLD_M ? best : null;
+  return bestD <= nearThresholdM ? best : null;
 }
 
 export function centroid(points: LatLon[]): LatLon | null {

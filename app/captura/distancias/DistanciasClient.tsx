@@ -167,9 +167,18 @@ export default function DistanciasClient() {
     };
   }, []);
 
+  // Detección con respaldo de borde (≤30 m) para la semilla inicial y para
+  // reanudar el modo automático.
   const detectedHole = useMemo(() => {
     if (geo.status !== "ok") return null;
     return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES);
+  }, [geo]);
+
+  // Detección ESTRICTA: solo si estás DENTRO del polígono de un hoyo. Se usa
+  // para cambiar de hoyo (no el "más cercano", que brincaba a hoyos vecinos).
+  const insideHole = useMemo(() => {
+    if (geo.status !== "ok") return null;
+    return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES, 0);
   }, [geo]);
 
   const nearest = useMemo(() => {
@@ -188,20 +197,54 @@ export default function DistanciasClient() {
     nearest != null &&
     nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
 
-  const activeHole = manualHole ?? detectedHole ?? nearestHole;
+  // Hoyo automático "pegajoso": una vez en un hoyo NO cambia solo. Solo cambia
+  // cuando entras DENTRO del polígono de otro hoyo, confirmado en 2 lecturas
+  // seguidas. Si no estás dentro de ningún polígono, se queda en el actual
+  // (evita que brinque del 12 al 7/6 por el ruido del GPS entre hoyos).
+  const [autoHole, setAutoHole] = useState<number | null>(null);
+  const autoCandidateRef = useRef<{ hole: number; count: number }>({
+    hole: 0,
+    count: 0,
+  });
+  useEffect(() => {
+    if (geo.status !== "ok") return;
+    setAutoHole((prev) => {
+      if (prev == null) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return detectedHole ?? nearestHole;
+      }
+      if (insideHole == null || insideHole === prev) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return prev;
+      }
+      const cand = autoCandidateRef.current;
+      if (cand.hole === insideHole) {
+        cand.count += 1;
+      } else {
+        autoCandidateRef.current = { hole: insideHole, count: 1 };
+      }
+      if (autoCandidateRef.current.count >= 2) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return insideHole;
+      }
+      return prev;
+    });
+  }, [insideHole, detectedHole, nearestHole, geo.status]);
+
+  const activeHole = manualHole ?? autoHole ?? nearestHole;
 
   // Reanudar automático al caminar a otro hoyo: si fijaste el hoyo a mano y el
-  // GPS te detecta ya en un hoyo distinto al de cuando lo fijaste, vuelve a auto.
+  // GPS te detecta ya dentro de un hoyo distinto al de cuando lo fijaste.
   useEffect(() => {
     if (
       manualHole != null &&
-      detectedHole != null &&
-      detectedHole !== manualAtDetectedRef.current
+      insideHole != null &&
+      insideHole !== manualAtDetectedRef.current
     ) {
       setManualHole(null);
       setTapPoint(null);
     }
-  }, [detectedHole, manualHole]);
+  }, [insideHole, manualHole]);
 
   useEffect(() => {
     let cancelled = false;
@@ -338,9 +381,9 @@ export default function DistanciasClient() {
   }, [actorQuery, activeHole]);
 
   const changeHole = (delta: number) => {
-    manualAtDetectedRef.current = detectedHole;
+    manualAtDetectedRef.current = insideHole;
     setManualHole(((prev) => {
-      const base = prev ?? detectedHole ?? nearestHole;
+      const base = prev ?? autoHole ?? nearestHole;
       let next = base + delta;
       if (next < 1) next = 18;
       if (next > 18) next = 1;

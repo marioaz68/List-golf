@@ -137,22 +137,60 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES);
   }, [geo]);
 
+  // Estricta: solo si estás DENTRO del polígono (para cambiar de hoyo).
+  const insideHole = useMemo(() => {
+    if (geo.status !== "ok") return null;
+    return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES, 0);
+  }, [geo]);
+
   const nearestHole = useMemo(() => {
     if (geo.status !== "ok") return 1;
     return computeAllHoleDistances(geo.lat, geo.lon)[0]?.holeNo ?? 1;
   }, [geo]);
 
-  const activeHole = manualHole ?? detectedHole ?? nearestHole;
+  // Hoyo automático "pegajoso": no cambia hasta entrar DENTRO de otro hoyo
+  // (2 lecturas seguidas). Evita brincos por ruido del GPS entre hoyos.
+  const [autoHole, setAutoHole] = useState<number | null>(null);
+  const autoCandidateRef = useRef<{ hole: number; count: number }>({
+    hole: 0,
+    count: 0,
+  });
+  useEffect(() => {
+    if (geo.status !== "ok") return;
+    setAutoHole((prev) => {
+      if (prev == null) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return detectedHole ?? nearestHole;
+      }
+      if (insideHole == null || insideHole === prev) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return prev;
+      }
+      const cand = autoCandidateRef.current;
+      if (cand.hole === insideHole) {
+        cand.count += 1;
+      } else {
+        autoCandidateRef.current = { hole: insideHole, count: 1 };
+      }
+      if (autoCandidateRef.current.count >= 2) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return insideHole;
+      }
+      return prev;
+    });
+  }, [insideHole, detectedHole, nearestHole, geo.status]);
+
+  const activeHole = manualHole ?? autoHole ?? nearestHole;
 
   useEffect(() => {
     if (
       manualHole != null &&
-      detectedHole != null &&
-      detectedHole !== manualAtDetectedRef.current
+      insideHole != null &&
+      insideHole !== manualAtDetectedRef.current
     ) {
       setManualHole(null);
     }
-  }, [detectedHole, manualHole]);
+  }, [insideHole, manualHole]);
 
   const refetch = useCallback(async () => {
     try {
@@ -320,8 +358,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   };
 
   const changeHole = (delta: number) => {
-    manualAtDetectedRef.current = detectedHole;
-    const base = manualHole ?? detectedHole ?? nearestHole;
+    manualAtDetectedRef.current = insideHole;
+    const base = manualHole ?? autoHole ?? nearestHole;
     let next = base + delta;
     if (next < 1) next = 18;
     if (next > 18) next = 1;
