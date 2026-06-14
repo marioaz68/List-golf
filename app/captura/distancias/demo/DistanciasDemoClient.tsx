@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
   CCQ_HOLE_POINTS,
   greenDistancesForHole,
   referenceDistancesForHole,
+  type HoleGreenPoints,
+  type ReferencePoint,
 } from "@/lib/distances/ccqHolePoints";
+import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
+import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 
 function MapSkeleton() {
   return (
@@ -39,10 +43,94 @@ export default function DistanciasDemoClient() {
   const [stopIdx, setStopIdx] = useState(0);
   // Progreso del tee (0) al green (1): simula caminar por el hoyo.
   const [progress, setProgress] = useState(0);
+  const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
+  const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
 
   const route = ROUTES.find((r) => r.id === routeId) ?? ROUTES[0];
   const holeNo = route.holes[Math.min(stopIdx, route.holes.length - 1)];
-  const hp = CCQ_HOLE_POINTS[holeNo];
+
+  // Carga lo calibrado en BD (green + trampas) para este hoyo, igual que la
+  // app real, para que el demo muestre lo que se subió en Calibrar.
+  useEffect(() => {
+    let cancelled = false;
+    const courseId = defaultDistanciasCourseId();
+    (async () => {
+      try {
+        const [ptsRes, greenRes] = await Promise.all([
+          fetch(
+            `/api/captura/distancias/points?hole=${holeNo}&course_id=${courseId}`
+          ),
+          fetch(
+            `/api/captura/distancias/greens?hole=${holeNo}&course_id=${courseId}`
+          ),
+        ]);
+        const ptsData = (await ptsRes.json()) as {
+          ok?: boolean;
+          points?: Array<{
+            id: string;
+            label: string;
+            short_label: string;
+            kind: string;
+            lat: number;
+            lon: number;
+          }>;
+        };
+        const greenData = (await greenRes.json()) as {
+          ok?: boolean;
+          front?: { lat: number; lon: number };
+          center?: { lat: number; lon: number };
+          back?: { lat: number; lon: number };
+          source?: string;
+        };
+        if (cancelled) return;
+
+        if (ptsData.ok && ptsData.points) {
+          setCustomPoints(
+            ptsData.points.map((p) => ({
+              id: p.id,
+              label: p.label,
+              shortLabel: p.short_label,
+              lat: p.lat,
+              lon: p.lon,
+              kind: "custom" as const,
+              dbKind: p.kind,
+            }))
+          );
+        } else {
+          setCustomPoints([]);
+        }
+
+        if (
+          greenData.ok &&
+          greenData.source === "db" &&
+          greenData.front &&
+          greenData.center &&
+          greenData.back
+        ) {
+          setHoleGreen(
+            resolveHoleGreenPoints(holeNo, {
+              holeNumber: holeNo,
+              front: greenData.front,
+              center: greenData.center,
+              back: greenData.back,
+            })
+          );
+        } else {
+          setHoleGreen(CCQ_HOLE_POINTS[holeNo] ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setCustomPoints([]);
+          setHoleGreen(CCQ_HOLE_POINTS[holeNo] ?? null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [holeNo]);
+
+  const hp = holeGreen ?? CCQ_HOLE_POINTS[holeNo];
 
   // Posición simulada: interpola del tee al centro del green según el progreso.
   // A escala de un hoyo la interpolación lineal en lat/lon es suficiente.
@@ -64,8 +152,8 @@ export default function DistanciasDemoClient() {
 
   const refPoints = useMemo(() => {
     if (!hp || !player) return [];
-    return referenceDistancesForHole(player.lat, player.lon, hp, []);
-  }, [hp, player]);
+    return referenceDistancesForHole(player.lat, player.lon, hp, customPoints);
+  }, [hp, player, customPoints]);
 
   const goStop = (delta: number) => {
     setStopIdx((prev) => {
