@@ -324,21 +324,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           : "text-red-400";
 
   return (
-    <div className="flex h-dvh flex-col bg-slate-950 text-slate-100">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-3 py-2">
-        <div>
-          <h1 className="text-sm font-bold">🎯 Calibrar campo · CCQ</h1>
-          <p className="text-[10px] text-slate-400">
-            Párate en el punto y captura tu GPS
-          </p>
-        </div>
-        <Link href="/" className="text-[11px] font-semibold text-slate-400 underline">
-          cerrar
-        </Link>
-      </header>
-
-      {/* Mapa */}
-      <div className="relative min-h-0 flex-1">
+    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
+      {/* Mapa a pantalla completa */}
+      <div className="absolute inset-0">
         {geo.status === "ok" ? (
           <CalibrarMap
             holeNo={activeHole}
@@ -353,39 +341,41 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               : "📡 Esperando GPS…"}
           </div>
         )}
+      </div>
 
-        {/* Selector de hoyo flotante */}
-        <div className="absolute left-2 top-2 z-[1000] flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => changeHole(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/60 text-xl font-bold text-white backdrop-blur-sm"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            onClick={() => setManualHole(null)}
-            className="rounded-md bg-black/60 px-2.5 py-1 text-center backdrop-blur-sm"
-          >
-            <div className="text-sm font-black text-emerald-100">
-              Hoyo {activeHole}
-            </div>
-            <div className="text-[8px] text-slate-300">
-              {manualHole != null ? "tocar: auto" : "automático"}
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => changeHole(1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/60 text-xl font-bold text-white backdrop-blur-sm"
-          >
-            ›
-          </button>
-        </div>
+      {/* Selector de hoyo flotante (arriba izquierda) */}
+      <div className="absolute left-2 top-2 z-[1000] flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => changeHole(-1)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/60 text-xl font-bold text-white backdrop-blur-sm"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={() => setManualHole(null)}
+          className="rounded-md bg-black/60 px-2.5 py-1 text-center backdrop-blur-sm"
+        >
+          <div className="text-sm font-black text-emerald-100">
+            Hoyo {activeHole}
+          </div>
+          <div className="text-[8px] text-slate-300">
+            {manualHole != null ? "tocar: auto" : "automático"}
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => changeHole(1)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/60 text-xl font-bold text-white backdrop-blur-sm"
+        >
+          ›
+        </button>
+      </div>
 
-        {/* Precisión GPS flotante */}
-        <div className="absolute right-2 top-2 z-[1000] rounded-md bg-black/60 px-2 py-1 text-right backdrop-blur-sm">
+      {/* Precisión GPS + cerrar (arriba derecha) */}
+      <div className="absolute right-2 top-2 z-[1000] flex items-center gap-1.5">
+        <div className="rounded-md bg-black/60 px-2 py-1 text-right backdrop-blur-sm">
           <div className={`text-xs font-bold ${accuracyColor}`}>
             {accuracy == null ? "GPS…" : `±${accuracy} m`}
           </div>
@@ -393,24 +383,31 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             <div className="text-[8px] text-red-300">señal débil</div>
           ) : null}
         </div>
-
-        {/* Mensaje flash */}
-        {msg ? (
-          <div
-            className={[
-              "absolute bottom-2 left-1/2 z-[1000] -translate-x-1/2 rounded-full px-4 py-1.5 text-xs font-bold shadow-lg",
-              msg.kind === "ok"
-                ? "bg-emerald-600 text-white"
-                : "bg-red-600 text-white",
-            ].join(" ")}
-          >
-            {msg.text}
-          </div>
-        ) : null}
+        <Link
+          href="/"
+          aria-label="Cerrar"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+        >
+          ✕
+        </Link>
       </div>
 
-      {/* Controles */}
-      <div className="max-h-[46vh] shrink-0 overflow-y-auto border-t border-slate-800 bg-slate-900 px-3 py-3">
+      {/* Mensaje flash */}
+      {msg ? (
+        <div
+          className={[
+            "absolute left-1/2 top-14 z-[1000] -translate-x-1/2 rounded-full px-4 py-1.5 text-xs font-bold shadow-lg",
+            msg.kind === "ok"
+              ? "bg-emerald-600 text-white"
+              : "bg-red-600 text-white",
+          ].join(" ")}
+        >
+          {msg.text}
+        </div>
+      ) : null}
+
+      {/* Controles flotantes abajo */}
+      <div className="absolute inset-x-0 bottom-0 z-[1000] max-h-[46vh] overflow-y-auto border-t border-slate-800/80 bg-slate-900/90 px-3 py-3 backdrop-blur-sm">
         <h2 className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
           Green del hoyo {activeHole}
         </h2>
