@@ -155,14 +155,16 @@ function panScreenDelta(
 }
 
 /**
- * Coloca el green arriba y el jugador abajo en pantalla (tras rotar el mapa).
- * Usa el punto "atrás" del green como referencia superior.
+ * Ancla el green SIEMPRE arriba al centro de la pantalla (tras rotar el mapa).
+ * El jugador queda automáticamente abajo porque el mapa se rota para que el
+ * green apunte hacia arriba. El green es el punto fijo: no se mueve al hacer
+ * zoom ni al actualizar la posición.
  */
 export function tuneRotatedFraming(
   map: any,
   bearing: number,
-  playerLat: number,
-  playerLon: number,
+  _playerLat: number,
+  _playerLon: number,
   greenLat: number,
   greenLon: number,
   viewportW: number,
@@ -170,21 +172,12 @@ export function tuneRotatedFraming(
   _rotW: number,
   _rotH: number,
   topBar = 64,
-  bottomBar = 52
+  _bottomBar = 52
 ) {
-  const targetGreenY = topBar + (viewportH - topBar - bottomBar) * 0.12;
-  const targetPlayerY = viewportH - bottomBar - (viewportH - topBar - bottomBar) * 0.08;
+  const targetGreenY = topBar + Math.max(24, viewportH * 0.1);
   const targetCenterX = viewportW / 2;
 
-  for (let i = 0; i < 16; i++) {
-    const ps = toRotatedScreen(
-      map,
-      playerLat,
-      playerLon,
-      bearing,
-      viewportW,
-      viewportH
-    );
+  for (let i = 0; i < 20; i++) {
     const gs = toRotatedScreen(
       map,
       greenLat,
@@ -193,18 +186,10 @@ export function tuneRotatedFraming(
       viewportW,
       viewportH
     );
-    const errX = targetCenterX - (ps.x + gs.x) / 2;
-    const errGreenY = targetGreenY - gs.y;
-    const errPlayerY = targetPlayerY - ps.y;
-    if (
-      Math.abs(errX) < 2 &&
-      Math.abs(errGreenY) < 3 &&
-      Math.abs(errPlayerY) < 3
-    ) {
-      break;
-    }
-    // Prioriza que el green quede arriba y el jugador abajo.
-    panScreenDelta(map, bearing, errX * 0.65, (errGreenY * 0.5 + errPlayerY * 0.5) * 0.65);
+    const errX = targetCenterX - gs.x;
+    const errY = targetGreenY - gs.y;
+    if (Math.abs(errX) < 1.5 && Math.abs(errY) < 1.5) break;
+    panScreenDelta(map, bearing, errX, errY);
   }
 }
 
@@ -244,14 +229,16 @@ export function frameByProximity(
     maxZoom: 19,
   });
 
-  // Acercar progresivamente conforme bajan las yardas.
+  // Acercar progresivamente conforme bajan las yardas. El zoom se hace
+  // ALREDEDOR del green para que el green no se mueva al acercar.
   const t = Math.max(0, Math.min(1, (220 - yardsToGreen) / (220 - 25)));
   if (t > 0.08) {
     const extra = Math.min(1.8, t * 1.8);
-    map.setZoom(Math.min(20, map.getZoom() + extra), { animate: false });
+    const targetZoom = Math.min(20, map.getZoom() + extra);
+    map.setZoomAround([greenLat, greenLon], targetZoom, { animate: false });
   }
 
-  // Green arriba (atrás del green), jugador abajo.
+  // El green queda fijo arriba al centro; el jugador, abajo.
   tuneRotatedFraming(
     map,
     bearing,
