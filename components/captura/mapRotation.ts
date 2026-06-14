@@ -74,7 +74,18 @@ export async function loadLeaflet(): Promise<any> {
   return (window as any).L;
 }
 
-/** Envuelve el HTML de un marcador para contra-rotarlo y que quede legible. */
+/** Tamaño del viewport visible y del div del mapa (Leaflet). */
+export function readMapLayout(
+  container: HTMLElement | null,
+  mapEl: HTMLElement | null
+): { viewportW: number; viewportH: number; rotW: number; rotH: number } {
+  const vr = container?.getBoundingClientRect();
+  const viewportW = vr ? Math.round(vr.width) : 0;
+  const viewportH = vr ? Math.round(vr.height) : 0;
+  const rotW = mapEl?.offsetWidth || Math.round(viewportW * MAP_SCALE);
+  const rotH = mapEl?.offsetHeight || Math.round(viewportH * MAP_SCALE);
+  return { viewportW, viewportH, rotW, rotH };
+}
 export function uprightHtml(html: string, bearing: number): string {
   if (bearing === 0) return html;
   return `<div style="transform:rotate(${bearing}deg);transform-origin:center center;">${html}</div>`;
@@ -133,25 +144,29 @@ export function tuneRotatedFraming(
     };
   };
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 4; i++) {
     const ps = toScreen(playerLat, playerLon);
     const gs = toScreen(greenLat, greenLon);
     const errX = targetCenterX - (ps.x + gs.x) / 2;
     const errY = (targetPlayerY - ps.y + targetGreenY - gs.y) / 2;
-    if (Math.abs(errX) < 2 && Math.abs(errY) < 2) break;
-    const dpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
-    const dpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
+    if (Math.abs(errX) < 3 && Math.abs(errY) < 3) break;
+    // Pasos acotados: evita que el paneo se dispare lejos del hoyo.
+    const rawDpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
+    const rawDpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
+    const cap = 48;
+    const dpx = Math.max(-cap, Math.min(cap, rawDpx));
+    const dpy = Math.max(-cap, Math.min(cap, rawDpy));
     map.panBy([dpx, dpy], { animate: false });
   }
 }
 
 /**
- * Encuadre por cercanía: ajusta el zoom para que la separación en pantalla
- * jugador→green crezca conforme te acercas (acerca más rápido cerca del
- * green), manteniendo siempre el green arriba y el punto azul abajo.
+ * Encuadre por cercanía: primero fitBounds jugador→green (siempre se ve el
+ * hoyo), luego acerca según yardas y ajusta green arriba / jugador abajo.
  */
 export function frameByProximity(
   map: any,
+  L: any,
   bearing: number,
   playerLat: number,
   playerLon: number,
@@ -165,48 +180,41 @@ export function frameByProximity(
   topBar = 64,
   bottomBar = 52
 ) {
-  const usableH = Math.max(80, viewportH - topBar - bottomBar);
+  const bounds = L.latLngBounds(
+    [playerLat, playerLon],
+    [greenLat, greenLon]
+  );
 
-  // t: 0 lejos (≥220 yds) … 1 muy cerca (≤25 yds). La fracción de pantalla
-  // que ocupa el tramo jugador→green sube de 0.6 a 0.95 → zoom progresivo.
+  // Paso 1: encuadre fiable — jugador y green siempre en pantalla.
+  map.fitBounds(bounds, {
+    paddingTopLeft: [20, topBar + 20],
+    paddingBottomRight: [20, bottomBar + 20],
+    animate: false,
+    maxZoom: 19,
+  });
+
+  // Paso 2: acercar progresivamente conforme bajan las yardas.
   const t = Math.max(0, Math.min(1, (220 - yardsToGreen) / (220 - 25)));
-  const spanFrac = 0.6 + 0.35 * t;
-  const desiredPx = spanFrac * usableH;
-
-  const curZoom = map.getZoom();
-  const p1 = map.project([playerLat, playerLon], curZoom);
-  const p2 = map.project([greenLat, greenLon], curZoom);
-  const d0 = Math.hypot(p1.x - p2.x, p1.y - p2.y) || 1;
-  let newZoom = curZoom + Math.log2(desiredPx / d0);
-  newZoom = Math.max(15, Math.min(21, newZoom));
-  map.setZoom(newZoom, { animate: false });
-
-  const leftover = Math.max(0, usableH - desiredPx);
-  const targetGreenY = topBar + leftover * 0.4;
-  const targetPlayerY = viewportH - bottomBar - leftover * 0.6;
-  const targetCenterX = viewportW / 2;
-  const targetMidY = (targetGreenY + targetPlayerY) / 2;
-  const rotRad = (-bearing * Math.PI) / 180;
-  const panRad = (bearing * Math.PI) / 180;
-
-  const toScreen = (lat: number, lon: number) => {
-    const pt = map.latLngToContainerPoint([lat, lon]);
-    const x = pt.x - rotW / 2;
-    const y = pt.y - rotH / 2;
-    return {
-      x: viewportW / 2 + x * Math.cos(rotRad) - y * Math.sin(rotRad),
-      y: viewportH / 2 + x * Math.sin(rotRad) + y * Math.cos(rotRad),
-    };
-  };
-
-  for (let i = 0; i < 8; i++) {
-    const ps = toScreen(playerLat, playerLon);
-    const gs = toScreen(greenLat, greenLon);
-    const errX = targetCenterX - (ps.x + gs.x) / 2;
-    const errY = targetMidY - (ps.y + gs.y) / 2;
-    if (Math.abs(errX) < 2 && Math.abs(errY) < 2) break;
-    const dpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
-    const dpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
-    map.panBy([dpx, dpy], { animate: false });
+  if (t > 0.05) {
+    const extra = Math.min(1.5, t * 1.5);
+    map.setZoom(Math.min(20, map.getZoom() + extra), { animate: false });
+    map.panTo(
+      [(playerLat + greenLat) / 2, (playerLon + greenLon) / 2],
+      { animate: false }
+    );
   }
+
+  // Paso 3: ajuste fino vertical (green arriba, jugador abajo).
+  tuneRotatedFraming(
+    map,
+    bearing,
+    playerLat,
+    playerLon,
+    greenLat,
+    greenLon,
+    viewportW,
+    viewportH,
+    rotW,
+    rotH
+  );
 }

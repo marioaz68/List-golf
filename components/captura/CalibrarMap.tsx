@@ -12,6 +12,7 @@ import {
   addSatelliteLayers,
   frameByProximity,
   loadLeaflet,
+  readMapLayout,
   tuneRotatedFraming,
   uprightHtml,
 } from "@/components/captura/mapRotation";
@@ -115,7 +116,11 @@ export function CalibrarMap({
     const map = mapRef.current;
     const lg = layerRef.current;
     const rotator = rotatorRef.current;
-    if (!map || !lg || !rotator || size.w === 0 || size.h === 0 || !mapReady)
+    const { viewportW, viewportH, rotW, rotH } = readMapLayout(
+      containerRef.current,
+      mapDivRef.current
+    );
+    if (!map || !lg || !rotator || !mapReady || viewportW === 0 || viewportH === 0)
       return;
 
     (async () => {
@@ -190,9 +195,6 @@ export function CalibrarMap({
         document.head.appendChild(style);
       }
 
-      const rotW = size.w * MAP_SCALE;
-      const rotH = size.h * MAP_SCALE;
-
       map.invalidateSize();
 
       if (backMarker) {
@@ -208,22 +210,21 @@ export function CalibrarMap({
         );
         frameByProximity(
           map,
+          L,
           bearing,
           playerLat,
           playerLon,
           backMarker.lat,
           backMarker.lon,
           yards,
-          size.w,
-          size.h,
+          viewportW,
+          viewportH,
           rotW,
           rotH,
-          // En calibrar la barra superior flota poco; deja menos margen.
           56,
           16
         );
       } else {
-        // Sin green de referencia: centra al jugador.
         map.setView([playerLat, playerLon], 19, { animate: false });
         tuneRotatedFraming(
           map,
@@ -232,8 +233,8 @@ export function CalibrarMap({
           playerLon,
           playerLat,
           playerLon,
-          size.w,
-          size.h,
+          viewportW,
+          viewportH,
           rotW,
           rotH
         );

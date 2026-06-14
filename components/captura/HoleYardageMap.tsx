@@ -11,6 +11,7 @@ import {
   addSatelliteLayers,
   frameByProximity,
   loadLeaflet,
+  readMapLayout,
   screenToLatLng,
   tuneRotatedFraming,
   uprightHtml,
@@ -189,7 +190,18 @@ export function HoleYardageMap({
     const map = mapRef.current;
     const layerGroup = layersRef.current;
     const rotator = rotatorRef.current;
-    if (!map || !layerGroup || !rotator || size.w === 0 || size.h === 0 || !mapReady)
+    const { viewportW, viewportH, rotW, rotH } = readMapLayout(
+      containerRef.current,
+      mapDivRef.current
+    );
+    if (
+      !map ||
+      !layerGroup ||
+      !rotator ||
+      !mapReady ||
+      viewportW === 0 ||
+      viewportH === 0
+    )
       return;
 
     (async () => {
@@ -343,33 +355,29 @@ export function HoleYardageMap({
       ]);
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
-      const rotW = size.w * MAP_SCALE;
-      const rotH = size.h * MAP_SCALE;
-
       map.invalidateSize();
 
       try {
         if (greenTarget && !tapPoint) {
-          // Juego normal: zoom por cercanía (acerca más al acercarse al green).
           frameByProximity(
             map,
+            L,
             bearing,
             playerLat,
             playerLon,
             greenTarget.lat,
             greenTarget.lon,
             yardsToCenter,
-            size.w,
-            size.h,
+            viewportW,
+            viewportH,
             rotW,
             rotH
           );
         } else {
-          // Con punto tocado: encuadra jugador + green + medición.
           map.fitBounds(bounds, {
             paddingTopLeft: [16, 68],
             paddingBottomRight: [16, 52],
-            animate: true,
+            animate: false,
             maxZoom: 20,
           });
           if (greenTarget) {
@@ -380,16 +388,15 @@ export function HoleYardageMap({
               playerLon,
               greenTarget.lat,
               greenTarget.lon,
-              size.w,
-              size.h,
+              viewportW,
+              viewportH,
               rotW,
               rotH
             );
           }
         }
       } catch {
-        // Si el encuadre falla, al menos centra en el jugador (no dejar negro).
-        map.setView([playerLat, playerLon], 18, { animate: false });
+        map.fitBounds(bounds, { padding: [40, 40], animate: false, maxZoom: 19 });
       }
     })();
   }, [
