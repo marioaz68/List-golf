@@ -18,6 +18,41 @@ export const SATELLITE_TILE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 export const SATELLITE_ATTRIBUTION = "© Esri";
 
+// Respaldo (Google satélite por subdominio) si Esri no responde en algún tile.
+const SATELLITE_FALLBACK_URL =
+  "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
+
+/**
+ * Agrega la capa satélite al mapa con respaldo automático: si un tile de Esri
+ * falla, se enciende una capa de respaldo por debajo para que nunca quede en
+ * blanco. Sin detectRetina (causaba tiles en blanco en algunos dispositivos).
+ */
+export function addSatelliteLayers(map: any, L: any): void {
+  const fallback = L.tileLayer(SATELLITE_FALLBACK_URL, {
+    subdomains: ["0", "1", "2", "3"],
+    maxZoom: 21,
+    maxNativeZoom: 20,
+    attribution: "© Google",
+  });
+
+  const primary = L.tileLayer(SATELLITE_TILE_URL, {
+    maxZoom: 21,
+    maxNativeZoom: 19,
+    attribution: SATELLITE_ATTRIBUTION,
+  });
+
+  let fallbackOn = false;
+  primary.on("tileerror", () => {
+    if (!fallbackOn) {
+      fallbackOn = true;
+      fallback.addTo(map);
+      fallback.bringToBack();
+    }
+  });
+
+  primary.addTo(map);
+}
+
 /** Carga Leaflet desde CDN una sola vez. */
 export async function loadLeaflet(): Promise<any> {
   if (!(window as any).L) {

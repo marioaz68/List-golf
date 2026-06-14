@@ -9,8 +9,7 @@ import {
 import { getHolePolygon } from "@/lib/distances/ccqHolePoints";
 import {
   MAP_SCALE,
-  SATELLITE_ATTRIBUTION,
-  SATELLITE_TILE_URL,
+  addSatelliteLayers,
   frameByProximity,
   loadLeaflet,
   tuneRotatedFraming,
@@ -79,12 +78,7 @@ export function CalibrarMap({
         boxZoom: false,
         keyboard: false,
       });
-      L.tileLayer(SATELLITE_TILE_URL, {
-        maxZoom: 21,
-        maxNativeZoom: 19,
-        detectRetina: true,
-        attribution: SATELLITE_ATTRIBUTION,
-      }).addTo(map);
+      addSatelliteLayers(map, L);
       mapRef.current = map;
       layerRef.current = L.layerGroup().addTo(map);
       map.invalidateSize();
