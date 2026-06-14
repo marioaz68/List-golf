@@ -102,17 +102,25 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
     };
   }
 
-  // Hoyos completados desde el tee de inicio (1 o 10), wrap a 18. El hoyo en
-  // juego también cuenta para el ritmo esperado (si no, en el tee de salida
-  // minutosEsperados=0 y todo el tiempo transcurrido sale como atraso).
+  // Hoyos completados desde el tee de inicio (1 o 10), wrap a 18.
   const hoyosCompletados = holesPlayedFromCurrentHole(hoyoActual, teeStartHole);
-  const hoyosParaRitmo = Math.min(18, hoyosCompletados + 1);
 
-  const minutosEsperados = expectedMinutesForHolesPlayed(
-    hoyosParaRitmo,
-    teeStartHole,
-    perHoleMinutes
-  );
+  // Tiempo esperado = hoyos ya completados + MEDIO hoyo del que estás jugando
+  // (estimación de punto medio: no sabemos cuánto llevas del hoyo actual).
+  // Así, al llegar a un tee con ritmo perfecto el delta ≈ 0 (antes se contaba
+  // el hoyo actual completo y marcaba ~1 hoyo de adelanto/atraso falso).
+  const minActual =
+    perHoleMinutes?.[hoyoActual] != null &&
+    Number.isFinite(perHoleMinutes[hoyoActual])
+      ? (perHoleMinutes[hoyoActual] as number)
+      : MIN_POR_HOYO;
+  const minutosEsperados =
+    expectedMinutesForHolesPlayed(
+      hoyosCompletados,
+      teeStartHole,
+      perHoleMinutes
+    ) +
+    minActual / 2;
   const delta = minutosTranscurridos - minutosEsperados; // positivo = atrasado
 
   if (delta > UMBRAL_ATRASO_MIN) {
