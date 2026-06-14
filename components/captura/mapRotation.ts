@@ -10,34 +10,35 @@
 export const MAP_SCALE = 1.55;
 
 /**
- * Capa satélite. Esri World Imagery es estable en cualquier dominio (los
- * tiles no oficiales de Google a veces responden 403 según el referrer y el
- * mapa quedaba en negro).
+ * Capa satélite. Google muestra el campo de golf en alta definición (Esri
+ * tiene imágenes viejas/de baja resolución en algunas zonas, p. ej. el CCQ se
+ * veía como matorral). Esri queda como respaldo si Google falla algún tile.
  */
 export const SATELLITE_TILE_URL =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-export const SATELLITE_ATTRIBUTION = "© Esri";
-
-// Respaldo (Google satélite por subdominio) si Esri no responde en algún tile.
-const SATELLITE_FALLBACK_URL =
   "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}";
+export const SATELLITE_ATTRIBUTION = "© Google";
+
+// Respaldo (Esri World Imagery) si Google no responde en algún tile.
+const SATELLITE_FALLBACK_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 /**
- * Agrega la capa satélite al mapa con respaldo automático: si un tile de Esri
- * falla, se enciende una capa de respaldo por debajo para que nunca quede en
- * blanco. Sin detectRetina (causaba tiles en blanco en algunos dispositivos).
+ * Agrega la capa satélite al mapa con respaldo automático: si un tile del
+ * proveedor principal falla, se enciende una capa de respaldo por debajo para
+ * que nunca quede en blanco. Sin detectRetina (causaba tiles en blanco en
+ * algunos dispositivos).
  */
 export function addSatelliteLayers(map: any, L: any): void {
   const fallback = L.tileLayer(SATELLITE_FALLBACK_URL, {
-    subdomains: ["0", "1", "2", "3"],
     maxZoom: 21,
-    maxNativeZoom: 20,
-    attribution: "© Google",
+    maxNativeZoom: 19,
+    attribution: "© Esri",
   });
 
   const primary = L.tileLayer(SATELLITE_TILE_URL, {
+    subdomains: ["0", "1", "2", "3"],
     maxZoom: 21,
-    maxNativeZoom: 19,
+    maxNativeZoom: 20,
     attribution: SATELLITE_ATTRIBUTION,
   });
 
