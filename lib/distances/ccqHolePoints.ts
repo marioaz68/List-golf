@@ -71,8 +71,6 @@ function deriveHolePoints(holeNo: number): HoleGreenPoints {
     }))
     .sort((a, b) => a.d - b.d);
 
-  const greenA = ranked[0]?.v ?? center;
-  const greenB = ranked[1]?.v ?? center;
   const teeA = ranked[ranked.length - 1]?.v ?? center;
   const teeB = ranked[ranked.length - 2]?.v ?? teeA;
   const tee = {
@@ -100,9 +98,15 @@ function deriveHolePoints(holeNo: number): HoleGreenPoints {
     };
   }
 
-  const greenProjs = [proj(greenA), proj(greenB), proj(center)];
-  const front = pointAtProj(Math.min(...greenProjs));
-  const back = pointAtProj(Math.max(...greenProjs));
+  // Frente y fondo del green sobre el eje tee→centro, a una profundidad de
+  // green realista (~15 yds a cada lado = ~30 yds de fondo total). Derivar
+  // estos puntos de los vértices del polígono del hoyo daba diferencias
+  // absurdas (100+ yds) porque el polígono traza todo el hoyo, no el green.
+  // Si se calibran en BD (módulo Calibrar) esos valores tienen prioridad.
+  const HALF_GREEN_DEPTH_M = 15 * 0.9144; // 15 yardas en metros
+  const centerProj = proj(center);
+  const front = pointAtProj(centerProj - HALF_GREEN_DEPTH_M);
+  const back = pointAtProj(centerProj + HALF_GREEN_DEPTH_M);
 
   const referencePoints: ReferencePoint[] = [
     {

@@ -30,7 +30,10 @@ export const CCQ_GREEN_CENTERS: Record<number, GreenPoint> = {
   7: { lat: 20.560997, lon: -100.407719, par: 4 },
   8: { lat: 20.562842, lon: -100.407483, par: 3 },
   9: { lat: 20.566581, lon: -100.405926, par: 5 },
-  10: { lat: 20.568861, lon: -100.406837, par: 4 },
+  // Hoyo 10: el PDF tenía la coordenada fuera del polígono del hoyo (al norte,
+  // ~600 m del green real). El green está en el extremo sur del polígono (el
+  // hoyo juega norte→sur). Centro estimado a ~15 yds del "atrás" calibrado.
+  10: { lat: 20.563471, lon: -100.406969, par: 4 },
   // Hoyo 11: el PDF tenía un typo ("20°33'88.01''" con 88 segundos inválido).
   // Uso el centroide del polígono CCQ_HOLES como fallback (cerca, no perfecto).
   11: { lat: 20.55964, lon: -100.40718, par: 4 },
