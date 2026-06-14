@@ -141,16 +141,11 @@ export function HoleYardageMap({
           "touches" in e ? e.changedTouches[0].clientY : e.clientY;
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const { w, h } = sizeRef.current;
-        const rotW = w * MAP_SCALE;
-        const rotH = h * MAP_SCALE;
         const latlng = screenToLatLng(
           clientX,
           clientY,
           rect,
           bearingRef.current,
-          rotW,
-          rotH,
           mapRef.current,
           L
         );
@@ -208,10 +203,10 @@ export function HoleYardageMap({
       const L = await loadLeaflet();
       layerGroup.clearLayers();
 
-      const greenCenter = referencePoints.find((p) => p.kind === "green-center");
+      const greenBack = referencePoints.find((p) => p.kind === "green-back");
       const greenTarget =
-        greenCenter ??
-        referencePoints.find((p) => p.kind === "green-back") ??
+        greenBack ??
+        referencePoints.find((p) => p.kind === "green-center") ??
         referencePoints.find((p) => p.kind === "green-front");
       const bearing = greenTarget
         ? bearingDegrees(
@@ -359,6 +354,11 @@ export function HoleYardageMap({
 
       try {
         if (greenTarget && !tapPoint) {
+          const greenBounds = referencePoints
+            .filter((p) =>
+              ["green-front", "green-center", "green-back"].includes(p.kind)
+            )
+            .map((p) => [p.lat, p.lon] as [number, number]);
           frameByProximity(
             map,
             L,
@@ -371,7 +371,10 @@ export function HoleYardageMap({
             viewportW,
             viewportH,
             rotW,
-            rotH
+            rotH,
+            64,
+            52,
+            greenBounds
           );
         } else {
           map.fitBounds(bounds, {

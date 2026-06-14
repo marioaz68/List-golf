@@ -68,7 +68,7 @@ export function CalibrarMap({
       if (cancelled || !mapDivRef.current) return;
       const map = L.map(mapDivRef.current, {
         center: [playerPosRef.current.lat, playerPosRef.current.lon],
-        zoom: 19,
+        zoom: 17,
         maxZoom: 21,
         zoomSnap: 0,
         zoomControl: false,
@@ -221,8 +221,9 @@ export function CalibrarMap({
           viewportH,
           rotW,
           rotH,
-          56,
-          16
+          64,
+          52,
+          markers.map((m) => [m.lat, m.lon] as [number, number])
         );
       } else {
         map.setView([playerLat, playerLon], 19, { animate: false });

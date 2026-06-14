@@ -98,11 +98,10 @@ export function screenToLatLng(
   clientY: number,
   containerRect: DOMRect,
   bearing: number,
-  rotW: number,
-  rotH: number,
   map: any,
   L: any
 ) {
+  const mapSize = map.getSize();
   const cx = containerRect.left + containerRect.width / 2;
   const cy = containerRect.top + containerRect.height / 2;
   const x = clientX - cx;
@@ -110,12 +109,54 @@ export function screenToLatLng(
   const rad = (bearing * Math.PI) / 180;
   const ux = x * Math.cos(rad) - y * Math.sin(rad);
   const uy = x * Math.sin(rad) + y * Math.cos(rad);
-  return map.containerPointToLatLng(L.point(ux + rotW / 2, uy + rotH / 2));
+  return map.containerPointToLatLng(
+    L.point(ux + mapSize.x / 2, uy + mapSize.y / 2)
+  );
 }
 
 /**
- * Ajusta el paneo para que jugador + green queden colocados verticalmente
- * (green arriba, jugador abajo) en la pantalla rotada.
+ * Convierte lat/lon a posición en el viewport visible, considerando la
+ * rotación CSS del contenedor del mapa.
+ */
+function toRotatedScreen(
+  map: any,
+  lat: number,
+  lon: number,
+  bearing: number,
+  viewportW: number,
+  viewportH: number
+) {
+  const mapSize = map.getSize();
+  const pt = map.latLngToContainerPoint([lat, lon]);
+  const x = pt.x - mapSize.x / 2;
+  const y = pt.y - mapSize.y / 2;
+  const rotRad = (-bearing * Math.PI) / 180;
+  return {
+    x: viewportW / 2 + x * Math.cos(rotRad) - y * Math.sin(rotRad),
+    y: viewportH / 2 + x * Math.sin(rotRad) + y * Math.cos(rotRad),
+  };
+}
+
+/**
+ * Pan del mapa para mover un punto en pantalla (viewport) por (dx, dy).
+ * `panBy` mueve la vista, por lo que los puntos geográficos se desplazan en
+ * sentido contrario: por eso negamos el resultado de la rotación.
+ */
+function panScreenDelta(
+  map: any,
+  bearing: number,
+  dx: number,
+  dy: number
+) {
+  const panRad = (bearing * Math.PI) / 180;
+  const dpx = dx * Math.cos(panRad) - dy * Math.sin(panRad);
+  const dpy = dx * Math.sin(panRad) + dy * Math.cos(panRad);
+  map.panBy([-dpx, -dpy], { animate: false });
+}
+
+/**
+ * Coloca el green arriba y el jugador abajo en pantalla (tras rotar el mapa).
+ * Usa el punto "atrás" del green como referencia superior.
  */
 export function tuneRotatedFraming(
   map: any,
@@ -126,38 +167,44 @@ export function tuneRotatedFraming(
   greenLon: number,
   viewportW: number,
   viewportH: number,
-  rotW: number,
-  rotH: number
+  _rotW: number,
+  _rotH: number,
+  topBar = 64,
+  bottomBar = 52
 ) {
-  const targetPlayerY = viewportH * 0.82;
-  const targetGreenY = viewportH * 0.18;
+  const targetGreenY = topBar + (viewportH - topBar - bottomBar) * 0.12;
+  const targetPlayerY = viewportH - bottomBar - (viewportH - topBar - bottomBar) * 0.08;
   const targetCenterX = viewportW / 2;
-  const rotRad = (-bearing * Math.PI) / 180;
-  const panRad = (bearing * Math.PI) / 180;
 
-  const toScreen = (lat: number, lon: number) => {
-    const pt = map.latLngToContainerPoint([lat, lon]);
-    const x = pt.x - rotW / 2;
-    const y = pt.y - rotH / 2;
-    return {
-      x: viewportW / 2 + x * Math.cos(rotRad) - y * Math.sin(rotRad),
-      y: viewportH / 2 + x * Math.sin(rotRad) + y * Math.cos(rotRad),
-    };
-  };
-
-  for (let i = 0; i < 4; i++) {
-    const ps = toScreen(playerLat, playerLon);
-    const gs = toScreen(greenLat, greenLon);
+  for (let i = 0; i < 16; i++) {
+    const ps = toRotatedScreen(
+      map,
+      playerLat,
+      playerLon,
+      bearing,
+      viewportW,
+      viewportH
+    );
+    const gs = toRotatedScreen(
+      map,
+      greenLat,
+      greenLon,
+      bearing,
+      viewportW,
+      viewportH
+    );
     const errX = targetCenterX - (ps.x + gs.x) / 2;
-    const errY = (targetPlayerY - ps.y + targetGreenY - gs.y) / 2;
-    if (Math.abs(errX) < 3 && Math.abs(errY) < 3) break;
-    // Pasos acotados: evita que el paneo se dispare lejos del hoyo.
-    const rawDpx = errX * Math.cos(panRad) - errY * Math.sin(panRad);
-    const rawDpy = errX * Math.sin(panRad) + errY * Math.cos(panRad);
-    const cap = 48;
-    const dpx = Math.max(-cap, Math.min(cap, rawDpx));
-    const dpy = Math.max(-cap, Math.min(cap, rawDpy));
-    map.panBy([dpx, dpy], { animate: false });
+    const errGreenY = targetGreenY - gs.y;
+    const errPlayerY = targetPlayerY - ps.y;
+    if (
+      Math.abs(errX) < 2 &&
+      Math.abs(errGreenY) < 3 &&
+      Math.abs(errPlayerY) < 3
+    ) {
+      break;
+    }
+    // Prioriza que el green quede arriba y el jugador abajo.
+    panScreenDelta(map, bearing, errX * 0.65, (errGreenY * 0.5 + errPlayerY * 0.5) * 0.65);
   }
 }
 
@@ -179,33 +226,32 @@ export function frameByProximity(
   rotW: number,
   rotH: number,
   topBar = 64,
-  bottomBar = 52
+  bottomBar = 52,
+  extraBounds?: Array<[number, number]>
 ) {
   const bounds = L.latLngBounds(
     [playerLat, playerLon],
     [greenLat, greenLon]
   );
+  if (extraBounds) {
+    for (const pt of extraBounds) bounds.extend(pt);
+  }
 
-  // Paso 1: encuadre fiable — jugador y green siempre en pantalla.
   map.fitBounds(bounds, {
-    paddingTopLeft: [20, topBar + 20],
-    paddingBottomRight: [20, bottomBar + 20],
+    paddingTopLeft: [24, topBar + 24],
+    paddingBottomRight: [24, bottomBar + 24],
     animate: false,
     maxZoom: 19,
   });
 
-  // Paso 2: acercar progresivamente conforme bajan las yardas.
+  // Acercar progresivamente conforme bajan las yardas.
   const t = Math.max(0, Math.min(1, (220 - yardsToGreen) / (220 - 25)));
-  if (t > 0.05) {
-    const extra = Math.min(1.5, t * 1.5);
+  if (t > 0.08) {
+    const extra = Math.min(1.8, t * 1.8);
     map.setZoom(Math.min(20, map.getZoom() + extra), { animate: false });
-    map.panTo(
-      [(playerLat + greenLat) / 2, (playerLon + greenLon) / 2],
-      { animate: false }
-    );
   }
 
-  // Paso 3: ajuste fino vertical (green arriba, jugador abajo).
+  // Green arriba (atrás del green), jugador abajo.
   tuneRotatedFraming(
     map,
     bearing,
@@ -216,6 +262,8 @@ export function frameByProximity(
     viewportW,
     viewportH,
     rotW,
-    rotH
+    rotH,
+    topBar,
+    bottomBar
   );
 }
