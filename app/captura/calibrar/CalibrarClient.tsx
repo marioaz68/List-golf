@@ -18,6 +18,7 @@ import {
   lineFromWaypoints,
   waypointsFromLine,
 } from "@/lib/distances/centerline";
+import { haversineMeters } from "@/lib/distances/ccqGreens";
 import type {
   SimpleCalibrarMode,
   SimpleGreenKey,
@@ -339,6 +340,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     await persistRing(activeKind, next, "Punto borrado.");
   };
 
+  /** Cierra el fairway tocando el punto 1 (mínimo 3 puntos). */
+  const closeFairwayRing = async () => {
+    if (activeKind !== "fairway" || fairwayRing.length < 3) {
+      flash("err", "Mínimo 3 puntos para cerrar el fairway.");
+      return;
+    }
+    setAddingCorner(false);
+    await persistRing("fairway", fairwayRing, "Fairway cerrado.");
+  };
+
   const handleMapTap = (lat: number, lon: number) => {
     if (mode === "green") {
       void saveGreen(selectedGreen, lat, lon);
@@ -346,6 +357,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
     if (!activeKind || !addingCorner) {
       // Sin "agregar tocando": para mover un punto, arrástralo directamente.
+      return;
+    }
+    // Fairway: si tocas cerca del punto 1, cierras el polígono tú mismo.
+    if (
+      activeKind === "fairway" &&
+      fairwayRing.length >= 3 &&
+      haversineMeters(lat, lon, fairwayRing[0].lat, fairwayRing[0].lon) < 14
+    ) {
+      void closeFairwayRing();
       return;
     }
     // Modo agregar: cada toque agrega el siguiente punto del contorno en orden.
@@ -399,6 +419,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             onGreenMove={saveGreen}
             onVertexMove={saveVertex}
             onVertexSelect={setSelectedVertex}
+            onCloseRing={
+              mode === "fairway" && addingCorner ? closeFairwayRing : undefined
+            }
             onMapTap={handleMapTap}
           />
         ) : (
@@ -592,9 +615,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : addingCorner
-              ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden. Vuelve a tocar el botón para terminar.`
-              : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
+            : addingCorner && mode === "fairway"
+              ? "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
+              : addingCorner
+                ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
+                : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
         </p>
       </div>
     </div>

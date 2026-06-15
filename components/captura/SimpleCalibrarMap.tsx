@@ -40,6 +40,8 @@ interface SimpleCalibrarMapProps {
   onVertexMove: (index: number, lat: number, lon: number) => void;
   /** Tocar un vértice lo selecciona (para luego borrarlo o ajustarlo). */
   onVertexSelect?: (index: number) => void;
+  /** Al trazar fairway: tocar el primer punto cierra el polígono. */
+  onCloseRing?: () => void;
   onMapTap: (lat: number, lon: number) => void;
 }
 
@@ -62,6 +64,7 @@ export function SimpleCalibrarMap({
   onGreenMove,
   onVertexMove,
   onVertexSelect,
+  onCloseRing,
   onMapTap,
 }: SimpleCalibrarMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -70,6 +73,7 @@ export function SimpleCalibrarMap({
   const onGreenMoveRef = useRef(onGreenMove);
   const onVertexMoveRef = useRef(onVertexMove);
   const onVertexSelectRef = useRef(onVertexSelect);
+  const onCloseRingRef = useRef(onCloseRing);
   const onMapTapRef = useRef(onMapTap);
   const dragLockRef = useRef(false);
   const framedKeyRef = useRef("");
@@ -77,6 +81,7 @@ export function SimpleCalibrarMap({
   onGreenMoveRef.current = onGreenMove;
   onVertexMoveRef.current = onVertexMove;
   onVertexSelectRef.current = onVertexSelect;
+  onCloseRingRef.current = onCloseRing;
   onMapTapRef.current = onMapTap;
 
   useEffect(() => {
@@ -165,10 +170,10 @@ export function SimpleCalibrarMap({
       }
 
       // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
-      // tocando") NO se dibuja el cierre último→primero: solo la línea
-      // secuencial de abajo, para que cada punto salga del ANTERIOR. El cierre
-      // con el primer punto aparece al terminar de agregar.
+      // tocando") NO se dibuja el cierre: el usuario toca el punto 1 para cerrar.
       const tracingFairway = mode === "fairway" && addingCorner;
+      const canCloseFairway =
+        tracingFairway && fairwayRing.length >= 3;
       if (fairwayRing.length >= 3 && !tracingFairway) {
         const fwFeature = polygonFromRing(holeNo, fairwayRing);
         L.geoJSON(fwFeature, {
@@ -207,6 +212,24 @@ export function SimpleCalibrarMap({
           dashArray: editRing.length >= 3 ? undefined : "6,6",
           interactive: false,
         }).addTo(lg);
+        // Pista de cierre: línea punteada del último al primero (solo fairway).
+        if (canCloseFairway && editRing.length >= 3) {
+          const first = editRing[0];
+          const last = editRing[editRing.length - 1];
+          L.polyline(
+            [
+              [last.lat, last.lon],
+              [first.lat, first.lon],
+            ],
+            {
+              color: COLORS.fairway.line,
+              weight: 2,
+              opacity: 0.55,
+              dashArray: "8,8",
+              interactive: false,
+            }
+          ).addTo(lg);
+        }
       }
 
       // Vértices del contorno/línea activos. Usan la misma mira (cruz + círculo)
@@ -218,41 +241,55 @@ export function SimpleCalibrarMap({
         for (let i = 0; i < editRing.length; i++) {
           const v = editRing[i];
           const selected = selectedVertex === i;
-          const dot = selected ? 16 : 11;
+          const isCloseTarget = canCloseFairway && i === 0;
+          const dot = isCloseTarget ? 18 : selected ? 16 : 11;
           const arm = dot + 14;
-          const ringColor = selected ? "#fb7185" : "#fff";
+          const ringColor = isCloseTarget
+            ? "#fbbf24"
+            : selected
+              ? "#fb7185"
+              : "#fff";
           const box = 56;
           const c = box / 2;
+          // Al trazar fairway, solo el punto 1 es tocable (para cerrar).
+          const vertexInteractive =
+            !addingCorner || isCloseTarget;
           const marker = L.marker([v.lat, v.lon], {
             draggable: !addingCorner,
-            interactive: !addingCorner,
+            interactive: vertexInteractive,
             icon: L.divIcon({
               className: "",
-              html: `<div style="position:relative;width:${box}px;height:${box}px;${addingCorner ? "pointer-events:none;" : ""}touch-action:none;">
+              html: `<div style="position:relative;width:${box}px;height:${box}px;${vertexInteractive ? "" : "pointer-events:none;"}touch-action:none;">
                 <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${arm}px;background:${ringColor};opacity:0.95;"></div>
                 <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${arm}px;height:2px;background:${ringColor};opacity:0.95;"></div>
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);${isCloseTarget ? "box-shadow:0 0 0 4px rgba(251,191,36,0.55);" : ""}"></div>
+                ${isCloseTarget ? `<div style="position:absolute;top:calc(50% + ${dot / 2 + 6}px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fbbf24;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:800;font-family:Arial,sans-serif;white-space:nowrap;">Cerrar</div>` : ""}
               </div>`,
               iconSize: [box, box],
               iconAnchor: [c, c],
             }),
-            zIndexOffset: selected ? 900 : 800,
+            zIndexOffset: isCloseTarget ? 950 : selected ? 900 : 800,
           }).addTo(lg);
-          if (!addingCorner) {
-            // Tocar el vértice lo selecciona (para borrarlo/ajustarlo).
+          if (vertexInteractive) {
             marker.on("click", () => {
-              onVertexSelectRef.current?.(i);
+              if (isCloseTarget) {
+                onCloseRingRef.current?.();
+              } else {
+                onVertexSelectRef.current?.(i);
+              }
             });
-            marker.on("dragstart", () => {
-              dragLockRef.current = true;
-            });
-            marker.on("dragend", (e: any) => {
-              const ll = e.target.getLatLng();
-              onVertexMoveRef.current(i, ll.lat, ll.lng);
-              setTimeout(() => {
-                dragLockRef.current = false;
-              }, 120);
-            });
+            if (!addingCorner) {
+              marker.on("dragstart", () => {
+                dragLockRef.current = true;
+              });
+              marker.on("dragend", (e: any) => {
+                const ll = e.target.getLatLng();
+                onVertexMoveRef.current(i, ll.lat, ll.lng);
+                setTimeout(() => {
+                  dragLockRef.current = false;
+                }, 120);
+              });
+            }
           }
         }
       }
