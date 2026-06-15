@@ -280,6 +280,44 @@ export function zoomToFitMeters(
   return Math.max(15, Math.min(20.5, quantized));
 }
 
+/**
+ * Zoom para que TODOS los puntos dados (del punto actual al green) quepan en
+ * pantalla, considerando la rotación (eje "hacia el green" = vertical). Mide la
+ * extensión a lo largo (vertical) y a lo ancho (horizontal, p. ej. doglegs) y
+ * elige el zoom que satisface ambas. El primer punto se usa como referencia.
+ */
+export function zoomToFitWaypoints(
+  pts: Array<{ lat: number; lon: number }>,
+  bearingDeg: number,
+  availW: number,
+  availH: number
+): number {
+  if (pts.length < 2) return 18;
+  const bRad = (bearingDeg * Math.PI) / 180;
+  const M_PER_DEG_LAT = 110_574;
+  const ref = pts[0];
+  const mPerDegLon = 111_320 * Math.cos((ref.lat * Math.PI) / 180);
+  let minAlong = Infinity;
+  let maxAlong = -Infinity;
+  let minCross = Infinity;
+  let maxCross = -Infinity;
+  for (const p of pts) {
+    const east = (p.lon - ref.lon) * mPerDegLon;
+    const north = (p.lat - ref.lat) * M_PER_DEG_LAT;
+    const along = east * Math.sin(bRad) + north * Math.cos(bRad);
+    const cross = east * Math.cos(bRad) - north * Math.sin(bRad);
+    if (along < minAlong) minAlong = along;
+    if (along > maxAlong) maxAlong = along;
+    if (cross < minCross) minCross = cross;
+    if (cross > maxCross) maxCross = cross;
+  }
+  const vMeters = Math.max(1, maxAlong - minAlong);
+  const hMeters = Math.max(1, maxCross - minCross);
+  const zV = zoomToFitMeters(vMeters, ref.lat, availH);
+  const zH = zoomToFitMeters(hMeters, ref.lat, availW);
+  return Math.min(zV, zH);
+}
+
 export function frameByProximity(
   map: any,
   _L: any,
@@ -303,7 +341,10 @@ export function frameByProximity(
   /** Largo (m) del tramo actual: si se pasa, el zoom ajusta ese tramo para que
    *  llene el alto disponible (la foto no sale chica). Prioritario sobre los
    *  escalones por par. */
-  fitSegmentMeters?: number | null
+  fitSegmentMeters?: number | null,
+  /** Zoom ya calculado (p. ej. para que quepa del punto actual al green). Si se
+   *  pasa, manda sobre cualquier otro cálculo. */
+  explicitZoom?: number | null
 ) {
   const currentZoom = map.getZoom();
   // Alto disponible en pantalla para el tramo (entre el ancla arriba y los
@@ -311,18 +352,23 @@ export function frameByProximity(
   const targetTopY = topBar + Math.max(24, viewportH * 0.1);
   const availablePx = Math.max(80, (viewportH - bottomBar - targetTopY) * 0.96);
   const rawZoom =
-    fitSegmentMeters && fitSegmentMeters > 0
-      ? zoomToFitMeters(fitSegmentMeters, greenLat, availablePx)
-      : centerlineSegment
-        ? zoomStopForCenterlineSegment(
-            par,
-            centerlineSegment.idx,
-            centerlineSegment.total
-          )
-        : zoomStopForPar(par, yardsToGreen);
-  // Con tramo fijo (centerline o fit por metros) el zoom es determinista, así
-  // que no necesita histéresis por yardas.
-  const stableSegment = Boolean(centerlineSegment) || Boolean(fitSegmentMeters);
+    explicitZoom && explicitZoom > 0
+      ? explicitZoom
+      : fitSegmentMeters && fitSegmentMeters > 0
+        ? zoomToFitMeters(fitSegmentMeters, greenLat, availablePx)
+        : centerlineSegment
+          ? zoomStopForCenterlineSegment(
+              par,
+              centerlineSegment.idx,
+              centerlineSegment.total
+            )
+          : zoomStopForPar(par, yardsToGreen);
+  // Con tramo fijo (centerline, fit por metros o zoom explícito) el zoom es
+  // determinista, así que no necesita histéresis por yardas.
+  const stableSegment =
+    Boolean(centerlineSegment) ||
+    Boolean(fitSegmentMeters) ||
+    Boolean(explicitZoom);
   const zoomNearMargin = stableSegment
     ? rawZoom
     : zoomStopForPar(par, yardsToGreen + 12);

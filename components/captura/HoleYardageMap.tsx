@@ -1,15 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { bearingDegrees, haversineMeters } from "@/lib/distances/ccqGreens";
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
   yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
-import {
-  aimWaypointIndex,
-  centerlineSegmentIndex,
-} from "@/lib/distances/centerline";
+import { centerlineSegmentIndex } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
@@ -21,6 +18,7 @@ import {
   screenToLatLng,
   tuneRotatedFraming,
   uprightHtml,
+  zoomToFitWaypoints,
 } from "@/components/captura/mapRotation";
 
 export interface TapPoint {
@@ -222,38 +220,46 @@ export function HoleYardageMap({
         ? centerlineSegmentIndex(player, centerline!)
         : 0;
       const totalSegs = hasCenterline ? centerline!.length - 1 : 1;
-      const aimIdx = hasCenterline
-        ? aimWaypointIndex(player, centerline!)
-        : -1;
-      const aimWp =
-        hasCenterline && aimIdx >= 0
-          ? centerline![Math.min(aimIdx, centerline!.length - 1)]
-          : null;
-      // Punto "de atrás" del tramo actual (de dónde vienes): así encuadramos
-      // el tramo completo (punto actual → siguiente) para que llene la pantalla.
+      // Punto actual (de dónde vienes en este tramo) y el ÚLTIMO punto de la
+      // línea (= "after"/atrás del green). La foto va del punto actual al green.
       const fromWp = hasCenterline ? centerline![segIdx] : null;
+      const lastWp = hasCenterline
+        ? centerline![centerline!.length - 1]
+        : null;
 
-      // Orientación y anclaje: siguiente punto de la línea naranja arriba;
-      // sin línea, directo al green.
-      const aim = aimWp ?? greenTarget ?? null;
+      // Anclaje/orientación: el green (último punto) arriba; el jugador, abajo.
+      const aim = lastWp ?? greenTarget ?? null;
       const anchor = aim ?? greenTarget;
       const yardsToAnchor =
         anchor != null
           ? yardsBetween(playerLat, playerLon, anchor.lat, anchor.lon)
           : yardsToCenter;
 
-      // Largo del tramo actual en metros (de dónde vienes → siguiente punto).
-      // El zoom ajustará este tramo al alto disponible.
-      const segMeters =
-        fromWp && aimWp
-          ? haversineMeters(fromWp.lat, fromWp.lon, aimWp.lat, aimWp.lon)
-          : null;
+      // Zoom: que quepan TODOS los puntos restantes (del actual al green), así
+      // al avanzar de punto la foto se va acercando hacia el green.
+      const remainingWps =
+        hasCenterline && fromWp ? centerline!.slice(segIdx) : null;
 
+      // Orientación estable por tramo: usamos el punto actual (fijo) → green
+      // como eje, no el jugador (que se mueve), para que la foto no gire ni
+      // reescale mientras caminas dentro del mismo tramo.
+      const orientFrom = fromWp ?? { lat: playerLat, lon: playerLon };
       const bearing = aim
-        ? bearingDegrees(playerLat, playerLon, aim.lat, aim.lon)
+        ? bearingDegrees(orientFrom.lat, orientFrom.lon, aim.lat, aim.lon)
         : 0;
       bearingRef.current = bearing;
       rotator.style.transform = `rotate(${-bearing}deg)`;
+
+      // Píxeles disponibles (mismos márgenes que el encuadre: top 56, bottom 104).
+      const topBarPx = 56;
+      const bottomBarPx = 104;
+      const targetTopY = topBarPx + Math.max(24, viewportH * 0.1);
+      const availH = Math.max(80, (viewportH - bottomBarPx - targetTopY) * 0.96);
+      const availW = Math.max(80, viewportW * 0.88);
+      const fitZoom =
+        remainingWps && remainingWps.length >= 2
+          ? zoomToFitWaypoints(remainingWps, bearing, availW, availH)
+          : null;
 
       // Vista limpia: sin línea azul del hoyo ni líneas/etiquetas de obstáculos.
       // De los puntos del green solo mostramos el número de yardas en chiquito
@@ -373,7 +379,8 @@ export function HoleYardageMap({
             recenterHole || recenterSeg,
             par,
             hasCenterline ? { idx: segIdx, total: totalSegs } : null,
-            segMeters
+            null,
+            fitZoom
           );
         } else {
           map.fitBounds(bounds, {
