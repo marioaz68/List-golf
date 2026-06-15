@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { bearingDegrees } from "@/lib/distances/ccqGreens";
+import { bearingDegrees, haversineMeters } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
   getHolePolygonResolved,
@@ -244,6 +244,9 @@ export function HoleYardageMap({
         hasCenterline && aimIdx >= 0
           ? centerline![Math.min(aimIdx, centerline!.length - 1)]
           : null;
+      // Punto "de atrás" del tramo actual (de dónde vienes): así encuadramos
+      // el tramo completo (punto actual → siguiente) para que llene la pantalla.
+      const fromWp = hasCenterline ? centerline![segIdx] : null;
 
       // Orientación y anclaje: siguiente punto de la línea naranja arriba;
       // sin línea, directo al green.
@@ -253,6 +256,13 @@ export function HoleYardageMap({
         anchor != null
           ? yardsBetween(playerLat, playerLon, anchor.lat, anchor.lon)
           : yardsToCenter;
+
+      // Largo del tramo actual en metros (de dónde vienes → siguiente punto).
+      // El zoom ajustará este tramo al alto disponible.
+      const segMeters =
+        fromWp && aimWp
+          ? haversineMeters(fromWp.lat, fromWp.lon, aimWp.lat, aimWp.lon)
+          : null;
 
       const bearing = aim
         ? bearingDegrees(playerLat, playerLon, aim.lat, aim.lon)
@@ -410,12 +420,13 @@ export function HoleYardageMap({
             viewportH,
             rotW,
             rotH,
-            64,
-            52,
+            56,
+            104,
             undefined,
             recenterHole || recenterSeg,
             par,
-            hasCenterline ? { idx: segIdx, total: totalSegs } : null
+            hasCenterline ? { idx: segIdx, total: totalSegs } : null,
+            segMeters
           );
         } else {
           map.fitBounds(bounds, {

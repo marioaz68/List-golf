@@ -259,6 +259,27 @@ export function zoomStopForCenterlineSegment(
   return table[step];
 }
 
+/**
+ * Zoom Leaflet para que `meters` (largo del tramo en el suelo) ocupe
+ * `targetPixels` de alto en pantalla. Así la foto del tramo actual llena el
+ * espacio disponible (más grande en tablet, ajustada en teléfono). Se cuantiza
+ * a 0.5 para estabilidad: como el tramo es fijo, el zoom resultante es fijo y
+ * no flashea mientras estás en ese tramo.
+ */
+export function zoomToFitMeters(
+  meters: number,
+  lat: number,
+  targetPixels: number
+): number {
+  if (meters <= 0 || targetPixels <= 0) return 18;
+  // metros por pixel a zoom 0 (proyección Web Mercator) a esta latitud.
+  const mppZ0 = 156543.03392 * Math.cos((lat * Math.PI) / 180);
+  const mppNeeded = meters / targetPixels;
+  const z = Math.log2(mppZ0 / mppNeeded);
+  const quantized = Math.round(z * 2) / 2;
+  return Math.max(15, Math.min(20.5, quantized));
+}
+
 export function frameByProximity(
   map: any,
   _L: any,
@@ -278,20 +299,34 @@ export function frameByProximity(
   recenter = true,
   par = 4,
   /** Si se pasa, el zoom sigue el tramo de la línea central (no yardas al green). */
-  centerlineSegment?: { idx: number; total: number } | null
+  centerlineSegment?: { idx: number; total: number } | null,
+  /** Largo (m) del tramo actual: si se pasa, el zoom ajusta ese tramo para que
+   *  llene el alto disponible (la foto no sale chica). Prioritario sobre los
+   *  escalones por par. */
+  fitSegmentMeters?: number | null
 ) {
   const currentZoom = map.getZoom();
-  const rawZoom = centerlineSegment
-    ? zoomStopForCenterlineSegment(
-        par,
-        centerlineSegment.idx,
-        centerlineSegment.total
-      )
-    : zoomStopForPar(par, yardsToGreen);
-  const zoomNearMargin = centerlineSegment
+  // Alto disponible en pantalla para el tramo (entre el ancla arriba y los
+  // controles/ritmo abajo). Reservamos un margen para que respire.
+  const targetTopY = topBar + Math.max(24, viewportH * 0.1);
+  const availablePx = Math.max(80, (viewportH - bottomBar - targetTopY) * 0.96);
+  const rawZoom =
+    fitSegmentMeters && fitSegmentMeters > 0
+      ? zoomToFitMeters(fitSegmentMeters, greenLat, availablePx)
+      : centerlineSegment
+        ? zoomStopForCenterlineSegment(
+            par,
+            centerlineSegment.idx,
+            centerlineSegment.total
+          )
+        : zoomStopForPar(par, yardsToGreen);
+  // Con tramo fijo (centerline o fit por metros) el zoom es determinista, así
+  // que no necesita histéresis por yardas.
+  const stableSegment = Boolean(centerlineSegment) || Boolean(fitSegmentMeters);
+  const zoomNearMargin = stableSegment
     ? rawZoom
     : zoomStopForPar(par, yardsToGreen + 12);
-  const zoomFarMargin = centerlineSegment
+  const zoomFarMargin = stableSegment
     ? rawZoom
     : zoomStopForPar(par, yardsToGreen - 12);
   let qZoom = rawZoom;
