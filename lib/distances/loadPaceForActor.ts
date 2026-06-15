@@ -11,6 +11,7 @@ import {
 } from "@/lib/ritmo/scoreProgress";
 import {
   computePace,
+  holeScheduleWindow,
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "@/lib/telegram/ritmo/paceCalculator";
@@ -26,6 +27,10 @@ export interface PaceForActorResult {
   deltaMinutes: number | null;
   hoyo: number | null;
   message: string;
+  /** Horario "ideal" en que el grupo debería jugar el hoyo actual (hora de
+   *  México, h:mm:ss). Null si no hay hora de salida o no se resolvió el hoyo. */
+  windowStart: string | null;
+  windowEnd: string | null;
 }
 
 /**
@@ -126,6 +131,8 @@ export async function loadPaceForActor(
       deltaMinutes: null,
       hoyo: null,
       message: "Sin grupo/ronda activa.",
+      windowStart: null,
+      windowEnd: null,
     };
   }
 
@@ -149,6 +156,19 @@ export async function loadPaceForActor(
       ? pace.deltaMinutes
       : null;
 
+  // Ventana de horario ideal del hoyo actual (independiente del color/delta).
+  const win =
+    hoyo != null
+      ? holeScheduleWindow({
+          hole: hoyo,
+          teeTimeISO: ctx.groupTeeTime,
+          actualStartISO: ctx.groupActualStart,
+          teeStartHole: ctx.groupStartHole,
+          roundDate: ctx.roundDate,
+          perHoleMinutes,
+        })
+      : null;
+
   return {
     ok: true,
     status: pace.kind,
@@ -156,5 +176,7 @@ export async function loadPaceForActor(
     deltaMinutes,
     hoyo: pace.kind === "sin_datos" ? null : pace.hoyo,
     message: pace.msg,
+    windowStart: win?.startLabel ?? null,
+    windowEnd: win?.endLabel ?? null,
   };
 }

@@ -51,6 +51,9 @@ interface PaceState {
   status: string;
   color: PaceColor;
   deltaMinutes: number | null;
+  hoyo?: number | null;
+  windowStart?: string | null;
+  windowEnd?: string | null;
 }
 
 const PACE_STYLE: Record<
@@ -523,30 +526,58 @@ export default function DistanciasClient() {
 }
 
 function PaceBannerThin({ pace }: { pace: PaceState | null }) {
-  if (!pace || pace.color === "none" || pace.deltaMinutes == null) return null;
-  const style = PACE_STYLE[pace.color];
-  const mins = Math.abs(Math.round(pace.deltaMinutes));
-  const detail =
-    pace.color === "blue"
+  if (!pace) return null;
+  const hasDelta = pace.color !== "none" && pace.deltaMinutes != null;
+  const hasWindow = Boolean(pace.windowStart && pace.windowEnd);
+  if (!hasDelta && !hasWindow) return null;
+
+  // Si no hay semáforo (solo ventana de horario), usamos un estilo neutro.
+  const style = hasDelta
+    ? PACE_STYLE[pace.color as Exclude<PaceColor, "none">]
+    : { box: "border-slate-500 bg-slate-800", title: "RITMO", label: "text-slate-100" };
+
+  const mins = hasDelta ? Math.abs(Math.round(pace.deltaMinutes as number)) : 0;
+  const detail = hasDelta
+    ? pace.color === "blue"
       ? `${mins} min más rápido`
       : pace.color === "green"
         ? `±${mins} min · vas bien`
-        : `${mins} min más lento`;
+        : `${mins} min más lento`
+    : "";
+
   return (
     <div
       className={[
-        "pointer-events-none flex items-center justify-center gap-2 border-t-2 px-3 py-1.5 text-center shadow-lg",
+        "pointer-events-none flex flex-col items-center justify-center border-t-2 px-3 py-1 text-center shadow-lg",
         style.box,
       ].join(" ")}
     >
-      <span
-        className={["text-base font-black tracking-wide", style.label].join(" ")}
-      >
-        {style.title}
-      </span>
-      <span className={["text-xs font-bold", style.label].join(" ")}>
-        · {detail}
-      </span>
+      <div className="flex items-center justify-center gap-2">
+        <span
+          className={[
+            "text-base font-black tracking-wide",
+            style.label,
+          ].join(" ")}
+        >
+          {style.title}
+        </span>
+        {detail ? (
+          <span className={["text-xs font-bold", style.label].join(" ")}>
+            · {detail}
+          </span>
+        ) : null}
+      </div>
+      {hasWindow ? (
+        <span
+          className={[
+            "text-[11px] font-semibold leading-tight",
+            style.label,
+          ].join(" ")}
+        >
+          {pace.hoyo ? `Hoyo ${pace.hoyo}` : "Este hoyo"} ideal:{" "}
+          {pace.windowStart}–{pace.windowEnd}
+        </span>
+      ) : null}
     </div>
   );
 }

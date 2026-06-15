@@ -54,6 +54,27 @@ interface ComputePaceArgs {
   perHoleMinutes?: PerHoleMinutes | null;
 }
 
+/** Hora de referencia de salida del grupo. Usa la salida real
+ *  (actual_start_at) si existe, pero nunca antes de la salida programada
+ *  (un actual_start marcado por error más temprano que el tee inflaría el
+ *  atraso). Si no hay salida real, usa la programada. */
+export function resolveTeeDate(args: {
+  teeTimeISO: string | null;
+  actualStartISO?: string | null;
+  roundDate: string | null;
+}): Date | null {
+  const { teeTimeISO, actualStartISO, roundDate } = args;
+  const scheduled =
+    teeTimeISO && roundDate ? parseTeeDateTime(roundDate, teeTimeISO) : null;
+  if (actualStartISO) {
+    const d = new Date(actualStartISO);
+    if (!Number.isNaN(d.getTime())) {
+      return scheduled && d.getTime() < scheduled.getTime() ? scheduled : d;
+    }
+  }
+  return scheduled;
+}
+
 export function computePace(args: ComputePaceArgs): PaceStatus {
   const {
     hoyoActual,
@@ -69,21 +90,8 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
     return { kind: "sin_datos", msg: "Sin detectar hoyo todavía." };
   }
 
-  // Referencia de inicio. Usamos la salida real (actual_start_at) si existe,
-  // PERO nunca antes de la salida programada: un actual_start_at marcado por
-  // error más temprano que el tee inflaría el atraso (caso real: tee 7:40 con
-  // actual 7:08 → +32 min falsos). En cambio sí respetamos salidas tardías.
-  let teeDate: Date | null = null;
-  const scheduled =
-    teeTimeISO && roundDate ? parseTeeDateTime(roundDate, teeTimeISO) : null;
-  if (actualStartISO) {
-    const d = new Date(actualStartISO);
-    if (!Number.isNaN(d.getTime())) {
-      teeDate =
-        scheduled && d.getTime() < scheduled.getTime() ? scheduled : d;
-    }
-  }
-  if (!teeDate) teeDate = scheduled;
+  // Referencia de inicio (salida real acotada por la programada).
+  const teeDate = resolveTeeDate({ teeTimeISO, actualStartISO, roundDate });
 
   if (!teeDate) {
     return {
@@ -178,6 +186,74 @@ function parseTeeDateTime(roundDate: string, teeTime: string): Date | null {
 
 /** Exportado para ritmo / recordatorios (salida programada). */
 export { parseTeeDateTime };
+
+/** Ventana de horario "ideal" en que el grupo debería estar jugando un hoyo,
+ *  según su hora de salida y los minutos esperados por hoyo (acumulados desde
+ *  el tee de inicio, con wrap 1..18). Ej.: salida en el 10 a las 8:00 →
+ *  hoyo 10 = 8:00:00–8:13:45, hoyo 11 = 8:13:45–8:29:09, etc. */
+export interface HoleScheduleWindow {
+  hole: number;
+  /** Inicio/fin como epoch ms (para formatear en la zona horaria que quieras). */
+  startMs: number;
+  endMs: number;
+  /** Etiquetas ya formateadas en hora de México (h:mm:ss, 24h). */
+  startLabel: string;
+  endLabel: string;
+}
+
+const MEXICO_TIME_FMT = new Intl.DateTimeFormat("es-MX", {
+  timeZone: "America/Mexico_City",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+function mexicoTimeLabel(d: Date): string {
+  // es-MX 24h devuelve "08:13:45"; quitamos el cero inicial para "8:13:45".
+  return MEXICO_TIME_FMT.format(d).replace(/^0/, "");
+}
+
+export function holeScheduleWindow(args: {
+  hole: number;
+  teeTimeISO: string | null;
+  actualStartISO?: string | null;
+  teeStartHole: number;
+  roundDate: string | null;
+  perHoleMinutes?: PerHoleMinutes | null;
+}): HoleScheduleWindow | null {
+  const { hole, teeStartHole, perHoleMinutes } = args;
+  if (!hole || hole < 1 || hole > 18) return null;
+
+  const teeDate = resolveTeeDate({
+    teeTimeISO: args.teeTimeISO,
+    actualStartISO: args.actualStartISO,
+    roundDate: args.roundDate,
+  });
+  if (!teeDate) return null;
+
+  // Minutos acumulados de los hoyos ANTERIORES al actual (desde el tee).
+  const holesBefore = holesPlayedFromCurrentHole(hole, teeStartHole);
+  const minutesBefore = expectedMinutesForHolesPlayed(
+    holesBefore,
+    teeStartHole,
+    perHoleMinutes
+  );
+  const minThisHole =
+    perHoleMinutes?.[hole] != null && Number.isFinite(perHoleMinutes[hole])
+      ? (perHoleMinutes[hole] as number)
+      : MIN_POR_HOYO;
+
+  const startMs = teeDate.getTime() + minutesBefore * 60000;
+  const endMs = startMs + minThisHole * 60000;
+  return {
+    hole,
+    startMs,
+    endMs,
+    startLabel: mexicoTimeLabel(new Date(startMs)),
+    endLabel: mexicoTimeLabel(new Date(endMs)),
+  };
+}
 
 /** Hoyo "oficial" del grupo: la moda de los últimos N puntos detectados.
  *  Filtra falsos positivos de zonas con traslape entre hoyos paralelos. */
