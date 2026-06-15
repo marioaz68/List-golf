@@ -356,6 +356,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             selectedVertex={selectedVertex}
             onGreenMove={saveGreen}
             onVertexMove={saveVertex}
+            onVertexSelect={setSelectedVertex}
             onMapTap={handleMapTap}
           />
         ) : (

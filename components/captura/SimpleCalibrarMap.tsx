@@ -33,6 +33,8 @@ interface SimpleCalibrarMapProps {
   selectedVertex?: number | null;
   onGreenMove: (key: SimpleGreenKey, lat: number, lon: number) => void;
   onVertexMove: (index: number, lat: number, lon: number) => void;
+  /** Tocar un vértice lo selecciona (para luego borrarlo o ajustarlo). */
+  onVertexSelect?: (index: number) => void;
   onMapTap: (lat: number, lon: number) => void;
 }
 
@@ -51,6 +53,7 @@ export function SimpleCalibrarMap({
   selectedVertex = null,
   onGreenMove,
   onVertexMove,
+  onVertexSelect,
   onMapTap,
 }: SimpleCalibrarMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -58,12 +61,14 @@ export function SimpleCalibrarMap({
   const layerRef = useRef<any>(null);
   const onGreenMoveRef = useRef(onGreenMove);
   const onVertexMoveRef = useRef(onVertexMove);
+  const onVertexSelectRef = useRef(onVertexSelect);
   const onMapTapRef = useRef(onMapTap);
   const dragLockRef = useRef(false);
   const framedKeyRef = useRef("");
 
   onGreenMoveRef.current = onGreenMove;
   onVertexMoveRef.current = onVertexMove;
+  onVertexSelectRef.current = onVertexSelect;
   onMapTapRef.current = onMapTap;
 
   useEffect(() => {
@@ -157,22 +162,36 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Vértices arrastrables del contorno activo (azul o amarillo).
+      // Vértices arrastrables del contorno activo (azul o amarillo). Usan la
+      // misma mira (cruz + círculo) que el green: es más precisa que un cuadro.
       if (mode === "boundary" || mode === "fairway") {
         for (let i = 0; i < editRing.length; i++) {
           const v = editRing[i];
           const selected = selectedVertex === i;
-          const size = selected ? 30 : 24;
+          const dot = selected ? 16 : 11;
+          const arm = dot + 14;
+          const ringColor = selected ? "#fb7185" : "#fff";
+          const box = 56;
+          const c = box / 2;
           const marker = L.marker([v.lat, v.lon], {
             draggable: true,
             icon: L.divIcon({
               className: "",
-              html: `<div style="width:${size}px;height:${size}px;border-radius:5px;background:${editColor};border:3px solid ${selected ? "#fb7185" : "#fff"};box-shadow:0 2px 10px rgba(0,0,0,0.75);touch-action:none;"></div>`,
-              iconSize: [size, size],
-              iconAnchor: [size / 2, size / 2],
+              html: `<div style="position:relative;width:${box}px;height:${box}px;touch-action:none;">
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${arm}px;background:${ringColor};opacity:0.95;"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${arm}px;height:2px;background:${ringColor};opacity:0.95;"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);"></div>
+              </div>`,
+              iconSize: [box, box],
+              iconAnchor: [c, c],
             }),
             zIndexOffset: selected ? 900 : 800,
           }).addTo(lg);
+          // Tocar el vértice lo selecciona (para borrarlo/ajustarlo) sin que el
+          // mapa registre un "tap" que agregaría otro punto.
+          marker.on("click", () => {
+            onVertexSelectRef.current?.(i);
+          });
           marker.on("dragstart", () => {
             dragLockRef.current = true;
           });
