@@ -28,6 +28,9 @@ interface SimpleCalibrarMapProps {
   boundaryRing: LatLon[];
   /** Contorno del fairway (línea amarilla). Puede ir vacío si no se ha dibujado. */
   fairwayRing: LatLon[];
+  /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
+   *  tap del mapa agregue el siguiente punto del contorno. */
+  addingCorner?: boolean;
   selectedGreen?: SimpleGreenKey | null;
   /** Índice del vértice seleccionado dentro del contorno ACTIVO (según mode). */
   selectedVertex?: number | null;
@@ -49,6 +52,7 @@ export function SimpleCalibrarMap({
   greenPoints,
   boundaryRing,
   fairwayRing,
+  addingCorner = false,
   selectedGreen = null,
   selectedVertex = null,
   onGreenMove,
@@ -162,8 +166,24 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Vértices arrastrables del contorno activo (azul o amarillo). Usan la
-      // misma mira (cruz + círculo) que el green: es más precisa que un cuadro.
+      // Línea conectora del contorno activo: se ve crecer desde el 2º punto,
+      // antes de que el polígono (3+ puntos) tenga relleno.
+      if ((mode === "boundary" || mode === "fairway") && editRing.length >= 2) {
+        const pts = editRing.map((v) => [v.lat, v.lon] as [number, number]);
+        L.polyline(pts, {
+          color: editColor,
+          weight: 3,
+          opacity: 0.95,
+          dashArray: editRing.length >= 3 ? undefined : "6,6",
+          interactive: false,
+        }).addTo(lg);
+      }
+
+      // Vértices del contorno activo (azul o amarillo). Usan la misma mira
+      // (cruz + círculo) que el green: más precisa que un cuadro.
+      //  - En modo "agregar tocando" los puntos NO interceptan el toque
+      //    (interactive:false) para que cada tap agregue el siguiente punto.
+      //  - Fuera de ese modo son arrastrables y se seleccionan al tocarlos.
       if (mode === "boundary" || mode === "fairway") {
         for (let i = 0; i < editRing.length; i++) {
           const v = editRing[i];
@@ -174,10 +194,11 @@ export function SimpleCalibrarMap({
           const box = 56;
           const c = box / 2;
           const marker = L.marker([v.lat, v.lon], {
-            draggable: true,
+            draggable: !addingCorner,
+            interactive: !addingCorner,
             icon: L.divIcon({
               className: "",
-              html: `<div style="position:relative;width:${box}px;height:${box}px;touch-action:none;">
+              html: `<div style="position:relative;width:${box}px;height:${box}px;${addingCorner ? "pointer-events:none;" : ""}touch-action:none;">
                 <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${arm}px;background:${ringColor};opacity:0.95;"></div>
                 <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${arm}px;height:2px;background:${ringColor};opacity:0.95;"></div>
                 <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);"></div>
@@ -187,21 +208,22 @@ export function SimpleCalibrarMap({
             }),
             zIndexOffset: selected ? 900 : 800,
           }).addTo(lg);
-          // Tocar el vértice lo selecciona (para borrarlo/ajustarlo) sin que el
-          // mapa registre un "tap" que agregaría otro punto.
-          marker.on("click", () => {
-            onVertexSelectRef.current?.(i);
-          });
-          marker.on("dragstart", () => {
-            dragLockRef.current = true;
-          });
-          marker.on("dragend", (e: any) => {
-            const ll = e.target.getLatLng();
-            onVertexMoveRef.current(i, ll.lat, ll.lng);
-            setTimeout(() => {
-              dragLockRef.current = false;
-            }, 120);
-          });
+          if (!addingCorner) {
+            // Tocar el vértice lo selecciona (para borrarlo/ajustarlo).
+            marker.on("click", () => {
+              onVertexSelectRef.current?.(i);
+            });
+            marker.on("dragstart", () => {
+              dragLockRef.current = true;
+            });
+            marker.on("dragend", (e: any) => {
+              const ll = e.target.getLatLng();
+              onVertexMoveRef.current(i, ll.lat, ll.lng);
+              setTimeout(() => {
+                dragLockRef.current = false;
+              }, 120);
+            });
+          }
         }
       }
 
@@ -274,6 +296,7 @@ export function SimpleCalibrarMap({
     greenPoints,
     boundaryRing,
     fairwayRing,
+    addingCorner,
     selectedGreen,
     selectedVertex,
   ]);

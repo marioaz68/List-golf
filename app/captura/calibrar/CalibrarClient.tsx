@@ -213,8 +213,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       if (!data.ok) throw new Error(data.error || "Error");
       flash("ok", note);
     } catch (e) {
+      // No recargamos del servidor para NO perder el trazo en curso; el usuario
+      // puede reintentar moviendo/agregando un punto.
       flash("err", e instanceof Error ? e.message : "Error al guardar línea");
-      await refetch();
     } finally {
       setBusy(false);
     }
@@ -236,51 +237,6 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     if (next.length >= 3) {
       await persistRing(activeKind, next, `Punto ${next.length} agregado.`);
     }
-  };
-
-  // Inserta un punto donde tocaste, en el lado (segmento) más cercano del
-  // contorno. Así el nuevo punto queda "en orden" y la línea no se cruza.
-  const insertAtNearestEdge = async (lat: number, lon: number) => {
-    if (!activeKind) return;
-    const ring = activeRing;
-    if (ring.length < 3) {
-      await appendPoint(lat, lon);
-      return;
-    }
-    const mLon = 111_320 * Math.cos((lat * Math.PI) / 180);
-    const mLat = 110_574;
-    const px = lon * mLon;
-    const py = lat * mLat;
-    let bestEdge = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < ring.length; i++) {
-      const a = ring[i];
-      const b = ring[(i + 1) % ring.length];
-      const ax = a.lon * mLon;
-      const ay = a.lat * mLat;
-      const bx = b.lon * mLon;
-      const by = b.lat * mLat;
-      const dx = bx - ax;
-      const dy = by - ay;
-      const len2 = dx * dx + dy * dy;
-      let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
-      t = Math.max(0, Math.min(1, t));
-      const cx = ax + t * dx;
-      const cy = ay + t * dy;
-      const d = Math.hypot(px - cx, py - cy);
-      if (d < bestD) {
-        bestD = d;
-        bestEdge = i;
-      }
-    }
-    const next = [
-      ...ring.slice(0, bestEdge + 1),
-      { lat, lon },
-      ...ring.slice(bestEdge + 1),
-    ];
-    setActiveRing(next);
-    setSelectedVertex(bestEdge + 1);
-    await persistRing(activeKind, next, `Punto ${bestEdge + 2} agregado.`);
   };
 
   const deleteVertex = async () => {
@@ -312,11 +268,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       // Sin "agregar tocando": para mover un punto, arrástralo directamente.
       return;
     }
-    if (activeRing.length < 3) {
-      void appendPoint(lat, lon);
-    } else {
-      void insertAtNearestEdge(lat, lon);
-    }
+    // Modo agregar: cada toque agrega el siguiente punto del contorno en orden.
+    void appendPoint(lat, lon);
   };
 
   const switchMode = (next: SimpleCalibrarMode) => {
@@ -352,6 +305,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             greenPoints={greenPoints}
             boundaryRing={boundaryRing}
             fairwayRing={fairwayRing}
+            addingCorner={addingCorner}
             selectedGreen={selectedGreen}
             selectedVertex={selectedVertex}
             onGreenMove={saveGreen}
