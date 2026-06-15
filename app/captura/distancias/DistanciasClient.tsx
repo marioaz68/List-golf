@@ -13,10 +13,19 @@ import {
   type HoleGreenPoints,
   type ReferencePoint,
 } from "@/lib/distances/ccqHolePoints";
+import {
+  detectInsideHole,
+  seedAutoHole,
+  type GreenCentersByHole,
+} from "@/lib/distances/detectActiveHole";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
-import { detectHole } from "@/lib/telegram/ritmo/geometry";
+import {
+  buildCourseHolesCollection,
+  parseBoundariesPayload,
+} from "@/lib/distances/resolveCourseHoles";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
+import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 
 function MapSkeleton() {
@@ -97,6 +106,19 @@ export default function DistanciasClient() {
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
+  const [courseHoles, setCourseHoles] =
+    useState<FeatureCollection<Polygon, { hoyo: number }>>(CCQ_HOLES);
+  const [boundaryByHole, setBoundaryByHole] = useState<
+    Map<number, Polygon>
+  >(() => new Map());
+  const [greenCenters, setGreenCenters] = useState<GreenCentersByHole>(() => {
+    const out: GreenCentersByHole = {};
+    for (let h = 1; h <= 18; h++) {
+      const hp = CCQ_HOLE_POINTS[h];
+      if (hp) out[h] = hp.center;
+    }
+    return out;
+  });
   const watchIdRef = useRef<number | null>(null);
   // Última posición aceptada. Sirve para ignorar el micro-jitter del GPS
   // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
@@ -170,19 +192,50 @@ export default function DistanciasClient() {
     };
   }, []);
 
-  // Detección con respaldo de borde (≤30 m) para la semilla inicial y para
-  // reanudar el modo automático.
-  const detectedHole = useMemo(() => {
-    if (geo.status !== "ok") return null;
-    return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES);
-  }, [geo]);
+  // Polígonos calibrados + greens de los 18 hoyos (una sola llamada al abrir).
+  useEffect(() => {
+    let cancelled = false;
+    const courseId = defaultDistanciasCourseId();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/captura/distancias/course-layout?course_id=${courseId}`
+        );
+        const data = (await res.json()) as {
+          ok?: boolean;
+          boundaries?: Array<{ hole_number: number; polygon: unknown }>;
+          greens?: Array<{
+            hole_number: number;
+            center: { lat: number; lon: number };
+          }>;
+        };
+        if (cancelled || !data.ok) return;
+        const calibrated = parseBoundariesPayload(data.boundaries ?? []);
+        setBoundaryByHole(calibrated);
+        setCourseHoles(buildCourseHolesCollection(calibrated));
+        const centers: GreenCentersByHole = {};
+        for (const g of data.greens ?? []) {
+          if (g.center) centers[g.hole_number] = g.center;
+        }
+        setGreenCenters(centers);
+      } catch {
+        /* mantiene CCQ_HOLES por defecto */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Detección ESTRICTA: solo si estás DENTRO del polígono de un hoyo. Se usa
-  // para cambiar de hoyo (no el "más cercano", que brincaba a hoyos vecinos).
+  // Dentro del polígono calibrado (con desempate por green más cercano).
   const insideHole = useMemo(() => {
     if (geo.status !== "ok") return null;
-    return detectHole({ lat: geo.lat, lon: geo.lon }, CCQ_HOLES, 0);
-  }, [geo]);
+    return detectInsideHole(
+      { lat: geo.lat, lon: geo.lon },
+      courseHoles,
+      greenCenters
+    );
+  }, [geo, courseHoles, greenCenters]);
 
   const nearest = useMemo(() => {
     if (geo.status !== "ok") return null;
@@ -209,12 +262,36 @@ export default function DistanciasClient() {
     hole: 0,
     count: 0,
   });
+  const layoutReseededRef = useRef(false);
+
+  // Al llegar polígonos calibrados, re-sembrar el hoyo (corrige 1→2 en la salida).
+  useEffect(() => {
+    if (
+      layoutReseededRef.current ||
+      boundaryByHole.size === 0 ||
+      geo.status !== "ok" ||
+      manualHole != null
+    ) {
+      return;
+    }
+    layoutReseededRef.current = true;
+    autoCandidateRef.current = { hole: 0, count: 0 };
+    setAutoHole(
+      seedAutoHole(
+        { lat: geo.lat, lon: geo.lon },
+        courseHoles,
+        greenCenters
+      )
+    );
+  }, [boundaryByHole.size, geo, manualHole, courseHoles, greenCenters]);
+
   useEffect(() => {
     if (geo.status !== "ok") return;
+    const pos = { lat: geo.lat, lon: geo.lon };
     setAutoHole((prev) => {
       if (prev == null) {
         autoCandidateRef.current = { hole: 0, count: 0 };
-        return detectedHole ?? nearestHole;
+        return seedAutoHole(pos, courseHoles, greenCenters);
       }
       // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
       const expectedNext = (prev % 18) + 1;
@@ -234,7 +311,7 @@ export default function DistanciasClient() {
       }
       return prev;
     });
-  }, [insideHole, detectedHole, nearestHole, geo.status]);
+  }, [insideHole, geo, courseHoles, greenCenters]);
 
   const activeHole = manualHole ?? autoHole ?? nearestHole;
 
@@ -409,6 +486,7 @@ export default function DistanciasClient() {
             playerLon={geo.lon}
             yardsToCenter={greenYds.center}
             referencePoints={refPoints}
+            holeBoundary={boundaryByHole.get(activeHole) ?? null}
             tapPoint={tapPoint}
             onMapTap={onMapTap}
           />

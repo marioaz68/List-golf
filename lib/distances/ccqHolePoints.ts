@@ -7,6 +7,7 @@
  */
 
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
+import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
   CCQ_GREEN_CENTERS,
   haversineMeters,
@@ -243,4 +244,19 @@ export function zoomForYardsToCenter(yards: number): number {
 
 export function getHolePolygon(holeNo: number) {
   return CCQ_HOLES.features.find((f) => f.properties.hoyo === holeNo) ?? null;
+}
+
+/** Polígono del hoyo: calibrado en BD si existe, si no el del código. */
+export function getHolePolygonResolved(
+  holeNo: number,
+  boundaryOverride?: Polygon | null
+) {
+  if (boundaryOverride) {
+    return {
+      type: "Feature" as const,
+      properties: { hoyo: holeNo },
+      geometry: boundaryOverride,
+    };
+  }
+  return getHolePolygon(holeNo);
 }

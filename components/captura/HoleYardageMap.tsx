@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
-  getHolePolygon,
+  getHolePolygonResolved,
 } from "@/lib/distances/ccqHolePoints";
+import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
   MAP_SCALE,
   addSatelliteLayers,
@@ -30,6 +31,8 @@ interface HoleYardageMapProps {
   playerLon: number;
   yardsToCenter: number;
   referencePoints: ReferencePointWithYards[];
+  /** Polígono calibrado del hoyo (línea azul de Calibrar). */
+  holeBoundary?: Polygon | null;
   tapPoint?: TapPoint | null;
   onMapTap?: (lat: number, lon: number) => void;
 }
@@ -64,6 +67,7 @@ export function HoleYardageMap({
   playerLon,
   yardsToCenter,
   referencePoints,
+  holeBoundary = null,
   tapPoint,
   onMapTap,
 }: HoleYardageMapProps) {
@@ -211,11 +215,11 @@ export function HoleYardageMap({
       const L = await loadLeaflet();
       layerGroup.clearLayers();
 
+      const greenCenter = referencePoints.find((p) => p.kind === "green-center");
+      const greenFront = referencePoints.find((p) => p.kind === "green-front");
       const greenBack = referencePoints.find((p) => p.kind === "green-back");
-      const greenTarget =
-        greenBack ??
-        referencePoints.find((p) => p.kind === "green-center") ??
-        referencePoints.find((p) => p.kind === "green-front");
+      // Orientación y anclaje: centro del green (entrada/centro/atrás arriba al centro).
+      const greenTarget = greenCenter ?? greenFront ?? greenBack;
       const bearing = greenTarget
         ? bearingDegrees(
             playerLat,
@@ -227,7 +231,7 @@ export function HoleYardageMap({
       bearingRef.current = bearing;
       rotator.style.transform = `rotate(${-bearing}deg)`;
 
-      const holeFeature = getHolePolygon(holeNo);
+      const holeFeature = getHolePolygonResolved(holeNo, holeBoundary);
       if (holeFeature) {
         L.geoJSON(holeFeature, {
           style: {
@@ -415,6 +419,7 @@ export function HoleYardageMap({
   }, [
     holeNo,
     par,
+    holeBoundary,
     playerLat,
     playerLon,
     yardsToCenter,
