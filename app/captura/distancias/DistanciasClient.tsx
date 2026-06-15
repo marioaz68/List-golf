@@ -197,10 +197,10 @@ export default function DistanciasClient() {
     nearest != null &&
     nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
 
-  // Hoyo automático "pegajoso": una vez en un hoyo NO cambia solo. Solo cambia
-  // cuando entras DENTRO del polígono de otro hoyo, confirmado en 2 lecturas
-  // seguidas. Si no estás dentro de ningún polígono, se queda en el actual
-  // (evita que brinque del 12 al 7/6 por el ruido del GPS entre hoyos).
+  // Hoyo automático "pegajoso" y SOLO ascendente: una vez en un hoyo, solo
+  // puede avanzar al SIGUIENTE en orden (10→11, 9→10, 18→1). Nunca brinca
+  // hacia atrás ni se salta hoyos. Cambia cuando entras DENTRO del polígono
+  // del hoyo siguiente, confirmado en 2 lecturas seguidas.
   const [autoHole, setAutoHole] = useState<number | null>(null);
   const autoCandidateRef = useRef<{ hole: number; count: number }>({
     hole: 0,
@@ -213,7 +213,9 @@ export default function DistanciasClient() {
         autoCandidateRef.current = { hole: 0, count: 0 };
         return detectedHole ?? nearestHole;
       }
-      if (insideHole == null || insideHole === prev) {
+      // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
+      const expectedNext = (prev % 18) + 1;
+      if (insideHole !== expectedNext) {
         autoCandidateRef.current = { hole: 0, count: 0 };
         return prev;
       }
@@ -225,7 +227,7 @@ export default function DistanciasClient() {
       }
       if (autoCandidateRef.current.count >= 2) {
         autoCandidateRef.current = { hole: 0, count: 0 };
-        return insideHole;
+        return expectedNext;
       }
       return prev;
     });
