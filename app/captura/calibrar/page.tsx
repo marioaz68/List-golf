@@ -1,7 +1,6 @@
 /**
- * /captura/calibrar — Mini App de calibración del campo (solo personal
- * autorizado). Captura GPS en sitio para mover entrada/centro/atrás del green
- * y marcar trampas/obstáculos. Se abre desde el comando /CALIBRAR en Telegram.
+ * /captura/calibrar — Editor satelital simple por hoyo (personal autorizado).
+ * Sin rotación Waze: mapa de arriba, arrastrar o tocar para colocar puntos.
  */
 import { Suspense } from "react";
 import Link from "next/link";
