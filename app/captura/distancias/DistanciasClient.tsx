@@ -635,15 +635,21 @@ export default function DistanciasClient() {
         {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
       </div>
 
-      {/* Punto tocado: pastilla flotante */}
+      {/* Punto tocado: yardas + botón claro para quitar la línea y la medición. */}
       {tapPoint && !farFromCourse ? (
-        <button
-          type="button"
-          onClick={() => setTapPoint(null)}
-          className="absolute left-1/2 top-2 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-xs font-black text-white shadow-lg backdrop-blur-sm"
-        >
-          {tapPoint.yards} yds · tocar para quitar
-        </button>
+        <div className="absolute left-1/2 top-2 z-[1000] flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-pink-600/95 py-1 pl-3 pr-1 shadow-lg backdrop-blur-sm">
+          <span className="text-sm font-black leading-none text-white">
+            {tapPoint.yards} yds
+          </span>
+          <button
+            type="button"
+            onClick={() => setTapPoint(null)}
+            aria-label="Quitar medición"
+            className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-1 text-[11px] font-bold leading-none text-white active:scale-95"
+          >
+            ✕ Quitar
+          </button>
+        </div>
       ) : null}
 
       {/* Fuera del rango del club */}
