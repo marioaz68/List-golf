@@ -14,11 +14,13 @@ import {
   type ReferencePoint,
 } from "@/lib/distances/ccqHolePoints";
 import {
-  detectInsideHole,
+  detectHole,
   seedAutoHole,
+  type CenterlinesByHole,
   type GreenCentersByHole,
   type TeesByHole,
 } from "@/lib/distances/detectActiveHole";
+import { waypointsFromLine } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import {
@@ -120,6 +122,9 @@ export default function DistanciasClient() {
     }
     return out;
   });
+  // Línea central de fairway por hoyo (salida→green). Señal principal para
+  // detectar el hoyo y para orientar la foto siguiendo el fairway (doglegs).
+  const [centerlines, setCenterlines] = useState<CenterlinesByHole>({});
   // Salidas por hoyo: ancla para detectar el hoyo cuando estás fuera de los
   // polígonos (tees de atrás). Por ahora derivadas del polígono base.
   const teeCenters = useMemo<TeesByHole>(() => {
@@ -219,6 +224,10 @@ export default function DistanciasClient() {
             hole_number: number;
             center: { lat: number; lon: number };
           }>;
+          centerlines?: Array<{
+            hole_number: number;
+            waypoints?: Array<{ lat: number; lon: number }>;
+          }>;
         };
         if (cancelled || !data.ok) return;
         const calibrated = parseBoundariesPayload(data.boundaries ?? []);
@@ -229,6 +238,14 @@ export default function DistanciasClient() {
           if (g.center) centers[g.hole_number] = g.center;
         }
         setGreenCenters(centers);
+        const cls: CenterlinesByHole = {};
+        for (const c of data.centerlines ?? []) {
+          const wps = Array.isArray(c.waypoints)
+            ? c.waypoints
+            : waypointsFromLine(c as unknown);
+          if (wps && wps.length >= 2) cls[c.hole_number] = wps;
+        }
+        setCenterlines(cls);
       } catch {
         /* mantiene CCQ_HOLES por defecto */
       }
@@ -238,15 +255,17 @@ export default function DistanciasClient() {
     };
   }, []);
 
-  // Dentro del polígono calibrado (con desempate por green más cercano).
+  // Hoyo detectado: manda la línea central de fairway más cercana; si no estás
+  // sobre ninguna, el polígono que te contiene (desempate por centerline/green).
   const insideHole = useMemo(() => {
     if (geo.status !== "ok") return null;
-    return detectInsideHole(
+    return detectHole(
       { lat: geo.lat, lon: geo.lon },
       courseHoles,
-      greenCenters
+      greenCenters,
+      centerlines
     );
-  }, [geo, courseHoles, greenCenters]);
+  }, [geo, courseHoles, greenCenters, centerlines]);
 
   const nearest = useMemo(() => {
     if (geo.status !== "ok") return null;
@@ -277,9 +296,11 @@ export default function DistanciasClient() {
 
   // Al llegar polígonos calibrados, re-sembrar el hoyo (corrige 1→2 en la salida).
   useEffect(() => {
+    const layoutReady =
+      boundaryByHole.size > 0 || Object.keys(centerlines).length > 0;
     if (
       layoutReseededRef.current ||
-      boundaryByHole.size === 0 ||
+      !layoutReady ||
       geo.status !== "ok" ||
       manualHole != null
     ) {
@@ -292,10 +313,19 @@ export default function DistanciasClient() {
         { lat: geo.lat, lon: geo.lon },
         courseHoles,
         greenCenters,
-        teeCenters
+        teeCenters,
+        centerlines
       )
     );
-  }, [boundaryByHole.size, geo, manualHole, courseHoles, greenCenters, teeCenters]);
+  }, [
+    boundaryByHole.size,
+    geo,
+    manualHole,
+    courseHoles,
+    greenCenters,
+    teeCenters,
+    centerlines,
+  ]);
 
   useEffect(() => {
     if (geo.status !== "ok") return;
@@ -303,7 +333,7 @@ export default function DistanciasClient() {
     setAutoHole((prev) => {
       if (prev == null) {
         autoCandidateRef.current = { hole: 0, count: 0 };
-        return seedAutoHole(pos, courseHoles, greenCenters, teeCenters);
+        return seedAutoHole(pos, courseHoles, greenCenters, teeCenters, centerlines);
       }
       // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
       const expectedNext = (prev % 18) + 1;
@@ -323,7 +353,7 @@ export default function DistanciasClient() {
       }
       return prev;
     });
-  }, [insideHole, geo, courseHoles, greenCenters, teeCenters]);
+  }, [insideHole, geo, courseHoles, greenCenters, teeCenters, centerlines]);
 
   const activeHole = manualHole ?? autoHole ?? nearestHole;
 
@@ -499,6 +529,7 @@ export default function DistanciasClient() {
             yardsToCenter={greenYds.center}
             referencePoints={refPoints}
             holeBoundary={boundaryByHole.get(activeHole) ?? null}
+            centerline={centerlines[activeHole] ?? null}
             tapPoint={tapPoint}
             onMapTap={onMapTap}
           />

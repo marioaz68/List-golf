@@ -6,6 +6,8 @@ import {
   type ReferencePointWithYards,
   getHolePolygonResolved,
 } from "@/lib/distances/ccqHolePoints";
+import { aimWaypointIndex } from "@/lib/distances/centerline";
+import type { LatLon } from "@/lib/distances/holeBoundary";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
   MAP_SCALE,
@@ -33,6 +35,9 @@ interface HoleYardageMapProps {
   referencePoints: ReferencePointWithYards[];
   /** Polígono calibrado del hoyo (línea azul de Calibrar). */
   holeBoundary?: Polygon | null;
+  /** Línea central de fairway (salida→green) para orientar la foto siguiendo
+   *  el fairway en doglegs. Si no hay, se orienta directo al green. */
+  centerline?: LatLon[] | null;
   tapPoint?: TapPoint | null;
   onMapTap?: (lat: number, lon: number) => void;
 }
@@ -68,6 +73,7 @@ export function HoleYardageMap({
   yardsToCenter,
   referencePoints,
   holeBoundary = null,
+  centerline = null,
   tapPoint,
   onMapTap,
 }: HoleYardageMapProps) {
@@ -218,15 +224,18 @@ export function HoleYardageMap({
       const greenCenter = referencePoints.find((p) => p.kind === "green-center");
       const greenFront = referencePoints.find((p) => p.kind === "green-front");
       const greenBack = referencePoints.find((p) => p.kind === "green-back");
-      // Orientación y anclaje: centro del green (entrada/centro/atrás arriba al centro).
+      // Anclaje y zoom: centro del green (entrada/centro/atrás arriba al centro).
       const greenTarget = greenCenter ?? greenFront ?? greenBack;
-      const bearing = greenTarget
-        ? bearingDegrees(
-            playerLat,
-            playerLon,
-            greenTarget.lat,
-            greenTarget.lon
-          )
+      // Orientación: si hay línea central de fairway, apuntamos al SIGUIENTE
+      // punto por delante (sigue el dogleg). Si no, directo al green.
+      let aim: { lat: number; lon: number } | null = greenTarget ?? null;
+      if (centerline && centerline.length >= 2) {
+        const idx = aimWaypointIndex({ lat: playerLat, lon: playerLon }, centerline);
+        const wp = centerline[Math.min(idx, centerline.length - 1)];
+        if (wp) aim = wp;
+      }
+      const bearing = aim
+        ? bearingDegrees(playerLat, playerLon, aim.lat, aim.lon)
         : 0;
       bearingRef.current = bearing;
       rotator.style.transform = `rotate(${-bearing}deg)`;
@@ -420,6 +429,7 @@ export function HoleYardageMap({
     holeNo,
     par,
     holeBoundary,
+    centerline,
     playerLat,
     playerLon,
     yardsToCenter,

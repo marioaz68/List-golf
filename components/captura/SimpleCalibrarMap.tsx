@@ -18,7 +18,7 @@ export interface SimpleGreenPoint {
   color: string;
 }
 
-export type SimpleCalibrarMode = "green" | "boundary" | "fairway";
+export type SimpleCalibrarMode = "green" | "boundary" | "fairway" | "centerline";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
@@ -28,6 +28,8 @@ interface SimpleCalibrarMapProps {
   boundaryRing: LatLon[];
   /** Contorno del fairway (línea amarilla). Puede ir vacío si no se ha dibujado. */
   fairwayRing: LatLon[];
+  /** Centro de fairway (línea naranja ABIERTA salida→green) para orientar Yardas. */
+  centerlineRing: LatLon[];
   /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
    *  tap del mapa agregue el siguiente punto del contorno. */
   addingCorner?: boolean;
@@ -44,6 +46,7 @@ interface SimpleCalibrarMapProps {
 const COLORS = {
   boundary: { line: "#22d3ee", fill: "#0891b2" },
   fairway: { line: "#facc15", fill: "#ca8a04" },
+  centerline: { line: "#fb923c", fill: "#ea580c" },
 };
 
 export function SimpleCalibrarMap({
@@ -52,6 +55,7 @@ export function SimpleCalibrarMap({
   greenPoints,
   boundaryRing,
   fairwayRing,
+  centerlineRing,
   addingCorner = false,
   selectedGreen = null,
   selectedVertex = null,
@@ -125,9 +129,18 @@ export function SimpleCalibrarMap({
         ? boundaryRing
         : mode === "fairway"
           ? fairwayRing
-          : [];
+          : mode === "centerline"
+            ? centerlineRing
+            : [];
     const editColor =
-      mode === "fairway" ? COLORS.fairway.line : COLORS.boundary.line;
+      mode === "fairway"
+        ? COLORS.fairway.line
+        : mode === "centerline"
+          ? COLORS.centerline.line
+          : COLORS.boundary.line;
+    const isRing = mode === "boundary" || mode === "fairway";
+    const isLine = mode === "centerline";
+    const editable = isRing || isLine;
 
     (async () => {
       const L = await loadLeaflet();
@@ -166,9 +179,22 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
+      // Centro de fairway (línea naranja ABIERTA salida→green). Siempre visible;
+      // tenue si no se está editando.
+      if (centerlineRing.length >= 2) {
+        const pts = centerlineRing.map((v) => [v.lat, v.lon] as [number, number]);
+        L.polyline(pts, {
+          color: COLORS.centerline.line,
+          weight: mode === "centerline" ? 4 : 2,
+          opacity: mode === "centerline" ? 1 : 0.5,
+          interactive: false,
+        }).addTo(lg);
+      }
+
       // Línea conectora del contorno activo: se ve crecer desde el 2º punto,
-      // antes de que el polígono (3+ puntos) tenga relleno.
-      if ((mode === "boundary" || mode === "fairway") && editRing.length >= 2) {
+      // antes de que el polígono (3+ puntos) tenga relleno. (No para centerline,
+      // que ya se dibuja arriba como línea abierta.)
+      if (isRing && editRing.length >= 2) {
         const pts = editRing.map((v) => [v.lat, v.lon] as [number, number]);
         L.polyline(pts, {
           color: editColor,
@@ -179,12 +205,12 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Vértices del contorno activo (azul o amarillo). Usan la misma mira
-      // (cruz + círculo) que el green: más precisa que un cuadro.
+      // Vértices del contorno/línea activos. Usan la misma mira (cruz + círculo)
+      // que el green: más precisa que un cuadro.
       //  - En modo "agregar tocando" los puntos NO interceptan el toque
       //    (interactive:false) para que cada tap agregue el siguiente punto.
       //  - Fuera de ese modo son arrastrables y se seleccionan al tocarlos.
-      if (mode === "boundary" || mode === "fairway") {
+      if (editable) {
         for (let i = 0; i < editRing.length; i++) {
           const v = editRing[i];
           const selected = selectedVertex === i;
@@ -282,6 +308,11 @@ export function SimpleCalibrarMap({
             fairwayRing.map((v) => [v.lat, v.lon] as [number, number])
           );
           map.fitBounds(fb, { padding: [40, 40], maxZoom: 19, animate: false });
+        } else if (mode === "centerline" && centerlineRing.length >= 2) {
+          const cb = L.latLngBounds(
+            centerlineRing.map((v) => [v.lat, v.lon] as [number, number])
+          );
+          map.fitBounds(cb, { padding: [40, 40], maxZoom: 19, animate: false });
         } else if (holeFeature) {
           const bounds = L.geoJSON(holeFeature).getBounds();
           for (const g of greenPoints) bounds.extend([g.lat, g.lon]);
@@ -296,6 +327,7 @@ export function SimpleCalibrarMap({
     greenPoints,
     boundaryRing,
     fairwayRing,
+    centerlineRing,
     addingCorner,
     selectedGreen,
     selectedVertex,

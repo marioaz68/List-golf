@@ -9,6 +9,7 @@ import {
   type HolePolygonKind,
 } from "@/lib/distances/calibrationStore";
 import { parseBoundaryGeoJson } from "@/lib/distances/holeBoundary";
+import { parseCenterlineGeo } from "@/lib/distances/centerline";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ const KINDS = new Set<HolePolygonKind>([
   "bunker",
   "water",
   "ob",
+  "centerline",
 ]);
 
 function parseHole(v: string | null): number | null {
@@ -72,9 +74,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "kind inválido" }, { status: 400 });
   }
 
-  const polygon = parseBoundaryGeoJson(body.polygon);
-  if (!polygon) {
-    return NextResponse.json({ ok: false, error: "polygon inválido" }, { status: 400 });
+  // El fairway/green/etc. son polígonos; la centerline es una línea (LineString).
+  const geojson =
+    kind === "centerline"
+      ? parseCenterlineGeo(body.polygon)
+      : parseBoundaryGeoJson(body.polygon);
+  if (!geojson) {
+    return NextResponse.json(
+      { ok: false, error: kind === "centerline" ? "línea inválida" : "polygon inválido" },
+      { status: 400 }
+    );
   }
 
   const sortOrder = Number(body.sort_order ?? 0);
@@ -86,7 +95,7 @@ export async function POST(request: NextRequest) {
       courseId,
       hole,
       kind,
-      geojson: polygon,
+      geojson,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
     });
     return NextResponse.json({ ok: true });

@@ -109,7 +109,13 @@ export async function updateReferencePoint(
 }
 
 /** Tipos de polígono calibrable por hoyo (además de la línea azul del hoyo). */
-export type HolePolygonKind = "fairway" | "green" | "bunker" | "water" | "ob";
+export type HolePolygonKind =
+  | "fairway"
+  | "green"
+  | "bunker"
+  | "water"
+  | "ob"
+  | "centerline";
 
 export interface HolePolygonRow {
   kind: HolePolygonKind;

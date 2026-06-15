@@ -13,6 +13,11 @@ import {
   ringFromPolygon,
   type LatLon,
 } from "@/lib/distances/holeBoundary";
+import {
+  defaultCenterline,
+  lineFromWaypoints,
+  waypointsFromLine,
+} from "@/lib/distances/centerline";
 import type {
   SimpleCalibrarMode,
   SimpleGreenKey,
@@ -49,8 +54,14 @@ const GREEN_META: Record<
   back: { label: "Atrás", color: "#059669" },
 };
 
-/** Contorno que el modo está editando (línea azul del hoyo o amarilla fairway). */
-type RingKind = "boundary" | "fairway";
+/** Lo que el modo está editando: línea azul (hoyo), amarilla (fairway) o
+ *  naranja (centro de fairway, una línea abierta salida→green). */
+type RingKind = "boundary" | "fairway" | "centerline";
+
+/** Mínimo de puntos: polígonos cerrados ≥3, la línea de centro ≥2. */
+function minPoints(kind: RingKind): number {
+  return kind === "centerline" ? 2 : 3;
+}
 
 export default function CalibrarClient({ tg }: { tg: string }) {
   const searchParams = useSearchParams();
@@ -67,6 +78,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     defaultHoleRing(1)
   );
   const [fairwayRing, setFairwayRing] = useState<LatLon[]>([]);
+  const [centerlineRing, setCenterlineRing] = useState<LatLon[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
@@ -79,7 +91,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes] = await Promise.all([
+      const [gRes, bRes, fRes, cRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
@@ -89,12 +101,21 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${hole}&kind=fairway&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=centerline&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
       const fData = await fRes.json();
+      const cData = await cRes.json();
 
+      // Centro y "atrás" del green (para generar la línea de centro por defecto).
+      let greenCenter: LatLon | null = null;
+      let greenBack: LatLon | null = null;
       if (gData?.ok) {
+        greenCenter = gData.center;
+        greenBack = gData.back ?? null;
         setGreen({
           front: gData.front,
           center: gData.center,
@@ -104,6 +125,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       } else {
         const hp = CCQ_HOLE_POINTS[hole];
         if (hp) {
+          greenCenter = hp.center;
+          greenBack = hp.back ?? null;
           setGreen({
             front: hp.front,
             center: hp.center,
@@ -129,6 +152,28 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       } else {
         setFairwayRing([]);
       }
+
+      // Centro de fairway: lo calibrado, o uno por defecto (recta salida→green
+      // según par) que el usuario solo acomoda. NO se guarda hasta que lo mueva.
+      let centerWps: LatLon[] = [];
+      if (cData?.ok && Array.isArray(cData.polygons)) {
+        const cl = cData.polygons.find(
+          (p: { kind: string }) => p.kind === "centerline"
+        );
+        centerWps = cl ? waypointsFromLine(cl.geojson) : [];
+      }
+      if (centerWps.length < 2) {
+        const hp = CCQ_HOLE_POINTS[hole];
+        if (hp?.tee && greenCenter) {
+          centerWps = defaultCenterline(
+            hp.tee,
+            greenCenter,
+            greenBack,
+            hp.par ?? 4
+          );
+        }
+      }
+      setCenterlineRing(centerWps);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
     }
@@ -149,12 +194,27 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }));
   }, [green]);
 
-  // Contorno activo según el modo (azul hoyo / amarillo fairway).
+  // Contorno/línea activos según el modo.
   const activeKind: RingKind | null =
-    mode === "boundary" ? "boundary" : mode === "fairway" ? "fairway" : null;
-  const activeRing = activeKind === "fairway" ? fairwayRing : boundaryRing;
+    mode === "boundary"
+      ? "boundary"
+      : mode === "fairway"
+        ? "fairway"
+        : mode === "centerline"
+          ? "centerline"
+          : null;
+  const activeRing =
+    activeKind === "fairway"
+      ? fairwayRing
+      : activeKind === "centerline"
+        ? centerlineRing
+        : boundaryRing;
   const setActiveRing =
-    activeKind === "fairway" ? setFairwayRing : setBoundaryRing;
+    activeKind === "fairway"
+      ? setFairwayRing
+      : activeKind === "centerline"
+        ? setCenterlineRing
+        : setBoundaryRing;
 
   const saveGreen = async (key: SimpleGreenKey, lat: number, lon: number) => {
     setGreen((prev) =>
@@ -191,19 +251,34 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
-  /** Guarda el contorno (azul=boundary, amarillo=fairway) en su endpoint. */
+  /** Guarda lo dibujado en su endpoint: boundary=azul, fairway=amarillo (polígono),
+   *  centerline=naranja (línea abierta salida→green). */
   const persistRing = async (kind: RingKind, ring: LatLon[], note: string) => {
     setBusy(true);
     try {
-      const polygon = polygonFromRing(hole, ring).geometry;
+      // Línea/fairway vacíos: borrar el registro (no se puede guardar vacío).
+      if (kind !== "boundary" && ring.length === 0) {
+        const res = await fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          { method: "DELETE" }
+        );
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Error");
+        flash("ok", note);
+        return;
+      }
+      const geo =
+        kind === "centerline"
+          ? lineFromWaypoints(ring)
+          : polygonFromRing(hole, ring).geometry;
       const url =
         kind === "boundary"
           ? "/api/captura/calibrar/boundary"
           : "/api/captura/calibrar/polygon";
       const body =
         kind === "boundary"
-          ? { tg: tgId, course_id: CCQ_COURSE_ID, hole, polygon }
-          : { tg: tgId, course_id: CCQ_COURSE_ID, hole, kind: "fairway", polygon };
+          ? { tg: tgId, course_id: CCQ_COURSE_ID, hole, polygon: geo }
+          : { tg: tgId, course_id: CCQ_COURSE_ID, hole, kind, polygon: geo };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -228,28 +303,33 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     await persistRing(activeKind, next, `Punto ${index + 1} guardado.`);
   };
 
-  /** Agrega un punto al final del contorno (para ir trazando uno nuevo). */
+  /** Agrega un punto al final del contorno/línea (para ir trazando uno nuevo). */
   const appendPoint = async (lat: number, lon: number) => {
     if (!activeKind) return;
     const next = [...activeRing, { lat, lon }];
     setActiveRing(next);
     setSelectedVertex(next.length - 1);
-    if (next.length >= 3) {
+    if (next.length >= minPoints(activeKind)) {
       await persistRing(activeKind, next, `Punto ${next.length} agregado.`);
     }
   };
 
   const deleteVertex = async () => {
     if (!activeKind) return;
-    if (activeRing.length <= 3) {
-      // En fairway, borrar todo deja la línea sin dibujar.
-      if (activeKind === "fairway" && activeRing.length > 0) {
+    const min = minPoints(activeKind);
+    if (activeRing.length <= min) {
+      // Fairway/centro: borrar todo deja la línea sin dibujar.
+      if (activeKind !== "boundary" && activeRing.length > 0) {
         setActiveRing([]);
         setSelectedVertex(0);
-        await persistRing("fairway", [], "Fairway borrado.");
+        await persistRing(
+          activeKind,
+          [],
+          activeKind === "fairway" ? "Fairway borrado." : "Centro borrado."
+        );
         return;
       }
-      flash("err", "Mínimo 3 puntos.");
+      flash("err", `Mínimo ${min} puntos.`);
       return;
     }
     const i = selectedVertex;
@@ -276,6 +356,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     setMode(next);
     setSelectedVertex(0);
     // En fairway sin contorno, arranca en "agregar tocando" para trazarlo.
+    // El centro de fairway ya viene pre-cargado, así que NO arranca agregando.
     if (next === "fairway") setAddingCorner(fairwayRing.length < 3);
     else setAddingCorner(false);
   };
@@ -291,8 +372,14 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     });
   };
 
-  const isRingMode = mode === "boundary" || mode === "fairway";
-  const ringLabel = mode === "fairway" ? "fairway" : "hoyo";
+  const isRingMode =
+    mode === "boundary" || mode === "fairway" || mode === "centerline";
+  const ringLabel =
+    mode === "fairway"
+      ? "fairway"
+      : mode === "centerline"
+        ? "centro de fairway"
+        : "hoyo";
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-black text-white">
@@ -305,6 +392,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             greenPoints={greenPoints}
             boundaryRing={boundaryRing}
             fairwayRing={fairwayRing}
+            centerlineRing={centerlineRing}
             addingCorner={addingCorner}
             selectedGreen={selectedGreen}
             selectedVertex={selectedVertex}
@@ -373,7 +461,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("green")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-xs font-bold",
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
               mode === "green"
                 ? "bg-emerald-500 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -385,7 +473,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("boundary")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-xs font-bold",
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
               mode === "boundary"
                 ? "bg-cyan-400 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -397,13 +485,25 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("fairway")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-xs font-bold",
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
               mode === "fairway"
                 ? "bg-yellow-400 text-black"
                 : "bg-slate-800 text-slate-200",
             ].join(" ")}
           >
             Fairway
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("centerline")}
+            className={[
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "centerline"
+                ? "bg-orange-400 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Centro
           </button>
         </div>
 
@@ -440,7 +540,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                       selectedVertex === i
                         ? mode === "fairway"
                           ? "border-yellow-300 bg-yellow-400 text-black"
-                          : "border-cyan-300 bg-cyan-400 text-black"
+                          : mode === "centerline"
+                            ? "border-orange-300 bg-orange-400 text-black"
+                            : "border-cyan-300 bg-cyan-400 text-black"
                         : "border-slate-600 bg-slate-800 text-white",
                     ].join(" ")}
                   >
@@ -473,9 +575,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 onClick={() => void deleteVertex()}
                 className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
               >
-                {activeRing.length <= 3 && mode === "fairway"
+                {activeKind &&
+                activeRing.length <= minPoints(activeKind) &&
+                mode === "fairway"
                   ? "Borrar fairway"
-                  : `Borrar punto ${selectedVertex + 1}`}
+                  : activeKind &&
+                      activeRing.length <= minPoints(activeKind) &&
+                      mode === "centerline"
+                    ? "Borrar centro"
+                    : `Borrar punto ${selectedVertex + 1}`}
               </button>
             </div>
           </>
