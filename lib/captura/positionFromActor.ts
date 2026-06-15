@@ -9,7 +9,6 @@ import { getCourseHoles } from "@/lib/telegram/ritmo/holes";
 import { smoothedHoleForGroup } from "@/lib/telegram/ritmo/paceCalculator";
 
 const MAX_ACCURACY_M = 30;
-const MAX_HOLE_JUMP = 2;
 
 /** Args para guardar una posición GPS desde la Mini App de captura.
  *  La Mini App pasa `entryId` (jugador) o `caddieId` directamente — no hay
@@ -133,7 +132,8 @@ export async function saveCapturaPosition(
 
   // Filtros silenciosos (mismos que el pipeline de Telegram):
   //  - accuracy > 30 m  -> no contar para detección de hoyo
-  //  - salto > 2 hoyos respecto al hoyo estable del grupo -> outlier
+  //  - solo el hoyo actual del grupo o el siguiente en orden (wrap 18->1):
+  //    el reloj del ritmo no debe brincar a hoyos no consecutivos.
   const noisy =
     typeof accuracy === "number" &&
     Number.isFinite(accuracy) &&
@@ -143,13 +143,13 @@ export async function saveCapturaPosition(
   if (ctx.groupId && hoyoCrudo != null && !noisy) {
     stableHole = await smoothedHoleForGroup(supabase, ctx.groupId);
   }
-  const tooFar =
-    stableHole != null &&
-    hoyoCrudo != null &&
-    Math.abs(hoyoCrudo - stableHole) > MAX_HOLE_JUMP &&
-    Math.abs(18 - Math.abs(hoyoCrudo - stableHole)) > MAX_HOLE_JUMP;
+  let outOfOrder = false;
+  if (stableHole != null && hoyoCrudo != null) {
+    const next = (stableHole % 18) + 1;
+    outOfOrder = hoyoCrudo !== stableHole && hoyoCrudo !== next;
+  }
 
-  const hoyo = noisy || tooFar ? null : hoyoCrudo;
+  const hoyo = noisy || outOfOrder ? null : hoyoCrudo;
 
   // group_id: el del contexto activo, o el hint del URL si el contexto
   // no lo trajo (caso raro: el jugador abrió un link de un grupo distinto).

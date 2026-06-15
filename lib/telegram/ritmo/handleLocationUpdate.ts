@@ -24,14 +24,6 @@ export interface RitmoLocationInput {
  *  es típicamente un ping con multipath o con baja constelación de satélites. */
 const MAX_ACCURACY_M = 30;
 
-/** Salto máximo permitido entre el hoyo recién detectado y el último hoyo
- *  estable del grupo. Si el delta es mayor, el ping se descarta como outlier
- *  (alguien caminando entre fairways paralelos, polígonos que se traslapan,
- *  o falsos positivos por antenas celulares). El recorrido normal pasa de un
- *  hoyo al siguiente, así que un salto > 2 hoyos en pocos minutos es
- *  prácticamente siempre un error de detección. */
-const MAX_HOLE_JUMP = 2;
-
 export interface RitmoLocationResult {
   ok: boolean;
   reply?: string;          // mensaje a mandar al chat (solo en el 1er share)
@@ -370,10 +362,10 @@ export async function handleRitmoLocationUpdate(
   //   - Si la precisión horizontal es peor que MAX_ACCURACY_M (típicamente
   //     >30 m en cobertura densa de árboles o multipath), guardamos la
   //     posición pero NO la usamos como evidencia de hoyo.
-  //   - Si el hoyo detectado salta más de MAX_HOLE_JUMP respecto al último
-  //     estable del grupo, es casi seguro un outlier (polígonos paralelos,
-  //     fix débil). Lo guardamos pero tampoco lo dejamos votar para el hoyo
-  //     "oficial" del grupo.
+  //   - Si el hoyo detectado NO es el hoyo actual del grupo ni el SIGUIENTE en
+  //     orden (wrap 18->1), se descarta: el reloj del ritmo no debe brincar a
+  //     hoyos no consecutivos (polígonos paralelos, fix débil, cruzar otro
+  //     hoyo). Solo avanza de un hoyo al que sigue.
   // El ping siempre se persiste para auditoría — solo cambia si se cuenta
   // para `hoyo_detectado` o si se guarda con null.
   const acc = input.accuracy ?? null;
@@ -385,14 +377,15 @@ export async function handleRitmoLocationUpdate(
   if (ctx.groupId && hoyoCrudo != null) {
     stableHole = await smoothedHoleForGroup(supabase, ctx.groupId);
   }
-  const tooFar =
-    stableHole != null &&
-    hoyoCrudo != null &&
-    Math.abs(hoyoCrudo - stableHole) > MAX_HOLE_JUMP &&
-    // Permite el wrap-around 18->1 en grupos que vuelven a hoyos del front
-    Math.abs(18 - Math.abs(hoyoCrudo - stableHole)) > MAX_HOLE_JUMP;
+  // Solo se acepta el hoyo actual del grupo o el siguiente en orden ascendente
+  // (con envoltura 18->1 por si empezaron en la segunda vuelta / shotgun).
+  let outOfOrder = false;
+  if (stableHole != null && hoyoCrudo != null) {
+    const next = (stableHole % 18) + 1;
+    outOfOrder = hoyoCrudo !== stableHole && hoyoCrudo !== next;
+  }
 
-  const hoyoInstantaneo = noisy || tooFar ? null : hoyoCrudo;
+  const hoyoInstantaneo = noisy || outOfOrder ? null : hoyoCrudo;
   const { error: insertErr } = await supabase.from("ritmo_positions").insert({
     tournament_id: ctx.tournamentId,
     round_id: ctx.roundId,
