@@ -401,6 +401,7 @@ export default function DistanciasClient() {
         {geo.status === "ok" && greenYds && !farFromCourse ? (
           <HoleYardageMap
             holeNo={activeHole}
+            par={holeMeta?.par ?? 4}
             playerLat={geo.lat}
             playerLon={geo.lon}
             yardsToCenter={greenYds.center}

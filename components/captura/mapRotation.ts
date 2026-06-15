@@ -6,8 +6,6 @@
  * cercanía acerca progresivamente conforme el jugador avanza hacia el green.
  */
 
-import { haversineMeters } from "@/lib/distances/ccqGreens";
-
 /** Escala del div del mapa vs. el viewport visible (evita esquinas negras al rotar). */
 export const MAP_SCALE = 1.55;
 
@@ -195,9 +193,6 @@ export function tuneRotatedFraming(
   }
 }
 
-/** Circunferencia de la Tierra (m) en el ecuador, para metros/pixel. */
-const EARTH_CIRCUMFERENCE_M = 40075016.686;
-
 /**
  * Encuadre estilo Waze, determinista (sin fitBounds, que provocaba saltos y
  * parpadeo). El zoom se calcula a partir de la distancia jugador→green para
@@ -206,6 +201,43 @@ const EARTH_CIRCUMFERENCE_M = 40075016.686;
  * estable (misma posición ⇒ misma vista, sin flashear) y se acerca solo
  * conforme te aproximas al green.
  */
+/**
+ * Zoom por ESCALONES según el par del hoyo, en función de las yardas al green:
+ *   - Par 3 → 2 acercamientos
+ *   - Par 4 → 3 acercamientos
+ *   - Par 5 → 4 acercamientos
+ * El zoom solo cambia al cruzar un umbral de distancia (con histéresis), así la
+ * foto no flashea: mientras estás en la misma banda, la escala no se mueve.
+ */
+const ZOOM_STEP_TABLES: Record<number, Array<{ maxYds: number; zoom: number }>> = {
+  // del más lejos (Infinity) al más cerca; gana la banda más cercana cumplida.
+  2: [
+    { maxYds: Infinity, zoom: 18 },
+    { maxYds: 70, zoom: 19.5 },
+  ],
+  3: [
+    { maxYds: Infinity, zoom: 17 },
+    { maxYds: 170, zoom: 18.5 },
+    { maxYds: 70, zoom: 19.5 },
+  ],
+  4: [
+    { maxYds: Infinity, zoom: 16.5 },
+    { maxYds: 320, zoom: 17.5 },
+    { maxYds: 170, zoom: 18.5 },
+    { maxYds: 70, zoom: 19.5 },
+  ],
+};
+
+export function zoomStopForPar(par: number, yards: number): number {
+  const stops = Math.max(2, Math.min(4, (par || 4) - 1));
+  const table = ZOOM_STEP_TABLES[stops] ?? ZOOM_STEP_TABLES[3];
+  let zoom = table[0].zoom;
+  for (const band of table) {
+    if (yards <= band.maxYds) zoom = band.zoom;
+  }
+  return zoom;
+}
+
 export function frameByProximity(
   map: any,
   _L: any,
@@ -214,7 +246,7 @@ export function frameByProximity(
   playerLon: number,
   greenLat: number,
   greenLon: number,
-  _yardsToGreen: number,
+  yardsToGreen: number,
   viewportW: number,
   viewportH: number,
   rotW: number,
@@ -222,24 +254,24 @@ export function frameByProximity(
   topBar = 64,
   bottomBar = 52,
   _extraBounds?: Array<[number, number]>,
-  recenter = true
+  recenter = true,
+  par = 4
 ) {
-  // Distancia jugador→green (m). La queremos representar como ~66% del alto
-  // útil de la pantalla, así el jugador cae cerca del borde inferior.
-  const distM = haversineMeters(playerLat, playerLon, greenLat, greenLon);
-  const usableH = Math.max(160, viewportH - topBar - bottomBar);
-  const targetSpanPx = usableH * 0.66;
-
-  // metros por pixel deseados → nivel de zoom Leaflet, CUANTIZADO en pasos de
-  // 0.5 para que pequeños cambios de distancia NO recarguen los tiles del
-  // satélite (eso causaba el parpadeo). El zoom solo cambia por escalones.
-  const mpp = Math.max(distM, 10) / targetSpanPx;
-  const latRad = (greenLat * Math.PI) / 180;
-  let zoom = Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos(latRad)) / mpp) - 8;
-  zoom = Math.max(16, Math.min(20.5, zoom));
-  const qZoom = Math.round(zoom * 2) / 2;
-
+  // Zoom discreto por par: 2/3/4 escalones según par 3/4/5. Con histéresis de
+  // 12 yd en los umbrales para que el GPS no haga rebotar el escalón.
   const currentZoom = map.getZoom();
+  const rawZoom = zoomStopForPar(par, yardsToGreen);
+  // Aplica histéresis: si el nuevo escalón está "a un paso" del actual y la
+  // diferencia es chica, conserva el actual salvo que se cruce con margen.
+  const zoomNearMargin = zoomStopForPar(par, yardsToGreen + 12);
+  const zoomFarMargin = zoomStopForPar(par, yardsToGreen - 12);
+  let qZoom = rawZoom;
+  if (
+    Math.abs(currentZoom - zoomNearMargin) < 0.01 ||
+    Math.abs(currentZoom - zoomFarMargin) < 0.01
+  ) {
+    qZoom = currentZoom;
+  }
   const zoomChanged = Math.abs(currentZoom - qZoom) > 0.01;
 
   // El zoom (cambio de escala) es lo que recarga TODOS los tiles y provoca el

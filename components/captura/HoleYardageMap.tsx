@@ -25,6 +25,7 @@ export interface TapPoint {
 
 interface HoleYardageMapProps {
   holeNo: number;
+  par?: number;
   playerLat: number;
   playerLon: number;
   yardsToCenter: number;
@@ -58,6 +59,7 @@ function yardLabel(yards: number): string {
  */
 export function HoleYardageMap({
   holeNo,
+  par = 4,
   playerLat,
   playerLon,
   yardsToCenter,
@@ -381,7 +383,8 @@ export function HoleYardageMap({
             64,
             52,
             greenBounds,
-            recenter
+            recenter,
+            par
           );
         } else {
           map.fitBounds(bounds, {
@@ -411,6 +414,7 @@ export function HoleYardageMap({
     })();
   }, [
     holeNo,
+    par,
     playerLat,
     playerLon,
     yardsToCenter,

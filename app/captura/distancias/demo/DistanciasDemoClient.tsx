@@ -172,6 +172,7 @@ export default function DistanciasDemoClient() {
         {player && greenYds ? (
           <HoleYardageMap
             holeNo={holeNo}
+            par={hp?.par ?? 4}
             playerLat={player.lat}
             playerLon={player.lon}
             yardsToCenter={greenYds.center}
