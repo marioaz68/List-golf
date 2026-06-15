@@ -504,15 +504,23 @@ export default function DistanciasClient() {
     };
   }, [actorQuery, activeHole]);
 
-  const changeHole = (delta: number) => {
+  // Avanzar manualmente: SOLO ascendente (envuelve 18→1). No se puede
+  // retroceder de hoyo; para reiniciar usa "Salir en 1 / 10".
+  const nextHole = () => {
     manualAtDetectedRef.current = insideHole;
     setManualHole(((prev) => {
       const base = prev ?? autoHole ?? nearestHole;
-      let next = base + delta;
-      if (next < 1) next = 18;
-      if (next > 18) next = 1;
-      return next;
+      return (base % 18) + 1;
     })());
+    setTapPoint(null);
+  };
+
+  // Comenzar la vuelta en la salida (primer punto) del hoyo elegido (1 o 10).
+  // Fija el hoyo a mano; el avance automático seguirá de ahí en orden.
+  const startAtHole = (n: number) => {
+    manualAtDetectedRef.current = insideHole;
+    autoCandidateRef.current = { hole: 0, count: 0 };
+    setManualHole(n);
     setTapPoint(null);
   };
 
@@ -556,14 +564,35 @@ export default function DistanciasClient() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
         <div className="pointer-events-none flex items-center justify-between gap-1.5 px-2 pb-2">
           <div className="pointer-events-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => changeHole(-1)}
-              aria-label="Hoyo anterior"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
-            >
-              ‹
-            </button>
+            {/* Comenzar la vuelta en la salida del 1 o del 10. */}
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={() => startAtHole(1)}
+                aria-label="Comenzar en el hoyo 1"
+                className={[
+                  "rounded-md border px-2 py-0.5 text-[10px] font-black leading-tight shadow-lg backdrop-blur-sm active:scale-95",
+                  activeHole === 1
+                    ? "border-amber-300 bg-amber-500 text-black"
+                    : "border-white/30 bg-black/60 text-amber-100",
+                ].join(" ")}
+              >
+                Salir 1
+              </button>
+              <button
+                type="button"
+                onClick={() => startAtHole(10)}
+                aria-label="Comenzar en el hoyo 10"
+                className={[
+                  "rounded-md border px-2 py-0.5 text-[10px] font-black leading-tight shadow-lg backdrop-blur-sm active:scale-95",
+                  activeHole === 10
+                    ? "border-amber-300 bg-amber-500 text-black"
+                    : "border-white/30 bg-black/60 text-amber-100",
+                ].join(" ")}
+              >
+                Salir 10
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setManualHole(null)}
@@ -583,7 +612,7 @@ export default function DistanciasClient() {
             </button>
             <button
               type="button"
-              onClick={() => changeHole(1)}
+              onClick={nextHole}
               aria-label="Hoyo siguiente"
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
             >
