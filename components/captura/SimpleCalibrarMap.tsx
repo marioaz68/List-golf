@@ -164,8 +164,12 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Línea amarilla del fairway (si ya tiene al menos 3 puntos).
-      if (fairwayRing.length >= 3) {
+      // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
+      // tocando") NO se dibuja el cierre último→primero: solo la línea
+      // secuencial de abajo, para que cada punto salga del ANTERIOR. El cierre
+      // con el primer punto aparece al terminar de agregar.
+      const tracingFairway = mode === "fairway" && addingCorner;
+      if (fairwayRing.length >= 3 && !tracingFairway) {
         const fwFeature = polygonFromRing(holeNo, fairwayRing);
         L.geoJSON(fwFeature, {
           style: {
