@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { bearingDegrees, haversineMeters } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
-  getHolePolygonResolved,
   yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
 import {
@@ -45,20 +44,6 @@ interface HoleYardageMapProps {
   tapPoint?: TapPoint | null;
   onMapTap?: (lat: number, lon: number) => void;
 }
-
-const KIND_COLOR: Record<string, string> = {
-  "green-front": "#34d399",
-  "green-center": "#10b981",
-  "green-back": "#059669",
-  tee: "#fbbf24",
-  corner: "#94a3b8",
-  custom: "#f472b6",
-  bunker: "#eab308",
-  water: "#38bdf8",
-  dogleg: "#a78bfa",
-  hazard: "#f97316",
-  other: "#94a3b8",
-};
 
 function yardLabel(yards: number): string {
   return `${yards}`;
@@ -270,60 +255,22 @@ export function HoleYardageMap({
       bearingRef.current = bearing;
       rotator.style.transform = `rotate(${-bearing}deg)`;
 
-      const holeFeature = getHolePolygonResolved(holeNo, holeBoundary);
-      if (holeFeature) {
-        L.geoJSON(holeFeature, {
-          style: {
-            color: "#22d3ee",
-            weight: 2,
-            opacity: 0.85,
-            fillColor: "#0891b2",
-            fillOpacity: 0.12,
-          },
-          interactive: false,
-        }).addTo(layerGroup);
-      }
-
+      // Vista limpia: sin línea azul del hoyo ni líneas/etiquetas de obstáculos.
+      // De los puntos del green solo mostramos el número de yardas en chiquito
+      // (sin el punto/dot), en entrada/centro/atrás.
+      const GREEN_KINDS = ["green-front", "green-center", "green-back"];
       for (const p of referencePoints) {
-        const color =
-          p.kind === "custom" && p.dbKind
-            ? (KIND_COLOR[p.dbKind] ?? KIND_COLOR.custom)
-            : (KIND_COLOR[p.kind] ?? "#94a3b8");
-        L.polyline(
-          [
-            [playerLat, playerLon],
-            [p.lat, p.lon],
-          ],
-          { color, weight: 1.5, opacity: 0.55, dashArray: "4 6" }
-        ).addTo(layerGroup);
-
-        const midLat = (playerLat + p.lat) / 2;
-        const midLon = (playerLon + p.lon) / 2;
-        L.marker([midLat, midLon], {
-          icon: L.divIcon({
-            className: "",
-            html: uprightHtml(
-              `<div style="background:rgba(0,0,0,0.72);color:#fff;padding:1px 5px;border-radius:6px;font-size:10px;font-weight:700;font-family:Arial,sans-serif;border:1px solid ${color};">${yardLabel(p.yards)}</div>`,
-              bearing
-            ),
-            iconSize: [36, 16],
-            iconAnchor: [18, 8],
-          }),
-          interactive: false,
-        }).addTo(layerGroup);
-
+        if (!GREEN_KINDS.includes(p.kind)) continue;
+        const isCenter = p.kind === "green-center";
         L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: "",
             html: uprightHtml(
-              `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
-              <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>
-              <div style="background:rgba(0,0,0,0.75);color:#fff;padding:1px 4px;border-radius:4px;font-size:9px;font-weight:700;font-family:Arial,sans-serif;">${p.shortLabel}</div>
-            </div>`,
+              `<div style="color:#fff;font-size:${isCenter ? 12 : 10}px;font-weight:800;font-family:Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95);">${yardLabel(p.yards)}</div>`,
               bearing
             ),
-            iconSize: [24, 32],
-            iconAnchor: [12, 6],
+            iconSize: [30, 14],
+            iconAnchor: [15, 7],
           }),
           interactive: false,
         }).addTo(layerGroup);
