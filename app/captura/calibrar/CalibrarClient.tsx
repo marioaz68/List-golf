@@ -57,6 +57,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [mode, setMode] = useState<SimpleCalibrarMode>("green");
   const [selectedGreen, setSelectedGreen] = useState<SimpleGreenKey>("front");
   const [selectedVertex, setSelectedVertex] = useState(0);
+  // Modo "agregar tocando": cada toque inserta una esquina en el lado más
+  // cercano del contorno (evita que la línea se cruce de lado a lado).
+  const [addingCorner, setAddingCorner] = useState(false);
   const [green, setGreen] = useState<GreenInfo | null>(null);
   const [boundaryRing, setBoundaryRing] = useState<LatLon[]>(() =>
     defaultHoleRing(1)
@@ -199,22 +202,45 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     await persistRing(next, `Esquina ${index + 1} guardada.`);
   };
 
-  // Inserta una esquina nueva a la mitad entre la seleccionada y la siguiente,
-  // y la deja seleccionada para arrastrarla.
-  const addVertex = async () => {
-    if (boundaryRing.length === 0) return;
-    const i = selectedVertex;
-    const a = boundaryRing[i];
-    const b = boundaryRing[(i + 1) % boundaryRing.length];
-    const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+  // Inserta un punto donde tocaste, en el lado (segmento) más cercano del
+  // contorno. Así el nuevo punto queda "en orden" y la línea no se cruza.
+  const insertAtNearestEdge = async (lat: number, lon: number) => {
+    const ring = boundaryRing;
+    if (ring.length < 2) return;
+    const mLon = 111_320 * Math.cos((lat * Math.PI) / 180);
+    const mLat = 110_574;
+    const px = lon * mLon;
+    const py = lat * mLat;
+    let bestEdge = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      const ax = a.lon * mLon;
+      const ay = a.lat * mLat;
+      const bx = b.lon * mLon;
+      const by = b.lat * mLat;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const cx = ax + t * dx;
+      const cy = ay + t * dy;
+      const d = Math.hypot(px - cx, py - cy);
+      if (d < bestD) {
+        bestD = d;
+        bestEdge = i;
+      }
+    }
     const next = [
-      ...boundaryRing.slice(0, i + 1),
-      mid,
-      ...boundaryRing.slice(i + 1),
+      ...ring.slice(0, bestEdge + 1),
+      { lat, lon },
+      ...ring.slice(bestEdge + 1),
     ];
     setBoundaryRing(next);
-    setSelectedVertex(i + 1);
-    await persistRing(next, "Esquina agregada.");
+    setSelectedVertex(bestEdge + 1);
+    await persistRing(next, `Esquina ${bestEdge + 2} agregada.`);
   };
 
   const deleteVertex = async () => {
@@ -232,12 +258,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const handleMapTap = (lat: number, lon: number) => {
     if (mode === "green") {
       void saveGreen(selectedGreen, lat, lon);
+    } else if (addingCorner) {
+      void insertAtNearestEdge(lat, lon);
     } else {
       void saveVertex(selectedVertex, lat, lon);
     }
   };
 
   const changeHole = (delta: number) => {
+    setAddingCorner(false);
+    setSelectedVertex(0);
     setHole((h) => {
       let n = h + delta;
       if (n < 1) n = 18;
@@ -320,7 +350,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <div className="mb-2 flex gap-2">
           <button
             type="button"
-            onClick={() => setMode("green")}
+            onClick={() => {
+              setMode("green");
+              setAddingCorner(false);
+            }}
             className={[
               "flex-1 rounded-lg py-2.5 text-xs font-bold",
               mode === "green"
@@ -386,10 +419,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void addVertex()}
-                className="flex-1 rounded-lg bg-emerald-600 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+                onClick={() => setAddingCorner((a) => !a)}
+                className={[
+                  "flex-1 rounded-lg py-2 text-[11px] font-bold disabled:opacity-50",
+                  addingCorner
+                    ? "bg-amber-500 text-black"
+                    : "bg-emerald-600 text-white",
+                ].join(" ")}
               >
-                + Agregar esquina
+                {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
               </button>
               <button
                 type="button"
@@ -397,7 +435,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 onClick={() => void deleteVertex()}
                 className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
               >
-                Borrar esquina {selectedVertex + 1}
+                Borrar esq. {selectedVertex + 1}
               </button>
             </div>
           </>
@@ -406,7 +444,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : "«+ Agregar» crea una esquina junto a la seleccionada. Arrástrala a la orilla."}
+            : addingCorner
+              ? "Toca el contorno para ir agregando esquinas en orden. Vuelve a tocar el botón para terminar."
+              : "Arrastra una esquina, o usa «+ Agregar tocando» para crear nuevas."}
         </p>
       </div>
     </div>
