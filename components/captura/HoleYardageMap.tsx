@@ -5,8 +5,12 @@ import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
   getHolePolygonResolved,
+  yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
-import { aimWaypointIndex } from "@/lib/distances/centerline";
+import {
+  aimWaypointIndex,
+  centerlineSegmentIndex,
+} from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
@@ -86,6 +90,7 @@ export function HoleYardageMap({
   // Último hoyo encuadrado: al cambiar de hoyo recolocamos la vista; en
   // actualizaciones de posición no, para no recargar tiles (evita parpadeo).
   const framedHoleRef = useRef<number | null>(null);
+  const framedSegmentRef = useRef<number>(0);
   const onMapTapRef = useRef(onMapTap);
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
@@ -224,16 +229,31 @@ export function HoleYardageMap({
       const greenCenter = referencePoints.find((p) => p.kind === "green-center");
       const greenFront = referencePoints.find((p) => p.kind === "green-front");
       const greenBack = referencePoints.find((p) => p.kind === "green-back");
-      // Anclaje y zoom: centro del green (entrada/centro/atrás arriba al centro).
       const greenTarget = greenCenter ?? greenFront ?? greenBack;
-      // Orientación: si hay línea central de fairway, apuntamos al SIGUIENTE
-      // punto por delante (sigue el dogleg). Si no, directo al green.
-      let aim: { lat: number; lon: number } | null = greenTarget ?? null;
-      if (centerline && centerline.length >= 2) {
-        const idx = aimWaypointIndex({ lat: playerLat, lon: playerLon }, centerline);
-        const wp = centerline[Math.min(idx, centerline.length - 1)];
-        if (wp) aim = wp;
-      }
+
+      const player = { lat: playerLat, lon: playerLon };
+      const hasCenterline = Boolean(centerline && centerline.length >= 2);
+      const segIdx = hasCenterline
+        ? centerlineSegmentIndex(player, centerline!)
+        : 0;
+      const totalSegs = hasCenterline ? centerline!.length - 1 : 1;
+      const aimIdx = hasCenterline
+        ? aimWaypointIndex(player, centerline!)
+        : -1;
+      const aimWp =
+        hasCenterline && aimIdx >= 0
+          ? centerline![Math.min(aimIdx, centerline!.length - 1)]
+          : null;
+
+      // Orientación y anclaje: siguiente punto de la línea naranja arriba;
+      // sin línea, directo al green.
+      const aim = aimWp ?? greenTarget ?? null;
+      const anchor = aim ?? greenTarget;
+      const yardsToAnchor =
+        anchor != null
+          ? yardsBetween(playerLat, playerLon, anchor.lat, anchor.lon)
+          : yardsToCenter;
+
       const bearing = aim
         ? bearingDegrees(playerLat, playerLon, aim.lat, aim.lon)
         : 0;
@@ -372,32 +392,30 @@ export function HoleYardageMap({
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
 
       try {
-        if (greenTarget && !tapPoint) {
-          const greenBounds = referencePoints
-            .filter((p) =>
-              ["green-front", "green-center", "green-back"].includes(p.kind)
-            )
-            .map((p) => [p.lat, p.lon] as [number, number]);
-          const recenter = framedHoleRef.current !== holeNo;
+        if (anchor && !tapPoint) {
+          const recenterHole = framedHoleRef.current !== holeNo;
+          const recenterSeg = framedSegmentRef.current !== segIdx;
           framedHoleRef.current = holeNo;
+          framedSegmentRef.current = segIdx;
           frameByProximity(
             map,
             L,
             bearing,
             playerLat,
             playerLon,
-            greenTarget.lat,
-            greenTarget.lon,
-            yardsToCenter,
+            anchor.lat,
+            anchor.lon,
+            yardsToAnchor,
             viewportW,
             viewportH,
             rotW,
             rotH,
             64,
             52,
-            greenBounds,
-            recenter,
-            par
+            undefined,
+            recenterHole || recenterSeg,
+            par,
+            hasCenterline ? { idx: segIdx, total: totalSegs } : null
           );
         } else {
           map.fitBounds(bounds, {
@@ -406,14 +424,14 @@ export function HoleYardageMap({
             animate: false,
             maxZoom: 20,
           });
-          if (greenTarget) {
+          if (anchor) {
             tuneRotatedFraming(
               map,
               bearing,
               playerLat,
               playerLon,
-              greenTarget.lat,
-              greenTarget.lon,
+              anchor.lat,
+              anchor.lon,
               viewportW,
               viewportH,
               rotW,

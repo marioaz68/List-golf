@@ -129,13 +129,11 @@ export function distanceToCenterlineM(p: LatLon, line: LatLon[]): number {
 }
 
 /**
- * Siguiente waypoint hacia el que debe apuntar la foto: el primer punto de la
- * línea que queda "por delante" del jugador (proyección creciente hacia el
- * green). Si ya pasó todos, apunta al green (último). Devuelve el índice.
+ * Segmento actual de la línea central (0 = entre el punto 0 y 1).
+ * Sirve para elegir el escalón de zoom por tramo (par3→2, par4→3, par5→4).
  */
-export function aimWaypointIndex(p: LatLon, line: LatLon[]): number {
-  if (line.length <= 1) return line.length - 1;
-  // Encuentra el segmento más cercano; el aim es el extremo final de ese segmento.
+export function centerlineSegmentIndex(p: LatLon, line: LatLon[]): number {
+  if (line.length <= 1) return 0;
   let bestSeg = 0;
   let bestD = Infinity;
   for (let i = 0; i < line.length - 1; i++) {
@@ -145,5 +143,15 @@ export function aimWaypointIndex(p: LatLon, line: LatLon[]): number {
       bestSeg = i;
     }
   }
-  return bestSeg + 1;
+  return bestSeg;
+}
+
+/**
+ * Siguiente waypoint hacia el que debe apuntar la foto: el primer punto de la
+ * línea que queda "por delante" del jugador (proyección creciente hacia el
+ * green). Si ya pasó todos, apunta al green (último). Devuelve el índice.
+ */
+export function aimWaypointIndex(p: LatLon, line: LatLon[]): number {
+  if (line.length <= 1) return line.length - 1;
+  return centerlineSegmentIndex(p, line) + 1;
 }

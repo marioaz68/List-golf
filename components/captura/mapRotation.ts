@@ -238,6 +238,27 @@ export function zoomStopForPar(par: number, yards: number): number {
   return zoom;
 }
 
+/** Zoom discreto por TRAMO de la línea central (par3→2, par4→3, par5→4 escalones).
+ *  segmentIdx va de 0 (salida) a totalSegments-1 (último tramo hacia el green). */
+const SEGMENT_ZOOM: Record<number, number[]> = {
+  2: [17.5, 19.5],
+  3: [16.5, 18, 19.5],
+  4: [16, 17.5, 18.5, 19.5],
+};
+
+export function zoomStopForCenterlineSegment(
+  par: number,
+  segmentIdx: number,
+  totalSegments: number
+): number {
+  const stops = Math.max(2, Math.min(4, (par || 4) - 1));
+  const table = SEGMENT_ZOOM[stops] ?? SEGMENT_ZOOM[3];
+  if (totalSegments <= 1) return table[0];
+  const t = Math.max(0, Math.min(1, segmentIdx / (totalSegments - 1)));
+  const step = Math.min(table.length - 1, Math.round(t * (table.length - 1)));
+  return table[step];
+}
+
 export function frameByProximity(
   map: any,
   _L: any,
@@ -255,16 +276,24 @@ export function frameByProximity(
   bottomBar = 52,
   _extraBounds?: Array<[number, number]>,
   recenter = true,
-  par = 4
+  par = 4,
+  /** Si se pasa, el zoom sigue el tramo de la línea central (no yardas al green). */
+  centerlineSegment?: { idx: number; total: number } | null
 ) {
-  // Zoom discreto por par: 2/3/4 escalones según par 3/4/5. Con histéresis de
-  // 12 yd en los umbrales para que el GPS no haga rebotar el escalón.
   const currentZoom = map.getZoom();
-  const rawZoom = zoomStopForPar(par, yardsToGreen);
-  // Aplica histéresis: si el nuevo escalón está "a un paso" del actual y la
-  // diferencia es chica, conserva el actual salvo que se cruce con margen.
-  const zoomNearMargin = zoomStopForPar(par, yardsToGreen + 12);
-  const zoomFarMargin = zoomStopForPar(par, yardsToGreen - 12);
+  const rawZoom = centerlineSegment
+    ? zoomStopForCenterlineSegment(
+        par,
+        centerlineSegment.idx,
+        centerlineSegment.total
+      )
+    : zoomStopForPar(par, yardsToGreen);
+  const zoomNearMargin = centerlineSegment
+    ? rawZoom
+    : zoomStopForPar(par, yardsToGreen + 12);
+  const zoomFarMargin = centerlineSegment
+    ? rawZoom
+    : zoomStopForPar(par, yardsToGreen - 12);
   let qZoom = rawZoom;
   if (
     Math.abs(currentZoom - zoomNearMargin) < 0.01 ||
