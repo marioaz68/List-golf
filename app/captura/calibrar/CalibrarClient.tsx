@@ -166,14 +166,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
-  const saveVertex = async (index: number, lat: number, lon: number) => {
-    const next = boundaryRing.map((v, i) =>
-      i === index ? { lat, lon } : v
-    );
-    setBoundaryRing(next);
+  const persistRing = async (ring: LatLon[], note: string) => {
     setBusy(true);
     try {
-      const polygon = polygonFromRing(hole, next).geometry;
+      const polygon = polygonFromRing(hole, ring).geometry;
       const res = await fetch("/api/captura/calibrar/boundary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,13 +182,51 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Error");
-      flash("ok", `Esquina ${index + 1} guardada.`);
+      flash("ok", note);
     } catch (e) {
       flash("err", e instanceof Error ? e.message : "Error al guardar línea");
       await refetch();
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveVertex = async (index: number, lat: number, lon: number) => {
+    const next = boundaryRing.map((v, i) =>
+      i === index ? { lat, lon } : v
+    );
+    setBoundaryRing(next);
+    await persistRing(next, `Esquina ${index + 1} guardada.`);
+  };
+
+  // Inserta una esquina nueva a la mitad entre la seleccionada y la siguiente,
+  // y la deja seleccionada para arrastrarla.
+  const addVertex = async () => {
+    if (boundaryRing.length === 0) return;
+    const i = selectedVertex;
+    const a = boundaryRing[i];
+    const b = boundaryRing[(i + 1) % boundaryRing.length];
+    const mid = { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+    const next = [
+      ...boundaryRing.slice(0, i + 1),
+      mid,
+      ...boundaryRing.slice(i + 1),
+    ];
+    setBoundaryRing(next);
+    setSelectedVertex(i + 1);
+    await persistRing(next, "Esquina agregada.");
+  };
+
+  const deleteVertex = async () => {
+    if (boundaryRing.length <= 3) {
+      flash("err", "Mínimo 3 esquinas.");
+      return;
+    }
+    const i = selectedVertex;
+    const next = boundaryRing.filter((_, idx) => idx !== i);
+    setBoundaryRing(next);
+    setSelectedVertex(Math.max(0, i - 1));
+    await persistRing(next, "Esquina borrada.");
   };
 
   const handleMapTap = (lat: number, lon: number) => {
@@ -330,29 +364,49 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             ))}
           </div>
         ) : (
-          <div className="flex gap-1 overflow-x-auto pb-0.5">
-            {boundaryRing.map((_, i) => (
+          <>
+            <div className="flex gap-1 overflow-x-auto pb-0.5">
+              {boundaryRing.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setSelectedVertex(i)}
+                  className={[
+                    "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                    selectedVertex === i
+                      ? "border-cyan-300 bg-cyan-400 text-black"
+                      : "border-slate-600 bg-slate-800 text-white",
+                  ].join(" ")}
+                >
+                  Esq. {i + 1}
+                </button>
+              ))}
+            </div>
+            <div className="mt-1.5 flex gap-2">
               <button
-                key={i}
                 type="button"
-                onClick={() => setSelectedVertex(i)}
-                className={[
-                  "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
-                  selectedVertex === i
-                    ? "border-cyan-300 bg-cyan-400 text-black"
-                    : "border-slate-600 bg-slate-800 text-white",
-                ].join(" ")}
+                disabled={busy}
+                onClick={() => void addVertex()}
+                className="flex-1 rounded-lg bg-emerald-600 py-2 text-[11px] font-bold text-white disabled:opacity-50"
               >
-                Esq. {i + 1}
+                + Agregar esquina
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                disabled={busy || boundaryRing.length <= 3}
+                onClick={() => void deleteVertex()}
+                className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
+              >
+                Borrar esquina {selectedVertex + 1}
+              </button>
+            </div>
+          </>
         )}
 
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : "Arrastra la esquina cyan o toca el mapa en la orilla del campo."}
+            : "«+ Agregar» crea una esquina junto a la seleccionada. Arrástrala a la orilla."}
         </p>
       </div>
     </div>
