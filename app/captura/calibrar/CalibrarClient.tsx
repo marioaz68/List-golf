@@ -260,9 +260,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       void saveGreen(selectedGreen, lat, lon);
     } else if (addingCorner) {
       void insertAtNearestEdge(lat, lon);
-    } else {
-      void saveVertex(selectedVertex, lat, lon);
     }
+    // En línea, sin "agregar tocando": tocar el mapa NO mueve nada.
+    // Para ajustar una esquina ya puesta, arrástrala directamente.
   };
 
   const changeHole = (delta: number) => {
