@@ -32,8 +32,6 @@ interface SimpleCalibrarMapProps {
   onMapTap: (lat: number, lon: number) => void;
 }
 
-const GREEN_ANCHOR = 14;
-
 export function SimpleCalibrarMap({
   holeNo,
   mode,
@@ -52,7 +50,7 @@ export function SimpleCalibrarMap({
   const onVertexMoveRef = useRef(onVertexMove);
   const onMapTapRef = useRef(onMapTap);
   const dragLockRef = useRef(false);
-  const framedHoleRef = useRef(0);
+  const framedKeyRef = useRef("");
 
   onGreenMoveRef.current = onGreenMove;
   onVertexMoveRef.current = onVertexMove;
@@ -93,7 +91,7 @@ export function SimpleCalibrarMap({
   }, []);
 
   useEffect(() => {
-    framedHoleRef.current = 0;
+    framedKeyRef.current = "";
   }, [holeNo]);
 
   useEffect(() => {
@@ -153,17 +151,28 @@ export function SimpleCalibrarMap({
 
       for (const g of greenPoints) {
         const selected = mode === "green" && selectedGreen === g.key;
-        const dot = selected ? 28 : 22;
+        // Marcador fino: punto pequeño con mira (crosshair) para calibrar con
+        // precisión al hacer zoom. El seleccionado resalta en ámbar.
+        const ring = selected ? 18 : 12;
+        const ringColor = selected ? "#fbbf24" : "#fff";
+        const labelHtml =
+          mode === "green"
+            ? `<div style="position:absolute;top:50%;left:calc(50% + ${ring / 2 + 4}px);transform:translateY(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:1px 5px;border-radius:5px;font-size:10px;font-weight:700;font-family:Arial,sans-serif;white-space:nowrap;">${g.label}</div>`
+            : "";
+        const box = 80;
+        const c = box / 2;
         const marker = L.marker([g.lat, g.lon], {
           draggable: mode === "green",
           icon: L.divIcon({
             className: "",
-            html: `<div style="display:flex;flex-direction:column;align-items:center;touch-action:none;">
-              <div style="width:${dot}px;height:${dot}px;border-radius:50%;background:${g.color};border:3px solid ${selected ? "#fbbf24" : "#fff"};box-shadow:0 2px 10px rgba(0,0,0,0.7);"></div>
-              <div style="margin-top:3px;background:rgba(0,0,0,0.88);color:#fff;padding:2px 7px;border-radius:6px;font-size:12px;font-weight:800;font-family:Arial,sans-serif;white-space:nowrap;">${g.label}</div>
+            html: `<div style="position:relative;width:${box}px;height:${box}px;touch-action:none;">
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${ring}px;height:${ring}px;border-radius:50%;background:${g.color}cc;border:2px solid ${ringColor};box-shadow:0 1px 5px rgba(0,0,0,0.7);"></div>
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${ring + 10}px;background:${ringColor};opacity:0.9;"></div>
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${ring + 10}px;height:2px;background:${ringColor};opacity:0.9;"></div>
+              ${labelHtml}
             </div>`,
-            iconSize: [96, 48],
-            iconAnchor: [48, GREEN_ANCHOR],
+            iconSize: [box, box],
+            iconAnchor: [c, c],
           }),
           zIndexOffset: selected ? 700 : 600,
         }).addTo(lg);
@@ -182,12 +191,22 @@ export function SimpleCalibrarMap({
       }
 
       map.invalidateSize();
-      const holeChanged = framedHoleRef.current !== holeNo;
-      if (holeChanged && holeFeature) {
-        const bounds = L.geoJSON(holeFeature).getBounds();
-        for (const g of greenPoints) bounds.extend([g.lat, g.lon]);
-        map.fitBounds(bounds, { padding: [28, 28], maxZoom: 19, animate: false });
-        framedHoleRef.current = holeNo;
+      // Reencuadra solo cuando cambia el hoyo o el modo; al colocar/arrastrar
+      // puntos NO reencuadra (conserva tu zoom para calibrar fino).
+      const frameKey = `${holeNo}:${mode}`;
+      if (framedKeyRef.current !== frameKey) {
+        if (mode === "green" && greenPoints.length > 0) {
+          const gb = L.latLngBounds(
+            greenPoints.map((g) => [g.lat, g.lon] as [number, number])
+          );
+          // Zoom cerrado al green para precisión; maxZoom alto.
+          map.fitBounds(gb, { padding: [70, 70], maxZoom: 21, animate: false });
+        } else if (holeFeature) {
+          const bounds = L.geoJSON(holeFeature).getBounds();
+          for (const g of greenPoints) bounds.extend([g.lat, g.lon]);
+          map.fitBounds(bounds, { padding: [28, 28], maxZoom: 19, animate: false });
+        }
+        framedKeyRef.current = frameKey;
       }
     })();
   }, [
