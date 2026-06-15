@@ -235,14 +235,14 @@ export default function DistanciasClient() {
 
   const activeHole = manualHole ?? autoHole ?? nearestHole;
 
-  // Reanudar automático al caminar a otro hoyo: si fijaste el hoyo a mano y el
-  // GPS te detecta ya dentro de un hoyo distinto al de cuando lo fijaste.
+  // Reanudar automático SOLO cuando caminas al hoyo SIGUIENTE al que fijaste a
+  // mano. Cruzar por cualquier otro hoyo (traslapes) NO descarta tu elección
+  // manual: se respeta hasta que llegas al que sigue en orden.
   useEffect(() => {
-    if (
-      manualHole != null &&
-      insideHole != null &&
-      insideHole !== manualAtDetectedRef.current
-    ) {
+    if (manualHole == null || insideHole == null) return;
+    const expectedNext = (manualHole % 18) + 1;
+    if (insideHole === expectedNext) {
+      setAutoHole(expectedNext);
       setManualHole(null);
       setTapPoint(null);
     }
