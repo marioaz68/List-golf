@@ -108,6 +108,84 @@ export async function updateReferencePoint(
   if (error) throw new Error(error.message);
 }
 
+/** Tipos de polígono calibrable por hoyo (además de la línea azul del hoyo). */
+export type HolePolygonKind = "fairway" | "green" | "bunker" | "water" | "ob";
+
+export interface HolePolygonRow {
+  kind: HolePolygonKind;
+  sort_order: number;
+  geojson: unknown;
+}
+
+/** Carga todos los polígonos calibrados de un hoyo (fairway, green, etc.). */
+export async function loadHolePolygons(
+  admin: SupabaseClient,
+  courseId: string,
+  hole: number,
+  kind?: HolePolygonKind
+): Promise<HolePolygonRow[]> {
+  let q = admin
+    .from("course_hole_polygons")
+    .select("kind, sort_order, geojson")
+    .eq("course_id", courseId)
+    .eq("hole_number", hole)
+    .order("kind", { ascending: true })
+    .order("sort_order", { ascending: true });
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HolePolygonRow[];
+}
+
+/** Guarda (upsert) un polígono calibrado de un hoyo en su "slot" (kind+índice). */
+export async function saveHolePolygon(
+  admin: SupabaseClient,
+  args: {
+    courseId: string;
+    hole: number;
+    kind: HolePolygonKind;
+    geojson: unknown;
+    sortOrder?: number;
+  }
+): Promise<void> {
+  const { courseId, hole, kind, geojson } = args;
+  const sortOrder = args.sortOrder ?? 0;
+  const { error } = await admin.from("course_hole_polygons").upsert(
+    {
+      course_id: courseId,
+      hole_number: hole,
+      kind,
+      sort_order: sortOrder,
+      geojson,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "course_id,hole_number,kind,sort_order" }
+  );
+  if (error) throw new Error(error.message);
+}
+
+/** Borra un polígono calibrado de un hoyo. */
+export async function deleteHolePolygon(
+  admin: SupabaseClient,
+  args: {
+    courseId: string;
+    hole: number;
+    kind: HolePolygonKind;
+    sortOrder?: number;
+  }
+): Promise<void> {
+  const { courseId, hole, kind } = args;
+  const sortOrder = args.sortOrder ?? 0;
+  const { error } = await admin
+    .from("course_hole_polygons")
+    .delete()
+    .eq("course_id", courseId)
+    .eq("hole_number", hole)
+    .eq("kind", kind)
+    .eq("sort_order", sortOrder);
+  if (error) throw new Error(error.message);
+}
+
 /** Carga polígono calibrado del hoyo (null = usar el del código). */
 export async function loadHoleBoundary(
   admin: SupabaseClient,

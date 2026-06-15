@@ -18,25 +18,35 @@ export interface SimpleGreenPoint {
   color: string;
 }
 
-export type SimpleCalibrarMode = "green" | "boundary";
+export type SimpleCalibrarMode = "green" | "boundary" | "fairway";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
   mode: SimpleCalibrarMode;
   greenPoints: SimpleGreenPoint[];
+  /** Contorno del hoyo (línea azul). */
   boundaryRing: LatLon[];
+  /** Contorno del fairway (línea amarilla). Puede ir vacío si no se ha dibujado. */
+  fairwayRing: LatLon[];
   selectedGreen?: SimpleGreenKey | null;
+  /** Índice del vértice seleccionado dentro del contorno ACTIVO (según mode). */
   selectedVertex?: number | null;
   onGreenMove: (key: SimpleGreenKey, lat: number, lon: number) => void;
   onVertexMove: (index: number, lat: number, lon: number) => void;
   onMapTap: (lat: number, lon: number) => void;
 }
 
+const COLORS = {
+  boundary: { line: "#22d3ee", fill: "#0891b2" },
+  fairway: { line: "#facc15", fill: "#ca8a04" },
+};
+
 export function SimpleCalibrarMap({
   holeNo,
   mode,
   greenPoints,
   boundaryRing,
+  fairwayRing,
   selectedGreen = null,
   selectedVertex = null,
   onGreenMove,
@@ -100,10 +110,21 @@ export function SimpleCalibrarMap({
     if (!map || !lg) return;
     if (dragLockRef.current) return;
 
+    // Contorno editable activo según el modo.
+    const editRing =
+      mode === "boundary"
+        ? boundaryRing
+        : mode === "fairway"
+          ? fairwayRing
+          : [];
+    const editColor =
+      mode === "fairway" ? COLORS.fairway.line : COLORS.boundary.line;
+
     (async () => {
       const L = await loadLeaflet();
       lg.clearLayers();
 
+      // Línea azul del hoyo (siempre visible; tenue si no se está editando).
       const holeFeature = resolveHolePolygonFeature(
         holeNo,
         polygonFromRing(holeNo, boundaryRing).geometry
@@ -111,26 +132,42 @@ export function SimpleCalibrarMap({
       if (holeFeature) {
         L.geoJSON(holeFeature, {
           style: {
-            color: "#22d3ee",
-            weight: 4,
-            opacity: 1,
-            fillColor: "#0891b2",
-            fillOpacity: 0.2,
+            color: COLORS.boundary.line,
+            weight: mode === "boundary" ? 4 : 2,
+            opacity: mode === "boundary" ? 1 : 0.55,
+            fillColor: COLORS.boundary.fill,
+            fillOpacity: mode === "boundary" ? 0.2 : 0.08,
           },
           interactive: false,
         }).addTo(lg);
       }
 
-      if (mode === "boundary") {
-        for (let i = 0; i < boundaryRing.length; i++) {
-          const v = boundaryRing[i];
+      // Línea amarilla del fairway (si ya tiene al menos 3 puntos).
+      if (fairwayRing.length >= 3) {
+        const fwFeature = polygonFromRing(holeNo, fairwayRing);
+        L.geoJSON(fwFeature, {
+          style: {
+            color: COLORS.fairway.line,
+            weight: mode === "fairway" ? 4 : 2,
+            opacity: mode === "fairway" ? 1 : 0.55,
+            fillColor: COLORS.fairway.fill,
+            fillOpacity: mode === "fairway" ? 0.18 : 0.08,
+          },
+          interactive: false,
+        }).addTo(lg);
+      }
+
+      // Vértices arrastrables del contorno activo (azul o amarillo).
+      if (mode === "boundary" || mode === "fairway") {
+        for (let i = 0; i < editRing.length; i++) {
+          const v = editRing[i];
           const selected = selectedVertex === i;
           const size = selected ? 30 : 24;
           const marker = L.marker([v.lat, v.lon], {
             draggable: true,
             icon: L.divIcon({
               className: "",
-              html: `<div style="width:${size}px;height:${size}px;border-radius:5px;background:#22d3ee;border:3px solid ${selected ? "#fbbf24" : "#fff"};box-shadow:0 2px 10px rgba(0,0,0,0.75);touch-action:none;"></div>`,
+              html: `<div style="width:${size}px;height:${size}px;border-radius:5px;background:${editColor};border:3px solid ${selected ? "#fb7185" : "#fff"};box-shadow:0 2px 10px rgba(0,0,0,0.75);touch-action:none;"></div>`,
               iconSize: [size, size],
               iconAnchor: [size / 2, size / 2],
             }),
@@ -149,10 +186,9 @@ export function SimpleCalibrarMap({
         }
       }
 
+      // Puntos del green (entrada/centro/atrás) con mira fina.
       for (const g of greenPoints) {
         const selected = mode === "green" && selectedGreen === g.key;
-        // Marcador fino: punto pequeño con mira (crosshair) para calibrar con
-        // precisión al hacer zoom. El seleccionado resalta en ámbar.
         const ring = selected ? 18 : 12;
         const ringColor = selected ? "#fbbf24" : "#fff";
         const labelHtml =
@@ -199,8 +235,12 @@ export function SimpleCalibrarMap({
           const gb = L.latLngBounds(
             greenPoints.map((g) => [g.lat, g.lon] as [number, number])
           );
-          // Zoom cerrado al green para precisión; maxZoom alto.
           map.fitBounds(gb, { padding: [70, 70], maxZoom: 21, animate: false });
+        } else if (mode === "fairway" && fairwayRing.length >= 2) {
+          const fb = L.latLngBounds(
+            fairwayRing.map((v) => [v.lat, v.lon] as [number, number])
+          );
+          map.fitBounds(fb, { padding: [40, 40], maxZoom: 19, animate: false });
         } else if (holeFeature) {
           const bounds = L.geoJSON(holeFeature).getBounds();
           for (const g of greenPoints) bounds.extend([g.lat, g.lon]);
@@ -214,11 +254,10 @@ export function SimpleCalibrarMap({
     mode,
     greenPoints,
     boundaryRing,
+    fairwayRing,
     selectedGreen,
     selectedVertex,
   ]);
 
-  return (
-    <div ref={containerRef} className="absolute inset-0 bg-black" />
-  );
+  return <div ref={containerRef} className="absolute inset-0 bg-black" />;
 }

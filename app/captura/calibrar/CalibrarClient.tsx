@@ -49,6 +49,9 @@ const GREEN_META: Record<
   back: { label: "Atrás", color: "#059669" },
 };
 
+/** Contorno que el modo está editando (línea azul del hoyo o amarilla fairway). */
+type RingKind = "boundary" | "fairway";
+
 export default function CalibrarClient({ tg }: { tg: string }) {
   const searchParams = useSearchParams();
   const tgId = tg || searchParams.get("tg") || "";
@@ -57,13 +60,13 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [mode, setMode] = useState<SimpleCalibrarMode>("green");
   const [selectedGreen, setSelectedGreen] = useState<SimpleGreenKey>("front");
   const [selectedVertex, setSelectedVertex] = useState(0);
-  // Modo "agregar tocando": cada toque inserta una esquina en el lado más
-  // cercano del contorno (evita que la línea se cruce de lado a lado).
+  // Modo "agregar tocando": cada toque agrega un punto al contorno activo.
   const [addingCorner, setAddingCorner] = useState(false);
   const [green, setGreen] = useState<GreenInfo | null>(null);
   const [boundaryRing, setBoundaryRing] = useState<LatLon[]>(() =>
     defaultHoleRing(1)
   );
+  const [fairwayRing, setFairwayRing] = useState<LatLon[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
@@ -76,16 +79,20 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes] = await Promise.all([
+      const [gRes, bRes, fRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
         fetch(
           `/api/captura/distancias/boundary?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=fairway&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
+      const fData = await fRes.json();
 
       if (gData?.ok) {
         setGreen({
@@ -108,11 +115,19 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
       if (bData?.ok) {
         const poly = parseBoundaryGeoJson(bData.polygon);
-        setBoundaryRing(
-          poly ? ringFromPolygon(poly) : defaultHoleRing(hole)
-        );
+        setBoundaryRing(poly ? ringFromPolygon(poly) : defaultHoleRing(hole));
       } else {
         setBoundaryRing(defaultHoleRing(hole));
+      }
+
+      if (fData?.ok && Array.isArray(fData.polygons)) {
+        const fw = fData.polygons.find(
+          (p: { kind: string }) => p.kind === "fairway"
+        );
+        const poly = fw ? parseBoundaryGeoJson(fw.geojson) : null;
+        setFairwayRing(poly ? ringFromPolygon(poly) : []);
+      } else {
+        setFairwayRing([]);
       }
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
@@ -133,6 +148,13 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       color: GREEN_META[key].color,
     }));
   }, [green]);
+
+  // Contorno activo según el modo (azul hoyo / amarillo fairway).
+  const activeKind: RingKind | null =
+    mode === "boundary" ? "boundary" : mode === "fairway" ? "fairway" : null;
+  const activeRing = activeKind === "fairway" ? fairwayRing : boundaryRing;
+  const setActiveRing =
+    activeKind === "fairway" ? setFairwayRing : setBoundaryRing;
 
   const saveGreen = async (key: SimpleGreenKey, lat: number, lon: number) => {
     setGreen((prev) =>
@@ -169,19 +191,23 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
-  const persistRing = async (ring: LatLon[], note: string) => {
+  /** Guarda el contorno (azul=boundary, amarillo=fairway) en su endpoint. */
+  const persistRing = async (kind: RingKind, ring: LatLon[], note: string) => {
     setBusy(true);
     try {
       const polygon = polygonFromRing(hole, ring).geometry;
-      const res = await fetch("/api/captura/calibrar/boundary", {
+      const url =
+        kind === "boundary"
+          ? "/api/captura/calibrar/boundary"
+          : "/api/captura/calibrar/polygon";
+      const body =
+        kind === "boundary"
+          ? { tg: tgId, course_id: CCQ_COURSE_ID, hole, polygon }
+          : { tg: tgId, course_id: CCQ_COURSE_ID, hole, kind: "fairway", polygon };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tg: tgId,
-          course_id: CCQ_COURSE_ID,
-          hole,
-          polygon,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Error");
@@ -195,18 +221,32 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   };
 
   const saveVertex = async (index: number, lat: number, lon: number) => {
-    const next = boundaryRing.map((v, i) =>
-      i === index ? { lat, lon } : v
-    );
-    setBoundaryRing(next);
-    await persistRing(next, `Esquina ${index + 1} guardada.`);
+    if (!activeKind) return;
+    const next = activeRing.map((v, i) => (i === index ? { lat, lon } : v));
+    setActiveRing(next);
+    await persistRing(activeKind, next, `Punto ${index + 1} guardado.`);
+  };
+
+  /** Agrega un punto al final del contorno (para ir trazando uno nuevo). */
+  const appendPoint = async (lat: number, lon: number) => {
+    if (!activeKind) return;
+    const next = [...activeRing, { lat, lon }];
+    setActiveRing(next);
+    setSelectedVertex(next.length - 1);
+    if (next.length >= 3) {
+      await persistRing(activeKind, next, `Punto ${next.length} agregado.`);
+    }
   };
 
   // Inserta un punto donde tocaste, en el lado (segmento) más cercano del
   // contorno. Así el nuevo punto queda "en orden" y la línea no se cruza.
   const insertAtNearestEdge = async (lat: number, lon: number) => {
-    const ring = boundaryRing;
-    if (ring.length < 2) return;
+    if (!activeKind) return;
+    const ring = activeRing;
+    if (ring.length < 3) {
+      await appendPoint(lat, lon);
+      return;
+    }
     const mLon = 111_320 * Math.cos((lat * Math.PI) / 180);
     const mLat = 110_574;
     const px = lon * mLon;
@@ -238,31 +278,53 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       { lat, lon },
       ...ring.slice(bestEdge + 1),
     ];
-    setBoundaryRing(next);
+    setActiveRing(next);
     setSelectedVertex(bestEdge + 1);
-    await persistRing(next, `Esquina ${bestEdge + 2} agregada.`);
+    await persistRing(activeKind, next, `Punto ${bestEdge + 2} agregado.`);
   };
 
   const deleteVertex = async () => {
-    if (boundaryRing.length <= 3) {
-      flash("err", "Mínimo 3 esquinas.");
+    if (!activeKind) return;
+    if (activeRing.length <= 3) {
+      // En fairway, borrar todo deja la línea sin dibujar.
+      if (activeKind === "fairway" && activeRing.length > 0) {
+        setActiveRing([]);
+        setSelectedVertex(0);
+        await persistRing("fairway", [], "Fairway borrado.");
+        return;
+      }
+      flash("err", "Mínimo 3 puntos.");
       return;
     }
     const i = selectedVertex;
-    const next = boundaryRing.filter((_, idx) => idx !== i);
-    setBoundaryRing(next);
+    const next = activeRing.filter((_, idx) => idx !== i);
+    setActiveRing(next);
     setSelectedVertex(Math.max(0, i - 1));
-    await persistRing(next, "Esquina borrada.");
+    await persistRing(activeKind, next, "Punto borrado.");
   };
 
   const handleMapTap = (lat: number, lon: number) => {
     if (mode === "green") {
       void saveGreen(selectedGreen, lat, lon);
-    } else if (addingCorner) {
+      return;
+    }
+    if (!activeKind || !addingCorner) {
+      // Sin "agregar tocando": para mover un punto, arrástralo directamente.
+      return;
+    }
+    if (activeRing.length < 3) {
+      void appendPoint(lat, lon);
+    } else {
       void insertAtNearestEdge(lat, lon);
     }
-    // En línea, sin "agregar tocando": tocar el mapa NO mueve nada.
-    // Para ajustar una esquina ya puesta, arrástrala directamente.
+  };
+
+  const switchMode = (next: SimpleCalibrarMode) => {
+    setMode(next);
+    setSelectedVertex(0);
+    // En fairway sin contorno, arranca en "agregar tocando" para trazarlo.
+    if (next === "fairway") setAddingCorner(fairwayRing.length < 3);
+    else setAddingCorner(false);
   };
 
   const changeHole = (delta: number) => {
@@ -276,6 +338,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     });
   };
 
+  const isRingMode = mode === "boundary" || mode === "fairway";
+  const ringLabel = mode === "fairway" ? "fairway" : "hoyo";
+
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-black text-white">
       {/* Mapa: ocupa casi toda la pantalla */}
@@ -286,6 +351,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             mode={mode}
             greenPoints={greenPoints}
             boundaryRing={boundaryRing}
+            fairwayRing={fairwayRing}
             selectedGreen={selectedGreen}
             selectedVertex={selectedVertex}
             onGreenMove={saveGreen}
@@ -347,13 +413,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
       {/* Barra inferior fija y pequeña */}
       <div className="z-[1000] shrink-0 border-t border-slate-700 bg-slate-950 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
-        <div className="mb-2 flex gap-2">
+        <div className="mb-2 flex gap-1.5">
           <button
             type="button"
-            onClick={() => {
-              setMode("green");
-              setAddingCorner(false);
-            }}
+            onClick={() => switchMode("green")}
             className={[
               "flex-1 rounded-lg py-2.5 text-xs font-bold",
               mode === "green"
@@ -361,11 +424,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 : "bg-slate-800 text-slate-200",
             ].join(" ")}
           >
-            Puntos green
+            Green
           </button>
           <button
             type="button"
-            onClick={() => setMode("boundary")}
+            onClick={() => switchMode("boundary")}
             className={[
               "flex-1 rounded-lg py-2.5 text-xs font-bold",
               mode === "boundary"
@@ -374,6 +437,18 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             ].join(" ")}
           >
             Línea hoyo
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("fairway")}
+            className={[
+              "flex-1 rounded-lg py-2.5 text-xs font-bold",
+              mode === "fairway"
+                ? "bg-yellow-400 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Fairway
           </button>
         </div>
 
@@ -396,25 +471,33 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               </button>
             ))}
           </div>
-        ) : (
+        ) : isRingMode ? (
           <>
-            <div className="flex gap-1 overflow-x-auto pb-0.5">
-              {boundaryRing.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setSelectedVertex(i)}
-                  className={[
-                    "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
-                    selectedVertex === i
-                      ? "border-cyan-300 bg-cyan-400 text-black"
-                      : "border-slate-600 bg-slate-800 text-white",
-                  ].join(" ")}
-                >
-                  Esq. {i + 1}
-                </button>
-              ))}
-            </div>
+            {activeRing.length > 0 ? (
+              <div className="flex gap-1 overflow-x-auto pb-0.5">
+                {activeRing.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedVertex(i)}
+                    className={[
+                      "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                      selectedVertex === i
+                        ? mode === "fairway"
+                          ? "border-yellow-300 bg-yellow-400 text-black"
+                          : "border-cyan-300 bg-cyan-400 text-black"
+                        : "border-slate-600 bg-slate-800 text-white",
+                    ].join(" ")}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg bg-slate-800 px-3 py-2 text-center text-[11px] text-slate-300">
+                Aún no hay {ringLabel}. Activa «+ Agregar tocando» y toca el mapa.
+              </div>
+            )}
             <div className="mt-1.5 flex gap-2">
               <button
                 type="button"
@@ -431,22 +514,24 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               </button>
               <button
                 type="button"
-                disabled={busy || boundaryRing.length <= 3}
+                disabled={busy || activeRing.length === 0}
                 onClick={() => void deleteVertex()}
                 className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
               >
-                Borrar esq. {selectedVertex + 1}
+                {activeRing.length <= 3 && mode === "fairway"
+                  ? "Borrar fairway"
+                  : `Borrar punto ${selectedVertex + 1}`}
               </button>
             </div>
           </>
-        )}
+        ) : null}
 
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
             : addingCorner
-              ? "Toca el contorno para ir agregando esquinas en orden. Vuelve a tocar el botón para terminar."
-              : "Arrastra una esquina, o usa «+ Agregar tocando» para crear nuevas."}
+              ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden. Vuelve a tocar el botón para terminar.`
+              : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
         </p>
       </div>
     </div>
