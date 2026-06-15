@@ -17,6 +17,7 @@ import {
   detectInsideHole,
   seedAutoHole,
   type GreenCentersByHole,
+  type TeesByHole,
 } from "@/lib/distances/detectActiveHole";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
@@ -119,6 +120,16 @@ export default function DistanciasClient() {
     }
     return out;
   });
+  // Salidas por hoyo: ancla para detectar el hoyo cuando estás fuera de los
+  // polígonos (tees de atrás). Por ahora derivadas del polígono base.
+  const teeCenters = useMemo<TeesByHole>(() => {
+    const out: TeesByHole = {};
+    for (let h = 1; h <= 18; h++) {
+      const hp = CCQ_HOLE_POINTS[h];
+      if (hp?.tee) out[h] = hp.tee;
+    }
+    return out;
+  }, []);
   const watchIdRef = useRef<number | null>(null);
   // Última posición aceptada. Sirve para ignorar el micro-jitter del GPS
   // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
@@ -280,10 +291,11 @@ export default function DistanciasClient() {
       seedAutoHole(
         { lat: geo.lat, lon: geo.lon },
         courseHoles,
-        greenCenters
+        greenCenters,
+        teeCenters
       )
     );
-  }, [boundaryByHole.size, geo, manualHole, courseHoles, greenCenters]);
+  }, [boundaryByHole.size, geo, manualHole, courseHoles, greenCenters, teeCenters]);
 
   useEffect(() => {
     if (geo.status !== "ok") return;
@@ -291,7 +303,7 @@ export default function DistanciasClient() {
     setAutoHole((prev) => {
       if (prev == null) {
         autoCandidateRef.current = { hole: 0, count: 0 };
-        return seedAutoHole(pos, courseHoles, greenCenters);
+        return seedAutoHole(pos, courseHoles, greenCenters, teeCenters);
       }
       // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
       const expectedNext = (prev % 18) + 1;
@@ -311,7 +323,7 @@ export default function DistanciasClient() {
       }
       return prev;
     });
-  }, [insideHole, geo, courseHoles, greenCenters]);
+  }, [insideHole, geo, courseHoles, greenCenters, teeCenters]);
 
   const activeHole = manualHole ?? autoHole ?? nearestHole;
 
