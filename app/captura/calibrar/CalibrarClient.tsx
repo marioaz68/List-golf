@@ -569,13 +569,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       return;
     }
     // Fairway: tocar cerca del punto 1 cierra el polígono (hoyos largos).
-    // OB: también usa proximidad (el fraccionamiento es grande, más tolerancia).
-    // Bunker/lago: NO usar proximidad — son pequeños y el 4º toque cerraba antes de
-    // tiempo; ahí se cierra solo tocando el punto 1 o el botón «Cerrar».
+    // Bunker/lago/OB: NO usar proximidad — se cierran solo tocando el punto 1 o el botón «Cerrar».
     if (
-      (activeKind === "fairway" || activeKind === "ob") &&
+      activeKind === "fairway" &&
       activeRing.length >= 3 &&
-      haversineMeters(lat, lon, activeRing[0].lat, activeRing[0].lon) < (activeKind === "ob" ? 30 : 14)
+      haversineMeters(lat, lon, activeRing[0].lat, activeRing[0].lon) < 14
     ) {
       void closeRing();
       return;
