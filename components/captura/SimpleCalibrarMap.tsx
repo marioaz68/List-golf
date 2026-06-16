@@ -23,7 +23,8 @@ export type SimpleCalibrarMode =
   | "boundary"
   | "fairway"
   | "centerline"
-  | "bunker";
+  | "bunker"
+  | "water";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
@@ -35,10 +36,13 @@ interface SimpleCalibrarMapProps {
   fairwayRing: LatLon[];
   /** Centro de fairway (línea naranja ABIERTA salida→green) para orientar Yardas. */
   centerlineRing: LatLon[];
-  /** Bunkers del hoyo (varios polígonos). En modo "bunker" se edita el activo. */
+  /** Bunkers del hoyo (varios polígonos, color arena). */
   bunkers?: LatLon[][];
-  /** Índice del bunker activo (editable) dentro de `bunkers`. */
-  activeBunkerIndex?: number | null;
+  /** Lagos del hoyo (varios polígonos, color agua). */
+  waters?: LatLon[][];
+  /** Índice del polígono activo (editable) dentro del modo múltiple actual
+   *  (bunker o lago). */
+  activePolyIndex?: number | null;
   /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
    *  tap del mapa agregue el siguiente punto del contorno. */
   addingCorner?: boolean;
@@ -59,6 +63,7 @@ const COLORS = {
   fairway: { line: "#facc15", fill: "#ca8a04" },
   centerline: { line: "#fb923c", fill: "#ea580c" },
   bunker: { line: "#f5deb3", fill: "#e3c789" },
+  water: { line: "#38bdf8", fill: "#0ea5e9" },
 };
 
 export function SimpleCalibrarMap({
@@ -69,7 +74,8 @@ export function SimpleCalibrarMap({
   fairwayRing,
   centerlineRing,
   bunkers = [],
-  activeBunkerIndex = null,
+  waters = [],
+  activePolyIndex = null,
   addingCorner = false,
   selectedGreen = null,
   selectedVertex = null,
@@ -140,11 +146,14 @@ export function SimpleCalibrarMap({
     if (!map || !lg) return;
     if (dragLockRef.current) return;
 
-    // Contorno editable activo según el modo.
-    const activeBunker =
-      mode === "bunker" && activeBunkerIndex != null
-        ? (bunkers[activeBunkerIndex] ?? [])
+    // Modo múltiple (bunker/lago): lista activa y polígono editable.
+    const multiList =
+      mode === "bunker" ? bunkers : mode === "water" ? waters : [];
+    const activeMulti =
+      (mode === "bunker" || mode === "water") && activePolyIndex != null
+        ? (multiList[activePolyIndex] ?? [])
         : [];
+    // Contorno editable activo según el modo.
     const editRing =
       mode === "boundary"
         ? boundaryRing
@@ -152,8 +161,8 @@ export function SimpleCalibrarMap({
           ? fairwayRing
           : mode === "centerline"
             ? centerlineRing
-            : mode === "bunker"
-              ? activeBunker
+            : mode === "bunker" || mode === "water"
+              ? activeMulti
               : [];
     const editColor =
       mode === "fairway"
@@ -162,9 +171,14 @@ export function SimpleCalibrarMap({
           ? COLORS.centerline.line
           : mode === "bunker"
             ? COLORS.bunker.line
-            : COLORS.boundary.line;
+            : mode === "water"
+              ? COLORS.water.line
+              : COLORS.boundary.line;
     const isRing =
-      mode === "boundary" || mode === "fairway" || mode === "bunker";
+      mode === "boundary" ||
+      mode === "fairway" ||
+      mode === "bunker" ||
+      mode === "water";
     const isLine = mode === "centerline";
     const editable = isRing || isLine;
 
@@ -190,35 +204,44 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Bunkers (varios polígonos, color arena). El activo se dibuja con sus
-      // vértices editables abajo; los demás quedan como relleno estático.
-      const tracingBunker = mode === "bunker" && addingCorner;
-      for (let bi = 0; bi < bunkers.length; bi++) {
-        const ring = bunkers[bi];
-        if (!ring || ring.length < 3) continue;
-        const isActive = mode === "bunker" && bi === activeBunkerIndex;
-        // El bunker activo en trazado se dibuja como línea abierta (abajo), no
-        // como polígono cerrado, hasta que el usuario cierre tocando el punto 1.
-        if (isActive && tracingBunker) continue;
-        const bFeature = polygonFromRing(holeNo, ring);
-        L.geoJSON(bFeature, {
-          style: {
-            color: COLORS.bunker.line,
-            weight: isActive ? 4 : 2,
-            opacity: mode === "bunker" ? (isActive ? 1 : 0.7) : 0.55,
-            fillColor: COLORS.bunker.fill,
-            fillOpacity: isActive ? 0.4 : 0.28,
-          },
-          interactive: false,
-        }).addTo(lg);
-      }
+      // Polígonos múltiples (bunkers = arena, lagos = agua). El activo se dibuja
+      // con sus vértices editables abajo; los demás quedan como relleno estático.
+      const tracingMulti =
+        (mode === "bunker" || mode === "water") && addingCorner;
+      const drawMulti = (
+        list: LatLon[][],
+        kind: "bunker" | "water"
+      ) => {
+        const col = COLORS[kind];
+        const isCurrentMode = mode === kind;
+        for (let bi = 0; bi < list.length; bi++) {
+          const ring = list[bi];
+          if (!ring || ring.length < 3) continue;
+          const isActive = isCurrentMode && bi === activePolyIndex;
+          // El activo en trazado se dibuja como línea abierta (abajo), no como
+          // polígono cerrado, hasta que el usuario cierre tocando el punto 1.
+          if (isActive && tracingMulti) continue;
+          L.geoJSON(polygonFromRing(holeNo, ring), {
+            style: {
+              color: col.line,
+              weight: isActive ? 4 : 2,
+              opacity: isCurrentMode ? (isActive ? 1 : 0.7) : 0.5,
+              fillColor: col.fill,
+              fillOpacity: isActive ? 0.4 : isCurrentMode ? 0.28 : 0.2,
+            },
+            interactive: false,
+          }).addTo(lg);
+        }
+      };
+      drawMulti(bunkers, "bunker");
+      drawMulti(waters, "water");
 
       // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
       // tocando") NO se dibuja el cierre: el usuario toca el punto 1 para cerrar.
       const tracingFairway = mode === "fairway" && addingCorner;
       const canCloseRing =
         (tracingFairway && fairwayRing.length >= 3) ||
-        (tracingBunker && editRing.length >= 3);
+        (tracingMulti && editRing.length >= 3);
       if (fairwayRing.length >= 3 && !tracingFairway) {
         const fwFeature = polygonFromRing(holeNo, fairwayRing);
         L.geoJSON(fwFeature, {
@@ -287,9 +310,12 @@ export function SimpleCalibrarMap({
           const v = editRing[i];
           const selected = selectedVertex === i;
           const isCloseTarget = canCloseRing && i === 0;
-          // Bunker: área de toque pequeña en el punto 1 para no robar taps al mapa.
+          // Bunker/lago: área de toque pequeña en el punto 1 (polígonos chicos)
+          // para no robar taps al mapa.
           const tightCloseHit =
-            isCloseTarget && mode === "bunker" && addingCorner;
+            isCloseTarget &&
+            (mode === "bunker" || mode === "water") &&
+            addingCorner;
           const dot = isCloseTarget ? (tightCloseHit ? 14 : 18) : selected ? 16 : 11;
           const arm = dot + 14;
           const ringColor = isCloseTarget
@@ -402,11 +428,11 @@ export function SimpleCalibrarMap({
             centerlineRing.map((v) => [v.lat, v.lon] as [number, number])
           );
           map.fitBounds(cb, { padding: [40, 40], maxZoom: 19, animate: false });
-        } else if (mode === "bunker") {
-          // Encuadra todo el hoyo para ver/colocar bunkers en cualquier parte.
+        } else if (mode === "bunker" || mode === "water") {
+          // Encuadra todo el hoyo para ver/colocar bunkers o lagos donde sea.
           if (holeFeature) {
             const bounds = L.geoJSON(holeFeature).getBounds();
-            for (const ring of bunkers)
+            for (const ring of multiList)
               for (const v of ring) bounds.extend([v.lat, v.lon]);
             map.fitBounds(bounds, { padding: [24, 24], maxZoom: 20, animate: false });
           }
@@ -426,7 +452,8 @@ export function SimpleCalibrarMap({
     fairwayRing,
     centerlineRing,
     bunkers,
-    activeBunkerIndex,
+    waters,
+    activePolyIndex,
     addingCorner,
     selectedGreen,
     selectedVertex,

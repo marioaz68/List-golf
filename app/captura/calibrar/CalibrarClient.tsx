@@ -56,8 +56,20 @@ const GREEN_META: Record<
 };
 
 /** Lo que el modo está editando: línea azul (hoyo), amarilla (fairway),
- *  naranja (centro de fairway, línea abierta) o arena (bunker, varios por hoyo). */
-type RingKind = "boundary" | "fairway" | "centerline" | "bunker";
+ *  naranja (centro de fairway, línea abierta) o polígonos múltiples por hoyo
+ *  (bunkers = arena, lagos = agua). */
+type RingKind = "boundary" | "fairway" | "centerline" | "bunker" | "water";
+
+/** Modos con varios polígonos por hoyo (se crean/editan/borran uno por uno). */
+type MultiKind = "bunker" | "water";
+
+const MULTI_META: Record<
+  MultiKind,
+  { label: string; one: string; prefix: string }
+> = {
+  bunker: { label: "Bunkers", one: "bunker", prefix: "B" },
+  water: { label: "Lagos", one: "lago", prefix: "L" },
+};
 
 /** Mínimo de puntos: polígonos cerrados ≥3, la línea de centro ≥2. */
 function minPoints(kind: RingKind): number {
@@ -80,9 +92,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   );
   const [fairwayRing, setFairwayRing] = useState<LatLon[]>([]);
   const [centerlineRing, setCenterlineRing] = useState<LatLon[]>([]);
-  // Bunkers: varios polígonos por hoyo. El índice en el arreglo = sort_order.
+  // Bunkers y lagos: varios polígonos por hoyo. El índice del arreglo = sort_order.
   const [bunkers, setBunkers] = useState<LatLon[][]>([]);
-  const [activeBunker, setActiveBunker] = useState<number | null>(null);
+  const [waters, setWaters] = useState<LatLon[][]>([]);
+  // Índice del polígono activo dentro del modo múltiple actual (bunker o lago).
+  const [activePoly, setActivePoly] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
@@ -95,7 +109,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes, cRes, bkRes] = await Promise.all([
+      const [gRes, bRes, fRes, cRes, bkRes, wRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
@@ -111,12 +125,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${hole}&kind=bunker&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=water&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
       const fData = await fRes.json();
       const cData = await cRes.json();
       const bkData = await bkRes.json();
+      const wData = await wRes.json();
 
       // Centro y "atrás" del green (para generar la línea de centro por defecto).
       let greenCenter: LatLon | null = null;
@@ -183,24 +201,22 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       }
       setCenterlineRing(centerWps);
 
-      // Bunkers: ordenados por sort_order; cada uno es un anillo.
-      if (bkData?.ok && Array.isArray(bkData.polygons)) {
-        const rings = bkData.polygons
-          .filter((p: { kind: string }) => p.kind === "bunker")
-          .sort(
-            (a: { sort_order: number }, b: { sort_order: number }) =>
-              (a.sort_order ?? 0) - (b.sort_order ?? 0)
-          )
-          .map((p: { geojson: unknown }) => {
+      // Bunkers y lagos: ordenados por sort_order; cada uno es un anillo.
+      const ringsFrom = (data: unknown, kind: MultiKind): LatLon[][] => {
+        const d = data as { ok?: boolean; polygons?: unknown };
+        if (!d?.ok || !Array.isArray(d.polygons)) return [];
+        return (d.polygons as { kind: string; sort_order?: number; geojson: unknown }[])
+          .filter((p) => p.kind === kind)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((p) => {
             const poly = parseBoundaryGeoJson(p.geojson);
             return poly ? ringFromPolygon(poly) : [];
           })
-          .filter((r: LatLon[]) => r.length >= 3);
-        setBunkers(rings);
-      } else {
-        setBunkers([]);
-      }
-      setActiveBunker(null);
+          .filter((r) => r.length >= 3);
+      };
+      setBunkers(ringsFrom(bkData, "bunker"));
+      setWaters(ringsFrom(wData, "water"));
+      setActivePoly(null);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
     }
@@ -221,6 +237,12 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }));
   }, [green]);
 
+  // Modo múltiple (bunkers o lagos): lista y setter según el modo actual.
+  const multiKind: MultiKind | null =
+    mode === "bunker" ? "bunker" : mode === "water" ? "water" : null;
+  const multiList = multiKind === "water" ? waters : bunkers;
+  const setMultiList = multiKind === "water" ? setWaters : setBunkers;
+
   // Contorno/línea activos según el modo.
   const activeKind: RingKind | null =
     mode === "boundary"
@@ -229,32 +251,30 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         ? "fairway"
         : mode === "centerline"
           ? "centerline"
-          : mode === "bunker"
-            ? "bunker"
-            : null;
+          : multiKind;
   const activeRing: LatLon[] =
     activeKind === "fairway"
       ? fairwayRing
       : activeKind === "centerline"
         ? centerlineRing
-        : activeKind === "bunker"
-          ? activeBunker != null
-            ? (bunkers[activeBunker] ?? [])
+        : multiKind
+          ? activePoly != null
+            ? (multiList[activePoly] ?? [])
             : []
           : boundaryRing;
   const setActiveRing = (next: LatLon[]) => {
     if (activeKind === "fairway") setFairwayRing(next);
     else if (activeKind === "centerline") setCenterlineRing(next);
-    else if (activeKind === "bunker") {
-      if (activeBunker != null) {
-        setBunkers((prev) =>
-          prev.map((r, i) => (i === activeBunker ? next : r))
+    else if (multiKind) {
+      if (activePoly != null) {
+        setMultiList((prev) =>
+          prev.map((r, i) => (i === activePoly ? next : r))
         );
       }
     } else setBoundaryRing(next);
   };
-  /** sort_order del slot que se está editando (bunker = su índice). */
-  const activeSortOrder = activeKind === "bunker" ? (activeBunker ?? 0) : 0;
+  /** sort_order del slot que se está editando (bunker/lago = su índice). */
+  const activeSortOrder = multiKind ? (activePoly ?? 0) : 0;
 
   const saveGreen = async (key: SimpleGreenKey, lat: number, lon: number) => {
     setGreen((prev) =>
@@ -348,19 +368,23 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
-  /** Reescribe TODOS los bunkers en la BD con sort_order contiguo (0..n-1).
-   *  Se usa al borrar un bunker para no dejar huecos en los slots. */
-  const persistAllBunkers = async (next: LatLon[][]) => {
+  /** Reescribe TODOS los polígonos de un tipo (bunker/lago) con sort_order
+   *  contiguo (0..n-1). Se usa al borrar uno para no dejar huecos en los slots. */
+  const persistAllMulti = async (
+    kind: MultiKind,
+    prevLen: number,
+    next: LatLon[][]
+  ) => {
     setBusy(true);
     try {
       // Borra slots sobrantes (los índices ya no usados al final).
-      for (let i = next.length; i < bunkers.length; i++) {
+      for (let i = next.length; i < prevLen; i++) {
         await fetch(
-          `/api/captura/calibrar/polygon?hole=${hole}&kind=bunker&sort_order=${i}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&sort_order=${i}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
           { method: "DELETE" }
         );
       }
-      // Reescribe cada bunker en su nuevo slot.
+      // Reescribe cada polígono en su nuevo slot.
       for (let i = 0; i < next.length; i++) {
         const geo = polygonFromRing(hole, next[i]).geometry;
         await fetch("/api/captura/calibrar/polygon", {
@@ -370,15 +394,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             tg: tgId,
             course_id: CCQ_COURSE_ID,
             hole,
-            kind: "bunker",
+            kind,
             polygon: geo,
             sort_order: i,
           }),
         });
       }
-      flash("ok", "Bunkers actualizados.");
+      flash("ok", `${MULTI_META[kind].label} actualizados.`);
     } catch (e) {
-      flash("err", e instanceof Error ? e.message : "Error al guardar bunkers");
+      flash("err", e instanceof Error ? e.message : "Error al guardar");
     } finally {
       setBusy(false);
     }
@@ -416,14 +440,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     if (!activeKind) return;
     const min = minPoints(activeKind);
     if (activeRing.length <= min) {
-      // Bunker en el mínimo: borrar punto = borrar el bunker completo.
-      if (activeKind === "bunker" && activeBunker != null) {
-        const next = bunkers.filter((_, idx) => idx !== activeBunker);
-        setBunkers(next);
-        setActiveBunker(null);
+      // Bunker/lago en el mínimo: borrar punto = borrar el polígono completo.
+      if (multiKind && activePoly != null) {
+        const prevLen = multiList.length;
+        const next = multiList.filter((_, idx) => idx !== activePoly);
+        setMultiList(next);
+        setActivePoly(null);
         setSelectedVertex(0);
         setAddingCorner(false);
-        await persistAllBunkers(next);
+        await persistAllMulti(multiKind, prevLen, next);
         return;
       }
       // Fairway/centro: borrar todo deja la línea sin dibujar.
@@ -450,27 +475,27 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     await persistRing(activeKind, next, "Punto borrado.", activeSortOrder);
   };
 
-  /** Cierra el contorno activo (fairway o bunker) tocando el punto 1. */
+  /** Cierra el contorno activo (fairway, bunker o lago) tocando el punto 1. */
   const closeRing = async () => {
-    if (activeKind !== "fairway" && activeKind !== "bunker") return;
+    if (activeKind !== "fairway" && !multiKind) return;
     if (activeRing.length < 3) {
       flash("err", "Mínimo 3 puntos para cerrar.");
       return;
     }
     setAddingCorner(false);
-    await persistRing(
-      activeKind,
-      activeRing,
-      activeKind === "fairway" ? "Fairway cerrado." : "Bunker cerrado.",
-      activeSortOrder
-    );
+    const note =
+      activeKind === "fairway"
+        ? "Fairway cerrado."
+        : `${MULTI_META[multiKind as MultiKind].one} cerrado.`;
+    await persistRing(activeKind!, activeRing, note, activeSortOrder);
   };
 
-  /** Crea un bunker nuevo (vacío) y entra en modo "agregar tocando". */
-  const addBunker = () => {
-    setBunkers((prev) => {
+  /** Crea un polígono nuevo (bunker/lago) vacío y entra en "agregar tocando". */
+  const addPoly = () => {
+    if (!multiKind) return;
+    setMultiList((prev) => {
       const next = [...prev, []];
-      setActiveBunker(next.length - 1);
+      setActivePoly(next.length - 1);
       return next;
     });
     setSelectedVertex(0);
@@ -504,7 +529,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const switchMode = (next: SimpleCalibrarMode) => {
     setMode(next);
     setSelectedVertex(0);
-    setActiveBunker(null);
+    setActivePoly(null);
     // En fairway sin contorno, arranca en "agregar tocando" para trazarlo.
     // El centro de fairway ya viene pre-cargado, así que NO arranca agregando.
     if (next === "fairway") setAddingCorner(fairwayRing.length < 3);
@@ -529,8 +554,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       ? "fairway"
       : mode === "centerline"
         ? "centro de fairway"
-        : mode === "bunker"
-          ? "bunker"
+        : multiKind
+          ? MULTI_META[multiKind].one
           : "hoyo";
 
   return (
@@ -546,7 +571,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             fairwayRing={fairwayRing}
             centerlineRing={centerlineRing}
             bunkers={bunkers}
-            activeBunkerIndex={activeBunker}
+            waters={waters}
+            activePolyIndex={activePoly}
             addingCorner={addingCorner}
             selectedGreen={selectedGreen}
             selectedVertex={selectedVertex}
@@ -554,7 +580,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             onVertexMove={saveVertex}
             onVertexSelect={setSelectedVertex}
             onCloseRing={
-              (mode === "fairway" || mode === "bunker") && addingCorner
+              (mode === "fairway" || mode === "bunker" || mode === "water") &&
+              addingCorner
                 ? closeRing
                 : undefined
             }
@@ -676,6 +703,18 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           >
             Bunkers
           </button>
+          <button
+            type="button"
+            onClick={() => switchMode("water")}
+            className={[
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "water"
+                ? "bg-sky-400 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Lagos
+          </button>
         </div>
 
         {mode === "green" ? (
@@ -697,102 +736,116 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               </button>
             ))}
           </div>
-        ) : mode === "bunker" ? (
-          <>
-            <div className="flex gap-1 overflow-x-auto pb-0.5">
-              {bunkers.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    setActiveBunker(i);
-                    setSelectedVertex(0);
-                    setAddingCorner(false);
-                  }}
-                  className={[
-                    "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
-                    activeBunker === i
-                      ? "border-amber-200 bg-amber-200 text-black"
-                      : "border-slate-600 bg-slate-800 text-white",
-                  ].join(" ")}
-                >
-                  B{i + 1}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={addBunker}
-                className="shrink-0 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
-              >
-                ＋ Nuevo
-              </button>
-            </div>
-            {activeBunker != null ? (
+        ) : multiKind ? (
+          (() => {
+            const meta = MULTI_META[multiKind];
+            const chipActive =
+              multiKind === "water"
+                ? "border-sky-300 bg-sky-400 text-black"
+                : "border-amber-200 bg-amber-200 text-black";
+            const closeBtn =
+              multiKind === "water"
+                ? "border-sky-300 bg-sky-400 text-black"
+                : "border-amber-300 bg-amber-200 text-black";
+            return (
               <>
-                {activeRing.length > 0 ? (
-                  <div className="mt-1 flex gap-1 overflow-x-auto pb-0.5">
-                    {activeRing.map((_, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setSelectedVertex(i)}
-                        className={[
-                          "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
-                          selectedVertex === i
-                            ? "border-amber-200 bg-amber-200 text-black"
-                            : "border-slate-600 bg-slate-800 text-white",
-                        ].join(" ")}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-1.5 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setAddingCorner((a) => !a)}
-                    className={[
-                      "flex-1 rounded-lg py-2 text-[11px] font-bold disabled:opacity-50",
-                      addingCorner
-                        ? "bg-amber-500 text-black"
-                        : "bg-emerald-600 text-white",
-                    ].join(" ")}
-                  >
-                    {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
-                  </button>
-                  {addingCorner && activeRing.length >= 3 ? (
+                <div className="flex gap-1 overflow-x-auto pb-0.5">
+                  {multiList.map((_, i) => (
                     <button
+                      key={i}
                       type="button"
-                      disabled={busy}
-                      onClick={() => void closeRing()}
-                      className="shrink-0 rounded-lg border border-amber-300 bg-amber-200 px-3 py-2 text-[11px] font-bold text-black disabled:opacity-50"
+                      onClick={() => {
+                        setActivePoly(i);
+                        setSelectedVertex(0);
+                        setAddingCorner(false);
+                      }}
+                      className={[
+                        "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                        activePoly === i
+                          ? chipActive
+                          : "border-slate-600 bg-slate-800 text-white",
+                      ].join(" ")}
                     >
-                      Cerrar
+                      {meta.prefix}
+                      {i + 1}
                     </button>
-                  ) : null}
+                  ))}
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void deleteVertex()}
-                    className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
+                    onClick={addPoly}
+                    className="shrink-0 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
                   >
-                    {activeRing.length <= minPoints("bunker")
-                      ? "Borrar bunker"
-                      : `Borrar punto ${selectedVertex + 1}`}
+                    ＋ Nuevo
                   </button>
                 </div>
+                {activePoly != null ? (
+                  <>
+                    {activeRing.length > 0 ? (
+                      <div className="mt-1 flex gap-1 overflow-x-auto pb-0.5">
+                        {activeRing.map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setSelectedVertex(i)}
+                            className={[
+                              "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                              selectedVertex === i
+                                ? chipActive
+                                : "border-slate-600 bg-slate-800 text-white",
+                            ].join(" ")}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="mt-1.5 flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setAddingCorner((a) => !a)}
+                        className={[
+                          "flex-1 rounded-lg py-2 text-[11px] font-bold disabled:opacity-50",
+                          addingCorner
+                            ? "bg-amber-500 text-black"
+                            : "bg-emerald-600 text-white",
+                        ].join(" ")}
+                      >
+                        {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
+                      </button>
+                      {addingCorner && activeRing.length >= 3 ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void closeRing()}
+                          className={`shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold disabled:opacity-50 ${closeBtn}`}
+                        >
+                          Cerrar
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void deleteVertex()}
+                        className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
+                      >
+                        {activeRing.length <= minPoints(multiKind)
+                          ? `Borrar ${meta.one}`
+                          : `Borrar punto ${selectedVertex + 1}`}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-1 rounded-lg bg-slate-800 px-3 py-2 text-center text-[11px] text-slate-300">
+                    {multiList.length === 0
+                      ? `No hay ${meta.label.toLowerCase()}. Toca «＋ Nuevo» y marca el contorno tocando el mapa.`
+                      : `Elige un ${meta.one} (${meta.prefix}1, ${meta.prefix}2…) para ajustarlo o «＋ Nuevo» para otro.`}
+                  </div>
+                )}
               </>
-            ) : (
-              <div className="mt-1 rounded-lg bg-slate-800 px-3 py-2 text-center text-[11px] text-slate-300">
-                {bunkers.length === 0
-                  ? "No hay bunkers. Toca «＋ Nuevo» y marca el contorno tocando el mapa."
-                  : "Elige un bunker (B1, B2…) para ajustarlo o «＋ Nuevo» para otro."}
-              </div>
-            )}
-          </>
+            );
+          })()
         ) : isRingMode ? (
           <>
             {activeRing.length > 0 ? (
@@ -859,14 +912,14 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : addingCorner && (mode === "fairway" || mode === "bunker")
-              ? mode === "bunker"
+            : addingCorner && (mode === "fairway" || multiKind)
+              ? multiKind
                 ? "Toca el mapa para agregar puntos en orden. Con 3+ puntos usa «Cerrar» o toca el punto 1 en el mapa."
                 : "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
               : addingCorner
                 ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
-                : mode === "bunker"
-                  ? "Elige un bunker para arrastrar sus puntos, o crea uno nuevo. Donde no haya arena, borra el bunker."
+                : multiKind
+                  ? `Elige un ${MULTI_META[multiKind].one} para arrastrar sus puntos, o crea uno nuevo. Donde no aplique, bórralo.`
                   : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
         </p>
       </div>
