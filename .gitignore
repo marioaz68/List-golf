@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# bunker detection (temp: venv, tiles cache, debug overlays)
+/scripts/.venv-bunkers
+/scripts/.bunker-tiles
+/scripts/.bunker-debug
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

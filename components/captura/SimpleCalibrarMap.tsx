@@ -18,7 +18,12 @@ export interface SimpleGreenPoint {
   color: string;
 }
 
-export type SimpleCalibrarMode = "green" | "boundary" | "fairway" | "centerline";
+export type SimpleCalibrarMode =
+  | "green"
+  | "boundary"
+  | "fairway"
+  | "centerline"
+  | "bunker";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
@@ -30,6 +35,10 @@ interface SimpleCalibrarMapProps {
   fairwayRing: LatLon[];
   /** Centro de fairway (línea naranja ABIERTA salida→green) para orientar Yardas. */
   centerlineRing: LatLon[];
+  /** Bunkers del hoyo (varios polígonos). En modo "bunker" se edita el activo. */
+  bunkers?: LatLon[][];
+  /** Índice del bunker activo (editable) dentro de `bunkers`. */
+  activeBunkerIndex?: number | null;
   /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
    *  tap del mapa agregue el siguiente punto del contorno. */
   addingCorner?: boolean;
@@ -49,6 +58,7 @@ const COLORS = {
   boundary: { line: "#22d3ee", fill: "#0891b2" },
   fairway: { line: "#facc15", fill: "#ca8a04" },
   centerline: { line: "#fb923c", fill: "#ea580c" },
+  bunker: { line: "#f5deb3", fill: "#e3c789" },
 };
 
 export function SimpleCalibrarMap({
@@ -58,6 +68,8 @@ export function SimpleCalibrarMap({
   boundaryRing,
   fairwayRing,
   centerlineRing,
+  bunkers = [],
+  activeBunkerIndex = null,
   addingCorner = false,
   selectedGreen = null,
   selectedVertex = null,
@@ -129,6 +141,10 @@ export function SimpleCalibrarMap({
     if (dragLockRef.current) return;
 
     // Contorno editable activo según el modo.
+    const activeBunker =
+      mode === "bunker" && activeBunkerIndex != null
+        ? (bunkers[activeBunkerIndex] ?? [])
+        : [];
     const editRing =
       mode === "boundary"
         ? boundaryRing
@@ -136,14 +152,19 @@ export function SimpleCalibrarMap({
           ? fairwayRing
           : mode === "centerline"
             ? centerlineRing
-            : [];
+            : mode === "bunker"
+              ? activeBunker
+              : [];
     const editColor =
       mode === "fairway"
         ? COLORS.fairway.line
         : mode === "centerline"
           ? COLORS.centerline.line
-          : COLORS.boundary.line;
-    const isRing = mode === "boundary" || mode === "fairway";
+          : mode === "bunker"
+            ? COLORS.bunker.line
+            : COLORS.boundary.line;
+    const isRing =
+      mode === "boundary" || mode === "fairway" || mode === "bunker";
     const isLine = mode === "centerline";
     const editable = isRing || isLine;
 
@@ -169,11 +190,35 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
+      // Bunkers (varios polígonos, color arena). El activo se dibuja con sus
+      // vértices editables abajo; los demás quedan como relleno estático.
+      const tracingBunker = mode === "bunker" && addingCorner;
+      for (let bi = 0; bi < bunkers.length; bi++) {
+        const ring = bunkers[bi];
+        if (!ring || ring.length < 3) continue;
+        const isActive = mode === "bunker" && bi === activeBunkerIndex;
+        // El bunker activo en trazado se dibuja como línea abierta (abajo), no
+        // como polígono cerrado, hasta que el usuario cierre tocando el punto 1.
+        if (isActive && tracingBunker) continue;
+        const bFeature = polygonFromRing(holeNo, ring);
+        L.geoJSON(bFeature, {
+          style: {
+            color: COLORS.bunker.line,
+            weight: isActive ? 4 : 2,
+            opacity: mode === "bunker" ? (isActive ? 1 : 0.7) : 0.55,
+            fillColor: COLORS.bunker.fill,
+            fillOpacity: isActive ? 0.4 : 0.28,
+          },
+          interactive: false,
+        }).addTo(lg);
+      }
+
       // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
       // tocando") NO se dibuja el cierre: el usuario toca el punto 1 para cerrar.
       const tracingFairway = mode === "fairway" && addingCorner;
-      const canCloseFairway =
-        tracingFairway && fairwayRing.length >= 3;
+      const canCloseRing =
+        (tracingFairway && fairwayRing.length >= 3) ||
+        (tracingBunker && editRing.length >= 3);
       if (fairwayRing.length >= 3 && !tracingFairway) {
         const fwFeature = polygonFromRing(holeNo, fairwayRing);
         L.geoJSON(fwFeature, {
@@ -212,8 +257,8 @@ export function SimpleCalibrarMap({
           dashArray: editRing.length >= 3 ? undefined : "6,6",
           interactive: false,
         }).addTo(lg);
-        // Pista de cierre: línea punteada del último al primero (solo fairway).
-        if (canCloseFairway && editRing.length >= 3) {
+        // Pista de cierre: línea punteada del último al primero (fairway/bunker).
+        if (canCloseRing && editRing.length >= 3) {
           const first = editRing[0];
           const last = editRing[editRing.length - 1];
           L.polyline(
@@ -222,7 +267,7 @@ export function SimpleCalibrarMap({
               [first.lat, first.lon],
             ],
             {
-              color: COLORS.fairway.line,
+              color: editColor,
               weight: 2,
               opacity: 0.55,
               dashArray: "8,8",
@@ -241,7 +286,7 @@ export function SimpleCalibrarMap({
         for (let i = 0; i < editRing.length; i++) {
           const v = editRing[i];
           const selected = selectedVertex === i;
-          const isCloseTarget = canCloseFairway && i === 0;
+          const isCloseTarget = canCloseRing && i === 0;
           const dot = isCloseTarget ? 18 : selected ? 16 : 11;
           const arm = dot + 14;
           const ringColor = isCloseTarget
@@ -251,7 +296,7 @@ export function SimpleCalibrarMap({
               : "#fff";
           const box = 56;
           const c = box / 2;
-          // Al trazar fairway, solo el punto 1 es tocable (para cerrar).
+          // Al trazar (fairway/bunker), solo el punto 1 es tocable (cerrar).
           const vertexInteractive =
             !addingCorner || isCloseTarget;
           const marker = L.marker([v.lat, v.lon], {
@@ -354,6 +399,14 @@ export function SimpleCalibrarMap({
             centerlineRing.map((v) => [v.lat, v.lon] as [number, number])
           );
           map.fitBounds(cb, { padding: [40, 40], maxZoom: 19, animate: false });
+        } else if (mode === "bunker") {
+          // Encuadra todo el hoyo para ver/colocar bunkers en cualquier parte.
+          if (holeFeature) {
+            const bounds = L.geoJSON(holeFeature).getBounds();
+            for (const ring of bunkers)
+              for (const v of ring) bounds.extend([v.lat, v.lon]);
+            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 20, animate: false });
+          }
         } else if (holeFeature) {
           const bounds = L.geoJSON(holeFeature).getBounds();
           for (const g of greenPoints) bounds.extend([g.lat, g.lon]);
@@ -369,6 +422,8 @@ export function SimpleCalibrarMap({
     boundaryRing,
     fairwayRing,
     centerlineRing,
+    bunkers,
+    activeBunkerIndex,
     addingCorner,
     selectedGreen,
     selectedVertex,

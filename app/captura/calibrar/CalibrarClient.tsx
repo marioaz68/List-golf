@@ -55,9 +55,9 @@ const GREEN_META: Record<
   back: { label: "Atrás", color: "#059669" },
 };
 
-/** Lo que el modo está editando: línea azul (hoyo), amarilla (fairway) o
- *  naranja (centro de fairway, una línea abierta salida→green). */
-type RingKind = "boundary" | "fairway" | "centerline";
+/** Lo que el modo está editando: línea azul (hoyo), amarilla (fairway),
+ *  naranja (centro de fairway, línea abierta) o arena (bunker, varios por hoyo). */
+type RingKind = "boundary" | "fairway" | "centerline" | "bunker";
 
 /** Mínimo de puntos: polígonos cerrados ≥3, la línea de centro ≥2. */
 function minPoints(kind: RingKind): number {
@@ -80,6 +80,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   );
   const [fairwayRing, setFairwayRing] = useState<LatLon[]>([]);
   const [centerlineRing, setCenterlineRing] = useState<LatLon[]>([]);
+  // Bunkers: varios polígonos por hoyo. El índice en el arreglo = sort_order.
+  const [bunkers, setBunkers] = useState<LatLon[][]>([]);
+  const [activeBunker, setActiveBunker] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null
@@ -92,7 +95,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes, cRes] = await Promise.all([
+      const [gRes, bRes, fRes, cRes, bkRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
@@ -105,11 +108,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${hole}&kind=centerline&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=bunker&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
       const fData = await fRes.json();
       const cData = await cRes.json();
+      const bkData = await bkRes.json();
 
       // Centro y "atrás" del green (para generar la línea de centro por defecto).
       let greenCenter: LatLon | null = null;
@@ -175,6 +182,25 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         }
       }
       setCenterlineRing(centerWps);
+
+      // Bunkers: ordenados por sort_order; cada uno es un anillo.
+      if (bkData?.ok && Array.isArray(bkData.polygons)) {
+        const rings = bkData.polygons
+          .filter((p: { kind: string }) => p.kind === "bunker")
+          .sort(
+            (a: { sort_order: number }, b: { sort_order: number }) =>
+              (a.sort_order ?? 0) - (b.sort_order ?? 0)
+          )
+          .map((p: { geojson: unknown }) => {
+            const poly = parseBoundaryGeoJson(p.geojson);
+            return poly ? ringFromPolygon(poly) : [];
+          })
+          .filter((r: LatLon[]) => r.length >= 3);
+        setBunkers(rings);
+      } else {
+        setBunkers([]);
+      }
+      setActiveBunker(null);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
     }
@@ -203,19 +229,32 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         ? "fairway"
         : mode === "centerline"
           ? "centerline"
-          : null;
-  const activeRing =
+          : mode === "bunker"
+            ? "bunker"
+            : null;
+  const activeRing: LatLon[] =
     activeKind === "fairway"
       ? fairwayRing
       : activeKind === "centerline"
         ? centerlineRing
-        : boundaryRing;
-  const setActiveRing =
-    activeKind === "fairway"
-      ? setFairwayRing
-      : activeKind === "centerline"
-        ? setCenterlineRing
-        : setBoundaryRing;
+        : activeKind === "bunker"
+          ? activeBunker != null
+            ? (bunkers[activeBunker] ?? [])
+            : []
+          : boundaryRing;
+  const setActiveRing = (next: LatLon[]) => {
+    if (activeKind === "fairway") setFairwayRing(next);
+    else if (activeKind === "centerline") setCenterlineRing(next);
+    else if (activeKind === "bunker") {
+      if (activeBunker != null) {
+        setBunkers((prev) =>
+          prev.map((r, i) => (i === activeBunker ? next : r))
+        );
+      }
+    } else setBoundaryRing(next);
+  };
+  /** sort_order del slot que se está editando (bunker = su índice). */
+  const activeSortOrder = activeKind === "bunker" ? (activeBunker ?? 0) : 0;
 
   const saveGreen = async (key: SimpleGreenKey, lat: number, lon: number) => {
     setGreen((prev) =>
@@ -253,14 +292,19 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   };
 
   /** Guarda lo dibujado en su endpoint: boundary=azul, fairway=amarillo (polígono),
-   *  centerline=naranja (línea abierta salida→green). */
-  const persistRing = async (kind: RingKind, ring: LatLon[], note: string) => {
+   *  centerline=naranja (línea abierta), bunker=arena (sortOrder = slot). */
+  const persistRing = async (
+    kind: RingKind,
+    ring: LatLon[],
+    note: string,
+    sortOrder = 0
+  ) => {
     setBusy(true);
     try {
-      // Línea/fairway vacíos: borrar el registro (no se puede guardar vacío).
+      // Línea/fairway/bunker vacíos: borrar ese slot (no se guarda vacío).
       if (kind !== "boundary" && ring.length === 0) {
         const res = await fetch(
-          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&sort_order=${sortOrder}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
           { method: "DELETE" }
         );
         const data = await res.json();
@@ -279,7 +323,14 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       const body =
         kind === "boundary"
           ? { tg: tgId, course_id: CCQ_COURSE_ID, hole, polygon: geo }
-          : { tg: tgId, course_id: CCQ_COURSE_ID, hole, kind, polygon: geo };
+          : {
+              tg: tgId,
+              course_id: CCQ_COURSE_ID,
+              hole,
+              kind,
+              polygon: geo,
+              sort_order: sortOrder,
+            };
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -297,11 +348,52 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }
   };
 
+  /** Reescribe TODOS los bunkers en la BD con sort_order contiguo (0..n-1).
+   *  Se usa al borrar un bunker para no dejar huecos en los slots. */
+  const persistAllBunkers = async (next: LatLon[][]) => {
+    setBusy(true);
+    try {
+      // Borra slots sobrantes (los índices ya no usados al final).
+      for (let i = next.length; i < bunkers.length; i++) {
+        await fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=bunker&sort_order=${i}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          { method: "DELETE" }
+        );
+      }
+      // Reescribe cada bunker en su nuevo slot.
+      for (let i = 0; i < next.length; i++) {
+        const geo = polygonFromRing(hole, next[i]).geometry;
+        await fetch("/api/captura/calibrar/polygon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tg: tgId,
+            course_id: CCQ_COURSE_ID,
+            hole,
+            kind: "bunker",
+            polygon: geo,
+            sort_order: i,
+          }),
+        });
+      }
+      flash("ok", "Bunkers actualizados.");
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "Error al guardar bunkers");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveVertex = async (index: number, lat: number, lon: number) => {
     if (!activeKind) return;
     const next = activeRing.map((v, i) => (i === index ? { lat, lon } : v));
     setActiveRing(next);
-    await persistRing(activeKind, next, `Punto ${index + 1} guardado.`);
+    await persistRing(
+      activeKind,
+      next,
+      `Punto ${index + 1} guardado.`,
+      activeSortOrder
+    );
   };
 
   /** Agrega un punto al final del contorno/línea (para ir trazando uno nuevo). */
@@ -311,7 +403,12 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     setActiveRing(next);
     setSelectedVertex(next.length - 1);
     if (next.length >= minPoints(activeKind)) {
-      await persistRing(activeKind, next, `Punto ${next.length} agregado.`);
+      await persistRing(
+        activeKind,
+        next,
+        `Punto ${next.length} agregado.`,
+        activeSortOrder
+      );
     }
   };
 
@@ -319,8 +416,21 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     if (!activeKind) return;
     const min = minPoints(activeKind);
     if (activeRing.length <= min) {
+      // Bunker en el mínimo: borrar punto = borrar el bunker completo.
+      if (activeKind === "bunker" && activeBunker != null) {
+        const next = bunkers.filter((_, idx) => idx !== activeBunker);
+        setBunkers(next);
+        setActiveBunker(null);
+        setSelectedVertex(0);
+        setAddingCorner(false);
+        await persistAllBunkers(next);
+        return;
+      }
       // Fairway/centro: borrar todo deja la línea sin dibujar.
-      if (activeKind !== "boundary" && activeRing.length > 0) {
+      if (
+        (activeKind === "fairway" || activeKind === "centerline") &&
+        activeRing.length > 0
+      ) {
         setActiveRing([]);
         setSelectedVertex(0);
         await persistRing(
@@ -337,17 +447,34 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     const next = activeRing.filter((_, idx) => idx !== i);
     setActiveRing(next);
     setSelectedVertex(Math.max(0, i - 1));
-    await persistRing(activeKind, next, "Punto borrado.");
+    await persistRing(activeKind, next, "Punto borrado.", activeSortOrder);
   };
 
-  /** Cierra el fairway tocando el punto 1 (mínimo 3 puntos). */
-  const closeFairwayRing = async () => {
-    if (activeKind !== "fairway" || fairwayRing.length < 3) {
-      flash("err", "Mínimo 3 puntos para cerrar el fairway.");
+  /** Cierra el contorno activo (fairway o bunker) tocando el punto 1. */
+  const closeRing = async () => {
+    if (activeKind !== "fairway" && activeKind !== "bunker") return;
+    if (activeRing.length < 3) {
+      flash("err", "Mínimo 3 puntos para cerrar.");
       return;
     }
     setAddingCorner(false);
-    await persistRing("fairway", fairwayRing, "Fairway cerrado.");
+    await persistRing(
+      activeKind,
+      activeRing,
+      activeKind === "fairway" ? "Fairway cerrado." : "Bunker cerrado.",
+      activeSortOrder
+    );
+  };
+
+  /** Crea un bunker nuevo (vacío) y entra en modo "agregar tocando". */
+  const addBunker = () => {
+    setBunkers((prev) => {
+      const next = [...prev, []];
+      setActiveBunker(next.length - 1);
+      return next;
+    });
+    setSelectedVertex(0);
+    setAddingCorner(true);
   };
 
   const handleMapTap = (lat: number, lon: number) => {
@@ -359,13 +486,13 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       // Sin "agregar tocando": para mover un punto, arrástralo directamente.
       return;
     }
-    // Fairway: si tocas cerca del punto 1, cierras el polígono tú mismo.
+    // Fairway/bunker: si tocas cerca del punto 1, cierras el polígono tú mismo.
     if (
-      activeKind === "fairway" &&
-      fairwayRing.length >= 3 &&
-      haversineMeters(lat, lon, fairwayRing[0].lat, fairwayRing[0].lon) < 14
+      (activeKind === "fairway" || activeKind === "bunker") &&
+      activeRing.length >= 3 &&
+      haversineMeters(lat, lon, activeRing[0].lat, activeRing[0].lon) < 14
     ) {
-      void closeFairwayRing();
+      void closeRing();
       return;
     }
     // Modo agregar: cada toque agrega el siguiente punto del contorno en orden.
@@ -375,6 +502,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const switchMode = (next: SimpleCalibrarMode) => {
     setMode(next);
     setSelectedVertex(0);
+    setActiveBunker(null);
     // En fairway sin contorno, arranca en "agregar tocando" para trazarlo.
     // El centro de fairway ya viene pre-cargado, así que NO arranca agregando.
     if (next === "fairway") setAddingCorner(fairwayRing.length < 3);
@@ -399,7 +527,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       ? "fairway"
       : mode === "centerline"
         ? "centro de fairway"
-        : "hoyo";
+        : mode === "bunker"
+          ? "bunker"
+          : "hoyo";
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-black text-white">
@@ -413,6 +543,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             boundaryRing={boundaryRing}
             fairwayRing={fairwayRing}
             centerlineRing={centerlineRing}
+            bunkers={bunkers}
+            activeBunkerIndex={activeBunker}
             addingCorner={addingCorner}
             selectedGreen={selectedGreen}
             selectedVertex={selectedVertex}
@@ -420,7 +552,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             onVertexMove={saveVertex}
             onVertexSelect={setSelectedVertex}
             onCloseRing={
-              mode === "fairway" && addingCorner ? closeFairwayRing : undefined
+              (mode === "fairway" || mode === "bunker") && addingCorner
+                ? closeRing
+                : undefined
             }
             onMapTap={handleMapTap}
           />
@@ -528,6 +662,18 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           >
             Centro
           </button>
+          <button
+            type="button"
+            onClick={() => switchMode("bunker")}
+            className={[
+              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "bunker"
+                ? "bg-amber-200 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Bunkers
+          </button>
         </div>
 
         {mode === "green" ? (
@@ -549,6 +695,92 @@ export default function CalibrarClient({ tg }: { tg: string }) {
               </button>
             ))}
           </div>
+        ) : mode === "bunker" ? (
+          <>
+            <div className="flex gap-1 overflow-x-auto pb-0.5">
+              {bunkers.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setActiveBunker(i);
+                    setSelectedVertex(0);
+                    setAddingCorner(false);
+                  }}
+                  className={[
+                    "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                    activeBunker === i
+                      ? "border-amber-200 bg-amber-200 text-black"
+                      : "border-slate-600 bg-slate-800 text-white",
+                  ].join(" ")}
+                >
+                  B{i + 1}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={addBunker}
+                className="shrink-0 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white disabled:opacity-50"
+              >
+                ＋ Nuevo
+              </button>
+            </div>
+            {activeBunker != null ? (
+              <>
+                {activeRing.length > 0 ? (
+                  <div className="mt-1 flex gap-1 overflow-x-auto pb-0.5">
+                    {activeRing.map((_, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setSelectedVertex(i)}
+                        className={[
+                          "shrink-0 rounded-lg border px-3 py-2 text-[11px] font-bold",
+                          selectedVertex === i
+                            ? "border-amber-200 bg-amber-200 text-black"
+                            : "border-slate-600 bg-slate-800 text-white",
+                        ].join(" ")}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setAddingCorner((a) => !a)}
+                    className={[
+                      "flex-1 rounded-lg py-2 text-[11px] font-bold disabled:opacity-50",
+                      addingCorner
+                        ? "bg-amber-500 text-black"
+                        : "bg-emerald-600 text-white",
+                    ].join(" ")}
+                  >
+                    {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void deleteVertex()}
+                    className="flex-1 rounded-lg border border-red-600/60 bg-red-900/40 py-2 text-[11px] font-bold text-red-200 disabled:opacity-40"
+                  >
+                    {activeRing.length <= minPoints("bunker")
+                      ? "Borrar bunker"
+                      : `Borrar punto ${selectedVertex + 1}`}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="mt-1 rounded-lg bg-slate-800 px-3 py-2 text-center text-[11px] text-slate-300">
+                {bunkers.length === 0
+                  ? "No hay bunkers. Toca «＋ Nuevo» y marca el contorno tocando el mapa."
+                  : "Elige un bunker (B1, B2…) para ajustarlo o «＋ Nuevo» para otro."}
+              </div>
+            )}
+          </>
         ) : isRingMode ? (
           <>
             {activeRing.length > 0 ? (
@@ -615,11 +847,13 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : addingCorner && mode === "fairway"
+            : addingCorner && (mode === "fairway" || mode === "bunker")
               ? "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
               : addingCorner
                 ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
-                : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
+                : mode === "bunker"
+                  ? "Elige un bunker para arrastrar sus puntos, o crea uno nuevo. Donde no haya arena, borra el bunker."
+                  : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
         </p>
       </div>
     </div>
