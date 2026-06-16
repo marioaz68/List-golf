@@ -20,6 +20,7 @@ export interface SimpleGreenPoint {
 
 export type SimpleCalibrarMode =
   | "green"
+  | "greenarea"
   | "boundary"
   | "fairway"
   | "centerline"
@@ -40,8 +41,10 @@ interface SimpleCalibrarMapProps {
   bunkers?: LatLon[][];
   /** Lagos del hoyo (varios polígonos, color agua). */
   waters?: LatLon[][];
+  /** Áreas de green del hoyo (varios polígonos, color verde). */
+  greenAreas?: LatLon[][];
   /** Índice del polígono activo (editable) dentro del modo múltiple actual
-   *  (bunker o lago). */
+   *  (bunker, lago o área de green). */
   activePolyIndex?: number | null;
   /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
    *  tap del mapa agregue el siguiente punto del contorno. */
@@ -64,7 +67,17 @@ const COLORS = {
   centerline: { line: "#fb923c", fill: "#ea580c" },
   bunker: { line: "#f5deb3", fill: "#e3c789" },
   water: { line: "#38bdf8", fill: "#0ea5e9" },
+  green: { line: "#4ade80", fill: "#16a34a" },
 };
+
+/** Modo de la UI → tipo de polígono múltiple. */
+type MapMultiKind = "bunker" | "water" | "green";
+function mapModeKind(m: SimpleCalibrarMode): MapMultiKind | null {
+  if (m === "bunker") return "bunker";
+  if (m === "water") return "water";
+  if (m === "greenarea") return "green";
+  return null;
+}
 
 export function SimpleCalibrarMap({
   holeNo,
@@ -75,6 +88,7 @@ export function SimpleCalibrarMap({
   centerlineRing,
   bunkers = [],
   waters = [],
+  greenAreas = [],
   activePolyIndex = null,
   addingCorner = false,
   selectedGreen = null,
@@ -146,11 +160,18 @@ export function SimpleCalibrarMap({
     if (!map || !lg) return;
     if (dragLockRef.current) return;
 
-    // Modo múltiple (bunker/lago): lista activa y polígono editable.
+    // Modo múltiple (bunker/lago/área de green): lista activa y polígono editable.
+    const modeKind = mapModeKind(mode);
     const multiList =
-      mode === "bunker" ? bunkers : mode === "water" ? waters : [];
+      modeKind === "bunker"
+        ? bunkers
+        : modeKind === "water"
+          ? waters
+          : modeKind === "green"
+            ? greenAreas
+            : [];
     const activeMulti =
-      (mode === "bunker" || mode === "water") && activePolyIndex != null
+      modeKind != null && activePolyIndex != null
         ? (multiList[activePolyIndex] ?? [])
         : [];
     // Contorno editable activo según el modo.
@@ -161,7 +182,7 @@ export function SimpleCalibrarMap({
           ? fairwayRing
           : mode === "centerline"
             ? centerlineRing
-            : mode === "bunker" || mode === "water"
+            : modeKind != null
               ? activeMulti
               : [];
     const editColor =
@@ -169,16 +190,11 @@ export function SimpleCalibrarMap({
         ? COLORS.fairway.line
         : mode === "centerline"
           ? COLORS.centerline.line
-          : mode === "bunker"
-            ? COLORS.bunker.line
-            : mode === "water"
-              ? COLORS.water.line
-              : COLORS.boundary.line;
+          : modeKind != null
+            ? COLORS[modeKind].line
+            : COLORS.boundary.line;
     const isRing =
-      mode === "boundary" ||
-      mode === "fairway" ||
-      mode === "bunker" ||
-      mode === "water";
+      mode === "boundary" || mode === "fairway" || modeKind != null;
     const isLine = mode === "centerline";
     const editable = isRing || isLine;
 
@@ -204,16 +220,13 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Polígonos múltiples (bunkers = arena, lagos = agua). El activo se dibuja
-      // con sus vértices editables abajo; los demás quedan como relleno estático.
-      const tracingMulti =
-        (mode === "bunker" || mode === "water") && addingCorner;
-      const drawMulti = (
-        list: LatLon[][],
-        kind: "bunker" | "water"
-      ) => {
+      // Polígonos múltiples (bunkers = arena, lagos = agua, green = área del
+      // green). El activo se dibuja con sus vértices editables abajo; los demás
+      // quedan como relleno estático.
+      const tracingMulti = modeKind != null && addingCorner;
+      const drawMulti = (list: LatLon[][], kind: MapMultiKind) => {
         const col = COLORS[kind];
-        const isCurrentMode = mode === kind;
+        const isCurrentMode = modeKind === kind;
         for (let bi = 0; bi < list.length; bi++) {
           const ring = list[bi];
           if (!ring || ring.length < 3) continue;
@@ -235,6 +248,7 @@ export function SimpleCalibrarMap({
       };
       drawMulti(bunkers, "bunker");
       drawMulti(waters, "water");
+      drawMulti(greenAreas, "green");
 
       // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
       // tocando") NO se dibuja el cierre: el usuario toca el punto 1 para cerrar.
@@ -310,12 +324,10 @@ export function SimpleCalibrarMap({
           const v = editRing[i];
           const selected = selectedVertex === i;
           const isCloseTarget = canCloseRing && i === 0;
-          // Bunker/lago: área de toque pequeña en el punto 1 (polígonos chicos)
-          // para no robar taps al mapa.
+          // Bunker/lago/green: área de toque pequeña en el punto 1 (polígonos
+          // chicos) para no robar taps al mapa.
           const tightCloseHit =
-            isCloseTarget &&
-            (mode === "bunker" || mode === "water") &&
-            addingCorner;
+            isCloseTarget && modeKind != null && addingCorner;
           const dot = isCloseTarget ? (tightCloseHit ? 14 : 18) : selected ? 16 : 11;
           const arm = dot + 14;
           const ringColor = isCloseTarget
@@ -428,8 +440,8 @@ export function SimpleCalibrarMap({
             centerlineRing.map((v) => [v.lat, v.lon] as [number, number])
           );
           map.fitBounds(cb, { padding: [40, 40], maxZoom: 19, animate: false });
-        } else if (mode === "bunker" || mode === "water") {
-          // Encuadra todo el hoyo para ver/colocar bunkers o lagos donde sea.
+        } else if (modeKind != null) {
+          // Encuadra todo el hoyo para ver/colocar bunkers, lagos o greens.
           if (holeFeature) {
             const bounds = L.geoJSON(holeFeature).getBounds();
             for (const ring of multiList)
@@ -453,6 +465,7 @@ export function SimpleCalibrarMap({
     centerlineRing,
     bunkers,
     waters,
+    greenAreas,
     activePolyIndex,
     addingCorner,
     selectedGreen,

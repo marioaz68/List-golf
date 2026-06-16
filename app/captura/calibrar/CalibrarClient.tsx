@@ -57,11 +57,17 @@ const GREEN_META: Record<
 
 /** Lo que el modo está editando: línea azul (hoyo), amarilla (fairway),
  *  naranja (centro de fairway, línea abierta) o polígonos múltiples por hoyo
- *  (bunkers = arena, lagos = agua). */
-type RingKind = "boundary" | "fairway" | "centerline" | "bunker" | "water";
+ *  (bunkers = arena, lagos = agua, green = área del green). */
+type RingKind =
+  | "boundary"
+  | "fairway"
+  | "centerline"
+  | "bunker"
+  | "water"
+  | "green";
 
 /** Modos con varios polígonos por hoyo (se crean/editan/borran uno por uno). */
-type MultiKind = "bunker" | "water";
+type MultiKind = "bunker" | "water" | "green";
 
 const MULTI_META: Record<
   MultiKind,
@@ -69,7 +75,17 @@ const MULTI_META: Record<
 > = {
   bunker: { label: "Bunkers", one: "bunker", prefix: "B" },
   water: { label: "Lagos", one: "lago", prefix: "L" },
+  green: { label: "Greens", one: "green", prefix: "G" },
 };
+
+/** Modo de la UI → tipo de polígono múltiple (el área del green usa el modo
+ *  "greenarea" para no chocar con "green", que son los puntos del green). */
+function modeToMulti(m: SimpleCalibrarMode): MultiKind | null {
+  if (m === "bunker") return "bunker";
+  if (m === "water") return "water";
+  if (m === "greenarea") return "green";
+  return null;
+}
 
 /** Mínimo de puntos: polígonos cerrados ≥3, la línea de centro ≥2. */
 function minPoints(kind: RingKind): number {
@@ -92,10 +108,12 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   );
   const [fairwayRing, setFairwayRing] = useState<LatLon[]>([]);
   const [centerlineRing, setCenterlineRing] = useState<LatLon[]>([]);
-  // Bunkers y lagos: varios polígonos por hoyo. El índice del arreglo = sort_order.
+  // Bunkers, lagos y áreas de green: varios polígonos por hoyo.
+  // El índice del arreglo = sort_order.
   const [bunkers, setBunkers] = useState<LatLon[][]>([]);
   const [waters, setWaters] = useState<LatLon[][]>([]);
-  // Índice del polígono activo dentro del modo múltiple actual (bunker o lago).
+  const [greenAreas, setGreenAreas] = useState<LatLon[][]>([]);
+  // Índice del polígono activo dentro del modo múltiple actual.
   const [activePoly, setActivePoly] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
@@ -109,7 +127,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes, cRes, bkRes, wRes] = await Promise.all([
+      const [gRes, bRes, fRes, cRes, bkRes, wRes, grRes] = await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
@@ -128,6 +146,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${hole}&kind=water&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${hole}&kind=green&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
@@ -135,6 +156,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       const cData = await cRes.json();
       const bkData = await bkRes.json();
       const wData = await wRes.json();
+      const grData = await grRes.json();
 
       // Centro y "atrás" del green (para generar la línea de centro por defecto).
       let greenCenter: LatLon | null = null;
@@ -216,6 +238,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       };
       setBunkers(ringsFrom(bkData, "bunker"));
       setWaters(ringsFrom(wData, "water"));
+      setGreenAreas(ringsFrom(grData, "green"));
       setActivePoly(null);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
@@ -237,11 +260,20 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     }));
   }, [green]);
 
-  // Modo múltiple (bunkers o lagos): lista y setter según el modo actual.
-  const multiKind: MultiKind | null =
-    mode === "bunker" ? "bunker" : mode === "water" ? "water" : null;
-  const multiList = multiKind === "water" ? waters : bunkers;
-  const setMultiList = multiKind === "water" ? setWaters : setBunkers;
+  // Modo múltiple (bunkers, lagos o áreas de green): lista y setter.
+  const multiKind: MultiKind | null = modeToMulti(mode);
+  const multiList =
+    multiKind === "water"
+      ? waters
+      : multiKind === "green"
+        ? greenAreas
+        : bunkers;
+  const setMultiList =
+    multiKind === "water"
+      ? setWaters
+      : multiKind === "green"
+        ? setGreenAreas
+        : setBunkers;
 
   // Contorno/línea activos según el modo.
   const activeKind: RingKind | null =
@@ -572,6 +604,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             centerlineRing={centerlineRing}
             bunkers={bunkers}
             waters={waters}
+            greenAreas={greenAreas}
             activePolyIndex={activePoly}
             addingCorner={addingCorner}
             selectedGreen={selectedGreen}
@@ -580,8 +613,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             onVertexMove={saveVertex}
             onVertexSelect={setSelectedVertex}
             onCloseRing={
-              (mode === "fairway" || mode === "bunker" || mode === "water") &&
-              addingCorner
+              (mode === "fairway" || multiKind != null) && addingCorner
                 ? closeRing
                 : undefined
             }
@@ -642,24 +674,36 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
       {/* Barra inferior fija y pequeña */}
       <div className="z-[1000] shrink-0 border-t border-slate-700 bg-slate-950 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
-        <div className="mb-2 flex gap-1.5">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => switchMode("green")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "green"
                 ? "bg-emerald-500 text-black"
                 : "bg-slate-800 text-slate-200",
             ].join(" ")}
           >
-            Green
+            Pts green
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("greenarea")}
+            className={[
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "greenarea"
+                ? "bg-green-400 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Área green
           </button>
           <button
             type="button"
             onClick={() => switchMode("boundary")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "boundary"
                 ? "bg-cyan-400 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -671,7 +715,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("fairway")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "fairway"
                 ? "bg-yellow-400 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -683,7 +727,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("centerline")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "centerline"
                 ? "bg-orange-400 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -695,7 +739,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("bunker")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "bunker"
                 ? "bg-amber-200 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -707,7 +751,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             type="button"
             onClick={() => switchMode("water")}
             className={[
-              "flex-1 rounded-lg py-2.5 text-[11px] font-bold",
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
               mode === "water"
                 ? "bg-sky-400 text-black"
                 : "bg-slate-800 text-slate-200",
@@ -742,11 +786,15 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             const chipActive =
               multiKind === "water"
                 ? "border-sky-300 bg-sky-400 text-black"
-                : "border-amber-200 bg-amber-200 text-black";
+                : multiKind === "green"
+                  ? "border-green-300 bg-green-400 text-black"
+                  : "border-amber-200 bg-amber-200 text-black";
             const closeBtn =
               multiKind === "water"
                 ? "border-sky-300 bg-sky-400 text-black"
-                : "border-amber-300 bg-amber-200 text-black";
+                : multiKind === "green"
+                  ? "border-green-300 bg-green-400 text-black"
+                  : "border-amber-300 bg-amber-200 text-black";
             return (
               <>
                 <div className="flex gap-1 overflow-x-auto pb-0.5">
