@@ -25,7 +25,8 @@ export type SimpleCalibrarMode =
   | "fairway"
   | "centerline"
   | "bunker"
-  | "water";
+  | "water"
+  | "ob";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
@@ -43,8 +44,11 @@ interface SimpleCalibrarMapProps {
   waters?: LatLon[][];
   /** Áreas de green del hoyo (varios polígonos, color verde). */
   greenAreas?: LatLon[][];
+  /** OB de todo el campo (varios polígonos, color rojo). Se muestran en todos
+   *  los hoyos porque el límite del fraccionamiento es compartido. */
+  obAreas?: LatLon[][];
   /** Índice del polígono activo (editable) dentro del modo múltiple actual
-   *  (bunker, lago o área de green). */
+   *  (bunker, lago, área de green u OB). */
   activePolyIndex?: number | null;
   /** Modo "agregar tocando": los puntos no interceptan el toque para que cada
    *  tap del mapa agregue el siguiente punto del contorno. */
@@ -68,14 +72,16 @@ const COLORS = {
   bunker: { line: "#f5deb3", fill: "#e3c789" },
   water: { line: "#38bdf8", fill: "#0ea5e9" },
   green: { line: "#4ade80", fill: "#16a34a" },
+  ob: { line: "#f87171", fill: "#dc2626" },
 };
 
 /** Modo de la UI → tipo de polígono múltiple. */
-type MapMultiKind = "bunker" | "water" | "green";
+type MapMultiKind = "bunker" | "water" | "green" | "ob";
 function mapModeKind(m: SimpleCalibrarMode): MapMultiKind | null {
   if (m === "bunker") return "bunker";
   if (m === "water") return "water";
   if (m === "greenarea") return "green";
+  if (m === "ob") return "ob";
   return null;
 }
 
@@ -89,6 +95,7 @@ export function SimpleCalibrarMap({
   bunkers = [],
   waters = [],
   greenAreas = [],
+  obAreas = [],
   activePolyIndex = null,
   addingCorner = false,
   selectedGreen = null,
@@ -169,7 +176,9 @@ export function SimpleCalibrarMap({
           ? waters
           : modeKind === "green"
             ? greenAreas
-            : [];
+            : modeKind === "ob"
+              ? obAreas
+              : [];
     const activeMulti =
       modeKind != null && activePolyIndex != null
         ? (multiList[activePolyIndex] ?? [])
@@ -249,6 +258,7 @@ export function SimpleCalibrarMap({
       drawMulti(bunkers, "bunker");
       drawMulti(waters, "water");
       drawMulti(greenAreas, "green");
+      drawMulti(obAreas, "ob");
 
       // Fairway amarillo CERRADO (polígono). Mientras trazas (modo "agregar
       // tocando") NO se dibuja el cierre: el usuario toca el punto 1 para cerrar.
@@ -441,11 +451,15 @@ export function SimpleCalibrarMap({
           );
           map.fitBounds(cb, { padding: [40, 40], maxZoom: 19, animate: false });
         } else if (modeKind != null) {
-          // Encuadra todo el hoyo para ver/colocar bunkers, lagos o greens.
+          // Encuadra el hoyo para colocar bunkers/lagos/greens. El OB es de todo
+          // el campo (sus polígonos quedan lejos), así que solo encuadra el hoyo
+          // y el usuario navega el mapa para trazar el resto.
           if (holeFeature) {
             const bounds = L.geoJSON(holeFeature).getBounds();
-            for (const ring of multiList)
-              for (const v of ring) bounds.extend([v.lat, v.lon]);
+            if (modeKind !== "ob") {
+              for (const ring of multiList)
+                for (const v of ring) bounds.extend([v.lat, v.lon]);
+            }
             map.fitBounds(bounds, { padding: [24, 24], maxZoom: 20, animate: false });
           }
         } else if (holeFeature) {
@@ -466,6 +480,7 @@ export function SimpleCalibrarMap({
     bunkers,
     waters,
     greenAreas,
+    obAreas,
     activePolyIndex,
     addingCorner,
     selectedGreen,

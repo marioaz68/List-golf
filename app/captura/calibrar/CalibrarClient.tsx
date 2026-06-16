@@ -64,10 +64,11 @@ type RingKind =
   | "centerline"
   | "bunker"
   | "water"
-  | "green";
+  | "green"
+  | "ob";
 
 /** Modos con varios polígonos por hoyo (se crean/editan/borran uno por uno). */
-type MultiKind = "bunker" | "water" | "green";
+type MultiKind = "bunker" | "water" | "green" | "ob";
 
 const MULTI_META: Record<
   MultiKind,
@@ -76,7 +77,15 @@ const MULTI_META: Record<
   bunker: { label: "Bunkers", one: "bunker", prefix: "B" },
   water: { label: "Lagos", one: "lago", prefix: "L" },
   green: { label: "Greens", one: "green", prefix: "G" },
+  ob: { label: "OB", one: "OB", prefix: "OB" },
 };
+
+/** El OB es de TODO el campo (fraccionamiento): se guarda y carga con
+ *  hole_number = 0 y se muestra en todos los hoyos. El resto van por hoyo. */
+const COURSE_WIDE_HOLE = 0;
+function holeForKind(kind: RingKind, hole: number): number {
+  return kind === "ob" ? COURSE_WIDE_HOLE : hole;
+}
 
 /** Modo de la UI → tipo de polígono múltiple (el área del green usa el modo
  *  "greenarea" para no chocar con "green", que son los puntos del green). */
@@ -84,6 +93,7 @@ function modeToMulti(m: SimpleCalibrarMode): MultiKind | null {
   if (m === "bunker") return "bunker";
   if (m === "water") return "water";
   if (m === "greenarea") return "green";
+  if (m === "ob") return "ob";
   return null;
 }
 
@@ -113,6 +123,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [bunkers, setBunkers] = useState<LatLon[][]>([]);
   const [waters, setWaters] = useState<LatLon[][]>([]);
   const [greenAreas, setGreenAreas] = useState<LatLon[][]>([]);
+  // OB de todo el campo (compartido por todos los hoyos, hole_number = 0).
+  const [obAreas, setObAreas] = useState<LatLon[][]>([]);
   // Índice del polígono activo dentro del modo múltiple actual.
   const [activePoly, setActivePoly] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -127,7 +139,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes, cRes, bkRes, wRes, grRes] = await Promise.all([
+      const [gRes, bRes, fRes, cRes, bkRes, wRes, grRes, obRes] =
+        await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
         ),
@@ -149,6 +162,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${hole}&kind=green&course_id=${CCQ_COURSE_ID}`
         ),
+        // OB: de todo el campo (hole 0), no del hoyo actual.
+        fetch(
+          `/api/captura/calibrar/polygon?hole=${COURSE_WIDE_HOLE}&kind=ob&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
@@ -157,6 +174,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       const bkData = await bkRes.json();
       const wData = await wRes.json();
       const grData = await grRes.json();
+      const obData = await obRes.json();
 
       // Centro y "atrás" del green (para generar la línea de centro por defecto).
       let greenCenter: LatLon | null = null;
@@ -239,6 +257,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       setBunkers(ringsFrom(bkData, "bunker"));
       setWaters(ringsFrom(wData, "water"));
       setGreenAreas(ringsFrom(grData, "green"));
+      setObAreas(ringsFrom(obData, "ob"));
       setActivePoly(null);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
@@ -267,13 +286,17 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       ? waters
       : multiKind === "green"
         ? greenAreas
-        : bunkers;
+        : multiKind === "ob"
+          ? obAreas
+          : bunkers;
   const setMultiList =
     multiKind === "water"
       ? setWaters
       : multiKind === "green"
         ? setGreenAreas
-        : setBunkers;
+        : multiKind === "ob"
+          ? setObAreas
+          : setBunkers;
 
   // Contorno/línea activos según el modo.
   const activeKind: RingKind | null =
@@ -351,12 +374,13 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     note: string,
     sortOrder = 0
   ) => {
+    const polyHole = holeForKind(kind, hole);
     setBusy(true);
     try {
       // Línea/fairway/bunker vacíos: borrar ese slot (no se guarda vacío).
       if (kind !== "boundary" && ring.length === 0) {
         const res = await fetch(
-          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&sort_order=${sortOrder}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          `/api/captura/calibrar/polygon?hole=${polyHole}&kind=${kind}&sort_order=${sortOrder}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
           { method: "DELETE" }
         );
         const data = await res.json();
@@ -367,7 +391,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       const geo =
         kind === "centerline"
           ? lineFromWaypoints(ring)
-          : polygonFromRing(hole, ring).geometry;
+          : polygonFromRing(polyHole, ring).geometry;
       const url =
         kind === "boundary"
           ? "/api/captura/calibrar/boundary"
@@ -378,7 +402,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           : {
               tg: tgId,
               course_id: CCQ_COURSE_ID,
-              hole,
+              hole: polyHole,
               kind,
               polygon: geo,
               sort_order: sortOrder,
@@ -407,25 +431,26 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     prevLen: number,
     next: LatLon[][]
   ) => {
+    const polyHole = holeForKind(kind, hole);
     setBusy(true);
     try {
       // Borra slots sobrantes (los índices ya no usados al final).
       for (let i = next.length; i < prevLen; i++) {
         await fetch(
-          `/api/captura/calibrar/polygon?hole=${hole}&kind=${kind}&sort_order=${i}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
+          `/api/captura/calibrar/polygon?hole=${polyHole}&kind=${kind}&sort_order=${i}&course_id=${CCQ_COURSE_ID}&tg=${encodeURIComponent(tgId)}`,
           { method: "DELETE" }
         );
       }
       // Reescribe cada polígono en su nuevo slot.
       for (let i = 0; i < next.length; i++) {
-        const geo = polygonFromRing(hole, next[i]).geometry;
+        const geo = polygonFromRing(polyHole, next[i]).geometry;
         await fetch("/api/captura/calibrar/polygon", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tg: tgId,
             course_id: CCQ_COURSE_ID,
-            hole,
+            hole: polyHole,
             kind,
             polygon: geo,
             sort_order: i,
@@ -605,6 +630,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             bunkers={bunkers}
             waters={waters}
             greenAreas={greenAreas}
+            obAreas={obAreas}
             activePolyIndex={activePoly}
             addingCorner={addingCorner}
             selectedGreen={selectedGreen}
@@ -759,6 +785,18 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           >
             Lagos
           </button>
+          <button
+            type="button"
+            onClick={() => switchMode("ob")}
+            className={[
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "ob"
+                ? "bg-red-500 text-white"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            OB
+          </button>
         </div>
 
         {mode === "green" ? (
@@ -788,13 +826,17 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 ? "border-sky-300 bg-sky-400 text-black"
                 : multiKind === "green"
                   ? "border-green-300 bg-green-400 text-black"
-                  : "border-amber-200 bg-amber-200 text-black";
+                  : multiKind === "ob"
+                    ? "border-red-400 bg-red-500 text-white"
+                    : "border-amber-200 bg-amber-200 text-black";
             const closeBtn =
               multiKind === "water"
                 ? "border-sky-300 bg-sky-400 text-black"
                 : multiKind === "green"
                   ? "border-green-300 bg-green-400 text-black"
-                  : "border-amber-300 bg-amber-200 text-black";
+                  : multiKind === "ob"
+                    ? "border-red-400 bg-red-500 text-white"
+                    : "border-amber-300 bg-amber-200 text-black";
             return (
               <>
                 <div className="flex gap-1 overflow-x-auto pb-0.5">

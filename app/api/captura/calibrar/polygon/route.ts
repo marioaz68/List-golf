@@ -23,8 +23,9 @@ const KINDS = new Set<HolePolygonKind>([
 ]);
 
 function parseHole(v: string | null): number | null {
+  // 0 = elemento de todo el campo (p. ej. OB del fraccionamiento); 1-18 = hoyo.
   const n = Number(v);
-  return Number.isFinite(n) && n >= 1 && n <= 18 ? n : null;
+  return Number.isFinite(n) && n >= 0 && n <= 18 ? n : null;
 }
 
 /** GET: lista los polígonos calibrados de un hoyo (opcionalmente por tipo). */
