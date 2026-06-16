@@ -486,9 +486,11 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       // Sin "agregar tocando": para mover un punto, arrástralo directamente.
       return;
     }
-    // Fairway/bunker: si tocas cerca del punto 1, cierras el polígono tú mismo.
+    // Fairway: tocar cerca del punto 1 cierra el polígono (hoyos largos).
+    // Bunker: NO usar proximidad — son pequeños y el 4º toque cerraba antes de
+    // tiempo; ahí se cierra solo tocando el punto 1 o el botón «Cerrar».
     if (
-      (activeKind === "fairway" || activeKind === "bunker") &&
+      activeKind === "fairway" &&
       activeRing.length >= 3 &&
       haversineMeters(lat, lon, activeRing[0].lat, activeRing[0].lon) < 14
     ) {
@@ -761,6 +763,16 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                   >
                     {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
                   </button>
+                  {addingCorner && activeRing.length >= 3 ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void closeRing()}
+                      className="shrink-0 rounded-lg border border-amber-300 bg-amber-200 px-3 py-2 text-[11px] font-bold text-black disabled:opacity-50"
+                    >
+                      Cerrar
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy}
@@ -848,7 +860,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
             : addingCorner && (mode === "fairway" || mode === "bunker")
-              ? "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
+              ? mode === "bunker"
+                ? "Toca el mapa para agregar puntos en orden. Con 3+ puntos usa «Cerrar» o toca el punto 1 en el mapa."
+                : "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
               : addingCorner
                 ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
                 : mode === "bunker"

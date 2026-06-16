@@ -287,16 +287,19 @@ export function SimpleCalibrarMap({
           const v = editRing[i];
           const selected = selectedVertex === i;
           const isCloseTarget = canCloseRing && i === 0;
-          const dot = isCloseTarget ? 18 : selected ? 16 : 11;
+          // Bunker: área de toque pequeña en el punto 1 para no robar taps al mapa.
+          const tightCloseHit =
+            isCloseTarget && mode === "bunker" && addingCorner;
+          const dot = isCloseTarget ? (tightCloseHit ? 14 : 18) : selected ? 16 : 11;
           const arm = dot + 14;
           const ringColor = isCloseTarget
             ? "#fbbf24"
             : selected
               ? "#fb7185"
               : "#fff";
-          const box = 56;
+          const box = tightCloseHit ? 24 : 56;
           const c = box / 2;
-          // Al trazar (fairway/bunker), solo el punto 1 es tocable (cerrar).
+          // Al trazar, solo el punto 1 es tocable (cerrar). El resto no intercepta.
           const vertexInteractive =
             !addingCorner || isCloseTarget;
           const marker = L.marker([v.lat, v.lon], {
@@ -304,11 +307,11 @@ export function SimpleCalibrarMap({
             interactive: vertexInteractive,
             icon: L.divIcon({
               className: "",
-              html: `<div style="position:relative;width:${box}px;height:${box}px;${vertexInteractive ? "" : "pointer-events:none;"}touch-action:none;">
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${arm}px;background:${ringColor};opacity:0.95;"></div>
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${arm}px;height:2px;background:${ringColor};opacity:0.95;"></div>
-                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);${isCloseTarget ? "box-shadow:0 0 0 4px rgba(251,191,36,0.55);" : ""}"></div>
-                ${isCloseTarget ? `<div style="position:absolute;top:calc(50% + ${dot / 2 + 6}px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fbbf24;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:800;font-family:Arial,sans-serif;white-space:nowrap;">Cerrar</div>` : ""}
+              html: `<div style="position:relative;width:${box}px;height:${box}px;overflow:visible;${vertexInteractive && !tightCloseHit ? "" : "pointer-events:none;"}touch-action:none;">
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:${arm}px;background:${ringColor};opacity:0.95;pointer-events:none;"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${arm}px;height:2px;background:${ringColor};opacity:0.95;pointer-events:none;"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${dot}px;height:${dot}px;border-radius:50%;background:${editColor}dd;border:2px solid ${ringColor};box-shadow:0 1px 6px rgba(0,0,0,0.8);${isCloseTarget ? "box-shadow:0 0 0 4px rgba(251,191,36,0.55);" : ""}${tightCloseHit ? "pointer-events:auto;" : ""}"></div>
+                ${isCloseTarget ? `<div style="position:absolute;top:calc(50% + ${dot / 2 + 6}px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fbbf24;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:800;font-family:Arial,sans-serif;white-space:nowrap;pointer-events:none;">Cerrar</div>` : ""}
               </div>`,
               iconSize: [box, box],
               iconAnchor: [c, c],
