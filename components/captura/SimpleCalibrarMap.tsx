@@ -44,7 +44,7 @@ interface SimpleCalibrarMapProps {
   waters?: LatLon[][];
   /** Áreas de green del hoyo (varios polígonos, color verde). */
   greenAreas?: LatLon[][];
-  /** OB de todo el campo (varios polígonos, color rojo). Se muestran en todos
+  /** OB de todo el campo (varias líneas abiertas, color rojo). Se muestran en todos
    *  los hoyos porque el límite del fraccionamiento es compartido. */
   obAreas?: LatLon[][];
   /** Índice del polígono activo (editable) dentro del modo múltiple actual
@@ -202,9 +202,12 @@ export function SimpleCalibrarMap({
           : modeKind != null
             ? COLORS[modeKind].line
             : COLORS.boundary.line;
+    const isObLine = modeKind === "ob";
     const isRing =
-      mode === "boundary" || mode === "fairway" || modeKind != null;
-    const isLine = mode === "centerline";
+      mode === "boundary" ||
+      mode === "fairway" ||
+      (modeKind != null && !isObLine);
+    const isLine = mode === "centerline" || isObLine;
     const editable = isRing || isLine;
 
     (async () => {
@@ -236,23 +239,36 @@ export function SimpleCalibrarMap({
       const drawMulti = (list: LatLon[][], kind: MapMultiKind) => {
         const col = COLORS[kind];
         const isCurrentMode = modeKind === kind;
+        const isObKind = kind === "ob";
+        const minLen = isObKind ? 2 : 3;
         for (let bi = 0; bi < list.length; bi++) {
           const ring = list[bi];
-          if (!ring || ring.length < 3) continue;
+          if (!ring || ring.length < minLen) continue;
           const isActive = isCurrentMode && bi === activePolyIndex;
-          // El activo en trazado se dibuja como línea abierta (abajo), no como
-          // polígono cerrado, hasta que el usuario cierre tocando el punto 1.
-          if (isActive && tracingMulti) continue;
-          L.geoJSON(polygonFromRing(holeNo, ring), {
-            style: {
-              color: col.line,
-              weight: isActive ? 4 : 2,
-              opacity: isCurrentMode ? (isActive ? 1 : 0.7) : 0.5,
-              fillColor: col.fill,
-              fillOpacity: isActive ? 0.4 : isCurrentMode ? 0.28 : 0.2,
-            },
-            interactive: false,
-          }).addTo(lg);
+          // OB activo siempre se dibuja abajo; polígonos activos solo mientras trazas.
+          if (isActive && (tracingMulti || isObKind)) continue;
+          if (isObKind) {
+            L.polyline(
+              ring.map((v) => [v.lat, v.lon] as [number, number]),
+              {
+                color: col.line,
+                weight: isActive ? 4 : 2,
+                opacity: isCurrentMode ? (isActive ? 1 : 0.7) : 0.5,
+                interactive: false,
+              }
+            ).addTo(lg);
+          } else {
+            L.geoJSON(polygonFromRing(holeNo, ring), {
+              style: {
+                color: col.line,
+                weight: isActive ? 4 : 2,
+                opacity: isCurrentMode ? (isActive ? 1 : 0.7) : 0.5,
+                fillColor: col.fill,
+                fillOpacity: isActive ? 0.4 : isCurrentMode ? 0.28 : 0.2,
+              },
+              interactive: false,
+            }).addTo(lg);
+          }
         }
       };
       drawMulti(bunkers, "bunker");
@@ -265,7 +281,7 @@ export function SimpleCalibrarMap({
       const tracingFairway = mode === "fairway" && addingCorner;
       const canCloseRing =
         (tracingFairway && fairwayRing.length >= 3) ||
-        (tracingMulti && editRing.length >= 3);
+        (tracingMulti && editRing.length >= 3 && !isObLine);
       if (fairwayRing.length >= 3 && !tracingFairway) {
         const fwFeature = polygonFromRing(holeNo, fairwayRing);
         L.geoJSON(fwFeature, {
@@ -292,9 +308,20 @@ export function SimpleCalibrarMap({
         }).addTo(lg);
       }
 
-      // Línea conectora del contorno activo: se ve crecer desde el 2º punto,
-      // antes de que el polígono (3+ puntos) tenga relleno. (No para centerline,
-      // que ya se dibuja arriba como línea abierta.)
+      // OB activo en edición (línea roja abierta). Centerline ya se dibuja arriba.
+      if (isObLine && editRing.length >= 2) {
+        const pts = editRing.map((v) => [v.lat, v.lon] as [number, number]);
+        L.polyline(pts, {
+          color: editColor,
+          weight: 4,
+          opacity: 0.95,
+          dashArray: tracingMulti && editRing.length < 2 ? "6,6" : undefined,
+          interactive: false,
+        }).addTo(lg);
+      }
+
+      // Línea conectora del contorno activo (polígonos): se ve crecer desde el 2º
+      // punto, antes de que el polígono (3+ puntos) tenga relleno.
       if (isRing && editRing.length >= 2) {
         const pts = editRing.map((v) => [v.lat, v.lon] as [number, number]);
         L.polyline(pts, {
@@ -337,7 +364,7 @@ export function SimpleCalibrarMap({
           // Bunker/lago/green: área de toque pequeña en el punto 1 (polígonos
           // chicos) para no robar taps al mapa.
           const tightCloseHit =
-            isCloseTarget && modeKind != null && addingCorner;
+            isCloseTarget && modeKind != null && modeKind !== "ob" && addingCorner;
           const dot = isCloseTarget ? (tightCloseHit ? 14 : 18) : selected ? 16 : 11;
           const arm = dot + 14;
           const ringColor = isCloseTarget

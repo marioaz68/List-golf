@@ -75,14 +75,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "kind inválido" }, { status: 400 });
   }
 
-  // El fairway/green/etc. son polígonos; la centerline es una línea (LineString).
+  // Fairway/green/etc. = polígonos; centerline y OB = líneas abiertas (LineString).
   const geojson =
-    kind === "centerline"
+    kind === "centerline" || kind === "ob"
       ? parseCenterlineGeo(body.polygon)
       : parseBoundaryGeoJson(body.polygon);
   if (!geojson) {
     return NextResponse.json(
-      { ok: false, error: kind === "centerline" ? "línea inválida" : "polygon inválido" },
+      {
+        ok: false,
+        error:
+          kind === "centerline" || kind === "ob"
+            ? "línea inválida"
+            : "polygon inválido",
+      },
       { status: 400 }
     );
   }

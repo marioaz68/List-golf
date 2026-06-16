@@ -97,9 +97,9 @@ function modeToMulti(m: SimpleCalibrarMode): MultiKind | null {
   return null;
 }
 
-/** Mínimo de puntos: polígonos cerrados ≥3, la línea de centro ≥2. */
+/** Mínimo de puntos: polígonos cerrados ≥3; centerline y OB = líneas abiertas ≥2. */
 function minPoints(kind: RingKind): number {
-  return kind === "centerline" ? 2 : 3;
+  return kind === "centerline" || kind === "ob" ? 2 : 3;
 }
 
 export default function CalibrarClient({ tg }: { tg: string }) {
@@ -241,7 +241,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       }
       setCenterlineRing(centerWps);
 
-      // Bunkers y lagos: ordenados por sort_order; cada uno es un anillo.
+      // Bunkers/lagos/green = polígonos; OB = líneas abiertas (LineString).
       const ringsFrom = (data: unknown, kind: MultiKind): LatLon[][] => {
         const d = data as { ok?: boolean; polygons?: unknown };
         if (!d?.ok || !Array.isArray(d.polygons)) return [];
@@ -254,10 +254,25 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           })
           .filter((r) => r.length >= 3);
       };
+      const obLinesFrom = (data: unknown): LatLon[][] => {
+        const d = data as { ok?: boolean; polygons?: unknown };
+        if (!d?.ok || !Array.isArray(d.polygons)) return [];
+        return (d.polygons as { kind: string; sort_order?: number; geojson: unknown }[])
+          .filter((p) => p.kind === "ob")
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((p) => {
+            const wps = waypointsFromLine(p.geojson);
+            if (wps.length >= 2) return wps;
+            // Compat: OB guardado antes como polígono.
+            const poly = parseBoundaryGeoJson(p.geojson);
+            return poly ? ringFromPolygon(poly) : [];
+          })
+          .filter((r) => r.length >= 2);
+      };
       setBunkers(ringsFrom(bkData, "bunker"));
       setWaters(ringsFrom(wData, "water"));
       setGreenAreas(ringsFrom(grData, "green"));
-      setObAreas(ringsFrom(obData, "ob"));
+      setObAreas(obLinesFrom(obData));
       setActivePoly(null);
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
@@ -389,7 +404,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         return;
       }
       const geo =
-        kind === "centerline"
+        kind === "centerline" || kind === "ob"
           ? lineFromWaypoints(ring)
           : polygonFromRing(polyHole, ring).geometry;
       const url =
@@ -441,9 +456,12 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           { method: "DELETE" }
         );
       }
-      // Reescribe cada polígono en su nuevo slot.
+      // Reescribe cada slot (polígono o línea OB).
       for (let i = 0; i < next.length; i++) {
-        const geo = polygonFromRing(polyHole, next[i]).geometry;
+        const geo =
+          kind === "ob"
+            ? lineFromWaypoints(next[i])
+            : polygonFromRing(polyHole, next[i]).geometry;
         await fetch("/api/captura/calibrar/polygon", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -532,8 +550,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     await persistRing(activeKind, next, "Punto borrado.", activeSortOrder);
   };
 
-  /** Cierra el contorno activo (fairway, bunker o lago) tocando el punto 1. */
+  /** Cierra el contorno activo (fairway, bunker, lago o green). OB = línea abierta, no se cierra. */
   const closeRing = async () => {
+    if (multiKind === "ob") return;
     if (activeKind !== "fairway" && !multiKind) return;
     if (activeRing.length < 3) {
       flash("err", "Mínimo 3 puntos para cerrar.");
@@ -569,7 +588,8 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       return;
     }
     // Fairway: tocar cerca del punto 1 cierra el polígono (hoyos largos).
-    // Bunker/lago/OB: NO usar proximidad — se cierran solo tocando el punto 1 o el botón «Cerrar».
+    // Bunker/lago/green: se cierran tocando el punto 1 o el botón «Cerrar».
+    // OB: línea abierta — cada toque solo agrega puntos, sin cierre.
     if (
       activeKind === "fairway" &&
       activeRing.length >= 3 &&
@@ -638,7 +658,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             onVertexMove={saveVertex}
             onVertexSelect={setSelectedVertex}
             onCloseRing={
-              (mode === "fairway" || multiKind != null) && addingCorner
+              (mode === "fairway" ||
+                (multiKind != null && multiKind !== "ob")) &&
+              addingCorner
                 ? closeRing
                 : undefined
             }
@@ -903,7 +925,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                       >
                         {addingCorner ? "✓ Tocando: agregar" : "+ Agregar tocando"}
                       </button>
-                      {addingCorner && activeRing.length >= 3 ? (
+                      {addingCorner && multiKind !== "ob" && activeRing.length >= 3 ? (
                         <button
                           type="button"
                           disabled={busy}
@@ -928,7 +950,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 ) : (
                   <div className="mt-1 rounded-lg bg-slate-800 px-3 py-2 text-center text-[11px] text-slate-300">
                     {multiList.length === 0
-                      ? `No hay ${meta.label.toLowerCase()}. Toca «＋ Nuevo» y marca el contorno tocando el mapa.`
+                      ? multiKind === "ob"
+                        ? "No hay OB. Toca «＋ Nuevo» y traza la línea tocando el mapa (mínimo 2 puntos)."
+                        : `No hay ${meta.label.toLowerCase()}. Toca «＋ Nuevo» y marca el contorno tocando el mapa.`
                       : `Elige un ${meta.one} (${meta.prefix}1, ${meta.prefix}2…) para ajustarlo o «＋ Nuevo» para otro.`}
                   </div>
                 )}
@@ -1001,15 +1025,19 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         <p className="mt-2 text-center text-[11px] leading-snug text-slate-400">
           {mode === "green"
             ? "Arrastra el punto verde o toca el mapa donde va en la foto."
-            : addingCorner && (mode === "fairway" || multiKind)
-              ? multiKind
+            : addingCorner && mode === "fairway"
+              ? "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
+              : addingCorner && multiKind && multiKind !== "ob"
                 ? "Toca el mapa para agregar puntos en orden. Con 3+ puntos usa «Cerrar» o toca el punto 1 en el mapa."
-                : "Toca el mapa para ir agregando puntos en orden. Con 3+ puntos, toca el punto 1 (Cerrar) para unir con el primero."
-              : addingCorner
-                ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
-                : multiKind
-                  ? `Elige un ${MULTI_META[multiKind].one} para arrastrar sus puntos, o crea uno nuevo. Donde no aplique, bórralo.`
-                  : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
+                : addingCorner && multiKind === "ob"
+                  ? "Toca el mapa para trazar la línea OB. Con 2+ puntos ya se guarda; no hace falta cerrar."
+                  : addingCorner
+                    ? `Toca el mapa para ir agregando el contorno del ${ringLabel} en orden.`
+                    : multiKind
+                      ? multiKind === "ob"
+                        ? "Elige un OB para arrastrar sus puntos, o crea uno nuevo. Es una línea abierta (sin cierre)."
+                        : `Elige un ${MULTI_META[multiKind].one} para arrastrar sus puntos, o crea uno nuevo. Donde no aplique, bórralo.`
+                      : `Arrastra un punto del ${ringLabel}, o usa «+ Agregar tocando» para crear nuevos.`}
         </p>
       </div>
     </div>
