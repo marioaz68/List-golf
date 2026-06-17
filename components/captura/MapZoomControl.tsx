@@ -17,7 +17,7 @@ export function MapZoomControl({
   canZoomOut = true,
 }: MapZoomControlProps) {
   return (
-    <div className="pointer-events-auto absolute bottom-[4.75rem] right-2 z-[1000] flex flex-col items-center gap-0.5 rounded-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md">
+    <div className="pointer-events-auto absolute bottom-[7rem] right-2 z-[1020] flex flex-col items-center gap-0.5 rounded-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md">
       <button
         type="button"
         onClick={onZoomIn}
