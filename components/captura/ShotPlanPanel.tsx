@@ -6,6 +6,7 @@ import {
   carryYards,
   clubYardPickerValues,
   CLUB_BY_ID,
+  PUTTER_MAX_YARDS,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
@@ -15,6 +16,16 @@ function buildClubPicks(bag: PlayerBag) {
   for (const c of getEnabledBagClubs(bag)) {
     const cat = CLUB_BY_ID[c.catalogId];
     if (!cat) continue;
+    if (cat.category === "putter") {
+      out.push({
+        key: "putter:full",
+        catalogId: "putter",
+        swing: "full",
+        label: "Putter",
+        short: "P",
+      });
+      continue;
+    }
     out.push({
       key: `${c.catalogId}:full`,
       catalogId: c.catalogId,
@@ -57,25 +68,44 @@ export function ShotPlanPanel({
   const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
 
   const bagClub = bag.clubs.find((c) => c.catalogId === pick?.catalogId);
-  const defaultYards =
-    pick && bagClub
+  const isPutter = pick?.catalogId === "putter";
+  const defaultYards = isPutter
+    ? Math.max(5, Math.round((suggestedYards ?? 10) / 5) * 5)
+    : pick && bagClub
       ? carryYards(bagClub.yardsFull, bagClub.yardsThreeQuarter, pick.swing)
       : 100;
 
   const yardValues = useMemo(
-    () => clubYardPickerValues(defaultYards),
-    [defaultYards]
+    () => clubYardPickerValues(defaultYards, suggestedYards),
+    [defaultYards, suggestedYards]
   );
   const [plannedYards, setPlannedYards] = useState(defaultYards);
 
   useEffect(() => {
+    if (
+      suggestedYards != null &&
+      suggestedYards > 0 &&
+      suggestedYards <= PUTTER_MAX_YARDS &&
+      picks.some((p) => p.catalogId === "putter")
+    ) {
+      setClubKey("putter:full");
+    }
+  }, [suggestedYards, picks]);
+
+  useEffect(() => {
     if (!pick) return;
+    if (pick.catalogId === "putter") {
+      if (suggestedYards != null && suggestedYards > 0) {
+        setPlannedYards(Math.max(5, Math.round(suggestedYards / 5) * 5));
+      }
+      return;
+    }
     const bc = bag.clubs.find((c) => c.catalogId === pick.catalogId);
     if (!bc) return;
     setPlannedYards(
       carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing)
     );
-  }, [pick, bag.clubs]);
+  }, [pick, bag.clubs, suggestedYards]);
 
   const yardLabels = useMemo(
     () => yardValues.map((y) => String(y)),
@@ -101,7 +131,11 @@ export function ShotPlanPanel({
     );
   }
 
-  const swingLabel = pick.swing === "three_quarter" ? "3/4" : "full";
+  const swingLabel = isPutter
+    ? "putt"
+    : pick.swing === "three_quarter"
+      ? "3/4"
+      : "full";
 
   return (
     <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">

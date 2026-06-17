@@ -20,11 +20,14 @@ export function ClubSuggestionStrip({
 }: ClubSuggestionStripProps) {
   const gapHint = useMemo(() => {
     if (!suggestion) return null;
+    if (suggestion.catalogId === "putter") return "putt";
     const g = suggestion.gapYards;
     if (Math.abs(g) <= 5) return "justo";
     if (g > 0) return `+${g}`;
     return `${g}`;
   }, [suggestion]);
+
+  const isPutter = suggestion?.catalogId === "putter";
 
   return (
     <div className="pointer-events-auto mx-2 mb-1 rounded-lg border border-white/15 bg-black/80 px-2 py-1 shadow-lg backdrop-blur-md">
@@ -35,7 +38,7 @@ export function ClubSuggestionStrip({
           </span>
           {suggestion ? (
             <span className="truncate text-[10px] font-semibold text-slate-400">
-              {suggestion.carryYards} yds
+              {isPutter ? `${suggestion.targetYards} yds` : `${suggestion.carryYards} yds`}
               {gapHint ? (
                 <span className="text-amber-400/90"> · {gapHint}</span>
               ) : null}
@@ -45,16 +48,20 @@ export function ClubSuggestionStrip({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <SwingChip
-            active={swing === "full"}
-            label="Full"
-            onClick={() => onSwingChange("full")}
-          />
-          <SwingChip
-            active={swing === "three_quarter"}
-            label="3/4"
-            onClick={() => onSwingChange("three_quarter")}
-          />
+          {!isPutter ? (
+            <>
+              <SwingChip
+                active={swing === "full"}
+                label="Full"
+                onClick={() => onSwingChange("full")}
+              />
+              <SwingChip
+                active={swing === "three_quarter"}
+                label="3/4"
+                onClick={() => onSwingChange("three_quarter")}
+              />
+            </>
+          ) : null}
           {onClear ? (
             <button
               type="button"

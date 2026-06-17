@@ -52,6 +52,12 @@ export const CLUB_BY_ID = Object.fromEntries(
   CLUB_CATALOG.map((c) => [c.id, c])
 ) as Record<string, ClubCatalogEntry>;
 
+/** Mínimo en rollers de yardas (chip, bunker, putt largo). */
+export const MIN_YARD_PICK = 5;
+
+/** Distancia al green (yds) a partir de la cual se sugiere putter. */
+export const PUTTER_MAX_YARDS = 40;
+
 /** 3/4 ≈ 75 % de la yarda full (redondeada a 5 yds). */
 export function defaultThreeQuarterYards(full: number): number {
   if (full <= 0) return 0;
@@ -71,14 +77,20 @@ export function yardRangeValues(
   return out;
 }
 
-/** Valores ±50 yds alrededor del bastón, en saltos de 5. */
-export function clubYardPickerValues(anchorYards: number): number[] {
-  const center = Math.max(5, Math.round(anchorYards / 5) * 5);
-  return yardRangeValues(
-    Math.max(10, center - 50),
-    Math.min(320, center + 50),
-    5
-  );
+/** Valores ±50 yds alrededor del foco (distancia al green o carry del bastón). */
+export function clubYardPickerValues(
+  anchorYards: number,
+  focusYards?: number
+): number[] {
+  const anchor = Math.max(MIN_YARD_PICK, Math.round(anchorYards / 5) * 5);
+  const focus =
+    focusYards != null && focusYards > 0
+      ? Math.max(MIN_YARD_PICK, Math.round(focusYards / 5) * 5)
+      : anchor;
+  const span = focus <= 50 ? 40 : 50;
+  const lo = Math.max(MIN_YARD_PICK, focus - span);
+  const hi = Math.min(320, Math.max(focus + span, lo + 10));
+  return yardRangeValues(lo, hi, 5);
 }
 
 export function carryYards(
