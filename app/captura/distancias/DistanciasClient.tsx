@@ -870,19 +870,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     };
   }, [actorQuery, activeHole]);
 
-  // Avanzar manualmente: SOLO ascendente (envuelve 18→1). No se puede
-  // retroceder de hoyo; para reiniciar usa "Salir en 1 / 10".
-  const nextHole = () => {
-    manualAtDetectedRef.current = insideHole;
-    setManualHole((prev) => {
-      const base = prev ?? autoHole ?? nearestHole;
-      return (base % 18) + 1;
-    });
-    setTapPoint(null);
-    setTargetYards(0);
-    resetTapUi();
-    if (demoMode) setDemoProgress(0.35);
-  };
+  const goToHole = useCallback(
+    (delta: 1 | -1) => {
+      manualAtDetectedRef.current = insideHole;
+      setManualHole((prev) => {
+        const base = prev ?? autoHole ?? nearestHole;
+        if (delta === 1) return (base % 18) + 1;
+        return base <= 1 ? 18 : base - 1;
+      });
+      setTapPoint(null);
+      setTargetYards(0);
+      resetTapUi();
+      if (demoMode) setDemoProgress(0.35);
+    },
+    [insideHole, autoHole, nearestHole, resetTapUi, demoMode]
+  );
+
+  const prevHole = useCallback(() => goToHole(-1), [goToHole]);
+  const nextHole = useCallback(() => goToHole(1), [goToHole]);
 
   const startAtHole = (n: number) => {
     manualAtDetectedRef.current = insideHole;
@@ -1095,10 +1100,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             </div>
             <button
               type="button"
-              onClick={() => setManualHole(null)}
-              disabled={manualHole == null || demoMode}
-              aria-label="Volver a detección automática"
-              className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm disabled:opacity-100"
+              onClick={prevHole}
+              aria-label="Hoyo anterior"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+            >
+              ‹
+            </button>
+            <div
+              className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm"
+              aria-live="polite"
             >
               <div className="text-xs font-black text-emerald-100">
                 H{activeHole}
@@ -1106,10 +1116,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
                   par {holeMeta?.par ?? "—"}
                 </span>
               </div>
-              {manualHole != null ? (
-                <div className="text-[8px] text-slate-300">tocar para auto</div>
-              ) : null}
-            </button>
+              {hasTeeMark ? (
+                <div className="text-[8px] text-emerald-400/90">salida ✓</div>
+              ) : (
+                <div className="text-[8px] text-amber-300/90">marca salida</div>
+              )}
+            </div>
             <button
               type="button"
               onClick={nextHole}

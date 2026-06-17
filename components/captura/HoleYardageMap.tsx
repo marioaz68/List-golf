@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { MapZoomControl } from "@/components/captura/MapZoomControl";
 import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
   type ReferencePointWithYards,
@@ -12,10 +13,16 @@ import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
   MAP_SCALE,
   addSatelliteLayers,
+  applyManualZoomLevel,
+  clampManualZoomDelta,
   frameByProximity,
   loadLeaflet,
-  readMapLayout,
+  manualZoomPercent,
+  MANUAL_ZOOM_DELTA_MAX,
+  MANUAL_ZOOM_DELTA_MIN,
+  MANUAL_ZOOM_STEP,
   panToShowInViewport,
+  readMapLayout,
   screenToLatLng,
   tuneRotatedFraming,
   uprightHtml,
@@ -98,12 +105,16 @@ export function HoleYardageMap({
   // actualizaciones de posición no, para no recargar tiles (evita parpadeo).
   const framedHoleRef = useRef<number | null>(null);
   const framedSegmentRef = useRef<number>(0);
+  const autoZoomRef = useRef(17);
+  const userZoomDeltaRef = useRef(0);
+  const framingAnchorRef = useRef<{ lat: number; lon: number } | null>(null);
   const onMapTapRef = useRef(onMapTap);
   const lastTouchEndAtRef = useRef(0);
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [mapReady, setMapReady] = useState(false);
+  const [zoomPercent, setZoomPercent] = useState(100);
   onMapTapRef.current = onMapTap;
   sizeRef.current = size;
   playerPosRef.current = { lat: playerLat, lon: playerLon };
@@ -237,6 +248,45 @@ export function HoleYardageMap({
     map.invalidateSize();
   }, [size.w, size.h]);
 
+  const applyUserZoom = useCallback(() => {
+    const map = mapRef.current;
+    const anchor = framingAnchorRef.current;
+    const { viewportW, viewportH, rotW, rotH } = readMapLayout(
+      containerRef.current,
+      mapDivRef.current
+    );
+    if (!map || !anchor || viewportW === 0 || viewportH === 0) return;
+    applyManualZoomLevel(
+      map,
+      bearingRef.current,
+      anchor.lat,
+      anchor.lon,
+      autoZoomRef.current,
+      userZoomDeltaRef.current,
+      viewportW,
+      viewportH,
+      rotW,
+      rotH
+    );
+  }, []);
+
+  const bumpZoom = useCallback(
+    (direction: 1 | -1) => {
+      const next = clampManualZoomDelta(
+        userZoomDeltaRef.current + direction * MANUAL_ZOOM_STEP
+      );
+      userZoomDeltaRef.current = next;
+      setZoomPercent(manualZoomPercent(next));
+      applyUserZoom();
+    },
+    [applyUserZoom]
+  );
+
+  useEffect(() => {
+    userZoomDeltaRef.current = 0;
+    setZoomPercent(100);
+  }, [holeNo]);
+
   // Update markers, rotation, zoom when data changes
   useEffect(() => {
     const map = mapRef.current;
@@ -285,9 +335,15 @@ export function HoleYardageMap({
         ? centerline![centerline!.length - 1]
         : null;
 
-      // Anclaje/orientación: el green (último punto) arriba; el jugador, abajo.
-      const aim = lastWp ?? greenTarget ?? null;
-      const anchor = aim ?? greenTarget;
+      // Anclaje superior: último punto de la línea (= after / atrás del green).
+      const greenBackPt = referencePoints.find((p) => p.kind === "green-back");
+      const topAnchor =
+        lastWp ??
+        (greenBackPt
+          ? { lat: greenBackPt.lat, lon: greenBackPt.lon }
+          : null) ??
+        greenTarget;
+      const anchor = topAnchor;
 
       // Zoom: que quepan TODOS los puntos restantes (del actual al green), así
       // al avanzar de punto la foto se va acercando hacia el green.
@@ -298,8 +354,8 @@ export function HoleYardageMap({
       // como eje, no el jugador (que se mueve), para que la foto no gire ni
       // reescale mientras caminas dentro del mismo tramo.
       const orientFrom = fromWp ?? framingPos;
-      const bearing = aim
-        ? bearingDegrees(orientFrom.lat, orientFrom.lon, aim.lat, aim.lon)
+      const bearing = topAnchor
+        ? bearingDegrees(orientFrom.lat, orientFrom.lon, topAnchor.lat, topAnchor.lon)
         : 0;
       bearingRef.current = bearing;
       rotator.style.transform = `rotate(${-bearing}deg)`;
@@ -451,6 +507,25 @@ export function HoleYardageMap({
               null,
               fitZoom
             );
+            autoZoomRef.current = map.getZoom();
+            framingAnchorRef.current = { lat: anchor.lat, lon: anchor.lon };
+            if (recenterHole) {
+              userZoomDeltaRef.current = 0;
+              setZoomPercent(100);
+            } else if (userZoomDeltaRef.current !== 0) {
+              applyManualZoomLevel(
+                map,
+                bearing,
+                anchor.lat,
+                anchor.lon,
+                autoZoomRef.current,
+                userZoomDeltaRef.current,
+                viewportW,
+                viewportH,
+                rotW,
+                rotH
+              );
+            }
           } else if (userPin) {
             panToShowInViewport(
               map,
@@ -474,6 +549,12 @@ export function HoleYardageMap({
               56,
               104
             );
+          }
+          if (!shouldReframe && anchor) {
+            framingAnchorRef.current = { lat: anchor.lat, lon: anchor.lon };
+            if (autoZoomRef.current <= 0) {
+              autoZoomRef.current = map.getZoom();
+            }
           }
         }
       } catch {
@@ -528,6 +609,21 @@ export function HoleYardageMap({
           ? "Paso 1 · toca donde sales"
           : "Toca el mapa · D distancia · G golpe"}
       </div>
+      {mapReady ? (
+        <MapZoomControl
+          percent={zoomPercent}
+          onZoomIn={() => bumpZoom(1)}
+          onZoomOut={() => bumpZoom(-1)}
+          canZoomIn={
+            userZoomDeltaRef.current <
+            MANUAL_ZOOM_DELTA_MAX - MANUAL_ZOOM_STEP * 0.5
+          }
+          canZoomOut={
+            userZoomDeltaRef.current >
+            MANUAL_ZOOM_DELTA_MIN + MANUAL_ZOOM_STEP * 0.5
+          }
+        />
+      ) : null}
     </div>
   );
 }

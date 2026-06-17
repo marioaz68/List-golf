@@ -146,10 +146,61 @@ export function panToShowInViewport(
   }
 }
 
-/**
- * Convierte lat/lon a posición en el viewport visible, considerando la
- * rotación CSS del contenedor del mapa.
- */
+/** Paso de zoom manual (+/−) en niveles Leaflet. */
+export const MANUAL_ZOOM_STEP = 0.4;
+export const MANUAL_ZOOM_DELTA_MIN = -1.2;
+export const MANUAL_ZOOM_DELTA_MAX = 2.2;
+
+export function manualZoomPercent(delta: number): number {
+  return Math.round(100 * 2 ** delta);
+}
+
+export function clampManualZoomDelta(delta: number): number {
+  return Math.max(
+    MANUAL_ZOOM_DELTA_MIN,
+    Math.min(MANUAL_ZOOM_DELTA_MAX, delta)
+  );
+}
+
+/** Aplica zoom manual y re-ancla el punto after/green arriba al centro. */
+export function applyManualZoomLevel(
+  map: any,
+  bearing: number,
+  anchorLat: number,
+  anchorLon: number,
+  autoZoom: number,
+  delta: number,
+  viewportW: number,
+  viewportH: number,
+  rotW: number,
+  rotH: number,
+  minZoom = 15,
+  maxZoom = 21,
+  topBar = 56,
+  bottomBar = 104
+): number {
+  const z = Math.max(minZoom, Math.min(maxZoom, autoZoom + delta));
+  // Sin setZoomAround en el green: solo cambia escala y luego fija el after arriba.
+  map.setZoom(z, { animate: false });
+  for (let pass = 0; pass < 2; pass++) {
+    tuneRotatedFraming(
+      map,
+      bearing,
+      0,
+      0,
+      anchorLat,
+      anchorLon,
+      viewportW,
+      viewportH,
+      rotW,
+      rotH,
+      topBar,
+      bottomBar
+    );
+  }
+  return z;
+}
+
 function toRotatedScreen(
   map: any,
   lat: number,
