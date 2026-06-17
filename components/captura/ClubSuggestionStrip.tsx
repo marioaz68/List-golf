@@ -6,16 +6,26 @@ import type { ClubSuggestion } from "@/lib/distances/suggestClub";
 
 interface ClubSuggestionStripProps {
   suggestion: ClubSuggestion | null;
+  targetYards: number;
   swing: SwingKind;
   onSwingChange: (s: SwingKind) => void;
+  onPrevClub?: () => void;
+  onNextClub?: () => void;
+  canPrevClub?: boolean;
+  canNextClub?: boolean;
   onClear?: () => void;
 }
 
-/** Fila compacta: bastón sugerido + full/3·4 (yardas al green van arriba). */
+/** Bastón sugerido al green + cambio rápido ‹ › y full/3·4. */
 export function ClubSuggestionStrip({
   suggestion,
+  targetYards,
   swing,
   onSwingChange,
+  onPrevClub,
+  onNextClub,
+  canPrevClub = false,
+  canNextClub = false,
   onClear,
 }: ClubSuggestionStripProps) {
   const gapHint = useMemo(() => {
@@ -31,21 +41,52 @@ export function ClubSuggestionStrip({
 
   return (
     <div className="pointer-events-auto mx-2 mb-1 rounded-lg border border-white/15 bg-black/80 px-2 py-1 shadow-lg backdrop-blur-md">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-sm font-black leading-none text-white">
-            {suggestion?.shortLabel ?? "—"}
-          </span>
-          {suggestion ? (
-            <span className="truncate text-[10px] font-semibold text-slate-400">
-              {isPutter ? `${suggestion.targetYards} yds` : `${suggestion.carryYards} yds`}
-              {gapHint ? (
-                <span className="text-amber-400/90"> · {gapHint}</span>
-              ) : null}
-            </span>
-          ) : (
-            <span className="text-[10px] text-amber-200">Bolsa</span>
-          )}
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex min-w-0 shrink items-center gap-1">
+          {onPrevClub ? (
+            <button
+              type="button"
+              onClick={onPrevClub}
+              disabled={!canPrevClub}
+              aria-label="Bastón anterior"
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md bg-white/10 text-sm font-bold text-white disabled:opacity-30 active:scale-95"
+            >
+              ‹
+            </button>
+          ) : null}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[10px] font-bold text-emerald-300">
+                {targetYards}→
+              </span>
+              <span className="truncate text-sm font-black leading-none text-white">
+                {suggestion?.shortLabel ?? "—"}
+              </span>
+            </div>
+            {suggestion ? (
+              <span className="truncate text-[9px] font-semibold text-slate-400">
+                {isPutter
+                  ? `${suggestion.targetYards} yds putt`
+                  : `${suggestion.carryYards} yds carry`}
+                {gapHint && !isPutter ? (
+                  <span className="text-amber-400/90"> · {gapHint}</span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="text-[9px] text-amber-200">Activa bastones en Bolsa</span>
+            )}
+          </div>
+          {onNextClub ? (
+            <button
+              type="button"
+              onClick={onNextClub}
+              disabled={!canNextClub}
+              aria-label="Siguiente bastón"
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md bg-white/10 text-sm font-bold text-white disabled:opacity-30 active:scale-95"
+            >
+              ›
+            </button>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {!isPutter ? (

@@ -44,7 +44,7 @@ import {
   savePlayerBag,
   type PlayerBag,
 } from "@/lib/distances/playerBag";
-import { suggestClub } from "@/lib/distances/suggestClub";
+import { rankClubsForTarget } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   cancelPendingShot,
@@ -143,6 +143,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
   const [targetYards, setTargetYards] = useState(0);
+  const [clubPickIndex, setClubPickIndex] = useState(0);
   const [swing, setSwing] = useState<SwingKind>("full");
   const [bagOpen, setBagOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
@@ -569,17 +570,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     return null;
   }, [geo, pendingShot, completedShotsCount, lastBall]);
 
-  const playGreenYds = useMemo(() => {
-    if (!lastBall || !activeHolePoints || needsTeeMark) return null;
-    return greenDistancesForHole(
-      lastBall.lat,
-      lastBall.lon,
-      activeHolePoints
-    );
-  }, [lastBall, activeHolePoints, needsTeeMark]);
-
-  const topGreenYds = useMemo(() => {
-    if (!activeHolePoints) return null;
+  const liveGreenYds = useMemo(() => {
+    if (!activeHolePoints || geo.status !== "ok" || needsTeeMark) return null;
     if (tapPoint) {
       return greenDistancesForHole(
         tapPoint.lat,
@@ -587,8 +579,32 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         activeHolePoints
       );
     }
+    return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
+  }, [geo, activeHolePoints, needsTeeMark, tapPoint]);
+
+  const playGreenYds = useMemo(() => {
+    if (!activeHolePoints || needsTeeMark) return null;
+    if (tapPoint) {
+      return greenDistancesForHole(
+        tapPoint.lat,
+        tapPoint.lon,
+        activeHolePoints
+      );
+    }
+    if (geo.status === "ok") {
+      return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
+    }
+    if (!lastBall) return null;
+    return greenDistancesForHole(
+      lastBall.lat,
+      lastBall.lon,
+      activeHolePoints
+    );
+  }, [lastBall, activeHolePoints, needsTeeMark, geo, tapPoint]);
+
+  const topGreenYds = useMemo(() => {
     return playGreenYds;
-  }, [tapPoint, playGreenYds, activeHolePoints]);
+  }, [playGreenYds]);
 
   const topGreenLabel = useMemo(() => {
     if (tapPoint) return "Punto marcado";
@@ -685,18 +701,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [arrivalToast]);
 
   useEffect(() => {
-    if (needsTeeMark || shotPlanOpen || distanceMode || pendingTap) return;
-    if (playGreenYds) {
-      setTargetYards(Math.round(playGreenYds.center / 5) * 5);
+    if (needsTeeMark || shotPlanOpen || pendingTap) return;
+    if (distanceMode && tapPoint) return;
+    if (liveGreenYds) {
+      setTargetYards(Math.round(liveGreenYds.center / 5) * 5);
     }
   }, [
-    playGreenYds?.center,
+    liveGreenYds?.center,
     needsTeeMark,
     activeHole,
     shotPlanOpen,
     distanceMode,
     pendingTap,
+    tapPoint,
   ]);
+
+  useEffect(() => {
+    setClubPickIndex(0);
+  }, [targetYards, swing, activeHole]);
 
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
@@ -733,14 +755,49 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const shotPlanSuggestedYards = useMemo(() => {
     if (!activeHolePoints) return undefined;
-    const anchor = lastBall ?? teeMark;
-    if (!anchor) return undefined;
+    let lat: number | undefined;
+    let lon: number | undefined;
+    if (pendingTap) {
+      lat = pendingTap.lat;
+      lon = pendingTap.lon;
+    } else if (geo.status === "ok") {
+      lat = geo.lat;
+      lon = geo.lon;
+    } else if (lastBall) {
+      lat = lastBall.lat;
+      lon = lastBall.lon;
+    } else if (teeMark) {
+      lat = teeMark.lat;
+      lon = teeMark.lon;
+    }
+    if (lat == null || lon == null) return undefined;
     return (
       Math.round(
-        greenDistancesForHole(anchor.lat, anchor.lon, activeHolePoints).center / 5
+        greenDistancesForHole(lat, lon, activeHolePoints).center / 5
       ) * 5
     );
-  }, [activeHolePoints, lastBall, teeMark]);
+  }, [activeHolePoints, pendingTap, geo, lastBall, teeMark]);
+
+  const shotPlanGreenDist = useMemo(() => {
+    if (!activeHolePoints) return null;
+    let lat: number | undefined;
+    let lon: number | undefined;
+    if (pendingTap) {
+      lat = pendingTap.lat;
+      lon = pendingTap.lon;
+    } else if (geo.status === "ok") {
+      lat = geo.lat;
+      lon = geo.lon;
+    } else if (lastBall) {
+      lat = lastBall.lat;
+      lon = lastBall.lon;
+    } else if (teeMark) {
+      lat = teeMark.lat;
+      lon = teeMark.lon;
+    }
+    if (lat == null || lon == null) return null;
+    return greenDistancesForHole(lat, lon, activeHolePoints);
+  }, [activeHolePoints, pendingTap, geo, lastBall, teeMark]);
 
   const holeMeta = activeHolePoints;
 
@@ -879,10 +936,21 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     });
   }, [geo, tapPoint]);
 
+  const rankedClubs = useMemo(() => {
+    if (targetYards <= 0) return [];
+    return rankClubsForTarget(
+      getEnabledBagClubs(bag),
+      targetYards,
+      swing,
+      liveGreenYds
+    );
+  }, [bag, targetYards, swing, liveGreenYds]);
+
   const clubSuggestion = useMemo(() => {
-    if (targetYards <= 0) return null;
-    return suggestClub(getEnabledBagClubs(bag), targetYards, swing);
-  }, [bag, targetYards, swing]);
+    if (!rankedClubs.length) return null;
+    const idx = Math.min(clubPickIndex, rankedClubs.length - 1);
+    return rankedClubs[idx] ?? null;
+  }, [rankedClubs, clubPickIndex]);
 
   const clearTap = useCallback(() => {
     setTapPoint(null);
@@ -1120,15 +1188,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             </button>
           </div>
         ) : null}
-        {!needsTeeMark &&
+        {hasTeeMark &&
         !shotPlanOpen &&
         !pendingTap &&
         targetYards > 0 &&
         !farFromCourse ? (
           <ClubSuggestionStrip
             suggestion={clubSuggestion}
+            targetYards={targetYards}
             swing={swing}
             onSwingChange={setSwing}
+            onPrevClub={() => setClubPickIndex((i) => Math.max(0, i - 1))}
+            onNextClub={() =>
+              setClubPickIndex((i) =>
+                Math.min(rankedClubs.length - 1, i + 1)
+              )
+            }
+            canPrevClub={clubPickIndex > 0}
+            canNextClub={clubPickIndex < rankedClubs.length - 1}
             onClear={distanceMode ? clearTap : undefined}
           />
         ) : null}
@@ -1269,6 +1346,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         <ShotPlanPanel
           bag={bag}
           suggestedYards={shotPlanSuggestedYards}
+          greenDist={shotPlanGreenDist}
           onConfirm={handleConfirmPlan}
           onCancel={() => setShotPlanOpen(false)}
         />

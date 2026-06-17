@@ -2,7 +2,7 @@ import {
   carryYards,
   CLUB_BY_ID,
   MIN_YARD_PICK,
-  PUTTER_MAX_YARDS,
+  shouldSuggestPutter,
   yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
@@ -17,28 +17,65 @@ export interface ClubSuggestion {
   gapYards: number;
 }
 
+export interface GreenDistances {
+  front: number;
+  center: number;
+  back: number;
+}
+
+function putterSuggestion(targetYards: number): ClubSuggestion {
+  const cat = CLUB_BY_ID.putter;
+  return {
+    catalogId: "putter",
+    label: cat.label,
+    shortLabel: cat.shortLabel,
+    carryYards: targetYards,
+    targetYards,
+    gapYards: 0,
+  };
+}
+
+function scoreCandidate(carry: number, targetYards: number): number {
+  const gap = carry - targetYards;
+  const shortfall = gap < 0 ? -gap : 0;
+  return Math.abs(gap) + shortfall * 1.5;
+}
+
 /**
- * Bastón cuya carry se acerca más a la distancia objetivo.
- * Prefiere no quedarse corto (>8 yds) cuando hay empate.
+ * Bastones ordenados por qué tan bien encajan con la distancia al green.
  */
-export function suggestClub(
+export function rankClubsForTarget(
   clubs: PlayerBagClub[],
   targetYards: number,
-  swing: SwingKind
-): ClubSuggestion | null {
-  if (targetYards <= 0) return null;
+  swing: SwingKind,
+  greenDist?: GreenDistances | null
+): ClubSuggestion[] {
+  if (targetYards <= 0) return [];
 
-  const putterClub = clubs.find((c) => c.catalogId === "putter" && c.enabled);
-  if (putterClub && targetYards <= PUTTER_MAX_YARDS) {
-    const cat = CLUB_BY_ID.putter;
-    return {
-      catalogId: "putter",
-      label: cat.label,
-      shortLabel: cat.shortLabel,
-      carryYards: targetYards,
-      targetYards,
-      gapYards: 0,
-    };
+  const hasPutter = clubs.some((c) => c.catalogId === "putter");
+  if (hasPutter && shouldSuggestPutter(targetYards, greenDist)) {
+    const putter = putterSuggestion(targetYards);
+    const others = clubs
+      .map((c) => {
+        const cat = CLUB_BY_ID[c.catalogId];
+        if (!cat || cat.defaultYardsFull <= 0) return null;
+        const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
+        if (carry <= 0) return null;
+        const gap = carry - targetYards;
+        return {
+          catalogId: c.catalogId,
+          label: cat.label,
+          shortLabel: cat.shortLabel,
+          carryYards: carry,
+          targetYards,
+          gapYards: gap,
+          score: scoreCandidate(carry, targetYards),
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null)
+      .sort((a, b) => a.score - b.score)
+      .map(({ score: _, ...rest }) => rest);
+    return [putter, ...others];
   }
 
   const candidates = clubs
@@ -48,8 +85,6 @@ export function suggestClub(
       const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
       if (carry <= 0) return null;
       const gap = carry - targetYards;
-      const shortfall = gap < 0 ? -gap : 0;
-      const score = Math.abs(gap) + shortfall * 1.5;
       return {
         catalogId: c.catalogId,
         label: cat.label,
@@ -57,23 +92,26 @@ export function suggestClub(
         carryYards: carry,
         targetYards,
         gapYards: gap,
-        score,
+        score: scoreCandidate(carry, targetYards),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
 
-  if (!candidates.length) return null;
-
   candidates.sort((a, b) => a.score - b.score);
-  const best = candidates[0];
-  return {
-    catalogId: best.catalogId,
-    label: best.label,
-    shortLabel: best.shortLabel,
-    carryYards: best.carryYards,
-    targetYards: best.targetYards,
-    gapYards: best.gapYards,
-  };
+  return candidates.map(({ score: _, ...rest }) => rest);
+}
+
+/**
+ * Bastón cuya carry se acerca más a la distancia objetivo.
+ * Prefiere no quedarse corto (>8 yds) cuando hay empate.
+ */
+export function suggestClub(
+  clubs: PlayerBagClub[],
+  targetYards: number,
+  swing: SwingKind,
+  greenDist?: GreenDistances | null
+): ClubSuggestion | null {
+  return rankClubsForTarget(clubs, targetYards, swing, greenDist)[0] ?? null;
 }
 
 /** Valores para el roller: distancia al green ± rango, paso 5 yds. */

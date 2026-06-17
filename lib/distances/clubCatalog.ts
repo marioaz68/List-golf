@@ -56,7 +56,18 @@ export const CLUB_BY_ID = Object.fromEntries(
 export const MIN_YARD_PICK = 5;
 
 /** Distancia al green (yds) a partir de la cual se sugiere putter. */
-export const PUTTER_MAX_YARDS = 40;
+export const PUTTER_MAX_YARDS = 55;
+
+/** En green o muy cerca: priorizar putter. */
+export function shouldSuggestPutter(
+  targetYards: number,
+  greenDist?: { front: number; center: number; back: number } | null
+): boolean {
+  if (targetYards <= 30) return true;
+  if (!greenDist) return targetYards <= PUTTER_MAX_YARDS;
+  if (greenDist.front <= 18 && targetYards <= 45) return true;
+  return targetYards <= PUTTER_MAX_YARDS && greenDist.back <= 20;
+}
 
 /** 3/4 ≈ 75 % de la yarda full (redondeada a 5 yds). */
 export function defaultThreeQuarterYards(full: number): number {

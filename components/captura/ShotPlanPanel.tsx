@@ -6,9 +6,10 @@ import {
   carryYards,
   clubYardPickerValues,
   CLUB_BY_ID,
-  PUTTER_MAX_YARDS,
+  shouldSuggestPutter,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
+import type { GreenDistances } from "@/lib/distances/suggestClub";
 import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
 function buildClubPicks(bag: PlayerBag) {
@@ -48,6 +49,7 @@ interface ShotPlanPanelProps {
   bag: PlayerBag;
   /** Yardas sugeridas al abrir (p. ej. distancia al green desde la salida). */
   suggestedYards?: number;
+  greenDist?: GreenDistances | null;
   onConfirm: (plan: {
     catalogId: string;
     swing: SwingKind;
@@ -60,6 +62,7 @@ interface ShotPlanPanelProps {
 export function ShotPlanPanel({
   bag,
   suggestedYards,
+  greenDist = null,
   onConfirm,
   onCancel,
 }: ShotPlanPanelProps) {
@@ -85,12 +88,12 @@ export function ShotPlanPanel({
     if (
       suggestedYards != null &&
       suggestedYards > 0 &&
-      suggestedYards <= PUTTER_MAX_YARDS &&
+      shouldSuggestPutter(suggestedYards, greenDist) &&
       picks.some((p) => p.catalogId === "putter")
     ) {
       setClubKey("putter:full");
     }
-  }, [suggestedYards, picks]);
+  }, [suggestedYards, greenDist, picks]);
 
   useEffect(() => {
     if (!pick) return;
