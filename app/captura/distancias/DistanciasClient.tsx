@@ -30,6 +30,17 @@ import {
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
+import { ClubSuggestionStrip } from "@/components/captura/ClubSuggestionStrip";
+import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
+import type { SwingKind } from "@/lib/distances/clubCatalog";
+import {
+  defaultPlayerBag,
+  getEnabledBagClubs,
+  loadPlayerBag,
+  savePlayerBag,
+  type PlayerBag,
+} from "@/lib/distances/playerBag";
+import { suggestClub, yardsRollerValues } from "@/lib/distances/suggestClub";
 
 function MapSkeleton() {
   return (
@@ -106,6 +117,11 @@ export default function DistanciasClient() {
   const [geo, setGeo] = useState<GeoState>({ status: "idle" });
   const [manualHole, setManualHole] = useState<number | null>(null);
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
+  /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
+  const [targetYards, setTargetYards] = useState(0);
+  const [swing, setSwing] = useState<SwingKind>("full");
+  const [bagOpen, setBagOpen] = useState(false);
+  const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -145,6 +161,15 @@ export default function DistanciasClient() {
   const manualAtDetectedRef = useRef<number | null>(null);
 
   const searchParams = useSearchParams();
+  const bagScope =
+    searchParams.get("tg")?.trim() ||
+    searchParams.get("me")?.trim() ||
+    undefined;
+
+  useEffect(() => {
+    setBag(loadPlayerBag(bagScope));
+  }, [bagScope]);
+
   const actorQuery = useMemo(() => {
     const me = searchParams.get("me") || searchParams.get("entry_id");
     const caddie = searchParams.get("caddie") || searchParams.get("caddie_id");
@@ -464,14 +489,50 @@ export default function DistanciasClient() {
 
   const onMapTap = useCallback(
     (lat: number, lon: number) => {
-      if (geo.status !== "ok") return;
+      if (geo.status !== "ok" || !activeHolePoints) return;
+      const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
       setTapPoint({
         lat,
         lon,
         yards: yardsBetween(geo.lat, geo.lon, lat, lon),
       });
+      setTargetYards(toGreen.center);
+      setSwing("full");
     },
-    [geo]
+    [geo, activeHolePoints]
+  );
+
+  const tapGreenYards = useMemo(() => {
+    if (!tapPoint || !activeHolePoints) return null;
+    return greenDistancesForHole(
+      tapPoint.lat,
+      tapPoint.lon,
+      activeHolePoints
+    );
+  }, [tapPoint, activeHolePoints]);
+
+  const clubSuggestion = useMemo(() => {
+    if (!tapPoint || targetYards <= 0) return null;
+    return suggestClub(getEnabledBagClubs(bag), targetYards, swing);
+  }, [bag, tapPoint, targetYards, swing]);
+
+  const rollerValues = useMemo(() => {
+    const base = tapGreenYards?.center ?? 0;
+    if (base <= 0) return [];
+    return yardsRollerValues(base);
+  }, [tapGreenYards?.center]);
+
+  const clearTap = useCallback(() => {
+    setTapPoint(null);
+    setTargetYards(0);
+  }, []);
+
+  const handleBagChange = useCallback(
+    (next: PlayerBag) => {
+      setBag(next);
+      savePlayerBag(next, bagScope);
+    },
+    [bagScope]
   );
 
   // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
@@ -513,15 +574,15 @@ export default function DistanciasClient() {
       return (base % 18) + 1;
     })());
     setTapPoint(null);
+    setTargetYards(0);
   };
 
-  // Comenzar la vuelta en la salida (primer punto) del hoyo elegido (1 o 10).
-  // Fija el hoyo a mano; el avance automático seguirá de ahí en orden.
   const startAtHole = (n: number) => {
     manualAtDetectedRef.current = insideHole;
     autoCandidateRef.current = { hole: 0, count: 0 };
     setManualHole(n);
     setTapPoint(null);
+    setTargetYards(0);
   };
 
   return (
@@ -560,8 +621,38 @@ export default function DistanciasClient() {
         ✕
       </Link>
 
+      <button
+        type="button"
+        onClick={() => setBagOpen(true)}
+        className="absolute left-2 top-2 z-[1000] rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95"
+      >
+        Bolsa
+      </button>
+
+      <PlayerBagSheet
+        open={bagOpen}
+        bag={bag}
+        onChange={handleBagChange}
+        onClose={() => {
+          savePlayerBag(bag, bagScope);
+          setBagOpen(false);
+        }}
+      />
+
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
+        {tapPoint && tapGreenYards && !farFromCourse ? (
+          <ClubSuggestionStrip
+            suggestion={clubSuggestion}
+            swing={swing}
+            onSwingChange={setSwing}
+            rollerValues={rollerValues}
+            targetYards={targetYards}
+            onTargetYardsChange={setTargetYards}
+            greenYards={tapGreenYards}
+            onClear={clearTap}
+          />
+        ) : null}
         <div className="pointer-events-none flex items-center justify-between gap-1.5 px-2 pb-2">
           <div className="pointer-events-auto flex items-center gap-1.5">
             {/* Comenzar la vuelta en la salida del 1 o del 10. */}
@@ -635,20 +726,10 @@ export default function DistanciasClient() {
         {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
       </div>
 
-      {/* Punto tocado: yardas + botón claro para quitar la línea y la medición. */}
+      {/* Distancia desde tu posición hasta el punto tocado (referencia). */}
       {tapPoint && !farFromCourse ? (
-        <div className="absolute left-1/2 top-2 z-[1000] flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-pink-600/95 py-1 pl-3 pr-1 shadow-lg backdrop-blur-sm">
-          <span className="text-sm font-black leading-none text-white">
-            {tapPoint.yards} yds
-          </span>
-          <button
-            type="button"
-            onClick={() => setTapPoint(null)}
-            aria-label="Quitar medición"
-            className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-1 text-[11px] font-bold leading-none text-white active:scale-95"
-          >
-            ✕ Quitar
-          </button>
+        <div className="absolute left-1/2 top-11 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur-sm">
+          {tapPoint.yards} yds desde ti
         </div>
       ) : null}
 
