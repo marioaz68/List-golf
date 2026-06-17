@@ -49,6 +49,7 @@ import {
   addPlannedShot,
   cancelPendingShot,
   clearHoleShots,
+  clearHoleTeeMark,
   completeShotArrival,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
@@ -446,7 +447,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     }
   }, [insideHole, manualHole]);
 
+  const catalogTeeForHole = useMemo(
+    () => CCQ_HOLE_POINTS[activeHole]?.tee ?? teeCenters[activeHole] ?? null,
+    [activeHole, teeCenters]
+  );
+
   useEffect(() => {
+    setHoleGreen(CCQ_HOLE_POINTS[activeHole] ?? null);
+    setCustomPoints([]);
     let cancelled = false;
     const courseId = defaultDistanciasCourseId();
     (async () => {
@@ -547,6 +555,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (s) => s.completedAt != null
   ).length;
 
+  const canAdjustTee =
+    hasTeeMark && completedShotsCount === 0 && pendingShot == null;
+
+  // Fija el hoyo mientras falta marcar salida para que el círculo verde no
+  // salte a otro hoyo si el GPS auto-detecta mal.
+  useEffect(() => {
+    if (!needsTeeMark) return;
+    setManualHole((prev) => prev ?? activeHole);
+  }, [needsTeeMark, activeHole]);
+
   const shotLandings = useMemo(
     () =>
       shotsOnHole
@@ -644,6 +662,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const markTeeAt = useCallback(
     (lat: number, lon: number) => {
+      const wasMarked = hasHoleTeeMark(holeShotsStore, activeHole);
       let next = setHoleTeeMark(holeShotsStore, activeHole, { lat, lon });
       const orphan = pendingShotOnHole(next, activeHole);
       if (orphan) {
@@ -668,7 +687,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             : 0;
         if (toGreen > 0) setTargetYards(toGreen);
         setShotPlanOpen(true);
-        setArrivalToast(`Salida marcada · elige bastón (golpe 1)`);
+        setArrivalToast(
+          wasMarked
+            ? `Salida corregida · elige bastón (golpe 1)`
+            : `Salida marcada · elige bastón (golpe 1)`
+        );
       } else {
         setShotPlanOpen(false);
         setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
@@ -678,10 +701,23 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   );
 
   const markTeeAtCatalog = useCallback(() => {
-    const tee = activeHolePoints?.tee;
+    const tee = catalogTeeForHole;
     if (!tee) return;
     markTeeAt(tee.lat, tee.lon);
-  }, [activeHolePoints?.tee, markTeeAt]);
+  }, [catalogTeeForHole, markTeeAt]);
+
+  const clearTeeMarkOnly = useCallback(() => {
+    let next = clearHoleTeeMark(holeShotsStore, activeHole);
+    const orphan = pendingShotOnHole(next, activeHole);
+    if (orphan) {
+      next = cancelPendingShot(next, activeHole, orphan.id);
+    }
+    setHoleShotsStore(next);
+    saveHoleShots(next, bagScope);
+    resetTapUi();
+    setTapPoint(null);
+    setArrivalToast(`Hoyo ${activeHole} · marca tu salida`);
+  }, [holeShotsStore, activeHole, bagScope, resetTapUi]);
 
   const markTeeHere = useCallback(() => {
     if (geo.status !== "ok") return;
@@ -823,7 +859,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
 
-      if (needsTeeMark) {
+      if (needsTeeMark || canAdjustTee) {
         markTeeAt(lat, lon);
         return;
       }
@@ -870,6 +906,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       geo,
       activeHolePoints,
       needsTeeMark,
+      canAdjustTee,
       hasTeeMark,
       markTeeAt,
       shotPlanOpen,
@@ -1088,11 +1125,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             }
             teeMarkPoint={teeMark}
             needsTeeMark={needsTeeMark}
+            teeAdjustMode={canAdjustTee}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
             catalogTeePoint={
-              needsTeeMark && activeHolePoints?.tee
-                ? activeHolePoints.tee
+              (needsTeeMark || canAdjustTee) && catalogTeeForHole
+                ? catalogTeeForHole
                 : null
             }
           />
@@ -1149,13 +1187,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         onClose={() => setShotsDetailOpen(false)}
       />
 
-      {needsTeeMark && !farFromCourse ? (
+      {(needsTeeMark || canAdjustTee) && !farFromCourse ? (
         <div className="pointer-events-auto absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
           <p className="text-center text-[11px] font-black text-emerald-100">
-            Hoyo {activeHole} · marca tu salida
+            {needsTeeMark
+              ? `Hoyo ${activeHole} · marca tu salida`
+              : `Hoyo ${activeHole} · corrige la salida`}
           </p>
           <p className="mt-0.5 text-center text-[10px] text-emerald-200/85">
-            Toca el círculo verde del tee en el mapa
+            {needsTeeMark
+              ? "Toca el círculo verde del tee en el mapa"
+              : "Toca el tee en el mapa o usa el botón de abajo"}
           </p>
           <div className="mt-2 flex gap-1.5">
             <button
@@ -1165,13 +1207,23 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             >
               ⛳ Tee del hoyo
             </button>
-            <button
-              type="button"
-              onClick={markTeeHere}
-              className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
-            >
-              📍 Aquí salgo
-            </button>
+            {needsTeeMark ? (
+              <button
+                type="button"
+                onClick={markTeeHere}
+                className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
+              >
+                📍 Aquí salgo
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={clearTeeMarkOnly}
+                className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
+              >
+                ↺ Borrar salida
+              </button>
+            )}
           </div>
         </div>
       ) : null}

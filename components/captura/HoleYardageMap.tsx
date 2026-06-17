@@ -64,6 +64,8 @@ interface HoleYardageMapProps {
   teeMarkPoint?: { lat: number; lon: number } | null;
   /** Si true, el jugador debe marcar salida antes de D/G. */
   needsTeeMark?: boolean;
+  /** Salida ya marcada pero aún corregible (sin golpes confirmados). */
+  teeAdjustMode?: boolean;
   /** Posiciones fijas donde quedó la bola (golpes ya confirmados). */
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
   /** Bola actual: GPS al marcar llegada, o última bola al jugar. */
@@ -97,6 +99,7 @@ export function HoleYardageMap({
   lineFromLon,
   teeMarkPoint = null,
   needsTeeMark = false,
+  teeAdjustMode = false,
   shotLandings = [],
   playBallPoint = null,
   catalogTeePoint = null,
@@ -438,7 +441,7 @@ export function HoleYardageMap({
       }
 
       // Marcadores fijos del hoyo: salida + cada golpe confirmado (no se quitan).
-      if (needsTeeMark && catalogTeePoint) {
+      if ((needsTeeMark || teeAdjustMode) && catalogTeePoint) {
         L.marker([catalogTeePoint.lat, catalogTeePoint.lon], {
           icon: L.divIcon({
             className: "yardage-ball-marker",
@@ -618,6 +621,8 @@ export function HoleYardageMap({
     shotLandings,
     playBallPoint,
     catalogTeePoint,
+    needsTeeMark,
+    teeAdjustMode,
     size.w,
     size.h,
     mapReady,
@@ -649,7 +654,9 @@ export function HoleYardageMap({
       <div className="pointer-events-none absolute left-2 top-14 z-[1010] max-w-[11rem] rounded-md bg-black/70 px-2 py-1 text-[9px] leading-tight text-slate-300">
         {needsTeeMark
           ? "Paso 1 · toca el tee en el mapa"
-          : "Toca el mapa · D distancia · G golpe"}
+          : teeAdjustMode
+            ? "Toca el tee en el mapa para corregir la salida"
+            : "Toca el mapa · D distancia · G golpe"}
       </div>
       {mapReady ? (
         <MapZoomControl
