@@ -46,6 +46,7 @@ import {
 import { suggestClub, yardsRollerValues } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
+  cancelPendingShot,
   completeShotArrival,
   hasLoggedShotsOnHole,
   lastBallPosition,
@@ -815,6 +816,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             holeBoundary={boundaryByHole.get(activeHole) ?? null}
             centerline={centerlines[activeHole] ?? null}
             tapPoint={tapPoint}
+            pendingTapPoint={pendingTap}
             onMapTap={onMapTap}
             lineFromLat={
               tapPoint && measureAnchor ? measureAnchor.lat : undefined
@@ -877,6 +879,21 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         onClose={() => setShotsDetailOpen(false)}
       />
 
+      {pendingTap && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[38%] z-[1055] flex justify-center px-4">
+          <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/80 px-3 py-2 shadow-2xl backdrop-blur-md">
+            <p className="mb-1.5 text-center text-[10px] font-semibold text-slate-300">
+              ¿Qué quieres hacer?
+            </p>
+            <MapTapActions
+              onDistance={handleChooseDistance}
+              onShot={handleChooseShot}
+              onCancel={() => setPendingTap(null)}
+            />
+          </div>
+        </div>
+      ) : null}
+
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
         {arrivalToast ? (
@@ -885,17 +902,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           </div>
         ) : null}
         {pendingShot && !pendingTap && !shotPlanOpen ? (
-          <div className="pointer-events-none mx-2 mb-1 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 text-center text-[11px] font-bold text-amber-200 shadow-lg">
-            Toca en el mapa donde quedó la bola
-          </div>
-        ) : null}
-        {pendingTap && !farFromCourse ? (
-          <div className="pointer-events-auto mb-1 flex justify-center">
-            <MapTapActions
-              onDistance={handleChooseDistance}
-              onShot={handleChooseShot}
-              onCancel={() => setPendingTap(null)}
-            />
+          <div className="pointer-events-auto mx-2 mb-1 flex items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 shadow-lg">
+            <span className="text-[11px] font-bold text-amber-200">
+              Toca donde quedó la bola
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const next = cancelPendingShot(
+                  holeShotsStore,
+                  activeHole,
+                  pendingShot.id
+                );
+                setHoleShotsStore(next);
+                saveHoleShots(next, bagScope);
+              }}
+              className="rounded bg-amber-900/80 px-1.5 py-0.5 text-[9px] font-bold text-amber-100"
+            >
+              Cancelar
+            </button>
           </div>
         ) : null}
         {shotPlanOpen && !farFromCourse ? (

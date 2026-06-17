@@ -167,6 +167,22 @@ export function clearHoleShots(
   return { version: 1, byHole: rest };
 }
 
+export function cancelPendingShot(
+  store: HoleShotsStore,
+  hole: number,
+  shotId: string
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  return {
+    version: 1,
+    byHole: {
+      ...store.byHole,
+      [key]: prev.filter((s) => s.id !== shotId),
+    },
+  };
+}
+
 export function plannedVsActualDelta(shot: HoleShot): number | null {
   if (shot.actualYards == null) return null;
   return shot.actualYards - shot.plannedYards;

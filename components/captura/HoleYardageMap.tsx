@@ -40,6 +40,8 @@ interface HoleYardageMapProps {
    *  el fairway en doglegs. Si no hay, se orienta directo al green. */
   centerline?: LatLon[] | null;
   tapPoint?: TapPoint | null;
+  /** Punto tocado pendiente de elegir D/G. */
+  pendingTapPoint?: { lat: number; lon: number } | null;
   onMapTap?: (lat: number, lon: number) => void;
   /** Origen de la línea de medición (default: posición del jugador). */
   lineFromLat?: number;
@@ -67,6 +69,7 @@ export function HoleYardageMap({
   holeBoundary = null,
   centerline = null,
   tapPoint,
+  pendingTapPoint = null,
   onMapTap,
   lineFromLat,
   lineFromLon,
@@ -125,7 +128,6 @@ export function HoleYardageMap({
         // No se puede mover con los dedos para que no se desalinee.
         dragging: false,
         scrollWheelZoom: false,
-        tap: false,
         doubleClickZoom: false,
         touchZoom: false,
         boxZoom: false,
@@ -136,19 +138,24 @@ export function HoleYardageMap({
 
       mapRef.current = map;
       layersRef.current = L.layerGroup().addTo(map);
-      // invalidateSize diferido: tras crear el mapa el contenedor rotado puede
-      // no tener su tamaño final; sin esto los tiles a veces no se dibujan.
-      map.invalidateSize();
-      requestAnimationFrame(() => {
-        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
+
+      const fireTap = (() => {
+        let lastAt = 0;
+        return (lat: number, lon: number) => {
+          const now = Date.now();
+          if (now - lastAt < 350) return;
+          lastAt = now;
+          onMapTapRef.current?.(lat, lon);
+        };
+      })();
+
+      map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
+        fireTap(e.latlng.lat, e.latlng.lng);
       });
-      setTimeout(() => {
-        if (!cancelled && mapRef.current) mapRef.current.invalidateSize();
-      }, 250);
-      setMapReady(true);
 
       const onTap = (e: MouseEvent | TouchEvent) => {
         if (!onMapTapRef.current || !mapRef.current) return;
+        e.preventDefault();
         const clientX =
           "touches" in e ? e.changedTouches[0].clientX : e.clientX;
         const clientY =
@@ -163,14 +170,20 @@ export function HoleYardageMap({
           mapRef.current,
           L
         );
-        onMapTapRef.current(latlng.lat, latlng.lng);
+        fireTap(latlng.lat, latlng.lng);
       };
 
       const container = containerRef.current;
+      container?.addEventListener("touchend", onTap, { passive: false });
       container?.addEventListener("click", onTap);
+
+      map.invalidateSize();
+      setMapReady(true);
 
       cleanup = () => {
         cancelled = true;
+        map.off("click");
+        container?.removeEventListener("touchend", onTap);
         container?.removeEventListener("click", onTap);
         mapRef.current = null;
         layersRef.current = null;
@@ -187,6 +200,16 @@ export function HoleYardageMap({
     // markers; recrear el mapa en cada GPS rompía la rotación/encuadre.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // invalidateSize diferido tras crear el mapa
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+    map.invalidateSize();
+    requestAnimationFrame(() => map.invalidateSize());
+    const t = window.setTimeout(() => map.invalidateSize(), 250);
+    return () => window.clearTimeout(t);
+  }, [mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -330,6 +353,21 @@ export function HoleYardageMap({
         }).addTo(layerGroup);
       }
 
+      if (pendingTapPoint && !tapPoint) {
+        L.marker([pendingTapPoint.lat, pendingTapPoint.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="width:16px;height:16px;border-radius:50%;background:#a855f7;border:2px solid #fff;box-shadow:0 0 0 4px rgba(168,85,247,0.45);"></div>`,
+              bearing
+            ),
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+          }),
+          interactive: false,
+        }).addTo(layerGroup);
+      }
+
       if (lastBallPoint) {
         L.marker([lastBallPoint.lat, lastBallPoint.lon], {
           icon: L.divIcon({
@@ -443,6 +481,7 @@ export function HoleYardageMap({
     yardsToCenter,
     referencePoints,
     tapPoint,
+    pendingTapPoint,
     lineFromLat,
     lineFromLon,
     lastBallPoint,
@@ -457,10 +496,10 @@ export function HoleYardageMap({
   const offsetPct = ((MAP_SCALE - 1) / 2) * 100;
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full w-full overflow-hidden bg-black"
-    >
+      <div
+        ref={containerRef}
+        className="relative h-full w-full touch-manipulation overflow-hidden bg-black"
+      >
       <div
         ref={rotatorRef}
         className="absolute"
@@ -475,7 +514,7 @@ export function HoleYardageMap({
         <div ref={mapDivRef} className="absolute inset-0" />
       </div>
       <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
-        Toca el mapa para medir
+        Toca el mapa · D distancia · G golpe
       </div>
     </div>
   );
