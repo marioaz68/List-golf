@@ -64,8 +64,10 @@ interface HoleYardageMapProps {
   teeMarkPoint?: { lat: number; lon: number } | null;
   /** Si true, el jugador debe marcar salida antes de D/G. */
   needsTeeMark?: boolean;
-  /** Posiciones donde quedó la bola (golpes completados). */
-  shotLandings?: Array<{ lat: number; lon: number }>;
+  /** Posiciones fijas donde quedó la bola (golpes ya confirmados). */
+  shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
+  /** Bola actual: GPS al marcar llegada, o última bola al jugar. */
+  playBallPoint?: { lat: number; lon: number } | null;
 }
 
 function yardLabel(yards: number): string {
@@ -94,6 +96,7 @@ export function HoleYardageMap({
   teeMarkPoint = null,
   needsTeeMark = false,
   shotLandings = [],
+  playBallPoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -420,47 +423,68 @@ export function HoleYardageMap({
 
         L.marker(
           [tapPoint.lat, tapPoint.lon],
-          ballMarkerOptions(L, golfBallHtml(18, "#ec4899"), 18)
+          ballMarkerOptions(L, golfBallHtml(9, "#ec4899"), 9)
         ).addTo(layerGroup);
       }
 
       if (pendingTapPoint && !tapPoint) {
         L.marker(
           [pendingTapPoint.lat, pendingTapPoint.lon],
-          ballMarkerOptions(L, golfBallHtml(18, "#a855f7"), 18)
+          ballMarkerOptions(L, golfBallHtml(9, "#a855f7"), 9)
         ).addTo(layerGroup);
       }
 
+      // Marcadores fijos del hoyo: salida + cada golpe confirmado (no se quitan).
       if (teeMarkPoint) {
         L.marker(
           [teeMarkPoint.lat, teeMarkPoint.lon],
-          teeMarkerOptions(L, 18)
+          teeMarkerOptions(L, 9)
         ).addTo(layerGroup);
       }
 
       for (const land of shotLandings) {
         L.marker(
           [land.lat, land.lon],
-          ballMarkerOptions(L, golfBallHtml(16, "#f59e0b"), 16)
+          {
+            ...ballMarkerOptions(L, golfBallHtml(8, "#f59e0b"), 8),
+            zIndexOffset: 620 + land.strokeNo,
+          }
         ).addTo(layerGroup);
       }
 
-      L.marker([playerLat, playerLon], {
-        icon: L.divIcon({
-          className: "",
-          html: uprightHtml(
-            `<div style="position:relative;width:20px;height:20px;">
+      if (playBallPoint) {
+        L.marker(
+          [playBallPoint.lat, playBallPoint.lon],
+          {
+            ...ballMarkerOptions(L, golfBallHtml(9, "#3b82f6"), 9),
+            zIndexOffset: 900,
+          }
+        ).addTo(layerGroup);
+      }
+
+      const showPhoneDot =
+        !playBallPoint ||
+        Math.abs(playBallPoint.lat - playerLat) > 0.00002 ||
+        Math.abs(playBallPoint.lon - playerLon) > 0.00002;
+
+      if (showPhoneDot) {
+        L.marker([playerLat, playerLon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="position:relative;width:20px;height:20px;">
             <div style="position:absolute;inset:-6px;border-radius:50%;background:rgba(59,130,246,0.25);animation:yardage-pulse 1.8s ease-out infinite;"></div>
             <div style="position:absolute;inset:0;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.5);"></div>
           </div>`,
-            bearing
-          ),
-          iconSize: [20, 20],
-          iconAnchor: [10, 10],
-        }),
-        interactive: false,
-        zIndexOffset: 1000,
-      }).addTo(layerGroup);
+              bearing
+            ),
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          }),
+          interactive: false,
+          zIndexOffset: 1000,
+        }).addTo(layerGroup);
+      }
 
       if (!document.querySelector("style[data-yardage-pulse]")) {
         const style = document.createElement("style");
@@ -576,6 +600,7 @@ export function HoleYardageMap({
     lineFromLon,
     teeMarkPoint,
     shotLandings,
+    playBallPoint,
     size.w,
     size.h,
     mapReady,

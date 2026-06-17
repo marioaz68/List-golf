@@ -549,9 +549,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     () =>
       shotsOnHole
         .filter((s) => s.completedAt != null && s.to)
-        .map((s) => ({ lat: s.to!.lat, lon: s.to!.lon })),
+        .sort((a, b) => a.strokeNo - b.strokeNo)
+        .map((s) => ({
+          lat: s.to!.lat,
+          lon: s.to!.lon,
+          strokeNo: s.strokeNo,
+        })),
     [shotsOnHole]
   );
+
+  const playBallPoint = useMemo(() => {
+    if (geo.status !== "ok") return null;
+    if (pendingShot) {
+      return { lat: geo.lat, lon: geo.lon };
+    }
+    if (completedShotsCount > 0 && lastBall) {
+      return { lat: lastBall.lat, lon: lastBall.lon };
+    }
+    return null;
+  }, [geo, pendingShot, completedShotsCount, lastBall]);
 
   const playGreenYds = useMemo(() => {
     if (!lastBall || !activeHolePoints || needsTeeMark) return null;
@@ -611,14 +627,31 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const markTeeAt = useCallback(
     (lat: number, lon: number) => {
-      const next = setHoleTeeMark(holeShotsStore, activeHole, { lat, lon });
+      let next = setHoleTeeMark(holeShotsStore, activeHole, { lat, lon });
+      const orphan = pendingShotOnHole(next, activeHole);
+      if (orphan) {
+        next = cancelPendingShot(next, activeHole, orphan.id);
+      }
+      const hasCompleted = shotsForHole(next, activeHole).some(
+        (s) => s.completedAt != null
+      );
       setHoleShotsStore(next);
       saveHoleShots(next, bagScope);
       setManualHole((prev) => prev ?? activeHole);
-      setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
-      resetTapUi();
+      setPendingTap(null);
+      setDistanceMode(false);
+      setMeasureFromPhoneOnce(false);
+      setTapPoint(null);
+      setTargetYards(0);
+      if (!hasCompleted) {
+        setShotPlanOpen(true);
+        setArrivalToast(`Golpe 1 · elige bastón y yardas`);
+      } else {
+        setShotPlanOpen(false);
+        setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
+      }
     },
-    [holeShotsStore, activeHole, bagScope, resetTapUi]
+    [holeShotsStore, activeHole, bagScope]
   );
 
   const markTeeHere = useCallback(() => {
@@ -698,6 +731,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     );
   }, [geo, activeHolePoints, customPoints]);
 
+  const shotPlanSuggestedYards = useMemo(() => {
+    if (!activeHolePoints) return undefined;
+    const anchor = lastBall ?? teeMark;
+    if (!anchor) return undefined;
+    return (
+      Math.round(
+        greenDistancesForHole(anchor.lat, anchor.lon, activeHolePoints).center / 5
+      ) * 5
+    );
+  }, [activeHolePoints, lastBall, teeMark]);
+
   const holeMeta = activeHolePoints;
 
   const onMapTap = useCallback(
@@ -708,6 +752,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         markTeeAt(lat, lon);
         return;
       }
+
+      if (shotPlanOpen && !pendingShot) return;
 
       if (pendingShot) {
         if (!hasTeeMark) {
@@ -751,6 +797,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       needsTeeMark,
       hasTeeMark,
       markTeeAt,
+      shotPlanOpen,
       pendingShot,
       holeShotsStore,
       activeHole,
@@ -956,6 +1003,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             teeMarkPoint={teeMark}
             needsTeeMark={needsTeeMark}
             shotLandings={shotLandings}
+            playBallPoint={playBallPoint}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -1220,6 +1268,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       {shotPlanOpen && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
           bag={bag}
+          suggestedYards={shotPlanSuggestedYards}
           onConfirm={handleConfirmPlan}
           onCancel={() => setShotPlanOpen(false)}
         />

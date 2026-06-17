@@ -35,6 +35,8 @@ function buildClubPicks(bag: PlayerBag) {
 
 interface ShotPlanPanelProps {
   bag: PlayerBag;
+  /** Yardas sugeridas al abrir (p. ej. distancia al green desde la salida). */
+  suggestedYards?: number;
   onConfirm: (plan: {
     catalogId: string;
     swing: SwingKind;
@@ -44,7 +46,12 @@ interface ShotPlanPanelProps {
 }
 
 /** Rollers abajo-izquierda, compactos; bastón y yardas visibles al centro. */
-export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) {
+export function ShotPlanPanel({
+  bag,
+  suggestedYards,
+  onConfirm,
+  onCancel,
+}: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
   const [clubKey, setClubKey] = useState(picks[0]?.key ?? "");
   const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
@@ -74,6 +81,14 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
     () => yardValues.map((y) => String(y)),
     [yardValues]
   );
+
+  useEffect(() => {
+    if (suggestedYards == null || suggestedYards <= 0 || !yardValues.length) return;
+    const nearest = yardValues.reduce((best, y) =>
+      Math.abs(y - suggestedYards) < Math.abs(best - suggestedYards) ? y : best
+    );
+    setPlannedYards(nearest);
+  }, [suggestedYards, yardValues]);
 
   if (!pick || !picks.length) {
     return (
