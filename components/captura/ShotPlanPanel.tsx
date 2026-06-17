@@ -94,7 +94,7 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
   }
 
   return (
-    <div className="pointer-events-auto mx-2 rounded-lg border border-white/15 bg-black/88 px-2 py-2 shadow-lg backdrop-blur-md">
+    <div className="pointer-events-auto mx-2 rounded-lg border border-white/15 bg-black/88 px-2 py-1.5 shadow-lg backdrop-blur-md">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
           Planear golpe
@@ -113,7 +113,7 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
             Bastón
           </span>
           <VerticalRoller
-            className="h-[4.5rem] w-full"
+            className="h-[2.75rem] w-full"
             values={picks.map((p) => p.label)}
             value={pick.label}
             onChange={(label) => {
@@ -127,7 +127,7 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
             Yardas
           </span>
           <VerticalRoller
-            className="h-[4.5rem] w-full"
+            className="h-[2.75rem] w-full"
             values={yardLabels}
             value={plannedStr}
             onChange={(s) => setPlannedYards(Number(s))}
@@ -143,7 +143,7 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
             plannedYards,
           })
         }
-        className="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-black text-white active:scale-[0.98]"
+        className="mt-1.5 w-full rounded-lg bg-emerald-600 py-1.5 text-[11px] font-black text-white active:scale-[0.98]"
       >
         Guardar plan · toca donde quede la bola
       </button>

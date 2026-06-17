@@ -32,6 +32,7 @@ import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { ClubSuggestionStrip } from "@/components/captura/ClubSuggestionStrip";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
+import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
@@ -43,7 +44,7 @@ import {
   savePlayerBag,
   type PlayerBag,
 } from "@/lib/distances/playerBag";
-import { suggestClub, yardsRollerValues } from "@/lib/distances/suggestClub";
+import { suggestClub } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   cancelPendingShot,
@@ -536,6 +537,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (s) => s.completedAt != null
   ).length;
 
+  const shotLandings = useMemo(
+    () =>
+      shotsOnHole
+        .filter((s) => s.completedAt != null && s.to)
+        .map((s) => ({ lat: s.to!.lat, lon: s.to!.lon })),
+    [shotsOnHole]
+  );
+
+  const mapFocusPoint = tapPoint ?? pendingTap;
+
+  const focusGreenYds = useMemo(() => {
+    if (!mapFocusPoint || !activeHolePoints) return null;
+    return greenDistancesForHole(
+      mapFocusPoint.lat,
+      mapFocusPoint.lon,
+      activeHolePoints
+    );
+  }, [mapFocusPoint, activeHolePoints]);
+
   const measureAnchor = useMemo(() => {
     if (geo.status !== "ok") return null;
     const usePhone =
@@ -651,7 +671,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setHoleShotsStore(next);
         saveHoleShots(next, bagScope);
         setArrivalToast(
-          `Golpe ${pendingShot.strokeNo}: plan ${pendingShot.plannedYards} → ${actual} yds`
+          `Golpe ${pendingShot.strokeNo}: ${actual} yds · al green ${greenDistancesForHole(lat, lon, activeHolePoints).center}`
         );
         resetTapUi();
         setTapPoint(null);
@@ -747,25 +767,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     });
   }, [geo, tapPoint]);
 
-  const tapGreenYards = useMemo(() => {
-    if (!tapPoint || !activeHolePoints) return null;
-    return greenDistancesForHole(
-      tapPoint.lat,
-      tapPoint.lon,
-      activeHolePoints
-    );
-  }, [tapPoint, activeHolePoints]);
-
   const clubSuggestion = useMemo(() => {
     if (!tapPoint || targetYards <= 0) return null;
     return suggestClub(getEnabledBagClubs(bag), targetYards, swing);
   }, [bag, tapPoint, targetYards, swing]);
-
-  const rollerValues = useMemo(() => {
-    const base = tapGreenYards?.center ?? 0;
-    if (base <= 0) return [];
-    return yardsRollerValues(base);
-  }, [tapGreenYards?.center]);
 
   const clearTap = useCallback(() => {
     setTapPoint(null);
@@ -858,12 +863,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             lineFromLon={
               tapPoint && measureAnchor ? measureAnchor.lon : undefined
             }
-            lastBallPoint={
-              hasLoggedShotsOnHole(holeShotsStore, activeHole)
-                ? lastBall
-                : null
-            }
             teeMarkPoint={teeMark}
+            shotLandings={shotLandings}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -989,15 +990,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             onCancel={() => setShotPlanOpen(false)}
           />
         ) : null}
-        {distanceMode && tapPoint && tapGreenYards && !farFromCourse ? (
+        {distanceMode && tapPoint && !farFromCourse ? (
           <ClubSuggestionStrip
             suggestion={clubSuggestion}
             swing={swing}
             onSwingChange={setSwing}
-            rollerValues={rollerValues}
-            targetYards={targetYards}
-            onTargetYardsChange={setTargetYards}
-            greenYards={tapGreenYards}
             onClear={clearTap}
           />
         ) : null}
@@ -1118,12 +1115,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {/* Distancia hasta el punto tocado (desde bola o teléfono). */}
-      {distanceMode && tapPoint && measureAnchor && !farFromCourse ? (
-        <div className="absolute left-1/2 top-11 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur-sm">
-          {tapPoint.yards} yds ·{" "}
-          {measureAnchor.fromPhone ? "desde ti" : teeMark && !hasLoggedShotsOnHole(holeShotsStore, activeHole) ? "desde salida" : "desde bola"}
-        </div>
+      {focusGreenYds && mapFocusPoint && !farFromCourse && !needsTeeMark ? (
+        <MapFocusTopBar
+          demoMode={demoMode}
+          greenCenterYards={focusGreenYds.center}
+          segmentYards={tapPoint?.yards}
+          segmentLabel={
+            measureAnchor?.fromPhone
+              ? "Desde ti"
+              : teeMark && !hasLoggedShotsOnHole(holeShotsStore, activeHole)
+                ? "Desde salida"
+                : "Desde bola"
+          }
+        />
       ) : null}
 
       {/* Fuera del rango del club */}

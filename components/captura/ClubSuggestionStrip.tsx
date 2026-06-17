@@ -3,28 +3,19 @@
 import { useMemo } from "react";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import type { ClubSuggestion } from "@/lib/distances/suggestClub";
-import { YardsRoller } from "@/components/captura/YardsRoller";
 
 interface ClubSuggestionStripProps {
   suggestion: ClubSuggestion | null;
   swing: SwingKind;
   onSwingChange: (s: SwingKind) => void;
-  rollerValues: number[];
-  targetYards: number;
-  onTargetYardsChange: (y: number) => void;
-  greenYards: { front: number; center: number; back: number };
   onClear: () => void;
 }
 
-/** Barra compacta: bastón sugerido + roller de yardas + full/3·4. */
+/** Fila compacta: bastón sugerido + full/3·4 (yardas al green van arriba). */
 export function ClubSuggestionStrip({
   suggestion,
   swing,
   onSwingChange,
-  rollerValues,
-  targetYards,
-  onTargetYardsChange,
-  greenYards,
   onClear,
 }: ClubSuggestionStripProps) {
   const gapHint = useMemo(() => {
@@ -36,10 +27,10 @@ export function ClubSuggestionStrip({
   }, [suggestion]);
 
   return (
-    <div className="pointer-events-auto mx-2 mb-1 rounded-xl border border-white/15 bg-black/80 px-2 py-1.5 shadow-lg backdrop-blur-md">
-      <div className="mb-1 flex items-center justify-between gap-2">
+    <div className="pointer-events-auto mx-2 mb-1 rounded-lg border border-white/15 bg-black/80 px-2 py-1 shadow-lg backdrop-blur-md">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-lg font-black leading-none text-white">
+          <span className="truncate text-sm font-black leading-none text-white">
             {suggestion?.shortLabel ?? "—"}
           </span>
           {suggestion ? (
@@ -50,9 +41,7 @@ export function ClubSuggestionStrip({
               ) : null}
             </span>
           ) : (
-            <span className="text-[10px] text-amber-200">
-              Configura tu bolsa
-            </span>
+            <span className="text-[10px] text-amber-200">Bolsa</span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -70,25 +59,11 @@ export function ClubSuggestionStrip({
             type="button"
             onClick={onClear}
             aria-label="Quitar punto"
-            className="ml-0.5 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white"
+            className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white"
           >
             ✕
           </button>
         </div>
-      </div>
-      <div className="flex items-center gap-1">
-        <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-          Al green
-        </span>
-        <YardsRoller
-          className="min-w-0 flex-1"
-          values={rollerValues}
-          value={targetYards}
-          onChange={onTargetYardsChange}
-        />
-        <span className="shrink-0 text-[9px] text-slate-500">
-          {greenYards.front}/{greenYards.back}
-        </span>
       </div>
     </div>
   );
@@ -108,7 +83,7 @@ function SwingChip({
       type="button"
       onClick={onClick}
       className={[
-        "rounded-full px-2 py-0.5 text-[10px] font-bold",
+        "rounded-full px-1.5 py-0.5 text-[9px] font-bold",
         active
           ? "bg-amber-500 text-black"
           : "bg-white/10 text-slate-300",

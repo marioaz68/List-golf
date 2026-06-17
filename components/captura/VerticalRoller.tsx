@@ -71,7 +71,7 @@ export function VerticalRoller({
         onScroll={handleScroll}
         className="h-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="h-[38%] shrink-0" aria-hidden />
+        <div className="h-[32%] shrink-0" aria-hidden />
         {values.map((label) => {
           const active = label === value;
           return (
@@ -80,7 +80,7 @@ export function VerticalRoller({
               type="button"
               onClick={() => onChange(label)}
               className={[
-                "flex w-full snap-center items-center justify-center py-1 transition-all",
+                "flex w-full snap-center items-center justify-center py-0.5 transition-all",
                 active
                   ? "text-sm font-black text-amber-300"
                   : "text-[10px] font-semibold text-slate-600 opacity-40",
@@ -90,7 +90,7 @@ export function VerticalRoller({
             </button>
           );
         })}
-        <div className="h-[38%] shrink-0" aria-hidden />
+        <div className="h-[32%] shrink-0" aria-hidden />
       </div>
     </div>
   );

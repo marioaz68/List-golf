@@ -20,6 +20,7 @@ import {
   uprightHtml,
   zoomToFitWaypoints,
 } from "@/components/captura/mapRotation";
+import { golfBallHtml, teeBallHtml } from "@/components/captura/mapMarkers";
 
 export interface TapPoint {
   lat: number;
@@ -46,10 +47,10 @@ interface HoleYardageMapProps {
   /** Origen de la línea de medición (default: posición del jugador). */
   lineFromLat?: number;
   lineFromLon?: number;
-  /** Última bola confirmada en el hoyo. */
-  lastBallPoint?: { lat: number; lon: number } | null;
   /** Salida marcada por el jugador al iniciar el hoyo. */
   teeMarkPoint?: { lat: number; lon: number } | null;
+  /** Posiciones donde quedó la bola (golpes completados). */
+  shotLandings?: Array<{ lat: number; lon: number }>;
 }
 
 function yardLabel(yards: number): string {
@@ -75,8 +76,8 @@ export function HoleYardageMap({
   onMapTap,
   lineFromLat,
   lineFromLon,
-  lastBallPoint = null,
   teeMarkPoint = null,
+  shotLandings = [],
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -345,11 +346,8 @@ export function HoleYardageMap({
         L.marker([tapPoint.lat, tapPoint.lon], {
           icon: L.divIcon({
             className: "",
-            html: uprightHtml(
-              `<div style="width:14px;height:14px;border-radius:50%;background:#ec4899;border:2px solid #fff;box-shadow:0 0 0 3px rgba(236,72,153,0.4);"></div>`,
-              bearing
-            ),
-            iconSize: [14, 14],
+            html: uprightHtml(golfBallHtml(15, "#ec4899"), bearing),
+            iconSize: [15, 15],
             iconAnchor: [7, 7],
           }),
           interactive: false,
@@ -360,12 +358,9 @@ export function HoleYardageMap({
         L.marker([pendingTapPoint.lat, pendingTapPoint.lon], {
           icon: L.divIcon({
             className: "",
-            html: uprightHtml(
-              `<div style="width:16px;height:16px;border-radius:50%;background:#a855f7;border:2px solid #fff;box-shadow:0 0 0 4px rgba(168,85,247,0.45);"></div>`,
-              bearing
-            ),
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
+            html: uprightHtml(golfBallHtml(14, "#a855f7"), bearing),
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
           }),
           interactive: false,
         }).addTo(layerGroup);
@@ -375,26 +370,20 @@ export function HoleYardageMap({
         L.marker([teeMarkPoint.lat, teeMarkPoint.lon], {
           icon: L.divIcon({
             className: "",
-            html: uprightHtml(
-              `<div style="width:14px;height:14px;border-radius:50%;background:#22c55e;border:2px solid #fff;box-shadow:0 0 0 3px rgba(34,197,94,0.5);"></div>`,
-              bearing
-            ),
-            iconSize: [14, 14],
-            iconAnchor: [7, 7],
+            html: uprightHtml(teeBallHtml(14), bearing),
+            iconSize: [14, 20],
+            iconAnchor: [7, 17],
           }),
           interactive: false,
         }).addTo(layerGroup);
       }
 
-      if (lastBallPoint) {
-        L.marker([lastBallPoint.lat, lastBallPoint.lon], {
+      for (const land of shotLandings) {
+        L.marker([land.lat, land.lon], {
           icon: L.divIcon({
             className: "",
-            html: uprightHtml(
-              `<div style="width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 2px rgba(245,158,11,0.45);"></div>`,
-              bearing
-            ),
-            iconSize: [12, 12],
+            html: uprightHtml(golfBallHtml(13, "#f59e0b"), bearing),
+            iconSize: [13, 13],
             iconAnchor: [6, 6],
           }),
           interactive: false,
@@ -502,8 +491,8 @@ export function HoleYardageMap({
     pendingTapPoint,
     lineFromLat,
     lineFromLon,
-    lastBallPoint,
     teeMarkPoint,
+    shotLandings,
     size.w,
     size.h,
     mapReady,
