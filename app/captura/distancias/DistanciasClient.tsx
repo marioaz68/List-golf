@@ -48,6 +48,7 @@ import { suggestClub } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   cancelPendingShot,
+  clearHoleShots,
   completeShotArrival,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
@@ -205,6 +206,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setBag(loadPlayerBag(bagScope));
     setHoleShotsStore(loadHoleShots(bagScope));
   }, [bagScope]);
+
+  useEffect(() => {
+    if (!demoMode) return;
+    setHoleShotsStore((prev) => {
+      const next = clearHoleShots(prev, 1);
+      saveHoleShots(next, bagScope);
+      return next;
+    });
+    setManualHole(1);
+  }, [demoMode, bagScope]);
 
   const actorQuery = useMemo(() => {
     const me = searchParams.get("me") || searchParams.get("entry_id");
@@ -889,15 +900,35 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const prevHole = useCallback(() => goToHole(-1), [goToHole]);
   const nextHole = useCallback(() => goToHole(1), [goToHole]);
 
-  const startAtHole = (n: number) => {
-    manualAtDetectedRef.current = insideHole;
-    autoCandidateRef.current = { hole: 0, count: 0 };
-    setManualHole(n);
-    setTapPoint(null);
-    setTargetYards(0);
-    resetTapUi();
-    if (demoMode) setDemoProgress(0.35);
-  };
+  const resetHoleFromScratch = useCallback(
+    (hole: number) => {
+      const next = clearHoleShots(holeShotsStore, hole);
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      setTapPoint(null);
+      setTargetYards(0);
+      resetTapUi();
+      setShotsDetailOpen(false);
+    },
+    [holeShotsStore, bagScope, resetTapUi]
+  );
+
+  const startAtHole = useCallback(
+    (n: number) => {
+      manualAtDetectedRef.current = insideHole;
+      autoCandidateRef.current = { hole: 0, count: 0 };
+      resetHoleFromScratch(n);
+      setManualHole(n);
+      setArrivalToast(`Hoyo ${n} · marca tu salida`);
+      if (demoMode) setDemoProgress(0.35);
+    },
+    [insideHole, resetHoleFromScratch, demoMode]
+  );
+
+  const resetActiveHole = useCallback(() => {
+    resetHoleFromScratch(activeHole);
+    setArrivalToast(`Hoyo ${activeHole} reiniciado · marca salida`);
+  }, [activeHole, resetHoleFromScratch]);
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
@@ -1129,6 +1160,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               className="flex h-10 w-10 items-center justify-center rounded-full border border-white/30 bg-black/60 text-2xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
             >
               ›
+            </button>
+            <button
+              type="button"
+              onClick={resetActiveHole}
+              aria-label="Reiniciar hoyo desde cero"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/60 text-base font-bold leading-none text-slate-200 shadow-lg backdrop-blur-sm active:scale-95"
+              title="Reiniciar hoyo"
+            >
+              ↺
             </button>
             {(completedShotsCount > 0 || pendingShot) && !farFromCourse ? (
               <button
