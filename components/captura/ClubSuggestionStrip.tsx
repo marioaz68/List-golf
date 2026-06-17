@@ -8,7 +8,7 @@ interface ClubSuggestionStripProps {
   suggestion: ClubSuggestion | null;
   swing: SwingKind;
   onSwingChange: (s: SwingKind) => void;
-  onClear: () => void;
+  onClear?: () => void;
 }
 
 /** Fila compacta: bastón sugerido + full/3·4 (yardas al green van arriba). */
@@ -55,14 +55,16 @@ export function ClubSuggestionStrip({
             label="3/4"
             onClick={() => onSwingChange("three_quarter")}
           />
-          <button
-            type="button"
-            onClick={onClear}
-            aria-label="Quitar punto"
-            className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white"
-          >
-            ✕
-          </button>
+          {onClear ? (
+            <button
+              type="button"
+              onClick={onClear}
+              aria-label="Quitar punto"
+              className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white"
+            >
+              ✕
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

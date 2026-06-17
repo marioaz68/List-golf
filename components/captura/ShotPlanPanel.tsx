@@ -10,15 +10,8 @@ import {
 } from "@/lib/distances/clubCatalog";
 import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
-export interface ClubPick {
-  key: string;
-  catalogId: string;
-  swing: SwingKind;
-  label: string;
-}
-
-function buildClubPicks(bag: PlayerBag): ClubPick[] {
-  const out: ClubPick[] = [];
+function buildClubPicks(bag: PlayerBag) {
+  const out: { key: string; catalogId: string; swing: SwingKind; label: string; short: string }[] = [];
   for (const c of getEnabledBagClubs(bag)) {
     const cat = CLUB_BY_ID[c.catalogId];
     if (!cat) continue;
@@ -26,13 +19,15 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
       key: `${c.catalogId}:full`,
       catalogId: c.catalogId,
       swing: "full",
-      label: `${cat.shortLabel} · full`,
+      label: `${cat.shortLabel} full`,
+      short: cat.shortLabel,
     });
     out.push({
       key: `${c.catalogId}:three_quarter`,
       catalogId: c.catalogId,
       swing: "three_quarter",
-      label: `${cat.shortLabel} · 3/4`,
+      label: `${cat.shortLabel} 3/4`,
+      short: cat.shortLabel,
     });
   }
   return out;
@@ -48,15 +43,17 @@ interface ShotPlanPanelProps {
   onCancel: () => void;
 }
 
+/** Rollers abajo-izquierda, compactos; bastón y yardas visibles al centro. */
 export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
   const [clubKey, setClubKey] = useState(picks[0]?.key ?? "");
   const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
 
   const bagClub = bag.clubs.find((c) => c.catalogId === pick?.catalogId);
-  const defaultYards = pick && bagClub
-    ? carryYards(bagClub.yardsFull, bagClub.yardsThreeQuarter, pick.swing)
-    : 100;
+  const defaultYards =
+    pick && bagClub
+      ? carryYards(bagClub.yardsFull, bagClub.yardsThreeQuarter, pick.swing)
+      : 100;
 
   const yardValues = useMemo(
     () => clubYardPickerValues(defaultYards),
@@ -68,52 +65,35 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
     if (!pick) return;
     const bc = bag.clubs.find((c) => c.catalogId === pick.catalogId);
     if (!bc) return;
-    const y = carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing);
-    setPlannedYards(y);
+    setPlannedYards(
+      carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing)
+    );
   }, [pick, bag.clubs]);
 
   const yardLabels = useMemo(
     () => yardValues.map((y) => String(y)),
     [yardValues]
   );
-  const plannedStr = String(plannedYards);
 
   if (!pick || !picks.length) {
     return (
-      <div className="pointer-events-auto mx-2 rounded-lg border border-amber-500/40 bg-black/85 px-3 py-2 text-center text-[11px] text-amber-200">
-        Activa bastones en Bolsa primero.
-        <button
-          type="button"
-          onClick={onCancel}
-          className="ml-2 font-bold text-white underline"
-        >
-          Cerrar
+      <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] rounded-lg border border-amber-500/40 bg-black/90 px-2 py-1.5 text-[10px] text-amber-200">
+        Activa bastones en Bolsa.
+        <button type="button" onClick={onCancel} className="ml-1 font-bold underline">
+          ✕
         </button>
       </div>
     );
   }
 
+  const swingLabel = pick.swing === "three_quarter" ? "3/4" : "full";
+
   return (
-    <div className="pointer-events-auto mx-2 rounded-lg border border-white/15 bg-black/88 px-2 py-1.5 shadow-lg backdrop-blur-md">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          Planear golpe
-        </span>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-[10px] font-bold text-slate-500"
-        >
-          ✕
-        </button>
-      </div>
-      <div className="flex items-stretch gap-2">
-        <div className="flex flex-1 flex-col items-center rounded-md border border-slate-700/80 bg-slate-950/80 py-1">
-          <span className="mb-0.5 text-[8px] font-bold uppercase text-slate-500">
-            Bastón
-          </span>
+    <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
+      <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
+        <div className="w-[3.25rem]">
           <VerticalRoller
-            className="h-[2.75rem] w-full"
+            className="h-[4.5rem] w-full"
             values={picks.map((p) => p.label)}
             value={pick.label}
             onChange={(label) => {
@@ -122,31 +102,48 @@ export function ShotPlanPanel({ bag, onConfirm, onCancel }: ShotPlanPanelProps) 
             }}
           />
         </div>
-        <div className="flex flex-1 flex-col items-center rounded-md border border-slate-700/80 bg-slate-950/80 py-1">
-          <span className="mb-0.5 text-[8px] font-bold uppercase text-slate-500">
-            Yardas
-          </span>
+        <div className="w-[2.75rem]">
           <VerticalRoller
-            className="h-[2.75rem] w-full"
+            className="h-[4.5rem] w-full"
             values={yardLabels}
-            value={plannedStr}
+            value={String(plannedYards)}
             onChange={(s) => setPlannedYards(Number(s))}
           />
         </div>
       </div>
-      <button
-        type="button"
-        onClick={() =>
-          onConfirm({
-            catalogId: pick.catalogId,
-            swing: pick.swing,
-            plannedYards,
-          })
-        }
-        className="mt-1.5 w-full rounded-lg bg-emerald-600 py-1.5 text-[11px] font-black text-white active:scale-[0.98]"
-      >
-        Guardar plan · toca donde quede la bola
-      </button>
+      <div className="flex min-w-[3.5rem] flex-col items-center justify-center rounded-lg border border-amber-500/30 bg-black/90 px-1.5 py-0.5 shadow-lg">
+        <span className="text-sm font-black leading-none text-white">
+          {pick.short}
+        </span>
+        <span className="text-[9px] font-bold text-amber-300">{swingLabel}</span>
+        <span className="mt-0.5 text-base font-black leading-none text-emerald-300">
+          {plannedYards}
+        </span>
+      </div>
+      <div className="flex flex-col justify-center gap-1">
+        <button
+          type="button"
+          onClick={() =>
+            onConfirm({
+              catalogId: pick.catalogId,
+              swing: pick.swing,
+              plannedYards,
+            })
+          }
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-lg font-black text-white shadow active:scale-95"
+          aria-label="Guardar plan"
+        >
+          ✓
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex h-7 w-9 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-slate-300"
+          aria-label="Cancelar"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }

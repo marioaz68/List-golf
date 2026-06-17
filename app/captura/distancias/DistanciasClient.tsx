@@ -545,16 +545,33 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [shotsOnHole]
   );
 
-  const mapFocusPoint = tapPoint ?? pendingTap;
-
-  const focusGreenYds = useMemo(() => {
-    if (!mapFocusPoint || !activeHolePoints) return null;
+  const playGreenYds = useMemo(() => {
+    if (!lastBall || !activeHolePoints || needsTeeMark) return null;
     return greenDistancesForHole(
-      mapFocusPoint.lat,
-      mapFocusPoint.lon,
+      lastBall.lat,
+      lastBall.lon,
       activeHolePoints
     );
-  }, [mapFocusPoint, activeHolePoints]);
+  }, [lastBall, activeHolePoints, needsTeeMark]);
+
+  const topGreenYds = useMemo(() => {
+    if (!activeHolePoints) return null;
+    if (tapPoint) {
+      return greenDistancesForHole(
+        tapPoint.lat,
+        tapPoint.lon,
+        activeHolePoints
+      );
+    }
+    return playGreenYds;
+  }, [tapPoint, playGreenYds, activeHolePoints]);
+
+  const topGreenLabel = useMemo(() => {
+    if (tapPoint) return "Punto marcado";
+    if (hasLoggedShotsOnHole(holeShotsStore, activeHole)) return "Desde bola";
+    if (teeMark) return "Desde salida";
+    return "Posición";
+  }, [tapPoint, holeShotsStore, activeHole, teeMark]);
 
   const measureAnchor = useMemo(() => {
     if (geo.status !== "ok") return null;
@@ -612,6 +629,20 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     const t = window.setTimeout(() => setArrivalToast(null), 2500);
     return () => window.clearTimeout(t);
   }, [arrivalToast]);
+
+  useEffect(() => {
+    if (needsTeeMark || shotPlanOpen || distanceMode || pendingTap) return;
+    if (playGreenYds) {
+      setTargetYards(Math.round(playGreenYds.center / 5) * 5);
+    }
+  }, [
+    playGreenYds?.center,
+    needsTeeMark,
+    activeHole,
+    shotPlanOpen,
+    distanceMode,
+    pendingTap,
+  ]);
 
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
@@ -675,7 +706,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         );
         resetTapUi();
         setTapPoint(null);
-        setTargetYards(0);
+        setTargetYards(
+          Math.round(
+            greenDistancesForHole(lat, lon, activeHolePoints).center / 5
+          ) * 5
+        );
         return;
       }
 
@@ -768,9 +803,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [geo, tapPoint]);
 
   const clubSuggestion = useMemo(() => {
-    if (!tapPoint || targetYards <= 0) return null;
+    if (targetYards <= 0) return null;
     return suggestClub(getEnabledBagClubs(bag), targetYards, swing);
-  }, [bag, tapPoint, targetYards, swing]);
+  }, [bag, targetYards, swing]);
 
   const clearTap = useCallback(() => {
     setTapPoint(null);
@@ -920,22 +955,20 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       />
 
       {needsTeeMark && !farFromCourse ? (
-        <div className="pointer-events-auto absolute inset-x-2 top-[30%] z-[1055] flex flex-col items-center gap-2 px-2">
-          <div className="w-full max-w-sm rounded-xl border border-emerald-500/40 bg-emerald-950/92 px-3 py-2.5 text-center shadow-2xl">
-            <p className="text-[11px] font-bold text-emerald-100">
-              Hoyo {activeHole} · marca tu salida
-            </p>
-            <p className="mt-0.5 text-[10px] text-emerald-200/80">
-              Toca el mapa donde sales, o usa tu posición actual
-            </p>
-            <button
-              type="button"
-              onClick={markTeeHere}
-              className="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-black text-white active:scale-[0.98]"
-            >
-              📍 Aquí salgo
-            </button>
-          </div>
+        <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1055] max-w-[10.5rem] rounded-lg border border-emerald-500/40 bg-emerald-950/92 px-2 py-1.5 shadow-lg">
+          <p className="text-[10px] font-bold leading-tight text-emerald-100">
+            Hoyo {activeHole} · marca salida
+          </p>
+          <p className="mt-0.5 text-[9px] text-emerald-200/75">
+            Toca el mapa o:
+          </p>
+          <button
+            type="button"
+            onClick={markTeeHere}
+            className="mt-1 w-full rounded-md bg-emerald-600 py-1 text-[10px] font-black text-white active:scale-[0.98]"
+          >
+            📍 Aquí salgo
+          </button>
         </div>
       ) : null}
 
@@ -983,19 +1016,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             </button>
           </div>
         ) : null}
-        {shotPlanOpen && !farFromCourse ? (
-          <ShotPlanPanel
-            bag={bag}
-            onConfirm={handleConfirmPlan}
-            onCancel={() => setShotPlanOpen(false)}
-          />
-        ) : null}
-        {distanceMode && tapPoint && !farFromCourse ? (
+        {!needsTeeMark &&
+        !shotPlanOpen &&
+        !pendingTap &&
+        targetYards > 0 &&
+        !farFromCourse ? (
           <ClubSuggestionStrip
             suggestion={clubSuggestion}
             swing={swing}
             onSwingChange={setSwing}
-            onClear={clearTap}
+            onClear={distanceMode ? clearTap : undefined}
           />
         ) : null}
         {distanceMode &&
@@ -1115,18 +1145,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {focusGreenYds && mapFocusPoint && !farFromCourse && !needsTeeMark ? (
+      {shotPlanOpen && !farFromCourse ? (
+        <ShotPlanPanel
+          bag={bag}
+          onConfirm={handleConfirmPlan}
+          onCancel={() => setShotPlanOpen(false)}
+        />
+      ) : null}
+
+      {topGreenYds && !farFromCourse && !needsTeeMark ? (
         <MapFocusTopBar
           demoMode={demoMode}
-          greenCenterYards={focusGreenYds.center}
-          segmentYards={tapPoint?.yards}
-          segmentLabel={
-            measureAnchor?.fromPhone
-              ? "Desde ti"
-              : teeMark && !hasLoggedShotsOnHole(holeShotsStore, activeHole)
-                ? "Desde salida"
-                : "Desde bola"
-          }
+          greenCenterYards={topGreenYds.center}
+          positionLabel={topGreenLabel}
         />
       ) : null}
 

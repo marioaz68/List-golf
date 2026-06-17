@@ -20,7 +20,12 @@ import {
   uprightHtml,
   zoomToFitWaypoints,
 } from "@/components/captura/mapRotation";
-import { golfBallHtml, teeBallHtml } from "@/components/captura/mapMarkers";
+import {
+  ballMarkerOptions,
+  ensureBallMarkerStyles,
+  golfBallHtml,
+  teeMarkerOptions,
+} from "@/components/captura/mapMarkers";
 
 export interface TapPoint {
   lat: number;
@@ -242,6 +247,7 @@ export function HoleYardageMap({
 
     (async () => {
       const L = await loadLeaflet();
+      ensureBallMarkerStyles();
       layerGroup.clearLayers();
 
       const greenCenter = referencePoints.find((p) => p.kind === "green-center");
@@ -343,51 +349,31 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        L.marker([tapPoint.lat, tapPoint.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: uprightHtml(golfBallHtml(15, "#ec4899"), bearing),
-            iconSize: [15, 15],
-            iconAnchor: [7, 7],
-          }),
-          interactive: false,
-        }).addTo(layerGroup);
+        L.marker(
+          [tapPoint.lat, tapPoint.lon],
+          ballMarkerOptions(L, golfBallHtml(18, "#ec4899"), 18)
+        ).addTo(layerGroup);
       }
 
       if (pendingTapPoint && !tapPoint) {
-        L.marker([pendingTapPoint.lat, pendingTapPoint.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: uprightHtml(golfBallHtml(14, "#a855f7"), bearing),
-            iconSize: [14, 14],
-            iconAnchor: [7, 7],
-          }),
-          interactive: false,
-        }).addTo(layerGroup);
+        L.marker(
+          [pendingTapPoint.lat, pendingTapPoint.lon],
+          ballMarkerOptions(L, golfBallHtml(18, "#a855f7"), 18)
+        ).addTo(layerGroup);
       }
 
       if (teeMarkPoint) {
-        L.marker([teeMarkPoint.lat, teeMarkPoint.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: uprightHtml(teeBallHtml(14), bearing),
-            iconSize: [14, 20],
-            iconAnchor: [7, 17],
-          }),
-          interactive: false,
-        }).addTo(layerGroup);
+        L.marker(
+          [teeMarkPoint.lat, teeMarkPoint.lon],
+          teeMarkerOptions(L, 18)
+        ).addTo(layerGroup);
       }
 
       for (const land of shotLandings) {
-        L.marker([land.lat, land.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: uprightHtml(golfBallHtml(13, "#f59e0b"), bearing),
-            iconSize: [13, 13],
-            iconAnchor: [6, 6],
-          }),
-          interactive: false,
-        }).addTo(layerGroup);
+        L.marker(
+          [land.lat, land.lon],
+          ballMarkerOptions(L, golfBallHtml(16, "#f59e0b"), 16)
+        ).addTo(layerGroup);
       }
 
       L.marker([playerLat, playerLon], {
@@ -423,6 +409,10 @@ export function HoleYardageMap({
           .map((p) => [p.lat, p.lon] as [number, number]),
       ]);
       if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
+      if (teeMarkPoint) bounds.extend([teeMarkPoint.lat, teeMarkPoint.lon]);
+      for (const land of shotLandings) {
+        bounds.extend([land.lat, land.lon]);
+      }
 
       try {
         if (anchor && !tapPoint) {
