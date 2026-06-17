@@ -15,6 +15,7 @@ import {
   frameByProximity,
   loadLeaflet,
   readMapLayout,
+  panToShowInViewport,
   screenToLatLng,
   tuneRotatedFraming,
   uprightHtml,
@@ -95,6 +96,7 @@ export function HoleYardageMap({
   const framedHoleRef = useRef<number | null>(null);
   const framedSegmentRef = useRef<number>(0);
   const onMapTapRef = useRef(onMapTap);
+  const lastTouchEndAtRef = useRef(0);
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -152,23 +154,30 @@ export function HoleYardageMap({
         let lastAt = 0;
         return (lat: number, lon: number) => {
           const now = Date.now();
-          if (now - lastAt < 350) return;
+          if (now - lastAt < 400) return;
           lastAt = now;
           onMapTapRef.current?.(lat, lon);
         };
       })();
 
-      map.on("click", (e: { latlng: { lat: number; lng: number } }) => {
-        fireTap(e.latlng.lat, e.latlng.lng);
-      });
-
       const onTap = (e: MouseEvent | TouchEvent) => {
         if (!onMapTapRef.current || !mapRef.current) return;
-        e.preventDefault();
+        const isTouch = e.type === "touchend";
+        if (!isTouch && Date.now() - lastTouchEndAtRef.current < 500) {
+          return;
+        }
+        if (isTouch) {
+          e.preventDefault();
+          lastTouchEndAtRef.current = Date.now();
+        }
         const clientX =
-          "touches" in e ? e.changedTouches[0].clientX : e.clientX;
+          "changedTouches" in e && e.changedTouches.length > 0
+            ? e.changedTouches[0].clientX
+            : (e as MouseEvent).clientX;
         const clientY =
-          "touches" in e ? e.changedTouches[0].clientY : e.clientY;
+          "changedTouches" in e && e.changedTouches.length > 0
+            ? e.changedTouches[0].clientY
+            : (e as MouseEvent).clientY;
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         const latlng = screenToLatLng(
@@ -191,7 +200,6 @@ export function HoleYardageMap({
 
       cleanup = () => {
         cancelled = true;
-        map.off("click");
         container?.removeEventListener("touchend", onTap);
         container?.removeEventListener("click", onTap);
         mapRef.current = null;
@@ -256,9 +264,15 @@ export function HoleYardageMap({
       const greenTarget = greenCenter ?? greenFront ?? greenBack;
 
       const player = { lat: playerLat, lon: playerLon };
+      const lastLanding =
+        shotLandings.length > 0
+          ? shotLandings[shotLandings.length - 1]
+          : null;
+      /** Posición de juego para encuadre (salida/última bola), no solo GPS. */
+      const framingPos = lastLanding ?? teeMarkPoint ?? player;
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
       const segIdx = hasCenterline
-        ? centerlineSegmentIndex(player, centerline!)
+        ? centerlineSegmentIndex(framingPos, centerline!)
         : 0;
       const totalSegs = hasCenterline ? centerline!.length - 1 : 1;
       // Punto actual (de dónde vienes en este tramo) y el ÚLTIMO punto de la
@@ -271,10 +285,6 @@ export function HoleYardageMap({
       // Anclaje/orientación: el green (último punto) arriba; el jugador, abajo.
       const aim = lastWp ?? greenTarget ?? null;
       const anchor = aim ?? greenTarget;
-      const yardsToAnchor =
-        anchor != null
-          ? yardsBetween(playerLat, playerLon, anchor.lat, anchor.lon)
-          : yardsToCenter;
 
       // Zoom: que quepan TODOS los puntos restantes (del actual al green), así
       // al avanzar de punto la foto se va acercando hacia el green.
@@ -284,7 +294,7 @@ export function HoleYardageMap({
       // Orientación estable por tramo: usamos el punto actual (fijo) → green
       // como eje, no el jugador (que se mueve), para que la foto no gire ni
       // reescale mientras caminas dentro del mismo tramo.
-      const orientFrom = fromWp ?? { lat: playerLat, lon: playerLon };
+      const orientFrom = fromWp ?? framingPos;
       const bearing = aim
         ? bearingDegrees(orientFrom.lat, orientFrom.lon, aim.lat, aim.lon)
         : 0;
@@ -400,72 +410,71 @@ export function HoleYardageMap({
         document.head.appendChild(style);
       }
 
-      const bounds = L.latLngBounds([
-        [playerLat, playerLon],
-        ...referencePoints
-          .filter((p) =>
-            ["green-front", "green-center", "green-back"].includes(p.kind)
-          )
-          .map((p) => [p.lat, p.lon] as [number, number]),
-      ]);
-      if (tapPoint) bounds.extend([tapPoint.lat, tapPoint.lon]);
-      if (teeMarkPoint) bounds.extend([teeMarkPoint.lat, teeMarkPoint.lon]);
-      for (const land of shotLandings) {
-        bounds.extend([land.lat, land.lon]);
-      }
+      const userPin = tapPoint ?? pendingTapPoint;
 
       try {
-        if (anchor && !tapPoint) {
+        if (anchor) {
           const recenterHole = framedHoleRef.current !== holeNo;
           const recenterSeg = framedSegmentRef.current !== segIdx;
           framedHoleRef.current = holeNo;
           framedSegmentRef.current = segIdx;
-          frameByProximity(
-            map,
-            L,
-            bearing,
-            playerLat,
-            playerLon,
-            anchor.lat,
-            anchor.lon,
-            yardsToAnchor,
-            viewportW,
-            viewportH,
-            rotW,
-            rotH,
-            56,
-            104,
-            undefined,
-            recenterHole || recenterSeg,
-            par,
-            hasCenterline ? { idx: segIdx, total: totalSegs } : null,
-            null,
-            fitZoom
-          );
-        } else {
-          map.fitBounds(bounds, {
-            paddingTopLeft: [16, 68],
-            paddingBottomRight: [16, 52],
-            animate: false,
-            maxZoom: 20,
-          });
-          if (anchor) {
+          const shouldReframe =
+            !userPin && (recenterHole || recenterSeg);
+          if (shouldReframe) {
+            frameByProximity(
+              map,
+              L,
+              bearing,
+              framingPos.lat,
+              framingPos.lon,
+              anchor.lat,
+              anchor.lon,
+              yardsBetween(
+                framingPos.lat,
+                framingPos.lon,
+                anchor.lat,
+                anchor.lon
+              ),
+              viewportW,
+              viewportH,
+              rotW,
+              rotH,
+              56,
+              104,
+              undefined,
+              true,
+              par,
+              hasCenterline ? { idx: segIdx, total: totalSegs } : null,
+              null,
+              fitZoom
+            );
+          } else if (userPin) {
+            panToShowInViewport(
+              map,
+              bearing,
+              userPin.lat,
+              userPin.lon,
+              viewportW,
+              viewportH
+            );
             tuneRotatedFraming(
               map,
               bearing,
-              playerLat,
-              playerLon,
+              framingPos.lat,
+              framingPos.lon,
               anchor.lat,
               anchor.lon,
               viewportW,
               viewportH,
               rotW,
-              rotH
+              rotH,
+              56,
+              104
             );
           }
         }
       } catch {
-        map.fitBounds(bounds, { padding: [40, 40], animate: false, maxZoom: 19 });
+        /* mantener vista actual */
       }
     })();
   }, [

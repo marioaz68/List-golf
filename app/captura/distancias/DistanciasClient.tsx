@@ -606,6 +606,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       const next = setHoleTeeMark(holeShotsStore, activeHole, { lat, lon });
       setHoleShotsStore(next);
       saveHoleShots(next, bagScope);
+      setManualHole((prev) => prev ?? activeHole);
       setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
       resetTapUi();
     },

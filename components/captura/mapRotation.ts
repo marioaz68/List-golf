@@ -92,7 +92,11 @@ export function uprightHtml(html: string, bearing: number): string {
   return `<div style="transform:rotate(${bearing}deg);transform-origin:center center;">${html}</div>`;
 }
 
-/** Convierte un toque en pantalla a lat/lon considerando la rotación del mapa. */
+/**
+ * Convierte un toque en pantalla a lat/lon considerando la rotación CSS del
+ * mapa. Leaflet no conoce esa rotación: NUNCA uses map.mouseEventToLatLng ni
+ * map.on("click") en mapas rotados; solo esta función vía el contenedor visible.
+ */
 export function screenToLatLng(
   clientX: number,
   clientY: number,
@@ -112,6 +116,34 @@ export function screenToLatLng(
   return map.containerPointToLatLng(
     L.point(ux + mapSize.x / 2, uy + mapSize.y / 2)
   );
+}
+
+/** Paneo suave (sin cambiar zoom) para que un punto quede en el viewport rotado. */
+export function panToShowInViewport(
+  map: any,
+  bearing: number,
+  lat: number,
+  lon: number,
+  viewportW: number,
+  viewportH: number,
+  marginPx = 48
+) {
+  const targetX = viewportW / 2;
+  const targetY = viewportH / 2;
+  const pt = toRotatedScreen(map, lat, lon, bearing, viewportW, viewportH);
+  const minX = marginPx;
+  const maxX = viewportW - marginPx;
+  const minY = marginPx + 40;
+  const maxY = viewportH - marginPx - 80;
+  let dx = 0;
+  let dy = 0;
+  if (pt.x < minX) dx = pt.x - minX;
+  else if (pt.x > maxX) dx = pt.x - maxX;
+  if (pt.y < minY) dy = pt.y - minY;
+  else if (pt.y > maxY) dy = pt.y - maxY;
+  if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+    panScreenDelta(map, bearing, dx, dy);
+  }
 }
 
 /**
