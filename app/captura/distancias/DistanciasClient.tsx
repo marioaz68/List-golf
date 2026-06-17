@@ -520,7 +520,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         lon,
         yards: yardsBetween(geo.lat, geo.lon, lat, lon),
       });
-      setTargetYards(toGreen.center);
+      setTargetYards(Math.round(toGreen.center / 5) * 5);
       setSwing("full");
     },
     [geo, activeHolePoints]

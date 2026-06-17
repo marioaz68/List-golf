@@ -1,4 +1,9 @@
-import { carryYards, CLUB_BY_ID, type SwingKind } from "@/lib/distances/clubCatalog";
+import {
+  carryYards,
+  CLUB_BY_ID,
+  yardRangeValues,
+  type SwingKind,
+} from "@/lib/distances/clubCatalog";
 import type { PlayerBagClub } from "@/lib/distances/playerBag";
 
 export interface ClubSuggestion {
@@ -56,14 +61,13 @@ export function suggestClub(
   };
 }
 
-/** Valores para el roller: distancia al green ± rango, paso 1 yd. */
+/** Valores para el roller: distancia al green ± rango, paso 5 yds. */
 export function yardsRollerValues(
   baseYards: number,
   span = 45
 ): number[] {
-  const lo = Math.max(15, baseYards - span);
-  const hi = baseYards + span;
-  const out: number[] = [];
-  for (let y = lo; y <= hi; y++) out.push(y);
-  return out;
+  const center = Math.max(5, Math.round(baseYards / 5) * 5);
+  const lo = Math.max(15, center - span);
+  const hi = center + span;
+  return yardRangeValues(lo, hi, 5);
 }

@@ -7,6 +7,7 @@ interface YardsRollerProps {
   value: number;
   onChange: (yards: number) => void;
   className?: string;
+  size?: "sm" | "md";
 }
 
 /** Roller horizontal compacto (scroll-snap) para ajustar yardas objetivo. */
@@ -15,7 +16,11 @@ export function YardsRoller({
   value,
   onChange,
   className = "",
+  size = "md",
 }: YardsRollerProps) {
+  const hClass = size === "sm" ? "h-7" : "h-9";
+  const activeText = size === "sm" ? "text-sm" : "text-base";
+  const idleText = size === "sm" ? "text-[10px]" : "text-xs";
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const skipScrollRef = useRef(false);
 
@@ -61,7 +66,7 @@ export function YardsRoller({
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex h-9 snap-x snap-mandatory overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={`flex ${hClass} snap-x snap-mandatory overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
       >
         <div className="w-[42%] shrink-0" aria-hidden />
         {values.map((y) => {
@@ -74,8 +79,8 @@ export function YardsRoller({
               className={[
                 "snap-center shrink-0 px-2 text-center transition-all",
                 active
-                  ? "text-base font-black text-amber-300"
-                  : "text-xs font-semibold text-slate-500",
+                  ? `${activeText} font-black text-amber-300`
+                  : `${idleText} font-semibold text-slate-500`,
               ].join(" ")}
             >
               {y}

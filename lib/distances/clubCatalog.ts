@@ -58,6 +58,29 @@ export function defaultThreeQuarterYards(full: number): number {
   return Math.round((full * 0.75) / 5) * 5;
 }
 
+/** Rango de yardas para roller, paso 5 (p. ej. bolsa o distancia al green). */
+export function yardRangeValues(
+  min: number,
+  max: number,
+  step = 5
+): number[] {
+  const lo = Math.round(min / step) * step;
+  const hi = Math.round(max / step) * step;
+  const out: number[] = [];
+  for (let y = lo; y <= hi; y += step) out.push(y);
+  return out;
+}
+
+/** Valores ±50 yds alrededor del bastón, en saltos de 5. */
+export function clubYardPickerValues(anchorYards: number): number[] {
+  const center = Math.max(5, Math.round(anchorYards / 5) * 5);
+  return yardRangeValues(
+    Math.max(10, center - 50),
+    Math.min(320, center + 50),
+    5
+  );
+}
+
 export function carryYards(
   yardsFull: number,
   yardsThreeQuarter: number,
