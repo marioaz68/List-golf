@@ -514,19 +514,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   );
 
   const lastBall = useMemo(() => {
-    const catalogTee = activeHolePoints?.tee
-      ? { lat: activeHolePoints.tee.lat, lon: activeHolePoints.tee.lon }
-      : undefined;
-    return lastBallPosition(holeShotsStore, activeHole, catalogTee);
-  }, [holeShotsStore, activeHole, activeHolePoints?.tee]);
+    return lastBallPosition(holeShotsStore, activeHole);
+  }, [holeShotsStore, activeHole]);
 
   const teeMark = useMemo(
     () => holeTeeMark(holeShotsStore, activeHole),
     [holeShotsStore, activeHole]
   );
 
-  const needsTeeMark =
-    !hasHoleTeeMark(holeShotsStore, activeHole) && !pendingShot;
+  const hasTeeMark = hasHoleTeeMark(holeShotsStore, activeHole);
+  const needsTeeMark = !hasTeeMark;
 
   const shotsOnHole = useMemo(
     () => shotsForHole(holeShotsStore, activeHole),
@@ -626,6 +623,18 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [activeHole, resetTapUi]);
 
   useEffect(() => {
+    if (hasTeeMark || !pendingShot) return;
+    const next = cancelPendingShot(
+      holeShotsStore,
+      activeHole,
+      pendingShot.id
+    );
+    setHoleShotsStore(next);
+    saveHoleShots(next, bagScope);
+    setShotPlanOpen(false);
+  }, [hasTeeMark, pendingShot, holeShotsStore, activeHole, bagScope]);
+
+  useEffect(() => {
     if (!arrivalToast) return;
     const t = window.setTimeout(() => setArrivalToast(null), 2500);
     return () => window.clearTimeout(t);
@@ -690,6 +699,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       }
 
       if (pendingShot) {
+        if (!hasTeeMark) {
+          setArrivalToast("Marca tu salida antes de registrar un golpe");
+          return;
+        }
         const actual = Math.round(
           yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
         ) * 5;
@@ -725,6 +738,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       geo,
       activeHolePoints,
       needsTeeMark,
+      hasTeeMark,
       markTeeAt,
       pendingShot,
       holeShotsStore,
@@ -761,9 +775,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [pendingTap, geo, activeHolePoints, measureAnchor]);
 
   const handleChooseShot = useCallback(() => {
+    if (!hasTeeMark) {
+      setArrivalToast("Marca tu salida en este hoyo primero");
+      setPendingTap(null);
+      return;
+    }
     setShotPlanOpen(true);
     setPendingTap(null);
-  }, []);
+  }, [hasTeeMark]);
 
   const handleConfirmPlan = useCallback(
     (plan: {
@@ -771,13 +790,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       swing: SwingKind;
       plannedYards: number;
     }) => {
-      const from =
-        lastBall ??
-        teeMark ??
-        (activeHolePoints?.tee
-          ? { lat: activeHolePoints.tee.lat, lon: activeHolePoints.tee.lon }
-          : null);
-      if (!from) return;
+      if (!teeMark) {
+        setArrivalToast("Marca tu salida antes de planear un golpe");
+        setShotPlanOpen(false);
+        return;
+      }
+      const from = lastBall ?? teeMark;
       const { store } = addPlannedShot(
         holeShotsStore,
         activeHole,
@@ -791,7 +809,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotPlanOpen(false);
       setArrivalToast("Toca en el mapa donde quedó la bola");
     },
-    [lastBall, teeMark, activeHolePoints, holeShotsStore, activeHole, bagScope]
+    [teeMark, lastBall, holeShotsStore, activeHole, bagScope]
   );
 
   const measureFromPhoneNow = useCallback(() => {
@@ -900,6 +918,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               tapPoint && measureAnchor ? measureAnchor.lon : undefined
             }
             teeMarkPoint={teeMark}
+            needsTeeMark={needsTeeMark}
             shotLandings={shotLandings}
           />
         ) : (
@@ -995,7 +1014,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             {arrivalToast}
           </div>
         ) : null}
-        {pendingShot && !pendingTap && !shotPlanOpen ? (
+        {pendingShot && !pendingTap && !shotPlanOpen && hasTeeMark ? (
           <div className="pointer-events-auto mx-2 mb-1 flex items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 shadow-lg">
             <span className="text-[11px] font-bold text-amber-200">
               Toca donde quedó la bola
@@ -1146,7 +1165,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {shotPlanOpen && !farFromCourse ? (
+      {shotPlanOpen && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
           bag={bag}
           onConfirm={handleConfirmPlan}

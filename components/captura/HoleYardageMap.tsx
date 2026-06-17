@@ -55,6 +55,8 @@ interface HoleYardageMapProps {
   lineFromLon?: number;
   /** Salida marcada por el jugador al iniciar el hoyo. */
   teeMarkPoint?: { lat: number; lon: number } | null;
+  /** Si true, el jugador debe marcar salida antes de D/G. */
+  needsTeeMark?: boolean;
   /** Posiciones donde quedó la bola (golpes completados). */
   shotLandings?: Array<{ lat: number; lon: number }>;
 }
@@ -83,6 +85,7 @@ export function HoleYardageMap({
   lineFromLat,
   lineFromLon,
   teeMarkPoint = null,
+  needsTeeMark = false,
   shotLandings = [],
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -521,7 +524,9 @@ export function HoleYardageMap({
         <div ref={mapDivRef} className="absolute inset-0" />
       </div>
       <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
-        Toca el mapa · D distancia · G golpe
+        {needsTeeMark
+          ? "Paso 1 · toca donde sales"
+          : "Toca el mapa · D distancia · G golpe"}
       </div>
     </div>
   );
