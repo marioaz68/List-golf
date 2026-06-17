@@ -48,11 +48,14 @@ import {
   addPlannedShot,
   cancelPendingShot,
   completeShotArrival,
+  hasHoleTeeMark,
   hasLoggedShotsOnHole,
+  holeTeeMark,
   lastBallPosition,
   loadHoleShots,
   pendingShotOnHole,
   saveHoleShots,
+  setHoleTeeMark,
   shotsForHole,
   type HoleShotsStore,
 } from "@/lib/distances/holeShots";
@@ -510,13 +513,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   );
 
   const lastBall = useMemo(() => {
-    if (!activeHolePoints?.tee) return null;
-    return lastBallPosition(
-      holeShotsStore,
-      activeHole,
-      activeHolePoints.tee
-    );
+    const catalogTee = activeHolePoints?.tee
+      ? { lat: activeHolePoints.tee.lat, lon: activeHolePoints.tee.lon }
+      : undefined;
+    return lastBallPosition(holeShotsStore, activeHole, catalogTee);
   }, [holeShotsStore, activeHole, activeHolePoints?.tee]);
+
+  const teeMark = useMemo(
+    () => holeTeeMark(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
+
+  const needsTeeMark =
+    !hasHoleTeeMark(holeShotsStore, activeHole) && !pendingShot;
 
   const shotsOnHole = useMemo(
     () => shotsForHole(holeShotsStore, activeHole),
@@ -531,7 +540,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     if (geo.status !== "ok") return null;
     const usePhone =
       measureFromPhoneOnce ||
-      !hasLoggedShotsOnHole(holeShotsStore, activeHole);
+      (!hasLoggedShotsOnHole(holeShotsStore, activeHole) &&
+        !hasHoleTeeMark(holeShotsStore, activeHole));
     if (usePhone) {
       return { lat: geo.lat, lon: geo.lon, fromPhone: true as const };
     }
@@ -553,6 +563,22 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setDistanceMode(false);
     setMeasureFromPhoneOnce(false);
   }, []);
+
+  const markTeeAt = useCallback(
+    (lat: number, lon: number) => {
+      const next = setHoleTeeMark(holeShotsStore, activeHole, { lat, lon });
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
+      resetTapUi();
+    },
+    [holeShotsStore, activeHole, bagScope, resetTapUi]
+  );
+
+  const markTeeHere = useCallback(() => {
+    if (geo.status !== "ok") return;
+    markTeeAt(geo.lat, geo.lon);
+  }, [geo, markTeeAt]);
 
   useEffect(() => {
     resetTapUi();
@@ -606,6 +632,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
 
+      if (needsTeeMark) {
+        markTeeAt(lat, lon);
+        return;
+      }
+
       if (pendingShot) {
         const actual = Math.round(
           yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
@@ -637,6 +668,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [
       geo,
       activeHolePoints,
+      needsTeeMark,
+      markTeeAt,
       pendingShot,
       holeShotsStore,
       activeHole,
@@ -684,6 +717,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     }) => {
       const from =
         lastBall ??
+        teeMark ??
         (activeHolePoints?.tee
           ? { lat: activeHolePoints.tee.lat, lon: activeHolePoints.tee.lon }
           : null);
@@ -701,7 +735,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotPlanOpen(false);
       setArrivalToast("Toca en el mapa donde quedó la bola");
     },
-    [lastBall, activeHolePoints, holeShotsStore, activeHole, bagScope]
+    [lastBall, teeMark, activeHolePoints, holeShotsStore, activeHole, bagScope]
   );
 
   const measureFromPhoneNow = useCallback(() => {
@@ -824,7 +858,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             lineFromLon={
               tapPoint && measureAnchor ? measureAnchor.lon : undefined
             }
-            lastBallPoint={lastBall}
+            lastBallPoint={
+              hasLoggedShotsOnHole(holeShotsStore, activeHole)
+                ? lastBall
+                : null
+            }
+            teeMarkPoint={teeMark}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -879,7 +918,27 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         onClose={() => setShotsDetailOpen(false)}
       />
 
-      {pendingTap && !farFromCourse ? (
+      {needsTeeMark && !farFromCourse ? (
+        <div className="pointer-events-auto absolute inset-x-2 top-[30%] z-[1055] flex flex-col items-center gap-2 px-2">
+          <div className="w-full max-w-sm rounded-xl border border-emerald-500/40 bg-emerald-950/92 px-3 py-2.5 text-center shadow-2xl">
+            <p className="text-[11px] font-bold text-emerald-100">
+              Hoyo {activeHole} · marca tu salida
+            </p>
+            <p className="mt-0.5 text-[10px] text-emerald-200/80">
+              Toca el mapa donde sales, o usa tu posición actual
+            </p>
+            <button
+              type="button"
+              onClick={markTeeHere}
+              className="mt-2 w-full rounded-lg bg-emerald-600 py-2 text-xs font-black text-white active:scale-[0.98]"
+            >
+              📍 Aquí salgo
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingTap && !farFromCourse && !needsTeeMark ? (
         <div className="pointer-events-none absolute inset-x-0 top-[38%] z-[1055] flex justify-center px-4">
           <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/80 px-3 py-2 shadow-2xl backdrop-blur-md">
             <p className="mb-1.5 text-center text-[10px] font-semibold text-slate-300">
@@ -1063,7 +1122,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       {distanceMode && tapPoint && measureAnchor && !farFromCourse ? (
         <div className="absolute left-1/2 top-11 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur-sm">
           {tapPoint.yards} yds ·{" "}
-          {measureAnchor.fromPhone ? "desde ti" : "desde bola"}
+          {measureAnchor.fromPhone ? "desde ti" : teeMark && !hasLoggedShotsOnHole(holeShotsStore, activeHole) ? "desde salida" : "desde bola"}
         </div>
       ) : null}
 

@@ -48,6 +48,8 @@ interface HoleYardageMapProps {
   lineFromLon?: number;
   /** Última bola confirmada en el hoyo. */
   lastBallPoint?: { lat: number; lon: number } | null;
+  /** Salida marcada por el jugador al iniciar el hoyo. */
+  teeMarkPoint?: { lat: number; lon: number } | null;
 }
 
 function yardLabel(yards: number): string {
@@ -74,6 +76,7 @@ export function HoleYardageMap({
   lineFromLat,
   lineFromLon,
   lastBallPoint = null,
+  teeMarkPoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -368,6 +371,21 @@ export function HoleYardageMap({
         }).addTo(layerGroup);
       }
 
+      if (teeMarkPoint) {
+        L.marker([teeMarkPoint.lat, teeMarkPoint.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="width:14px;height:14px;border-radius:50%;background:#22c55e;border:2px solid #fff;box-shadow:0 0 0 3px rgba(34,197,94,0.5);"></div>`,
+              bearing
+            ),
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+          }),
+          interactive: false,
+        }).addTo(layerGroup);
+      }
+
       if (lastBallPoint) {
         L.marker([lastBallPoint.lat, lastBallPoint.lon], {
           icon: L.divIcon({
@@ -485,6 +503,7 @@ export function HoleYardageMap({
     lineFromLat,
     lineFromLon,
     lastBallPoint,
+    teeMarkPoint,
     size.w,
     size.h,
     mapReady,

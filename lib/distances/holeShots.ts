@@ -20,14 +20,16 @@ export interface HoleShot {
 }
 
 export interface HoleShotsStore {
-  version: 1;
+  version: 2;
   byHole: Record<string, HoleShot[]>;
+  /** Salida marcada por el jugador al iniciar cada hoyo. */
+  teeMarkByHole: Record<string, LatLon>;
 }
 
-const STORAGE_PREFIX = "listgolf-hole-shots-v1";
+const STORAGE_PREFIX = "listgolf-hole-shots-v2";
 
 export function defaultHoleShotsStore(): HoleShotsStore {
-  return { version: 1, byHole: {} };
+  return { version: 2, byHole: {}, teeMarkByHole: {} };
 }
 
 function storageKey(scope?: string): string {
@@ -35,14 +37,40 @@ function storageKey(scope?: string): string {
   return s ? `${STORAGE_PREFIX}:${s}` : STORAGE_PREFIX;
 }
 
+function migrateStore(raw: unknown): HoleShotsStore {
+  if (!raw || typeof raw !== "object") return defaultHoleShotsStore();
+  const o = raw as {
+    version?: number;
+    byHole?: Record<string, HoleShot[]>;
+    teeMarkByHole?: Record<string, LatLon>;
+  };
+  if (o.version === 2 && o.byHole) {
+    return {
+      version: 2,
+      byHole: o.byHole,
+      teeMarkByHole: o.teeMarkByHole ?? {},
+    };
+  }
+  if (o.version === 1 && o.byHole) {
+    return { version: 2, byHole: o.byHole, teeMarkByHole: {} };
+  }
+  return defaultHoleShotsStore();
+}
+
 export function loadHoleShots(scope?: string): HoleShotsStore {
   if (typeof window === "undefined") return defaultHoleShotsStore();
   try {
     const raw = window.localStorage.getItem(storageKey(scope));
-    if (!raw) return defaultHoleShotsStore();
-    const parsed = JSON.parse(raw) as HoleShotsStore;
-    if (parsed?.version !== 1 || !parsed.byHole) return defaultHoleShotsStore();
-    return parsed;
+    if (!raw) {
+      const legacy = window.localStorage.getItem(
+        scope?.trim()
+          ? `listgolf-hole-shots-v1:${scope.trim()}`
+          : "listgolf-hole-shots-v1"
+      );
+      if (legacy) return migrateStore(JSON.parse(legacy));
+      return defaultHoleShotsStore();
+    }
+    return migrateStore(JSON.parse(raw));
   } catch {
     return defaultHoleShotsStore();
   }
@@ -61,6 +89,42 @@ export function shotsForHole(store: HoleShotsStore, hole: number): HoleShot[] {
   return store.byHole[String(hole)] ?? [];
 }
 
+export function holeTeeMark(
+  store: HoleShotsStore,
+  hole: number
+): LatLon | null {
+  const m = store.teeMarkByHole[String(hole)];
+  return m ? { ...m } : null;
+}
+
+export function hasHoleTeeMark(store: HoleShotsStore, hole: number): boolean {
+  return Boolean(store.teeMarkByHole[String(hole)]);
+}
+
+export function setHoleTeeMark(
+  store: HoleShotsStore,
+  hole: number,
+  point: LatLon
+): HoleShotsStore {
+  return {
+    ...store,
+    teeMarkByHole: {
+      ...store.teeMarkByHole,
+      [String(hole)]: { ...point },
+    },
+  };
+}
+
+export function clearHoleTeeMark(
+  store: HoleShotsStore,
+  hole: number
+): HoleShotsStore {
+  const key = String(hole);
+  if (!store.teeMarkByHole[key]) return store;
+  const { [key]: _, ...rest } = store.teeMarkByHole;
+  return { ...store, teeMarkByHole: rest };
+}
+
 export function hasLoggedShotsOnHole(
   store: HoleShotsStore,
   hole: number
@@ -68,18 +132,18 @@ export function hasLoggedShotsOnHole(
   return shotsForHole(store, hole).some((s) => s.completedAt != null);
 }
 
-/** Última bola confirmada en el hoyo; si no hay, usa el tee. */
+/** Ancla del hoyo: última bola confirmada, o salida del jugador, o tee del catálogo. */
 export function lastBallPosition(
   store: HoleShotsStore,
   hole: number,
-  tee: LatLon | undefined
+  catalogTee?: LatLon
 ): LatLon | null {
   const shots = shotsForHole(store, hole);
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
     if (s.completedAt != null && s.to) return s.to;
   }
-  return tee ?? null;
+  return holeTeeMark(store, hole) ?? catalogTee ?? null;
 }
 
 export function pendingShotOnHole(
@@ -124,7 +188,7 @@ export function addPlannedShot(
     completedAt: null,
   };
   const next = {
-    version: 1 as const,
+    ...store,
     byHole: { ...store.byHole, [key]: [...prev, shot] },
   };
   return { store: next, shot };
@@ -140,7 +204,7 @@ export function completeShotArrival(
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
   return {
-    version: 1,
+    ...store,
     byHole: {
       ...store.byHole,
       [key]: prev.map((s) =>
@@ -162,9 +226,11 @@ export function clearHoleShots(
   hole: number
 ): HoleShotsStore {
   const key = String(hole);
-  if (!store.byHole[key]) return store;
-  const { [key]: _, ...rest } = store.byHole;
-  return { version: 1, byHole: rest };
+  const nextByHole = { ...store.byHole };
+  delete nextByHole[key];
+  const nextTee = { ...store.teeMarkByHole };
+  delete nextTee[key];
+  return { version: 2, byHole: nextByHole, teeMarkByHole: nextTee };
 }
 
 export function cancelPendingShot(
@@ -175,7 +241,7 @@ export function cancelPendingShot(
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
   return {
-    version: 1,
+    ...store,
     byHole: {
       ...store.byHole,
       [key]: prev.filter((s) => s.id !== shotId),
