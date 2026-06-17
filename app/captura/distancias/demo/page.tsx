@@ -1,11 +1,9 @@
 /**
- * /captura/distancias/demo — Simulador para probar el medidor de yardas sin
- * estar en el campo. Recorre los 18 hoyos en orden (por vueltas) con una
- * ubicación simulada y verifica que el green quede arriba y tú abajo, además
- * del acercamiento al avanzar del tee al green.
+ * /captura/distancias/demo — Yardas en modo demo (sin GPS ni límite de 300 m).
+ * Misma UI que en campo: bolsa, tap en mapa, sugerencia de bastón.
  */
 import { Suspense } from "react";
-import DistanciasDemoClient from "./DistanciasDemoClient";
+import DistanciasClient from "../DistanciasClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -19,7 +17,7 @@ export default function DistanciasDemoPage() {
         </div>
       }
     >
-      <DistanciasDemoClient />
+      <DistanciasClient demoMode />
     </Suspense>
   );
 }

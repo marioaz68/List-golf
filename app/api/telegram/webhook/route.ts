@@ -39,7 +39,9 @@ import {
 } from "@/lib/telegram/handicap/misRondasCommand";
 import {
   isDistancesCommand,
+  isDistancesDemoCommand,
   buildDistancesReply,
+  buildDistancesDemoReply,
 } from "@/lib/telegram/distancesCommand";
 import {
   isCalibrarCommand,
@@ -237,6 +239,17 @@ export async function POST(req: Request) {
         buttons: reply.buttons,
       });
       return NextResponse.json({ ok: true, calibrar: "link_sent" });
+    }
+
+    // === RANGEFINDER DEMO: /YARDAS DEMO — en casa sin GPS (antes de YARDAS) ===
+    if (text && isDistancesDemoCommand(text)) {
+      const reply = buildDistancesDemoReply(userId);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, distances_demo: "link_sent" });
     }
 
     // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===

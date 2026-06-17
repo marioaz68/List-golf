@@ -113,9 +113,13 @@ function timeAgo(ms: number): string {
   return `${Math.round(min / 60)}h`;
 }
 
-export default function DistanciasClient() {
-  const [geo, setGeo] = useState<GeoState>({ status: "idle" });
-  const [manualHole, setManualHole] = useState<number | null>(null);
+export default function DistanciasClient({ demoMode = false }: { demoMode?: boolean }) {
+  const [geo, setGeo] = useState<GeoState>(
+    demoMode ? { status: "idle" } : { status: "idle" }
+  );
+  const [manualHole, setManualHole] = useState<number | null>(demoMode ? 1 : null);
+  /** En demo: 0 = tee, 1 = casi en el green (simula caminar el hoyo). */
+  const [demoProgress, setDemoProgress] = useState(0.35);
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
   const [targetYards, setTargetYards] = useState(0);
@@ -182,6 +186,7 @@ export default function DistanciasClient() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (demoMode) return;
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       setGeo({
         status: "error",
@@ -231,7 +236,7 @@ export default function DistanciasClient() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, []);
+  }, [demoMode]);
 
   // Polígonos calibrados + greens de los 18 hoyos (una sola llamada al abrir).
   useEffect(() => {
@@ -304,6 +309,7 @@ export default function DistanciasClient() {
   // Si el GPS te ubica a más de este radio del green más cercano, no medimos
   // (evita yardas absurdas cuando alguien abre la pantalla desde su casa lejos).
   const farFromCourse =
+    !demoMode &&
     geo.status === "ok" &&
     nearest != null &&
     nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
@@ -470,6 +476,24 @@ export default function DistanciasClient() {
 
   const activeHolePoints = holeGreen ?? CCQ_HOLE_POINTS[activeHole];
 
+  // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
+  useEffect(() => {
+    if (!demoMode) return;
+    const hp = activeHolePoints;
+    if (!hp?.tee || !hp.center) {
+      setGeo({ status: "requesting" });
+      return;
+    }
+    const f = Math.max(0, Math.min(1, demoProgress)) * 0.92;
+    setGeo({
+      status: "ok",
+      lat: hp.tee.lat + (hp.center.lat - hp.tee.lat) * f,
+      lon: hp.tee.lon + (hp.center.lon - hp.tee.lon) * f,
+      accuracy: 5,
+      ts: Date.now(),
+    });
+  }, [demoMode, activeHolePoints, demoProgress]);
+
   const greenYds = useMemo(() => {
     if (geo.status !== "ok" || !activeHolePoints) return null;
     return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
@@ -569,12 +593,13 @@ export default function DistanciasClient() {
   // retroceder de hoyo; para reiniciar usa "Salir en 1 / 10".
   const nextHole = () => {
     manualAtDetectedRef.current = insideHole;
-    setManualHole(((prev) => {
+    setManualHole((prev) => {
       const base = prev ?? autoHole ?? nearestHole;
       return (base % 18) + 1;
-    })());
+    });
     setTapPoint(null);
     setTargetYards(0);
+    if (demoMode) setDemoProgress(0.35);
   };
 
   const startAtHole = (n: number) => {
@@ -583,6 +608,7 @@ export default function DistanciasClient() {
     setManualHole(n);
     setTapPoint(null);
     setTargetYards(0);
+    if (demoMode) setDemoProgress(0.35);
   };
 
   return (
@@ -624,10 +650,19 @@ export default function DistanciasClient() {
       <button
         type="button"
         onClick={() => setBagOpen(true)}
-        className="absolute left-2 top-2 z-[1000] rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95"
+        className={[
+          "absolute left-2 z-[1000] rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95",
+          demoMode ? "top-11" : "top-2",
+        ].join(" ")}
       >
         Bolsa
       </button>
+
+      {demoMode ? (
+        <div className="pointer-events-none absolute left-2 top-2 z-[1000] max-w-[70%] rounded-full bg-amber-500/95 px-2.5 py-1 text-[10px] font-black leading-tight text-amber-950 shadow-lg">
+          DEMO · en casa · sin GPS
+        </div>
+      ) : null}
 
       <PlayerBagSheet
         open={bagOpen}
@@ -687,7 +722,7 @@ export default function DistanciasClient() {
             <button
               type="button"
               onClick={() => setManualHole(null)}
-              disabled={manualHole == null}
+              disabled={manualHole == null || demoMode}
               aria-label="Volver a detección automática"
               className="rounded-md bg-black/60 px-2 py-0.5 text-center leading-none shadow-lg backdrop-blur-sm disabled:opacity-100"
             >
@@ -723,7 +758,24 @@ export default function DistanciasClient() {
         </div>
 
         {/* Barra de ritmo delgada, pegada al borde inferior */}
-        {!farFromCourse ? <PaceBannerThin pace={pace} /> : null}
+        {!farFromCourse ? <PaceBannerThin pace={demoMode ? null : pace} /> : null}
+        {demoMode ? (
+          <div className="pointer-events-auto mx-2 mb-1 rounded-lg bg-black/75 px-3 py-2 backdrop-blur-sm">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-300">
+              <span>Tee</span>
+              <span>Simular posición ({Math.round(demoProgress * 100)}%)</span>
+              <span>Green</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(demoProgress * 100)}
+              onChange={(e) => setDemoProgress(Number(e.target.value) / 100)}
+              className="w-full accent-emerald-500"
+            />
+          </div>
+        ) : null}
       </div>
 
       {/* Distancia desde tu posición hasta el punto tocado (referencia). */}
