@@ -368,6 +368,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     count: 0,
   });
   const layoutReseededRef = useRef(false);
+  const prevActiveHoleRef = useRef<number | null>(null);
 
   // Al llegar polígonos calibrados, re-sembrar el hoyo (corrige 1→2 en la salida).
   useEffect(() => {
@@ -653,22 +654,34 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       );
       setHoleShotsStore(next);
       saveHoleShots(next, bagScope);
-      setManualHole((prev) => prev ?? activeHole);
+      setManualHole(activeHole);
       setPendingTap(null);
       setDistanceMode(false);
       setMeasureFromPhoneOnce(false);
       setTapPoint(null);
-      setTargetYards(0);
       if (!hasCompleted) {
+        const toGreen =
+          activeHolePoints != null
+            ? Math.round(
+                greenDistancesForHole(lat, lon, activeHolePoints).center / 5
+              ) * 5
+            : 0;
+        if (toGreen > 0) setTargetYards(toGreen);
         setShotPlanOpen(true);
-        setArrivalToast(`Golpe 1 · elige bastón y yardas`);
+        setArrivalToast(`Salida marcada · elige bastón (golpe 1)`);
       } else {
         setShotPlanOpen(false);
         setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
       }
     },
-    [holeShotsStore, activeHole, bagScope]
+    [holeShotsStore, activeHole, bagScope, activeHolePoints]
   );
+
+  const markTeeAtCatalog = useCallback(() => {
+    const tee = activeHolePoints?.tee;
+    if (!tee) return;
+    markTeeAt(tee.lat, tee.lon);
+  }, [activeHolePoints?.tee, markTeeAt]);
 
   const markTeeHere = useCallback(() => {
     if (geo.status !== "ok") return;
@@ -676,10 +689,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [geo, markTeeAt]);
 
   useEffect(() => {
-    resetTapUi();
-    setTapPoint(null);
-    setTargetYards(0);
-    setShotsDetailOpen(false);
+    if (prevActiveHoleRef.current === activeHole) return;
+    if (prevActiveHoleRef.current !== null) {
+      resetTapUi();
+      setTapPoint(null);
+      setTargetYards(0);
+      setShotsDetailOpen(false);
+      setShotPlanOpen(false);
+    }
+    prevActiveHoleRef.current = activeHole;
   }, [activeHole, resetTapUi]);
 
   useEffect(() => {
@@ -695,10 +713,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [hasTeeMark, pendingShot, holeShotsStore, activeHole, bagScope]);
 
   useEffect(() => {
-    if (!arrivalToast) return;
+    if (!arrivalToast || needsTeeMark) return;
     const t = window.setTimeout(() => setArrivalToast(null), 2500);
     return () => window.clearTimeout(t);
-  }, [arrivalToast]);
+  }, [arrivalToast, needsTeeMark]);
 
   useEffect(() => {
     if (needsTeeMark || shotPlanOpen || pendingTap) return;
@@ -1072,6 +1090,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             needsTeeMark={needsTeeMark}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
+            catalogTeePoint={
+              needsTeeMark && activeHolePoints?.tee
+                ? activeHolePoints.tee
+                : null
+            }
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -1127,20 +1150,29 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       />
 
       {needsTeeMark && !farFromCourse ? (
-        <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1055] max-w-[10.5rem] rounded-lg border border-emerald-500/40 bg-emerald-950/92 px-2 py-1.5 shadow-lg">
-          <p className="text-[10px] font-bold leading-tight text-emerald-100">
-            Hoyo {activeHole} · marca salida
+        <div className="pointer-events-auto absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
+          <p className="text-center text-[11px] font-black text-emerald-100">
+            Hoyo {activeHole} · marca tu salida
           </p>
-          <p className="mt-0.5 text-[9px] text-emerald-200/75">
-            Toca el mapa o:
+          <p className="mt-0.5 text-center text-[10px] text-emerald-200/85">
+            Toca el círculo verde del tee en el mapa
           </p>
-          <button
-            type="button"
-            onClick={markTeeHere}
-            className="mt-1 w-full rounded-md bg-emerald-600 py-1 text-[10px] font-black text-white active:scale-[0.98]"
-          >
-            📍 Aquí salgo
-          </button>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              type="button"
+              onClick={markTeeAtCatalog}
+              className="flex-1 rounded-md bg-emerald-600 py-1.5 text-[10px] font-black text-white active:scale-[0.98]"
+            >
+              ⛳ Tee del hoyo
+            </button>
+            <button
+              type="button"
+              onClick={markTeeHere}
+              className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
+            >
+              📍 Aquí salgo
+            </button>
+          </div>
         </div>
       ) : null}
 

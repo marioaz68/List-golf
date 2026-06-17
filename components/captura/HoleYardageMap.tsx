@@ -68,6 +68,8 @@ interface HoleYardageMapProps {
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
   /** Bola actual: GPS al marcar llegada, o última bola al jugar. */
   playBallPoint?: { lat: number; lon: number } | null;
+  /** Tee del catálogo (referencia visual al marcar salida). */
+  catalogTeePoint?: { lat: number; lon: number } | null;
 }
 
 function yardLabel(yards: number): string {
@@ -97,6 +99,7 @@ export function HoleYardageMap({
   needsTeeMark = false,
   shotLandings = [],
   playBallPoint = null,
+  catalogTeePoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -209,16 +212,16 @@ export function HoleYardageMap({
       };
 
       const container = containerRef.current;
-      container?.addEventListener("touchend", onTap, { passive: false });
-      container?.addEventListener("click", onTap);
+      container?.addEventListener("touchend", onTap, { passive: false, capture: true });
+      container?.addEventListener("click", onTap, { capture: true });
 
       map.invalidateSize();
       setMapReady(true);
 
       cleanup = () => {
         cancelled = true;
-        container?.removeEventListener("touchend", onTap);
-        container?.removeEventListener("click", onTap);
+        container?.removeEventListener("touchend", onTap, { capture: true });
+        container?.removeEventListener("click", onTap, { capture: true });
         mapRef.current = null;
         layersRef.current = null;
         setMapReady(false);
@@ -435,6 +438,19 @@ export function HoleYardageMap({
       }
 
       // Marcadores fijos del hoyo: salida + cada golpe confirmado (no se quitan).
+      if (needsTeeMark && catalogTeePoint) {
+        L.marker([catalogTeePoint.lat, catalogTeePoint.lon], {
+          icon: L.divIcon({
+            className: "yardage-ball-marker",
+            html: `<div style="width:14px;height:14px;border-radius:50%;border:2px dashed rgba(52,211,153,0.95);background:rgba(16,185,129,0.25);box-shadow:0 0 0 3px rgba(0,0,0,0.35);"></div>`,
+            iconSize: [14, 14],
+            iconAnchor: [7, 7],
+          }),
+          interactive: false,
+          zIndexOffset: 580,
+        }).addTo(layerGroup);
+      }
+
       if (teeMarkPoint) {
         L.marker(
           [teeMarkPoint.lat, teeMarkPoint.lon],
@@ -601,6 +617,7 @@ export function HoleYardageMap({
     teeMarkPoint,
     shotLandings,
     playBallPoint,
+    catalogTeePoint,
     size.w,
     size.h,
     mapReady,
@@ -629,9 +646,9 @@ export function HoleYardageMap({
       >
         <div ref={mapDivRef} className="absolute inset-0" />
       </div>
-      <div className="pointer-events-none absolute bottom-9 left-2 rounded-md bg-black/60 px-2 py-1 text-[9px] text-slate-300">
+      <div className="pointer-events-none absolute left-2 top-14 z-[1010] max-w-[11rem] rounded-md bg-black/70 px-2 py-1 text-[9px] leading-tight text-slate-300">
         {needsTeeMark
-          ? "Paso 1 · toca donde sales"
+          ? "Paso 1 · toca el tee en el mapa"
           : "Toca el mapa · D distancia · G golpe"}
       </div>
       {mapReady ? (
