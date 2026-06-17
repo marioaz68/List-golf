@@ -41,6 +41,11 @@ interface HoleYardageMapProps {
   centerline?: LatLon[] | null;
   tapPoint?: TapPoint | null;
   onMapTap?: (lat: number, lon: number) => void;
+  /** Origen de la línea de medición (default: posición del jugador). */
+  lineFromLat?: number;
+  lineFromLon?: number;
+  /** Última bola confirmada en el hoyo. */
+  lastBallPoint?: { lat: number; lon: number } | null;
 }
 
 function yardLabel(yards: number): string {
@@ -63,6 +68,9 @@ export function HoleYardageMap({
   centerline = null,
   tapPoint,
   onMapTap,
+  lineFromLat,
+  lineFromLon,
+  lastBallPoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -283,16 +291,18 @@ export function HoleYardageMap({
       }
 
       if (tapPoint) {
+        const fromLat = lineFromLat ?? playerLat;
+        const fromLon = lineFromLon ?? playerLon;
         L.polyline(
           [
-            [playerLat, playerLon],
+            [fromLat, fromLon],
             [tapPoint.lat, tapPoint.lon],
           ],
           { color: "#f472b6", weight: 2.5, opacity: 0.9 }
         ).addTo(layerGroup);
 
-        const midLat = (playerLat + tapPoint.lat) / 2;
-        const midLon = (playerLon + tapPoint.lon) / 2;
+        const midLat = (fromLat + tapPoint.lat) / 2;
+        const midLon = (fromLon + tapPoint.lon) / 2;
         L.marker([midLat, midLon], {
           icon: L.divIcon({
             className: "",
@@ -315,6 +325,21 @@ export function HoleYardageMap({
             ),
             iconSize: [14, 14],
             iconAnchor: [7, 7],
+          }),
+          interactive: false,
+        }).addTo(layerGroup);
+      }
+
+      if (lastBallPoint) {
+        L.marker([lastBallPoint.lat, lastBallPoint.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="width:12px;height:12px;border-radius:50%;background:#f59e0b;border:2px solid #fff;box-shadow:0 0 0 2px rgba(245,158,11,0.45);"></div>`,
+              bearing
+            ),
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
           }),
           interactive: false,
         }).addTo(layerGroup);
@@ -418,6 +443,9 @@ export function HoleYardageMap({
     yardsToCenter,
     referencePoints,
     tapPoint,
+    lineFromLat,
+    lineFromLon,
+    lastBallPoint,
     size.w,
     size.h,
     mapReady,

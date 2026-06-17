@@ -31,7 +31,10 @@ import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { ClubSuggestionStrip } from "@/components/captura/ClubSuggestionStrip";
+import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
+import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
+import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
   defaultPlayerBag,
@@ -41,6 +44,17 @@ import {
   type PlayerBag,
 } from "@/lib/distances/playerBag";
 import { suggestClub, yardsRollerValues } from "@/lib/distances/suggestClub";
+import {
+  addPlannedShot,
+  completeShotArrival,
+  hasLoggedShotsOnHole,
+  lastBallPosition,
+  loadHoleShots,
+  pendingShotOnHole,
+  saveHoleShots,
+  shotsForHole,
+  type HoleShotsStore,
+} from "@/lib/distances/holeShots";
 
 function MapSkeleton() {
   return (
@@ -126,6 +140,18 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [swing, setSwing] = useState<SwingKind>("full");
   const [bagOpen, setBagOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
+  /** Demo golpes: toque pendiente D/G, plan abierto, medir una vez desde teléfono. */
+  const [holeShotsStore, setHoleShotsStore] = useState<HoleShotsStore>(() =>
+    loadHoleShots(undefined)
+  );
+  const [pendingTap, setPendingTap] = useState<{ lat: number; lon: number } | null>(
+    null
+  );
+  const [shotPlanOpen, setShotPlanOpen] = useState(false);
+  const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
+  const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
+  const [distanceMode, setDistanceMode] = useState(false);
+  const [arrivalToast, setArrivalToast] = useState<string | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -172,6 +198,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   useEffect(() => {
     setBag(loadPlayerBag(bagScope));
+    setHoleShotsStore(loadHoleShots(bagScope));
   }, [bagScope]);
 
   const actorQuery = useMemo(() => {
@@ -476,6 +503,69 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const activeHolePoints = holeGreen ?? CCQ_HOLE_POINTS[activeHole];
 
+  const pendingShot = useMemo(
+    () => pendingShotOnHole(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
+
+  const lastBall = useMemo(() => {
+    if (!activeHolePoints?.tee) return null;
+    return lastBallPosition(
+      holeShotsStore,
+      activeHole,
+      activeHolePoints.tee
+    );
+  }, [holeShotsStore, activeHole, activeHolePoints?.tee]);
+
+  const shotsOnHole = useMemo(
+    () => shotsForHole(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
+
+  const completedShotsCount = shotsOnHole.filter(
+    (s) => s.completedAt != null
+  ).length;
+
+  const measureAnchor = useMemo(() => {
+    if (geo.status !== "ok") return null;
+    const usePhone =
+      measureFromPhoneOnce ||
+      !hasLoggedShotsOnHole(holeShotsStore, activeHole);
+    if (usePhone) {
+      return { lat: geo.lat, lon: geo.lon, fromPhone: true as const };
+    }
+    if (lastBall) {
+      return { lat: lastBall.lat, lon: lastBall.lon, fromPhone: false as const };
+    }
+    return { lat: geo.lat, lon: geo.lon, fromPhone: true as const };
+  }, [
+    geo,
+    measureFromPhoneOnce,
+    holeShotsStore,
+    activeHole,
+    lastBall,
+  ]);
+
+  const resetTapUi = useCallback(() => {
+    setPendingTap(null);
+    setShotPlanOpen(false);
+    setDistanceMode(false);
+    setMeasureFromPhoneOnce(false);
+  }, []);
+
+  useEffect(() => {
+    resetTapUi();
+    setTapPoint(null);
+    setTargetYards(0);
+    setShotsDetailOpen(false);
+  }, [activeHole, resetTapUi]);
+
+  useEffect(() => {
+    if (!arrivalToast) return;
+    const t = window.setTimeout(() => setArrivalToast(null), 2500);
+    return () => window.clearTimeout(t);
+  }, [arrivalToast]);
+
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
     if (!demoMode) return;
@@ -514,17 +604,113 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const onMapTap = useCallback(
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
-      const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
-      setTapPoint({
-        lat,
-        lon,
-        yards: yardsBetween(geo.lat, geo.lon, lat, lon),
-      });
-      setTargetYards(Math.round(toGreen.center / 5) * 5);
-      setSwing("full");
+
+      if (pendingShot) {
+        const actual = Math.round(
+          yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
+        ) * 5;
+        const next = completeShotArrival(
+          holeShotsStore,
+          activeHole,
+          pendingShot.id,
+          { lat, lon },
+          actual
+        );
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        setArrivalToast(
+          `Golpe ${pendingShot.strokeNo}: plan ${pendingShot.plannedYards} → ${actual} yds`
+        );
+        resetTapUi();
+        setTapPoint(null);
+        setTargetYards(0);
+        return;
+      }
+
+      setPendingTap({ lat, lon });
+      setShotPlanOpen(false);
+      setDistanceMode(false);
+      setTapPoint(null);
+      setTargetYards(0);
     },
-    [geo, activeHolePoints]
+    [
+      geo,
+      activeHolePoints,
+      pendingShot,
+      holeShotsStore,
+      activeHole,
+      bagScope,
+      resetTapUi,
+    ]
   );
+
+  const handleChooseDistance = useCallback(() => {
+    if (!pendingTap || geo.status !== "ok" || !activeHolePoints || !measureAnchor)
+      return;
+    const yards = yardsBetween(
+      measureAnchor.lat,
+      measureAnchor.lon,
+      pendingTap.lat,
+      pendingTap.lon
+    );
+    const toGreen = greenDistancesForHole(
+      pendingTap.lat,
+      pendingTap.lon,
+      activeHolePoints
+    );
+    setTapPoint({
+      lat: pendingTap.lat,
+      lon: pendingTap.lon,
+      yards,
+    });
+    setTargetYards(Math.round(toGreen.center / 5) * 5);
+    setSwing("full");
+    setDistanceMode(true);
+    setPendingTap(null);
+    setMeasureFromPhoneOnce(false);
+  }, [pendingTap, geo, activeHolePoints, measureAnchor]);
+
+  const handleChooseShot = useCallback(() => {
+    setShotPlanOpen(true);
+    setPendingTap(null);
+  }, []);
+
+  const handleConfirmPlan = useCallback(
+    (plan: {
+      catalogId: string;
+      swing: SwingKind;
+      plannedYards: number;
+    }) => {
+      const from =
+        lastBall ??
+        (activeHolePoints?.tee
+          ? { lat: activeHolePoints.tee.lat, lon: activeHolePoints.tee.lon }
+          : null);
+      if (!from) return;
+      const { store } = addPlannedShot(
+        holeShotsStore,
+        activeHole,
+        from,
+        plan.catalogId,
+        plan.swing,
+        plan.plannedYards
+      );
+      setHoleShotsStore(store);
+      saveHoleShots(store, bagScope);
+      setShotPlanOpen(false);
+      setArrivalToast("Toca en el mapa donde quedó la bola");
+    },
+    [lastBall, activeHolePoints, holeShotsStore, activeHole, bagScope]
+  );
+
+  const measureFromPhoneNow = useCallback(() => {
+    if (geo.status !== "ok" || !tapPoint) return;
+    setMeasureFromPhoneOnce(true);
+    setTapPoint({
+      ...tapPoint,
+      yards: yardsBetween(geo.lat, geo.lon, tapPoint.lat, tapPoint.lon),
+    });
+  }, [geo, tapPoint]);
 
   const tapGreenYards = useMemo(() => {
     if (!tapPoint || !activeHolePoints) return null;
@@ -549,7 +735,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const clearTap = useCallback(() => {
     setTapPoint(null);
     setTargetYards(0);
-  }, []);
+    resetTapUi();
+  }, [resetTapUi]);
 
   const handleBagChange = useCallback(
     (next: PlayerBag) => {
@@ -599,6 +786,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     });
     setTapPoint(null);
     setTargetYards(0);
+    resetTapUi();
     if (demoMode) setDemoProgress(0.35);
   };
 
@@ -608,6 +796,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setManualHole(n);
     setTapPoint(null);
     setTargetYards(0);
+    resetTapUi();
     if (demoMode) setDemoProgress(0.35);
   };
 
@@ -627,6 +816,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             centerline={centerlines[activeHole] ?? null}
             tapPoint={tapPoint}
             onMapTap={onMapTap}
+            lineFromLat={
+              tapPoint && measureAnchor ? measureAnchor.lat : undefined
+            }
+            lineFromLon={
+              tapPoint && measureAnchor ? measureAnchor.lon : undefined
+            }
+            lastBallPoint={lastBall}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -674,9 +870,42 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         }}
       />
 
+      <HoleShotsDetailSheet
+        open={shotsDetailOpen}
+        hole={activeHole}
+        store={holeShotsStore}
+        onClose={() => setShotsDetailOpen(false)}
+      />
+
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
-        {tapPoint && tapGreenYards && !farFromCourse ? (
+        {arrivalToast ? (
+          <div className="pointer-events-none mx-2 mb-1 rounded-lg bg-emerald-900/90 px-3 py-1.5 text-center text-[11px] font-semibold text-emerald-100 shadow-lg">
+            {arrivalToast}
+          </div>
+        ) : null}
+        {pendingShot && !pendingTap && !shotPlanOpen ? (
+          <div className="pointer-events-none mx-2 mb-1 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 text-center text-[11px] font-bold text-amber-200 shadow-lg">
+            Toca en el mapa donde quedó la bola
+          </div>
+        ) : null}
+        {pendingTap && !farFromCourse ? (
+          <div className="pointer-events-auto mb-1 flex justify-center">
+            <MapTapActions
+              onDistance={handleChooseDistance}
+              onShot={handleChooseShot}
+              onCancel={() => setPendingTap(null)}
+            />
+          </div>
+        ) : null}
+        {shotPlanOpen && !farFromCourse ? (
+          <ShotPlanPanel
+            bag={bag}
+            onConfirm={handleConfirmPlan}
+            onCancel={() => setShotPlanOpen(false)}
+          />
+        ) : null}
+        {distanceMode && tapPoint && tapGreenYards && !farFromCourse ? (
           <ClubSuggestionStrip
             suggestion={clubSuggestion}
             swing={swing}
@@ -687,6 +916,20 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             greenYards={tapGreenYards}
             onClear={clearTap}
           />
+        ) : null}
+        {distanceMode &&
+        tapPoint &&
+        hasLoggedShotsOnHole(holeShotsStore, activeHole) &&
+        !farFromCourse ? (
+          <div className="pointer-events-auto mb-1 flex justify-center">
+            <button
+              type="button"
+              onClick={measureFromPhoneNow}
+              className="rounded-full border border-sky-500/50 bg-sky-950/80 px-2.5 py-0.5 text-[10px] font-bold text-sky-200 shadow active:scale-95"
+            >
+              📍 Medir desde teléfono
+            </button>
+          </div>
         ) : null}
         <div className="pointer-events-none flex items-center justify-between gap-1.5 px-2 pb-2">
           <div className="pointer-events-auto flex items-center gap-1.5">
@@ -744,6 +987,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             >
               ›
             </button>
+            {(completedShotsCount > 0 || pendingShot) && !farFromCourse ? (
+              <button
+                type="button"
+                onClick={() => setShotsDetailOpen((o) => !o)}
+                className="rounded-md border border-white/25 bg-black/60 px-2 py-1 text-[10px] font-black text-amber-200 shadow-lg backdrop-blur-sm active:scale-95"
+              >
+                Golpes
+                <span className="ml-0.5 text-emerald-300">
+                  {completedShotsCount}
+                  {pendingShot ? "+" : ""}
+                </span>
+              </button>
+            ) : null}
           </div>
 
           {greenYds ? (
@@ -778,10 +1034,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {/* Distancia desde tu posición hasta el punto tocado (referencia). */}
-      {tapPoint && !farFromCourse ? (
+      {/* Distancia hasta el punto tocado (desde bola o teléfono). */}
+      {distanceMode && tapPoint && measureAnchor && !farFromCourse ? (
         <div className="absolute left-1/2 top-11 z-[1000] -translate-x-1/2 rounded-full bg-pink-600/90 px-3 py-1 text-[11px] font-bold text-white shadow-lg backdrop-blur-sm">
-          {tapPoint.yards} yds desde ti
+          {tapPoint.yards} yds ·{" "}
+          {measureAnchor.fromPhone ? "desde ti" : "desde bola"}
         </div>
       ) : null}
 
