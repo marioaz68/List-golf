@@ -587,20 +587,66 @@ export function HoleYardageMap({
               viewportW,
               viewportH
             );
-            tuneRotatedFraming(
-              map,
-              bearing,
-              framingPos.lat,
-              framingPos.lon,
-              anchor.lat,
-              anchor.lon,
-              viewportW,
-              viewportH,
-              rotW,
-              rotH,
-              56,
-              104
-            );
+            if (userZoomDeltaRef.current !== 0) {
+              applyManualZoomLevel(
+                map,
+                bearing,
+                anchor.lat,
+                anchor.lon,
+                autoZoomRef.current,
+                userZoomDeltaRef.current,
+                viewportW,
+                viewportH,
+                rotW,
+                rotH
+              );
+            } else {
+              tuneRotatedFraming(
+                map,
+                bearing,
+                framingPos.lat,
+                framingPos.lon,
+                anchor.lat,
+                anchor.lon,
+                viewportW,
+                viewportH,
+                rotW,
+                rotH,
+                56,
+                104
+              );
+            }
+          } else {
+            // GPS / demo / bola: re-anclar green arriba sin recalcular zoom.
+            if (userZoomDeltaRef.current !== 0) {
+              applyManualZoomLevel(
+                map,
+                bearing,
+                anchor.lat,
+                anchor.lon,
+                autoZoomRef.current,
+                userZoomDeltaRef.current,
+                viewportW,
+                viewportH,
+                rotW,
+                rotH
+              );
+            } else {
+              tuneRotatedFraming(
+                map,
+                bearing,
+                framingPos.lat,
+                framingPos.lon,
+                anchor.lat,
+                anchor.lon,
+                viewportW,
+                viewportH,
+                rotW,
+                rotH,
+                56,
+                104
+              );
+            }
           }
           if (!shouldReframe && anchor) {
             framingAnchorRef.current = { lat: anchor.lat, lon: anchor.lon };

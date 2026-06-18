@@ -162,7 +162,7 @@ export function clampManualZoomDelta(delta: number): number {
   );
 }
 
-/** Aplica zoom manual y re-ancla el punto after/green arriba al centro. */
+/** Aplica zoom manual manteniendo el ancla (green/after) fijo arriba al centro. */
 export function applyManualZoomLevel(
   map: any,
   bearing: number,
@@ -180,9 +180,22 @@ export function applyManualZoomLevel(
   bottomBar = 104
 ): number {
   const z = Math.max(minZoom, Math.min(maxZoom, autoZoom + delta));
-  // Sin setZoomAround en el green: solo cambia escala y luego fija el after arriba.
-  map.setZoom(z, { animate: false });
-  for (let pass = 0; pass < 2; pass++) {
+  tuneRotatedFraming(
+    map,
+    bearing,
+    0,
+    0,
+    anchorLat,
+    anchorLon,
+    viewportW,
+    viewportH,
+    rotW,
+    rotH,
+    topBar,
+    bottomBar
+  );
+  map.setZoomAround([anchorLat, anchorLon], z, { animate: false });
+  for (let pass = 0; pass < 3; pass++) {
     tuneRotatedFraming(
       map,
       bearing,
@@ -197,6 +210,7 @@ export function applyManualZoomLevel(
       topBar,
       bottomBar
     );
+    map.setZoomAround([anchorLat, anchorLon], map.getZoom(), { animate: false });
   }
   return z;
 }
@@ -467,29 +481,29 @@ export function frameByProximity(
   }
   const zoomChanged = Math.abs(currentZoom - qZoom) > 0.01;
 
-  // El zoom (cambio de escala) es lo que recarga TODOS los tiles y provoca el
-  // parpadeo, así que solo se aplica cuando cambia el escalón cuantizado o al
-  // cambiar de hoyo. El re-anclado del green (abajo) usa paneo, que no
-  // recarga el satélite, así que se ejecuta siempre para mantenerlo fijo.
-  if (recenter) {
-    map.setView([greenLat, greenLon], qZoom, { animate: false });
-  } else if (zoomChanged) {
+  // Zoom anclado al green para que no se desplace al cambiar escala o de hoyo.
+  if (recenter || zoomChanged) {
     map.setZoomAround([greenLat, greenLon], qZoom, { animate: false });
   }
 
   // El green queda fijo arriba al centro; el jugador, abajo.
-  tuneRotatedFraming(
-    map,
-    bearing,
-    playerLat,
-    playerLon,
-    greenLat,
-    greenLon,
-    viewportW,
-    viewportH,
-    rotW,
-    rotH,
-    topBar,
-    bottomBar
-  );
+  for (let pass = 0; pass < (recenter || zoomChanged ? 3 : 1); pass++) {
+    tuneRotatedFraming(
+      map,
+      bearing,
+      playerLat,
+      playerLon,
+      greenLat,
+      greenLon,
+      viewportW,
+      viewportH,
+      rotW,
+      rotH,
+      topBar,
+      bottomBar
+    );
+    if (zoomChanged || recenter) {
+      map.setZoomAround([greenLat, greenLon], map.getZoom(), { animate: false });
+    }
+  }
 }
