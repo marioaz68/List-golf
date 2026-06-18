@@ -57,14 +57,12 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
-  addFinalGreenPutt,
   cancelPendingShot,
   clearHoleShots,
   completeShotArrival,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
   holeTeeMark,
-  isFinalTapInPuttRecorded,
   isGivenPuttRecorded,
   isTapInPendingPutt,
   lastBallPosition,
@@ -976,10 +974,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
-      const { hole, strokeCount, lat, lon, centerYards } = holeFinishPrompt;
+      const { hole, strokeCount, lat, lon } = holeFinishPrompt;
       let nextStore = holeShotsStore;
       let totalStrokes = strokeCount;
-      const pin = activeHolePoints?.center ?? { lat, lon };
       const pendingTapIn = isTapInPendingPutt(holeShotsStore, hole);
 
       if (how === "given" && !isGivenPuttRecorded(holeShotsStore, hole)) {
@@ -992,18 +989,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             Math.max(1, pendingTapIn.plannedYards),
             "given"
           );
+          totalStrokes = strokeCount + 1;
+          setHoleShotsStore(nextStore);
+          saveHoleShots(nextStore, bagScope);
         } else {
-          nextStore = addFinalGreenPutt(
-            holeShotsStore,
-            hole,
-            { lat, lon },
-            pin,
-            "given"
-          );
+          // Último golpe ya registrado en el mapa; la dada no suma putt extra.
+          totalStrokes = strokeCount;
         }
-        totalStrokes = strokeCount + 1;
-        setHoleShotsStore(nextStore);
-        saveHoleShots(nextStore, bagScope);
       } else if (how === "in") {
         if (pendingTapIn) {
           nextStore = completeShotArrival(
@@ -1017,20 +1009,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           totalStrokes = strokeCount + 1;
           setHoleShotsStore(nextStore);
           saveHoleShots(nextStore, bagScope);
-        } else if (
-          !isFinalTapInPuttRecorded(holeShotsStore, hole) &&
-          centerYards > 0
-        ) {
-          nextStore = addFinalGreenPutt(
-            holeShotsStore,
-            hole,
-            { lat, lon },
-            pin,
-            "green"
-          );
-          totalStrokes = strokeCount + 1;
-          setHoleShotsStore(nextStore);
-          saveHoleShots(nextStore, bagScope);
+        } else {
+          // Entró al hundir en el mapa: el conteo ya incluye ese golpe.
+          totalStrokes = strokeCount;
         }
       }
 
