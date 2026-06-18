@@ -135,9 +135,11 @@ export function ShotPlanPanel({
     setUserPick(null);
   }, [yardsToGreen, autoPlan?.catalogId, autoPlan?.swing]);
 
-  const activePick =
-    picks.find((p) => p.key === userPick?.clubKey) ?? autoPick ?? picks[0];
-  const plannedYards = userPick?.plannedYards ?? carryForPick(activePick);
+  const activePick = autoPick ?? picks.find((p) => p.key === userPick?.clubKey) ?? picks[0];
+  const plannedYards =
+    userPick?.clubKey === activePick.key
+      ? userPick.plannedYards
+      : carryForPick(activePick);
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);

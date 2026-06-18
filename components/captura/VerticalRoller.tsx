@@ -9,6 +9,9 @@ interface VerticalRollerProps {
   className?: string;
 }
 
+/** Índice del primer botón (hay un spacer arriba). */
+const FIRST_ITEM_CHILD_INDEX = 1;
+
 /** Roller vertical: solo se lee el valor centrado (scroll-snap). */
 export function VerticalRoller({
   values,
@@ -17,27 +20,47 @@ export function VerticalRoller({
   className = "",
 }: VerticalRollerProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const skipScrollRef = useRef(false);
+  const ignoreScrollRef = useRef(true);
+  const mountedRef = useRef(false);
 
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el || skipScrollRef.current) return;
+    if (!el) return;
     const idx = values.indexOf(value);
     if (idx < 0) return;
-    const child = el.children[idx] as HTMLElement | undefined;
+
+    ignoreScrollRef.current = true;
+    const child = el.children[idx + FIRST_ITEM_CHILD_INDEX] as
+      | HTMLElement
+      | undefined;
     if (!child) return;
+
     const top = child.offsetTop - (el.clientHeight - child.clientHeight) / 2;
-    el.scrollTo({ top, behavior: "smooth" });
+    el.scrollTo({
+      top,
+      behavior: mountedRef.current ? "smooth" : "auto",
+    });
+    mountedRef.current = true;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        ignoreScrollRef.current = false;
+      });
+    });
   }, [value, values]);
 
   const handleScroll = () => {
+    if (ignoreScrollRef.current) return;
     const el = scrollerRef.current;
     if (!el || !values.length) return;
+
     const center = el.scrollTop + el.clientHeight / 2;
     let bestIdx = 0;
     let bestDist = Infinity;
-    for (let i = 0; i < el.children.length; i++) {
-      const child = el.children[i] as HTMLElement;
+
+    for (let i = 0; i < values.length; i++) {
+      const child = el.children[i + FIRST_ITEM_CHILD_INDEX] as HTMLElement;
+      if (!child) continue;
       const childCenter = child.offsetTop + child.clientHeight / 2;
       const d = Math.abs(childCenter - center);
       if (d < bestDist) {
@@ -45,12 +68,13 @@ export function VerticalRoller({
         bestIdx = i;
       }
     }
+
     const next = values[bestIdx];
     if (next && next !== value) {
-      skipScrollRef.current = true;
+      ignoreScrollRef.current = true;
       onChange(next);
       requestAnimationFrame(() => {
-        skipScrollRef.current = false;
+        ignoreScrollRef.current = false;
       });
     }
   };

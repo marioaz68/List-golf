@@ -74,12 +74,9 @@ export function pickBestClubAndCarry(
 
   for (const c of clubs) {
     const cat = CLUB_BY_ID[c.catalogId];
-    if (!cat || cat.defaultYardsFull <= 0) continue;
+    if (!cat || cat.category === "putter") continue;
 
-    const swings: SwingKind[] =
-      cat.category === "putter" ? ["full"] : ["full", "three_quarter"];
-
-    for (const swing of swings) {
+    for (const swing of ["full", "three_quarter"] as SwingKind[]) {
       const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
       if (carry <= 0) continue;
       const score = scoreCandidate(carry, targetYards);
@@ -87,8 +84,10 @@ export function pickBestClubAndCarry(
         score < bestScore ||
         (score === bestScore &&
           best &&
-          swing === "full" &&
-          best.swing === "three_quarter")
+          (carry > best.carryYards ||
+            (carry === best.carryYards &&
+              swing === "full" &&
+              best.swing === "three_quarter")))
       ) {
         bestScore = score;
         best = {
@@ -99,9 +98,7 @@ export function pickBestClubAndCarry(
           rollerLabel:
             swing === "three_quarter"
               ? `${cat.shortLabel} 3/4`
-              : cat.category === "putter"
-                ? "Putter"
-                : `${cat.shortLabel} full`,
+              : `${cat.shortLabel} full`,
         };
       }
     }
