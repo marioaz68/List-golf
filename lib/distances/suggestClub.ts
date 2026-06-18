@@ -8,7 +8,6 @@ import {
 } from "@/lib/distances/clubCatalog";
 import type { LieKind } from "@/lib/distances/detectLie";
 import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
-import { isInPuttingZone } from "@/lib/distances/onGreen";
 import type { PlayerBagClub } from "@/lib/distances/playerBag";
 
 export interface ClubSuggestion {
@@ -106,10 +105,8 @@ export function pickBestClubAndCarry(
 
   const hasPutter = clubs.some((c) => c.catalogId === "putter");
   const onGreenLie = onGreen === true || lieKind === "green";
-  const puttingZone =
-    greenDist != null && isInPuttingZone(greenDist) && targetYards <= 50;
 
-  if (hasPutter && (onGreenLie || puttingZone)) {
+  if (hasPutter && onGreenLie) {
     const cat = CLUB_BY_ID.putter;
     return {
       catalogId: "putter",

@@ -1,21 +1,16 @@
 import { haversineMeters } from "@/lib/distances/ccqGreens";
 import type { HoleGreenPoints } from "@/lib/distances/ccqHolePoints";
-import { greenDistancesForHole } from "@/lib/distances/ccqHolePoints";
 import { distanceToCenterlineM, waypointsFromLine } from "@/lib/distances/centerline";
 import {
   parseBoundaryGeoJson,
   ringFromPolygon,
   type LatLon,
 } from "@/lib/distances/holeBoundary";
+import type { BunkerPoint } from "@/lib/distances/inBunker";
 import {
-  BUNKER_POINT_RADIUS_M,
-  distanceToPolygonMeters,
-  isPointInBunker,
-  isPointInsideBunkerPolygon,
-  type BunkerPoint,
-} from "@/lib/distances/inBunker";
-import {
-  isOnGreenByDistances,
+  isPointInBunkerPolygon,
+  isPointInFairwayPolygon,
+  isPointInWaterPolygon,
   isPointOnGreen,
 } from "@/lib/distances/onGreen";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
@@ -69,13 +64,8 @@ export function lieChipClass(kind: LieKind): string {
   }
 }
 
-/** Tolerancia (m) a la línea de OB calibrada. */
+/** Tolerancia (m) a la línea de OB calibrada (LineString, no polígono). */
 export const OB_LINE_BUFFER_M = 12;
-
-/** Tolerancia (m) fuera del polígono de agua. */
-export const WATER_POLYGON_BUFFER_M = 10;
-
-export const WATER_POINT_RADIUS_M = BUNKER_POINT_RADIUS_M;
 
 export interface LieContext {
   kind: LieKind;
@@ -89,31 +79,6 @@ export function obLineFromGeojson(raw: unknown): LatLon[] {
   if (wps.length >= 2) return wps;
   const poly = parseBoundaryGeoJson(raw);
   return poly ? ringFromPolygon(poly) : [];
-}
-
-function isPointInBufferedPolygons(
-  lat: number,
-  lon: number,
-  polygons: Polygon[],
-  bufferM: number
-): boolean {
-  const p = { lat, lon };
-  for (const poly of polygons) {
-    if (distanceToPolygonMeters(p, poly) <= bufferM) return true;
-  }
-  return false;
-}
-
-function isPointNearReferencePoints(
-  lat: number,
-  lon: number,
-  points: BunkerPoint[],
-  radiusM: number
-): boolean {
-  for (const pt of points) {
-    if (haversineMeters(lat, lon, pt.lat, pt.lon) <= radiusM) return true;
-  }
-  return false;
 }
 
 function isPointNearObLines(
@@ -130,46 +95,13 @@ function isPointNearObLines(
   return false;
 }
 
-function isPointInWater(
-  lat: number,
-  lon: number,
-  waterPolygons: Polygon[],
-  waterPoints: BunkerPoint[]
-): boolean {
-  if (
-    waterPolygons.length > 0 &&
-    isPointInBufferedPolygons(
-      lat,
-      lon,
-      waterPolygons,
-      WATER_POLYGON_BUFFER_M
-    )
-  ) {
-    return true;
-  }
-  return isPointNearReferencePoints(
-    lat,
-    lon,
-    waterPoints,
-    WATER_POINT_RADIUS_M
-  );
-}
-
-function isPointInFairway(
-  lat: number,
-  lon: number,
-  fairwayPolygons: Polygon[]
-): boolean {
-  return isPointInBufferedPolygons(lat, lon, fairwayPolygons, 0);
-}
-
-/** Prioridad: OB → agua → trampa → green → fairway → rough. */
+/** Prioridad: OB → agua → trampa → green → fairway → rough. Solo polígonos (sin buffer). */
 export function detectLieAtPoint(
   lat: number,
   lon: number,
   greenPolygons: Polygon[],
   bunkerPolygons: Polygon[],
-  bunkerPoints: BunkerPoint[],
+  _bunkerPoints: BunkerPoint[],
   holePoints?: HoleGreenPoints | null,
   options?: {
     waterPolygons?: Polygon[];
@@ -178,8 +110,11 @@ export function detectLieAtPoint(
     obLines?: LatLon[][];
   }
 ): LieContext {
+  void holePoints;
+  void _bunkerPoints;
+  void options?.waterPoints;
+
   const waterPolygons = options?.waterPolygons ?? [];
-  const waterPoints = options?.waterPoints ?? [];
   const fairwayPolygons = options?.fairwayPolygons ?? [];
   const obLines = options?.obLines ?? [];
 
@@ -187,48 +122,23 @@ export function detectLieAtPoint(
     return { kind: "ob", onGreen: false, inBunker: false };
   }
 
-  if (
-    (waterPolygons.length > 0 || waterPoints.length > 0) &&
-    isPointInWater(lat, lon, waterPolygons, waterPoints)
-  ) {
+  if (waterPolygons.length > 0 && isPointInWaterPolygon(lat, lon, waterPolygons)) {
     return { kind: "water", onGreen: false, inBunker: false };
   }
 
-  const onGreen = isPointOnGreen(lat, lon, greenPolygons, holePoints);
-  const inBunkerInside = isPointInsideBunkerPolygon(
-    lat,
-    lon,
-    bunkerPolygons,
-    bunkerPoints
-  );
-
-  if (inBunkerInside) {
+  if (bunkerPolygons.length > 0 && isPointInBunkerPolygon(lat, lon, bunkerPolygons)) {
     return { kind: "bunker", onGreen: false, inBunker: true };
   }
 
-  if (onGreen) {
+  if (greenPolygons.length > 0 && isPointOnGreen(lat, lon, greenPolygons, holePoints)) {
     return { kind: "green", onGreen: true, inBunker: false };
-  }
-
-  const inBunkerNear = isPointInBunker(
-    lat,
-    lon,
-    bunkerPolygons,
-    bunkerPoints
-  );
-  if (inBunkerNear) {
-    return { kind: "bunker", onGreen: false, inBunker: true };
   }
 
   if (
     fairwayPolygons.length > 0 &&
-    isPointInFairway(lat, lon, fairwayPolygons)
+    isPointInFairwayPolygon(lat, lon, fairwayPolygons)
   ) {
     return { kind: "fairway", onGreen: false, inBunker: false };
-  }
-
-  if (holePoints && isOnGreenByDistances(greenDistancesForHole(lat, lon, holePoints))) {
-    return { kind: "green", onGreen: true, inBunker: false };
   }
 
   return { kind: "rough", onGreen: false, inBunker: false };

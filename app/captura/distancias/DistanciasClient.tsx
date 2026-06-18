@@ -29,7 +29,6 @@ import {
   lieArrivalPhrase,
   type LieKind,
 } from "@/lib/distances/detectLie";
-import { isPointOnGreen, isOnGreenByDistances } from "@/lib/distances/onGreen";
 import {
   isTapInPutt,
   puttYardsFromCenter,
@@ -847,23 +846,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       if (!activeHolePoints) return;
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
       const lie = detectLieForPoint(lat, lon);
-      let onGreen = lie.onGreen;
-      let inBunker = lie.inBunker;
-      let lieKind = lie.kind;
-      if (
-        !onGreen &&
-        (isOnGreenByDistances(dist) ||
-          isPointOnGreen(
-            lat,
-            lon,
-            greenPolygonsByHole.get(activeHole) ?? [],
-            activeHolePoints
-          ))
-      ) {
-        onGreen = true;
-        lieKind = "green";
-        inBunker = false;
-      }
+      const onGreen = lie.onGreen;
+      const inBunker = lie.inBunker;
+      const lieKind = lie.kind;
       const yardsToGreen = onGreen
         ? puttYardsFromCenter(dist.center)
         : Math.round(dist.center / 5) * 5;
@@ -923,27 +908,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       ballPointForLie.lat,
       ballPointForLie.lon
     );
-    let onGreen = detected.onGreen;
-    let kind: LieKind = detected.kind;
-    const dist = greenDistancesForHole(
-      ballPointForLie.lat,
-      ballPointForLie.lon,
-      activeHolePoints
-    );
-    if (
-      !onGreen &&
-      (isOnGreenByDistances(dist) ||
-        isPointOnGreen(
-          ballPointForLie.lat,
-          ballPointForLie.lon,
-          greenPolygonsByHole.get(activeHole) ?? [],
-          activeHolePoints
-        ))
-    ) {
-      onGreen = true;
-      kind = "green";
-    }
-    return { kind, onGreen };
+    return { kind: detected.kind, onGreen: detected.onGreen };
   }, [
     hasTeeMark,
     ballPointForLie,
@@ -1313,21 +1278,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         activeHolePoints
       );
       const lieFrom = detectLieForPoint(from.lat, from.lon);
-      let onGreenFrom = lieFrom.onGreen;
-      if (
-        !onGreenFrom &&
-        !lieFrom.inBunker &&
-        lieFrom.kind !== "ob" &&
-        lieFrom.kind !== "water" &&
-        isPointOnGreen(
-          from.lat,
-          from.lon,
-          greenPolygonsByHole.get(activeHole) ?? [],
-          activeHolePoints
-        )
-      ) {
-        onGreenFrom = true;
-      }
+      const onGreenFrom = lieFrom.onGreen;
 
       const { store, shot } = addPlannedShot(
         holeShotsStore,

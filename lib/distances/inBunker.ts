@@ -1,4 +1,3 @@
-import { haversineMeters } from "@/lib/distances/ccqGreens";
 import {
   pointInPolygon,
   type LatLon,
@@ -9,12 +8,6 @@ export interface BunkerPoint {
   lat: number;
   lon: number;
 }
-
-/** Radio (m) alrededor de un punto de trampa marcado en BD. */
-export const BUNKER_POINT_RADIUS_M = 28;
-
-/** Tolerancia (m) fuera del polígono de trampa (toque impreciso en mapa). */
-export const BUNKER_POLYGON_BUFFER_M = 15;
 
 function ringToLatLon(ring: number[][]): LatLon[] {
   return ring.map(([lon, lat]) => ({ lat, lon }));
@@ -60,42 +53,23 @@ export function distanceToPolygonMeters(p: LatLon, poly: Polygon): number {
   return min;
 }
 
-/** ¿Dentro del polígono de trampa (sin buffer de proximidad)? */
+/** ¿Dentro del polígono de trampa calibrado (sin tolerancia)? */
+export function isPointInBunker(
+  lat: number,
+  lon: number,
+  bunkerPolygons: Polygon[],
+  _bunkerPoints: BunkerPoint[] = []
+): boolean {
+  if (bunkerPolygons.length === 0) return false;
+  const p = { lat, lon };
+  return bunkerPolygons.some((poly) => pointInPolygon(p, poly));
+}
+
 export function isPointInsideBunkerPolygon(
   lat: number,
   lon: number,
   bunkerPolygons: Polygon[],
   bunkerPoints: BunkerPoint[] = []
 ): boolean {
-  const p = { lat, lon };
-  for (const poly of bunkerPolygons) {
-    if (pointInPolygon(p, poly)) return true;
-  }
-  for (const bp of bunkerPoints) {
-    if (haversineMeters(lat, lon, bp.lat, bp.lon) <= BUNKER_POINT_RADIUS_M) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** ¿La bola está en trampa calibrada (polígono o punto guardado)? */
-export function isPointInBunker(
-  lat: number,
-  lon: number,
-  bunkerPolygons: Polygon[],
-  bunkerPoints: BunkerPoint[] = []
-): boolean {
-  const p = { lat, lon };
-  for (const poly of bunkerPolygons) {
-    if (distanceToPolygonMeters(p, poly) <= BUNKER_POLYGON_BUFFER_M) {
-      return true;
-    }
-  }
-  for (const bp of bunkerPoints) {
-    if (haversineMeters(lat, lon, bp.lat, bp.lon) <= BUNKER_POINT_RADIUS_M) {
-      return true;
-    }
-  }
-  return false;
+  return isPointInBunker(lat, lon, bunkerPolygons, bunkerPoints);
 }
