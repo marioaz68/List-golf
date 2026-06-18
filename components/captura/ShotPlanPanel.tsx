@@ -112,6 +112,8 @@ interface ShotPlanPanelProps {
     plannedYards: number;
   }) => void;
   onCancel: () => void;
+  /** Vuelve a pedir tocar el mapa para el último golpe ya confirmado. */
+  onCorrectLastLanding?: () => void;
 }
 
 /** Rollers abajo-izquierda: bastón sugerido por yardas de bolsa vs distancia al green. */
@@ -124,6 +126,7 @@ export function ShotPlanPanel({
   inBunker = false,
   onConfirm,
   onCancel,
+  onCorrectLastLanding,
 }: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
 
@@ -284,12 +287,35 @@ export function ShotPlanPanel({
         </button>
         <button
           type="button"
-          onClick={onCancel}
-          className="flex h-7 w-9 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-slate-300"
-          aria-label="Cancelar"
+          onClick={onCorrectLastLanding ?? onCancel}
+          className={[
+            "flex h-7 w-9 items-center justify-center rounded-full text-[10px] font-bold active:scale-95",
+            onCorrectLastLanding
+              ? "border border-amber-500/50 bg-amber-950/90 text-amber-100"
+              : "bg-white/10 text-slate-300",
+          ].join(" ")}
+          aria-label={
+            onCorrectLastLanding
+              ? "Corregir ubicación de la bola"
+              : "Cancelar plan"
+          }
+          title={
+            onCorrectLastLanding
+              ? "Corregir ubicación de la bola"
+              : "Cancelar plan"
+          }
         >
           ✕
         </button>
+        {onCorrectLastLanding ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-[8px] font-bold leading-tight text-slate-400 underline active:scale-95"
+          >
+            cerrar
+          </button>
+        ) : null}
       </div>
     </div>
   );

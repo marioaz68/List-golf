@@ -66,8 +66,10 @@ import {
   isGivenPuttRecorded,
   isTapInPendingPutt,
   lastBallPosition,
+  lastCompletedShot,
   loadHoleShots,
   pendingShotOnHole,
+  resetShotArrival,
   saveHoleShots,
   setHoleTeeMark,
   shotsForHole,
@@ -654,6 +656,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [holeShotsStore, activeHole]
   );
 
+  const lastCompletedShotOnHole = useMemo(
+    () => lastCompletedShot(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
+
   const lastBall = useMemo(() => {
     return lastBallPosition(holeShotsStore, activeHole);
   }, [holeShotsStore, activeHole]);
@@ -878,6 +885,31 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotPlanOpen(true);
     },
     [activeHolePoints, detectLieForPoint, activeHole, greenPolygonsByHole]
+  );
+
+  const correctLastShotLanding = useCallback(
+    (shotId?: string) => {
+      const target =
+        shotId != null
+          ? shotsForHole(holeShotsStore, activeHole).find((s) => s.id === shotId)
+          : lastCompletedShot(holeShotsStore, activeHole);
+      if (!target || target.completedAt == null) return;
+      const next = resetShotArrival(holeShotsStore, activeHole, target.id);
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      setHoleFinishPrompt(null);
+      setShotPlanOpen(false);
+      setPlanContext(null);
+      setTapPoint(null);
+      setPendingTap(null);
+      setDistanceMode(false);
+      setMeasureFromPhoneOnce(false);
+      setShotsDetailOpen(false);
+      setArrivalToast(
+        `Golpe ${target.strokeNo} · toca de nuevo donde quedó la bola`
+      );
+    },
+    [holeShotsStore, activeHole, bagScope]
   );
 
   const ballPointForLie = useMemo(() => {
@@ -1608,6 +1640,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         hole={activeHole}
         store={holeShotsStore}
         onClose={() => setShotsDetailOpen(false)}
+        onCorrectLanding={(shotId) => correctLastShotLanding(shotId)}
       />
 
       {needsTeeMark && !farFromCourse ? (
@@ -1699,10 +1732,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
                   );
                   setHoleShotsStore(next);
                   saveHoleShots(next, bagScope);
+                  setArrivalToast("Golpe cancelado");
                 }}
                 className="rounded bg-amber-900/80 px-1.5 py-0.5 text-[9px] font-bold text-amber-100"
               >
-                Cancelar
+                Cancelar golpe
               </button>
             </div>
           </div>
@@ -1868,6 +1902,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             setShotPlanOpen(false);
             setPlanContext(null);
           }}
+          onCorrectLastLanding={
+            lastCompletedShotOnHole && !pendingShot
+              ? () => correctLastShotLanding()
+              : undefined
+          }
         />
       ) : null}
 

@@ -334,6 +334,33 @@ export function cancelPendingShot(
   };
 }
 
+/** Deshace la caída confirmada y deja el golpe pendiente de marcar en el mapa. */
+export function resetShotArrival(
+  store: HoleShotsStore,
+  hole: number,
+  shotId: string
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  return {
+    ...store,
+    byHole: {
+      ...store.byHole,
+      [key]: prev.map((s) =>
+        s.id === shotId
+          ? {
+              ...s,
+              to: null,
+              actualYards: null,
+              lieKind: undefined,
+              completedAt: null,
+            }
+          : s
+      ),
+    },
+  };
+}
+
 export function plannedVsActualDelta(shot: HoleShot): number | null {
   if (shot.actualYards == null) return null;
   return shot.actualYards - shot.plannedYards;

@@ -13,6 +13,7 @@ interface HoleShotsDetailSheetProps {
   hole: number;
   store: HoleShotsStore;
   onClose: () => void;
+  onCorrectLanding?: (shotId: string) => void;
 }
 
 export function HoleShotsDetailSheet({
@@ -20,6 +21,7 @@ export function HoleShotsDetailSheet({
   hole,
   store,
   onClose,
+  onCorrectLanding,
 }: HoleShotsDetailSheetProps) {
   if (!open) return null;
 
@@ -58,8 +60,19 @@ export function HoleShotsDetailSheet({
                   key={s.id}
                   className="rounded-md border border-slate-800 bg-slate-900/80 px-2 py-1.5 text-[11px]"
                 >
-                  <div className="font-bold text-white">
-                    {s.strokeNo}. {shotClubLabel(s.catalogId, s.swing)}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="font-bold text-white">
+                      {s.strokeNo}. {shotClubLabel(s.catalogId, s.swing)}
+                    </div>
+                    {!pending && onCorrectLanding ? (
+                      <button
+                        type="button"
+                        onClick={() => onCorrectLanding(s.id)}
+                        className="shrink-0 rounded bg-amber-900/80 px-1.5 py-0.5 text-[9px] font-bold text-amber-100"
+                      >
+                        Corregir ubicación
+                      </button>
+                    ) : null}
                   </div>
                   <div className="text-slate-400">
                     Plan:{" "}
