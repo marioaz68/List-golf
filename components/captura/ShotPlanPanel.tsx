@@ -12,8 +12,16 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
-function buildClubPicks(bag: PlayerBag) {
-  const out: { key: string; catalogId: string; swing: SwingKind; label: string; short: string }[] = [];
+type ClubPick = {
+  key: string;
+  catalogId: string;
+  swing: SwingKind;
+  label: string;
+  short: string;
+};
+
+function buildClubPicks(bag: PlayerBag): ClubPick[] {
+  const out: ClubPick[] = [];
   for (const c of getEnabledBagClubs(bag)) {
     const cat = CLUB_BY_ID[c.catalogId];
     if (!cat) continue;
@@ -43,6 +51,39 @@ function buildClubPicks(bag: PlayerBag) {
     });
   }
   return out;
+}
+
+function scoreCarry(carry: number, targetYards: number): number {
+  const gap = carry - targetYards;
+  const shortfall = gap < 0 ? -gap : 0;
+  return Math.abs(gap) + shortfall * 1.5;
+}
+
+/** Bastón + swing que mejor encajan con la distancia al green. */
+function bestPickForDistance(
+  picks: ClubPick[],
+  bag: PlayerBag,
+  targetYards: number,
+  greenDist: GreenDistances | null
+): ClubPick | null {
+  if (!picks.length || targetYards <= 0) return picks[0] ?? null;
+  if (shouldSuggestPutter(targetYards, greenDist)) {
+    return picks.find((p) => p.catalogId === "putter") ?? picks[0] ?? null;
+  }
+  let best: ClubPick | null = null;
+  let bestScore = Infinity;
+  for (const p of picks) {
+    const bc = bag.clubs.find((c) => c.catalogId === p.catalogId);
+    if (!bc) continue;
+    const carry = carryYards(bc.yardsFull, bc.yardsThreeQuarter, p.swing);
+    if (carry <= 0) continue;
+    const score = scoreCarry(carry, targetYards);
+    if (score < bestScore) {
+      bestScore = score;
+      best = p;
+    }
+  }
+  return best ?? picks[0] ?? null;
 }
 
 interface ShotPlanPanelProps {
@@ -85,15 +126,10 @@ export function ShotPlanPanel({
   const [plannedYards, setPlannedYards] = useState(defaultYards);
 
   useEffect(() => {
-    if (
-      suggestedYards != null &&
-      suggestedYards > 0 &&
-      shouldSuggestPutter(suggestedYards, greenDist) &&
-      picks.some((p) => p.catalogId === "putter")
-    ) {
-      setClubKey("putter:full");
-    }
-  }, [suggestedYards, greenDist, picks]);
+    if (!suggestedYards || suggestedYards <= 0 || !picks.length) return;
+    const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
+    if (best) setClubKey(best.key);
+  }, [suggestedYards, greenDist, bag, picks]);
 
   useEffect(() => {
     if (!pick) return;

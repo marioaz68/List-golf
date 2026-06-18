@@ -30,7 +30,6 @@ import {
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
-import { ClubSuggestionStrip } from "@/components/captura/ClubSuggestionStrip";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
 import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { MapTapActions } from "@/components/captura/MapTapActions";
@@ -39,12 +38,10 @@ import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
   defaultPlayerBag,
-  getEnabledBagClubs,
   loadPlayerBag,
   savePlayerBag,
   type PlayerBag,
 } from "@/lib/distances/playerBag";
-import { rankClubsForTarget } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   cancelPendingShot,
@@ -143,8 +140,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
   const [targetYards, setTargetYards] = useState(0);
-  const [clubPickIndex, setClubPickIndex] = useState(0);
-  const [swing, setSwing] = useState<SwingKind>("full");
   const [bagOpen, setBagOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
   /** Demo golpes: toque pendiente D/G, plan abierto, medir una vez desde teléfono. */
@@ -711,6 +706,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               ) * 5
             : 0;
         if (toGreen > 0) setTargetYards(toGreen);
+        setShotPlanOpen(true);
         setArrivalToast(
           wasMarked
             ? `Salida corregida · ${toGreen} yds al centro`
@@ -770,10 +766,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     tapPoint,
     teeMark,
   ]);
-
-  useEffect(() => {
-    setClubPickIndex(0);
-  }, [targetYards, swing, activeHole]);
 
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
@@ -954,7 +946,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       yards,
     });
     setTargetYards(Math.round(toGreen.center / 5) * 5);
-    setSwing("full");
     setDistanceMode(true);
     setPendingTap(null);
     setMeasureFromPhoneOnce(false);
@@ -1006,31 +997,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       yards: yardsBetween(geo.lat, geo.lon, tapPoint.lat, tapPoint.lon),
     });
   }, [geo, tapPoint]);
-
-  const rankedClubs = useMemo(() => {
-    if (targetYards <= 0) return [];
-    return rankClubsForTarget(
-      getEnabledBagClubs(bag),
-      targetYards,
-      swing,
-      liveGreenYds
-    );
-  }, [bag, targetYards, swing, liveGreenYds]);
-
-  const clubSuggestion = useMemo(() => {
-    if (!rankedClubs.length) return null;
-    const idx = Math.min(clubPickIndex, rankedClubs.length - 1);
-    return rankedClubs[idx] ?? null;
-  }, [rankedClubs, clubPickIndex]);
-
-  const handleConfirmSuggestion = useCallback(() => {
-    if (!clubSuggestion || !teeMark) return;
-    handleConfirmPlan({
-      catalogId: clubSuggestion.catalogId,
-      swing,
-      plannedYards: clubSuggestion.carryYards,
-    });
-  }, [clubSuggestion, teeMark, swing, handleConfirmPlan]);
 
   const clearTap = useCallback(() => {
     setTapPoint(null);
@@ -1266,29 +1232,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               Cancelar
             </button>
           </div>
-        ) : null}
-        {hasTeeMark &&
-        !shotPlanOpen &&
-        !pendingTap &&
-        !pendingShot &&
-        targetYards > 0 &&
-        !farFromCourse ? (
-          <ClubSuggestionStrip
-            suggestion={clubSuggestion}
-            targetYards={targetYards}
-            swing={swing}
-            onSwingChange={setSwing}
-            onPrevClub={() => setClubPickIndex((i) => Math.max(0, i - 1))}
-            onNextClub={() =>
-              setClubPickIndex((i) =>
-                Math.min(rankedClubs.length - 1, i + 1)
-              )
-            }
-            canPrevClub={clubPickIndex > 0}
-            canNextClub={clubPickIndex < rankedClubs.length - 1}
-            onConfirmShot={handleConfirmSuggestion}
-            onClear={distanceMode ? clearTap : undefined}
-          />
         ) : null}
         {distanceMode &&
         tapPoint &&
