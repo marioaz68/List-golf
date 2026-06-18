@@ -189,6 +189,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     hole: number;
     centerYards: number;
   } | null>(null);
+  /** Fuerza remount/reencuadre del mapa al cambiar de hoyo. */
+  const [mapFrameEpoch, setMapFrameEpoch] = useState(0);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -571,6 +573,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   useEffect(() => {
     setHoleGreen(CCQ_HOLE_POINTS[activeHole] ?? null);
     setCustomPoints([]);
+    setMapFrameEpoch((e) => e + 1);
     let cancelled = false;
     const courseId = defaultDistanciasCourseId();
     (async () => {
@@ -1035,7 +1038,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setHoleFinishPrompt(null);
       resetTapUi();
       setTapPoint(null);
-      manualAtDetectedRef.current = insideHole;
+      setPendingTap(null);
+      autoCandidateRef.current = { hole: 0, count: 0 };
+      setAutoHole(nextHoleNum);
       setManualHole(nextHoleNum);
       setTargetYards(0);
       if (demoMode) setDemoProgress(0.35);
@@ -1182,14 +1187,21 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [geo, activeHolePoints, lastBall, teeMark]);
 
   const refPoints = useMemo(() => {
-    if (geo.status !== "ok" || !activeHolePoints) return [];
+    if (!activeHolePoints) return [];
+    const origin =
+      needsTeeMark && catalogTeeForHole
+        ? catalogTeeForHole
+        : geo.status === "ok"
+          ? { lat: geo.lat, lon: geo.lon }
+          : null;
+    if (!origin) return [];
     return referenceDistancesForHole(
-      geo.lat,
-      geo.lon,
+      origin.lat,
+      origin.lon,
       activeHolePoints,
       customPoints
     );
-  }, [geo, activeHolePoints, customPoints]);
+  }, [geo, activeHolePoints, customPoints, needsTeeMark, catalogTeeForHole]);
 
   const playFromPoint = useMemo(() => {
     for (let i = shotsOnHole.length - 1; i >= 0; i--) {
@@ -1516,6 +1528,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       <div className="absolute inset-0">
         {geo.status === "ok" && greenYds && !farFromCourse ? (
           <HoleYardageMap
+            key={`yardage-h${activeHole}-e${mapFrameEpoch}`}
             holeNo={activeHole}
             par={holeMeta?.par ?? 4}
             playerLat={geo.lat}

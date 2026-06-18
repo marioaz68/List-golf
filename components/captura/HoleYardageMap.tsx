@@ -151,7 +151,10 @@ export function HoleYardageMap({
       const L = await loadLeaflet();
       if (cancelled || !mapDivRef.current) return;
       const map = L.map(mapDivRef.current, {
-        center: [playerPosRef.current.lat, playerPosRef.current.lon],
+        center:
+          needsTeeMark && catalogTeePoint
+            ? [catalogTeePoint.lat, catalogTeePoint.lon]
+            : [playerPosRef.current.lat, playerPosRef.current.lon],
         zoom: 17,
         maxZoom: 21,
         // zoomSnap 0 = zoom fraccional continuo: el acercamiento al green
@@ -526,7 +529,7 @@ export function HoleYardageMap({
           framedHoleRef.current = holeNo;
           framedSegmentRef.current = segIdx;
           const shouldReframe =
-            !userPin && (recenterHole || recenterSeg);
+            recenterHole || (!userPin && recenterSeg);
           if (shouldReframe) {
             frameByProximity(
               map,
