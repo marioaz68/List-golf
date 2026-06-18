@@ -23,8 +23,8 @@ import {
 import { waypointsFromLine } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
-import { isPointOnGreen } from "@/lib/distances/onGreen";
-import { isPointInBunker } from "@/lib/distances/inBunker";
+import { parsePolygonsFromApi } from "@/lib/distances/holeBoundary";
+import { detectLieAtPoint } from "@/lib/distances/detectLie";
 import {
   isHoleComplete,
   puttYardsFromCenter,
@@ -354,12 +354,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setCenterlines(cls);
         const gpMap = new Map<number, Polygon[]>();
         for (const g of data.green_polygons ?? []) {
-          if (g.polygons?.length) gpMap.set(g.hole_number, g.polygons);
+          const polys = parsePolygonsFromApi(g.polygons);
+          if (polys.length) gpMap.set(g.hole_number, polys);
         }
         setGreenPolygonsByHole(gpMap);
         const bkPolyMap = new Map<number, Polygon[]>();
         for (const b of data.bunker_polygons ?? []) {
-          if (b.polygons?.length) bkPolyMap.set(b.hole_number, b.polygons);
+          const polys = parsePolygonsFromApi(b.polygons);
+          if (polys.length) bkPolyMap.set(b.hole_number, polys);
         }
         setBunkerPolygonsByHole(bkPolyMap);
         const bkPtMap = new Map<
@@ -740,30 +742,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (lat: number, lon: number) => {
       if (!activeHolePoints) return;
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
-      const onGreen = isPointOnGreen(
-        lat,
-        lon,
-        greenPolygonsByHole.get(activeHole) ?? [],
-        activeHolePoints
-      );
-      const yardsToGreen = onGreen
-        ? puttYardsFromCenter(dist.center)
-        : Math.round(dist.center / 5) * 5;
-      if (yardsToGreen <= 0) return;
       const bunkerPoints = [
         ...(bunkerPointsByHole.get(activeHole) ?? []),
         ...customPoints
           .filter((p) => p.dbKind === "bunker")
           .map((p) => ({ lat: p.lat, lon: p.lon })),
       ];
-      const inBunker =
-        !onGreen &&
-        isPointInBunker(
-          lat,
-          lon,
-          bunkerPolygonsByHole.get(activeHole) ?? [],
-          bunkerPoints
-        );
+      const { onGreen, inBunker } = detectLieAtPoint(
+        lat,
+        lon,
+        greenPolygonsByHole.get(activeHole) ?? [],
+        bunkerPolygonsByHole.get(activeHole) ?? [],
+        bunkerPoints,
+        activeHolePoints
+      );
+      const yardsToGreen = onGreen
+        ? puttYardsFromCenter(dist.center)
+        : Math.round(dist.center / 5) * 5;
+      if (yardsToGreen <= 0) return;
       setPlanContext({
         yardsToGreen,
         greenDist: {
@@ -1461,7 +1457,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {shotPlanOpen && planContext && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
-          key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}`}
+          key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}-${planContext.inBunker ? "b" : ""}-${planContext.onGreen ? "g" : ""}`}
           bag={bag}
           yardsToGreen={planContext.yardsToGreen}
           greenDist={planContext.greenDist}

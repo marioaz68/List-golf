@@ -91,6 +91,11 @@ export function pickBestClubAndCarry(
 ): ClubPickPlan | null {
   if (targetYards <= 0 || !clubs.length) return null;
 
+  if (inBunker) {
+    const bunkerPick = pickBunkerClub(clubs);
+    if (bunkerPick) return bunkerPick;
+  }
+
   const hasPutter = clubs.some((c) => c.catalogId === "putter");
 
   if (
@@ -105,11 +110,6 @@ export function pickBestClubAndCarry(
       shortLabel: cat.shortLabel,
       rollerLabel: "Putt",
     };
-  }
-
-  if (inBunker && !onGreen) {
-    const bunkerPick = pickBunkerClub(clubs);
-    if (bunkerPick) return bunkerPick;
   }
 
   let best: ClubPickPlan | null = null;

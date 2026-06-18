@@ -34,9 +34,25 @@ export function polygonFromRing(
 
 export function parseBoundaryGeoJson(raw: unknown): Polygon | null {
   if (!raw || typeof raw !== "object") return null;
-  const g = raw as { type?: string; coordinates?: unknown };
-  if (g.type !== "Polygon" || !Array.isArray(g.coordinates)) return null;
-  return g as Polygon;
+  const g = raw as { type?: string; coordinates?: unknown; geometry?: unknown };
+  if (g.type === "Polygon" && Array.isArray(g.coordinates)) {
+    return g as Polygon;
+  }
+  if (g.type === "Feature" && g.geometry) {
+    return parseBoundaryGeoJson(g.geometry);
+  }
+  return null;
+}
+
+/** Normaliza polígonos del API (Polygon o Feature). */
+export function parsePolygonsFromApi(raw: unknown): Polygon[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Polygon[] = [];
+  for (const item of raw) {
+    const poly = parseBoundaryGeoJson(item);
+    if (poly) out.push(poly);
+  }
+  return out;
 }
 
 /** Polígono base del código o el calibrado si se pasa override. */

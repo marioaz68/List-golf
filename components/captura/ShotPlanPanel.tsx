@@ -147,10 +147,10 @@ export function ShotPlanPanel({
     plannedYards: number;
   } | null>(null);
 
-  /** Nueva distancia al green = nuevo golpe; limpiar elección manual previa. */
+  /** Nueva distancia/lie = nuevo golpe; limpiar elección manual previa. */
   useEffect(() => {
     setUserPick(null);
-  }, [yardsToGreen]);
+  }, [yardsToGreen, inBunker, onGreen]);
 
   const userSelectedPick = userPick
     ? picks.find((p) => p.key === userPick.clubKey)
