@@ -98,7 +98,13 @@ function bestPickForDistance(
     const carry = carryYards(bc.yardsFull, bc.yardsThreeQuarter, p.swing);
     if (carry <= 0) continue;
     const score = scoreCarry(carry, targetYards);
-    if (score < bestScore) {
+    if (
+      score < bestScore ||
+      (score === bestScore &&
+        best &&
+        p.swing === "full" &&
+        best.swing === "three_quarter")
+    ) {
       bestScore = score;
       best = p;
     }
@@ -139,10 +145,15 @@ export function ShotPlanPanel({
     carryForPick(picks[0], bag, suggestedYards)
   );
   const userPickedClubRef = useRef(false);
+  const lastSuggestedRef = useRef<number | undefined>(undefined);
 
   const isPutter = pick?.catalogId === "putter";
 
   useEffect(() => {
+    if (suggestedYards !== lastSuggestedRef.current) {
+      lastSuggestedRef.current = suggestedYards;
+      userPickedClubRef.current = false;
+    }
     if (userPickedClubRef.current) return;
     if (!suggestedYards || suggestedYards <= 0 || !picks.length) return;
     const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
