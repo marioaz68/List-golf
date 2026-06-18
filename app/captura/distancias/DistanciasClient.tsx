@@ -1050,7 +1050,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       if (demoMode) setDemoProgress(0);
       const howLabel = how === "given" ? " · quedó dada" : "";
       setArrivalToast(
-        `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum} · marca tu salida`
+        `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum}`
       );
     },
     [
@@ -1522,7 +1522,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       autoCandidateRef.current = { hole: 0, count: 0 };
       resetHoleFromScratch(n);
       setManualHole(n);
-      setArrivalToast(`Hoyo ${n} · marca tu salida`);
+      setArrivalToast(null);
       if (demoMode) setDemoProgress(0.35);
     },
     [insideHole, resetHoleFromScratch, demoMode]
@@ -1532,6 +1532,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     resetHoleFromScratch(activeHole);
     setArrivalToast(`Hoyo ${activeHole} reiniciado · marca salida`);
   }, [activeHole, resetHoleFromScratch]);
+
+  const teeMarkBannerLine =
+    arrivalToast &&
+    (arrivalToast.includes("terminado") ||
+      arrivalToast.includes("Pasa al hoyo") ||
+      arrivalToast.includes("reiniciado"))
+      ? arrivalToast
+      : `Hoyo ${activeHole} · marca tu salida`;
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
@@ -1624,10 +1632,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       {needsTeeMark && !farFromCourse ? (
         <div className="pointer-events-none absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
           <p className="text-center text-[11px] font-black text-emerald-100">
-            Hoyo {activeHole} · marca tu salida
+            {teeMarkBannerLine}
           </p>
           <p className="mt-0.5 text-center text-[10px] text-emerald-200/85">
-            Toca el tee en el mapa para confirmar
+            Marca tu salida · toca el tee en el mapa para confirmar
           </p>
         </div>
       ) : null}
@@ -1686,7 +1694,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
-        {arrivalToast ? (
+        {arrivalToast && !needsTeeMark ? (
           <div className="pointer-events-none mx-2 mb-1 rounded-lg bg-emerald-900/90 px-3 py-1.5 text-center text-[11px] font-semibold text-emerald-100 shadow-lg">
             {arrivalToast}
           </div>
