@@ -39,6 +39,36 @@ function scoreCandidate(carry: number, targetYards: number): number {
   return Math.abs(carry - targetYards);
 }
 
+/** LW en trampa; si no está en bolsa, la cuña más alta disponible. */
+function pickBunkerClub(clubs: PlayerBagClub[]): ClubPickPlan | null {
+  const preferOrder = [
+    "lw",
+    "w58",
+    "sw",
+    "w54",
+    "w52",
+    "w50",
+    "w48",
+    "pw",
+  ];
+  for (const id of preferOrder) {
+    const c = clubs.find((x) => x.catalogId === id);
+    if (!c) continue;
+    const cat = CLUB_BY_ID[id];
+    if (!cat) continue;
+    const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, "full");
+    if (carry <= 0) continue;
+    return {
+      catalogId: id,
+      swing: "full",
+      carryYards: carry,
+      shortLabel: cat.shortLabel,
+      rollerLabel: `${cat.shortLabel} full`,
+    };
+  }
+  return null;
+}
+
 export interface ClubPickPlan {
   catalogId: string;
   swing: SwingKind;
@@ -55,7 +85,8 @@ export function pickBestClubAndCarry(
   clubs: PlayerBagClub[],
   targetYards: number,
   greenDist?: GreenDistances | null,
-  onGreen?: boolean
+  onGreen?: boolean,
+  inBunker?: boolean
 ): ClubPickPlan | null {
   if (targetYards <= 0 || !clubs.length) return null;
 
@@ -73,6 +104,11 @@ export function pickBestClubAndCarry(
       shortLabel: cat.shortLabel,
       rollerLabel: "Putt",
     };
+  }
+
+  if (inBunker && !onGreen) {
+    const bunkerPick = pickBunkerClub(clubs);
+    if (bunkerPick) return bunkerPick;
   }
 
   let best: ClubPickPlan | null = null;

@@ -24,6 +24,7 @@ import { waypointsFromLine } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { isPointOnGreen } from "@/lib/distances/onGreen";
+import { isPointInBunker } from "@/lib/distances/inBunker";
 import {
   buildCourseHolesCollection,
   parseBoundariesPayload,
@@ -159,6 +160,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     yardsToGreen: number;
     greenDist: GreenDistances;
     onGreen: boolean;
+    inBunker: boolean;
   } | null>(null);
   const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
@@ -174,6 +176,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   >(() => new Map());
   const [greenPolygonsByHole, setGreenPolygonsByHole] = useState<
     Map<number, Polygon[]>
+  >(() => new Map());
+  const [bunkerPolygonsByHole, setBunkerPolygonsByHole] = useState<
+    Map<number, Polygon[]>
+  >(() => new Map());
+  const [bunkerPointsByHole, setBunkerPointsByHole] = useState<
+    Map<number, Array<{ lat: number; lon: number }>>
   >(() => new Map());
   const [greenCenters, setGreenCenters] = useState<GreenCentersByHole>(() => {
     const out: GreenCentersByHole = {};
@@ -314,6 +322,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             hole_number: number;
             polygons: Polygon[];
           }>;
+          bunker_polygons?: Array<{
+            hole_number: number;
+            polygons: Polygon[];
+          }>;
+          bunker_points?: Array<{
+            hole_number: number;
+            points: Array<{ lat: number; lon: number }>;
+          }>;
         };
         if (cancelled || !data.ok) return;
         const calibrated = parseBoundariesPayload(data.boundaries ?? []);
@@ -337,6 +353,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           if (g.polygons?.length) gpMap.set(g.hole_number, g.polygons);
         }
         setGreenPolygonsByHole(gpMap);
+        const bkPolyMap = new Map<number, Polygon[]>();
+        for (const b of data.bunker_polygons ?? []) {
+          if (b.polygons?.length) bkPolyMap.set(b.hole_number, b.polygons);
+        }
+        setBunkerPolygonsByHole(bkPolyMap);
+        const bkPtMap = new Map<
+          number,
+          Array<{ lat: number; lon: number }>
+        >();
+        for (const b of data.bunker_points ?? []) {
+          if (b.points?.length) bkPtMap.set(b.hole_number, b.points);
+        }
+        setBunkerPointsByHole(bkPtMap);
       } catch {
         /* mantiene CCQ_HOLES por defecto */
       }
@@ -715,6 +744,20 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         greenPolygonsByHole.get(activeHole) ?? [],
         activeHolePoints
       );
+      const bunkerPoints = [
+        ...(bunkerPointsByHole.get(activeHole) ?? []),
+        ...customPoints
+          .filter((p) => p.dbKind === "bunker")
+          .map((p) => ({ lat: p.lat, lon: p.lon })),
+      ];
+      const inBunker =
+        !onGreen &&
+        isPointInBunker(
+          lat,
+          lon,
+          bunkerPolygonsByHole.get(activeHole) ?? [],
+          bunkerPoints
+        );
       setPlanContext({
         yardsToGreen,
         greenDist: {
@@ -723,12 +766,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           back: dist.back,
         },
         onGreen,
+        inBunker,
       });
       setTargetYards(yardsToGreen);
       setPlanSession((s) => s + 1);
       setShotPlanOpen(true);
     },
-    [activeHolePoints, activeHole, greenPolygonsByHole]
+    [activeHolePoints, activeHole, greenPolygonsByHole, bunkerPolygonsByHole, bunkerPointsByHole, customPoints]
   );
 
   const markTeeAt = useCallback(
@@ -1398,6 +1442,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           yardsToGreen={planContext.yardsToGreen}
           greenDist={planContext.greenDist}
           onGreen={planContext.onGreen}
+          inBunker={planContext.inBunker}
           onConfirm={handleConfirmPlan}
           onCancel={() => {
             setShotPlanOpen(false);

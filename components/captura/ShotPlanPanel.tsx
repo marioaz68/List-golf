@@ -103,6 +103,8 @@ interface ShotPlanPanelProps {
   greenDist?: GreenDistances | null;
   /** Bola dentro del área del green calibrada (o estimada). */
   onGreen?: boolean;
+  /** Bola en trampa calibrada (polígono o punto guardado). */
+  inBunker?: boolean;
   onConfirm: (plan: {
     catalogId: string;
     swing: SwingKind;
@@ -117,6 +119,7 @@ export function ShotPlanPanel({
   yardsToGreen,
   greenDist = null,
   onGreen = false,
+  inBunker = false,
   onConfirm,
   onCancel,
 }: ShotPlanPanelProps) {
@@ -129,8 +132,15 @@ export function ShotPlanPanel({
   const enabledClubs = useMemo(() => getShotPlanBagClubs(bag), [bag]);
 
   const autoPlan = useMemo(
-    () => pickBestClubAndCarry(enabledClubs, yardsToGreen, greenDist, onGreen),
-    [enabledClubs, yardsToGreen, greenDist, onGreen]
+    () =>
+      pickBestClubAndCarry(
+        enabledClubs,
+        yardsToGreen,
+        greenDist,
+        onGreen,
+        inBunker
+      ),
+    [enabledClubs, yardsToGreen, greenDist, onGreen, inBunker]
   );
 
   const autoPick = useMemo(
@@ -214,6 +224,12 @@ export function ShotPlanPanel({
               <span className="text-amber-200">En el green</span>
               <span className="text-slate-400"> · </span>
               {yardsToGreen} al hoyo
+            </>
+          ) : inBunker ? (
+            <>
+              <span className="text-amber-200">En trampa</span>
+              <span className="text-slate-400"> · </span>
+              {yardsToGreen} al centro
             </>
           ) : (
             <>{yardsToGreen} al centro</>

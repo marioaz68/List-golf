@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const admin = createAdminClient();
-    const [boundRes, overrides, clRes, greenPolyRes] = await Promise.all([
+    const [boundRes, overrides, clRes, greenPolyRes, bunkerPolyRes, bunkerPtsRes] =
+      await Promise.all([
       admin
         .from("course_holes")
         .select("hole_number, boundary_geojson")
@@ -47,6 +48,19 @@ export async function GET(request: NextRequest) {
         .eq("kind", "green")
         .order("hole_number", { ascending: true })
         .order("sort_order", { ascending: true }),
+      admin
+        .from("course_hole_polygons")
+        .select("hole_number, sort_order, geojson")
+        .eq("course_id", courseId)
+        .eq("kind", "bunker")
+        .order("hole_number", { ascending: true })
+        .order("sort_order", { ascending: true }),
+      admin
+        .from("course_hole_reference_points")
+        .select("hole_number, lat, lon")
+        .eq("course_id", courseId)
+        .eq("kind", "bunker")
+        .order("hole_number", { ascending: true }),
     ]);
 
     if (boundRes.error) throw new Error(boundRes.error.message);
@@ -110,12 +124,48 @@ export async function GET(request: NextRequest) {
       ([hole_number, polygons]) => ({ hole_number, polygons })
     );
 
+    const bunkerPolygonsByHole = new Map<number, Polygon[]>();
+    if (!bunkerPolyRes.error) {
+      for (const row of bunkerPolyRes.data ?? []) {
+        const hole = Number(row.hole_number);
+        const poly = parseBoundaryGeoJson(row.geojson);
+        if (!poly) continue;
+        const list = bunkerPolygonsByHole.get(hole) ?? [];
+        list.push(poly);
+        bunkerPolygonsByHole.set(hole, list);
+      }
+    }
+    const bunker_polygons = Array.from(bunkerPolygonsByHole.entries()).map(
+      ([hole_number, polygons]) => ({ hole_number, polygons })
+    );
+
+    const bunkerPointsByHole = new Map<
+      number,
+      Array<{ lat: number; lon: number }>
+    >();
+    if (!bunkerPtsRes.error) {
+      for (const row of bunkerPtsRes.data ?? []) {
+        const hole = Number(row.hole_number);
+        const lat = Number(row.lat);
+        const lon = Number(row.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        const list = bunkerPointsByHole.get(hole) ?? [];
+        list.push({ lat, lon });
+        bunkerPointsByHole.set(hole, list);
+      }
+    }
+    const bunker_points = Array.from(bunkerPointsByHole.entries()).map(
+      ([hole_number, points]) => ({ hole_number, points })
+    );
+
     return NextResponse.json({
       ok: true,
       boundaries,
       greens,
       centerlines,
       green_polygons,
+      bunker_polygons,
+      bunker_points,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error cargando layout";
