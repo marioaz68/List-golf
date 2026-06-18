@@ -11,6 +11,8 @@ import {
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import {
+  defaultPlannedYardsForShot,
+  isWithinLwThreeQuarterReach,
   pickBestClubAndCarry,
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
@@ -68,18 +70,6 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
     });
   }
   return out;
-}
-
-function carryForPick(
-  pick: ClubPick | undefined,
-  yardsToGreen: number
-): number {
-  if (!pick) return MIN_YARD_PICK;
-  if (pick.catalogId === "putter") {
-    return puttYardsFromCenter(yardsToGreen);
-  }
-  if (pick.carryYards > 0) return pick.carryYards;
-  return MIN_YARD_PICK;
 }
 
 function pickToClubPick(
@@ -170,18 +160,36 @@ export function ShotPlanPanel({
 
   const isPutter = activePick?.catalogId === "putter";
 
+  const shortGameReach = isWithinLwThreeQuarterReach(
+    yardsToGreen,
+    enabledClubs
+  );
+
   const yardValues = useMemo(() => {
     if (isPutter) {
       const hi = Math.max(25, Math.min(60, puttYardsFromCenter(yardsToGreen) + 12));
       return yardRangeValues(1, hi, 1);
     }
+    if (shortGameReach) {
+      const center = Math.max(MIN_YARD_PICK, Math.round(yardsToGreen));
+      return yardRangeValues(
+        Math.max(MIN_YARD_PICK, center - 15),
+        center + 15,
+        1
+      );
+    }
     return yardRangeValues(MIN_YARD_PICK, MAX_YARD_PICK, 5);
-  }, [isPutter, yardsToGreen]);
+  }, [isPutter, yardsToGreen, shortGameReach]);
 
   const plannedYards =
     userPick != null && userSelectedPick
       ? userPick.plannedYards
-      : carryForPick(activePick, yardsToGreen);
+      : defaultPlannedYardsForShot(
+          yardsToGreen,
+          enabledClubs,
+          activePick,
+          onGreen
+        );
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);
@@ -191,7 +199,12 @@ export function ShotPlanPanel({
       plannedYards:
         prev != null
           ? prev.plannedYards
-          : carryForPick(found, yardsToGreen),
+          : defaultPlannedYardsForShot(
+              yardsToGreen,
+              enabledClubs,
+              found,
+              onGreen
+            ),
     }));
   };
 
@@ -239,7 +252,9 @@ export function ShotPlanPanel({
           <LieChip kind={lieKind} size="sm" />
           <span className="text-[9px] font-bold text-slate-500">·</span>
           <span className="text-[9px] font-bold text-emerald-300">
-            {onGreen ? `${yardsToGreen} al hoyo` : `${yardsToGreen} al centro`}
+            {onGreen || shortGameReach
+              ? `${yardsToGreen} al hoyo`
+              : `${yardsToGreen} al centro`}
           </span>
         </div>
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">

@@ -1,6 +1,7 @@
 import {
   carryYards,
   CLUB_BY_ID,
+  defaultThreeQuarterYards,
   MIN_YARD_PICK,
   shouldSuggestPutter,
   yardRangeValues,
@@ -39,6 +40,48 @@ function putterSuggestion(targetYards: number): ClubSuggestion {
 
 function scoreCandidate(carry: number, targetYards: number): number {
   return Math.abs(carry - targetYards);
+}
+
+/** Carry del LW 3/4 en la bolsa del jugador (o catálogo si no tiene LW). */
+export function lwThreeQuarterCarryYards(clubs: PlayerBagClub[]): number {
+  const lw = clubs.find((c) => c.catalogId === "lw");
+  if (lw) {
+    const carry = carryYards(lw.yardsFull, lw.yardsThreeQuarter, "three_quarter");
+    if (carry > 0) return carry;
+  }
+  const cat = CLUB_BY_ID.lw;
+  if (!cat) return 0;
+  return defaultThreeQuarterYards(cat.defaultYardsFull);
+}
+
+/** Distancia corta: dentro del alcance del LW 3/4. */
+export function isWithinLwThreeQuarterReach(
+  yardsToGreen: number,
+  clubs: PlayerBagClub[]
+): boolean {
+  const max = lwThreeQuarterCarryYards(clubs);
+  return max > 0 && yardsToGreen > 0 && yardsToGreen <= max;
+}
+
+/**
+ * Yardas planeadas por defecto al abrir el panel de golpe.
+ * Cerca del hoyo (≤ LW 3/4): distancia al green/hoyo directa.
+ */
+export function defaultPlannedYardsForShot(
+  yardsToGreen: number,
+  clubs: PlayerBagClub[],
+  pick?: { catalogId: string; carryYards: number } | null,
+  onGreen?: boolean
+): number {
+  if (yardsToGreen <= 0) return MIN_YARD_PICK;
+  if (onGreen || pick?.catalogId === "putter") {
+    return puttYardsFromCenter(yardsToGreen);
+  }
+  if (isWithinLwThreeQuarterReach(yardsToGreen, clubs)) {
+    return Math.max(MIN_YARD_PICK, Math.round(yardsToGreen));
+  }
+  if (pick && pick.carryYards > 0) return pick.carryYards;
+  return MIN_YARD_PICK;
 }
 
 /** LW en trampa (3/4 preferido); si no está en bolsa, la cuña más alta disponible. */
