@@ -337,9 +337,9 @@ export function HoleYardageMap({
           : null;
       /** Posición de juego para encuadre (salida/última bola), no solo GPS. */
       const framingPos =
-        lastLanding ??
-        teeMarkPoint ??
-        (needsTeeMark && catalogTeePoint ? catalogTeePoint : player);
+        needsTeeMark && catalogTeePoint
+          ? catalogTeePoint
+          : lastLanding ?? teeMarkPoint ?? player;
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
       const segIdx = hasCenterline
         ? centerlineSegmentIndex(framingPos, centerline!)
@@ -490,9 +490,10 @@ export function HoleYardageMap({
       }
 
       const showPhoneDot =
-        !playBallPoint ||
-        Math.abs(playBallPoint.lat - playerLat) > 0.00002 ||
-        Math.abs(playBallPoint.lon - playerLon) > 0.00002;
+        !needsTeeMark &&
+        (!playBallPoint ||
+          Math.abs(playBallPoint.lat - playerLat) > 0.00002 ||
+          Math.abs(playBallPoint.lon - playerLon) > 0.00002);
 
       if (showPhoneDot) {
         L.marker([playerLat, playerLon], {

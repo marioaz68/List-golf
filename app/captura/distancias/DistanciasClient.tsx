@@ -1035,6 +1035,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       }
 
       const nextHoleNum = (hole % 18) + 1;
+      nextStore = clearHoleShots(nextStore, nextHoleNum);
+      setHoleShotsStore(nextStore);
+      saveHoleShots(nextStore, bagScope);
+
       setHoleFinishPrompt(null);
       resetTapUi();
       setTapPoint(null);
@@ -1043,7 +1047,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setAutoHole(nextHoleNum);
       setManualHole(nextHoleNum);
       setTargetYards(0);
-      if (demoMode) setDemoProgress(0.35);
+      if (demoMode) setDemoProgress(0);
       const howLabel = how === "given" ? " · quedó dada" : "";
       setArrivalToast(
         `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum} · marca tu salida`
@@ -1168,6 +1172,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const greenYds = useMemo(() => {
     if (!activeHolePoints) return null;
+    if (needsTeeMark && catalogTeeForHole) {
+      return greenDistancesForHole(
+        catalogTeeForHole.lat,
+        catalogTeeForHole.lon,
+        activeHolePoints
+      );
+    }
     if (lastBall) {
       return greenDistancesForHole(
         lastBall.lat,
@@ -1184,7 +1195,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     }
     if (geo.status !== "ok") return null;
     return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
-  }, [geo, activeHolePoints, lastBall, teeMark]);
+  }, [geo, activeHolePoints, lastBall, teeMark, needsTeeMark, catalogTeeForHole]);
 
   const refPoints = useMemo(() => {
     if (!activeHolePoints) return [];
