@@ -13,6 +13,8 @@ import {
   defaultCenterline,
   waypointsFromLine,
 } from "@/lib/distances/centerline";
+import { parseBoundaryGeoJson } from "@/lib/distances/holeBoundary";
+import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const admin = createAdminClient();
-    const [boundRes, overrides, clRes] = await Promise.all([
+    const [boundRes, overrides, clRes, greenPolyRes] = await Promise.all([
       admin
         .from("course_holes")
         .select("hole_number, boundary_geojson")
@@ -38,6 +40,13 @@ export async function GET(request: NextRequest) {
         .select("hole_number, geojson")
         .eq("course_id", courseId)
         .eq("kind", "centerline"),
+      admin
+        .from("course_hole_polygons")
+        .select("hole_number, sort_order, geojson")
+        .eq("course_id", courseId)
+        .eq("kind", "green")
+        .order("hole_number", { ascending: true })
+        .order("sort_order", { ascending: true }),
     ]);
 
     if (boundRes.error) throw new Error(boundRes.error.message);
@@ -86,7 +95,28 @@ export async function GET(request: NextRequest) {
       return { hole_number: g.hole_number, source: "default", waypoints };
     });
 
-    return NextResponse.json({ ok: true, boundaries, greens, centerlines });
+    const greenPolygonsByHole = new Map<number, Polygon[]>();
+    if (!greenPolyRes.error) {
+      for (const row of greenPolyRes.data ?? []) {
+        const hole = Number(row.hole_number);
+        const poly = parseBoundaryGeoJson(row.geojson);
+        if (!poly) continue;
+        const list = greenPolygonsByHole.get(hole) ?? [];
+        list.push(poly);
+        greenPolygonsByHole.set(hole, list);
+      }
+    }
+    const green_polygons = Array.from(greenPolygonsByHole.entries()).map(
+      ([hole_number, polygons]) => ({ hole_number, polygons })
+    );
+
+    return NextResponse.json({
+      ok: true,
+      boundaries,
+      greens,
+      centerlines,
+      green_polygons,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error cargando layout";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

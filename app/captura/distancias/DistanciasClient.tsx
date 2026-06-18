@@ -23,6 +23,7 @@ import {
 import { waypointsFromLine } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
+import { isPointOnGreen } from "@/lib/distances/onGreen";
 import {
   buildCourseHolesCollection,
   parseBoundariesPayload,
@@ -157,6 +158,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [planContext, setPlanContext] = useState<{
     yardsToGreen: number;
     greenDist: GreenDistances;
+    onGreen: boolean;
   } | null>(null);
   const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
@@ -169,6 +171,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     useState<FeatureCollection<Polygon, { hoyo: number }>>(CCQ_HOLES);
   const [boundaryByHole, setBoundaryByHole] = useState<
     Map<number, Polygon>
+  >(() => new Map());
+  const [greenPolygonsByHole, setGreenPolygonsByHole] = useState<
+    Map<number, Polygon[]>
   >(() => new Map());
   const [greenCenters, setGreenCenters] = useState<GreenCentersByHole>(() => {
     const out: GreenCentersByHole = {};
@@ -305,6 +310,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             hole_number: number;
             waypoints?: Array<{ lat: number; lon: number }>;
           }>;
+          green_polygons?: Array<{
+            hole_number: number;
+            polygons: Polygon[];
+          }>;
         };
         if (cancelled || !data.ok) return;
         const calibrated = parseBoundariesPayload(data.boundaries ?? []);
@@ -323,6 +332,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           if (wps && wps.length >= 2) cls[c.hole_number] = wps;
         }
         setCenterlines(cls);
+        const gpMap = new Map<number, Polygon[]>();
+        for (const g of data.green_polygons ?? []) {
+          if (g.polygons?.length) gpMap.set(g.hole_number, g.polygons);
+        }
+        setGreenPolygonsByHole(gpMap);
       } catch {
         /* mantiene CCQ_HOLES por defecto */
       }
@@ -695,6 +709,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
       const yardsToGreen = Math.round(dist.center / 5) * 5;
       if (yardsToGreen <= 0) return;
+      const onGreen = isPointOnGreen(
+        lat,
+        lon,
+        greenPolygonsByHole.get(activeHole) ?? [],
+        activeHolePoints
+      );
       setPlanContext({
         yardsToGreen,
         greenDist: {
@@ -702,12 +722,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           center: dist.center,
           back: dist.back,
         },
+        onGreen,
       });
       setTargetYards(yardsToGreen);
       setPlanSession((s) => s + 1);
       setShotPlanOpen(true);
     },
-    [activeHolePoints]
+    [activeHolePoints, activeHole, greenPolygonsByHole]
   );
 
   const markTeeAt = useCallback(
@@ -1376,6 +1397,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           bag={bag}
           yardsToGreen={planContext.yardsToGreen}
           greenDist={planContext.greenDist}
+          onGreen={planContext.onGreen}
           onConfirm={handleConfirmPlan}
           onCancel={() => {
             setShotPlanOpen(false);

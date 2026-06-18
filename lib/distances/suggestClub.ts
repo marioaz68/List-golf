@@ -54,18 +54,24 @@ export interface ClubPickPlan {
 export function pickBestClubAndCarry(
   clubs: PlayerBagClub[],
   targetYards: number,
-  greenDist?: GreenDistances | null
+  greenDist?: GreenDistances | null,
+  onGreen?: boolean
 ): ClubPickPlan | null {
   if (targetYards <= 0 || !clubs.length) return null;
 
-  if (shouldSuggestPutter(targetYards, greenDist)) {
+  const hasPutter = clubs.some((c) => c.catalogId === "putter");
+
+  if (
+    hasPutter &&
+    shouldSuggestPutter(targetYards, greenDist, onGreen)
+  ) {
     const cat = CLUB_BY_ID.putter;
     return {
       catalogId: "putter",
       swing: "full",
       carryYards: Math.max(MIN_YARD_PICK, Math.round(targetYards / 5) * 5),
       shortLabel: cat.shortLabel,
-      rollerLabel: "Putter",
+      rollerLabel: "Putt",
     };
   }
 
@@ -114,12 +120,13 @@ export function rankClubsForTarget(
   clubs: PlayerBagClub[],
   targetYards: number,
   swing: SwingKind,
-  greenDist?: GreenDistances | null
+  greenDist?: GreenDistances | null,
+  onGreen?: boolean
 ): ClubSuggestion[] {
   if (targetYards <= 0) return [];
 
   const hasPutter = clubs.some((c) => c.catalogId === "putter");
-  if (hasPutter && shouldSuggestPutter(targetYards, greenDist)) {
+  if (hasPutter && shouldSuggestPutter(targetYards, greenDist, onGreen)) {
     const putter = putterSuggestion(targetYards);
     const others = clubs
       .map((c) => {
@@ -175,9 +182,10 @@ export function suggestClub(
   clubs: PlayerBagClub[],
   targetYards: number,
   swing: SwingKind,
-  greenDist?: GreenDistances | null
+  greenDist?: GreenDistances | null,
+  onGreen?: boolean
 ): ClubSuggestion | null {
-  return rankClubsForTarget(clubs, targetYards, swing, greenDist)[0] ?? null;
+  return rankClubsForTarget(clubs, targetYards, swing, greenDist, onGreen)[0] ?? null;
 }
 
 /** Valores para el roller: distancia al green ± rango, paso 5 yds. */

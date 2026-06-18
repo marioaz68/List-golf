@@ -14,7 +14,7 @@ import {
   pickBestClubAndCarry,
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
-import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
+import { getShotPlanBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
 type ClubPick = {
   key: string;
@@ -27,7 +27,7 @@ type ClubPick = {
 
 function buildClubPicks(bag: PlayerBag): ClubPick[] {
   const out: ClubPick[] = [];
-  for (const c of getEnabledBagClubs(bag)) {
+  for (const c of getShotPlanBagClubs(bag)) {
     const cat = CLUB_BY_ID[c.catalogId];
     if (!cat) continue;
     if (cat.category === "putter") {
@@ -35,7 +35,7 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
         key: "putter:full",
         catalogId: "putter",
         swing: "full",
-        label: "Putter",
+        label: "Putt",
         short: "P",
         carryYards: 0,
       });
@@ -67,8 +67,17 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
   return out;
 }
 
-function carryForPick(pick: ClubPick | undefined): number {
+function carryForPick(
+  pick: ClubPick | undefined,
+  yardsToGreen: number
+): number {
   if (!pick) return MIN_YARD_PICK;
+  if (pick.catalogId === "putter") {
+    return Math.max(
+      MIN_YARD_PICK,
+      Math.round(yardsToGreen / 5) * 5
+    );
+  }
   if (pick.carryYards > 0) return pick.carryYards;
   return MIN_YARD_PICK;
 }
@@ -92,6 +101,8 @@ interface ShotPlanPanelProps {
   /** Yardas al centro del green desde la bola / salida actual. */
   yardsToGreen: number;
   greenDist?: GreenDistances | null;
+  /** Bola dentro del área del green calibrada (o estimada). */
+  onGreen?: boolean;
   onConfirm: (plan: {
     catalogId: string;
     swing: SwingKind;
@@ -105,6 +116,7 @@ export function ShotPlanPanel({
   bag,
   yardsToGreen,
   greenDist = null,
+  onGreen = false,
   onConfirm,
   onCancel,
 }: ShotPlanPanelProps) {
@@ -114,11 +126,11 @@ export function ShotPlanPanel({
     []
   );
 
-  const enabledClubs = useMemo(() => getEnabledBagClubs(bag), [bag]);
+  const enabledClubs = useMemo(() => getShotPlanBagClubs(bag), [bag]);
 
   const autoPlan = useMemo(
-    () => pickBestClubAndCarry(enabledClubs, yardsToGreen, greenDist),
-    [enabledClubs, yardsToGreen, greenDist]
+    () => pickBestClubAndCarry(enabledClubs, yardsToGreen, greenDist, onGreen),
+    [enabledClubs, yardsToGreen, greenDist, onGreen]
   );
 
   const autoPick = useMemo(
@@ -145,14 +157,14 @@ export function ShotPlanPanel({
   const plannedYards =
     userPick != null && userSelectedPick
       ? userPick.plannedYards
-      : carryForPick(activePick);
+      : carryForPick(activePick, yardsToGreen);
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);
     if (!found) return;
     setUserPick({
       clubKey: found.key,
-      plannedYards: carryForPick(found),
+      plannedYards: carryForPick(found, yardsToGreen),
     });
   };
 
@@ -197,7 +209,15 @@ export function ShotPlanPanel({
     <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
       <div className="flex flex-col gap-0.5">
         <div className="rounded-md bg-black/80 px-1.5 py-0.5 text-center text-[9px] font-bold text-emerald-300">
-          {yardsToGreen} al centro
+          {onGreen ? (
+            <>
+              <span className="text-amber-200">En el green</span>
+              <span className="text-slate-400"> · </span>
+              {yardsToGreen} al hoyo
+            </>
+          ) : (
+            <>{yardsToGreen} al centro</>
+          )}
         </div>
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
           <div className="w-[3.25rem]">

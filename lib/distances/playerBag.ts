@@ -117,6 +117,16 @@ export function getEnabledBagClubs(bag: PlayerBag): PlayerBagClub[] {
   });
 }
 
+/** Bastones del roll bar: incluye putter si está activo en la bolsa. */
+export function getShotPlanBagClubs(bag: PlayerBag): PlayerBagClub[] {
+  return bag.clubs.filter((c) => {
+    if (!c.enabled) return false;
+    const cat = CLUB_BY_ID[c.catalogId];
+    if (!cat) return false;
+    return cat.category === "putter" || cat.defaultYardsFull > 0;
+  });
+}
+
 export function clubLabel(catalogId: string): string {
   return CLUB_BY_ID[catalogId]?.shortLabel ?? catalogId;
 }

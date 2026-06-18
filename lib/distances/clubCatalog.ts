@@ -64,8 +64,10 @@ export const PUTTER_MAX_YARDS = 55;
 /** En green o muy cerca: priorizar putter. */
 export function shouldSuggestPutter(
   targetYards: number,
-  greenDist?: { front: number; center: number; back: number } | null
+  greenDist?: { front: number; center: number; back: number } | null,
+  onGreen?: boolean
 ): boolean {
+  if (onGreen) return true;
   if (targetYards <= 30) return true;
   if (!greenDist) return targetYards <= PUTTER_MAX_YARDS;
   if (greenDist.front <= 18 && targetYards <= 45) return true;
