@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { VerticalRoller } from "@/components/captura/VerticalRoller";
 import {
   carryYards,
-  clubYardPickerValues,
   CLUB_BY_ID,
+  MAX_YARD_PICK,
+  MIN_YARD_PICK,
   shouldSuggestPutter,
+  yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import type { GreenDistances } from "@/lib/distances/suggestClub";
@@ -59,6 +61,24 @@ function scoreCarry(carry: number, targetYards: number): number {
   return Math.abs(gap) + shortfall * 1.5;
 }
 
+/** Yardas grabadas en bolsa para el bastón + swing elegido. */
+function carryForPick(
+  pick: ClubPick | undefined,
+  bag: PlayerBag,
+  suggestedYards?: number
+): number {
+  if (!pick) return MIN_YARD_PICK;
+  if (pick.catalogId === "putter") {
+    return Math.max(
+      MIN_YARD_PICK,
+      Math.round((suggestedYards ?? 10) / 5) * 5
+    );
+  }
+  const bc = bag.clubs.find((c) => c.catalogId === pick.catalogId);
+  if (!bc) return MIN_YARD_PICK;
+  return carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing);
+}
+
 /** Bastón + swing que mejor encajan con la distancia al green. */
 function bestPickForDistance(
   picks: ClubPick[],
@@ -108,56 +128,41 @@ export function ShotPlanPanel({
   onCancel,
 }: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
+  const yardValues = useMemo(
+    () => yardRangeValues(MIN_YARD_PICK, MAX_YARD_PICK, 5),
+    []
+  );
+
   const [clubKey, setClubKey] = useState(picks[0]?.key ?? "");
   const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
-
-  const bagClub = bag.clubs.find((c) => c.catalogId === pick?.catalogId);
-  const isPutter = pick?.catalogId === "putter";
-  const defaultYards = isPutter
-    ? Math.max(5, Math.round((suggestedYards ?? 10) / 5) * 5)
-    : pick && bagClub
-      ? carryYards(bagClub.yardsFull, bagClub.yardsThreeQuarter, pick.swing)
-      : 100;
-
-  const yardValues = useMemo(
-    () => clubYardPickerValues(defaultYards, suggestedYards),
-    [defaultYards, suggestedYards]
+  const [plannedYards, setPlannedYards] = useState(() =>
+    carryForPick(picks[0], bag, suggestedYards)
   );
-  const [plannedYards, setPlannedYards] = useState(defaultYards);
+  const userPickedClubRef = useRef(false);
+
+  const isPutter = pick?.catalogId === "putter";
 
   useEffect(() => {
+    if (userPickedClubRef.current) return;
     if (!suggestedYards || suggestedYards <= 0 || !picks.length) return;
     const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
-    if (best) setClubKey(best.key);
+    if (!best) return;
+    setClubKey(best.key);
+    setPlannedYards(carryForPick(best, bag, suggestedYards));
   }, [suggestedYards, greenDist, bag, picks]);
 
-  useEffect(() => {
-    if (!pick) return;
-    if (pick.catalogId === "putter") {
-      if (suggestedYards != null && suggestedYards > 0) {
-        setPlannedYards(Math.max(5, Math.round(suggestedYards / 5) * 5));
-      }
-      return;
-    }
-    const bc = bag.clubs.find((c) => c.catalogId === pick.catalogId);
-    if (!bc) return;
-    setPlannedYards(
-      carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing)
-    );
-  }, [pick, bag.clubs, suggestedYards]);
+  const handleClubChange = (label: string) => {
+    const found = picks.find((p) => p.label === label);
+    if (!found) return;
+    userPickedClubRef.current = true;
+    setClubKey(found.key);
+    setPlannedYards(carryForPick(found, bag, suggestedYards));
+  };
 
   const yardLabels = useMemo(
     () => yardValues.map((y) => String(y)),
     [yardValues]
   );
-
-  useEffect(() => {
-    if (suggestedYards == null || suggestedYards <= 0 || !yardValues.length) return;
-    const nearest = yardValues.reduce((best, y) =>
-      Math.abs(y - suggestedYards) < Math.abs(best - suggestedYards) ? y : best
-    );
-    setPlannedYards(nearest);
-  }, [suggestedYards, yardValues]);
 
   if (!pick || !picks.length) {
     return (
@@ -184,10 +189,7 @@ export function ShotPlanPanel({
             className="h-[4.5rem] w-full"
             values={picks.map((p) => p.label)}
             value={pick.label}
-            onChange={(label) => {
-              const found = picks.find((p) => p.label === label);
-              if (found) setClubKey(found.key);
-            }}
+            onChange={handleClubChange}
           />
         </div>
         <div className="w-[2.75rem]">

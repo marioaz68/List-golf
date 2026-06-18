@@ -1368,6 +1368,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {shotPlanOpen && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
+          key={`${activeHole}-${completedShotsCount}-${shotPlanSuggestedYards ?? 0}`}
           bag={bag}
           suggestedYards={shotPlanSuggestedYards}
           greenDist={shotPlanGreenDist}

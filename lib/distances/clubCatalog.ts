@@ -55,6 +55,9 @@ export const CLUB_BY_ID = Object.fromEntries(
 /** Mínimo en rollers de yardas (chip, bunker, putt largo). */
 export const MIN_YARD_PICK = 5;
 
+/** Máximo en rollers de yardas (driver / layup largo). */
+export const MAX_YARD_PICK = 300;
+
 /** Distancia al green (yds) a partir de la cual se sugiere putter. */
 export const PUTTER_MAX_YARDS = 55;
 
