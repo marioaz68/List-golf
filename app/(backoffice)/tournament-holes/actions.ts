@@ -29,8 +29,10 @@ function normalizeHcp(n: number) {
   return n;
 }
 
+import { CCQ_COURSE_PARS } from "@/lib/distances/ccqScorecard";
+
 function buildDefaultHoleRows(tournamentId: string) {
-  const pars = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 3, 4, 4];
+  const pars = [...CCQ_COURSE_PARS];
 
   return Array.from({ length: 18 }, (_, i) => ({
     tournament_id: tournamentId,

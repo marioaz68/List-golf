@@ -12,6 +12,8 @@
  * center, back) y guardarlos en tabla course_holes.
  */
 
+import { ccqParForHole } from "@/lib/distances/ccqScorecard";
+
 export interface GreenPoint {
   lat: number;
   lon: number;
@@ -20,30 +22,30 @@ export interface GreenPoint {
 }
 
 export const CCQ_GREEN_CENTERS: Record<number, GreenPoint> = {
-  // Datos parseados del PDF Cordenadas-ccq.pdf
-  1: { lat: 20.565451, lon: -100.409022, par: 4 },
-  2: { lat: 20.569517, lon: -100.407269, par: 5 },
-  3: { lat: 20.567710, lon: -100.406221, par: 3 },
-  4: { lat: 20.564200, lon: -100.408585, par: 4 },
-  5: { lat: 20.560940, lon: -100.408171, par: 4 },
-  6: { lat: 20.557369, lon: -100.407929, par: 4 },
-  7: { lat: 20.560997, lon: -100.407719, par: 4 },
-  8: { lat: 20.562842, lon: -100.407483, par: 3 },
-  9: { lat: 20.566581, lon: -100.405926, par: 5 },
+  // Coordenadas del PDF Cordenadas-ccq.pdf; par = CCQ_COURSE_PARS
+  1: { lat: 20.565451, lon: -100.409022, par: ccqParForHole(1) },
+  2: { lat: 20.569517, lon: -100.407269, par: ccqParForHole(2) },
+  3: { lat: 20.567710, lon: -100.406221, par: ccqParForHole(3) },
+  4: { lat: 20.564200, lon: -100.408585, par: ccqParForHole(4) },
+  5: { lat: 20.560940, lon: -100.408171, par: ccqParForHole(5) },
+  6: { lat: 20.557369, lon: -100.407929, par: ccqParForHole(6) },
+  7: { lat: 20.560997, lon: -100.407719, par: ccqParForHole(7) },
+  8: { lat: 20.562842, lon: -100.407483, par: ccqParForHole(8) },
+  9: { lat: 20.566581, lon: -100.405926, par: ccqParForHole(9) },
   // Hoyo 10: el PDF tenía la coordenada fuera del polígono del hoyo (al norte,
   // ~600 m del green real). El green está en el extremo sur del polígono (el
   // hoyo juega norte→sur). Centro estimado a ~15 yds del "atrás" calibrado.
-  10: { lat: 20.563471, lon: -100.406969, par: 4 },
+  10: { lat: 20.563471, lon: -100.406969, par: ccqParForHole(10) },
   // Hoyo 11: el PDF tenía un typo ("20°33'88.01''" con 88 segundos inválido).
   // Uso el centroide del polígono CCQ_HOLES como fallback (cerca, no perfecto).
-  11: { lat: 20.55964, lon: -100.40718, par: 4 },
-  12: { lat: 20.557063, lon: -100.407164, par: 3 },
-  13: { lat: 20.557464, lon: -100.411065, par: 5 },
-  14: { lat: 20.555639, lon: -100.407899, par: 5 },
-  15: { lat: 20.558924, lon: -100.405256, par: 3 },
-  16: { lat: 20.561392, lon: -100.404178, par: 4 },
-  17: { lat: 20.562731, lon: -100.405101, par: 4 },
-  18: { lat: 20.565801, lon: -100.405361, par: 4 },
+  11: { lat: 20.55964, lon: -100.40718, par: ccqParForHole(11) },
+  12: { lat: 20.557063, lon: -100.407164, par: ccqParForHole(12) },
+  13: { lat: 20.557464, lon: -100.411065, par: ccqParForHole(13) },
+  14: { lat: 20.555639, lon: -100.407899, par: ccqParForHole(14) },
+  15: { lat: 20.558924, lon: -100.405256, par: ccqParForHole(15) },
+  16: { lat: 20.561392, lon: -100.404178, par: ccqParForHole(16) },
+  17: { lat: 20.562731, lon: -100.405101, par: ccqParForHole(17) },
+  18: { lat: 20.565801, lon: -100.405361, par: ccqParForHole(18) },
 };
 
 /** Distancia en metros entre dos puntos (Haversine). */

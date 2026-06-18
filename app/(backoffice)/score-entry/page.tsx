@@ -22,6 +22,7 @@ import RepairCapturesButton from "./RepairCapturesButton";
 import {
   buildTournamentRoundCloseStatus,
 } from "@/lib/rounds/tournamentRoundClosure";
+import { CCQ_COURSE_PARS } from "@/lib/distances/ccqScorecard";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import { fmt } from "@/lib/i18n/fmt";
@@ -221,7 +222,7 @@ function entryMatchesNameQuery(
 }
 
 function buildDefaultHoles(): HoleRow[] {
-  const pars = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 3, 4, 4];
+  const pars = [...CCQ_COURSE_PARS];
 
   return Array.from({ length: 18 }, (_, i) => ({
     hole_number: i + 1,

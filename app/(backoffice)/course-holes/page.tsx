@@ -6,6 +6,7 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
+import { CCQ_COURSE_PARS } from "@/lib/distances/ccqScorecard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,7 +27,7 @@ type HoleRow = {
 };
 
 function buildDefaultHoles(): HoleRow[] {
-  const pars = [4, 4, 3, 5, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 3, 4, 4];
+  const pars = [...CCQ_COURSE_PARS];
 
   return Array.from({ length: 18 }, (_, i) => ({
     hole_number: i + 1,

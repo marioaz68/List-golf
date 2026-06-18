@@ -23,6 +23,11 @@ import {
   loadConsolationMpRule,
   reconcileRoundGroupOrder,
 } from "@/lib/matchplay/consolationMatchPlay";
+import {
+  CCQ_PAR3_HOLES,
+  CCQ_PAR4_HOLES,
+  CCQ_PAR5_HOLES,
+} from "@/lib/distances/ccqScorecard";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -253,9 +258,9 @@ function getShotgunExtraHoleOrder() {
   // TODO futuro: leer par real desde tournament_holes/course_holes.
   // Por ahora usamos el orden base del campo cargado en código.
   const primary = [1, 10];
-  const par5 = [5, 9, 14, 18];
-  const par4 = [2, 4, 6, 11, 13, 15, 17];
-  const par3 = [8, 3, 7, 12, 16];
+  const par5 = [...CCQ_PAR5_HOLES];
+  const par4 = [...CCQ_PAR4_HOLES];
+  const par3 = [...CCQ_PAR3_HOLES];
 
   return [...primary, ...par5, ...par4, ...par3];
 }

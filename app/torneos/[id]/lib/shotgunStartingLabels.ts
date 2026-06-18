@@ -1,5 +1,11 @@
 /** Misma lógica que `app/(backoffice)/tee-sheet/page.tsx` para hoyo + lado A/B. */
 
+import {
+  CCQ_PAR3_HOLES,
+  CCQ_PAR4_HOLES,
+  CCQ_PAR5_HOLES,
+} from "@/lib/distances/ccqScorecard";
+
 type ShotgunSlot = {
   hole: number;
   side: "A" | "B";
@@ -7,9 +13,9 @@ type ShotgunSlot = {
 
 function getShotgunExtraHoleOrder() {
   const primary = [1, 10];
-  const par5 = [5, 9, 14, 18];
-  const par4 = [2, 4, 6, 11, 13, 15, 17];
-  const par3 = [8, 3, 7, 12, 16];
+  const par5 = [...CCQ_PAR5_HOLES];
+  const par4 = [...CCQ_PAR4_HOLES];
+  const par3 = [...CCQ_PAR3_HOLES];
 
   return [...primary, ...par5, ...par4, ...par3];
 }
