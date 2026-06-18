@@ -13,6 +13,7 @@ interface ClubSuggestionStripProps {
   onNextClub?: () => void;
   canPrevClub?: boolean;
   canNextClub?: boolean;
+  onConfirmShot?: () => void;
   onClear?: () => void;
 }
 
@@ -26,6 +27,7 @@ export function ClubSuggestionStrip({
   onNextClub,
   canPrevClub = false,
   canNextClub = false,
+  onConfirmShot,
   onClear,
 }: ClubSuggestionStripProps) {
   const gapHint = useMemo(() => {
@@ -66,8 +68,8 @@ export function ClubSuggestionStrip({
             {suggestion ? (
               <span className="truncate text-[9px] font-semibold text-slate-400">
                 {isPutter
-                  ? `${suggestion.targetYards} yds putt`
-                  : `${suggestion.carryYards} yds carry`}
+                  ? `${suggestion.carryYards} yds putt`
+                  : `${suggestion.carryYards} yds en bolsa`}
                 {gapHint && !isPutter ? (
                   <span className="text-amber-400/90"> · {gapHint}</span>
                 ) : null}
@@ -102,6 +104,16 @@ export function ClubSuggestionStrip({
                 onClick={() => onSwingChange("three_quarter")}
               />
             </>
+          ) : null}
+          {onConfirmShot && suggestion ? (
+            <button
+              type="button"
+              onClick={onConfirmShot}
+              aria-label="Confirmar golpe"
+              className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white active:scale-95"
+            >
+              Golpe ✓
+            </button>
           ) : null}
           {onClear ? (
             <button

@@ -49,7 +49,6 @@ import {
   addPlannedShot,
   cancelPendingShot,
   clearHoleShots,
-  clearHoleTeeMark,
   completeShotArrival,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
@@ -590,7 +589,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [geo, pendingShot, completedShotsCount, lastBall]);
 
   const liveGreenYds = useMemo(() => {
-    if (!activeHolePoints || geo.status !== "ok" || needsTeeMark) return null;
+    if (!activeHolePoints || needsTeeMark) return null;
     if (tapPoint) {
       return greenDistancesForHole(
         tapPoint.lat,
@@ -598,8 +597,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         activeHolePoints
       );
     }
-    return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
-  }, [geo, activeHolePoints, needsTeeMark, tapPoint]);
+    if (lastBall) {
+      return greenDistancesForHole(
+        lastBall.lat,
+        lastBall.lon,
+        activeHolePoints
+      );
+    }
+    if (teeMark) {
+      return greenDistancesForHole(
+        teeMark.lat,
+        teeMark.lon,
+        activeHolePoints
+      );
+    }
+    if (geo.status === "ok") {
+      return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
+    }
+    return null;
+  }, [activeHolePoints, needsTeeMark, tapPoint, lastBall, teeMark, geo]);
 
   const playGreenYds = useMemo(() => {
     if (!activeHolePoints || needsTeeMark) return null;
@@ -610,16 +626,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         activeHolePoints
       );
     }
+    if (lastBall) {
+      return greenDistancesForHole(
+        lastBall.lat,
+        lastBall.lon,
+        activeHolePoints
+      );
+    }
+    if (teeMark) {
+      return greenDistancesForHole(
+        teeMark.lat,
+        teeMark.lon,
+        activeHolePoints
+      );
+    }
     if (geo.status === "ok") {
       return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
     }
-    if (!lastBall) return null;
-    return greenDistancesForHole(
-      lastBall.lat,
-      lastBall.lon,
-      activeHolePoints
-    );
-  }, [lastBall, activeHolePoints, needsTeeMark, geo, tapPoint]);
+    return null;
+  }, [lastBall, teeMark, activeHolePoints, needsTeeMark, geo, tapPoint]);
 
   const topGreenYds = useMemo(() => {
     return playGreenYds;
@@ -686,11 +711,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               ) * 5
             : 0;
         if (toGreen > 0) setTargetYards(toGreen);
-        setShotPlanOpen(true);
         setArrivalToast(
           wasMarked
-            ? `Salida corregida · elige bastón (golpe 1)`
-            : `Salida marcada · elige bastón (golpe 1)`
+            ? `Salida corregida · ${toGreen} yds al centro`
+            : `Salida marcada · ${toGreen} yds al centro`
         );
       } else {
         setShotPlanOpen(false);
@@ -699,30 +723,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     },
     [holeShotsStore, activeHole, bagScope, activeHolePoints]
   );
-
-  const markTeeAtCatalog = useCallback(() => {
-    const tee = catalogTeeForHole;
-    if (!tee) return;
-    markTeeAt(tee.lat, tee.lon);
-  }, [catalogTeeForHole, markTeeAt]);
-
-  const clearTeeMarkOnly = useCallback(() => {
-    let next = clearHoleTeeMark(holeShotsStore, activeHole);
-    const orphan = pendingShotOnHole(next, activeHole);
-    if (orphan) {
-      next = cancelPendingShot(next, activeHole, orphan.id);
-    }
-    setHoleShotsStore(next);
-    saveHoleShots(next, bagScope);
-    resetTapUi();
-    setTapPoint(null);
-    setArrivalToast(`Hoyo ${activeHole} · marca tu salida`);
-  }, [holeShotsStore, activeHole, bagScope, resetTapUi]);
-
-  const markTeeHere = useCallback(() => {
-    if (geo.status !== "ok") return;
-    markTeeAt(geo.lat, geo.lon);
-  }, [geo, markTeeAt]);
 
   useEffect(() => {
     if (prevActiveHoleRef.current === activeHole) return;
@@ -768,6 +768,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     distanceMode,
     pendingTap,
     tapPoint,
+    teeMark,
   ]);
 
   useEffect(() => {
@@ -793,9 +794,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [demoMode, activeHolePoints, demoProgress]);
 
   const greenYds = useMemo(() => {
-    if (geo.status !== "ok" || !activeHolePoints) return null;
+    if (!activeHolePoints) return null;
+    if (lastBall) {
+      return greenDistancesForHole(
+        lastBall.lat,
+        lastBall.lon,
+        activeHolePoints
+      );
+    }
+    if (teeMark) {
+      return greenDistancesForHole(
+        teeMark.lat,
+        teeMark.lon,
+        activeHolePoints
+      );
+    }
+    if (geo.status !== "ok") return null;
     return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
-  }, [geo, activeHolePoints]);
+  }, [geo, activeHolePoints, lastBall, teeMark]);
 
   const refPoints = useMemo(() => {
     if (geo.status !== "ok" || !activeHolePoints) return [];
@@ -814,15 +830,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     if (pendingTap) {
       lat = pendingTap.lat;
       lon = pendingTap.lon;
-    } else if (geo.status === "ok") {
-      lat = geo.lat;
-      lon = geo.lon;
     } else if (lastBall) {
       lat = lastBall.lat;
       lon = lastBall.lon;
     } else if (teeMark) {
       lat = teeMark.lat;
       lon = teeMark.lon;
+    } else if (geo.status === "ok") {
+      lat = geo.lat;
+      lon = geo.lon;
     }
     if (lat == null || lon == null) return undefined;
     return (
@@ -830,7 +846,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         greenDistancesForHole(lat, lon, activeHolePoints).center / 5
       ) * 5
     );
-  }, [activeHolePoints, pendingTap, geo, lastBall, teeMark]);
+  }, [activeHolePoints, pendingTap, lastBall, teeMark, geo]);
 
   const shotPlanGreenDist = useMemo(() => {
     if (!activeHolePoints) return null;
@@ -839,19 +855,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     if (pendingTap) {
       lat = pendingTap.lat;
       lon = pendingTap.lon;
-    } else if (geo.status === "ok") {
-      lat = geo.lat;
-      lon = geo.lon;
     } else if (lastBall) {
       lat = lastBall.lat;
       lon = lastBall.lon;
     } else if (teeMark) {
       lat = teeMark.lat;
       lon = teeMark.lon;
+    } else if (geo.status === "ok") {
+      lat = geo.lat;
+      lon = geo.lon;
     }
     if (lat == null || lon == null) return null;
     return greenDistancesForHole(lat, lon, activeHolePoints);
-  }, [activeHolePoints, pendingTap, geo, lastBall, teeMark]);
+  }, [activeHolePoints, pendingTap, lastBall, teeMark, geo]);
 
   const holeMeta = activeHolePoints;
 
@@ -1006,6 +1022,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     const idx = Math.min(clubPickIndex, rankedClubs.length - 1);
     return rankedClubs[idx] ?? null;
   }, [rankedClubs, clubPickIndex]);
+
+  const handleConfirmSuggestion = useCallback(() => {
+    if (!clubSuggestion || !teeMark) return;
+    handleConfirmPlan({
+      catalogId: clubSuggestion.catalogId,
+      swing,
+      plannedYards: clubSuggestion.carryYards,
+    });
+  }, [clubSuggestion, teeMark, swing, handleConfirmPlan]);
 
   const clearTap = useCallback(() => {
     setTapPoint(null);
@@ -1187,44 +1212,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         onClose={() => setShotsDetailOpen(false)}
       />
 
-      {(needsTeeMark || canAdjustTee) && !farFromCourse ? (
-        <div className="pointer-events-auto absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
+      {needsTeeMark && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
           <p className="text-center text-[11px] font-black text-emerald-100">
-            {needsTeeMark
-              ? `Hoyo ${activeHole} · marca tu salida`
-              : `Hoyo ${activeHole} · corrige la salida`}
+            Hoyo {activeHole} · marca tu salida
           </p>
           <p className="mt-0.5 text-center text-[10px] text-emerald-200/85">
-            {needsTeeMark
-              ? "Toca el círculo verde del tee en el mapa"
-              : "Toca el tee en el mapa o usa el botón de abajo"}
+            Toca el tee en el mapa para confirmar
           </p>
-          <div className="mt-2 flex gap-1.5">
-            <button
-              type="button"
-              onClick={markTeeAtCatalog}
-              className="flex-1 rounded-md bg-emerald-600 py-1.5 text-[10px] font-black text-white active:scale-[0.98]"
-            >
-              ⛳ Tee del hoyo
-            </button>
-            {needsTeeMark ? (
-              <button
-                type="button"
-                onClick={markTeeHere}
-                className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
-              >
-                📍 Aquí salgo
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={clearTeeMarkOnly}
-                className="flex-1 rounded-md border border-emerald-500/50 bg-emerald-900/80 py-1.5 text-[10px] font-black text-emerald-100 active:scale-[0.98]"
-              >
-                ↺ Borrar salida
-              </button>
-            )}
-          </div>
         </div>
       ) : null}
 
@@ -1275,6 +1270,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         {hasTeeMark &&
         !shotPlanOpen &&
         !pendingTap &&
+        !pendingShot &&
         targetYards > 0 &&
         !farFromCourse ? (
           <ClubSuggestionStrip
@@ -1290,6 +1286,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             }
             canPrevClub={clubPickIndex > 0}
             canNextClub={clubPickIndex < rankedClubs.length - 1}
+            onConfirmShot={handleConfirmSuggestion}
             onClear={distanceMode ? clearTap : undefined}
           />
         ) : null}
