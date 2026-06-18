@@ -1,17 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { VerticalRoller } from "@/components/captura/VerticalRoller";
 import {
   carryYards,
   CLUB_BY_ID,
   MAX_YARD_PICK,
   MIN_YARD_PICK,
-  shouldSuggestPutter,
   yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
-import type { GreenDistances } from "@/lib/distances/suggestClub";
+import {
+  pickBestClubAndCarry,
+  type GreenDistances,
+} from "@/lib/distances/suggestClub";
 import { getEnabledBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
 type ClubPick = {
@@ -20,6 +22,7 @@ type ClubPick = {
   swing: SwingKind;
   label: string;
   short: string;
+  carryYards: number;
 };
 
 function buildClubPicks(bag: PlayerBag): ClubPick[] {
@@ -34,15 +37,23 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
         swing: "full",
         label: "Putter",
         short: "P",
+        carryYards: 0,
       });
       continue;
     }
+    const fullCarry = carryYards(c.yardsFull, c.yardsThreeQuarter, "full");
+    const threeQuarterCarry = carryYards(
+      c.yardsFull,
+      c.yardsThreeQuarter,
+      "three_quarter"
+    );
     out.push({
       key: `${c.catalogId}:full`,
       catalogId: c.catalogId,
       swing: "full",
       label: `${cat.shortLabel} full`,
       short: cat.shortLabel,
+      carryYards: fullCarry,
     });
     out.push({
       key: `${c.catalogId}:three_quarter`,
@@ -50,96 +61,36 @@ function buildClubPicks(bag: PlayerBag): ClubPick[] {
       swing: "three_quarter",
       label: `${cat.shortLabel} 3/4`,
       short: cat.shortLabel,
+      carryYards: threeQuarterCarry,
     });
   }
   return out;
 }
 
-function scoreCarry(carry: number, targetYards: number): number {
-  const gap = carry - targetYards;
-  const shortfall = gap < 0 ? -gap : 0;
-  return Math.abs(gap) + shortfall * 1.5;
-}
-
-function carryForPick(
-  pick: ClubPick | undefined,
-  bag: PlayerBag,
-  suggestedYards?: number
-): number {
+function carryForPick(pick: ClubPick | undefined): number {
   if (!pick) return MIN_YARD_PICK;
-  if (pick.catalogId === "putter") {
-    return Math.max(
-      MIN_YARD_PICK,
-      Math.round((suggestedYards ?? 10) / 5) * 5
-    );
-  }
-  const bc = bag.clubs.find((c) => c.catalogId === pick.catalogId);
-  if (!bc) return MIN_YARD_PICK;
-  return carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing);
+  if (pick.carryYards > 0) return pick.carryYards;
+  return MIN_YARD_PICK;
 }
 
-function bestPickForDistance(
+function pickToClubPick(
   picks: ClubPick[],
-  bag: PlayerBag,
-  targetYards: number,
-  greenDist: GreenDistances | null
+  plan: ReturnType<typeof pickBestClubAndCarry>
 ): ClubPick | null {
-  if (!picks.length || targetYards <= 0) return picks[0] ?? null;
-  if (shouldSuggestPutter(targetYards, greenDist)) {
-    return picks.find((p) => p.catalogId === "putter") ?? picks[0] ?? null;
-  }
-  let best: ClubPick | null = null;
-  let bestScore = Infinity;
-  for (const p of picks) {
-    const bc = bag.clubs.find((c) => c.catalogId === p.catalogId);
-    if (!bc) continue;
-    const carry = carryYards(bc.yardsFull, bc.yardsThreeQuarter, p.swing);
-    if (carry <= 0) continue;
-    const score = scoreCarry(carry, targetYards);
-    if (
-      score < bestScore ||
-      (score === bestScore &&
-        best &&
-        p.swing === "full" &&
-        best.swing === "three_quarter")
-    ) {
-      bestScore = score;
-      best = p;
-    }
-  }
-  return best ?? picks[0] ?? null;
-}
-
-function initialPlanState(
-  picks: ClubPick[],
-  bag: PlayerBag,
-  suggestedYards: number,
-  greenDist: GreenDistances | null
-): { clubKey: string; plannedYards: number } {
-  const fallback = picks[0];
-  if (!suggestedYards || suggestedYards <= 0 || !picks.length) {
-    return {
-      clubKey: fallback?.key ?? "",
-      plannedYards: carryForPick(fallback, bag, suggestedYards),
-    };
-  }
-  const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
-  if (!best) {
-    return {
-      clubKey: fallback?.key ?? "",
-      plannedYards: carryForPick(fallback, bag, suggestedYards),
-    };
-  }
-  return {
-    clubKey: best.key,
-    plannedYards: carryForPick(best, bag, suggestedYards),
-  };
+  if (!plan) return null;
+  return (
+    picks.find(
+      (p) => p.catalogId === plan.catalogId && p.swing === plan.swing
+    ) ??
+    picks.find((p) => p.label === plan.rollerLabel) ??
+    null
+  );
 }
 
 interface ShotPlanPanelProps {
   bag: PlayerBag;
   /** Yardas al centro del green desde la bola / salida actual. */
-  suggestedYards: number;
+  yardsToGreen: number;
   greenDist?: GreenDistances | null;
   onConfirm: (plan: {
     catalogId: string;
@@ -149,10 +100,10 @@ interface ShotPlanPanelProps {
   onCancel: () => void;
 }
 
-/** Rollers abajo-izquierda, compactos; bastón y yardas visibles al centro. */
+/** Rollers abajo-izquierda: bastón sugerido por yardas de bolsa vs distancia al green. */
 export function ShotPlanPanel({
   bag,
-  suggestedYards,
+  yardsToGreen,
   greenDist = null,
   onConfirm,
   onCancel,
@@ -163,22 +114,38 @@ export function ShotPlanPanel({
     []
   );
 
-  const initial = useMemo(
-    () => initialPlanState(picks, bag, suggestedYards, greenDist),
-    [picks, bag, suggestedYards, greenDist]
+  const enabledClubs = useMemo(() => getEnabledBagClubs(bag), [bag]);
+
+  const autoPlan = useMemo(
+    () => pickBestClubAndCarry(enabledClubs, yardsToGreen, greenDist),
+    [enabledClubs, yardsToGreen, greenDist]
   );
 
-  const [clubKey, setClubKey] = useState(initial.clubKey);
-  const [plannedYards, setPlannedYards] = useState(initial.plannedYards);
+  const autoPick = useMemo(
+    () => pickToClubPick(picks, autoPlan),
+    [picks, autoPlan]
+  );
 
-  const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
-  const isPutter = pick?.catalogId === "putter";
+  const [userPick, setUserPick] = useState<{
+    clubKey: string;
+    plannedYards: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setUserPick(null);
+  }, [yardsToGreen, autoPlan?.catalogId, autoPlan?.swing]);
+
+  const activePick =
+    picks.find((p) => p.key === userPick?.clubKey) ?? autoPick ?? picks[0];
+  const plannedYards = userPick?.plannedYards ?? carryForPick(activePick);
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);
     if (!found) return;
-    setClubKey(found.key);
-    setPlannedYards(carryForPick(found, bag, suggestedYards));
+    setUserPick({
+      clubKey: found.key,
+      plannedYards: carryForPick(found),
+    });
   };
 
   const yardLabels = useMemo(
@@ -186,10 +153,12 @@ export function ShotPlanPanel({
     [yardValues]
   );
 
-  if (!pick || !picks.length) {
+  if (!picks.length || yardsToGreen <= 0) {
     return (
       <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] rounded-lg border border-amber-500/40 bg-black/90 px-2 py-1.5 text-[10px] text-amber-200">
-        Activa bastones en Bolsa.
+        {yardsToGreen <= 0
+          ? "Esperando distancia al green…"
+          : "Activa bastones en Bolsa."}
         <button type="button" onClick={onCancel} className="ml-1 font-bold underline">
           ✕
         </button>
@@ -197,9 +166,14 @@ export function ShotPlanPanel({
     );
   }
 
+  if (!activePick) {
+    return null;
+  }
+
+  const isPutter = activePick.catalogId === "putter";
   const swingLabel = isPutter
     ? "putt"
-    : pick.swing === "three_quarter"
+    : activePick.swing === "three_quarter"
       ? "3/4"
       : "full";
 
@@ -207,14 +181,14 @@ export function ShotPlanPanel({
     <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
       <div className="flex flex-col gap-0.5">
         <div className="rounded-md bg-black/80 px-1.5 py-0.5 text-center text-[9px] font-bold text-emerald-300">
-          {suggestedYards} al centro
+          {yardsToGreen} al centro
         </div>
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
           <div className="w-[3.25rem]">
             <VerticalRoller
               className="h-[4.5rem] w-full"
               values={picks.map((p) => p.label)}
-              value={pick.label}
+              value={activePick.label}
               onChange={handleClubChange}
             />
           </div>
@@ -223,14 +197,19 @@ export function ShotPlanPanel({
               className="h-[4.5rem] w-full"
               values={yardLabels}
               value={String(plannedYards)}
-              onChange={(s) => setPlannedYards(Number(s))}
+              onChange={(s) =>
+                setUserPick({
+                  clubKey: activePick.key,
+                  plannedYards: Number(s),
+                })
+              }
             />
           </div>
         </div>
       </div>
       <div className="flex min-w-[3.5rem] flex-col items-center justify-center rounded-lg border border-amber-500/30 bg-black/90 px-1.5 py-0.5 shadow-lg">
         <span className="text-sm font-black leading-none text-white">
-          {pick.short}
+          {activePick.short}
         </span>
         <span className="text-[9px] font-bold text-amber-300">{swingLabel}</span>
         <span className="mt-0.5 text-base font-black leading-none text-emerald-300">
@@ -242,8 +221,8 @@ export function ShotPlanPanel({
           type="button"
           onClick={() =>
             onConfirm({
-              catalogId: pick.catalogId,
-              swing: pick.swing,
+              catalogId: activePick.catalogId,
+              swing: activePick.swing,
               plannedYards,
             })
           }

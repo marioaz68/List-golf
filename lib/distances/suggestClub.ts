@@ -36,9 +36,78 @@ function putterSuggestion(targetYards: number): ClubSuggestion {
 }
 
 function scoreCandidate(carry: number, targetYards: number): number {
-  const gap = carry - targetYards;
-  const shortfall = gap < 0 ? -gap : 0;
-  return Math.abs(gap) + shortfall * 1.5;
+  return Math.abs(carry - targetYards);
+}
+
+export interface ClubPickPlan {
+  catalogId: string;
+  swing: SwingKind;
+  carryYards: number;
+  shortLabel: string;
+  rollerLabel: string;
+}
+
+/**
+ * Mejor bastón + swing de la bolsa para la distancia al green.
+ * Compara full y 3/4; las yardas devueltas son las grabadas en bolsa.
+ */
+export function pickBestClubAndCarry(
+  clubs: PlayerBagClub[],
+  targetYards: number,
+  greenDist?: GreenDistances | null
+): ClubPickPlan | null {
+  if (targetYards <= 0 || !clubs.length) return null;
+
+  if (shouldSuggestPutter(targetYards, greenDist)) {
+    const cat = CLUB_BY_ID.putter;
+    return {
+      catalogId: "putter",
+      swing: "full",
+      carryYards: Math.max(MIN_YARD_PICK, Math.round(targetYards / 5) * 5),
+      shortLabel: cat.shortLabel,
+      rollerLabel: "Putter",
+    };
+  }
+
+  let best: ClubPickPlan | null = null;
+  let bestScore = Infinity;
+
+  for (const c of clubs) {
+    const cat = CLUB_BY_ID[c.catalogId];
+    if (!cat || cat.defaultYardsFull <= 0) continue;
+
+    const swings: SwingKind[] =
+      cat.category === "putter" ? ["full"] : ["full", "three_quarter"];
+
+    for (const swing of swings) {
+      const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
+      if (carry <= 0) continue;
+      const score = scoreCandidate(carry, targetYards);
+      if (
+        score < bestScore ||
+        (score === bestScore &&
+          best &&
+          swing === "full" &&
+          best.swing === "three_quarter")
+      ) {
+        bestScore = score;
+        best = {
+          catalogId: c.catalogId,
+          swing,
+          carryYards: carry,
+          shortLabel: cat.shortLabel,
+          rollerLabel:
+            swing === "three_quarter"
+              ? `${cat.shortLabel} 3/4`
+              : cat.category === "putter"
+                ? "Putter"
+                : `${cat.shortLabel} full`,
+        };
+      }
+    }
+  }
+
+  return best;
 }
 
 /**

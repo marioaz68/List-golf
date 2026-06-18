@@ -153,9 +153,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [shotPlanOpen, setShotPlanOpen] = useState(false);
   /** Incrementa al abrir planificador para remontar con nueva distancia/bastón. */
   const [planSession, setPlanSession] = useState(0);
-  /** Distancia al centro del green desde el punto de juego actual (salida o última bola). */
-  const [planSuggestedYards, setPlanSuggestedYards] = useState(0);
-  const [planGreenDist, setPlanGreenDist] = useState<GreenDistances | null>(null);
+  /** Contexto del planificador: distancia al green + bastón sugerido desde ese punto. */
+  const [planContext, setPlanContext] = useState<{
+    yardsToGreen: number;
+    greenDist: GreenDistances;
+  } | null>(null);
   const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
   const [distanceMode, setDistanceMode] = useState(false);
@@ -682,38 +684,30 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const resetTapUi = useCallback(() => {
     setPendingTap(null);
     setShotPlanOpen(false);
+    setPlanContext(null);
     setDistanceMode(false);
     setMeasureFromPhoneOnce(false);
   }, []);
 
-  const openShotPlan = useCallback(() => {
-    setPlanSession((s) => s + 1);
-    setShotPlanOpen(true);
-  }, []);
-
-  /** Calcula yardas al centro del green y abre el roll bar desde ese punto. */
-  const applyPlanFromPoint = useCallback(
+  const openPlanFromPoint = useCallback(
     (lat: number, lon: number) => {
       if (!activeHolePoints) return;
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
-      const yards = Math.round(dist.center / 5) * 5;
-      setPlanSuggestedYards(yards);
-      setPlanGreenDist({
-        front: dist.front,
-        center: dist.center,
-        back: dist.back,
+      const yardsToGreen = Math.round(dist.center / 5) * 5;
+      if (yardsToGreen <= 0) return;
+      setPlanContext({
+        yardsToGreen,
+        greenDist: {
+          front: dist.front,
+          center: dist.center,
+          back: dist.back,
+        },
       });
-      setTargetYards(yards);
+      setTargetYards(yardsToGreen);
+      setPlanSession((s) => s + 1);
+      setShotPlanOpen(true);
     },
     [activeHolePoints]
-  );
-
-  const openPlanFromPoint = useCallback(
-    (lat: number, lon: number) => {
-      applyPlanFromPoint(lat, lon);
-      openShotPlan();
-    },
-    [applyPlanFromPoint, openShotPlan]
   );
 
   const markTeeAt = useCallback(
@@ -958,11 +952,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       openPlanFromPoint(pendingTap.lat, pendingTap.lon);
     } else if (playFromPoint) {
       openPlanFromPoint(playFromPoint.lat, playFromPoint.lon);
-    } else {
-      openShotPlan();
     }
     setPendingTap(null);
-  }, [hasTeeMark, pendingTap, playFromPoint, openPlanFromPoint, openShotPlan]);
+  }, [hasTeeMark, pendingTap, playFromPoint, openPlanFromPoint]);
 
   const handleConfirmPlan = useCallback(
     (plan: {
@@ -995,6 +987,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setHoleShotsStore(store);
       saveHoleShots(store, bagScope);
       setShotPlanOpen(false);
+      setPlanContext(null);
       setArrivalToast("Toca en el mapa donde quedó la bola");
     },
     [teeMark, holeShotsStore, activeHole, bagScope]
@@ -1377,14 +1370,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {shotPlanOpen && !farFromCourse && hasTeeMark ? (
+      {shotPlanOpen && planContext && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
-          key={`plan-${activeHole}-${planSession}-${planSuggestedYards}`}
+          key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}`}
           bag={bag}
-          suggestedYards={planSuggestedYards}
-          greenDist={planGreenDist}
+          yardsToGreen={planContext.yardsToGreen}
+          greenDist={planContext.greenDist}
           onConfirm={handleConfirmPlan}
-          onCancel={() => setShotPlanOpen(false)}
+          onCancel={() => {
+            setShotPlanOpen(false);
+            setPlanContext(null);
+          }}
         />
       ) : null}
 
