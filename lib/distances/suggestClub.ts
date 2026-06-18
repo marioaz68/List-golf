@@ -6,6 +6,7 @@ import {
   yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
+import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
 import type { PlayerBagClub } from "@/lib/distances/playerBag";
 
 export interface ClubSuggestion {
@@ -100,7 +101,7 @@ export function pickBestClubAndCarry(
     return {
       catalogId: "putter",
       swing: "full",
-      carryYards: Math.max(MIN_YARD_PICK, Math.round(targetYards / 5) * 5),
+      carryYards: puttYardsFromCenter(targetYards),
       shortLabel: cat.shortLabel,
       rollerLabel: "Putt",
     };

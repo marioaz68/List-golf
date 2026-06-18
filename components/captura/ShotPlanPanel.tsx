@@ -14,6 +14,7 @@ import {
   pickBestClubAndCarry,
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
+import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
 import { getShotPlanBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
 type ClubPick = {
@@ -73,10 +74,7 @@ function carryForPick(
 ): number {
   if (!pick) return MIN_YARD_PICK;
   if (pick.catalogId === "putter") {
-    return Math.max(
-      MIN_YARD_PICK,
-      Math.round(yardsToGreen / 5) * 5
-    );
+    return puttYardsFromCenter(yardsToGreen);
   }
   if (pick.carryYards > 0) return pick.carryYards;
   return MIN_YARD_PICK;
@@ -124,10 +122,6 @@ export function ShotPlanPanel({
   onCancel,
 }: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
-  const yardValues = useMemo(
-    () => yardRangeValues(MIN_YARD_PICK, MAX_YARD_PICK, 5),
-    []
-  );
 
   const enabledClubs = useMemo(() => getShotPlanBagClubs(bag), [bag]);
 
@@ -163,6 +157,16 @@ export function ShotPlanPanel({
     : null;
 
   const activePick = userSelectedPick ?? autoPick ?? picks[0];
+
+  const isPutter = activePick?.catalogId === "putter";
+
+  const yardValues = useMemo(() => {
+    if (isPutter) {
+      const hi = Math.max(25, Math.min(60, puttYardsFromCenter(yardsToGreen) + 12));
+      return yardRangeValues(1, hi, 1);
+    }
+    return yardRangeValues(MIN_YARD_PICK, MAX_YARD_PICK, 5);
+  }, [isPutter, yardsToGreen]);
 
   const plannedYards =
     userPick != null && userSelectedPick
@@ -208,7 +212,6 @@ export function ShotPlanPanel({
     return null;
   }
 
-  const isPutter = activePick.catalogId === "putter";
   const swingLabel = isPutter
     ? "putt"
     : activePick.swing === "three_quarter"

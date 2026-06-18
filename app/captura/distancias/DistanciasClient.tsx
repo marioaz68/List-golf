@@ -26,6 +26,10 @@ import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePo
 import { isPointOnGreen } from "@/lib/distances/onGreen";
 import { isPointInBunker } from "@/lib/distances/inBunker";
 import {
+  isHoleComplete,
+  puttYardsFromCenter,
+} from "@/lib/distances/holeComplete";
+import {
   buildCourseHolesCollection,
   parseBoundariesPayload,
 } from "@/lib/distances/resolveCourseHoles";
@@ -736,14 +740,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (lat: number, lon: number) => {
       if (!activeHolePoints) return;
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
-      const yardsToGreen = Math.round(dist.center / 5) * 5;
-      if (yardsToGreen <= 0) return;
       const onGreen = isPointOnGreen(
         lat,
         lon,
         greenPolygonsByHole.get(activeHole) ?? [],
         activeHolePoints
       );
+      const yardsToGreen = onGreen
+        ? puttYardsFromCenter(dist.center)
+        : Math.round(dist.center / 5) * 5;
+      if (yardsToGreen <= 0) return;
       const bunkerPoints = [
         ...(bunkerPointsByHole.get(activeHole) ?? []),
         ...customPoints
@@ -841,7 +847,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   useEffect(() => {
     if (!arrivalToast || needsTeeMark) return;
-    const t = window.setTimeout(() => setArrivalToast(null), 2500);
+    const ms = arrivalToast.includes("terminado") ? 4500 : 2500;
+    const t = window.setTimeout(() => setArrivalToast(null), ms);
     return () => window.clearTimeout(t);
   }, [arrivalToast, needsTeeMark]);
 
@@ -949,13 +956,27 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
         setHoleShotsStore(next);
         saveHoleShots(next, bagScope);
-        setArrivalToast(
-          `Golpe ${pendingShot.strokeNo}: ${actual} yds · al green ${toGreen.center}`
-        );
         setPendingTap(null);
         setDistanceMode(false);
         setMeasureFromPhoneOnce(false);
         setTapPoint(null);
+
+        if (isHoleComplete(toGreen.center)) {
+          const nextHoleNum = (activeHole % 18) + 1;
+          resetTapUi();
+          manualAtDetectedRef.current = insideHole;
+          setManualHole(nextHoleNum);
+          setTargetYards(0);
+          if (demoMode) setDemoProgress(0.35);
+          setArrivalToast(
+            `Hoyo ${activeHole} terminado · hoyo ${nextHoleNum} · marca tu salida`
+          );
+          return;
+        }
+
+        setArrivalToast(
+          `Golpe ${pendingShot.strokeNo}: ${actual} yds · al green ${toGreen.center}`
+        );
         openPlanFromPoint(lat, lon);
         return;
       }
@@ -979,6 +1000,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       activeHole,
       bagScope,
       openPlanFromPoint,
+      resetTapUi,
+      insideHole,
+      demoMode,
     ]
   );
 
