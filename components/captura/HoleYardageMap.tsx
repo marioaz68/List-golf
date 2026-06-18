@@ -294,6 +294,8 @@ export function HoleYardageMap({
   useEffect(() => {
     userZoomDeltaRef.current = 0;
     setZoomPercent(100);
+    framedHoleRef.current = -1;
+    framedSegmentRef.current = -1;
   }, [holeNo]);
 
   // Update markers, rotation, zoom when data changes
@@ -331,7 +333,10 @@ export function HoleYardageMap({
           ? shotLandings[shotLandings.length - 1]
           : null;
       /** Posición de juego para encuadre (salida/última bola), no solo GPS. */
-      const framingPos = lastLanding ?? teeMarkPoint ?? player;
+      const framingPos =
+        lastLanding ??
+        teeMarkPoint ??
+        (needsTeeMark && catalogTeePoint ? catalogTeePoint : player);
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
       const segIdx = hasCenterline
         ? centerlineSegmentIndex(framingPos, centerline!)

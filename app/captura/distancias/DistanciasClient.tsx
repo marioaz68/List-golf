@@ -643,7 +643,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     };
   }, [activeHole]);
 
-  const activeHolePoints = holeGreen ?? CCQ_HOLE_POINTS[activeHole];
+  const activeHolePoints = useMemo(() => {
+    if (holeGreen?.holeNo === activeHole) return holeGreen;
+    return CCQ_HOLE_POINTS[activeHole] ?? null;
+  }, [holeGreen, activeHole]);
 
   const pendingShot = useMemo(
     () => pendingShotOnHole(holeShotsStore, activeHole),
