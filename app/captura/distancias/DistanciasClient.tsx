@@ -29,7 +29,7 @@ import {
   lieArrivalPhrase,
   type LieKind,
 } from "@/lib/distances/detectLie";
-import { isPointOnGreen } from "@/lib/distances/onGreen";
+import { isPointOnGreen, isOnGreenByDistances } from "@/lib/distances/onGreen";
 import {
   isTapInPutt,
   puttYardsFromCenter,
@@ -852,18 +852,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       let lieKind = lie.kind;
       if (
         !onGreen &&
-        !inBunker &&
-        lieKind !== "ob" &&
-        lieKind !== "water" &&
-        isPointOnGreen(
-          lat,
-          lon,
-          greenPolygonsByHole.get(activeHole) ?? [],
-          activeHolePoints
-        )
+        (isOnGreenByDistances(dist) ||
+          isPointOnGreen(
+            lat,
+            lon,
+            greenPolygonsByHole.get(activeHole) ?? [],
+            activeHolePoints
+          ))
       ) {
         onGreen = true;
         lieKind = "green";
+        inBunker = false;
       }
       const yardsToGreen = onGreen
         ? puttYardsFromCenter(dist.center)
@@ -926,18 +925,20 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     );
     let onGreen = detected.onGreen;
     let kind: LieKind = detected.kind;
+    const dist = greenDistancesForHole(
+      ballPointForLie.lat,
+      ballPointForLie.lon,
+      activeHolePoints
+    );
     if (
       !onGreen &&
-      !detected.inBunker &&
-      kind !== "ob" &&
-      kind !== "water" &&
-      activeHolePoints &&
-      isPointOnGreen(
-        ballPointForLie.lat,
-        ballPointForLie.lon,
-        greenPolygonsByHole.get(activeHole) ?? [],
-        activeHolePoints
-      )
+      (isOnGreenByDistances(dist) ||
+        isPointOnGreen(
+          ballPointForLie.lat,
+          ballPointForLie.lon,
+          greenPolygonsByHole.get(activeHole) ?? [],
+          activeHolePoints
+        ))
     ) {
       onGreen = true;
       kind = "green";

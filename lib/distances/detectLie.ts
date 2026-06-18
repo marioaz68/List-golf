@@ -1,5 +1,6 @@
 import { haversineMeters } from "@/lib/distances/ccqGreens";
 import type { HoleGreenPoints } from "@/lib/distances/ccqHolePoints";
+import { greenDistancesForHole } from "@/lib/distances/ccqHolePoints";
 import { distanceToCenterlineM, waypointsFromLine } from "@/lib/distances/centerline";
 import {
   parseBoundaryGeoJson,
@@ -10,9 +11,13 @@ import {
   BUNKER_POINT_RADIUS_M,
   distanceToPolygonMeters,
   isPointInBunker,
+  isPointInsideBunkerPolygon,
   type BunkerPoint,
 } from "@/lib/distances/inBunker";
-import { isPointOnGreen } from "@/lib/distances/onGreen";
+import {
+  isOnGreenByDistances,
+  isPointOnGreen,
+} from "@/lib/distances/onGreen";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 
 export type LieKind = "ob" | "water" | "bunker" | "green" | "fairway" | "rough";
@@ -189,14 +194,30 @@ export function detectLieAtPoint(
     return { kind: "water", onGreen: false, inBunker: false };
   }
 
-  const inBunker = isPointInBunker(lat, lon, bunkerPolygons, bunkerPoints);
-  if (inBunker) {
+  const onGreen = isPointOnGreen(lat, lon, greenPolygons, holePoints);
+  const inBunkerInside = isPointInsideBunkerPolygon(
+    lat,
+    lon,
+    bunkerPolygons,
+    bunkerPoints
+  );
+
+  if (inBunkerInside) {
     return { kind: "bunker", onGreen: false, inBunker: true };
   }
 
-  const onGreen = isPointOnGreen(lat, lon, greenPolygons, holePoints);
   if (onGreen) {
     return { kind: "green", onGreen: true, inBunker: false };
+  }
+
+  const inBunkerNear = isPointInBunker(
+    lat,
+    lon,
+    bunkerPolygons,
+    bunkerPoints
+  );
+  if (inBunkerNear) {
+    return { kind: "bunker", onGreen: false, inBunker: true };
   }
 
   if (
@@ -204,6 +225,10 @@ export function detectLieAtPoint(
     isPointInFairway(lat, lon, fairwayPolygons)
   ) {
     return { kind: "fairway", onGreen: false, inBunker: false };
+  }
+
+  if (holePoints && isOnGreenByDistances(greenDistancesForHole(lat, lon, holePoints))) {
+    return { kind: "green", onGreen: true, inBunker: false };
   }
 
   return { kind: "rough", onGreen: false, inBunker: false };

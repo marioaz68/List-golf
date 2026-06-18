@@ -60,6 +60,25 @@ export function distanceToPolygonMeters(p: LatLon, poly: Polygon): number {
   return min;
 }
 
+/** ¿Dentro del polígono de trampa (sin buffer de proximidad)? */
+export function isPointInsideBunkerPolygon(
+  lat: number,
+  lon: number,
+  bunkerPolygons: Polygon[],
+  bunkerPoints: BunkerPoint[] = []
+): boolean {
+  const p = { lat, lon };
+  for (const poly of bunkerPolygons) {
+    if (pointInPolygon(p, poly)) return true;
+  }
+  for (const bp of bunkerPoints) {
+    if (haversineMeters(lat, lon, bp.lat, bp.lon) <= BUNKER_POINT_RADIUS_M) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** ¿La bola está en trampa calibrada (polígono o punto guardado)? */
 export function isPointInBunker(
   lat: number,
