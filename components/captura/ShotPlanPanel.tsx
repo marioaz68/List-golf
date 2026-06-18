@@ -131,13 +131,19 @@ export function ShotPlanPanel({
     plannedYards: number;
   } | null>(null);
 
+  /** Nueva distancia al green = nuevo golpe; limpiar elección manual previa. */
   useEffect(() => {
     setUserPick(null);
-  }, [yardsToGreen, autoPlan?.catalogId, autoPlan?.swing]);
+  }, [yardsToGreen]);
 
-  const activePick = autoPick ?? picks.find((p) => p.key === userPick?.clubKey) ?? picks[0];
+  const userSelectedPick = userPick
+    ? picks.find((p) => p.key === userPick.clubKey)
+    : null;
+
+  const activePick = userSelectedPick ?? autoPick ?? picks[0];
+
   const plannedYards =
-    userPick?.clubKey === activePick.key
+    userPick != null && userSelectedPick
       ? userPick.plannedYards
       : carryForPick(activePick);
 
@@ -147,6 +153,14 @@ export function ShotPlanPanel({
     setUserPick({
       clubKey: found.key,
       plannedYards: carryForPick(found),
+    });
+  };
+
+  const handleYardChange = (s: string) => {
+    const yards = Number(s);
+    setUserPick({
+      clubKey: activePick.key,
+      plannedYards: yards,
     });
   };
 
@@ -199,12 +213,7 @@ export function ShotPlanPanel({
               className="h-[4.5rem] w-full"
               values={yardLabels}
               value={String(plannedYards)}
-              onChange={(s) =>
-                setUserPick({
-                  clubKey: activePick.key,
-                  plannedYards: Number(s),
-                })
-              }
+              onChange={handleYardChange}
             />
           </div>
         </div>

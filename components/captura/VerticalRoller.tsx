@@ -71,11 +71,7 @@ export function VerticalRoller({
 
     const next = values[bestIdx];
     if (next && next !== value) {
-      ignoreScrollRef.current = true;
       onChange(next);
-      requestAnimationFrame(() => {
-        ignoreScrollRef.current = false;
-      });
     }
   };
 
