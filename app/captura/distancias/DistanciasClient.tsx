@@ -24,10 +24,16 @@ import { waypointsFromLine } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { parsePolygonsFromApi } from "@/lib/distances/holeBoundary";
-import { detectLieAtPoint } from "@/lib/distances/detectLie";
 import {
-  isHoleComplete,
+  detectLieAtPoint,
+  lieArrivalPhrase,
+  type LieKind,
+} from "@/lib/distances/detectLie";
+import { isPointOnGreen } from "@/lib/distances/onGreen";
+import {
+  isTapInPutt,
   puttYardsFromCenter,
+  shouldPromptHoleFinish,
 } from "@/lib/distances/holeComplete";
 import {
   buildCourseHolesCollection,
@@ -38,6 +44,7 @@ import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
 import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
+import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
@@ -163,6 +170,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [planContext, setPlanContext] = useState<{
     yardsToGreen: number;
     greenDist: GreenDistances;
+    lieKind: LieKind;
     onGreen: boolean;
     inBunker: boolean;
   } | null>(null);
@@ -170,6 +178,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
   const [distanceMode, setDistanceMode] = useState(false);
   const [arrivalToast, setArrivalToast] = useState<string | null>(null);
+  /** Tras caída a ~0 yds: confirmar si el hoyo terminó o sigue jugando. */
+  const [holeFinishPrompt, setHoleFinishPrompt] = useState<{
+    lat: number;
+    lon: number;
+    strokeCount: number;
+    hole: number;
+  } | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -187,6 +202,18 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [bunkerPointsByHole, setBunkerPointsByHole] = useState<
     Map<number, Array<{ lat: number; lon: number }>>
   >(() => new Map());
+  const [fairwayPolygonsByHole, setFairwayPolygonsByHole] = useState<
+    Map<number, Polygon[]>
+  >(() => new Map());
+  const [waterPolygonsByHole, setWaterPolygonsByHole] = useState<
+    Map<number, Polygon[]>
+  >(() => new Map());
+  const [waterPointsByHole, setWaterPointsByHole] = useState<
+    Map<number, Array<{ lat: number; lon: number }>>
+  >(() => new Map());
+  const [obLines, setObLines] = useState<Array<Array<{ lat: number; lon: number }>>>(
+    () => []
+  );
   const [greenCenters, setGreenCenters] = useState<GreenCentersByHole>(() => {
     const out: GreenCentersByHole = {};
     for (let h = 1; h <= 18; h++) {
@@ -334,6 +361,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             hole_number: number;
             points: Array<{ lat: number; lon: number }>;
           }>;
+          fairway_polygons?: Array<{
+            hole_number: number;
+            polygons: Polygon[];
+          }>;
+          water_polygons?: Array<{
+            hole_number: number;
+            polygons: Polygon[];
+          }>;
+          water_points?: Array<{
+            hole_number: number;
+            points: Array<{ lat: number; lon: number }>;
+          }>;
+          ob_lines?: Array<Array<{ lat: number; lon: number }>>;
         };
         if (cancelled || !data.ok) return;
         const calibrated = parseBoundariesPayload(data.boundaries ?? []);
@@ -372,6 +412,27 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           if (b.points?.length) bkPtMap.set(b.hole_number, b.points);
         }
         setBunkerPointsByHole(bkPtMap);
+        const fwMap = new Map<number, Polygon[]>();
+        for (const f of data.fairway_polygons ?? []) {
+          const polys = parsePolygonsFromApi(f.polygons);
+          if (polys.length) fwMap.set(f.hole_number, polys);
+        }
+        setFairwayPolygonsByHole(fwMap);
+        const wPolyMap = new Map<number, Polygon[]>();
+        for (const w of data.water_polygons ?? []) {
+          const polys = parsePolygonsFromApi(w.polygons);
+          if (polys.length) wPolyMap.set(w.hole_number, polys);
+        }
+        setWaterPolygonsByHole(wPolyMap);
+        const wPtMap = new Map<
+          number,
+          Array<{ lat: number; lon: number }>
+        >();
+        for (const w of data.water_points ?? []) {
+          if (w.points?.length) wPtMap.set(w.hole_number, w.points);
+        }
+        setWaterPointsByHole(wPtMap);
+        setObLines(data.ob_lines ?? []);
       } catch {
         /* mantiene CCQ_HOLES por defecto */
       }
@@ -738,24 +799,72 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setMeasureFromPhoneOnce(false);
   }, []);
 
-  const openPlanFromPoint = useCallback(
+  const detectLieForPoint = useCallback(
     (lat: number, lon: number) => {
-      if (!activeHolePoints) return;
-      const dist = greenDistancesForHole(lat, lon, activeHolePoints);
       const bunkerPoints = [
         ...(bunkerPointsByHole.get(activeHole) ?? []),
         ...customPoints
           .filter((p) => p.dbKind === "bunker")
           .map((p) => ({ lat: p.lat, lon: p.lon })),
       ];
-      const { onGreen, inBunker } = detectLieAtPoint(
+      const waterPoints = [
+        ...(waterPointsByHole.get(activeHole) ?? []),
+        ...customPoints
+          .filter((p) => p.dbKind === "water")
+          .map((p) => ({ lat: p.lat, lon: p.lon })),
+      ];
+      return detectLieAtPoint(
         lat,
         lon,
         greenPolygonsByHole.get(activeHole) ?? [],
         bunkerPolygonsByHole.get(activeHole) ?? [],
         bunkerPoints,
-        activeHolePoints
+        activeHolePoints,
+        {
+          waterPolygons: waterPolygonsByHole.get(activeHole) ?? [],
+          waterPoints,
+          fairwayPolygons: fairwayPolygonsByHole.get(activeHole) ?? [],
+          obLines,
+        }
       );
+    },
+    [
+      activeHole,
+      activeHolePoints,
+      greenPolygonsByHole,
+      bunkerPolygonsByHole,
+      bunkerPointsByHole,
+      waterPolygonsByHole,
+      waterPointsByHole,
+      fairwayPolygonsByHole,
+      obLines,
+      customPoints,
+    ]
+  );
+
+  const openPlanFromPoint = useCallback(
+    (lat: number, lon: number) => {
+      if (!activeHolePoints) return;
+      const dist = greenDistancesForHole(lat, lon, activeHolePoints);
+      const lie = detectLieForPoint(lat, lon);
+      let onGreen = lie.onGreen;
+      let inBunker = lie.inBunker;
+      let lieKind = lie.kind;
+      if (
+        !onGreen &&
+        !inBunker &&
+        lieKind !== "ob" &&
+        lieKind !== "water" &&
+        isPointOnGreen(
+          lat,
+          lon,
+          greenPolygonsByHole.get(activeHole) ?? [],
+          activeHolePoints
+        )
+      ) {
+        onGreen = true;
+        lieKind = "green";
+      }
       const yardsToGreen = onGreen
         ? puttYardsFromCenter(dist.center)
         : Math.round(dist.center / 5) * 5;
@@ -767,6 +876,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           center: dist.center,
           back: dist.back,
         },
+        lieKind,
         onGreen,
         inBunker,
       });
@@ -774,8 +884,77 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setPlanSession((s) => s + 1);
       setShotPlanOpen(true);
     },
-    [activeHolePoints, activeHole, greenPolygonsByHole, bunkerPolygonsByHole, bunkerPointsByHole, customPoints]
+    [activeHolePoints, detectLieForPoint, activeHole, greenPolygonsByHole]
   );
+
+  const ballPointForLie = useMemo(() => {
+    if (pendingShot?.from) return pendingShot.from;
+    if (lastBall) return lastBall;
+    if (teeMark) return teeMark;
+    return null;
+  }, [pendingShot, lastBall, teeMark]);
+
+  const currentBallLie = useMemo((): {
+    kind: LieKind;
+    onGreen: boolean;
+  } | null => {
+    if (!hasTeeMark || !ballPointForLie) return null;
+    if (shotPlanOpen && planContext) {
+      return {
+        kind: planContext.lieKind,
+        onGreen: planContext.onGreen,
+      };
+    }
+    const lastCompleted = [...shotsOnHole]
+      .reverse()
+      .find((s) => s.completedAt != null);
+    if (
+      lastCompleted?.lieKind &&
+      lastBall &&
+      lastCompleted.to &&
+      lastCompleted.to.lat === lastBall.lat &&
+      lastCompleted.to.lon === lastBall.lon
+    ) {
+      return {
+        kind: lastCompleted.lieKind,
+        onGreen: lastCompleted.lieKind === "green",
+      };
+    }
+    const detected = detectLieForPoint(
+      ballPointForLie.lat,
+      ballPointForLie.lon
+    );
+    let onGreen = detected.onGreen;
+    let kind: LieKind = detected.kind;
+    if (
+      !onGreen &&
+      !detected.inBunker &&
+      kind !== "ob" &&
+      kind !== "water" &&
+      activeHolePoints &&
+      isPointOnGreen(
+        ballPointForLie.lat,
+        ballPointForLie.lon,
+        greenPolygonsByHole.get(activeHole) ?? [],
+        activeHolePoints
+      )
+    ) {
+      onGreen = true;
+      kind = "green";
+    }
+    return { kind, onGreen };
+  }, [
+    hasTeeMark,
+    ballPointForLie,
+    shotPlanOpen,
+    planContext,
+    shotsOnHole,
+    lastBall,
+    detectLieForPoint,
+    activeHolePoints,
+    activeHole,
+    greenPolygonsByHole,
+  ]);
 
   const markTeeAt = useCallback(
     (lat: number, lon: number) => {
@@ -817,6 +996,60 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [holeShotsStore, activeHole, bagScope, activeHolePoints, openPlanFromPoint]
   );
 
+  const finishHoleAndAdvance = useCallback(
+    (how: "in" | "given") => {
+      if (!holeFinishPrompt) return;
+      const { hole, strokeCount } = holeFinishPrompt;
+      const nextHoleNum = (hole % 18) + 1;
+      setHoleFinishPrompt(null);
+      resetTapUi();
+      setTapPoint(null);
+      manualAtDetectedRef.current = insideHole;
+      setManualHole(nextHoleNum);
+      setTargetYards(0);
+      if (demoMode) setDemoProgress(0.35);
+      const howLabel = how === "given" ? " · quedó dada" : "";
+      setArrivalToast(
+        `Hoyo ${hole} terminado${howLabel} (${strokeCount} golpes) · Pasa al hoyo ${nextHoleNum} · marca tu salida`
+      );
+    },
+    [holeFinishPrompt, resetTapUi, insideHole, demoMode]
+  );
+
+  const showHoleFinishPrompt = useCallback(
+    (
+      lat: number,
+      lon: number,
+      strokeCount: number,
+      liePhrase?: string
+    ) => {
+      setShotPlanOpen(false);
+      setPlanContext(null);
+      setHoleFinishPrompt({
+        lat,
+        lon,
+        strokeCount,
+        hole: activeHole,
+      });
+      setArrivalToast(
+        liePhrase
+          ? `A menos de 1 yd · ${liePhrase} · ¿entró al hoyo?`
+          : `A menos de 1 yd al hoyo · ¿entró o quedó dada?`
+      );
+    },
+    [activeHole]
+  );
+
+  const continueHoleAfterMiss = useCallback(() => {
+    if (!holeFinishPrompt) return;
+    const { lat, lon, strokeCount, hole } = holeFinishPrompt;
+    setHoleFinishPrompt(null);
+    setArrivalToast(
+      `Golpe ${strokeCount} registrado · sigues en el hoyo ${hole}`
+    );
+    openPlanFromPoint(lat, lon);
+  }, [holeFinishPrompt, openPlanFromPoint]);
+
   useEffect(() => {
     if (prevActiveHoleRef.current === activeHole) return;
     if (prevActiveHoleRef.current !== null) {
@@ -825,6 +1058,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setTargetYards(0);
       setShotsDetailOpen(false);
       setShotPlanOpen(false);
+      setHoleFinishPrompt(null);
     }
     prevActiveHoleRef.current = activeHole;
   }, [activeHole, resetTapUi]);
@@ -842,11 +1076,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [hasTeeMark, pendingShot, holeShotsStore, activeHole, bagScope]);
 
   useEffect(() => {
-    if (!arrivalToast || needsTeeMark) return;
-    const ms = arrivalToast.includes("terminado") ? 4500 : 2500;
+    if (!arrivalToast || needsTeeMark || holeFinishPrompt) return;
+    const ms =
+      arrivalToast.includes("terminado") || arrivalToast.includes("Pasa al hoyo")
+        ? 6000
+        : 2500;
     const t = window.setTimeout(() => setArrivalToast(null), ms);
     return () => window.clearTimeout(t);
-  }, [arrivalToast, needsTeeMark]);
+  }, [arrivalToast, needsTeeMark, holeFinishPrompt]);
 
   useEffect(() => {
     if (needsTeeMark || shotPlanOpen || pendingTap) return;
@@ -926,6 +1163,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const onMapTap = useCallback(
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
+      if (holeFinishPrompt) return;
 
       if (needsTeeMark || canAdjustTee) {
         markTeeAt(lat, lon);
@@ -942,12 +1180,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         const actual = Math.round(
           yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
         ) * 5;
+        const lie = detectLieForPoint(lat, lon);
         const next = completeShotArrival(
           holeShotsStore,
           activeHole,
           pendingShot.id,
           { lat, lon },
-          actual
+          actual,
+          lie.kind
         );
         const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
         setHoleShotsStore(next);
@@ -957,21 +1197,23 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setMeasureFromPhoneOnce(false);
         setTapPoint(null);
 
-        if (isHoleComplete(toGreen.center)) {
-          const nextHoleNum = (activeHole % 18) + 1;
-          resetTapUi();
-          manualAtDetectedRef.current = insideHole;
-          setManualHole(nextHoleNum);
-          setTargetYards(0);
-          if (demoMode) setDemoProgress(0.35);
-          setArrivalToast(
-            `Hoyo ${activeHole} terminado · hoyo ${nextHoleNum} · marca tu salida`
+        if (
+          shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
+        ) {
+          const strokeCount = shotsForHole(next, activeHole).filter(
+            (s) => s.completedAt != null
+          ).length;
+          showHoleFinishPrompt(
+            lat,
+            lon,
+            strokeCount,
+            lieArrivalPhrase(lie.kind)
           );
           return;
         }
 
         setArrivalToast(
-          `Golpe ${pendingShot.strokeNo}: ${actual} yds · al green ${toGreen.center}`
+          `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
         );
         openPlanFromPoint(lat, lon);
         return;
@@ -999,6 +1241,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       resetTapUi,
       insideHole,
       demoMode,
+      holeFinishPrompt,
+      detectLieForPoint,
+      showHoleFinishPrompt,
     ]
   );
 
@@ -1047,7 +1292,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       swing: SwingKind;
       plannedYards: number;
     }) => {
-      if (!teeMark) {
+      if (!teeMark || !activeHolePoints) {
         setArrivalToast("Marca tu salida antes de planear un golpe");
         setShotPlanOpen(false);
         return;
@@ -1061,7 +1306,29 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           break;
         }
       }
-      const { store } = addPlannedShot(
+      const fromDist = greenDistancesForHole(
+        from.lat,
+        from.lon,
+        activeHolePoints
+      );
+      const lieFrom = detectLieForPoint(from.lat, from.lon);
+      let onGreenFrom = lieFrom.onGreen;
+      if (
+        !onGreenFrom &&
+        !lieFrom.inBunker &&
+        lieFrom.kind !== "ob" &&
+        lieFrom.kind !== "water" &&
+        isPointOnGreen(
+          from.lat,
+          from.lon,
+          greenPolygonsByHole.get(activeHole) ?? [],
+          activeHolePoints
+        )
+      ) {
+        onGreenFrom = true;
+      }
+
+      const { store, shot } = addPlannedShot(
         holeShotsStore,
         activeHole,
         from,
@@ -1069,13 +1336,49 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         plan.swing,
         plan.plannedYards
       );
+
+      if (
+        isTapInPutt(
+          fromDist.center,
+          plan.catalogId,
+          plan.plannedYards,
+          onGreenFrom
+        )
+      ) {
+        const actual = Math.max(1, plan.plannedYards);
+        const next = completeShotArrival(
+          store,
+          activeHole,
+          shot.id,
+          from,
+          actual,
+          onGreenFrom ? "green" : lieFrom.kind
+        );
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        const strokeCount = shotsForHole(next, activeHole).filter(
+          (s) => s.completedAt != null
+        ).length;
+        showHoleFinishPrompt(from.lat, from.lon, strokeCount, "en el green");
+        return;
+      }
+
       setHoleShotsStore(store);
       saveHoleShots(store, bagScope);
       setShotPlanOpen(false);
       setPlanContext(null);
       setArrivalToast("Toca en el mapa donde quedó la bola");
     },
-    [teeMark, holeShotsStore, activeHole, bagScope]
+    [
+      teeMark,
+      activeHolePoints,
+      holeShotsStore,
+      activeHole,
+      bagScope,
+      detectLieForPoint,
+      greenPolygonsByHole,
+      showHoleFinishPrompt,
+    ]
   );
 
   const measureFromPhoneNow = useCallback(() => {
@@ -1293,6 +1596,43 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         </div>
       ) : null}
 
+      {holeFinishPrompt && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[28%] z-[1095] flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-sm rounded-xl border-2 border-emerald-400/60 bg-emerald-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
+            <p className="text-center text-xs font-black text-emerald-50">
+              Hoyo {holeFinishPrompt.hole} · {holeFinishPrompt.strokeCount}{" "}
+              golpe{holeFinishPrompt.strokeCount === 1 ? "" : "s"}
+            </p>
+            <p className="mt-1 text-center text-[11px] font-semibold text-emerald-200">
+              Estás a menos de 1 yd · ¿entró al hoyo?
+            </p>
+            <div className="mt-2.5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => finishHoleAndAdvance("in")}
+                className="rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-black text-white active:scale-[0.98]"
+              >
+                Sí, entró
+              </button>
+              <button
+                type="button"
+                onClick={() => finishHoleAndAdvance("given")}
+                className="rounded-lg border border-emerald-400/50 bg-emerald-900/80 px-3 py-2.5 text-xs font-black text-emerald-100 active:scale-[0.98]"
+              >
+                Quedó dada
+              </button>
+              <button
+                type="button"
+                onClick={continueHoleAfterMiss}
+                className="rounded-lg border border-amber-500/40 bg-amber-950/80 px-3 py-2 text-[11px] font-bold text-amber-200 active:scale-[0.98]"
+              >
+                No entró · sigo jugando
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
         {arrivalToast ? (
@@ -1301,25 +1641,44 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           </div>
         ) : null}
         {pendingShot && !pendingTap && !shotPlanOpen && hasTeeMark ? (
-          <div className="pointer-events-auto mx-2 mb-1 flex items-center justify-center gap-2 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 shadow-lg">
-            <span className="text-[11px] font-bold text-amber-200">
-              Toca donde quedó la bola
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                const next = cancelPendingShot(
-                  holeShotsStore,
-                  activeHole,
-                  pendingShot.id
-                );
-                setHoleShotsStore(next);
-                saveHoleShots(next, bagScope);
-              }}
-              className="rounded bg-amber-900/80 px-1.5 py-0.5 text-[9px] font-bold text-amber-100"
-            >
-              Cancelar
-            </button>
+          <div className="pointer-events-auto mx-2 mb-1 flex flex-col items-center gap-1 rounded-lg border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 shadow-lg">
+            {currentBallLie ? (
+              <LieChip kind={currentBallLie.kind} size="sm" />
+            ) : null}
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-[11px] font-bold text-amber-200">
+                Golpe {pendingShot.strokeNo} · toca donde quedó la bola
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = cancelPendingShot(
+                    holeShotsStore,
+                    activeHole,
+                    pendingShot.id
+                  );
+                  setHoleShotsStore(next);
+                  saveHoleShots(next, bagScope);
+                }}
+                className="rounded bg-amber-900/80 px-1.5 py-0.5 text-[9px] font-bold text-amber-100"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {hasTeeMark &&
+        !pendingShot &&
+        !shotPlanOpen &&
+        currentBallLie &&
+        !farFromCourse ? (
+          <div className="pointer-events-none mx-2 mb-1 flex justify-center">
+            <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-black/80 px-2.5 py-1 shadow-lg backdrop-blur-md">
+              <span className="text-[9px] font-semibold text-slate-400">
+                Lie
+              </span>
+              <LieChip kind={currentBallLie.kind} size="sm" />
+            </div>
           </div>
         ) : null}
         {distanceMode &&
@@ -1457,10 +1816,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {shotPlanOpen && planContext && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
-          key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}-${planContext.inBunker ? "b" : ""}-${planContext.onGreen ? "g" : ""}`}
+          key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}-${planContext.lieKind}`}
           bag={bag}
           yardsToGreen={planContext.yardsToGreen}
           greenDist={planContext.greenDist}
+          lieKind={planContext.lieKind}
           onGreen={planContext.onGreen}
           inBunker={planContext.inBunker}
           onConfirm={handleConfirmPlan}
@@ -1476,6 +1836,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           demoMode={demoMode}
           greenCenterYards={topGreenYds.center}
           positionLabel={topGreenLabel}
+          lieKind={currentBallLie?.kind ?? null}
+          onGreen={currentBallLie?.onGreen ?? false}
         />
       ) : null}
 

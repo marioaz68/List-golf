@@ -47,7 +47,7 @@ export function VerticalRoller({
         ignoreScrollRef.current = false;
       });
     });
-  }, [value, values]);
+  }, [value, values.join("\0")]);
 
   const handleScroll = () => {
     if (ignoreScrollRef.current) return;

@@ -1,5 +1,6 @@
 "use client";
 
+import { lieLabel } from "@/lib/distances/detectLie";
 import {
   plannedVsActualDelta,
   shotClubLabel,
@@ -74,6 +75,11 @@ export function HoleShotsDetailSheet({
                         <span className="font-semibold text-emerald-300">
                           {s.actualYards}
                         </span>
+                        {s.lieKind ? (
+                          <span className="ml-1 text-amber-200/90">
+                            · {lieLabel(s.lieKind)}
+                          </span>
+                        ) : null}
                         {delta != null ? (
                           <span
                             className={

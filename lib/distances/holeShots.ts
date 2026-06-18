@@ -3,6 +3,7 @@ import {
   CLUB_BY_ID,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
+import type { LieKind } from "@/lib/distances/detectLie";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 
 export interface HoleShot {
@@ -15,6 +16,8 @@ export interface HoleShot {
   actualYards: number | null;
   from: LatLon;
   to: LatLon | null;
+  /** Lie donde quedó la bola (al confirmar caída). */
+  lieKind?: LieKind;
   plannedAt: number;
   completedAt: number | null;
 }
@@ -199,7 +202,8 @@ export function completeShotArrival(
   hole: number,
   shotId: string,
   to: LatLon,
-  actualYards: number
+  actualYards: number,
+  lieKind?: LieKind
 ): HoleShotsStore {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
@@ -213,6 +217,7 @@ export function completeShotArrival(
               ...s,
               to: { ...to },
               actualYards,
+              lieKind,
               completedAt: Date.now(),
             }
           : s

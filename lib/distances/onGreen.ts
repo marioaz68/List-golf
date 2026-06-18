@@ -13,10 +13,15 @@ export function isPointOnGreen(
 ): boolean {
   const p = { lat, lon };
   if (calibratedPolygons.length > 0) {
-    return calibratedPolygons.some((poly) => pointInPolygon(p, poly));
+    if (calibratedPolygons.some((poly) => pointInPolygon(p, poly))) {
+      return true;
+    }
   }
   if (!holePoints) return false;
   const dist = greenDistancesForHole(lat, lon, holePoints);
-  // Sin polígono: frente y fondo cercanos ≈ dentro del green (~30 yds de fondo).
-  return dist.front <= 35 && dist.back <= 35;
+  // Polígono ausente o impreciso: frente/fondo/centro cercanos ≈ en el green.
+  return (
+    dist.center <= 40 ||
+    (dist.front <= 35 && dist.back <= 35)
+  );
 }

@@ -15,6 +15,8 @@ import {
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
 import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
+import { LieChip } from "@/components/captura/LieChip";
+import type { LieKind } from "@/lib/distances/detectLie";
 import { getShotPlanBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
 
 type ClubPick = {
@@ -99,6 +101,7 @@ interface ShotPlanPanelProps {
   /** Yardas al centro del green desde la bola / salida actual. */
   yardsToGreen: number;
   greenDist?: GreenDistances | null;
+  lieKind?: LieKind;
   /** Bola dentro del área del green calibrada (o estimada). */
   onGreen?: boolean;
   /** Bola en trampa calibrada (polígono o punto guardado). */
@@ -116,6 +119,7 @@ export function ShotPlanPanel({
   bag,
   yardsToGreen,
   greenDist = null,
+  lieKind = "rough",
   onGreen = false,
   inBunker = false,
   onConfirm,
@@ -132,15 +136,18 @@ export function ShotPlanPanel({
         yardsToGreen,
         greenDist,
         onGreen,
-        inBunker
+        inBunker,
+        lieKind
       ),
-    [enabledClubs, yardsToGreen, greenDist, onGreen, inBunker]
+    [enabledClubs, yardsToGreen, greenDist, onGreen, inBunker, lieKind]
   );
 
   const autoPick = useMemo(
     () => pickToClubPick(picks, autoPlan),
     [picks, autoPlan]
   );
+
+  const clubLabels = useMemo(() => picks.map((p) => p.label), [picks]);
 
   const [userPick, setUserPick] = useState<{
     clubKey: string;
@@ -150,7 +157,7 @@ export function ShotPlanPanel({
   /** Nueva distancia/lie = nuevo golpe; limpiar elección manual previa. */
   useEffect(() => {
     setUserPick(null);
-  }, [yardsToGreen, inBunker, onGreen]);
+  }, [yardsToGreen, inBunker, onGreen, lieKind]);
 
   const userSelectedPick = userPick
     ? picks.find((p) => p.key === userPick.clubKey)
@@ -176,18 +183,22 @@ export function ShotPlanPanel({
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);
     if (!found) return;
-    setUserPick({
+    setUserPick((prev) => ({
       clubKey: found.key,
-      plannedYards: carryForPick(found, yardsToGreen),
-    });
+      plannedYards:
+        prev != null
+          ? prev.plannedYards
+          : carryForPick(found, yardsToGreen),
+    }));
   };
 
   const handleYardChange = (s: string) => {
     const yards = Number(s);
-    setUserPick({
-      clubKey: activePick.key,
+    if (!Number.isFinite(yards)) return;
+    setUserPick((prev) => ({
+      clubKey: prev?.clubKey ?? activePick.key,
       plannedYards: yards,
-    });
+    }));
   };
 
   const yardLabels = useMemo(
@@ -221,28 +232,18 @@ export function ShotPlanPanel({
   return (
     <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
       <div className="flex flex-col gap-0.5">
-        <div className="rounded-md bg-black/80 px-1.5 py-0.5 text-center text-[9px] font-bold text-emerald-300">
-          {onGreen ? (
-            <>
-              <span className="text-amber-200">En el green</span>
-              <span className="text-slate-400"> · </span>
-              {yardsToGreen} al hoyo
-            </>
-          ) : inBunker ? (
-            <>
-              <span className="text-amber-200">En trampa</span>
-              <span className="text-slate-400"> · </span>
-              {yardsToGreen} al centro
-            </>
-          ) : (
-            <>{yardsToGreen} al centro</>
-          )}
+        <div className="flex items-center justify-center gap-1 rounded-md bg-black/80 px-1.5 py-0.5">
+          <LieChip kind={lieKind} size="sm" />
+          <span className="text-[9px] font-bold text-slate-500">·</span>
+          <span className="text-[9px] font-bold text-emerald-300">
+            {onGreen ? `${yardsToGreen} al hoyo` : `${yardsToGreen} al centro`}
+          </span>
         </div>
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
           <div className="w-[3.25rem]">
             <VerticalRoller
               className="h-[4.5rem] w-full"
-              values={picks.map((p) => p.label)}
+              values={clubLabels}
               value={activePick.label}
               onChange={handleClubChange}
             />

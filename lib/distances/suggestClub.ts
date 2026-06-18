@@ -6,6 +6,7 @@ import {
   yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
+import type { LieKind } from "@/lib/distances/detectLie";
 import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
 import type { PlayerBagClub } from "@/lib/distances/playerBag";
 
@@ -40,7 +41,7 @@ function scoreCandidate(carry: number, targetYards: number): number {
   return Math.abs(carry - targetYards);
 }
 
-/** LW en trampa; si no está en bolsa, la cuña más alta disponible. */
+/** LW en trampa (3/4 preferido); si no está en bolsa, la cuña más alta disponible. */
 function pickBunkerClub(clubs: PlayerBagClub[]): ClubPickPlan | null {
   const preferOrder = [
     "lw",
@@ -57,12 +58,22 @@ function pickBunkerClub(clubs: PlayerBagClub[]): ClubPickPlan | null {
     if (!c) continue;
     const cat = CLUB_BY_ID[id];
     if (!cat) continue;
-    const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, "full");
-    if (carry <= 0) continue;
+    const threeQ = carryYards(c.yardsFull, c.yardsThreeQuarter, "three_quarter");
+    if (threeQ > 0) {
+      return {
+        catalogId: id,
+        swing: "three_quarter",
+        carryYards: threeQ,
+        shortLabel: cat.shortLabel,
+        rollerLabel: `${cat.shortLabel} 3/4`,
+      };
+    }
+    const full = carryYards(c.yardsFull, c.yardsThreeQuarter, "full");
+    if (full <= 0) continue;
     return {
       catalogId: id,
       swing: "full",
-      carryYards: carry,
+      carryYards: full,
       shortLabel: cat.shortLabel,
       rollerLabel: `${cat.shortLabel} full`,
     };
@@ -87,20 +98,33 @@ export function pickBestClubAndCarry(
   targetYards: number,
   greenDist?: GreenDistances | null,
   onGreen?: boolean,
-  inBunker?: boolean
+  inBunker?: boolean,
+  lieKind?: LieKind
 ): ClubPickPlan | null {
   if (targetYards <= 0 || !clubs.length) return null;
+
+  const hasPutter = clubs.some((c) => c.catalogId === "putter");
+  const onGreenLie = onGreen === true || lieKind === "green";
+
+  if (hasPutter && onGreenLie) {
+    const cat = CLUB_BY_ID.putter;
+    return {
+      catalogId: "putter",
+      swing: "full",
+      carryYards: puttYardsFromCenter(targetYards),
+      shortLabel: cat.shortLabel,
+      rollerLabel: "Putt",
+    };
+  }
 
   if (inBunker) {
     const bunkerPick = pickBunkerClub(clubs);
     if (bunkerPick) return bunkerPick;
   }
 
-  const hasPutter = clubs.some((c) => c.catalogId === "putter");
-
   if (
     hasPutter &&
-    shouldSuggestPutter(targetYards, greenDist, onGreen)
+    shouldSuggestPutter(targetYards, greenDist, onGreenLie)
   ) {
     const cat = CLUB_BY_ID.putter;
     return {
