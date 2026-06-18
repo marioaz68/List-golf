@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { VerticalRoller } from "@/components/captura/VerticalRoller";
 import {
   carryYards,
@@ -61,7 +61,6 @@ function scoreCarry(carry: number, targetYards: number): number {
   return Math.abs(gap) + shortfall * 1.5;
 }
 
-/** Yardas grabadas en bolsa para el bastón + swing elegido. */
 function carryForPick(
   pick: ClubPick | undefined,
   bag: PlayerBag,
@@ -79,7 +78,6 @@ function carryForPick(
   return carryYards(bc.yardsFull, bc.yardsThreeQuarter, pick.swing);
 }
 
-/** Bastón + swing que mejor encajan con la distancia al green. */
 function bestPickForDistance(
   picks: ClubPick[],
   bag: PlayerBag,
@@ -112,10 +110,36 @@ function bestPickForDistance(
   return best ?? picks[0] ?? null;
 }
 
+function initialPlanState(
+  picks: ClubPick[],
+  bag: PlayerBag,
+  suggestedYards: number,
+  greenDist: GreenDistances | null
+): { clubKey: string; plannedYards: number } {
+  const fallback = picks[0];
+  if (!suggestedYards || suggestedYards <= 0 || !picks.length) {
+    return {
+      clubKey: fallback?.key ?? "",
+      plannedYards: carryForPick(fallback, bag, suggestedYards),
+    };
+  }
+  const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
+  if (!best) {
+    return {
+      clubKey: fallback?.key ?? "",
+      plannedYards: carryForPick(fallback, bag, suggestedYards),
+    };
+  }
+  return {
+    clubKey: best.key,
+    plannedYards: carryForPick(best, bag, suggestedYards),
+  };
+}
+
 interface ShotPlanPanelProps {
   bag: PlayerBag;
-  /** Yardas sugeridas al abrir (p. ej. distancia al green desde la salida). */
-  suggestedYards?: number;
+  /** Yardas al centro del green desde la bola / salida actual. */
+  suggestedYards: number;
   greenDist?: GreenDistances | null;
   onConfirm: (plan: {
     catalogId: string;
@@ -139,33 +163,20 @@ export function ShotPlanPanel({
     []
   );
 
-  const [clubKey, setClubKey] = useState(picks[0]?.key ?? "");
-  const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
-  const [plannedYards, setPlannedYards] = useState(() =>
-    carryForPick(picks[0], bag, suggestedYards)
+  const initial = useMemo(
+    () => initialPlanState(picks, bag, suggestedYards, greenDist),
+    [picks, bag, suggestedYards, greenDist]
   );
-  const userPickedClubRef = useRef(false);
-  const lastSuggestedRef = useRef<number | undefined>(undefined);
 
+  const [clubKey, setClubKey] = useState(initial.clubKey);
+  const [plannedYards, setPlannedYards] = useState(initial.plannedYards);
+
+  const pick = picks.find((p) => p.key === clubKey) ?? picks[0];
   const isPutter = pick?.catalogId === "putter";
-
-  useEffect(() => {
-    if (suggestedYards !== lastSuggestedRef.current) {
-      lastSuggestedRef.current = suggestedYards;
-      userPickedClubRef.current = false;
-    }
-    if (userPickedClubRef.current) return;
-    if (!suggestedYards || suggestedYards <= 0 || !picks.length) return;
-    const best = bestPickForDistance(picks, bag, suggestedYards, greenDist);
-    if (!best) return;
-    setClubKey(best.key);
-    setPlannedYards(carryForPick(best, bag, suggestedYards));
-  }, [suggestedYards, greenDist, bag, picks]);
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);
     if (!found) return;
-    userPickedClubRef.current = true;
     setClubKey(found.key);
     setPlannedYards(carryForPick(found, bag, suggestedYards));
   };
@@ -194,22 +205,27 @@ export function ShotPlanPanel({
 
   return (
     <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
-      <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
-        <div className="w-[3.25rem]">
-          <VerticalRoller
-            className="h-[4.5rem] w-full"
-            values={picks.map((p) => p.label)}
-            value={pick.label}
-            onChange={handleClubChange}
-          />
+      <div className="flex flex-col gap-0.5">
+        <div className="rounded-md bg-black/80 px-1.5 py-0.5 text-center text-[9px] font-bold text-emerald-300">
+          {suggestedYards} al centro
         </div>
-        <div className="w-[2.75rem]">
-          <VerticalRoller
-            className="h-[4.5rem] w-full"
-            values={yardLabels}
-            value={String(plannedYards)}
-            onChange={(s) => setPlannedYards(Number(s))}
-          />
+        <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
+          <div className="w-[3.25rem]">
+            <VerticalRoller
+              className="h-[4.5rem] w-full"
+              values={picks.map((p) => p.label)}
+              value={pick.label}
+              onChange={handleClubChange}
+            />
+          </div>
+          <div className="w-[2.75rem]">
+            <VerticalRoller
+              className="h-[4.5rem] w-full"
+              values={yardLabels}
+              value={String(plannedYards)}
+              onChange={(s) => setPlannedYards(Number(s))}
+            />
+          </div>
         </div>
       </div>
       <div className="flex min-w-[3.5rem] flex-col items-center justify-center rounded-lg border border-amber-500/30 bg-black/90 px-1.5 py-0.5 shadow-lg">

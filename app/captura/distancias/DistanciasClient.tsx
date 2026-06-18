@@ -42,6 +42,7 @@ import {
   savePlayerBag,
   type PlayerBag,
 } from "@/lib/distances/playerBag";
+import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   cancelPendingShot,
@@ -152,6 +153,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [shotPlanOpen, setShotPlanOpen] = useState(false);
   /** Incrementa al abrir planificador para remontar con nueva distancia/bastón. */
   const [planSession, setPlanSession] = useState(0);
+  /** Distancia al centro del green desde el punto de juego actual (salida o última bola). */
+  const [planSuggestedYards, setPlanSuggestedYards] = useState(0);
+  const [planGreenDist, setPlanGreenDist] = useState<GreenDistances | null>(null);
   const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
   const [distanceMode, setDistanceMode] = useState(false);
@@ -687,6 +691,31 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setShotPlanOpen(true);
   }, []);
 
+  /** Calcula yardas al centro del green y abre el roll bar desde ese punto. */
+  const applyPlanFromPoint = useCallback(
+    (lat: number, lon: number) => {
+      if (!activeHolePoints) return;
+      const dist = greenDistancesForHole(lat, lon, activeHolePoints);
+      const yards = Math.round(dist.center / 5) * 5;
+      setPlanSuggestedYards(yards);
+      setPlanGreenDist({
+        front: dist.front,
+        center: dist.center,
+        back: dist.back,
+      });
+      setTargetYards(yards);
+    },
+    [activeHolePoints]
+  );
+
+  const openPlanFromPoint = useCallback(
+    (lat: number, lon: number) => {
+      applyPlanFromPoint(lat, lon);
+      openShotPlan();
+    },
+    [applyPlanFromPoint, openShotPlan]
+  );
+
   const markTeeAt = useCallback(
     (lat: number, lon: number) => {
       const wasMarked = hasHoleTeeMark(holeShotsStore, activeHole);
@@ -713,7 +742,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               ) * 5
             : 0;
         if (toGreen > 0) setTargetYards(toGreen);
-        openShotPlan();
+        openPlanFromPoint(lat, lon);
         setArrivalToast(
           wasMarked
             ? `Salida corregida · ${toGreen} yds al centro`
@@ -724,7 +753,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
       }
     },
-    [holeShotsStore, activeHole, bagScope, activeHolePoints, openShotPlan]
+    [holeShotsStore, activeHole, bagScope, activeHolePoints, openPlanFromPoint]
   );
 
   useEffect(() => {
@@ -822,51 +851,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     );
   }, [geo, activeHolePoints, customPoints]);
 
-  const shotPlanSuggestedYards = useMemo(() => {
-    if (!activeHolePoints) return undefined;
-    let lat: number | undefined;
-    let lon: number | undefined;
-    if (pendingTap) {
-      lat = pendingTap.lat;
-      lon = pendingTap.lon;
-    } else if (lastBall) {
-      lat = lastBall.lat;
-      lon = lastBall.lon;
-    } else if (teeMark) {
-      lat = teeMark.lat;
-      lon = teeMark.lon;
-    } else if (geo.status === "ok") {
-      lat = geo.lat;
-      lon = geo.lon;
+  const playFromPoint = useMemo(() => {
+    for (let i = shotsOnHole.length - 1; i >= 0; i--) {
+      const s = shotsOnHole[i];
+      if (s.completedAt != null && s.to) return s.to;
     }
-    if (lat == null || lon == null) return undefined;
-    return (
-      Math.round(
-        greenDistancesForHole(lat, lon, activeHolePoints).center / 5
-      ) * 5
-    );
-  }, [activeHolePoints, pendingTap, lastBall, teeMark, geo, holeShotsStore]);
-
-  const shotPlanGreenDist = useMemo(() => {
-    if (!activeHolePoints) return null;
-    let lat: number | undefined;
-    let lon: number | undefined;
-    if (pendingTap) {
-      lat = pendingTap.lat;
-      lon = pendingTap.lon;
-    } else if (lastBall) {
-      lat = lastBall.lat;
-      lon = lastBall.lon;
-    } else if (teeMark) {
-      lat = teeMark.lat;
-      lon = teeMark.lon;
-    } else if (geo.status === "ok") {
-      lat = geo.lat;
-      lon = geo.lon;
-    }
-    if (lat == null || lon == null) return null;
-    return greenDistancesForHole(lat, lon, activeHolePoints);
-  }, [activeHolePoints, pendingTap, lastBall, teeMark, geo, holeShotsStore]);
+    return teeMark;
+  }, [shotsOnHole, teeMark]);
 
   const holeMeta = activeHolePoints;
 
@@ -897,7 +888,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           actual
         );
         const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
-        const toCenter = Math.round(toGreen.center / 5) * 5;
         setHoleShotsStore(next);
         saveHoleShots(next, bagScope);
         setArrivalToast(
@@ -907,8 +897,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setDistanceMode(false);
         setMeasureFromPhoneOnce(false);
         setTapPoint(null);
-        setTargetYards(toCenter);
-        openShotPlan();
+        openPlanFromPoint(lat, lon);
         return;
       }
 
@@ -930,7 +919,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       holeShotsStore,
       activeHole,
       bagScope,
-      openShotPlan,
+      openPlanFromPoint,
     ]
   );
 
@@ -965,9 +954,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setPendingTap(null);
       return;
     }
-    openShotPlan();
+    if (pendingTap) {
+      openPlanFromPoint(pendingTap.lat, pendingTap.lon);
+    } else if (playFromPoint) {
+      openPlanFromPoint(playFromPoint.lat, playFromPoint.lon);
+    } else {
+      openShotPlan();
+    }
     setPendingTap(null);
-  }, [hasTeeMark, openShotPlan]);
+  }, [hasTeeMark, pendingTap, playFromPoint, openPlanFromPoint, openShotPlan]);
 
   const handleConfirmPlan = useCallback(
     (plan: {
@@ -980,7 +975,15 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setShotPlanOpen(false);
         return;
       }
-      const from = lastBall ?? teeMark;
+      const shots = shotsForHole(holeShotsStore, activeHole);
+      let from = teeMark;
+      for (let i = shots.length - 1; i >= 0; i--) {
+        const s = shots[i];
+        if (s.completedAt != null && s.to) {
+          from = s.to;
+          break;
+        }
+      }
       const { store } = addPlannedShot(
         holeShotsStore,
         activeHole,
@@ -994,7 +997,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotPlanOpen(false);
       setArrivalToast("Toca en el mapa donde quedó la bola");
     },
-    [teeMark, lastBall, holeShotsStore, activeHole, bagScope]
+    [teeMark, holeShotsStore, activeHole, bagScope]
   );
 
   const measureFromPhoneNow = useCallback(() => {
@@ -1376,10 +1379,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {shotPlanOpen && !farFromCourse && hasTeeMark ? (
         <ShotPlanPanel
-          key={`plan-${activeHole}-${planSession}`}
+          key={`plan-${activeHole}-${planSession}-${planSuggestedYards}`}
           bag={bag}
-          suggestedYards={shotPlanSuggestedYards}
-          greenDist={shotPlanGreenDist}
+          suggestedYards={planSuggestedYards}
+          greenDist={planGreenDist}
           onConfirm={handleConfirmPlan}
           onCancel={() => setShotPlanOpen(false)}
         />
