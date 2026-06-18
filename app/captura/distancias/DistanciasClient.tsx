@@ -65,6 +65,8 @@ import {
   hasLoggedShotsOnHole,
   holeTeeMark,
   isFinalTapInPuttRecorded,
+  isGivenPuttRecorded,
+  isTapInPendingPutt,
   lastBallPosition,
   loadHoleShots,
   pendingShotOnHole,
@@ -971,17 +973,59 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       const { hole, strokeCount, lat, lon, centerYards } = holeFinishPrompt;
       let nextStore = holeShotsStore;
       let totalStrokes = strokeCount;
+      const pin = activeHolePoints?.center ?? { lat, lon };
+      const pendingTapIn = isTapInPendingPutt(holeShotsStore, hole);
 
-      const needsFinalPutt =
-        !isFinalTapInPuttRecorded(holeShotsStore, hole) &&
-        (how === "given" || centerYards > 0);
-
-      if (needsFinalPutt) {
-        const pin = activeHolePoints?.center ?? { lat, lon };
-        nextStore = addFinalGreenPutt(holeShotsStore, hole, { lat, lon }, pin);
+      if (how === "given" && !isGivenPuttRecorded(holeShotsStore, hole)) {
+        if (pendingTapIn) {
+          nextStore = completeShotArrival(
+            holeShotsStore,
+            hole,
+            pendingTapIn.id,
+            { lat, lon },
+            Math.max(1, pendingTapIn.plannedYards),
+            "given"
+          );
+        } else {
+          nextStore = addFinalGreenPutt(
+            holeShotsStore,
+            hole,
+            { lat, lon },
+            pin,
+            "given"
+          );
+        }
         totalStrokes = strokeCount + 1;
         setHoleShotsStore(nextStore);
         saveHoleShots(nextStore, bagScope);
+      } else if (how === "in") {
+        if (pendingTapIn) {
+          nextStore = completeShotArrival(
+            holeShotsStore,
+            hole,
+            pendingTapIn.id,
+            { lat, lon },
+            Math.max(1, pendingTapIn.plannedYards),
+            "green"
+          );
+          totalStrokes = strokeCount + 1;
+          setHoleShotsStore(nextStore);
+          saveHoleShots(nextStore, bagScope);
+        } else if (
+          !isFinalTapInPuttRecorded(holeShotsStore, hole) &&
+          centerYards > 0
+        ) {
+          nextStore = addFinalGreenPutt(
+            holeShotsStore,
+            hole,
+            { lat, lon },
+            pin,
+            "green"
+          );
+          totalStrokes = strokeCount + 1;
+          setHoleShotsStore(nextStore);
+          saveHoleShots(nextStore, bagScope);
+        }
       }
 
       const nextHoleNum = (hole % 18) + 1;
@@ -1326,18 +1370,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           onGreenFrom
         )
       ) {
-        const actual = Math.max(1, plan.plannedYards);
-        const next = completeShotArrival(
-          store,
-          activeHole,
-          shot.id,
-          from,
-          actual,
-          onGreenFrom ? "green" : lieFrom.kind
-        );
-        setHoleShotsStore(next);
-        saveHoleShots(next, bagScope);
-        const strokeCount = shotsForHole(next, activeHole).filter(
+        setHoleShotsStore(store);
+        saveHoleShots(store, bagScope);
+        setShotPlanOpen(false);
+        setPlanContext(null);
+        const strokeCount = shotsForHole(store, activeHole).filter(
           (s) => s.completedAt != null
         ).length;
         showHoleFinishPrompt(

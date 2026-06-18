@@ -15,7 +15,14 @@ import {
 } from "@/lib/distances/onGreen";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 
-export type LieKind = "ob" | "water" | "bunker" | "green" | "fairway" | "rough";
+export type LieKind =
+  | "ob"
+  | "water"
+  | "bunker"
+  | "green"
+  | "fairway"
+  | "rough"
+  | "given";
 
 export const LIE_LABELS: Record<LieKind, string> = {
   ob: "OB",
@@ -24,6 +31,7 @@ export const LIE_LABELS: Record<LieKind, string> = {
   green: "Green",
   fairway: "Fairway",
   rough: "Rough",
+  given: "Dada",
 };
 
 export function lieLabel(kind: LieKind): string {
@@ -44,6 +52,8 @@ export function lieTextClass(kind: LieKind): string {
       return "text-lime-200";
     case "rough":
       return "text-orange-200";
+    case "given":
+      return "text-violet-200";
   }
 }
 
@@ -61,6 +71,8 @@ export function lieChipClass(kind: LieKind): string {
       return "border-lime-500/60 bg-lime-950/90 text-lime-100";
     case "rough":
       return "border-orange-500/60 bg-orange-950/90 text-orange-100";
+    case "given":
+      return "border-violet-500/60 bg-violet-950/90 text-violet-100";
   }
 }
 
@@ -159,5 +171,7 @@ export function lieArrivalPhrase(kind: LieKind): string {
       return "en fairway";
     case "rough":
       return "en rough";
+    case "given":
+      return "dada";
   }
 }

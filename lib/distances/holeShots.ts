@@ -182,8 +182,16 @@ export function isFinalTapInPuttRecorded(
     last.catalogId === "putter" &&
     last.actualYards != null &&
     last.actualYards <= 1 &&
-    last.lieKind === "green"
+    (last.lieKind === "green" || last.lieKind === "given")
   );
+}
+
+export function isGivenPuttRecorded(
+  store: HoleShotsStore,
+  hole: number
+): boolean {
+  const last = lastCompletedShot(store, hole);
+  return last?.lieKind === "given";
 }
 
 /** Registra el putt final (<1 yd) al cerrar el hoyo (entró o quedó dada). */
@@ -191,7 +199,8 @@ export function addFinalGreenPutt(
   store: HoleShotsStore,
   hole: number,
   from: LatLon,
-  pin: LatLon
+  pin: LatLon,
+  lieKind: LieKind = "green"
 ): HoleShotsStore {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
@@ -207,7 +216,7 @@ export function addFinalGreenPutt(
     actualYards: 1,
     from: { ...from },
     to: { ...pin },
-    lieKind: "green",
+    lieKind,
     plannedAt: now,
     completedAt: now,
   };
@@ -215,6 +224,20 @@ export function addFinalGreenPutt(
     ...store,
     byHole: { ...store.byHole, [key]: [...prev, shot] },
   };
+}
+
+export function isTapInPendingPutt(
+  store: HoleShotsStore,
+  hole: number
+): HoleShot | null {
+  const pending = pendingShotOnHole(store, hole);
+  if (
+    pending?.catalogId === "putter" &&
+    pending.plannedYards <= 1
+  ) {
+    return pending;
+  }
+  return null;
 }
 
 export function shotClubLabel(catalogId: string, swing: SwingKind): string {
