@@ -160,6 +160,63 @@ export function pendingShotOnHole(
   return null;
 }
 
+export function lastCompletedShot(
+  store: HoleShotsStore,
+  hole: number
+): HoleShot | null {
+  const shots = shotsForHole(store, hole);
+  for (let i = shots.length - 1; i >= 0; i--) {
+    if (shots[i].completedAt != null) return shots[i];
+  }
+  return null;
+}
+
+/** ¿El putt final (≤1 yd) ya quedó registrado como golpe completado? */
+export function isFinalTapInPuttRecorded(
+  store: HoleShotsStore,
+  hole: number
+): boolean {
+  const last = lastCompletedShot(store, hole);
+  if (!last) return false;
+  return (
+    last.catalogId === "putter" &&
+    last.actualYards != null &&
+    last.actualYards <= 1 &&
+    last.lieKind === "green"
+  );
+}
+
+/** Registra el putt final (<1 yd) al cerrar el hoyo (entró o quedó dada). */
+export function addFinalGreenPutt(
+  store: HoleShotsStore,
+  hole: number,
+  from: LatLon,
+  pin: LatLon
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const strokeNo = prev.filter((s) => s.completedAt != null).length + 1;
+  const now = Date.now();
+  const shot: HoleShot = {
+    id: `${hole}-${now}-final-${strokeNo}`,
+    hole,
+    strokeNo,
+    catalogId: "putter",
+    swing: "full",
+    plannedYards: 1,
+    actualYards: 1,
+    from: { ...from },
+    to: { ...pin },
+    lieKind: "green",
+    plannedAt: now,
+    completedAt: now,
+  };
+  return {
+    ...store,
+    byHole: { ...store.byHole, [key]: [...prev, shot] },
+  };
+}
+
 export function shotClubLabel(catalogId: string, swing: SwingKind): string {
   const cat = CLUB_BY_ID[catalogId];
   const short = cat?.shortLabel ?? catalogId;

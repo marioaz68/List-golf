@@ -57,12 +57,14 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
+  addFinalGreenPutt,
   cancelPendingShot,
   clearHoleShots,
   completeShotArrival,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
   holeTeeMark,
+  isFinalTapInPuttRecorded,
   lastBallPosition,
   loadHoleShots,
   pendingShotOnHole,
@@ -183,6 +185,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     lon: number;
     strokeCount: number;
     hole: number;
+    centerYards: number;
   } | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
@@ -965,7 +968,22 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
-      const { hole, strokeCount } = holeFinishPrompt;
+      const { hole, strokeCount, lat, lon, centerYards } = holeFinishPrompt;
+      let nextStore = holeShotsStore;
+      let totalStrokes = strokeCount;
+
+      const needsFinalPutt =
+        !isFinalTapInPuttRecorded(holeShotsStore, hole) &&
+        (how === "given" || centerYards > 0);
+
+      if (needsFinalPutt) {
+        const pin = activeHolePoints?.center ?? { lat, lon };
+        nextStore = addFinalGreenPutt(holeShotsStore, hole, { lat, lon }, pin);
+        totalStrokes = strokeCount + 1;
+        setHoleShotsStore(nextStore);
+        saveHoleShots(nextStore, bagScope);
+      }
+
       const nextHoleNum = (hole % 18) + 1;
       setHoleFinishPrompt(null);
       resetTapUi();
@@ -976,10 +994,18 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       if (demoMode) setDemoProgress(0.35);
       const howLabel = how === "given" ? " · quedó dada" : "";
       setArrivalToast(
-        `Hoyo ${hole} terminado${howLabel} (${strokeCount} golpes) · Pasa al hoyo ${nextHoleNum} · marca tu salida`
+        `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum} · marca tu salida`
       );
     },
-    [holeFinishPrompt, resetTapUi, insideHole, demoMode]
+    [
+      holeFinishPrompt,
+      holeShotsStore,
+      activeHolePoints,
+      bagScope,
+      resetTapUi,
+      insideHole,
+      demoMode,
+    ]
   );
 
   const showHoleFinishPrompt = useCallback(
@@ -987,6 +1013,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       lat: number,
       lon: number,
       strokeCount: number,
+      centerYards: number,
       liePhrase?: string
     ) => {
       setShotPlanOpen(false);
@@ -996,6 +1023,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         lon,
         strokeCount,
         hole: activeHole,
+        centerYards,
       });
       setArrivalToast(
         liePhrase
@@ -1173,6 +1201,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             lat,
             lon,
             strokeCount,
+            toGreen.center,
             lieArrivalPhrase(lie.kind)
           );
           return;
@@ -1311,7 +1340,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         const strokeCount = shotsForHole(next, activeHole).filter(
           (s) => s.completedAt != null
         ).length;
-        showHoleFinishPrompt(from.lat, from.lon, strokeCount, "en el green");
+        showHoleFinishPrompt(
+          from.lat,
+          from.lon,
+          strokeCount,
+          fromDist.center,
+          "en el green"
+        );
         return;
       }
 
