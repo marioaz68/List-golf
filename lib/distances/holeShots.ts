@@ -18,6 +18,8 @@ export interface HoleShot {
   to: LatLon | null;
   /** Lie donde quedó la bola (al confirmar caída). */
   lieKind?: LieKind;
+  /** Golpe de castigo (p. ej. OB stroke-and-distance). */
+  isPenalty?: boolean;
   plannedAt: number;
   completedAt: number | null;
 }
@@ -240,7 +242,12 @@ export function isTapInPendingPutt(
   return null;
 }
 
-export function shotClubLabel(catalogId: string, swing: SwingKind): string {
+export function shotClubLabel(
+  catalogId: string,
+  swing: SwingKind,
+  isPenalty?: boolean
+): string {
+  if (isPenalty || catalogId === "penalty") return "Castigo OB";
   const cat = CLUB_BY_ID[catalogId];
   const short = cat?.shortLabel ?? catalogId;
   return swing === "three_quarter" ? `${short} 3/4` : `${short} full`;
@@ -303,6 +310,48 @@ export function completeShotArrival(
           : s
       ),
     },
+  };
+}
+
+/**
+ * Tras marcar OB: registra castigo (+1) y devuelve el punto desde el que se
+ * repite (stroke-and-distance = donde estabas antes del golpe que fue a OB).
+ */
+export function applyObPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  obShotId: string
+): { store: HoleShotsStore; replayFrom: LatLon } | null {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const obShot = prev.find((s) => s.id === obShotId);
+  if (!obShot || obShot.completedAt == null || obShot.lieKind !== "ob") {
+    return null;
+  }
+  const replayFrom = { ...obShot.from };
+  const strokeNo = prev.filter((s) => s.completedAt != null).length + 1;
+  const now = Date.now();
+  const penalty: HoleShot = {
+    id: `${hole}-${now}-penalty-ob`,
+    hole,
+    strokeNo,
+    catalogId: "penalty",
+    swing: "full",
+    plannedYards: 0,
+    actualYards: 0,
+    from: replayFrom,
+    to: { ...replayFrom },
+    lieKind: "ob",
+    isPenalty: true,
+    plannedAt: now,
+    completedAt: now,
+  };
+  return {
+    store: {
+      ...store,
+      byHole: { ...store.byHole, [key]: [...prev, penalty] },
+    },
+    replayFrom,
   };
 }
 

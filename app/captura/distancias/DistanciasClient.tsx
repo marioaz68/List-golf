@@ -57,6 +57,7 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
+  applyObPenaltyStroke,
   cancelPendingShot,
   clearHoleShots,
   completeShotArrival,
@@ -695,7 +696,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const shotLandings = useMemo(
     () =>
       shotsOnHole
-        .filter((s) => s.completedAt != null && s.to)
+        .filter((s) => s.completedAt != null && s.to && !s.isPenalty)
         .sort((a, b) => a.strokeNo - b.strokeNo)
         .map((s) => ({
           lat: s.to!.lat,
@@ -1141,7 +1142,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   useEffect(() => {
     if (!arrivalToast || needsTeeMark || holeFinishPrompt) return;
     const ms =
-      arrivalToast.includes("terminado") || arrivalToast.includes("Pasa al hoyo")
+      arrivalToast.includes("terminado") ||
+      arrivalToast.includes("Pasa al hoyo") ||
+      arrivalToast.includes("OB ·")
         ? 6000
         : 2500;
     const t = window.setTimeout(() => setArrivalToast(null), ms);
@@ -1258,7 +1261,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
         ) * 5;
         const lie = detectLieForPoint(lat, lon);
-        const next = completeShotArrival(
+        let next = completeShotArrival(
           holeShotsStore,
           activeHole,
           pendingShot.id,
@@ -1266,13 +1269,35 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           actual,
           lie.kind
         );
-        const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
-        setHoleShotsStore(next);
-        saveHoleShots(next, bagScope);
         setPendingTap(null);
         setDistanceMode(false);
         setMeasureFromPhoneOnce(false);
         setTapPoint(null);
+
+        if (lie.kind === "ob") {
+          const replayFrom = {
+            lat: pendingShot.from.lat,
+            lon: pendingShot.from.lon,
+          };
+          const penalty = applyObPenaltyStroke(next, activeHole, pendingShot.id);
+          if (penalty) {
+            next = penalty.store;
+          }
+          const strokeCount = shotsForHole(next, activeHole).filter(
+            (s) => s.completedAt != null
+          ).length;
+          setHoleShotsStore(next);
+          saveHoleShots(next, bagScope);
+          setArrivalToast(
+            `OB · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · vuelves a jugar desde donde estabas`
+          );
+          openPlanFromPoint(replayFrom.lat, replayFrom.lon);
+          return;
+        }
+
+        const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
 
         if (
           shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
@@ -1709,7 +1734,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
         {arrivalToast && !needsTeeMark ? (
-          <div className="pointer-events-none mx-2 mb-1 rounded-lg bg-emerald-900/90 px-3 py-1.5 text-center text-[11px] font-semibold text-emerald-100 shadow-lg">
+          <div
+            className={[
+              "pointer-events-none mx-2 mb-1 rounded-lg px-3 py-1.5 text-center text-[11px] font-semibold shadow-lg",
+              arrivalToast.includes("OB ·")
+                ? "border border-red-500/50 bg-red-950/95 text-red-100"
+                : "bg-emerald-900/90 text-emerald-100",
+            ].join(" ")}
+          >
             {arrivalToast}
           </div>
         ) : null}

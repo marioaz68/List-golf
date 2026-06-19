@@ -62,7 +62,8 @@ export function HoleShotsDetailSheet({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-bold text-white">
-                      {s.strokeNo}. {shotClubLabel(s.catalogId, s.swing)}
+                      {s.strokeNo}.{" "}
+                      {shotClubLabel(s.catalogId, s.swing, s.isPenalty)}
                     </div>
                     {!pending && onCorrectLanding ? (
                       <button
@@ -75,35 +76,43 @@ export function HoleShotsDetailSheet({
                     ) : null}
                   </div>
                   <div className="text-slate-400">
-                    Plan:{" "}
-                    <span className="font-semibold text-amber-200">
-                      {s.plannedYards}
-                    </span>
-                    {pending ? (
-                      <span className="ml-1 text-amber-400">· pendiente</span>
+                    {s.isPenalty ? (
+                      <span className="font-semibold text-red-300">
+                        Castigo stroke-and-distance (+1)
+                      </span>
                     ) : (
                       <>
-                        {" "}
-                        → Ejec:{" "}
-                        <span className="font-semibold text-emerald-300">
-                          {s.actualYards}
+                        Plan:{" "}
+                        <span className="font-semibold text-amber-200">
+                          {s.plannedYards}
                         </span>
-                        {s.lieKind ? (
-                          <span className="ml-1 text-amber-200/90">
-                            · {lieLabel(s.lieKind)}
-                          </span>
-                        ) : null}
-                        {delta != null ? (
-                          <span
-                            className={
-                              delta >= 0 ? "text-sky-400" : "text-rose-400"
-                            }
-                          >
+                        {pending ? (
+                          <span className="ml-1 text-amber-400">· pendiente</span>
+                        ) : (
+                          <>
                             {" "}
-                            ({delta >= 0 ? "+" : ""}
-                            {delta})
-                          </span>
-                        ) : null}
+                            → Ejec:{" "}
+                            <span className="font-semibold text-emerald-300">
+                              {s.actualYards}
+                            </span>
+                            {s.lieKind ? (
+                              <span className="ml-1 text-amber-200/90">
+                                · {lieLabel(s.lieKind)}
+                              </span>
+                            ) : null}
+                            {delta != null ? (
+                              <span
+                                className={
+                                  delta >= 0 ? "text-sky-400" : "text-rose-400"
+                                }
+                              >
+                                {" "}
+                                ({delta >= 0 ? "+" : ""}
+                                {delta})
+                              </span>
+                            ) : null}
+                          </>
+                        )}
                       </>
                     )}
                   </div>
