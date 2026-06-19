@@ -1,6 +1,10 @@
 import { haversineMeters } from "@/lib/distances/ccqGreens";
 import type { HoleGreenPoints } from "@/lib/distances/ccqHolePoints";
-import { distanceToCenterlineM, waypointsFromLine } from "@/lib/distances/centerline";
+import {
+  centerlineSegmentIndex,
+  distanceToCenterlineM,
+  waypointsFromLine,
+} from "@/lib/distances/centerline";
 import {
   parseBoundaryGeoJson,
   ringFromPolygon,
@@ -79,6 +83,14 @@ export function lieChipClass(kind: LieKind): string {
 /** Tolerancia (m) a la línea de OB calibrada (LineString, no polígono). */
 export const OB_LINE_BUFFER_M = 12;
 
+/** Máx. distancia (m) al tramo OB más cercano para contar "más allá de la línea". */
+export const OB_PAST_LINE_MAX_M = 80;
+
+const M_PER_DEG_LAT = 110_574;
+function mPerDegLon(lat: number): number {
+  return 111_320 * Math.cos((lat * Math.PI) / 180);
+}
+
 export interface LieContext {
   kind: LieKind;
   onGreen: boolean;
@@ -93,16 +105,51 @@ export function obLineFromGeojson(raw: unknown): LatLon[] {
   return poly ? ringFromPolygon(poly) : [];
 }
 
-function isPointNearObLines(
+function cross2d(ax: number, ay: number, bx: number, by: number): number {
+  return ax * by - ay * bx;
+}
+
+/** Lado del punto respecto al segmento a→b (+1 izquierda, -1 derecha, 0 en línea). */
+function sideOfSegment(p: LatLon, a: LatLon, b: LatLon): number {
+  const mLon = mPerDegLon(p.lat);
+  const abx = (b.lon - a.lon) * mLon;
+  const aby = (b.lat - a.lat) * M_PER_DEG_LAT;
+  const apx = (p.lon - a.lon) * mLon;
+  const apy = (p.lat - a.lat) * M_PER_DEG_LAT;
+  const c = cross2d(abx, aby, apx, apy);
+  if (Math.abs(c) < 1e-3) return 0;
+  return c > 0 ? 1 : -1;
+}
+
+/** Punto al otro lado de la línea OB que el interior del campo (p. ej. green del hoyo). */
+function isPointPastObLine(
+  p: LatLon,
+  line: LatLon[],
+  inBoundsRef: LatLon
+): boolean {
+  if (line.length < 2) return false;
+  const dist = distanceToCenterlineM(p, line);
+  if (dist > OB_PAST_LINE_MAX_M) return false;
+  const segIdx = centerlineSegmentIndex(p, line);
+  const a = line[segIdx];
+  const b = line[segIdx + 1];
+  const sideP = sideOfSegment(p, a, b);
+  const sideRef = sideOfSegment(inBoundsRef, a, b);
+  if (sideP === 0 || sideRef === 0) return false;
+  return sideP !== sideRef;
+}
+
+function isPointOb(
   lat: number,
   lon: number,
-  obLines: LatLon[][]
+  obLines: LatLon[][],
+  inBoundsRef?: LatLon | null
 ): boolean {
   const p = { lat, lon };
   for (const line of obLines) {
-    if (line.length >= 2 && distanceToCenterlineM(p, line) <= OB_LINE_BUFFER_M) {
-      return true;
-    }
+    if (line.length < 2) continue;
+    if (distanceToCenterlineM(p, line) <= OB_LINE_BUFFER_M) return true;
+    if (inBoundsRef && isPointPastObLine(p, line, inBoundsRef)) return true;
   }
   return false;
 }
@@ -120,6 +167,8 @@ export function detectLieAtPoint(
     waterPoints?: BunkerPoint[];
     fairwayPolygons?: Polygon[];
     obLines?: LatLon[][];
+    /** Punto dentro del campo (p. ej. green del hoyo) para saber qué lado de la línea OB es válido. */
+    inBoundsRef?: LatLon | null;
   }
 ): LieContext {
   void holePoints;
@@ -130,7 +179,10 @@ export function detectLieAtPoint(
   const fairwayPolygons = options?.fairwayPolygons ?? [];
   const obLines = options?.obLines ?? [];
 
-  if (obLines.length > 0 && isPointNearObLines(lat, lon, obLines)) {
+  if (
+    obLines.length > 0 &&
+    isPointOb(lat, lon, obLines, options?.inBoundsRef)
+  ) {
     return { kind: "ob", onGreen: false, inBunker: false };
   }
 

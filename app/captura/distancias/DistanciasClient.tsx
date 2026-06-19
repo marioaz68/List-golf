@@ -817,36 +817,69 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const detectLieForPoint = useCallback(
     (lat: number, lon: number) => {
+      const physicalHole =
+        detectHole(
+          { lat, lon },
+          courseHoles,
+          greenCenters,
+          centerlines
+        ) ?? activeHole;
+      const lieHoles =
+        physicalHole === activeHole
+          ? [activeHole]
+          : [activeHole, physicalHole];
+
+      const polysFor = (map: Map<number, Polygon[]>) => {
+        const out: Polygon[] = [];
+        for (const h of lieHoles) out.push(...(map.get(h) ?? []));
+        return out;
+      };
+      const pointsFor = (map: Map<number, Array<{ lat: number; lon: number }>>) => {
+        const out: Array<{ lat: number; lon: number }> = [];
+        for (const h of lieHoles) out.push(...(map.get(h) ?? []));
+        return out;
+      };
+
       const bunkerPoints = [
-        ...(bunkerPointsByHole.get(activeHole) ?? []),
+        ...pointsFor(bunkerPointsByHole),
         ...customPoints
           .filter((p) => p.dbKind === "bunker")
           .map((p) => ({ lat: p.lat, lon: p.lon })),
       ];
       const waterPoints = [
-        ...(waterPointsByHole.get(activeHole) ?? []),
+        ...pointsFor(waterPointsByHole),
         ...customPoints
           .filter((p) => p.dbKind === "water")
           .map((p) => ({ lat: p.lat, lon: p.lon })),
       ];
+      const inBoundsRef =
+        greenCenters[activeHole] ??
+        greenCenters[physicalHole] ??
+        activeHolePoints?.center ??
+        null;
+
       return detectLieAtPoint(
         lat,
         lon,
-        greenPolygonsByHole.get(activeHole) ?? [],
-        bunkerPolygonsByHole.get(activeHole) ?? [],
+        polysFor(greenPolygonsByHole),
+        polysFor(bunkerPolygonsByHole),
         bunkerPoints,
         activeHolePoints,
         {
-          waterPolygons: waterPolygonsByHole.get(activeHole) ?? [],
+          waterPolygons: polysFor(waterPolygonsByHole),
           waterPoints,
-          fairwayPolygons: fairwayPolygonsByHole.get(activeHole) ?? [],
+          fairwayPolygons: polysFor(fairwayPolygonsByHole),
           obLines,
+          inBoundsRef,
         }
       );
     },
     [
       activeHole,
       activeHolePoints,
+      courseHoles,
+      greenCenters,
+      centerlines,
       greenPolygonsByHole,
       bunkerPolygonsByHole,
       bunkerPointsByHole,
