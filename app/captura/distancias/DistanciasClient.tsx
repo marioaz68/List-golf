@@ -25,6 +25,7 @@ import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { parsePolygonsFromApi } from "@/lib/distances/holeBoundary";
 import {
+  activeHoleInBoundsRefs,
   detectLieAtPoint,
   lieArrivalPhrase,
   type LieKind,
@@ -852,11 +853,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           .filter((p) => p.dbKind === "water")
           .map((p) => ({ lat: p.lat, lon: p.lon })),
       ];
-      const inBoundsRef =
-        greenCenters[activeHole] ??
-        greenCenters[physicalHole] ??
-        activeHolePoints?.center ??
-        null;
+      const inBoundsRefs = activeHoleInBoundsRefs({
+        teeMark,
+        tee: catalogTeeForHole,
+        centerline: centerlines[activeHole],
+        green: greenCenters[activeHole] ?? activeHolePoints?.center ?? null,
+      });
 
       return detectLieAtPoint(
         lat,
@@ -870,7 +872,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           waterPoints,
           fairwayPolygons: polysFor(fairwayPolygonsByHole),
           obLines,
-          inBoundsRef,
+          inBoundsRefs,
         }
       );
     },
@@ -880,6 +882,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       courseHoles,
       greenCenters,
       centerlines,
+      catalogTeeForHole,
+      teeMark,
       greenPolygonsByHole,
       bunkerPolygonsByHole,
       bunkerPointsByHole,

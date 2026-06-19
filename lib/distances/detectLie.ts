@@ -1,4 +1,3 @@
-import { haversineMeters } from "@/lib/distances/ccqGreens";
 import type { HoleGreenPoints } from "@/lib/distances/ccqHolePoints";
 import {
   centerlineSegmentIndex,
@@ -121,21 +120,47 @@ function sideOfSegment(p: LatLon, a: LatLon, b: LatLon): number {
   return c > 0 ? 1 : -1;
 }
 
-/** Punto al otro lado de la línea OB que el interior del campo (p. ej. green del hoyo). */
-function isPointPastObLine(
+/** Ancla del hoyo activo más cercana al tramo OB (salida, centerline, green). */
+function pickInBoundsRefForSegment(
+  refs: LatLon[],
+  a: LatLon,
+  b: LatLon
+): LatLon | null {
+  if (refs.length === 0) return null;
+  const segment = [a, b];
+  let best = refs[0];
+  let bestD = distanceToCenterlineM(refs[0], segment);
+  for (let i = 1; i < refs.length; i++) {
+    const d = distanceToCenterlineM(refs[i], segment);
+    if (d < bestD) {
+      bestD = d;
+      best = refs[i];
+    }
+  }
+  return best;
+}
+
+/** OB si la bola queda al otro lado de la línea que el hoyo activo (p. ej. h1→
+ *  derecha OB, h2→ izquierda OB en la misma línea de campo). */
+function isPointOnObSideOfLine(
   p: LatLon,
   line: LatLon[],
-  inBoundsRef: LatLon
+  inBoundsRefs: LatLon[]
 ): boolean {
-  if (line.length < 2) return false;
+  if (line.length < 2 || inBoundsRefs.length === 0) return false;
   const dist = distanceToCenterlineM(p, line);
   if (dist > OB_PAST_LINE_MAX_M) return false;
+
   const segIdx = centerlineSegmentIndex(p, line);
   const a = line[segIdx];
   const b = line[segIdx + 1];
   const sideP = sideOfSegment(p, a, b);
+  if (sideP === 0) return dist <= OB_LINE_BUFFER_M;
+
+  const inBoundsRef = pickInBoundsRefForSegment(inBoundsRefs, a, b);
+  if (!inBoundsRef) return false;
   const sideRef = sideOfSegment(inBoundsRef, a, b);
-  if (sideP === 0 || sideRef === 0) return false;
+  if (sideRef === 0) return false;
   return sideP !== sideRef;
 }
 
@@ -143,15 +168,38 @@ function isPointOb(
   lat: number,
   lon: number,
   obLines: LatLon[][],
-  inBoundsRef?: LatLon | null
+  inBoundsRefs?: LatLon[] | null
 ): boolean {
   const p = { lat, lon };
+  const refs = inBoundsRefs ?? [];
   for (const line of obLines) {
     if (line.length < 2) continue;
-    if (distanceToCenterlineM(p, line) <= OB_LINE_BUFFER_M) return true;
-    if (inBoundsRef && isPointPastObLine(p, line, inBoundsRef)) return true;
+    if (isPointOnObSideOfLine(p, line, refs)) return true;
   }
   return false;
+}
+
+/** Puntos del hoyo activo que marcan el lado válido (in-bounds) de la línea OB. */
+export function activeHoleInBoundsRefs(input: {
+  teeMark?: LatLon | null;
+  tee?: LatLon | null;
+  centerline?: LatLon[] | null;
+  green?: LatLon | null;
+}): LatLon[] {
+  const refs: LatLon[] = [];
+  const seen = new Set<string>();
+  const push = (pt?: LatLon | null) => {
+    if (!pt) return;
+    const key = `${pt.lat.toFixed(6)},${pt.lon.toFixed(6)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    refs.push(pt);
+  };
+  push(input.teeMark);
+  push(input.tee);
+  for (const pt of input.centerline ?? []) push(pt);
+  push(input.green);
+  return refs;
 }
 
 /** Prioridad: OB → agua → trampa → green → fairway → rough. Solo polígonos (sin buffer). */
@@ -167,8 +215,8 @@ export function detectLieAtPoint(
     waterPoints?: BunkerPoint[];
     fairwayPolygons?: Polygon[];
     obLines?: LatLon[][];
-    /** Punto dentro del campo (p. ej. green del hoyo) para saber qué lado de la línea OB es válido. */
-    inBoundsRef?: LatLon | null;
+    /** Anclas del hoyo activo (salida, centerline, green) para el lado válido de OB. */
+    inBoundsRefs?: LatLon[] | null;
   }
 ): LieContext {
   void holePoints;
@@ -181,7 +229,7 @@ export function detectLieAtPoint(
 
   if (
     obLines.length > 0 &&
-    isPointOb(lat, lon, obLines, options?.inBoundsRef)
+    isPointOb(lat, lon, obLines, options?.inBoundsRefs)
   ) {
     return { kind: "ob", onGreen: false, inBunker: false };
   }
