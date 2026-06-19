@@ -58,6 +58,7 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
+  addFinalGreenPutt,
   applyObPenaltyStroke,
   cancelPendingShot,
   clearHoleShots,
@@ -1063,8 +1064,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           setHoleShotsStore(nextStore);
           saveHoleShots(nextStore, bagScope);
         } else {
-          // Último golpe ya registrado en el mapa; la dada no suma putt extra.
-          totalStrokes = strokeCount;
+          const from =
+            lastBallPosition(nextStore, hole) ??
+            holeTeeMark(nextStore, hole) ?? { lat, lon };
+          nextStore = addFinalGreenPutt(
+            nextStore,
+            hole,
+            from,
+            { lat, lon },
+            "given"
+          );
+          totalStrokes = strokeCount + 1;
+          setHoleShotsStore(nextStore);
+          saveHoleShots(nextStore, bagScope);
         }
       } else if (how === "in") {
         if (pendingTapIn) {
