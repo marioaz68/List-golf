@@ -213,6 +213,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
   const [distanceMode, setDistanceMode] = useState(false);
   const [arrivalToast, setArrivalToast] = useState<string | null>(null);
+  const [waterDropError, setWaterDropError] = useState<string | null>(null);
   /** Tras caída a ~0 yds: confirmar si el hoyo terminó o sigue jugando. */
   const [holeFinishPrompt, setHoleFinishPrompt] = useState<{
     lat: number;
@@ -746,6 +747,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       catalogTeeForHole ?? undefined
     );
   }, [holeShotsStore, activeHole, catalogTeeForHole]);
+
+  const waterDropFocusPoints = useMemo(() => {
+    if (!pendingWaterDrop) return null;
+    const pts: Array<{ lat: number; lon: number }> = [];
+    if (lastBall) pts.push(lastBall);
+    const waterShot = lastCompletedShotOnHole;
+    if (waterShot?.to && waterShot.lieKind === "water") {
+      pts.push(waterShot.to);
+    }
+    return pts.length > 0 ? pts : null;
+  }, [pendingWaterDrop, lastBall, lastCompletedShotOnHole]);
 
   const teeMark = useMemo(
     () => holeTeeMark(holeShotsStore, activeHole),
@@ -1307,6 +1319,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [hasTeeMark, pendingShot, holeShotsStore, activeHole, bagScope]);
 
   useEffect(() => {
+    if (pendingWaterDrop) return;
+    setWaterDropError(null);
+  }, [pendingWaterDrop]);
+
+  useEffect(() => {
     if (!arrivalToast || needsTeeMark || holeFinishPrompt) return;
     const ms =
       arrivalToast.includes("terminado") ||
@@ -1416,9 +1433,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       if (pendingWaterDrop) {
         const dropLie = detectLieForPoint(lat, lon);
         if (dropLie.kind === "water") {
-          setArrivalToast("Marca atrás del lago, fuera del agua");
+          setWaterDropError("Marca fuera del agua, atrás del lago");
           return;
         }
+        setWaterDropError(null);
         const next = setWaterPenaltyDrop(
           holeShotsStore,
           activeHole,
@@ -1865,6 +1883,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
             waterDropMode={!!pendingWaterDrop}
+            waterDropFocusPoints={waterDropFocusPoints}
             mapFramingPoint={mapFramingPoint}
             catalogTeePoint={
               (needsTeeMark || canAdjustTee) && catalogTeeForHole
@@ -1957,6 +1976,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           <p className="text-center text-[10px] font-black leading-tight text-sky-50">
             Lago +1 · toca atrás del lago donde jugarás
           </p>
+          {waterDropError ? (
+            <p className="mt-0.5 text-center text-[10px] font-semibold text-amber-200">
+              {waterDropError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

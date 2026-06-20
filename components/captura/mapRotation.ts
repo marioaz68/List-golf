@@ -92,6 +92,13 @@ export function uprightHtml(html: string, bearing: number): string {
   return `<div style="transform:rotate(${bearing}deg);transform-origin:center center;">${html}</div>`;
 }
 
+/** Ignora toques en controles (+/−, botones) para no registrar golpes falsos. */
+export function isYardageMapSurfaceTap(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target.closest("[data-yardage-map-ui]")) return false;
+  return Boolean(target.closest("[data-yardage-map-surface]"));
+}
+
 /**
  * Convierte un toque en pantalla a lat/lon considerando la rotación CSS del
  * mapa. Leaflet no conoce esa rotación: NUNCA uses map.mouseEventToLatLng ni

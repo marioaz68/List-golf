@@ -16,8 +16,17 @@ export function MapZoomControl({
   canZoomIn = true,
   canZoomOut = true,
 }: MapZoomControlProps) {
+  const stopMapTap = (e: React.SyntheticEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="pointer-events-auto absolute bottom-[7rem] right-2 z-[1020] flex flex-col items-center gap-0.5 rounded-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md">
+    <div
+      data-yardage-map-ui
+      className="pointer-events-auto absolute bottom-[7rem] right-2 z-[1020] flex flex-col items-center gap-0.5 rounded-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md"
+      onPointerDown={stopMapTap}
+      onClick={stopMapTap}
+    >
       <button
         type="button"
         onClick={onZoomIn}
