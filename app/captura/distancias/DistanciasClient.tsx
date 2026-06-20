@@ -88,6 +88,11 @@ import {
   type HoleShotsStore,
   type ManualPenaltyReason,
 } from "@/lib/distances/holeShots";
+import {
+  configureHoleShotsSync,
+  loadHoleShotsMerged,
+  type HoleShotsSyncContext,
+} from "@/lib/distances/syncHoleShotsRemote";
 
 function framingPinAt(
   point: { lat: number; lon: number },
@@ -289,10 +294,45 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     searchParams.get("me")?.trim() ||
     undefined;
 
+  const shotsSyncCtx = useMemo((): HoleShotsSyncContext => {
+    const entryId =
+      searchParams.get("me")?.trim() ||
+      searchParams.get("entry_id")?.trim() ||
+      null;
+    const caddieId =
+      searchParams.get("caddie")?.trim() ||
+      searchParams.get("caddie_id")?.trim() ||
+      null;
+    const telegramUserId = searchParams.get("tg")?.trim() || null;
+    return {
+      entryId,
+      caddieId,
+      telegramUserId,
+      disabled: demoMode,
+    };
+  }, [searchParams, demoMode]);
+
+  useEffect(() => {
+    configureHoleShotsSync(shotsSyncCtx);
+  }, [shotsSyncCtx]);
+
   useEffect(() => {
     setBag(loadPlayerBag(bagScope));
-    setHoleShotsStore(loadHoleShots(bagScope));
-  }, [bagScope]);
+    const local = loadHoleShots(bagScope);
+    setHoleShotsStore(local);
+    if (demoMode) return;
+    let cancelled = false;
+    void loadHoleShotsMerged(local, bagScope, shotsSyncCtx).then((merged) => {
+      if (cancelled) return;
+      setHoleShotsStore(merged);
+      if (merged !== local) {
+        saveHoleShots(merged, bagScope);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bagScope, demoMode, shotsSyncCtx]);
 
   useEffect(() => {
     if (!demoMode) return;
@@ -727,12 +767,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [holeShotsStore, activeHole]
   );
 
-  const completedShotsCount = shotsOnHole.filter(
-    (s) => s.completedAt != null
-  ).length;
+  const holeStrokeCount = useMemo(
+    () => completedStrokeCount(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
 
   const canAdjustTee =
-    hasTeeMark && completedShotsCount === 0 && pendingShot == null;
+    hasTeeMark && holeStrokeCount === 0 && pendingShot == null;
 
   // Fija el hoyo mientras falta marcar salida para que el círculo verde no
   // salte a otro hoyo si el GPS auto-detecta mal.
@@ -759,7 +800,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     if (mapFramingLock) {
       return { lat: mapFramingLock.lat, lon: mapFramingLock.lon };
     }
-    if (completedShotsCount > 0 && lastBall) return lastBall;
+    if (holeStrokeCount > 0 && lastBall) return lastBall;
     if (teeMark) return teeMark;
     if (geo.status === "ok") return { lat: geo.lat, lon: geo.lon };
     return null;
@@ -767,7 +808,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     geo,
     pendingShot,
     mapFramingLock,
-    completedShotsCount,
+    holeStrokeCount,
     lastBall,
     teeMark,
   ]);
@@ -1477,9 +1518,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         if (
           shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
         ) {
-          const strokeCount = shotsForHole(next, activeHole).filter(
-            (s) => s.completedAt != null
-          ).length;
+          const strokeCount = completedStrokeCount(next, activeHole);
           pinMapFraming({ lat, lon });
           showHoleFinishPrompt(
             lat,
@@ -1573,30 +1612,36 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const handleAddPenalty = useCallback(
     (reason: ManualPenaltyReason) => {
       if (!teeMark || !activeHolePoints) return;
-      const from =
-        lastBallPosition(holeShotsStore, activeHole, catalogTeeForHole) ??
-        teeMark;
-      let next = holeShotsStore;
-      if (pendingShot) {
-        next = cancelPendingShot(next, activeHole, pendingShot.id);
-      }
-      next = addManualPenaltyStroke(next, activeHole, from, reason);
-      const strokeCount = completedStrokeCount(next, activeHole);
-      setHoleShotsStore(next);
-      saveHoleShots(next, bagScope);
-      pinMapFraming(from);
+
+      let fromPoint = teeMark;
+      let nextStore!: HoleShotsStore;
+
+      setHoleShotsStore((prev) => {
+        fromPoint =
+          lastBallPosition(prev, activeHole, catalogTeeForHole) ?? teeMark;
+        let next = prev;
+        const pending = pendingShotOnHole(prev, activeHole);
+        if (pending) {
+          next = cancelPendingShot(next, activeHole, pending.id);
+        }
+        next = addManualPenaltyStroke(next, activeHole, fromPoint, reason);
+        saveHoleShots(next, bagScope);
+        nextStore = next;
+        return next;
+      });
+
+      const strokeCount = completedStrokeCount(nextStore, activeHole);
+      pinMapFraming(fromPoint);
       setArrivalToast(
         `${penaltyReasonLabel(reason)} · +1 = ${strokeCount} golpes`
       );
-      openPlanFromPoint(from.lat, from.lon);
+      openPlanFromPoint(fromPoint.lat, fromPoint.lon);
     },
     [
       teeMark,
       activeHolePoints,
-      holeShotsStore,
       activeHole,
       catalogTeeForHole,
-      pendingShot,
       bagScope,
       pinMapFraming,
       openPlanFromPoint,
@@ -1647,9 +1692,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setShotPlanOpen(false);
         setPlanContext(null);
         pinMapFraming(from);
-        const strokeCount = shotsForHole(store, activeHole).filter(
-          (s) => s.completedAt != null
-        ).length;
+        const strokeCount = completedStrokeCount(store, activeHole);
         showHoleFinishPrompt(
           from.lat,
           from.lon,
@@ -2102,7 +2145,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             >
               ↺
             </button>
-            {(completedShotsCount > 0 || pendingShot) && !farFromCourse ? (
+            {(holeStrokeCount > 0 || pendingShot) && !farFromCourse ? (
               <button
                 type="button"
                 onClick={() => setShotsDetailOpen((o) => !o)}
@@ -2110,7 +2153,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               >
                 Golpes
                 <span className="ml-0.5 text-emerald-300">
-                  {completedShotsCount}
+                  {holeStrokeCount}
                   {pendingShot ? "+" : ""}
                 </span>
               </button>

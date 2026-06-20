@@ -79,6 +79,8 @@ export interface HoleShotsStore {
   byHole: Record<string, HoleShot[]>;
   /** Salida marcada por el jugador al iniciar cada hoyo. */
   teeMarkByHole: Record<string, LatLon>;
+  /** Marca de tiempo local/servidor para fusionar copias. */
+  updatedAt?: number;
 }
 
 const STORAGE_PREFIX = "listgolf-hole-shots-v2";
@@ -133,11 +135,44 @@ export function loadHoleShots(scope?: string): HoleShotsStore {
 
 export function saveHoleShots(store: HoleShotsStore, scope?: string): void {
   if (typeof window === "undefined") return;
+  const stamped: HoleShotsStore = { ...store, updatedAt: Date.now() };
   try {
-    window.localStorage.setItem(storageKey(scope), JSON.stringify(store));
+    window.localStorage.setItem(storageKey(scope), JSON.stringify(stamped));
   } catch {
     /* quota / privado */
   }
+  try {
+    // Import dinámico evita circular deps en SSR.
+    void import("@/lib/distances/syncHoleShotsRemote").then(({ queueHoleShotsRemoteSync }) => {
+      queueHoleShotsRemoteSync(stamped, scope);
+    });
+  } catch {
+    /* sin sync remoto */
+  }
+}
+
+/** Golpes completados + salidas marcadas (actividad registrada). */
+export function storeActivityScore(store: HoleShotsStore): number {
+  let n = 0;
+  for (const shots of Object.values(store.byHole)) {
+    n += shots.filter((s) => s.completedAt != null).length;
+  }
+  n += Object.keys(store.teeMarkByHole ?? {}).length;
+  return n;
+}
+
+/** Fusiona copia local y remota conservando la más completa/reciente. */
+export function mergeHoleShotsStores(
+  local: HoleShotsStore,
+  remote: HoleShotsStore
+): HoleShotsStore {
+  const localScore = storeActivityScore(local);
+  const remoteScore = storeActivityScore(remote);
+  if (remoteScore > localScore) return remote;
+  if (localScore > remoteScore) return local;
+  const localTs = local.updatedAt ?? 0;
+  const remoteTs = remote.updatedAt ?? 0;
+  return remoteTs > localTs ? remote : local;
 }
 
 export function shotsForHole(store: HoleShotsStore, hole: number): HoleShot[] {
@@ -264,7 +299,7 @@ export function addFinalGreenPutt(
 ): HoleShotsStore {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
-  const strokeNo = prev.filter((s) => s.completedAt != null).length + 1;
+  const strokeNo = completedStrokeCount(store, hole) + 1;
   const now = Date.now();
   const shot: HoleShot = {
     id: `${hole}-${now}-final-${strokeNo}`,
@@ -324,7 +359,7 @@ export function addPlannedShot(
 ): { store: HoleShotsStore; shot: HoleShot } {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
-  const strokeNo = prev.filter((s) => s.completedAt != null).length + 1;
+  const strokeNo = completedStrokeCount(store, hole) + 1;
   const shot: HoleShot = {
     id: `${hole}-${Date.now()}-${strokeNo}`,
     hole,
@@ -381,6 +416,9 @@ export function completedStrokeCount(
   return shotsForHole(store, hole).filter((s) => s.completedAt != null).length;
 }
 
+/** Total de golpes completados en el hoyo (incluye castigos). */
+export const holeStrokeCount = completedStrokeCount;
+
 function lieKindForPenalty(reason: PenaltyReason): LieKind {
   if (reason === "ob") return "ob";
   if (reason === "water" || reason === "hazard") return "water";
@@ -398,7 +436,7 @@ function appendPenaltyStroke(
   const strokeNo = completedStrokeCount(store, hole) + 1;
   const now = Date.now();
   const penalty: HoleShot = {
-    id: `${hole}-${now}-penalty-${penaltyReason}`,
+    id: `${hole}-${now}-${strokeNo}-penalty-${penaltyReason}`,
     hole,
     strokeNo,
     catalogId: "penalty",
@@ -437,7 +475,7 @@ function appendWaterPenaltyAwaitingDrop(
   const strokeNo = completedStrokeCount(store, hole) + 1;
   const now = Date.now();
   const penalty: HoleShot = {
-    id: `${hole}-${now}-penalty-water`,
+    id: `${hole}-${now}-${strokeNo}-penalty-water`,
     hole,
     strokeNo,
     catalogId: "penalty",
