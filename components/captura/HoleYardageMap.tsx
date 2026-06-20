@@ -70,6 +70,8 @@ interface HoleYardageMapProps {
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
   /** Bola actual: GPS al marcar llegada, o última bola al jugar. */
   playBallPoint?: { lat: number; lon: number } | null;
+  /** Tras OB: encuadre fijo en el tramo donde se jugó el golpe (no salida ni OB). */
+  mapFramingLock?: { lat: number; lon: number; segmentIdx: number } | null;
   /** Tee del catálogo (referencia visual al marcar salida). */
   catalogTeePoint?: { lat: number; lon: number } | null;
 }
@@ -102,6 +104,7 @@ export function HoleYardageMap({
   teeAdjustMode = false,
   shotLandings = [],
   playBallPoint = null,
+  mapFramingLock = null,
   catalogTeePoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -337,16 +340,19 @@ export function HoleYardageMap({
         shotLandings.length > 0
           ? shotLandings[shotLandings.length - 1]
           : null;
-      /** Posición de juego para encuadre: bola actual (p. ej. tras OB stroke-and-distance),
-       *  no el último aterrizaje si quedó fuera. */
+      /** Posición de juego para encuadre (tras OB = tramo donde pegaste, no salida). */
       const framingPos =
-        needsTeeMark && catalogTeePoint
+        mapFramingLock ??
+        (needsTeeMark && catalogTeePoint
           ? catalogTeePoint
-          : playBallPoint ?? lastLanding ?? teeMarkPoint ?? player;
+          : playBallPoint ?? lastLanding ?? player);
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
-      const segIdx = hasCenterline
-        ? centerlineSegmentIndex(framingPos, centerline!)
-        : 0;
+      const segIdx =
+        mapFramingLock != null && hasCenterline
+          ? mapFramingLock.segmentIdx
+          : hasCenterline
+            ? centerlineSegmentIndex(framingPos, centerline!)
+            : 0;
       const totalSegs = hasCenterline ? centerline!.length - 1 : 1;
       // Punto actual (de dónde vienes en este tramo) y el ÚLTIMO punto de la
       // línea (= "after"/atrás del green). La foto va del punto actual al green.
@@ -683,6 +689,7 @@ export function HoleYardageMap({
     teeMarkPoint,
     shotLandings,
     playBallPoint,
+    mapFramingLock,
     catalogTeePoint,
     needsTeeMark,
     teeAdjustMode,

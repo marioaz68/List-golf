@@ -137,7 +137,7 @@ export function hasLoggedShotsOnHole(
   return shotsForHole(store, hole).some((s) => s.completedAt != null);
 }
 
-/** Ancla del hoyo: última bola confirmada, o salida del jugador, o tee del catálogo. */
+/** Ancla del hoyo: dónde se juega el siguiente golpe (no dónde cayó un OB). */
 export function lastBallPosition(
   store: HoleShotsStore,
   hole: number,
@@ -146,7 +146,10 @@ export function lastBallPosition(
   const shots = shotsForHole(store, hole);
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
-    if (s.completedAt != null && s.to) return s.to;
+    if (s.completedAt == null) continue;
+    if (s.isPenalty && s.to) return s.to;
+    if (s.lieKind === "ob") return { ...s.from };
+    if (s.to) return s.to;
   }
   return holeTeeMark(store, hole) ?? catalogTee ?? null;
 }

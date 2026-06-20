@@ -20,7 +20,10 @@ import {
   type GreenCentersByHole,
   type TeesByHole,
 } from "@/lib/distances/detectActiveHole";
-import { waypointsFromLine } from "@/lib/distances/centerline";
+import {
+  centerlineSegmentIndex,
+  waypointsFromLine,
+} from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
 import { parsePolygonsFromApi } from "@/lib/distances/holeBoundary";
@@ -195,6 +198,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   } | null>(null);
   /** Fuerza remount/reencuadre del mapa al cambiar de hoyo. */
   const [mapFrameEpoch, setMapFrameEpoch] = useState(0);
+  /** Tras OB: fija foto en el tramo donde pegaste, no en la salida ni en el OB. */
+  const [mapFramingLock, setMapFramingLock] = useState<{
+    lat: number;
+    lon: number;
+    segmentIdx: number;
+  } | null>(null);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -666,8 +675,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   );
 
   const lastBall = useMemo(() => {
-    return lastBallPosition(holeShotsStore, activeHole);
-  }, [holeShotsStore, activeHole]);
+    return lastBallPosition(
+      holeShotsStore,
+      activeHole,
+      catalogTeeForHole ?? undefined
+    );
+  }, [holeShotsStore, activeHole, catalogTeeForHole]);
 
   const teeMark = useMemo(
     () => holeTeeMark(holeShotsStore, activeHole),
@@ -1173,6 +1186,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotsDetailOpen(false);
       setShotPlanOpen(false);
       setHoleFinishPrompt(null);
+      setMapFramingLock(null);
     }
     prevActiveHoleRef.current = activeHole;
   }, [activeHole, resetTapUi]);
@@ -1329,6 +1343,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             lat: pendingShot.from.lat,
             lon: pendingShot.from.lon,
           };
+          const cl = centerlines[activeHole];
+          const segmentIdx =
+            cl && cl.length >= 2
+              ? centerlineSegmentIndex(replayFrom, cl)
+              : 0;
+          setMapFramingLock({ ...replayFrom, segmentIdx });
           const penalized = ensureObPenaltyStroke(
             next,
             activeHole,
@@ -1470,6 +1490,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         plan.swing,
         plan.plannedYards
       );
+      setMapFramingLock(null);
 
       if (
         isTapInPutt(
@@ -1596,6 +1617,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setTargetYards(0);
       resetTapUi();
       setShotsDetailOpen(false);
+      setMapFramingLock(null);
     },
     [holeShotsStore, bagScope, resetTapUi]
   );
@@ -1654,6 +1676,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             teeAdjustMode={canAdjustTee}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
+            mapFramingLock={mapFramingLock}
             catalogTeePoint={
               (needsTeeMark || canAdjustTee) && catalogTeeForHole
                 ? catalogTeeForHole
