@@ -70,6 +70,8 @@ interface HoleYardageMapProps {
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
   /** Bola actual: última posición de juego (no GPS al planear golpe). */
   playBallPoint?: { lat: number; lon: number } | null;
+  /** Marca suelta tras lago: sin bola azul que tape el mapa. */
+  waterDropMode?: boolean;
   /** Encuadre fijo en la última bola o replay tras OB. */
   mapFramingPoint?: { lat: number; lon: number; segmentIdx: number } | null;
   /** Tee del catálogo (referencia visual al marcar salida). */
@@ -104,6 +106,7 @@ export function HoleYardageMap({
   teeAdjustMode = false,
   shotLandings = [],
   playBallPoint = null,
+  waterDropMode = false,
   mapFramingPoint = null,
   catalogTeePoint = null,
 }: HoleYardageMapProps) {
@@ -488,7 +491,7 @@ export function HoleYardageMap({
         ).addTo(layerGroup);
       }
 
-      if (playBallPoint) {
+      if (playBallPoint && !waterDropMode) {
         L.marker(
           [playBallPoint.lat, playBallPoint.lon],
           {
@@ -500,6 +503,7 @@ export function HoleYardageMap({
 
       const showPhoneDot =
         !needsTeeMark &&
+        !waterDropMode &&
         (!playBallPoint ||
           Math.abs(playBallPoint.lat - playerLat) > 0.00002 ||
           Math.abs(playBallPoint.lon - playerLon) > 0.00002);
@@ -689,6 +693,7 @@ export function HoleYardageMap({
     teeMarkPoint,
     shotLandings,
     playBallPoint,
+    waterDropMode,
     mapFramingPoint,
     catalogTeePoint,
     needsTeeMark,

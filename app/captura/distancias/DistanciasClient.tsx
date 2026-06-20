@@ -1504,7 +1504,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           const strokeCount = completedStrokeCount(next, activeHole);
           setHoleShotsStore(next);
           saveHoleShots(next, bagScope);
-          pinMapFraming(replayFrom);
+          pinMapFraming({ lat, lon });
           setArrivalToast(
             `Lago · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · toca atrás del lago donde jugarás`
           );
@@ -1864,6 +1864,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             teeAdjustMode={canAdjustTee}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
+            waterDropMode={!!pendingWaterDrop}
             mapFramingPoint={mapFramingPoint}
             catalogTeePoint={
               (needsTeeMark || canAdjustTee) && catalogTeeForHole
@@ -1952,15 +1953,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       ) : null}
 
       {pendingWaterDrop && !farFromCourse && !needsTeeMark ? (
-        <div className="pointer-events-none absolute inset-x-0 top-[28%] z-[1095] flex justify-center px-4">
-          <div className="pointer-events-none w-full max-w-sm rounded-xl border-2 border-sky-400/60 bg-sky-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
-            <p className="text-center text-xs font-black text-sky-50">
-              Lago · castigo +1 anotado
-            </p>
-            <p className="mt-1 text-center text-[11px] font-semibold text-sky-200">
-              Toca en el mapa atrás del lago, donde jugarás el siguiente golpe
-            </p>
-          </div>
+        <div className="pointer-events-none absolute inset-x-2 top-12 z-[1065] rounded-lg border border-sky-400/50 bg-sky-950/90 px-3 py-1.5 shadow-lg backdrop-blur-md">
+          <p className="text-center text-[10px] font-black leading-tight text-sky-50">
+            Lago +1 · toca atrás del lago donde jugarás
+          </p>
         </div>
       ) : null}
 
@@ -2003,7 +1999,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
       {/* Controles abajo: selector de hoyo + distancias al green. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch">
-        {arrivalToast && !needsTeeMark ? (
+        {arrivalToast && !needsTeeMark && !pendingWaterDrop ? (
           <div
             className={[
               "pointer-events-none mx-2 mb-1 rounded-lg px-3 py-1.5 text-center text-[11px] font-semibold shadow-lg",
