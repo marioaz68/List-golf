@@ -59,8 +59,9 @@ import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   addFinalGreenPutt,
-  applyObPenaltyStroke,
+  completedStrokeCount,
   cancelPendingShot,
+  ensureObPenaltyStroke,
   clearHoleShots,
   completeShotArrival,
   hasHoleTeeMark,
@@ -1328,13 +1329,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             lat: pendingShot.from.lat,
             lon: pendingShot.from.lon,
           };
-          const penalty = applyObPenaltyStroke(next, activeHole, pendingShot.id);
-          if (penalty) {
-            next = penalty.store;
-          }
-          const strokeCount = shotsForHole(next, activeHole).filter(
-            (s) => s.completedAt != null
-          ).length;
+          const penalized = ensureObPenaltyStroke(
+            next,
+            activeHole,
+            pendingShot.id,
+            replayFrom
+          );
+          next = penalized.store;
+          const strokeCount = completedStrokeCount(next, activeHole);
           setHoleShotsStore(next);
           saveHoleShots(next, bagScope);
           setArrivalToast(
@@ -1449,15 +1451,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setShotPlanOpen(false);
         return;
       }
-      const shots = shotsForHole(holeShotsStore, activeHole);
-      let from = teeMark;
-      for (let i = shots.length - 1; i >= 0; i--) {
-        const s = shots[i];
-        if (s.completedAt != null && s.to) {
-          from = s.to;
-          break;
-        }
-      }
+      const from =
+        lastBallPosition(holeShotsStore, activeHole, catalogTeeForHole) ??
+        teeMark;
       const fromDist = greenDistancesForHole(
         from.lat,
         from.lon,
@@ -1512,6 +1508,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       holeShotsStore,
       activeHole,
       bagScope,
+      catalogTeeForHole,
       detectLieForPoint,
       greenPolygonsByHole,
       showHoleFinishPrompt,

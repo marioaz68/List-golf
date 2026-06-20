@@ -313,23 +313,21 @@ export function completeShotArrival(
   };
 }
 
-/**
- * Tras marcar OB: registra castigo (+1) y devuelve el punto desde el que se
- * repite (stroke-and-distance = donde estabas antes del golpe que fue a OB).
- */
-export function applyObPenaltyStroke(
+export function completedStrokeCount(
+  store: HoleShotsStore,
+  hole: number
+): number {
+  return shotsForHole(store, hole).filter((s) => s.completedAt != null).length;
+}
+
+function appendObPenaltyStroke(
   store: HoleShotsStore,
   hole: number,
-  obShotId: string
-): { store: HoleShotsStore; replayFrom: LatLon } | null {
+  replayFrom: LatLon
+): HoleShotsStore {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
-  const obShot = prev.find((s) => s.id === obShotId);
-  if (!obShot || obShot.completedAt == null || obShot.lieKind !== "ob") {
-    return null;
-  }
-  const replayFrom = { ...obShot.from };
-  const strokeNo = prev.filter((s) => s.completedAt != null).length + 1;
+  const strokeNo = completedStrokeCount(store, hole) + 1;
   const now = Date.now();
   const penalty: HoleShot = {
     id: `${hole}-${now}-penalty-ob`,
@@ -339,7 +337,7 @@ export function applyObPenaltyStroke(
     swing: "full",
     plannedYards: 0,
     actualYards: 0,
-    from: replayFrom,
+    from: { ...replayFrom },
     to: { ...replayFrom },
     lieKind: "ob",
     isPenalty: true,
@@ -347,10 +345,51 @@ export function applyObPenaltyStroke(
     completedAt: now,
   };
   return {
-    store: {
-      ...store,
-      byHole: { ...store.byHole, [key]: [...prev, penalty] },
-    },
+    ...store,
+    byHole: { ...store.byHole, [key]: [...prev, penalty] },
+  };
+}
+
+/**
+ * Tras marcar OB: registra castigo (+1) y devuelve el punto desde el que se
+ * repite (stroke-and-distance = donde estabas antes del golpe que fue a OB).
+ */
+export function applyObPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  obShotId: string,
+  replayFromHint?: LatLon
+): { store: HoleShotsStore; replayFrom: LatLon } | null {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const obIdx = prev.findIndex((s) => s.id === obShotId);
+  if (obIdx < 0) return null;
+  const obShot = prev[obIdx];
+  if (obShot.completedAt == null) return null;
+
+  const replayFrom = replayFromHint ?? { ...obShot.from };
+
+  if (prev[obIdx + 1]?.isPenalty) {
+    return { store, replayFrom };
+  }
+
+  return {
+    store: appendObPenaltyStroke(store, hole, replayFrom),
+    replayFrom,
+  };
+}
+
+/** Garantiza el +1 de castigo OB tras confirmar la caída fuera. */
+export function ensureObPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  obShotId: string,
+  replayFrom: LatLon
+): { store: HoleShotsStore; replayFrom: LatLon } {
+  const applied = applyObPenaltyStroke(store, hole, obShotId, replayFrom);
+  if (applied) return applied;
+  return {
+    store: appendObPenaltyStroke(store, hole, replayFrom),
     replayFrom,
   };
 }
