@@ -825,11 +825,13 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     teeMark,
   ]);
 
-  /** Encuadre del mapa: siempre en la última bola (o replay tras OB). */
+  /** Encuadre del mapa: última bola, replay tras OB, o teléfono mientras esperas caída. */
   const mapFramingPoint = useMemo(() => {
     if (mapFramingLock) return mapFramingLock;
+    if (pendingShot && geo.status === "ok") {
+      return framingPinAt({ lat: geo.lat, lon: geo.lon }, centerlines[activeHole]);
+    }
     const pt =
-      pendingShot?.from ??
       lastBall ??
       (needsTeeMark && catalogTeeForHole ? catalogTeeForHole : null) ??
       teeMark ??
@@ -839,6 +841,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   }, [
     mapFramingLock,
     pendingShot,
+    geo,
     lastBall,
     needsTeeMark,
     catalogTeeForHole,
@@ -1725,8 +1728,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       saveHoleShots(store, bagScope);
       setShotPlanOpen(false);
       setPlanContext(null);
-      pinMapFraming(from);
-      setArrivalToast("Toca en el mapa donde quedó la bola");
+      setMapFramingLock(null);
+      setArrivalToast(
+        "Golpe registrado · al llegar toca en el mapa donde quedó la bola"
+      );
     },
     [
       teeMark,
@@ -1883,6 +1888,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
             waterDropMode={!!pendingWaterDrop}
+            awaitingLandingMode={
+              !!pendingShot && !pendingWaterDrop && !shotPlanOpen
+            }
             waterDropFocusPoints={waterDropFocusPoints}
             mapFramingPoint={mapFramingPoint}
             catalogTeePoint={
@@ -2044,7 +2052,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             ) : null}
             <div className="flex items-center justify-center gap-2">
               <span className="text-[11px] font-bold text-amber-200">
-                Golpe {pendingShot.strokeNo} · toca donde quedó la bola
+                Golpe {pendingShot.strokeNo} · al llegar, toca donde quedó la
+                bola
               </span>
               <button
                 type="button"

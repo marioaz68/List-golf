@@ -73,6 +73,8 @@ interface HoleYardageMapProps {
   playBallPoint?: { lat: number; lon: number } | null;
   /** Marca suelta tras lago: sin bola azul que tape el mapa. */
   waterDropMode?: boolean;
+  /** Tras confirmar basto: sigue el teléfono; conserva zoom manual hasta marcar caída. */
+  awaitingLandingMode?: boolean;
   /** Puntos para encuadrar lago + zona de suelta (salida previa y caída en agua). */
   waterDropFocusPoints?: Array<{ lat: number; lon: number }> | null;
   /** Encuadre fijo en la última bola o replay tras OB. */
@@ -110,6 +112,7 @@ export function HoleYardageMap({
   shotLandings = [],
   playBallPoint = null,
   waterDropMode = false,
+  awaitingLandingMode = false,
   waterDropFocusPoints = null,
   mapFramingPoint = null,
   catalogTeePoint = null,
@@ -129,6 +132,7 @@ export function HoleYardageMap({
   const userZoomDeltaRef = useRef(0);
   const framingAnchorRef = useRef<{ lat: number; lon: number } | null>(null);
   const onMapTapRef = useRef(onMapTap);
+  const awaitingLandingModeRef = useRef(awaitingLandingMode);
   const waterDropModeRef = useRef(waterDropMode);
   const lastTouchEndAtRef = useRef(0);
   const sizeRef = useRef({ w: 0, h: 0 });
@@ -137,6 +141,7 @@ export function HoleYardageMap({
   const [mapReady, setMapReady] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
   onMapTapRef.current = onMapTap;
+  awaitingLandingModeRef.current = awaitingLandingMode;
   waterDropModeRef.current = waterDropMode;
   sizeRef.current = size;
   playerPosRef.current = { lat: playerLat, lon: playerLon };
@@ -282,6 +287,19 @@ export function HoleYardageMap({
       mapDivRef.current
     );
     if (!map || !anchor || viewportW === 0 || viewportH === 0) return;
+    if (awaitingLandingModeRef.current || waterDropModeRef.current) {
+      map.setZoom(
+        Math.max(
+          15,
+          Math.min(
+            21,
+            autoZoomRef.current + userZoomDeltaRef.current
+          )
+        ),
+        { animate: false }
+      );
+      return;
+    }
     applyManualZoomLevel(
       map,
       bearingRef.current,
@@ -402,6 +420,20 @@ export function HoleYardageMap({
       const targetTopY = topBarPx + Math.max(24, viewportH * 0.1);
       const availH = Math.max(80, (viewportH - bottomBarPx - targetTopY) * 0.96);
       const availW = Math.max(80, viewportW * 0.88);
+      const manualZoomActive = userZoomDeltaRef.current !== 0;
+      const freezeMapView = waterDropMode;
+      const landingMarkMode = awaitingLandingMode;
+      const preserveManualZoom =
+        manualZoomActive && (waterDropMode || landingMarkMode);
+      const applyStoredZoom = () => {
+        map.setZoom(
+          Math.max(
+            15,
+            Math.min(21, autoZoomRef.current + userZoomDeltaRef.current)
+          ),
+          { animate: false }
+        );
+      };
       const fitZoom =
         waterDropMode &&
         waterDropFocusPoints &&
@@ -415,9 +447,10 @@ export function HoleYardageMap({
           : remainingWps && remainingWps.length >= 2
             ? zoomToFitWaypoints(remainingWps, bearing, availW, availH)
             : null;
-      const zoomAnchor = waterDropMode
-        ? { lat: framingPos.lat, lon: framingPos.lon }
-        : anchor;
+      const zoomAnchor =
+        freezeMapView || landingMarkMode
+          ? { lat: framingPos.lat, lon: framingPos.lon }
+          : anchor;
 
       // Vista limpia: sin línea azul del hoyo ni líneas/etiquetas de obstáculos.
       // De los puntos del green solo mostramos el número de yardas en chiquito
@@ -568,7 +601,7 @@ export function HoleYardageMap({
           framedPosRef.current = posKey;
           const shouldReframe =
             recenterHole || (!userPin && (recenterSeg || recenterPos));
-          if (shouldReframe) {
+          if (shouldReframe && !(landingMarkMode && manualZoomActive)) {
             frameByProximity(
               map,
               L,
@@ -599,9 +632,11 @@ export function HoleYardageMap({
             autoZoomRef.current = map.getZoom();
             framingAnchorRef.current = zoomAnchor;
             if (recenterHole || recenterPos) {
-              userZoomDeltaRef.current = 0;
-              setZoomPercent(100);
-            } else if (userZoomDeltaRef.current !== 0) {
+              if (!(landingMarkMode && manualZoomActive)) {
+                userZoomDeltaRef.current = 0;
+                setZoomPercent(100);
+              }
+            } else if (manualZoomActive && !landingMarkMode) {
               applyManualZoomLevel(
                 map,
                 bearing,
@@ -615,27 +650,23 @@ export function HoleYardageMap({
                 rotH
               );
             }
+          } else if (shouldReframe && landingMarkMode && manualZoomActive) {
+            framingAnchorRef.current = zoomAnchor;
+            applyStoredZoom();
           } else if (userPin) {
-            panToShowInViewport(
-              map,
-              bearing,
-              userPin.lat,
-              userPin.lon,
-              viewportW,
-              viewportH
-            );
-            if (waterDropMode && userZoomDeltaRef.current !== 0) {
-              map.setZoom(
-                Math.max(
-                  15,
-                  Math.min(
-                    21,
-                    autoZoomRef.current + userZoomDeltaRef.current
-                  )
-                ),
-                { animate: false }
+            if (!freezeMapView) {
+              panToShowInViewport(
+                map,
+                bearing,
+                userPin.lat,
+                userPin.lon,
+                viewportW,
+                viewportH
               );
-            } else if (userZoomDeltaRef.current !== 0) {
+            }
+            if (preserveManualZoom) {
+              applyStoredZoom();
+            } else if (!landingMarkMode && manualZoomActive) {
               applyManualZoomLevel(
                 map,
                 bearing,
@@ -648,7 +679,7 @@ export function HoleYardageMap({
                 rotW,
                 rotH
               );
-            } else {
+            } else if (!landingMarkMode) {
               tuneRotatedFraming(
                 map,
                 bearing,
@@ -666,18 +697,13 @@ export function HoleYardageMap({
             }
           } else {
             // GPS / demo / bola: re-anclar green arriba sin recalcular zoom.
-            if (waterDropMode && userZoomDeltaRef.current !== 0) {
-              map.setZoom(
-                Math.max(
-                  15,
-                  Math.min(
-                    21,
-                    autoZoomRef.current + userZoomDeltaRef.current
-                  )
-                ),
-                { animate: false }
-              );
-            } else if (userZoomDeltaRef.current !== 0) {
+            if (preserveManualZoom) {
+              applyStoredZoom();
+            } else if (freezeMapView) {
+              /* Suelta de lago: vista fija hasta marcar drop. */
+            } else if (landingMarkMode) {
+              /* Caída pendiente: zoom solo vía frameByProximity; vista estable para tocar. */
+            } else if (manualZoomActive) {
               applyManualZoomLevel(
                 map,
                 bearing,
@@ -735,6 +761,7 @@ export function HoleYardageMap({
     shotLandings,
     playBallPoint,
     waterDropMode,
+    awaitingLandingMode,
     waterDropFocusPoints,
     mapFramingPoint,
     catalogTeePoint,
