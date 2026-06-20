@@ -325,14 +325,105 @@ export function isTapInPendingPutt(
   store: HoleShotsStore,
   hole: number
 ): HoleShot | null {
+  return pendingPutterShotOnHole(store, hole);
+}
+
+/** Cualquier putt pendiente (p. ej. segundo putt en green antes de marcar caída). */
+export function pendingPutterShotOnHole(
+  store: HoleShotsStore,
+  hole: number
+): HoleShot | null {
   const pending = pendingShotOnHole(store, hole);
-  if (
-    pending?.catalogId === "putter" &&
-    pending.plannedYards <= 1
-  ) {
-    return pending;
-  }
+  if (pending?.catalogId === "putter") return pending;
   return null;
+}
+
+/** Golpes mostrados en el diálogo entró / quedó dada (incluye putt pendiente). */
+export function finishPromptStrokeCount(
+  store: HoleShotsStore,
+  hole: number
+): number {
+  const completed = completedStrokeCount(store, hole);
+  return pendingShotOnHole(store, hole) ? completed + 1 : completed;
+}
+
+function updateShotLieKind(
+  store: HoleShotsStore,
+  hole: number,
+  shotId: string,
+  lieKind: LieKind
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  return {
+    ...store,
+    byHole: {
+      ...store.byHole,
+      [key]: prev.map((s) => (s.id === shotId ? { ...s, lieKind } : s)),
+    },
+  };
+}
+
+/** Registra putt final concedido; devuelve conteo total del hoyo. */
+export function recordGivenPutt(
+  store: HoleShotsStore,
+  hole: number,
+  pin: LatLon
+): { store: HoleShotsStore; totalStrokes: number } {
+  if (isGivenPuttRecorded(store, hole)) {
+    return { store, totalStrokes: completedStrokeCount(store, hole) };
+  }
+
+  const pendingPutter = pendingPutterShotOnHole(store, hole);
+  if (pendingPutter) {
+    const next = completeShotArrival(
+      store,
+      hole,
+      pendingPutter.id,
+      pin,
+      Math.max(1, pendingPutter.plannedYards),
+      "given"
+    );
+    return { store: next, totalStrokes: completedStrokeCount(next, hole) };
+  }
+
+  const last = lastCompletedShot(store, hole);
+  if (
+    last &&
+    last.catalogId === "putter" &&
+    last.lieKind === "green" &&
+    last.actualYards != null &&
+    last.actualYards <= 1
+  ) {
+    const next = updateShotLieKind(store, hole, last.id, "given");
+    return { store: next, totalStrokes: completedStrokeCount(next, hole) };
+  }
+
+  const from =
+    lastBallPosition(store, hole) ?? holeTeeMark(store, hole) ?? pin;
+  const next = addFinalGreenPutt(store, hole, from, pin, "given");
+  return { store: next, totalStrokes: completedStrokeCount(next, hole) };
+}
+
+/** Registra que la bola entró al hoyo. */
+export function recordHoledPutt(
+  store: HoleShotsStore,
+  hole: number,
+  pin: LatLon
+): { store: HoleShotsStore; totalStrokes: number } {
+  const pendingPutter = pendingPutterShotOnHole(store, hole);
+  if (pendingPutter) {
+    const next = completeShotArrival(
+      store,
+      hole,
+      pendingPutter.id,
+      pin,
+      Math.max(1, pendingPutter.plannedYards),
+      "green"
+    );
+    return { store: next, totalStrokes: completedStrokeCount(next, hole) };
+  }
+  return { store, totalStrokes: completedStrokeCount(store, hole) };
 }
 
 export function shotClubLabel(
@@ -636,6 +727,44 @@ export function clearHoleShots(
   const nextTee = { ...store.teeMarkByHole };
   delete nextTee[key];
   return { version: 2, byHole: nextByHole, teeMarkByHole: nextTee };
+}
+
+export function removeLastShotOnHole(
+  store: HoleShotsStore,
+  hole: number
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  if (prev.length === 0) return store;
+  const trimmed = prev.slice(0, -1);
+  const renumbered = trimmed.map((s, i) => ({ ...s, strokeNo: i + 1 }));
+  return {
+    ...store,
+    byHole: { ...store.byHole, [key]: renumbered },
+  };
+}
+
+export function hasRemovableShotsOnHole(
+  store: HoleShotsStore,
+  hole: number
+): boolean {
+  return shotsForHole(store, hole).length > 0;
+}
+
+/** Hoyo con el golpe más reciente (para retomar la vuelta tras corregir). */
+export function playHeadHoleFromStore(store: HoleShotsStore): number | null {
+  let bestHole: number | null = null;
+  let bestTs = 0;
+  for (let h = 1; h <= 18; h++) {
+    for (const s of shotsForHole(store, h)) {
+      const ts = s.completedAt ?? s.plannedAt ?? 0;
+      if (ts >= bestTs) {
+        bestTs = ts;
+        bestHole = h;
+      }
+    }
+  }
+  return bestHole;
 }
 
 export function cancelPendingShot(

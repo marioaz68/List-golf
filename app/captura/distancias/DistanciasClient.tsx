@@ -61,7 +61,6 @@ import {
 import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
-  addFinalGreenPutt,
   addManualPenaltyStroke,
   completedStrokeCount,
   cancelPendingShot,
@@ -69,17 +68,21 @@ import {
   ensureWaterPenaltyStroke,
   clearHoleShots,
   completeShotArrival,
+  finishPromptStrokeCount,
+  hasRemovableShotsOnHole,
   hasHoleTeeMark,
   hasLoggedShotsOnHole,
   holeTeeMark,
-  isGivenPuttRecorded,
-  isTapInPendingPutt,
   lastBallPosition,
   lastCompletedShot,
   loadHoleShots,
   penaltyReasonLabel,
+  playHeadHoleFromStore,
   pendingShotOnHole,
   pendingWaterDropOnHole,
+  recordGivenPutt,
+  recordHoledPutt,
+  removeLastShotOnHole,
   resetShotArrival,
   saveHoleShots,
   setHoleTeeMark,
@@ -230,6 +233,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     lon: number;
     segmentIdx: number;
   } | null>(null);
+  /** Hoyo donde seguías jugando antes de regresar con las flechas. */
+  const [resumeHole, setResumeHole] = useState<number | null>(null);
+  /** Modo corrección: quitar golpes con ✕ y re-anotar el hoyo. */
+  const [holeCorrectionMode, setHoleCorrectionMode] = useState(false);
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -326,6 +333,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     void loadHoleShotsMerged(local, bagScope, shotsSyncCtx).then((merged) => {
       if (cancelled) return;
       setHoleShotsStore(merged);
+      const head = playHeadHoleFromStore(merged);
+      if (head != null) {
+        setResumeHole((prev) => prev ?? head);
+      }
       if (merged !== local) {
         saveHoleShots(merged, bagScope);
       }
@@ -1146,6 +1157,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       );
       setHoleShotsStore(next);
       saveHoleShots(next, bagScope);
+      if (resumeHole == null && !holeCorrectionMode) {
+        setResumeHole(activeHole);
+      }
       setManualHole(activeHole);
       setPendingTap(null);
       setDistanceMode(false);
@@ -1171,76 +1185,46 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setArrivalToast(`Salida del hoyo ${activeHole} marcada`);
       }
     },
-    [holeShotsStore, activeHole, bagScope, activeHolePoints, openPlanFromPoint, pinMapFraming]
+    [
+      holeShotsStore,
+      activeHole,
+      bagScope,
+      activeHolePoints,
+      openPlanFromPoint,
+      pinMapFraming,
+      resumeHole,
+      holeCorrectionMode,
+    ]
   );
 
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
-      const { hole, strokeCount, lat, lon } = holeFinishPrompt;
-      let nextStore = holeShotsStore;
-      let totalStrokes = strokeCount;
-      const pendingTapIn = isTapInPendingPutt(holeShotsStore, hole);
+      const { hole, lat, lon } = holeFinishPrompt;
+      const pin = { lat, lon };
+      let totalStrokes = holeFinishPrompt.strokeCount;
 
-      if (how === "given" && !isGivenPuttRecorded(holeShotsStore, hole)) {
-        if (pendingTapIn) {
-          nextStore = completeShotArrival(
-            holeShotsStore,
-            hole,
-            pendingTapIn.id,
-            { lat, lon },
-            Math.max(1, pendingTapIn.plannedYards),
-            "given"
-          );
-          totalStrokes = strokeCount + 1;
-          setHoleShotsStore(nextStore);
-          saveHoleShots(nextStore, bagScope);
-        } else {
-          const from =
-            lastBallPosition(nextStore, hole) ??
-            holeTeeMark(nextStore, hole) ?? { lat, lon };
-          nextStore = addFinalGreenPutt(
-            nextStore,
-            hole,
-            from,
-            { lat, lon },
-            "given"
-          );
-          totalStrokes = strokeCount + 1;
-          setHoleShotsStore(nextStore);
-          saveHoleShots(nextStore, bagScope);
-        }
-      } else if (how === "in") {
-        if (pendingTapIn) {
-          nextStore = completeShotArrival(
-            holeShotsStore,
-            hole,
-            pendingTapIn.id,
-            { lat, lon },
-            Math.max(1, pendingTapIn.plannedYards),
-            "green"
-          );
-          totalStrokes = strokeCount + 1;
-          setHoleShotsStore(nextStore);
-          saveHoleShots(nextStore, bagScope);
-        } else {
-          // Entró al hundir en el mapa: el conteo ya incluye ese golpe.
-          totalStrokes = strokeCount;
-        }
-      }
-
-      const nextHoleNum = (hole % 18) + 1;
-      nextStore = clearHoleShots(nextStore, nextHoleNum);
-      setHoleShotsStore(nextStore);
-      saveHoleShots(nextStore, bagScope);
+      setHoleShotsStore((prev) => {
+        const result =
+          how === "given"
+            ? recordGivenPutt(prev, hole, pin)
+            : recordHoledPutt(prev, hole, pin);
+        totalStrokes = result.totalStrokes;
+        const nextHoleNum = (hole % 18) + 1;
+        const nextStore = clearHoleShots(result.store, nextHoleNum);
+        saveHoleShots(nextStore, bagScope);
+        return nextStore;
+      });
 
       setHoleFinishPrompt(null);
       resetTapUi();
       setTapPoint(null);
       setPendingTap(null);
       autoCandidateRef.current = { hole: 0, count: 0 };
+      const nextHoleNum = (hole % 18) + 1;
       setAutoHole(nextHoleNum);
       setManualHole(nextHoleNum);
+      setResumeHole(nextHoleNum);
       setTargetYards(0);
       if (demoMode) setDemoProgress(0);
       const howLabel = how === "given" ? " · quedó dada" : "";
@@ -1248,15 +1232,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum}`
       );
     },
-    [
-      holeFinishPrompt,
-      holeShotsStore,
-      activeHolePoints,
-      bagScope,
-      resetTapUi,
-      insideHole,
-      demoMode,
-    ]
+    [holeFinishPrompt, bagScope, resetTapUi, demoMode]
   );
 
   const showHoleFinishPrompt = useCallback(
@@ -1305,6 +1281,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setShotPlanOpen(false);
       setHoleFinishPrompt(null);
       setMapFramingLock(null);
+      setHoleCorrectionMode(false);
     }
     prevActiveHoleRef.current = activeHole;
   }, [activeHole, resetTapUi]);
@@ -1539,7 +1516,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         if (
           shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
         ) {
-          const strokeCount = completedStrokeCount(next, activeHole);
+          const strokeCount = finishPromptStrokeCount(next, activeHole);
           pinMapFraming({ lat, lon });
           showHoleFinishPrompt(
             lat,
@@ -1713,7 +1690,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setShotPlanOpen(false);
         setPlanContext(null);
         pinMapFraming(from);
-        const strokeCount = completedStrokeCount(store, activeHole);
+        const strokeCount = finishPromptStrokeCount(store, activeHole);
         showHoleFinishPrompt(
           from.lat,
           from.lon,
@@ -1839,6 +1816,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       autoCandidateRef.current = { hole: 0, count: 0 };
       resetHoleFromScratch(n);
       setManualHole(n);
+      setResumeHole(n);
+      setHoleCorrectionMode(false);
       setArrivalToast(null);
       if (demoMode) setDemoProgress(0.35);
     },
@@ -1849,6 +1828,82 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     resetHoleFromScratch(activeHole);
     setArrivalToast(`Hoyo ${activeHole} reiniciado · marca salida`);
   }, [activeHole, resetHoleFromScratch]);
+
+  const canOfferHoleCorrection =
+    resumeHole != null &&
+    activeHole !== resumeHole &&
+    hasRemovableShotsOnHole(holeShotsStore, activeHole);
+
+  const enterHoleCorrection = useCallback(() => {
+    setHoleCorrectionMode(true);
+    setShotsDetailOpen(false);
+    setShotPlanOpen(false);
+    setPlanContext(null);
+    setHoleFinishPrompt(null);
+    resetTapUi();
+    setTapPoint(null);
+    setPendingTap(null);
+    setArrivalToast(`Corregir hoyo ${activeHole} · ✕ quita el último golpe`);
+  }, [activeHole, resetTapUi]);
+
+  const removeLastShotOnActiveHole = useCallback(() => {
+    if (!hasRemovableShotsOnHole(holeShotsStore, activeHole)) return;
+    const next = removeLastShotOnHole(holeShotsStore, activeHole);
+    setHoleShotsStore(next);
+    saveHoleShots(next, bagScope);
+    resetTapUi();
+    setShotPlanOpen(false);
+    setPlanContext(null);
+    setHoleFinishPrompt(null);
+    setShotsDetailOpen(false);
+    setMapFramingLock(null);
+    const pt =
+      lastBallPosition(next, activeHole, catalogTeeForHole ?? undefined) ??
+      holeTeeMark(next, activeHole) ??
+      catalogTeeForHole;
+    if (pt) pinMapFraming(pt);
+    setArrivalToast(
+      hasRemovableShotsOnHole(next, activeHole)
+        ? `Golpe quitado · sigue con ✕ o vuelve a anotar`
+        : `Golpes borrados · anota de nuevo el hoyo ${activeHole}`
+    );
+  }, [
+    activeHole,
+    bagScope,
+    holeShotsStore,
+    catalogTeeForHole,
+    resetTapUi,
+    pinMapFraming,
+  ]);
+
+  const returnToResumeHole = useCallback(() => {
+    if (resumeHole == null) return;
+    setHoleCorrectionMode(false);
+    resetTapUi();
+    setTapPoint(null);
+    setPendingTap(null);
+    setShotsDetailOpen(false);
+    setShotPlanOpen(false);
+    setHoleFinishPrompt(null);
+    setMapFramingLock(null);
+    setManualHole(resumeHole);
+    const pt =
+      lastBallPosition(
+        holeShotsStore,
+        resumeHole,
+        catalogTeeForHole ?? undefined
+      ) ??
+      holeTeeMark(holeShotsStore, resumeHole) ??
+      null;
+    if (pt) pinMapFraming(pt);
+    setArrivalToast(`De vuelta al hoyo ${resumeHole}`);
+  }, [
+    resumeHole,
+    resetTapUi,
+    holeShotsStore,
+    catalogTeeForHole,
+    pinMapFraming,
+  ]);
 
   const teeMarkBannerLine =
     arrivalToast &&
@@ -2132,6 +2187,39 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               >
                 Salir 10
               </button>
+              {canOfferHoleCorrection && !holeCorrectionMode ? (
+                <button
+                  type="button"
+                  onClick={enterHoleCorrection}
+                  aria-label={`Corregir hoyo ${activeHole}`}
+                  className="rounded-md border border-orange-400/50 bg-orange-950/80 px-2 py-0.5 text-[10px] font-black leading-tight text-orange-100 shadow-lg backdrop-blur-sm active:scale-95"
+                >
+                  Corregir hoyo
+                </button>
+              ) : null}
+              {holeCorrectionMode && resumeHole != null ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={removeLastShotOnActiveHole}
+                    disabled={
+                      !hasRemovableShotsOnHole(holeShotsStore, activeHole)
+                    }
+                    aria-label="Quitar último golpe"
+                    className="rounded-md border border-red-400/50 bg-red-950/80 px-2 py-0.5 text-[10px] font-black leading-tight text-red-100 shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-40"
+                  >
+                    ✕ Último golpe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={returnToResumeHole}
+                    aria-label={`Volver al hoyo ${resumeHole}`}
+                    className="rounded-md border border-emerald-400/50 bg-emerald-950/80 px-2 py-0.5 text-[10px] font-black leading-tight text-emerald-100 shadow-lg backdrop-blur-sm active:scale-95"
+                  >
+                    Volver al hoyo {resumeHole}
+                  </button>
+                </>
+              ) : null}
             </div>
             <button
               type="button"
