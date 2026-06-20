@@ -68,10 +68,10 @@ interface HoleYardageMapProps {
   teeAdjustMode?: boolean;
   /** Posiciones fijas donde quedó la bola (golpes ya confirmados). */
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
-  /** Bola actual: GPS al marcar llegada, o última bola al jugar. */
+  /** Bola actual: última posición de juego (no GPS al planear golpe). */
   playBallPoint?: { lat: number; lon: number } | null;
-  /** Tras OB: encuadre fijo en el tramo donde se jugó el golpe (no salida ni OB). */
-  mapFramingLock?: { lat: number; lon: number; segmentIdx: number } | null;
+  /** Encuadre fijo en la última bola o replay tras OB. */
+  mapFramingPoint?: { lat: number; lon: number; segmentIdx: number } | null;
   /** Tee del catálogo (referencia visual al marcar salida). */
   catalogTeePoint?: { lat: number; lon: number } | null;
 }
@@ -104,7 +104,7 @@ export function HoleYardageMap({
   teeAdjustMode = false,
   shotLandings = [],
   playBallPoint = null,
-  mapFramingLock = null,
+  mapFramingPoint = null,
   catalogTeePoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -340,16 +340,16 @@ export function HoleYardageMap({
         shotLandings.length > 0
           ? shotLandings[shotLandings.length - 1]
           : null;
-      /** Posición de juego para encuadre (tras OB = tramo donde pegaste, no salida). */
+      /** Posición de juego para encuadre: siempre la última bola, nunca GPS salvo fallback. */
       const framingPos =
-        mapFramingLock ??
+        mapFramingPoint ??
         (needsTeeMark && catalogTeePoint
           ? catalogTeePoint
-          : playBallPoint ?? lastLanding ?? player);
+          : playBallPoint ?? lastLanding ?? teeMarkPoint ?? catalogTeePoint ?? player);
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
       const segIdx =
-        mapFramingLock != null && hasCenterline
-          ? mapFramingLock.segmentIdx
+        mapFramingPoint != null && hasCenterline
+          ? mapFramingPoint.segmentIdx
           : hasCenterline
             ? centerlineSegmentIndex(framingPos, centerline!)
             : 0;
@@ -689,7 +689,7 @@ export function HoleYardageMap({
     teeMarkPoint,
     shotLandings,
     playBallPoint,
-    mapFramingLock,
+    mapFramingPoint,
     catalogTeePoint,
     needsTeeMark,
     teeAdjustMode,
