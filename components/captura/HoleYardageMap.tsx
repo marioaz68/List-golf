@@ -114,6 +114,7 @@ export function HoleYardageMap({
   // actualizaciones de posición no, para no recargar tiles (evita parpadeo).
   const framedHoleRef = useRef<number | null>(null);
   const framedSegmentRef = useRef<number>(0);
+  const framedPosRef = useRef<string>("");
   const autoZoomRef = useRef(17);
   const userZoomDeltaRef = useRef(0);
   const framingAnchorRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -299,6 +300,7 @@ export function HoleYardageMap({
     setZoomPercent(100);
     framedHoleRef.current = -1;
     framedSegmentRef.current = -1;
+    framedPosRef.current = "";
   }, [holeNo]);
 
   // Update markers, rotation, zoom when data changes
@@ -335,11 +337,12 @@ export function HoleYardageMap({
         shotLandings.length > 0
           ? shotLandings[shotLandings.length - 1]
           : null;
-      /** Posición de juego para encuadre (salida/última bola), no solo GPS. */
+      /** Posición de juego para encuadre: bola actual (p. ej. tras OB stroke-and-distance),
+       *  no el último aterrizaje si quedó fuera. */
       const framingPos =
         needsTeeMark && catalogTeePoint
           ? catalogTeePoint
-          : lastLanding ?? teeMarkPoint ?? player;
+          : playBallPoint ?? lastLanding ?? teeMarkPoint ?? player;
       const hasCenterline = Boolean(centerline && centerline.length >= 2);
       const segIdx = hasCenterline
         ? centerlineSegmentIndex(framingPos, centerline!)
@@ -527,10 +530,15 @@ export function HoleYardageMap({
         if (anchor) {
           const recenterHole = framedHoleRef.current !== holeNo;
           const recenterSeg = framedSegmentRef.current !== segIdx;
+          const posKey = `${Math.round(framingPos.lat * 1e5)}:${Math.round(
+            framingPos.lon * 1e5
+          )}`;
+          const recenterPos = framedPosRef.current !== posKey;
           framedHoleRef.current = holeNo;
           framedSegmentRef.current = segIdx;
+          framedPosRef.current = posKey;
           const shouldReframe =
-            recenterHole || (!userPin && recenterSeg);
+            recenterHole || (!userPin && (recenterSeg || recenterPos));
           if (shouldReframe) {
             frameByProximity(
               map,
@@ -561,7 +569,7 @@ export function HoleYardageMap({
             );
             autoZoomRef.current = map.getZoom();
             framingAnchorRef.current = { lat: anchor.lat, lon: anchor.lon };
-            if (recenterHole) {
+            if (recenterHole || recenterPos) {
               userZoomDeltaRef.current = 0;
               setZoomPercent(100);
             } else if (userZoomDeltaRef.current !== 0) {
