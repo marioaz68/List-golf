@@ -20,6 +20,8 @@ import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
 import { LieChip } from "@/components/captura/LieChip";
 import type { LieKind } from "@/lib/distances/detectLie";
 import { getShotPlanBagClubs, type PlayerBag } from "@/lib/distances/playerBag";
+import type { ManualPenaltyReason } from "@/lib/distances/holeShots";
+import { MANUAL_PENALTY_OPTIONS } from "@/lib/distances/holeShots";
 
 type ClubPick = {
   key: string;
@@ -102,6 +104,8 @@ interface ShotPlanPanelProps {
     plannedYards: number;
   }) => void;
   onCancel: () => void;
+  /** +1 por clic: BI, zanja, perdida y otros (OB y lago = automático). */
+  onAddPenalty?: (reason: ManualPenaltyReason) => void;
   /** Vuelve a pedir tocar el mapa para el último golpe ya confirmado. */
   onCorrectLastLanding?: () => void;
 }
@@ -116,6 +120,7 @@ export function ShotPlanPanel({
   inBunker = false,
   onConfirm,
   onCancel,
+  onAddPenalty,
   onCorrectLastLanding,
 }: ShotPlanPanelProps) {
   const picks = useMemo(() => buildClubPicks(bag), [bag]);
@@ -257,6 +262,20 @@ export function ShotPlanPanel({
               : `${yardsToGreen} al centro`}
           </span>
         </div>
+        {onAddPenalty ? (
+          <div className="grid max-w-[9.75rem] grid-cols-3 gap-0.5">
+            {MANUAL_PENALTY_OPTIONS.map(({ reason, label }) => (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => onAddPenalty(reason)}
+                className="rounded-md border border-red-500/40 bg-red-950/90 px-0.5 py-0.5 text-[7px] font-black leading-tight text-red-100 active:scale-95"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
           <div className="w-[3.25rem]">
             <VerticalRoller

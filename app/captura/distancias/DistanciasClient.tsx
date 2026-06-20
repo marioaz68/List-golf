@@ -62,9 +62,11 @@ import type { GreenDistances } from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   addFinalGreenPutt,
+  addManualPenaltyStroke,
   completedStrokeCount,
   cancelPendingShot,
   ensureObPenaltyStroke,
+  ensureWaterPenaltyStroke,
   clearHoleShots,
   completeShotArrival,
   hasHoleTeeMark,
@@ -75,12 +77,16 @@ import {
   lastBallPosition,
   lastCompletedShot,
   loadHoleShots,
+  penaltyReasonLabel,
   pendingShotOnHole,
+  pendingWaterDropOnHole,
   resetShotArrival,
   saveHoleShots,
   setHoleTeeMark,
+  setWaterPenaltyDrop,
   shotsForHole,
   type HoleShotsStore,
+  type ManualPenaltyReason,
 } from "@/lib/distances/holeShots";
 
 function framingPinAt(
@@ -683,6 +689,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     [holeShotsStore, activeHole]
   );
 
+  const pendingWaterDrop = useMemo(
+    () => pendingWaterDropOnHole(holeShotsStore, activeHole),
+    [holeShotsStore, activeHole]
+  );
+
   const lastCompletedShotOnHole = useMemo(
     () => lastCompletedShot(holeShotsStore, activeHole),
     [holeShotsStore, activeHole]
@@ -1259,7 +1270,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     const ms =
       arrivalToast.includes("terminado") ||
       arrivalToast.includes("Pasa al hoyo") ||
-      arrivalToast.includes("OB ·")
+      arrivalToast.includes("OB ·") ||
+      arrivalToast.includes("Lago ·")
         ? 6000
         : 2500;
     const t = window.setTimeout(() => setArrivalToast(null), ms);
@@ -1360,6 +1372,29 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       if (geo.status !== "ok" || !activeHolePoints) return;
       if (holeFinishPrompt) return;
 
+      if (pendingWaterDrop) {
+        const dropLie = detectLieForPoint(lat, lon);
+        if (dropLie.kind === "water") {
+          setArrivalToast("Marca atrás del lago, fuera del agua");
+          return;
+        }
+        const next = setWaterPenaltyDrop(
+          holeShotsStore,
+          activeHole,
+          pendingWaterDrop.id,
+          { lat, lon }
+        );
+        const strokeCount = completedStrokeCount(next, activeHole);
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        pinMapFraming({ lat, lon });
+        setArrivalToast(
+          `Lago · suelta marcada · ${strokeCount} golpes · elige bastón`
+        );
+        openPlanFromPoint(lat, lon);
+        return;
+      }
+
       if (needsTeeMark || canAdjustTee) {
         markTeeAt(lat, lon);
         return;
@@ -1409,6 +1444,29 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
             `OB · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · vuelves a jugar desde donde estabas`
           );
           openPlanFromPoint(replayFrom.lat, replayFrom.lon);
+          return;
+        }
+
+        if (lie.kind === "water") {
+          const replayFrom = {
+            lat: pendingShot.from.lat,
+            lon: pendingShot.from.lon,
+          };
+          setHoleShotsStore(next);
+          saveHoleShots(next, bagScope);
+          next = ensureWaterPenaltyStroke(
+            next,
+            activeHole,
+            pendingShot.id,
+            replayFrom
+          );
+          const strokeCount = completedStrokeCount(next, activeHole);
+          setHoleShotsStore(next);
+          saveHoleShots(next, bagScope);
+          pinMapFraming(replayFrom);
+          setArrivalToast(
+            `Lago · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · toca atrás del lago donde jugarás`
+          );
           return;
         }
 
@@ -1467,6 +1525,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       detectLieForPoint,
       showHoleFinishPrompt,
       pinMapFraming,
+      pendingWaterDrop,
     ]
   );
 
@@ -1510,6 +1569,39 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     }
     setPendingTap(null);
   }, [hasTeeMark, pendingTap, playFromPoint, openPlanFromPoint, pinMapFraming]);
+
+  const handleAddPenalty = useCallback(
+    (reason: ManualPenaltyReason) => {
+      if (!teeMark || !activeHolePoints) return;
+      const from =
+        lastBallPosition(holeShotsStore, activeHole, catalogTeeForHole) ??
+        teeMark;
+      let next = holeShotsStore;
+      if (pendingShot) {
+        next = cancelPendingShot(next, activeHole, pendingShot.id);
+      }
+      next = addManualPenaltyStroke(next, activeHole, from, reason);
+      const strokeCount = completedStrokeCount(next, activeHole);
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      pinMapFraming(from);
+      setArrivalToast(
+        `${penaltyReasonLabel(reason)} · +1 = ${strokeCount} golpes`
+      );
+      openPlanFromPoint(from.lat, from.lon);
+    },
+    [
+      teeMark,
+      activeHolePoints,
+      holeShotsStore,
+      activeHole,
+      catalogTeeForHole,
+      pendingShot,
+      bagScope,
+      pinMapFraming,
+      openPlanFromPoint,
+    ]
+  );
 
   const handleConfirmPlan = useCallback(
     (plan: {
@@ -1801,7 +1893,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         </div>
       ) : null}
 
-      {pendingTap && !farFromCourse && !needsTeeMark ? (
+      {pendingTap && !farFromCourse && !needsTeeMark && !pendingWaterDrop ? (
         <div className="pointer-events-none absolute inset-x-0 top-[38%] z-[1055] flex justify-center px-4">
           <div className="pointer-events-auto rounded-xl border border-white/20 bg-black/80 px-3 py-2 shadow-2xl backdrop-blur-md">
             <p className="mb-1.5 text-center text-[10px] font-semibold text-slate-300">
@@ -1812,6 +1904,19 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               onShot={handleChooseShot}
               onCancel={() => setPendingTap(null)}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {pendingWaterDrop && !farFromCourse && !needsTeeMark ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[28%] z-[1095] flex justify-center px-4">
+          <div className="pointer-events-none w-full max-w-sm rounded-xl border-2 border-sky-400/60 bg-sky-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
+            <p className="text-center text-xs font-black text-sky-50">
+              Lago · castigo +1 anotado
+            </p>
+            <p className="mt-1 text-center text-[11px] font-semibold text-sky-200">
+              Toca en el mapa atrás del lago, donde jugarás el siguiente golpe
+            </p>
           </div>
         </div>
       ) : null}
@@ -1861,7 +1966,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               "pointer-events-none mx-2 mb-1 rounded-lg px-3 py-1.5 text-center text-[11px] font-semibold shadow-lg",
               arrivalToast.includes("OB ·")
                 ? "border border-red-500/50 bg-red-950/95 text-red-100"
-                : "bg-emerald-900/90 text-emerald-100",
+                : arrivalToast.includes("Lago ·")
+                  ? "border border-sky-500/50 bg-sky-950/95 text-sky-100"
+                  : "bg-emerald-900/90 text-emerald-100",
             ].join(" ")}
           >
             {arrivalToast}
@@ -2042,7 +2149,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {shotPlanOpen && planContext && !farFromCourse && hasTeeMark ? (
+      {shotPlanOpen && planContext && !farFromCourse && hasTeeMark && !pendingWaterDrop ? (
         <ShotPlanPanel
           key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}-${planContext.lieKind}`}
           bag={bag}
@@ -2052,6 +2159,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           onGreen={planContext.onGreen}
           inBunker={planContext.inBunker}
           onConfirm={handleConfirmPlan}
+          onAddPenalty={handleAddPenalty}
           onCancel={() => {
             setShotPlanOpen(false);
             setPlanContext(null);

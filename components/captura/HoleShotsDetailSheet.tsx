@@ -2,6 +2,7 @@
 
 import { lieLabel } from "@/lib/distances/detectLie";
 import {
+  penaltyReasonLabel,
   plannedVsActualDelta,
   shotClubLabel,
   shotsForHole,
@@ -63,7 +64,12 @@ export function HoleShotsDetailSheet({
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-bold text-white">
                       {s.strokeNo}.{" "}
-                      {shotClubLabel(s.catalogId, s.swing, s.isPenalty)}
+                      {shotClubLabel(
+                        s.catalogId,
+                        s.swing,
+                        s.isPenalty,
+                        s.penaltyReason
+                      )}
                     </div>
                     {!pending && onCorrectLanding ? (
                       <button
@@ -78,7 +84,7 @@ export function HoleShotsDetailSheet({
                   <div className="text-slate-400">
                     {s.isPenalty ? (
                       <span className="font-semibold text-red-300">
-                        Castigo stroke-and-distance (+1)
+                        {penaltyReasonLabel(s.penaltyReason)} (+1)
                       </span>
                     ) : (
                       <>

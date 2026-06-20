@@ -20,8 +20,58 @@ export interface HoleShot {
   lieKind?: LieKind;
   /** Golpe de castigo (p. ej. OB stroke-and-distance). */
   isPenalty?: boolean;
+  /** Motivo del castigo cuando isPenalty. */
+  penaltyReason?: PenaltyReason;
   plannedAt: number;
   completedAt: number | null;
+}
+
+export type PenaltyReason =
+  | "ob"
+  | "water"
+  | "unplayable"
+  | "hazard"
+  | "lost"
+  | "wrong_place"
+  | "wrong_ball"
+  | "other";
+
+/** Castigos manuales (+1 por clic). OB y lago los maneja el sistema. */
+export type ManualPenaltyReason = Exclude<PenaltyReason, "ob" | "water">;
+
+export const MANUAL_PENALTY_OPTIONS: ReadonlyArray<{
+  reason: ManualPenaltyReason;
+  label: string;
+}> = [
+  { reason: "unplayable", label: "BI +1" },
+  { reason: "hazard", label: "Zanja +1" },
+  { reason: "lost", label: "Perdida +1" },
+  { reason: "wrong_place", label: "Lugar +1" },
+  { reason: "wrong_ball", label: "Equiv. +1" },
+  { reason: "other", label: "Otro +1" },
+];
+
+export function penaltyReasonLabel(reason?: PenaltyReason | string): string {
+  switch (reason) {
+    case "ob":
+      return "Fuera de límites (OB)";
+    case "water":
+      return "Lago";
+    case "unplayable":
+      return "Bola injugable";
+    case "hazard":
+      return "Zanja";
+    case "lost":
+      return "Bola perdida";
+    case "wrong_place":
+      return "Lugar incorrecto";
+    case "wrong_ball":
+      return "Bola equivocada";
+    case "other":
+      return "Otro castigo";
+    default:
+      return "Castigo";
+  }
 }
 
 export interface HoleShotsStore {
@@ -147,8 +197,13 @@ export function lastBallPosition(
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
     if (s.completedAt == null) continue;
-    if (s.isPenalty && s.to) return s.to;
+    if (s.isPenalty) {
+      if (s.penaltyReason === "water" && s.to == null) continue;
+      if (s.to) return s.to;
+      continue;
+    }
     if (s.lieKind === "ob") return { ...s.from };
+    if (s.lieKind === "water") continue;
     if (s.to) return s.to;
   }
   return holeTeeMark(store, hole) ?? catalogTee ?? null;
@@ -248,9 +303,12 @@ export function isTapInPendingPutt(
 export function shotClubLabel(
   catalogId: string,
   swing: SwingKind,
-  isPenalty?: boolean
+  isPenalty?: boolean,
+  penaltyReason?: PenaltyReason
 ): string {
-  if (isPenalty || catalogId === "penalty") return "Castigo OB";
+  if (isPenalty || catalogId === "penalty") {
+    return `${penaltyReasonLabel(penaltyReason)} +1`;
+  }
   const cat = CLUB_BY_ID[catalogId];
   const short = cat?.shortLabel ?? catalogId;
   return swing === "three_quarter" ? `${short} 3/4` : `${short} full`;
@@ -323,27 +381,35 @@ export function completedStrokeCount(
   return shotsForHole(store, hole).filter((s) => s.completedAt != null).length;
 }
 
-function appendObPenaltyStroke(
+function lieKindForPenalty(reason: PenaltyReason): LieKind {
+  if (reason === "ob") return "ob";
+  if (reason === "water" || reason === "hazard") return "water";
+  return "rough";
+}
+
+function appendPenaltyStroke(
   store: HoleShotsStore,
   hole: number,
-  replayFrom: LatLon
+  at: LatLon,
+  penaltyReason: PenaltyReason
 ): HoleShotsStore {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
   const strokeNo = completedStrokeCount(store, hole) + 1;
   const now = Date.now();
   const penalty: HoleShot = {
-    id: `${hole}-${now}-penalty-ob`,
+    id: `${hole}-${now}-penalty-${penaltyReason}`,
     hole,
     strokeNo,
     catalogId: "penalty",
     swing: "full",
     plannedYards: 0,
     actualYards: 0,
-    from: { ...replayFrom },
-    to: { ...replayFrom },
-    lieKind: "ob",
+    from: { ...at },
+    to: { ...at },
+    lieKind: lieKindForPenalty(penaltyReason),
     isPenalty: true,
+    penaltyReason,
     plannedAt: now,
     completedAt: now,
   };
@@ -351,6 +417,131 @@ function appendObPenaltyStroke(
     ...store,
     byHole: { ...store.byHole, [key]: [...prev, penalty] },
   };
+}
+
+function appendObPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  replayFrom: LatLon
+): HoleShotsStore {
+  return appendPenaltyStroke(store, hole, replayFrom, "ob");
+}
+
+function appendWaterPenaltyAwaitingDrop(
+  store: HoleShotsStore,
+  hole: number,
+  from: LatLon
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const strokeNo = completedStrokeCount(store, hole) + 1;
+  const now = Date.now();
+  const penalty: HoleShot = {
+    id: `${hole}-${now}-penalty-water`,
+    hole,
+    strokeNo,
+    catalogId: "penalty",
+    swing: "full",
+    plannedYards: 0,
+    actualYards: 0,
+    from: { ...from },
+    to: null,
+    lieKind: "water",
+    isPenalty: true,
+    penaltyReason: "water",
+    plannedAt: now,
+    completedAt: now,
+  };
+  return {
+    ...store,
+    byHole: { ...store.byHole, [key]: [...prev, penalty] },
+  };
+}
+
+/** Castigo de lago pendiente de marcar suelta atrás del agua. */
+export function pendingWaterDropOnHole(
+  store: HoleShotsStore,
+  hole: number
+): HoleShot | null {
+  const shots = shotsForHole(store, hole);
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i];
+    if (
+      s.isPenalty &&
+      s.penaltyReason === "water" &&
+      s.completedAt != null &&
+      s.to == null
+    ) {
+      return s;
+    }
+  }
+  return null;
+}
+
+export function setWaterPenaltyDrop(
+  store: HoleShotsStore,
+  hole: number,
+  penaltyShotId: string,
+  drop: LatLon
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  return {
+    ...store,
+    byHole: {
+      ...store.byHole,
+      [key]: prev.map((s) =>
+        s.id === penaltyShotId &&
+        s.isPenalty &&
+        s.penaltyReason === "water"
+          ? { ...s, to: { ...drop } }
+          : s
+      ),
+    },
+  };
+}
+
+function applyWaterPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  waterShotId: string,
+  from: LatLon
+): HoleShotsStore | null {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const waterIdx = prev.findIndex((s) => s.id === waterShotId);
+  if (waterIdx < 0) return null;
+  const waterShot = prev[waterIdx];
+  if (waterShot.completedAt == null || waterShot.lieKind !== "water") return null;
+
+  const next = prev[waterIdx + 1];
+  if (next?.isPenalty && next.penaltyReason === "water") {
+    return store;
+  }
+
+  return appendWaterPenaltyAwaitingDrop(store, hole, from);
+}
+
+/** Tras marcar caída en lago: +1 y espera toque de suelta atrás del agua. */
+export function ensureWaterPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  waterShotId: string,
+  from: LatLon
+): HoleShotsStore {
+  const applied = applyWaterPenaltyStroke(store, hole, waterShotId, from);
+  if (applied) return applied;
+  return appendWaterPenaltyAwaitingDrop(store, hole, from);
+}
+
+/** Anota +1 por clic (BI, zanja o bola perdida) sin mover la bola. */
+export function addManualPenaltyStroke(
+  store: HoleShotsStore,
+  hole: number,
+  at: LatLon,
+  reason: ManualPenaltyReason
+): HoleShotsStore {
+  return appendPenaltyStroke(store, hole, at, reason);
 }
 
 /**
