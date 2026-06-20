@@ -447,10 +447,12 @@ export function HoleYardageMap({
           : remainingWps && remainingWps.length >= 2
             ? zoomToFitWaypoints(remainingWps, bearing, availW, availH)
             : null;
-      const zoomAnchor =
+      const zoomAnchor: { lat: number; lon: number } =
         freezeMapView || landingMarkMode
           ? { lat: framingPos.lat, lon: framingPos.lon }
-          : anchor;
+          : anchor != null
+            ? { lat: anchor.lat, lon: anchor.lon }
+            : { lat: framingPos.lat, lon: framingPos.lon };
 
       // Vista limpia: sin línea azul del hoyo ni líneas/etiquetas de obstáculos.
       // De los puntos del green solo mostramos el número de yardas en chiquito
