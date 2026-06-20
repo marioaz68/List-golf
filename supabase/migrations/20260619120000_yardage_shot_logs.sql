@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS public.yardage_shot_logs (
   entry_id uuid REFERENCES public.tournament_entries (id) ON DELETE SET NULL,
   caddie_id uuid REFERENCES public.caddies (id) ON DELETE SET NULL,
   telegram_user_id bigint,
-  round_id uuid REFERENCES public.tournament_rounds (id) ON DELETE SET NULL,
+  round_id uuid REFERENCES public.rounds (id) ON DELETE SET NULL,
   course_id uuid REFERENCES public.courses (id) ON DELETE SET NULL,
   payload jsonb NOT NULL,
   payload_version integer NOT NULL DEFAULT 2,
