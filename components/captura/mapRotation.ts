@@ -184,9 +184,18 @@ export function applyManualZoomLevel(
   minZoom = 15,
   maxZoom = 21,
   topBar = 56,
-  bottomBar = 104
+  bottomBar = 104,
+  /** En green: todos los puntos deben caber (back arriba, bola abajo). */
+  fitPoints?: Array<{ lat: number; lon: number }> | null
 ): number {
-  const z = Math.max(minZoom, Math.min(maxZoom, autoZoom + delta));
+  let z = Math.max(minZoom, Math.min(maxZoom, autoZoom + delta));
+  if (fitPoints && fitPoints.length >= 2) {
+    const targetTopY = topBar + Math.max(24, viewportH * 0.1);
+    const availH = Math.max(80, (viewportH - bottomBar - targetTopY) * 0.92);
+    const availW = Math.max(80, viewportW * 0.88);
+    const fitZ = zoomToFitWaypoints(fitPoints, bearing, availW, availH);
+    z = Math.min(z, fitZ);
+  }
   tuneRotatedFraming(
     map,
     bearing,
@@ -218,6 +227,48 @@ export function applyManualZoomLevel(
       bottomBar
     );
     map.setZoomAround([anchorLat, anchorLon], map.getZoom(), { animate: false });
+  }
+  if (fitPoints && fitPoints.length >= 1) {
+    const marginX = Math.max(28, viewportW * 0.06);
+    const minY = topBar;
+    const maxY = viewportH - bottomBar - 12;
+    const minX = marginX;
+    const maxX = viewportW - marginX;
+    for (let pass = 0; pass < 6; pass++) {
+      let dx = 0;
+      let dy = 0;
+      for (const pt of fitPoints) {
+        const s = toRotatedScreen(
+          map,
+          pt.lat,
+          pt.lon,
+          bearing,
+          viewportW,
+          viewportH
+        );
+        if (s.x < minX) dx = Math.min(dx, s.x - minX);
+        else if (s.x > maxX) dx = Math.max(dx, s.x - maxX);
+        if (s.y < minY) dy = Math.min(dy, s.y - minY);
+        else if (s.y > maxY) dy = Math.max(dy, s.y - maxY);
+      }
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+      panScreenDelta(map, bearing, dx, dy);
+      tuneRotatedFraming(
+        map,
+        bearing,
+        0,
+        0,
+        anchorLat,
+        anchorLon,
+        viewportW,
+        viewportH,
+        rotW,
+        rotH,
+        topBar,
+        bottomBar
+      );
+      map.setZoomAround([anchorLat, anchorLon], map.getZoom(), { animate: false });
+    }
   }
   return z;
 }

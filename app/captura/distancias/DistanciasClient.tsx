@@ -1953,6 +1953,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
                 ? catalogTeeForHole
                 : null
             }
+            ballOnGreen={currentBallLie?.onGreen ?? false}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
