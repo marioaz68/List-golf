@@ -134,6 +134,7 @@ export function HoleYardageMap({
   const onMapTapRef = useRef(onMapTap);
   const awaitingLandingModeRef = useRef(awaitingLandingMode);
   const waterDropModeRef = useRef(waterDropMode);
+  const prevLandingMarkModeRef = useRef(false);
   const lastTouchEndAtRef = useRef(0);
   const sizeRef = useRef({ w: 0, h: 0 });
   const playerPosRef = useRef({ lat: playerLat, lon: playerLon });
@@ -352,6 +353,10 @@ export function HoleYardageMap({
       viewportH === 0
     )
       return;
+
+    const justEnteredLanding =
+      awaitingLandingMode && !prevLandingMarkModeRef.current;
+    prevLandingMarkModeRef.current = awaitingLandingMode;
 
     (async () => {
       const L = await loadLeaflet();
@@ -603,7 +608,15 @@ export function HoleYardageMap({
           framedPosRef.current = posKey;
           const shouldReframe =
             recenterHole || (!userPin && (recenterSeg || recenterPos));
-          if (shouldReframe && !(landingMarkMode && manualZoomActive)) {
+          if (
+            shouldReframe &&
+            landingMarkMode &&
+            justEnteredLanding &&
+            !manualZoomActive
+          ) {
+            autoZoomRef.current = map.getZoom();
+            framingAnchorRef.current = zoomAnchor;
+          } else if (shouldReframe && !(landingMarkMode && manualZoomActive)) {
             frameByProximity(
               map,
               L,
@@ -629,12 +642,17 @@ export function HoleYardageMap({
               par,
               hasCenterline ? { idx: segIdx, total: totalSegs } : null,
               null,
-              fitZoom
+              landingMarkMode ? null : fitZoom
             );
             autoZoomRef.current = map.getZoom();
             framingAnchorRef.current = zoomAnchor;
             if (recenterHole || recenterPos) {
-              if (!(landingMarkMode && manualZoomActive)) {
+              if (
+                !(
+                  landingMarkMode &&
+                  (manualZoomActive || justEnteredLanding)
+                )
+              ) {
                 userZoomDeltaRef.current = 0;
                 setZoomPercent(100);
               }

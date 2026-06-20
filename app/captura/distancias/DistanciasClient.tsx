@@ -1730,7 +1730,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       setPlanContext(null);
       setMapFramingLock(null);
       setArrivalToast(
-        "Golpe registrado · al llegar toca en el mapa donde quedó la bola"
+        "Golpe registrado · al llegar toca donde quedó la bola"
       );
     },
     [
