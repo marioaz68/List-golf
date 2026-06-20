@@ -725,13 +725,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const playBallPoint = useMemo(() => {
     if (geo.status !== "ok") return null;
     if (pendingShot) {
+      if (mapFramingLock) {
+        return { lat: mapFramingLock.lat, lon: mapFramingLock.lon };
+      }
       return { lat: geo.lat, lon: geo.lon };
     }
     if (completedShotsCount > 0 && lastBall) {
       return { lat: lastBall.lat, lon: lastBall.lon };
     }
     return null;
-  }, [geo, pendingShot, completedShotsCount, lastBall]);
+  }, [geo, pendingShot, mapFramingLock, completedShotsCount, lastBall]);
 
   const liveGreenYds = useMemo(() => {
     if (!activeHolePoints || needsTeeMark) return null;
@@ -1389,6 +1392,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setArrivalToast(
           `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
         );
+        setMapFramingLock(null);
         openPlanFromPoint(lat, lon);
         return;
       }
@@ -1490,7 +1494,6 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         plan.swing,
         plan.plannedYards
       );
-      setMapFramingLock(null);
 
       if (
         isTapInPutt(
