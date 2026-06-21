@@ -28,7 +28,7 @@ export function MapFocusTopBar({
     <div
       className={[
         "pointer-events-none absolute left-1/2 z-[1000] -translate-x-1/2",
-        demoMode ? "top-[5.5rem]" : "top-2",
+        demoMode ? "top-[2.65rem]" : "top-2",
       ].join(" ")}
     >
       <div className="flex max-w-[min(100vw-1rem,22rem)] flex-col items-center gap-1">

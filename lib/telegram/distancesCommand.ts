@@ -63,9 +63,7 @@ export function buildDistancesDemoReply(telegramUserId?: string | null): {
   buttons: { text: string; url: string }[][];
 } {
   const tg = String(telegramUserId ?? "").trim();
-  const qs = tg ? `?tg=${encodeURIComponent(tg)}` : "";
   const url = `${appUrl()}/captura/distancias?prueba=1${tg ? `&tg=${encodeURIComponent(tg)}` : ""}`;
-  const url3d = `${appUrl()}/captura/distancias/demo-3d${qs}`;
   return {
     text: [
       "🏠 Yardas DEMO (en casa)",
@@ -74,11 +72,7 @@ export function buildDistancesDemoReply(telegramUserId?: string | null): {
       "  • Sin GPS ni límite de 300 m",
       "  • Simula tu posición con el deslizador tee→green",
       "  • Bolsa, tap en mapa y bastón sugerido",
-      "  • Arriba puedes cambiar entre Satélite 2D y Preview 3D",
     ].join("\n"),
-    buttons: [
-      [{ text: "🏠 Demo satélite 2D", url }],
-      [{ text: "🎮 Preview 3D (experimental)", url: url3d }],
-    ],
+    buttons: [[{ text: "🏠 Abrir demo yardas", url }]],
   };
 }
