@@ -28,7 +28,8 @@ export default async function CalibrarPage(props: {
         <p className="mt-2 text-sm text-slate-400">
           La calibración del campo es solo para personal autorizado. Ábrela
           desde el comando <strong>/CALIBRAR</strong> en el bot de Telegram con
-          tu cuenta autorizada.
+          tu cuenta autorizada. Abajo verás el botón verde grande{" "}
+          <strong>「Calibrar salidas」</strong> para los tees (Negras, Azules…).
         </p>
         <Link
           href="/"

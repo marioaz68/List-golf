@@ -761,6 +761,14 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           ✕
         </Link>
 
+        {mode === "tee" ? (
+          <div className="pointer-events-none absolute inset-x-2 top-14 z-[1000] flex justify-center">
+            <div className="rounded-full bg-emerald-600/95 px-3 py-1 text-[10px] font-black text-white shadow-lg">
+              Salidas · {selectedTeeMeta.name} · H{hole} · toca el tee en el mapa
+            </div>
+          </div>
+        ) : null}
+
         {msg ? (
           <div
             className={[
@@ -781,6 +789,25 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
       {/* Barra inferior fija y pequeña */}
       <div className="z-[1000] shrink-0 border-t border-slate-700 bg-slate-950 px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
+        <div className="mb-2 rounded-lg border border-emerald-500/40 bg-emerald-950/50 px-2 py-1.5">
+          <div className="mb-1 text-[9px] font-bold uppercase tracking-wide text-emerald-300">
+            Salidas de tee (Yardas auto)
+          </div>
+          <button
+            type="button"
+            onClick={() => switchMode("tee")}
+            className={[
+              "w-full rounded-lg py-2.5 text-[12px] font-black",
+              mode === "tee"
+                ? "bg-emerald-400 text-black ring-2 ring-amber-400"
+                : "bg-slate-800 text-emerald-100",
+            ].join(" ")}
+          >
+            {mode === "tee"
+              ? `✓ Calibrando salidas · H${hole}`
+              : "⛳ Calibrar salidas (Negras, Azules…)"}
+          </button>
+        </div>
         <div className="mb-2 flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -805,18 +832,6 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             ].join(" ")}
           >
             Área green
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("tee")}
-            className={[
-              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
-              mode === "tee"
-                ? "bg-emerald-300 text-black"
-                : "bg-slate-800 text-slate-200",
-            ].join(" ")}
-          >
-            Salidas
           </button>
           <button
             type="button"

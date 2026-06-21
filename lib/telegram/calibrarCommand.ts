@@ -47,12 +47,13 @@ export function buildCalibrarReply(telegramUserId?: string | null): {
     text: [
       "🎯 Calibración del campo (CCQ)",
       "",
-      "Camina al punto real y captura tu posición GPS:",
-      "  • Entrada / centro / atrás del green",
-      "  • Trampas y obstáculos (bunker, agua, dogleg…)",
+      "Abre la pantalla satélite y elige abajo qué calibrar:",
+      "  • Salidas — tee de Negras/Azules/Blancas… (hoyo 1→18)",
+      "  • Pts green — entrada / centro / atrás",
+      "  • Fairway, bunkers, lagos, OB…",
       "",
-      "Párate en el punto exacto y toca el botón. Se guarda al instante",
-      "y aparece en la mini app 📏 Yardas de los jugadores.",
+      "Modo Salidas: elige color (ej. Negras), toca el tee en el mapa.",
+      "Se guarda al instante y Yardas usa esa posición al pasar de hoyo.",
     ].join("\n"),
     buttons: [[{ text: "🎯 Abrir calibración", url }]],
   };
