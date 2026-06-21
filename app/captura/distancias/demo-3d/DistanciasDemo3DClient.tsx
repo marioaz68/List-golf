@@ -29,10 +29,10 @@ const HoleFairway3DPreview = dynamic(
 );
 
 const DEMO_HOLES = [
+  { no: 1, label: "H1 · prueba real" },
   { no: 15, label: "H15 · dogleg" },
   { no: 16, label: "H16 · largo" },
-  { no: 1, label: "H1 · recto" },
-  { no: 10, label: "H10 · salida vuelta 2" },
+  { no: 10, label: "H10 · vuelta 2" },
 ] as const;
 
 type HoleLayout = {
@@ -52,7 +52,7 @@ export default function DistanciasDemo3DClient() {
     return `/captura/distancias?${p.toString()}`;
   }, [searchParams]);
 
-  const [holeNo, setHoleNo] = useState(15);
+  const [holeNo, setHoleNo] = useState(1);
   const [progress, setProgress] = useState(0);
   const [layout, setLayout] = useState<HoleLayout | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +151,7 @@ export default function DistanciasDemo3DClient() {
           </div>
         ) : (
           <HoleFairway3DPreview
+            holeNo={layout.holeNo}
             waypoints={layout.waypoints}
             center={layout.center}
             progress={progress}
@@ -208,8 +209,8 @@ export default function DistanciasDemo3DClient() {
             aria-label="Simular avance tee a green"
           />
           <p className="text-center text-[10px] leading-snug text-slate-400">
-            Cámara detrás del jugador · fairway siguiendo la centerline · bandera en el
-            centro calibrado (crece al acercarte).
+            Hoyo 1 con árboles, rough, tee y bunkers · cámara detrás del jugador ·
+            bandera en el centro calibrado.
           </p>
           <div className="flex justify-center pt-1">
             <Link
