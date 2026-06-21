@@ -19,6 +19,10 @@ import {
   waypointsFromLine,
 } from "@/lib/distances/centerline";
 import { haversineMeters } from "@/lib/distances/ccqGreens";
+import {
+  CCQ_CALIBRATION_TEE_SETS,
+  type TeeSetCode,
+} from "@/lib/distances/teePositions";
 import type {
   SimpleCalibrarMode,
   SimpleGreenKey,
@@ -125,6 +129,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
   const [greenAreas, setGreenAreas] = useState<LatLon[][]>([]);
   // OB de todo el campo (compartido por todos los hoyos, hole_number = 0).
   const [obAreas, setObAreas] = useState<LatLon[][]>([]);
+  const [selectedTeeCode, setSelectedTeeCode] = useState<TeeSetCode>("BLK");
+  const [teePoint, setTeePoint] = useState<LatLon | null>(null);
+  const [teeSaved, setTeeSaved] = useState(false);
   // Índice del polígono activo dentro del modo múltiple actual.
   const [activePoly, setActivePoly] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -139,7 +146,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
 
   const refetch = useCallback(async () => {
     try {
-      const [gRes, bRes, fRes, cRes, bkRes, wRes, grRes, obRes] =
+      const [gRes, bRes, fRes, cRes, bkRes, wRes, grRes, obRes, teeRes] =
         await Promise.all([
         fetch(
           `/api/captura/distancias/greens?hole=${hole}&course_id=${CCQ_COURSE_ID}`
@@ -166,6 +173,9 @@ export default function CalibrarClient({ tg }: { tg: string }) {
         fetch(
           `/api/captura/calibrar/polygon?hole=${COURSE_WIDE_HOLE}&kind=ob&course_id=${CCQ_COURSE_ID}`
         ),
+        fetch(
+          `/api/captura/calibrar/tee?hole=${hole}&tee_code=${selectedTeeCode}&course_id=${CCQ_COURSE_ID}`
+        ),
       ]);
       const gData = await gRes.json();
       const bData = await bRes.json();
@@ -175,6 +185,7 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       const wData = await wRes.json();
       const grData = await grRes.json();
       const obData = await obRes.json();
+      const teeData = await teeRes.json();
 
       // Centro y "atrás" del green (para generar la línea de centro por defecto).
       let greenCenter: LatLon | null = null;
@@ -274,10 +285,19 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       setGreenAreas(ringsFrom(grData, "green"));
       setObAreas(obLinesFrom(obData));
       setActivePoly(null);
+
+      if (teeData?.ok && Number.isFinite(teeData.lat) && Number.isFinite(teeData.lon)) {
+        setTeePoint({ lat: Number(teeData.lat), lon: Number(teeData.lon) });
+        setTeeSaved(teeData.source === "db");
+      } else {
+        const hp = CCQ_HOLE_POINTS[hole];
+        setTeePoint(hp?.tee ?? null);
+        setTeeSaved(false);
+      }
     } catch {
       flash("err", "No se pudo cargar el hoyo.");
     }
-  }, [hole]);
+  }, [hole, selectedTeeCode]);
 
   useEffect(() => {
     refetch();
@@ -293,6 +313,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       color: GREEN_META[key].color,
     }));
   }, [green]);
+
+  const selectedTeeMeta =
+    CCQ_CALIBRATION_TEE_SETS.find((t) => t.code === selectedTeeCode) ??
+    CCQ_CALIBRATION_TEE_SETS[0];
 
   // Modo múltiple (bunkers, lagos o áreas de green): lista y setter.
   const multiKind: MultiKind | null = modeToMulti(mode);
@@ -375,6 +399,34 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       flash("ok", `${GREEN_META[key].label} guardado.`);
     } catch (e) {
       flash("err", e instanceof Error ? e.message : "Error al guardar");
+      await refetch();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveTee = async (lat: number, lon: number) => {
+    setTeePoint({ lat, lon });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/captura/calibrar/tee", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tg: tgId,
+          course_id: CCQ_COURSE_ID,
+          hole,
+          tee_set_code: selectedTeeCode,
+          lat,
+          lon,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Error");
+      setTeeSaved(true);
+      flash("ok", `Salida ${selectedTeeMeta.name} H${hole} guardada.`);
+    } catch (e) {
+      flash("err", e instanceof Error ? e.message : "Error al guardar salida");
       await refetch();
     } finally {
       setBusy(false);
@@ -583,6 +635,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
       void saveGreen(selectedGreen, lat, lon);
       return;
     }
+    if (mode === "tee") {
+      void saveTee(lat, lon);
+      return;
+    }
     if (!activeKind || !addingCorner) {
       // Sin "agregar tocando": para mover un punto, arrástralo directamente.
       return;
@@ -665,6 +721,10 @@ export default function CalibrarClient({ tg }: { tg: string }) {
                 : undefined
             }
             onMapTap={handleMapTap}
+            teePoint={teePoint}
+            teeLabel={`${selectedTeeMeta.name} · H${hole}`}
+            teeMarkerColor={selectedTeeMeta.markerColor}
+            onTeeMove={saveTee}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -748,6 +808,18 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           </button>
           <button
             type="button"
+            onClick={() => switchMode("tee")}
+            className={[
+              "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
+              mode === "tee"
+                ? "bg-emerald-300 text-black"
+                : "bg-slate-800 text-slate-200",
+            ].join(" ")}
+          >
+            Salidas
+          </button>
+          <button
+            type="button"
             onClick={() => switchMode("boundary")}
             className={[
               "flex-1 basis-[22%] rounded-lg py-2.5 text-[11px] font-bold",
@@ -820,7 +892,32 @@ export default function CalibrarClient({ tg }: { tg: string }) {
           </button>
         </div>
 
-        {mode === "green" ? (
+        {mode === "tee" ? (
+          <>
+            <div className="mb-1.5 flex gap-1 overflow-x-auto pb-0.5">
+              {CCQ_CALIBRATION_TEE_SETS.map((t) => (
+                <button
+                  key={t.code}
+                  type="button"
+                  onClick={() => setSelectedTeeCode(t.code)}
+                  className={[
+                    "shrink-0 rounded-lg border px-2.5 py-2 text-[10px] font-bold",
+                    selectedTeeCode === t.code
+                      ? "border-amber-400 bg-amber-500 text-black"
+                      : t.chipClass,
+                  ].join(" ")}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] leading-snug text-slate-400">
+              Toca el mapa o arrastra el marcador de{" "}
+              <strong className="text-emerald-200">{selectedTeeMeta.name}</strong> en
+              el hoyo {hole}. {teeSaved ? "Guardada en BD ✓" : "Aún sin guardar (usa default)."}
+            </p>
+          </>
+        ) : mode === "green" ? (
           <div className="flex gap-1.5">
             {(["front", "center", "back"] as SimpleGreenKey[]).map((key) => (
               <button

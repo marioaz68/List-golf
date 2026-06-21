@@ -244,3 +244,29 @@ export async function saveHoleBoundary(
   });
   if (error) throw new Error(error.message);
 }
+
+/** Guarda la posición de una salida (tee) por hoyo y color de marcadores. */
+export async function saveTeePosition(
+  admin: SupabaseClient,
+  args: {
+    courseId: string;
+    hole: number;
+    teeSetCode: string;
+    lat: number;
+    lon: number;
+  }
+): Promise<void> {
+  const { courseId, hole, teeSetCode, lat, lon } = args;
+  const { error } = await admin.from("course_hole_tee_positions").upsert(
+    {
+      course_id: courseId,
+      hole_number: hole,
+      tee_set_code: teeSetCode.trim().toUpperCase(),
+      lat,
+      lon,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "course_id,hole_number,tee_set_code" }
+  );
+  if (error) throw new Error(error.message);
+}

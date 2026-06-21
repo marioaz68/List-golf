@@ -15,6 +15,7 @@ import {
 } from "@/lib/distances/centerline";
 import { obLineFromGeojson } from "@/lib/distances/detectLie";
 import { parseBoundaryGeoJson } from "@/lib/distances/holeBoundary";
+import { indexTeePositionRows } from "@/lib/distances/teePositions";
 import type { LatLon, Polygon } from "@/lib/telegram/ritmo/geometry";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
       waterPolyRes,
       obPolyRes,
       waterPtsRes,
+      teePosRes,
     ] = await Promise.all([
       admin
         .from("course_holes")
@@ -98,6 +100,11 @@ export async function GET(request: NextRequest) {
         .select("hole_number, lat, lon")
         .eq("course_id", courseId)
         .eq("kind", "water")
+        .order("hole_number", { ascending: true }),
+      admin
+        .from("course_hole_tee_positions")
+        .select("hole_number, tee_set_code, lat, lon")
+        .eq("course_id", courseId)
         .order("hole_number", { ascending: true }),
     ]);
 
@@ -253,6 +260,17 @@ export async function GET(request: NextRequest) {
       ([hole_number, points]) => ({ hole_number, points })
     );
 
+    const tee_positions =
+      teePosRes.error || !teePosRes.data
+        ? []
+        : (teePosRes.data ?? []).map((r) => ({
+            hole_number: Number(r.hole_number),
+            tee_set_code: String(r.tee_set_code),
+            lat: Number(r.lat),
+            lon: Number(r.lon),
+          }));
+    const tee_positions_by_code = indexTeePositionRows(tee_positions);
+
     return NextResponse.json({
       ok: true,
       boundaries,
@@ -265,6 +283,8 @@ export async function GET(request: NextRequest) {
       water_polygons,
       water_points,
       ob_lines,
+      tee_positions,
+      tee_positions_by_code,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error cargando layout";

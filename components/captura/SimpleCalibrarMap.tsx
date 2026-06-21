@@ -26,7 +26,8 @@ export type SimpleCalibrarMode =
   | "centerline"
   | "bunker"
   | "water"
-  | "ob";
+  | "ob"
+  | "tee";
 
 interface SimpleCalibrarMapProps {
   holeNo: number;
@@ -63,6 +64,11 @@ interface SimpleCalibrarMapProps {
   /** Al trazar fairway: tocar el primer punto cierra el polígono. */
   onCloseRing?: () => void;
   onMapTap: (lat: number, lon: number) => void;
+  /** Salida calibrada del set activo (modo tee). */
+  teePoint?: LatLon | null;
+  teeLabel?: string;
+  teeMarkerColor?: string;
+  onTeeMove?: (lat: number, lon: number) => void;
 }
 
 const COLORS = {
@@ -105,6 +111,10 @@ export function SimpleCalibrarMap({
   onVertexSelect,
   onCloseRing,
   onMapTap,
+  teePoint = null,
+  teeLabel = "Salida",
+  teeMarkerColor = "#34d399",
+  onTeeMove,
 }: SimpleCalibrarMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -114,6 +124,7 @@ export function SimpleCalibrarMap({
   const onVertexSelectRef = useRef(onVertexSelect);
   const onCloseRingRef = useRef(onCloseRing);
   const onMapTapRef = useRef(onMapTap);
+  const onTeeMoveRef = useRef(onTeeMove);
   const dragLockRef = useRef(false);
   const framedKeyRef = useRef("");
 
@@ -122,6 +133,7 @@ export function SimpleCalibrarMap({
   onVertexSelectRef.current = onVertexSelect;
   onCloseRingRef.current = onCloseRing;
   onMapTapRef.current = onMapTap;
+  onTeeMoveRef.current = onTeeMove;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -457,6 +469,35 @@ export function SimpleCalibrarMap({
         }
       }
 
+      if (mode === "tee" && teePoint) {
+        const ring = 16;
+        const box = 84;
+        const c = box / 2;
+        const marker = L.marker([teePoint.lat, teePoint.lon], {
+          draggable: true,
+          icon: L.divIcon({
+            className: "",
+            html: `<div style="position:relative;width:${box}px;height:${box}px;touch-action:none;">
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${ring}px;height:${ring}px;border-radius:50%;background:${teeMarkerColor};border:3px solid #fbbf24;box-shadow:0 0 0 4px rgba(0,0,0,0.45);"></div>
+              <div style="position:absolute;top:calc(50% + ${ring / 2 + 4}px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:800;font-family:Arial,sans-serif;white-space:nowrap;">${teeLabel}</div>
+            </div>`,
+            iconSize: [box, box],
+            iconAnchor: [c, c],
+          }),
+          zIndexOffset: 760,
+        }).addTo(lg);
+        marker.on("dragstart", () => {
+          dragLockRef.current = true;
+        });
+        marker.on("dragend", (e: any) => {
+          const ll = e.target.getLatLng();
+          onTeeMoveRef.current?.(ll.lat, ll.lng);
+          setTimeout(() => {
+            dragLockRef.current = false;
+          }, 120);
+        });
+      }
+
       map.invalidateSize();
       // Reencuadra solo cuando cambia el hoyo o el modo; al colocar/arrastrar
       // puntos NO reencuadra (conserva tu zoom para calibrar fino).
@@ -467,6 +508,8 @@ export function SimpleCalibrarMap({
             greenPoints.map((g) => [g.lat, g.lon] as [number, number])
           );
           map.fitBounds(gb, { padding: [70, 70], maxZoom: 21, animate: false });
+        } else if (mode === "tee" && teePoint) {
+          map.setView([teePoint.lat, teePoint.lon], 19, { animate: false });
         } else if (mode === "fairway" && fairwayRing.length >= 2) {
           const fb = L.latLngBounds(
             fairwayRing.map((v) => [v.lat, v.lon] as [number, number])
@@ -512,6 +555,9 @@ export function SimpleCalibrarMap({
     addingCorner,
     selectedGreen,
     selectedVertex,
+    teePoint,
+    teeLabel,
+    teeMarkerColor,
   ]);
 
   return <div ref={containerRef} className="absolute inset-0 bg-black" />;

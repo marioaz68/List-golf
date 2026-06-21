@@ -26,6 +26,17 @@ import {
 } from "@/lib/distances/centerline";
 import { resolveHoleGreenPoints } from "@/lib/distances/greenPoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
+import {
+  loadPlayingTeeCode,
+  savePlayingTeeCode,
+} from "@/lib/distances/playerTeeSet";
+import {
+  CCQ_CALIBRATION_TEE_SETS,
+  resolveTeePosition,
+  teeSetLabel,
+  type TeePositionsByCode,
+  type TeeSetCode,
+} from "@/lib/distances/teePositions";
 import { parsePolygonsFromApi } from "@/lib/distances/holeBoundary";
 import {
   activeHoleInBoundsRefs,
@@ -303,16 +314,18 @@ export default function DistanciasClient({
   // Línea central de fairway por hoyo (salida→green). Señal principal para
   // detectar el hoyo y para orientar la foto siguiendo el fairway (doglegs).
   const [centerlines, setCenterlines] = useState<CenterlinesByHole>({});
-  // Salidas por hoyo: ancla para detectar el hoyo cuando estás fuera de los
-  // polígonos (tees de atrás). Por ahora derivadas del polígono base.
+  const [teePositionsByCode, setTeePositionsByCode] =
+    useState<TeePositionsByCode>({});
+  const [playingTeeCode, setPlayingTeeCode] = useState<TeeSetCode>("WHT");
+  // Salidas por hoyo del set activo (calibradas o default del catálogo).
   const teeCenters = useMemo<TeesByHole>(() => {
     const out: TeesByHole = {};
     for (let h = 1; h <= 18; h++) {
-      const hp = CCQ_HOLE_POINTS[h];
-      if (hp?.tee) out[h] = hp.tee;
+      const tee = resolveTeePosition(h, playingTeeCode, teePositionsByCode);
+      if (tee) out[h] = tee;
     }
     return out;
-  }, []);
+  }, [playingTeeCode, teePositionsByCode]);
   const watchIdRef = useRef<number | null>(null);
   // Última posición aceptada. Sirve para ignorar el micro-jitter del GPS
   // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
@@ -321,12 +334,16 @@ export default function DistanciasClient({
   // Hoyo detectado en el momento que el usuario fijó el hoyo a mano. Al entrar
   // a un hoyo distinto (el GPS detecta otro polígono), se reanuda el automático.
   const manualAtDetectedRef = useRef<number | null>(null);
-
+  const autoPlanHoleRef = useRef<number | null>(null);
 
   const bagScope =
     searchParams.get("tg")?.trim() ||
     searchParams.get("me")?.trim() ||
     undefined;
+
+  useEffect(() => {
+    setPlayingTeeCode(loadPlayingTeeCode(bagScope));
+  }, [bagScope]);
 
   const shotsSyncCtx = useMemo((): HoleShotsSyncContext => {
     const entryId =
@@ -491,6 +508,7 @@ export default function DistanciasClient({
             points: Array<{ lat: number; lon: number }>;
           }>;
           ob_lines?: Array<Array<{ lat: number; lon: number }>>;
+          tee_positions_by_code?: TeePositionsByCode;
         };
         if (cancelled || !data.ok) return;
         const calibrated = parseBoundariesPayload(data.boundaries ?? []);
@@ -550,6 +568,7 @@ export default function DistanciasClient({
         }
         setWaterPointsByHole(wPtMap);
         setObLines(data.ob_lines ?? []);
+        setTeePositionsByCode(data.tee_positions_by_code ?? {});
       } catch {
         /* mantiene CCQ_HOLES por defecto */
       }
@@ -688,8 +707,8 @@ export default function DistanciasClient({
   }, [insideHole, manualHole]);
 
   const catalogTeeForHole = useMemo(
-    () => CCQ_HOLE_POINTS[activeHole]?.tee ?? teeCenters[activeHole] ?? null,
-    [activeHole, teeCenters]
+    () => resolveTeePosition(activeHole, playingTeeCode, teePositionsByCode),
+    [activeHole, playingTeeCode, teePositionsByCode]
   );
 
   useEffect(() => {
@@ -1234,6 +1253,42 @@ export default function DistanciasClient({
     ]
   );
 
+  const selectPlayingTee = useCallback(
+    (code: TeeSetCode) => {
+      setPlayingTeeCode(code);
+      savePlayingTeeCode(code, bagScope);
+      const tee = resolveTeePosition(activeHole, code, teePositionsByCode);
+      if (!tee) return;
+      const hasCompleted = shotsForHole(holeShotsStore, activeHole).some(
+        (s) => s.completedAt != null
+      );
+      if (hasCompleted) {
+        setArrivalToast(
+          `Juegas ${teeSetLabel(code)} · cambia salida en el siguiente hoyo`
+        );
+        return;
+      }
+      setHoleShotsStore((prev) => {
+        const next = setHoleTeeMark(prev, activeHole, tee);
+        saveHoleShots(next, bagScope);
+        return next;
+      });
+      autoPlanHoleRef.current = null;
+      pinMapFraming({ lat: tee.lat, lon: tee.lon });
+      openPlanFromPoint(tee.lat, tee.lon);
+      autoPlanHoleRef.current = activeHole;
+      setArrivalToast(`Salida ${teeSetLabel(code)} · H${activeHole}`);
+    },
+    [
+      bagScope,
+      activeHole,
+      teePositionsByCode,
+      holeShotsStore,
+      pinMapFraming,
+      openPlanFromPoint,
+    ]
+  );
+
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
@@ -1252,9 +1307,16 @@ export default function DistanciasClient({
           : recordHoledPutt(holeShotsStore, hole, pin);
       const startHole = inferRoundStartHole(holeShotsStore);
       const finishingRound = isRoundFinishingHole(hole, startHole);
-      const nextStore = finishingRound
+      const nextHoleNum = (hole % 18) + 1;
+      let nextStore = finishingRound
         ? result.store
-        : clearHoleShots(result.store, (hole % 18) + 1);
+        : clearHoleShots(result.store, nextHoleNum);
+      const nextTee = finishingRound
+        ? null
+        : resolveTeePosition(nextHoleNum, playingTeeCode, teePositionsByCode);
+      if (nextTee) {
+        nextStore = setHoleTeeMark(nextStore, nextHoleNum, nextTee);
+      }
 
       setHoleShotsStore(nextStore);
       saveHoleShots(nextStore, bagScope);
@@ -1274,18 +1336,35 @@ export default function DistanciasClient({
       }
 
       const totalStrokes = result.totalStrokes ?? strokeCount;
-      const nextHoleNum = (hole % 18) + 1;
       setAutoHole(nextHoleNum);
       setManualHole(nextHoleNum);
       setResumeHole(nextHoleNum);
       setTargetYards(0);
       if (demoMode) setDemoProgress(0);
+      autoPlanHoleRef.current = null;
+      if (nextTee) {
+        pinMapFraming({ lat: nextTee.lat, lon: nextTee.lon });
+        openPlanFromPoint(nextTee.lat, nextTee.lon);
+        autoPlanHoleRef.current = nextHoleNum;
+      }
       const howLabel = how === "given" ? " · quedó dada" : "";
+      const teeLabel = nextTee ? ` · Salida ${teeSetLabel(playingTeeCode)} lista` : "";
       setArrivalToast(
-        `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum}`
+        `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Hoyo ${nextHoleNum}${teeLabel}`
       );
     },
-    [holeFinishPrompt, holeShotsStore, bagScope, resetTapUi, demoMode, activeHolePoints]
+    [
+      holeFinishPrompt,
+      holeShotsStore,
+      bagScope,
+      resetTapUi,
+      demoMode,
+      activeHolePoints,
+      playingTeeCode,
+      teePositionsByCode,
+      pinMapFraming,
+      openPlanFromPoint,
+    ]
   );
 
   const showHoleFinishPrompt = useCallback(
@@ -1349,9 +1428,53 @@ export default function DistanciasClient({
       setHoleFinishPrompt(null);
       setMapFramingLock(null);
       setHoleCorrectionMode(false);
+      autoPlanHoleRef.current = null;
     }
     prevActiveHoleRef.current = activeHole;
   }, [activeHole, resetTapUi]);
+
+  useEffect(() => {
+    if (demoMode) return;
+    if (hasHoleTeeMark(holeShotsStore, activeHole)) return;
+    const tee = resolveTeePosition(
+      activeHole,
+      playingTeeCode,
+      teePositionsByCode
+    );
+    if (!tee) return;
+    setHoleShotsStore((prev) => {
+      if (hasHoleTeeMark(prev, activeHole)) return prev;
+      const next = setHoleTeeMark(prev, activeHole, tee);
+      saveHoleShots(next, bagScope);
+      return next;
+    });
+  }, [
+    activeHole,
+    playingTeeCode,
+    teePositionsByCode,
+    demoMode,
+    bagScope,
+  ]);
+
+  useEffect(() => {
+    if (demoMode || needsTeeMark || !teeMark) return;
+    const hasCompleted = shotsForHole(holeShotsStore, activeHole).some(
+      (s) => s.completedAt != null
+    );
+    if (hasCompleted) return;
+    if (autoPlanHoleRef.current === activeHole) return;
+    autoPlanHoleRef.current = activeHole;
+    pinMapFraming({ lat: teeMark.lat, lon: teeMark.lon });
+    openPlanFromPoint(teeMark.lat, teeMark.lon);
+  }, [
+    demoMode,
+    needsTeeMark,
+    teeMark,
+    activeHole,
+    holeShotsStore,
+    pinMapFraming,
+    openPlanFromPoint,
+  ]);
 
   useEffect(() => {
     if (hasTeeMark || !pendingShot) return;
@@ -1706,7 +1829,7 @@ export default function DistanciasClient({
         const tee = holeTeeMark(prev, activeHole);
         if (!tee) return prev;
         const from =
-          lastBallPosition(prev, activeHole, catalogTeeForHole) ?? tee;
+          lastBallPosition(prev, activeHole, catalogTeeForHole ?? undefined) ?? tee;
         const before = completedStrokeCount(prev, activeHole);
         const next = addManualPenaltyStroke(prev, activeHole, from, reason);
         const after = completedStrokeCount(next, activeHole);
@@ -1750,7 +1873,7 @@ export default function DistanciasClient({
         return;
       }
       const from =
-        lastBallPosition(holeShotsStore, activeHole, catalogTeeForHole) ??
+        lastBallPosition(holeShotsStore, activeHole, catalogTeeForHole ?? undefined) ??
         teeMark;
       const fromDist = greenDistancesForHole(
         from.lat,
@@ -2081,6 +2204,31 @@ export default function DistanciasClient({
       >
         ✕
       </Link>
+
+      {!farFromCourse && !demoMode ? (
+        <div
+          className="pointer-events-none absolute inset-x-12 top-2 z-[1000] flex justify-center"
+          data-yardage-map-ui
+        >
+          <div className="pointer-events-auto flex max-w-[min(100vw-6rem,24rem)] gap-1 overflow-x-auto rounded-full border border-white/15 bg-black/70 px-1.5 py-1 backdrop-blur-md">
+            {CCQ_CALIBRATION_TEE_SETS.map((t) => (
+              <button
+                key={t.code}
+                type="button"
+                onClick={() => selectPlayingTee(t.code)}
+                className={[
+                  "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black",
+                  playingTeeCode === t.code
+                    ? "border-amber-400 bg-amber-500 text-black"
+                    : t.chipClass,
+                ].join(" ")}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <button
         type="button"
