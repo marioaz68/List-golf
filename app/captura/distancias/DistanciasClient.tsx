@@ -2080,8 +2080,16 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
       </button>
 
       {demoMode ? (
-        <div className="pointer-events-none absolute left-2 top-2 z-[1000] max-w-[70%] rounded-full bg-amber-500/95 px-2.5 py-1 text-[10px] font-black leading-tight text-amber-950 shadow-lg">
-          DEMO · en casa · sin GPS
+        <div className="pointer-events-none absolute left-2 top-2 z-[1000] flex max-w-[85%] flex-col gap-1">
+          <div className="rounded-full bg-amber-500/95 px-2.5 py-1 text-[10px] font-black leading-tight text-amber-950 shadow-lg">
+            DEMO · en casa · sin GPS
+          </div>
+          <Link
+            href="/captura/distancias/demo-3d"
+            className="pointer-events-auto w-fit rounded-lg border border-violet-400/60 bg-violet-700/95 px-2.5 py-1 text-[10px] font-black text-white shadow-lg active:scale-95"
+          >
+            Abrir preview 3D →
+          </Link>
         </div>
       ) : null}
 
