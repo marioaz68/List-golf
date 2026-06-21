@@ -1,10 +1,14 @@
+import { yardsBetween } from "@/lib/distances/ccqHolePoints";
 import type { LieKind } from "@/lib/distances/detectLie";
+import type { LatLon } from "@/lib/distances/holeBoundary";
 
 /** Distancia al centro (yds) para preguntar si el hoyo terminó. */
 export const HOLE_COMPLETE_MAX_CENTER_YDS = 1;
 /** Putt/chip corto en green: hasta 2 yds al hoyo. */
 export const SHORT_PUTT_MAX_CENTER_YDS = 2;
 export const SHORT_PUTT_MAX_PLANNED_YDS = 2;
+/** Al marcar caída cerca del hoyo, la bola se ancla al centro calibrado. */
+export const LANDING_SNAP_TO_CENTER_YDS = 3;
 
 export function isHoleComplete(centerYards: number): boolean {
   return centerYards <= HOLE_COMPLETE_MAX_CENTER_YDS;
@@ -57,4 +61,27 @@ export function isTapInPutt(
 /** Yardas al hoyo para putt (precisión 1 yd). */
 export function puttYardsFromCenter(centerYards: number): number {
   return Math.max(1, Math.round(centerYards));
+}
+
+export function yardsToGreenCenter(point: LatLon, center: LatLon): number {
+  return yardsBetween(point.lat, point.lon, center.lat, center.lon);
+}
+
+/** Si la caída queda cerca del centro calibrado, usa ese punto (coincide con la bandera). */
+export function snapLandingToGreenCenter(
+  landing: LatLon,
+  center: LatLon,
+  centerYards?: number
+): LatLon {
+  const yds =
+    centerYards ?? yardsToGreenCenter(landing, center);
+  if (yds <= LANDING_SNAP_TO_CENTER_YDS) {
+    return { lat: center.lat, lon: center.lon };
+  }
+  return landing;
+}
+
+/** Posición de la bola cuando entró al hoyo: siempre el centro calibrado. */
+export function holedPinPosition(center: LatLon): LatLon {
+  return { lat: center.lat, lon: center.lon };
 }

@@ -35,8 +35,9 @@ import {
   ballMarkerOptions,
   ensureBallMarkerStyles,
   golfBallHtml,
-  golfPinFlagHtml,
   golfPinFlagMarkerOptions,
+  golfPinFlagScale,
+  golfPinFlagUprightHtml,
   teeMarkerOptions,
 } from "@/components/captura/mapMarkers";
 
@@ -87,6 +88,8 @@ interface HoleYardageMapProps {
   catalogTeePoint?: { lat: number; lon: number } | null;
   /** Bola en green: al hacer zoom manual, encuadra todo el green sin perder el back. */
   ballOnGreen?: boolean;
+  /** Centro calibrado del green (punto «Centro»): ancla la bandera del hoyo. */
+  greenCenterPoint?: LatLon | null;
 }
 
 function yardLabel(yards: number): string {
@@ -143,6 +146,7 @@ export function HoleYardageMap({
   mapFramingPoint = null,
   catalogTeePoint = null,
   ballOnGreen = false,
+  greenCenterPoint = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -420,7 +424,10 @@ export function HoleYardageMap({
       const greenCenter = referencePoints.find((p) => p.kind === "green-center");
       const greenFront = referencePoints.find((p) => p.kind === "green-front");
       const greenBack = referencePoints.find((p) => p.kind === "green-back");
-      const greenTarget = greenCenter ?? greenFront ?? greenBack;
+      const greenTarget =
+        greenCenterPoint != null
+          ? { lat: greenCenterPoint.lat, lon: greenCenterPoint.lon }
+          : greenCenter ?? greenFront ?? greenBack;
 
       const player = { lat: playerLat, lon: playerLon };
       const lastLanding =
@@ -593,18 +600,30 @@ export function HoleYardageMap({
       // De los puntos del green solo mostramos el número de yardas en chiquito
       // (sin el punto/dot), en entrada/centro/atrás.
       const GREEN_KINDS = ["green-front", "green-center", "green-back"];
+      if (greenCenterPoint) {
+        const centerYards =
+          referencePoints.find((p) => p.kind === "green-center")?.yards ??
+          Math.round(yardsToCenter);
+        const flagDistanceYards = Math.round(
+          yardsBetween(
+            framingPos.lat,
+            framingPos.lon,
+            greenCenterPoint.lat,
+            greenCenterPoint.lon
+          )
+        );
+        const flagScale = golfPinFlagScale(flagDistanceYards);
+        L.marker(
+          [greenCenterPoint.lat, greenCenterPoint.lon],
+          golfPinFlagMarkerOptions(
+            L,
+            golfPinFlagUprightHtml(centerYards, bearing, flagScale)
+          )
+        ).addTo(layerGroup);
+      }
       for (const p of referencePoints) {
         if (!GREEN_KINDS.includes(p.kind)) continue;
-        if (p.kind === "green-center") {
-          L.marker(
-            [p.lat, p.lon],
-            golfPinFlagMarkerOptions(
-              L,
-              uprightHtml(golfPinFlagHtml(p.yards), bearing)
-            )
-          ).addTo(layerGroup);
-          continue;
-        }
+        if (p.kind === "green-center") continue;
         L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: "",
@@ -904,6 +923,7 @@ export function HoleYardageMap({
     mapFramingPoint,
     catalogTeePoint,
     ballOnGreen,
+    greenCenterPoint,
     needsTeeMark,
     teeAdjustMode,
     size.w,

@@ -177,6 +177,7 @@ export default function DistanciasDemoClient() {
             playerLon={player.lon}
             yardsToCenter={greenYds.center}
             referencePoints={refPoints}
+            greenCenterPoint={holeGreen?.center ?? hp?.center ?? null}
             tapPoint={null}
           />
         ) : (

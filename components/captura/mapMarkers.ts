@@ -69,14 +69,32 @@ export function teeMarkerOptions(
   };
 }
 
+/** Anclaje del pin: borde inferior de la copa sobre el centro calibrado. */
+export const GOLF_PIN_CUP_X = 19;
+export const GOLF_PIN_CUP_CY = 46.5;
+export const GOLF_PIN_CUP_R = 4.4;
+export const GOLF_PIN_ANCHOR_Y = GOLF_PIN_CUP_CY + GOLF_PIN_CUP_R;
+export const GOLF_PIN_ICON_W = 38;
+export const GOLF_PIN_ICON_H = 52;
+
+/** Escala visual: lejana desde la salida → bandera pequeña; cerca del green → grande. */
+export function golfPinFlagScale(yardsToCenter: number): number {
+  const y = Math.max(0, yardsToCenter);
+  if (y <= 25) return 1;
+  if (y >= 400) return 0.28;
+  const t = (y - 25) / (400 - 25);
+  return 1 - t * 0.72;
+}
+
 /** Bandera de pin en el centro del green (copa + asta + bandera roja). */
-export function golfPinFlagHtml(yards?: number): string {
+export function golfPinFlagHtml(yards?: number, scale = 1): string {
+  const labelSize = Math.max(7, Math.round(10 * scale));
   const yardsLabel =
-    yards != null
-      ? `<div style="margin-top:1px;color:#fff;font-size:10px;font-weight:800;line-height:1;font-family:Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95);">${yards}</div>`
+    yards != null && scale >= 0.42
+      ? `<div style="position:absolute;left:${GOLF_PIN_ICON_W + 2}px;top:${GOLF_PIN_ANCHOR_Y - 10}px;color:#fff;font-size:${labelSize}px;font-weight:800;line-height:1;white-space:nowrap;font-family:Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95);">${yards}</div>`
       : "";
-  return `<div style="display:flex;flex-direction:column;align-items:center;width:38px;">
-    <svg xmlns="http://www.w3.org/2000/svg" width="38" height="52" viewBox="0 0 38 52" aria-hidden="true">
+  return `<div style="position:relative;width:${GOLF_PIN_ICON_W}px;height:${GOLF_PIN_ICON_H}px;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="${GOLF_PIN_ICON_W}" height="${GOLF_PIN_ICON_H}" viewBox="0 0 38 52" aria-hidden="true" style="display:block;">
       <defs>
         <linearGradient id="golfPinPole" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stop-color="#6b7280"/>
@@ -107,18 +125,31 @@ export function golfPinFlagHtml(yards?: number): string {
   </div>`;
 }
 
+/** Mantiene la copa fija en el centro calibrado al rotar/escalar el mapa. */
+export function golfPinFlagUprightHtml(
+  yards: number | undefined,
+  bearing: number,
+  scale = 1
+): string {
+  const origin = `${GOLF_PIN_CUP_X}px ${GOLF_PIN_ANCHOR_Y}px`;
+  const html = golfPinFlagHtml(yards, scale);
+  const parts: string[] = [];
+  if (scale !== 1) parts.push(`scale(${scale.toFixed(3)})`);
+  if (bearing !== 0) parts.push(`rotate(${bearing}deg)`);
+  if (parts.length === 0) return html;
+  return `<div style="transform:${parts.join(" ")};transform-origin:${origin};">${html}</div>`;
+}
+
 export function golfPinFlagMarkerOptions(
   L: { divIcon: (o: object) => unknown },
   html: string
 ) {
-  const w = 38;
-  const h = 62;
   return {
     icon: L.divIcon({
       className: MARKER_CLASS,
       html,
-      iconSize: [w, h],
-      iconAnchor: [w / 2, 50],
+      iconSize: [GOLF_PIN_ICON_W, GOLF_PIN_ICON_H],
+      iconAnchor: [GOLF_PIN_CUP_X, GOLF_PIN_ANCHOR_Y],
     }),
     interactive: false,
     zIndexOffset: 720,

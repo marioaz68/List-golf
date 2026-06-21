@@ -35,8 +35,10 @@ import {
 } from "@/lib/distances/detectLie";
 import {
   isTapInPutt,
+  holedPinPosition,
   puttYardsFromCenter,
   shouldPromptHoleFinish,
+  snapLandingToGreenCenter,
 } from "@/lib/distances/holeComplete";
 import {
   buildCourseHolesCollection,
@@ -1221,8 +1223,14 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
-      const { hole, lat, lon, strokeCount } = holeFinishPrompt;
-      const pin = { lat, lon };
+      const { hole, lat, lon, strokeCount, centerYards } = holeFinishPrompt;
+      const center = activeHolePoints?.center;
+      const pin =
+        center != null
+          ? how === "in"
+            ? holedPinPosition(center)
+            : snapLandingToGreenCenter({ lat, lon }, center, centerYards)
+          : { lat, lon };
 
       const result =
         how === "given"
@@ -1263,7 +1271,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum}`
       );
     },
-    [holeFinishPrompt, holeShotsStore, bagScope, resetTapUi, demoMode]
+    [holeFinishPrompt, holeShotsStore, bagScope, resetTapUi, demoMode, activeHolePoints]
   );
 
   const showHoleFinishPrompt = useCallback(
@@ -1491,15 +1499,26 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           setArrivalToast("Marca tu salida antes de registrar un golpe");
           return;
         }
-        const actual = Math.round(
-          yardsBetween(pendingShot.from.lat, pendingShot.from.lon, lat, lon) / 5
-        ) * 5;
         const lie = detectLieForPoint(lat, lon);
+        const toGreenBefore = greenDistancesForHole(lat, lon, activeHolePoints);
+        const landing = snapLandingToGreenCenter(
+          { lat, lon },
+          activeHolePoints.center,
+          toGreenBefore.center
+        );
+        const actual = Math.round(
+          yardsBetween(
+            pendingShot.from.lat,
+            pendingShot.from.lon,
+            landing.lat,
+            landing.lon
+          ) / 5
+        ) * 5;
         let next = completeShotArrival(
           holeShotsStore,
           activeHole,
           pendingShot.id,
-          { lat, lon },
+          landing,
           actual,
           lie.kind
         );
@@ -1554,7 +1573,11 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           return;
         }
 
-        const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
+        const toGreen = greenDistancesForHole(
+          landing.lat,
+          landing.lon,
+          activeHolePoints
+        );
         setHoleShotsStore(next);
         saveHoleShots(next, bagScope);
 
@@ -1562,10 +1585,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
           shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
         ) {
           const strokeCount = finishPromptStrokeCount(next, activeHole);
-          pinMapFraming({ lat, lon });
+          pinMapFraming(landing);
           showHoleFinishPrompt(
-            lat,
-            lon,
+            landing.lat,
+            landing.lon,
             strokeCount,
             toGreen.center,
             lieArrivalPhrase(lie.kind)
@@ -1576,7 +1599,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         setArrivalToast(
           `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
         );
-        pinMapFraming({ lat, lon });
+        pinMapFraming(landing);
         openPlanFromPoint(lat, lon);
         return;
       }
@@ -1747,8 +1770,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         pinMapFraming(from);
         const strokeCount = finishPromptStrokeCount(store, activeHole);
         showHoleFinishPrompt(
-          from.lat,
-          from.lon,
+          activeHolePoints.center.lat,
+          activeHolePoints.center.lon,
           strokeCount,
           fromDist.center,
           "en el green"
@@ -2024,6 +2047,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
                 : null
             }
             ballOnGreen={currentBallLie?.onGreen ?? false}
+            greenCenterPoint={activeHolePoints?.center ?? null}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
