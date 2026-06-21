@@ -28,11 +28,15 @@ import {
   tuneRotatedFraming,
   uprightHtml,
   zoomToFitWaypoints,
+  zoomToFitWaypointsWithMargin,
+  ensureTeeMarkVisible,
 } from "@/components/captura/mapRotation";
 import {
   ballMarkerOptions,
   ensureBallMarkerStyles,
   golfBallHtml,
+  golfPinFlagHtml,
+  golfPinFlagMarkerOptions,
   teeMarkerOptions,
 } from "@/components/captura/mapMarkers";
 
@@ -423,6 +427,8 @@ export function HoleYardageMap({
         shotLandings.length > 0
           ? shotLandings[shotLandings.length - 1]
           : null;
+      const startingHole =
+        (needsTeeMark || teeAdjustMode) && shotLandings.length === 0;
       /** Posición de juego para encuadre: siempre la última bola, nunca GPS salvo fallback. */
       const framingPos =
         mapFramingPoint ??
@@ -436,10 +442,12 @@ export function HoleYardageMap({
           : hasCenterline
             ? centerlineSegmentIndex(framingPos, centerline!)
             : 0;
+      const effectiveSegIdx =
+        startingHole && hasCenterline ? 0 : segIdx;
       const totalSegs = hasCenterline ? centerline!.length - 1 : 1;
       // Punto actual (de dónde vienes en este tramo) y el ÚLTIMO punto de la
       // línea (= "after"/atrás del green). La foto va del punto actual al green.
-      const fromWp = hasCenterline ? centerline![segIdx] : null;
+      const fromWp = hasCenterline ? centerline![effectiveSegIdx] : null;
       const lastWp = hasCenterline
         ? centerline![centerline!.length - 1]
         : null;
@@ -461,7 +469,11 @@ export function HoleYardageMap({
       // Zoom: que quepan TODOS los puntos restantes (del actual al green), así
       // al avanzar de punto la foto se va acercando hacia el green.
       const remainingWps =
-        hasCenterline && fromWp ? centerline!.slice(segIdx) : null;
+        hasCenterline && fromWp
+          ? startingHole
+            ? centerline!
+            : centerline!.slice(effectiveSegIdx)
+          : null;
 
       // Orientación estable por tramo: usamos el punto actual (fijo) → green
       // como eje, no el jugador (que se mueve), para que la foto no gire ni
@@ -519,19 +531,55 @@ export function HoleYardageMap({
           applyStoredZoom();
         }
       };
-      const fitZoom =
-        waterDropMode &&
-        waterDropFocusPoints &&
-        waterDropFocusPoints.length >= 2
-          ? zoomToFitWaypoints(
-              waterDropFocusPoints,
+      const fitZoom = (() => {
+        if (
+          waterDropMode &&
+          waterDropFocusPoints &&
+          waterDropFocusPoints.length >= 2
+        ) {
+          return zoomToFitWaypoints(
+            waterDropFocusPoints,
+            bearing,
+            availW,
+            availH
+          );
+        }
+        if (startingHole) {
+          const fitPts: Array<{ lat: number; lon: number }> = [];
+          const pushPt = (p: { lat: number; lon: number }) => {
+            if (
+              fitPts.some(
+                (q) =>
+                  Math.abs(q.lat - p.lat) < 1e-7 &&
+                  Math.abs(q.lon - p.lon) < 1e-7
+              )
+            ) {
+              return;
+            }
+            fitPts.push(p);
+          };
+          if (catalogTeePoint) pushPt(catalogTeePoint);
+          if (teeMarkPoint) pushPt(teeMarkPoint);
+          if (hasCenterline) {
+            for (const p of centerline!) pushPt(p);
+          } else if (anchor) {
+            pushPt(framingPos);
+            pushPt(anchor);
+          }
+          if (fitPts.length >= 2) {
+            return zoomToFitWaypointsWithMargin(
+              fitPts,
               bearing,
               availW,
               availH
-            )
-          : remainingWps && remainingWps.length >= 2
-            ? zoomToFitWaypoints(remainingWps, bearing, availW, availH)
-            : null;
+            );
+          }
+        }
+        if (remainingWps && remainingWps.length >= 2) {
+          return zoomToFitWaypoints(remainingWps, bearing, availW, availH);
+        }
+        return null;
+      })();
       const zoomAnchor: { lat: number; lon: number } =
         ballOnGreen && manualZoomActive && anchor
           ? { lat: anchor.lat, lon: anchor.lon }
@@ -547,12 +595,21 @@ export function HoleYardageMap({
       const GREEN_KINDS = ["green-front", "green-center", "green-back"];
       for (const p of referencePoints) {
         if (!GREEN_KINDS.includes(p.kind)) continue;
-        const isCenter = p.kind === "green-center";
+        if (p.kind === "green-center") {
+          L.marker(
+            [p.lat, p.lon],
+            golfPinFlagMarkerOptions(
+              L,
+              uprightHtml(golfPinFlagHtml(p.yards), bearing)
+            )
+          ).addTo(layerGroup);
+          continue;
+        }
         L.marker([p.lat, p.lon], {
           icon: L.divIcon({
             className: "",
             html: uprightHtml(
-              `<div style="color:#fff;font-size:${isCenter ? 12 : 10}px;font-weight:800;font-family:Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95);">${yardLabel(p.yards)}</div>`,
+              `<div style="color:#fff;font-size:10px;font-weight:800;font-family:Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.95);">${yardLabel(p.yards)}</div>`,
               bearing
             ),
             iconSize: [30, 14],
@@ -680,13 +737,13 @@ export function HoleYardageMap({
       try {
         if (anchor) {
           const recenterHole = framedHoleRef.current !== holeNo;
-          const recenterSeg = framedSegmentRef.current !== segIdx;
+          const recenterSeg = framedSegmentRef.current !== effectiveSegIdx;
           const posKey = `${Math.round(framingPos.lat * 1e5)}:${Math.round(
             framingPos.lon * 1e5
           )}`;
           const recenterPos = framedPosRef.current !== posKey;
           framedHoleRef.current = holeNo;
-          framedSegmentRef.current = segIdx;
+          framedSegmentRef.current = effectiveSegIdx;
           framedPosRef.current = posKey;
           const shouldReframe =
             recenterHole || (!userPin && (recenterSeg || recenterPos));
@@ -722,12 +779,24 @@ export function HoleYardageMap({
               undefined,
               true,
               par,
-              hasCenterline ? { idx: segIdx, total: totalSegs } : null,
+              hasCenterline
+                ? { idx: effectiveSegIdx, total: totalSegs }
+                : null,
               null,
               landingMarkMode ? null : fitZoom
             );
             autoZoomRef.current = map.getZoom();
             framingAnchorRef.current = zoomAnchor;
+            if (startingHole && catalogTeePoint) {
+              ensureTeeMarkVisible(
+                map,
+                bearing,
+                catalogTeePoint.lat,
+                catalogTeePoint.lon,
+                viewportW,
+                viewportH
+              );
+            }
             if (recenterHole || recenterPos) {
               if (
                 !(

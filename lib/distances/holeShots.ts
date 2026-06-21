@@ -5,6 +5,7 @@ import {
 } from "@/lib/distances/clubCatalog";
 import type { LieKind } from "@/lib/distances/detectLie";
 import type { LatLon } from "@/lib/distances/holeBoundary";
+import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 
 export interface HoleShot {
   id: string;
@@ -81,6 +82,8 @@ export interface HoleShotsStore {
   teeMarkByHole: Record<string, LatLon>;
   /** Marca de tiempo local/servidor para fusionar copias. */
   updatedAt?: number;
+  /** Hoyo de salida de la ronda (1 o 10). */
+  roundStartHole?: number;
 }
 
 const STORAGE_PREFIX = "listgolf-hole-shots-v2";
@@ -100,12 +103,19 @@ function migrateStore(raw: unknown): HoleShotsStore {
     version?: number;
     byHole?: Record<string, HoleShot[]>;
     teeMarkByHole?: Record<string, LatLon>;
+    roundStartHole?: number;
   };
   if (o.version === 2 && o.byHole) {
     return {
       version: 2,
       byHole: o.byHole,
       teeMarkByHole: o.teeMarkByHole ?? {},
+      roundStartHole:
+        typeof o.roundStartHole === "number" &&
+        o.roundStartHole >= 1 &&
+        o.roundStartHole <= 18
+          ? o.roundStartHole
+          : undefined,
     };
   }
   if (o.version === 1 && o.byHole) {
@@ -161,18 +171,50 @@ export function storeActivityScore(store: HoleShotsStore): number {
   return n;
 }
 
-/** Fusiona copia local y remota conservando la más completa/reciente. */
+function holeLatestShotTs(shots: HoleShot[]): number {
+  let best = 0;
+  for (const s of shots) {
+    const ts = s.completedAt ?? s.plannedAt ?? 0;
+    if (ts > best) best = ts;
+  }
+  return best;
+}
+
+/** Fusiona copia local y remota hoyo por hoyo (no pisa castigos de un hoyo con datos viejos de otro). */
 export function mergeHoleShotsStores(
   local: HoleShotsStore,
   remote: HoleShotsStore
 ): HoleShotsStore {
-  const localScore = storeActivityScore(local);
-  const remoteScore = storeActivityScore(remote);
-  if (remoteScore > localScore) return remote;
-  if (localScore > remoteScore) return local;
-  const localTs = local.updatedAt ?? 0;
-  const remoteTs = remote.updatedAt ?? 0;
-  return remoteTs > localTs ? remote : local;
+  const holeKeys = new Set([
+    ...Object.keys(local.byHole ?? {}),
+    ...Object.keys(remote.byHole ?? {}),
+  ]);
+  const byHole: Record<string, HoleShot[]> = {};
+  for (const key of holeKeys) {
+    const localShots = local.byHole[key] ?? [];
+    const remoteShots = remote.byHole[key] ?? [];
+    const localDone = localShots.filter((s) => s.completedAt != null).length;
+    const remoteDone = remoteShots.filter((s) => s.completedAt != null).length;
+    if (remoteDone > localDone) {
+      byHole[key] = remoteShots;
+    } else if (localDone > remoteDone) {
+      byHole[key] = localShots;
+    } else {
+      byHole[key] =
+        holeLatestShotTs(remoteShots) > holeLatestShotTs(localShots)
+          ? remoteShots
+          : localShots;
+    }
+  }
+  const teeMarkByHole = { ...remote.teeMarkByHole, ...local.teeMarkByHole };
+  const winner = (local.updatedAt ?? 0) >= (remote.updatedAt ?? 0) ? local : remote;
+  return {
+    version: 2,
+    byHole,
+    teeMarkByHole,
+    roundStartHole: winner.roundStartHole ?? local.roundStartHole ?? remote.roundStartHole,
+    updatedAt: Math.max(local.updatedAt ?? 0, remote.updatedAt ?? 0),
+  };
 }
 
 export function shotsForHole(store: HoleShotsStore, hole: number): HoleShot[] {
@@ -347,24 +389,7 @@ export function finishPromptStrokeCount(
   return pendingShotOnHole(store, hole) ? completed + 1 : completed;
 }
 
-function updateShotLieKind(
-  store: HoleShotsStore,
-  hole: number,
-  shotId: string,
-  lieKind: LieKind
-): HoleShotsStore {
-  const key = String(hole);
-  const prev = store.byHole[key] ?? [];
-  return {
-    ...store,
-    byHole: {
-      ...store.byHole,
-      [key]: prev.map((s) => (s.id === shotId ? { ...s, lieKind } : s)),
-    },
-  };
-}
-
-/** Registra putt final concedido; devuelve conteo total del hoyo. */
+/** Registra putt concedido: siempre +1 golpe (putt pendiente o tap-in dada). */
 export function recordGivenPutt(
   store: HoleShotsStore,
   hole: number,
@@ -374,28 +399,16 @@ export function recordGivenPutt(
     return { store, totalStrokes: completedStrokeCount(store, hole) };
   }
 
-  const pendingPutter = pendingPutterShotOnHole(store, hole);
-  if (pendingPutter) {
+  const pending = pendingShotOnHole(store, hole);
+  if (pending) {
     const next = completeShotArrival(
       store,
       hole,
-      pendingPutter.id,
+      pending.id,
       pin,
-      Math.max(1, pendingPutter.plannedYards),
+      Math.max(1, pending.plannedYards),
       "given"
     );
-    return { store: next, totalStrokes: completedStrokeCount(next, hole) };
-  }
-
-  const last = lastCompletedShot(store, hole);
-  if (
-    last &&
-    last.catalogId === "putter" &&
-    last.lieKind === "green" &&
-    last.actualYards != null &&
-    last.actualYards <= 1
-  ) {
-    const next = updateShotLieKind(store, hole, last.id, "given");
     return { store: next, totalStrokes: completedStrokeCount(next, hole) };
   }
 
@@ -411,14 +424,14 @@ export function recordHoledPutt(
   hole: number,
   pin: LatLon
 ): { store: HoleShotsStore; totalStrokes: number } {
-  const pendingPutter = pendingPutterShotOnHole(store, hole);
-  if (pendingPutter) {
+  const pending = pendingShotOnHole(store, hole);
+  if (pending) {
     const next = completeShotArrival(
       store,
       hole,
-      pendingPutter.id,
+      pending.id,
       pin,
-      Math.max(1, pendingPutter.plannedYards),
+      Math.max(1, pending.plannedYards),
       "green"
     );
     return { store: next, totalStrokes: completedStrokeCount(next, hole) };
@@ -813,6 +826,85 @@ export function resetShotArrival(
 export function plannedVsActualDelta(shot: HoleShot): number | null {
   if (shot.actualYards == null) return null;
   return shot.actualYards - shot.plannedYards;
+}
+
+export function isHoleFinished(store: HoleShotsStore, hole: number): boolean {
+  return (
+    isFinalTapInPuttRecorded(store, hole) || isGivenPuttRecorded(store, hole)
+  );
+}
+
+export function roundHoleOrder(startHole: number): number[] {
+  const start = Math.min(18, Math.max(1, Math.floor(startHole)));
+  return Array.from({ length: 18 }, (_, i) => ((start - 1 + i) % 18) + 1);
+}
+
+export function roundLastHole(startHole: number): number {
+  return roundHoleOrder(startHole)[17];
+}
+
+export function isRoundFinishingHole(hole: number, startHole: number): boolean {
+  return hole === roundLastHole(startHole);
+}
+
+export interface RoundStrokeTotals {
+  startHole: number;
+  firstNineHoles: number[];
+  secondNineHoles: number[];
+  firstNine: number;
+  secondNine: number;
+  total: number;
+}
+
+export function roundNineLabel(holes: number[]): string {
+  if (holes.length === 0) return "—";
+  const first = holes[0];
+  const last = holes[holes.length - 1];
+  return first === last ? `hoyo ${first}` : `hoyos ${first}–${last}`;
+}
+
+export function roundStrokeTotals(
+  store: HoleShotsStore,
+  startHole: number
+): RoundStrokeTotals {
+  const order = roundHoleOrder(startHole);
+  const firstNineHoles = order.slice(0, 9);
+  const secondNineHoles = order.slice(9);
+  const sumNine = (holes: number[]) =>
+    holes.reduce((acc, h) => acc + completedStrokeCount(store, h), 0);
+  const firstNine = sumNine(firstNineHoles);
+  const secondNine = sumNine(secondNineHoles);
+  return {
+    startHole,
+    firstNineHoles,
+    secondNineHoles,
+    firstNine,
+    secondNine,
+    total: firstNine + secondNine,
+  };
+}
+
+export function inferRoundStartHole(store: HoleShotsStore): number {
+  if (
+    typeof store.roundStartHole === "number" &&
+    store.roundStartHole >= 1 &&
+    store.roundStartHole <= 18
+  ) {
+    return store.roundStartHole;
+  }
+  const captured: number[] = [];
+  for (let h = 1; h <= 18; h++) {
+    if (isHoleFinished(store, h)) captured.push(h);
+  }
+  return resolveGroupStartHole(null, null, captured);
+}
+
+export function withRoundStartHole(
+  store: HoleShotsStore,
+  startHole: number
+): HoleShotsStore {
+  const hole = Math.min(18, Math.max(1, Math.floor(startHole)));
+  return { ...store, roundStartHole: hole };
 }
 
 export { carryYards };

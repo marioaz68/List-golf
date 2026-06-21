@@ -473,6 +473,47 @@ export function zoomToFitWaypoints(
   return Math.min(zV, zH);
 }
 
+/** Zoom extra hacia afuera al iniciar hoyo (salida visible en doglegs largos). */
+export const TEE_START_ZOOM_OUT = 0.5;
+
+export function zoomToFitWaypointsWithMargin(
+  pts: Array<{ lat: number; lon: number }>,
+  bearingDeg: number,
+  availW: number,
+  availH: number,
+  zoomOut = TEE_START_ZOOM_OUT
+): number {
+  if (pts.length < 2) return 18;
+  const z = zoomToFitWaypoints(pts, bearingDeg, availW, availH * 0.9);
+  return Math.max(15, Math.min(20.5, z - zoomOut));
+}
+
+/** Tras encuadrar, asegura que la salida no quede fuera de pantalla ni bajo los controles. */
+export function ensureTeeMarkVisible(
+  map: any,
+  bearing: number,
+  lat: number,
+  lon: number,
+  viewportW: number,
+  viewportH: number,
+  bottomBarPx = 128
+) {
+  const marginX = Math.max(32, viewportW * 0.06);
+  const minY = 72;
+  const maxY = viewportH - bottomBarPx;
+  for (let pass = 0; pass < 8; pass++) {
+    const pt = toRotatedScreen(map, lat, lon, bearing, viewportW, viewportH);
+    let dx = 0;
+    let dy = 0;
+    if (pt.x < marginX) dx = pt.x - marginX;
+    else if (pt.x > viewportW - marginX) dx = pt.x - (viewportW - marginX);
+    if (pt.y < minY) dy = pt.y - minY;
+    else if (pt.y > maxY) dy = pt.y - maxY;
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) break;
+    panScreenDelta(map, bearing, dx, dy);
+  }
+}
+
 export function frameByProximity(
   map: any,
   _L: any,

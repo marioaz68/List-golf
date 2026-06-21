@@ -268,7 +268,10 @@ export function ShotPlanPanel({
               <button
                 key={reason}
                 type="button"
-                onClick={() => onAddPenalty(reason)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddPenalty(reason);
+                }}
                 className="rounded-md border border-red-500/40 bg-red-950/90 px-0.5 py-0.5 text-[7px] font-black leading-tight text-red-100 active:scale-95"
               >
                 {label}

@@ -75,6 +75,8 @@ import {
   holeTeeMark,
   lastBallPosition,
   lastCompletedShot,
+  inferRoundStartHole,
+  isRoundFinishingHole,
   loadHoleShots,
   penaltyReasonLabel,
   playHeadHoleFromStore,
@@ -84,12 +86,16 @@ import {
   recordHoledPutt,
   removeLastShotOnHole,
   resetShotArrival,
+  roundNineLabel,
+  roundStrokeTotals,
   saveHoleShots,
   setHoleTeeMark,
   setWaterPenaltyDrop,
   shotsForHole,
   type HoleShotsStore,
   type ManualPenaltyReason,
+  type RoundStrokeTotals,
+  withRoundStartHole,
 } from "@/lib/distances/holeShots";
 import {
   configureHoleShotsSync,
@@ -237,6 +243,10 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const [resumeHole, setResumeHole] = useState<number | null>(null);
   /** Modo corrección: quitar golpes con ✕ y re-anotar el hoyo. */
   const [holeCorrectionMode, setHoleCorrectionMode] = useState(false);
+  /** Resumen al terminar la ronda (18 hoyos). */
+  const [roundSummary, setRoundSummary] = useState<RoundStrokeTotals | null>(
+    null
+  );
   const [customPoints, setCustomPoints] = useState<ReferencePoint[]>([]);
   const [holeGreen, setHoleGreen] = useState<HoleGreenPoints | null>(null);
   const [pace, setPace] = useState<PaceState | null>(null);
@@ -571,6 +581,8 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     hole: 0,
     count: 0,
   });
+  /** True solo si el GPS te ubicó en el hoyo fijado a mano antes de avanzar. */
+  const wasOnManualHoleRef = useRef(false);
   const layoutReseededRef = useRef(false);
   const prevActiveHoleRef = useRef<number | null>(null);
 
@@ -641,13 +653,22 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   // mano. Cruzar por cualquier otro hoyo (traslapes) NO descarta tu elección
   // manual: se respeta hasta que llegas al que sigue en orden.
   useEffect(() => {
+    if (manualHole != null && insideHole === manualHole) {
+      wasOnManualHoleRef.current = true;
+    }
+  }, [insideHole, manualHole]);
+
+  useEffect(() => {
     if (manualHole == null || insideHole == null) return;
     const expectedNext = (manualHole % 18) + 1;
-    if (insideHole === expectedNext) {
-      setAutoHole(expectedNext);
-      setManualHole(null);
-      setTapPoint(null);
-    }
+    if (insideHole !== expectedNext) return;
+    // Si retrocediste con ‹ estando físicamente más adelante (p. ej. en el 18
+    // mirando el 17), no interpretar el GPS como “avance” al hoyo siguiente.
+    if (!wasOnManualHoleRef.current) return;
+    wasOnManualHoleRef.current = false;
+    setAutoHole(expectedNext);
+    setManualHole(null);
+    setTapPoint(null);
   }, [insideHole, manualHole]);
 
   const catalogTeeForHole = useMemo(
@@ -1200,27 +1221,37 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const finishHoleAndAdvance = useCallback(
     (how: "in" | "given") => {
       if (!holeFinishPrompt) return;
-      const { hole, lat, lon } = holeFinishPrompt;
+      const { hole, lat, lon, strokeCount } = holeFinishPrompt;
       const pin = { lat, lon };
-      let totalStrokes = holeFinishPrompt.strokeCount;
 
-      setHoleShotsStore((prev) => {
-        const result =
-          how === "given"
-            ? recordGivenPutt(prev, hole, pin)
-            : recordHoledPutt(prev, hole, pin);
-        totalStrokes = result.totalStrokes;
-        const nextHoleNum = (hole % 18) + 1;
-        const nextStore = clearHoleShots(result.store, nextHoleNum);
-        saveHoleShots(nextStore, bagScope);
-        return nextStore;
-      });
+      const result =
+        how === "given"
+          ? recordGivenPutt(holeShotsStore, hole, pin)
+          : recordHoledPutt(holeShotsStore, hole, pin);
+      const startHole = inferRoundStartHole(holeShotsStore);
+      const finishingRound = isRoundFinishingHole(hole, startHole);
+      const nextStore = finishingRound
+        ? result.store
+        : clearHoleShots(result.store, (hole % 18) + 1);
 
+      setHoleShotsStore(nextStore);
+      saveHoleShots(nextStore, bagScope);
       setHoleFinishPrompt(null);
       resetTapUi();
       setTapPoint(null);
       setPendingTap(null);
       autoCandidateRef.current = { hole: 0, count: 0 };
+
+      if (finishingRound) {
+        const totals = roundStrokeTotals(result.store, startHole);
+        setRoundSummary(totals);
+        setArrivalToast(
+          `Ronda terminada · ${totals.total} golpes (${totals.firstNine} + ${totals.secondNine})`
+        );
+        return;
+      }
+
+      const totalStrokes = result.totalStrokes ?? strokeCount;
       const nextHoleNum = (hole % 18) + 1;
       setAutoHole(nextHoleNum);
       setManualHole(nextHoleNum);
@@ -1232,7 +1263,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Pasa al hoyo ${nextHoleNum}`
       );
     },
-    [holeFinishPrompt, bagScope, resetTapUi, demoMode]
+    [holeFinishPrompt, holeShotsStore, bagScope, resetTapUi, demoMode]
   );
 
   const showHoleFinishPrompt = useCallback(
@@ -1265,11 +1296,25 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     if (!holeFinishPrompt) return;
     const { lat, lon, strokeCount, hole } = holeFinishPrompt;
     setHoleFinishPrompt(null);
+    setHoleShotsStore((prev) => {
+      const pending = pendingShotOnHole(prev, hole);
+      if (!pending) return prev;
+      const next = completeShotArrival(
+        prev,
+        hole,
+        pending.id,
+        { lat, lon },
+        Math.max(1, pending.plannedYards),
+        "green"
+      );
+      saveHoleShots(next, bagScope);
+      return next;
+    });
     setArrivalToast(
       `Golpe ${strokeCount} registrado · sigues en el hoyo ${hole}`
     );
     openPlanFromPoint(lat, lon);
-  }, [holeFinishPrompt, openPlanFromPoint]);
+  }, [holeFinishPrompt, openPlanFromPoint, bagScope]);
 
   useEffect(() => {
     if (prevActiveHoleRef.current === activeHole) return;
@@ -1609,34 +1654,44 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   const handleAddPenalty = useCallback(
     (reason: ManualPenaltyReason) => {
-      if (!teeMark || !activeHolePoints) return;
+      if (!activeHolePoints) {
+        setArrivalToast("No se pudo anotar el castigo · espera a que cargue el hoyo");
+        return;
+      }
 
-      let fromPoint = teeMark;
-      let nextStore!: HoleShotsStore;
+      const result: {
+        from: { lat: number; lon: number } | null;
+        count: number;
+        added: boolean;
+      } = { from: null, count: 0, added: false };
 
       setHoleShotsStore((prev) => {
-        fromPoint =
-          lastBallPosition(prev, activeHole, catalogTeeForHole) ?? teeMark;
-        let next = prev;
-        const pending = pendingShotOnHole(prev, activeHole);
-        if (pending) {
-          next = cancelPendingShot(next, activeHole, pending.id);
-        }
-        next = addManualPenaltyStroke(next, activeHole, fromPoint, reason);
+        const tee = holeTeeMark(prev, activeHole);
+        if (!tee) return prev;
+        const from =
+          lastBallPosition(prev, activeHole, catalogTeeForHole) ?? tee;
+        const before = completedStrokeCount(prev, activeHole);
+        const next = addManualPenaltyStroke(prev, activeHole, from, reason);
+        const after = completedStrokeCount(next, activeHole);
+        if (after <= before) return prev;
         saveHoleShots(next, bagScope);
-        nextStore = next;
+        result.from = from;
+        result.count = after;
+        result.added = true;
         return next;
       });
 
-      const strokeCount = completedStrokeCount(nextStore, activeHole);
-      pinMapFraming(fromPoint);
+      if (!result.added || !result.from) {
+        setArrivalToast("Marca tu salida antes de anotar castigos");
+        return;
+      }
+      pinMapFraming(result.from);
       setArrivalToast(
-        `${penaltyReasonLabel(reason)} · +1 = ${strokeCount} golpes`
+        `${penaltyReasonLabel(reason)} · +1 = ${result.count} golpes`
       );
-      openPlanFromPoint(fromPoint.lat, fromPoint.lon);
+      openPlanFromPoint(result.from.lat, result.from.lon);
     },
     [
-      teeMark,
       activeHolePoints,
       activeHole,
       catalogTeeForHole,
@@ -1780,6 +1835,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   const goToHole = useCallback(
     (delta: 1 | -1) => {
       manualAtDetectedRef.current = insideHole;
+      if (delta === -1) {
+        wasOnManualHoleRef.current = false;
+      }
       setManualHole((prev) => {
         const base = prev ?? autoHole ?? nearestHole;
         if (delta === 1) return (base % 18) + 1;
@@ -1814,14 +1872,24 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     (n: number) => {
       manualAtDetectedRef.current = insideHole;
       autoCandidateRef.current = { hole: 0, count: 0 };
-      resetHoleFromScratch(n);
+      setRoundSummary(null);
+      setHoleShotsStore((prev) => {
+        const next = withRoundStartHole(clearHoleShots(prev, n), n);
+        saveHoleShots(next, bagScope);
+        return next;
+      });
+      setTapPoint(null);
+      setTargetYards(0);
+      resetTapUi();
+      setShotsDetailOpen(false);
+      setMapFramingLock(null);
       setManualHole(n);
       setResumeHole(n);
       setHoleCorrectionMode(false);
       setArrivalToast(null);
       if (demoMode) setDemoProgress(0.35);
     },
-    [insideHole, resetHoleFromScratch, demoMode]
+    [insideHole, bagScope, resetTapUi, demoMode]
   );
 
   const resetActiveHole = useCallback(() => {
@@ -1886,6 +1954,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setShotPlanOpen(false);
     setHoleFinishPrompt(null);
     setMapFramingLock(null);
+    wasOnManualHoleRef.current = insideHole === resumeHole;
     setManualHole(resumeHole);
     const pt =
       lastBallPosition(
@@ -1899,6 +1968,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
     setArrivalToast(`De vuelta al hoyo ${resumeHole}`);
   }, [
     resumeHole,
+    insideHole,
     resetTapUi,
     holeShotsStore,
     catalogTeeForHole,
@@ -2056,7 +2126,9 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               golpe{holeFinishPrompt.strokeCount === 1 ? "" : "s"}
             </p>
             <p className="mt-1 text-center text-[11px] font-semibold text-emerald-200">
-              Estás a menos de 1 yd · ¿entró al hoyo?
+              {holeFinishPrompt.centerYards <= 1
+                ? "Estás a menos de 1 yd · ¿entró al hoyo?"
+                : `Estás a ${Math.round(holeFinishPrompt.centerYards)} yds · ¿entró al hoyo?`}
             </p>
             <div className="mt-2.5 flex flex-col gap-2">
               <button
@@ -2081,6 +2153,58 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
                 No entró · sigo jugando
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {roundSummary && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[22%] z-[1105] flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-sm rounded-xl border-2 border-amber-300/70 bg-slate-950/98 px-4 py-4 shadow-2xl backdrop-blur-md">
+            <p className="text-center text-sm font-black text-amber-100">
+              Ronda terminada
+            </p>
+            <div className="mt-3 space-y-2 text-center">
+              <div className="rounded-lg border border-white/10 bg-black/40 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  1ª vuelta · {roundNineLabel(roundSummary.firstNineHoles)}
+                </p>
+                <p className="text-2xl font-black tabular-nums text-white">
+                  {roundSummary.firstNine}
+                  <span className="ml-1 text-sm font-bold text-slate-300">
+                    golpes
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/40 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  2ª vuelta · {roundNineLabel(roundSummary.secondNineHoles)}
+                </p>
+                <p className="text-2xl font-black tabular-nums text-white">
+                  {roundSummary.secondNine}
+                  <span className="ml-1 text-sm font-bold text-slate-300">
+                    golpes
+                  </span>
+                </p>
+              </div>
+              <div className="rounded-lg border border-amber-400/40 bg-amber-950/50 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-200/80">
+                  Total ronda
+                </p>
+                <p className="text-3xl font-black tabular-nums text-amber-100">
+                  {roundSummary.total}
+                  <span className="ml-1 text-base font-bold text-amber-200/80">
+                    golpes
+                  </span>
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRoundSummary(null)}
+              className="mt-3 w-full rounded-lg bg-amber-500 px-3 py-2.5 text-xs font-black text-black active:scale-[0.98]"
+            >
+              Entendido
+            </button>
           </div>
         </div>
       ) : null}
@@ -2310,7 +2434,12 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         ) : null}
       </div>
 
-      {shotPlanOpen && planContext && !farFromCourse && hasTeeMark && !pendingWaterDrop ? (
+      {shotPlanOpen &&
+      planContext &&
+      !farFromCourse &&
+      hasTeeMark &&
+      !pendingWaterDrop &&
+      !pendingShot ? (
         <ShotPlanPanel
           key={`plan-${activeHole}-${planSession}-${planContext.yardsToGreen}-${planContext.lieKind}`}
           bag={bag}
