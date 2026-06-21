@@ -63,6 +63,7 @@ import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
+import { RoundTeePickerOverlay } from "@/components/captura/RoundTeePickerOverlay";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
@@ -317,6 +318,8 @@ export default function DistanciasClient({
   const [teePositionsByCode, setTeePositionsByCode] =
     useState<TeePositionsByCode>({});
   const [playingTeeCode, setPlayingTeeCode] = useState<TeeSetCode>("BLK");
+  const [showRoundTeePicker, setShowRoundTeePicker] = useState(false);
+  const [roundTeeConfirmed, setRoundTeeConfirmed] = useState(false);
   // Salidas por hoyo del set activo (calibradas o default del catálogo).
   const teeCenters = useMemo<TeesByHole>(() => {
     const out: TeesByHole = {};
@@ -1253,18 +1256,16 @@ export default function DistanciasClient({
     ]
   );
 
-  const selectPlayingTee = useCallback(
+  const confirmRoundTee = useCallback(
     (code: TeeSetCode) => {
       setPlayingTeeCode(code);
       savePlayingTeeCode(code, bagScope);
+      setRoundTeeConfirmed(true);
+      setShowRoundTeePicker(false);
       const tee = resolveTeePosition(activeHole, code, teePositionsByCode);
-      if (!tee) return;
-      const hasCompleted = shotsForHole(holeShotsStore, activeHole).some(
-        (s) => s.completedAt != null
-      );
-      if (hasCompleted) {
+      if (!tee) {
         setArrivalToast(
-          `Juegas ${teeSetLabel(code)} · cambia salida en el siguiente hoyo`
+          `Salida ${teeSetLabel(code)} sin calibrar en H${activeHole}`
         );
         return;
       }
@@ -1273,19 +1274,23 @@ export default function DistanciasClient({
         saveHoleShots(next, bagScope);
         return next;
       });
+      if (resumeHole == null) setResumeHole(activeHole);
+      setManualHole(activeHole);
       autoPlanHoleRef.current = null;
       pinMapFraming({ lat: tee.lat, lon: tee.lon });
       openPlanFromPoint(tee.lat, tee.lon);
       autoPlanHoleRef.current = activeHole;
-      setArrivalToast(`Salida ${teeSetLabel(code)} · H${activeHole}`);
+      setArrivalToast(
+        `Salida ${teeSetLabel(code)} · todo el campo · elige bastón`
+      );
     },
     [
       bagScope,
       activeHole,
       teePositionsByCode,
-      holeShotsStore,
       pinMapFraming,
       openPlanFromPoint,
+      resumeHole,
     ]
   );
 
@@ -1434,8 +1439,42 @@ export default function DistanciasClient({
   }, [activeHole, resetTapUi]);
 
   useEffect(() => {
+    const startHole = inferRoundStartHole(holeShotsStore);
+    if (hasHoleTeeMark(holeShotsStore, startHole)) {
+      setRoundTeeConfirmed(true);
+    }
+  }, [holeShotsStore]);
+
+  useEffect(() => {
+    if (farFromCourse && !demoMode) return;
+    if (roundTeeConfirmed) return;
+    if (!needsTeeMark) return;
+    if (hasLoggedShotsOnHole(holeShotsStore, activeHole)) return;
+    const startHole = inferRoundStartHole(holeShotsStore);
+    if (activeHole !== startHole) return;
+    if (activeHole !== 1 && activeHole !== 10) return;
+    setShowRoundTeePicker(true);
+  }, [
+    demoMode,
+    farFromCourse,
+    roundTeeConfirmed,
+    needsTeeMark,
+    activeHole,
+    holeShotsStore,
+  ]);
+
+  useEffect(() => {
     if (demoMode) return;
+    if (showRoundTeePicker) return;
     if (hasHoleTeeMark(holeShotsStore, activeHole)) return;
+    const startHole = inferRoundStartHole(holeShotsStore);
+    if (
+      !roundTeeConfirmed &&
+      activeHole === startHole &&
+      (activeHole === 1 || activeHole === 10)
+    ) {
+      return;
+    }
     const tee = resolveTeePosition(
       activeHole,
       playingTeeCode,
@@ -1454,10 +1493,13 @@ export default function DistanciasClient({
     teePositionsByCode,
     demoMode,
     bagScope,
+    showRoundTeePicker,
+    roundTeeConfirmed,
+    holeShotsStore,
   ]);
 
   useEffect(() => {
-    if (demoMode || needsTeeMark || !teeMark) return;
+    if (demoMode || needsTeeMark || !teeMark || showRoundTeePicker) return;
     const hasCompleted = shotsForHole(holeShotsStore, activeHole).some(
       (s) => s.completedAt != null
     );
@@ -1474,6 +1516,7 @@ export default function DistanciasClient({
     holeShotsStore,
     pinMapFraming,
     openPlanFromPoint,
+    showRoundTeePicker,
   ]);
 
   useEffect(() => {
@@ -2047,6 +2090,8 @@ export default function DistanciasClient({
       setResumeHole(n);
       setHoleCorrectionMode(false);
       setArrivalToast(null);
+      setRoundTeeConfirmed(false);
+      setShowRoundTeePicker(true);
       if (demoMode) setDemoProgress(0.35);
     },
     [insideHole, bagScope, resetTapUi, demoMode]
@@ -2205,27 +2250,19 @@ export default function DistanciasClient({
         ✕
       </Link>
 
-      {!farFromCourse && !demoMode ? (
+      {!farFromCourse && roundTeeConfirmed ? (
         <div
           className="pointer-events-none absolute inset-x-12 top-2 z-[1000] flex justify-center"
           data-yardage-map-ui
         >
-          <div className="pointer-events-auto flex max-w-[min(100vw-6rem,24rem)] gap-1 overflow-x-auto rounded-full border border-white/15 bg-black/70 px-1.5 py-1 backdrop-blur-md">
-            {CCQ_CALIBRATION_TEE_SETS.map((t) => (
-              <button
-                key={t.code}
-                type="button"
-                onClick={() => selectPlayingTee(t.code)}
-                className={[
-                  "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black",
-                  playingTeeCode === t.code
-                    ? "border-amber-400 bg-amber-500 text-black"
-                    : t.chipClass,
-                ].join(" ")}
-              >
-                {t.name}
-              </button>
-            ))}
+          <div
+            className={[
+              "rounded-full border px-3 py-1 text-[10px] font-black shadow-lg backdrop-blur-md",
+              CCQ_CALIBRATION_TEE_SETS.find((t) => t.code === playingTeeCode)
+                ?.chipClass ?? "border-white/30 bg-black/70 text-white",
+            ].join(" ")}
+          >
+            Salida {teeSetLabel(playingTeeCode)}
           </div>
         </div>
       ) : null}
@@ -2267,13 +2304,23 @@ export default function DistanciasClient({
         onCorrectLanding={(shotId) => correctLastShotLanding(shotId)}
       />
 
-      {needsTeeMark && !farFromCourse ? (
+      {showRoundTeePicker && !farFromCourse ? (
+        <RoundTeePickerOverlay
+          holeNo={activeHole}
+          selectedCode={playingTeeCode}
+          onSelect={confirmRoundTee}
+        />
+      ) : null}
+
+      {needsTeeMark && !farFromCourse && !showRoundTeePicker ? (
         <div className="pointer-events-none absolute inset-x-2 top-12 z-[1065] rounded-xl border border-emerald-400/50 bg-emerald-950/95 px-3 py-2 shadow-xl backdrop-blur-md">
           <p className="text-center text-[11px] font-black text-emerald-100">
             {teeMarkBannerLine}
           </p>
           <p className="mt-0.5 text-center text-[10px] text-emerald-200/85">
-            Marca tu salida · toca el tee en el mapa para confirmar
+            {roundTeeConfirmed
+              ? "Toca el tee en el mapa para ajustar la salida"
+              : "Elige tu salida arriba (Negras, Azules…)"}
           </p>
         </div>
       ) : null}
