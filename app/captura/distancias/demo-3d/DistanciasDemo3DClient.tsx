@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CCQ_HOLE_POINTS } from "@/lib/distances/ccqHolePoints";
 import { defaultDistanciasCourseId } from "@/lib/distances/loadCourseReferencePoints";
@@ -44,6 +45,13 @@ type HoleLayout = {
 };
 
 export default function DistanciasDemo3DClient() {
+  const searchParams = useSearchParams();
+  const pruebaHref = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("prueba", "1");
+    return `/captura/distancias?${p.toString()}`;
+  }, [searchParams]);
+
   const [holeNo, setHoleNo] = useState(15);
   const [progress, setProgress] = useState(0);
   const [layout, setLayout] = useState<HoleLayout | null>(null);
@@ -137,7 +145,7 @@ export default function DistanciasDemo3DClient() {
         ) : error || !layout ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 bg-slate-950 px-6 text-center text-sm text-red-200">
             <p>{error ?? "Sin datos."}</p>
-            <Link href="/captura/distancias/demo" className="text-sky-300 underline">
+            <Link href={pruebaHref} className="text-sky-300 underline">
               Volver al demo 2D
             </Link>
           </div>
@@ -151,25 +159,7 @@ export default function DistanciasDemo3DClient() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex items-start justify-between gap-2 p-2">
-        <div className="pointer-events-auto space-y-1">
-          <div className="rounded-full bg-violet-600/90 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-lg">
-            Preview 3D · experimental
-          </div>
-          <p className="max-w-[11rem] rounded-lg bg-black/55 px-2 py-1 text-[9px] leading-snug text-slate-300 backdrop-blur-sm">
-            No afecta Yardas en campo. Solo demostración visual.
-          </p>
-        </div>
-        <Link
-          href="/captura/distancias/demo"
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold text-white shadow-lg backdrop-blur-sm"
-          aria-label="Cerrar preview 3D"
-        >
-          ✕
-        </Link>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 top-14 z-[1000] flex justify-center">
+      <div className="pointer-events-none absolute inset-x-0 top-[4.25rem] z-[1000] flex justify-center px-2">
         <div className="pointer-events-auto flex flex-wrap justify-center gap-1 rounded-full bg-black/60 px-2 py-1 backdrop-blur-sm">
           {DEMO_HOLES.map((h) => (
             <button
@@ -193,7 +183,7 @@ export default function DistanciasDemo3DClient() {
       </div>
 
       {layout && !loading ? (
-        <div className="pointer-events-none absolute inset-x-0 top-[4.5rem] z-[1000] flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 top-[6.25rem] z-[1000] flex justify-center px-2">
           <div className="rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[11px] font-semibold text-emerald-100 backdrop-blur-sm">
             H{layout.holeNo} · par {layout.par} · {yardsToCenter} yds al hoyo · centerline{" "}
             {layout.source === "db" ? "calibrada" : "default"}
@@ -221,13 +211,7 @@ export default function DistanciasDemo3DClient() {
             Cámara detrás del jugador · fairway siguiendo la centerline · bandera en el
             centro calibrado (crece al acercarte).
           </p>
-          <div className="flex justify-center gap-2 pt-1">
-            <Link
-              href="/captura/distancias/demo"
-              className="rounded-lg border border-white/20 bg-black/60 px-3 py-1.5 text-[11px] font-bold text-slate-200"
-            >
-              Demo 2D (satélite)
-            </Link>
+          <div className="flex justify-center pt-1">
             <Link
               href="/captura/distancias"
               className="rounded-lg border border-emerald-500/40 bg-emerald-950/80 px-3 py-1.5 text-[11px] font-bold text-emerald-100"

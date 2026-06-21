@@ -49,6 +49,7 @@ import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
 import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
+import { DistanciasDemoNav } from "@/components/captura/DistanciasDemoNav";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
@@ -190,7 +191,28 @@ function timeAgo(ms: number): string {
   return `${Math.round(min / 60)}h`;
 }
 
-export default function DistanciasClient({ demoMode = false }: { demoMode?: boolean }) {
+export default function DistanciasClient({
+  demoMode: demoModeProp = false,
+}: {
+  demoMode?: boolean;
+}) {
+  const searchParams = useSearchParams();
+  const demoMode =
+    demoModeProp || searchParams.get("prueba") === "1";
+
+  const pruebaHref = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("prueba", "1");
+    return `/captura/distancias?${p.toString()}`;
+  }, [searchParams]);
+
+  const demo3dHref = useMemo(() => {
+    const q = searchParams.toString();
+    return q
+      ? `/captura/distancias/demo-3d?${q}`
+      : "/captura/distancias/demo-3d";
+  }, [searchParams]);
+
   const [geo, setGeo] = useState<GeoState>(
     demoMode ? { status: "idle" } : { status: "idle" }
   );
@@ -308,7 +330,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
   // a un hoyo distinto (el GPS detecta otro polígono), se reanuda el automático.
   const manualAtDetectedRef = useRef<number | null>(null);
 
-  const searchParams = useSearchParams();
+
   const bagScope =
     searchParams.get("tg")?.trim() ||
     searchParams.get("me")?.trim() ||
@@ -2008,6 +2030,7 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
+      {demoMode ? <DistanciasDemoNav /> : null}
       {/* Mapa a pantalla completa */}
       <div className="absolute inset-0">
         {geo.status === "ok" && greenYds && !farFromCourse ? (
@@ -2073,23 +2096,17 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
         onClick={() => setBagOpen(true)}
         className={[
           "absolute left-2 z-[1000] rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95",
-          demoMode ? "top-11" : "top-2",
+          demoMode ? "top-[4.5rem]" : "top-2",
         ].join(" ")}
       >
         Bolsa
       </button>
 
       {demoMode ? (
-        <div className="pointer-events-none absolute left-2 top-2 z-[1000] flex max-w-[85%] flex-col gap-1">
+        <div className="pointer-events-none absolute inset-x-0 top-14 z-[1000] flex justify-center px-2">
           <div className="rounded-full bg-amber-500/95 px-2.5 py-1 text-[10px] font-black leading-tight text-amber-950 shadow-lg">
             DEMO · en casa · sin GPS
           </div>
-          <Link
-            href="/captura/distancias/demo-3d"
-            className="pointer-events-auto w-fit rounded-lg border border-violet-400/60 bg-violet-700/95 px-2.5 py-1 text-[10px] font-black text-white shadow-lg active:scale-95"
-          >
-            Abrir preview 3D →
-          </Link>
         </div>
       ) : null}
 
@@ -2521,6 +2538,23 @@ export default function DistanciasClient({ demoMode = false }: { demoMode?: bool
               cercano (hoyo {nearest.holeNo}).
             </p>
           ) : null}
+          <p className="mt-4 text-sm text-slate-300">
+            Puedes probar Yardas y el preview 3D desde casa:
+          </p>
+          <div className="mt-3 flex w-full max-w-sm flex-col gap-2">
+            <Link
+              href={pruebaHref}
+              className="rounded-xl border border-emerald-500/50 bg-emerald-950/90 px-4 py-3 text-sm font-bold text-emerald-100 shadow-lg active:scale-[0.98]"
+            >
+              🏠 Probar en casa (satélite 2D)
+            </Link>
+            <Link
+              href={demo3dHref}
+              className="rounded-xl border border-violet-400/50 bg-violet-950/90 px-4 py-3 text-sm font-bold text-violet-100 shadow-lg active:scale-[0.98]"
+            >
+              🎮 Preview 3D experimental
+            </Link>
+          </div>
           <Link
             href="/"
             className="mt-5 rounded-md border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200"

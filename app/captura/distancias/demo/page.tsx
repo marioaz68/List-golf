@@ -1,23 +1,22 @@
 /**
- * /captura/distancias/demo — Yardas en modo demo (sin GPS ni límite de 300 m).
- * Misma UI que en campo: bolsa, tap en mapa, sugerencia de bastón.
+ * /captura/distancias/demo — alias del modo prueba en la misma pantalla Yardas.
  */
-import { Suspense } from "react";
-import DistanciasClient from "../DistanciasClient";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default function DistanciasDemoPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-dvh items-center justify-center bg-slate-950 text-sm text-slate-400">
-          Cargando…
-        </div>
-      }
-    >
-      <DistanciasClient demoMode />
-    </Suspense>
-  );
+type SP = { [key: string]: string | string[] | undefined };
+
+export default async function DistanciasDemoPage(props: {
+  searchParams?: SP | Promise<SP>;
+}) {
+  const sp = props.searchParams ? await props.searchParams : {};
+  const p = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (typeof value === "string") p.set(key, value);
+    else if (Array.isArray(value) && value[0]) p.set(key, value[0]);
+  }
+  p.set("prueba", "1");
+  redirect(`/captura/distancias?${p.toString()}`);
 }
