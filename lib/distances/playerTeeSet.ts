@@ -11,12 +11,13 @@ function storageKey(scope?: string): string {
 }
 
 export function loadPlayingTeeCode(scope?: string): TeeSetCode {
-  if (typeof window === "undefined") return "WHT";
+  if (typeof window === "undefined") return "BLK";
   try {
     const raw = window.localStorage.getItem(storageKey(scope));
+    if (!raw) return "BLK";
     return normalizeTeeSetCode(raw);
   } catch {
-    return "WHT";
+    return "BLK";
   }
 }
 

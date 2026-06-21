@@ -69,7 +69,7 @@ export function normalizeTeeSetCode(raw: string | null | undefined): TeeSetCode 
     .toUpperCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "");
-  return CODE_ALIASES[key] ?? "WHT";
+  return CODE_ALIASES[key] ?? "BLK";
 }
 
 export type TeePositionsByCode = Partial<Record<TeeSetCode, Record<number, LatLon>>>;

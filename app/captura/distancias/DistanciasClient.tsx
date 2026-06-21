@@ -316,7 +316,7 @@ export default function DistanciasClient({
   const [centerlines, setCenterlines] = useState<CenterlinesByHole>({});
   const [teePositionsByCode, setTeePositionsByCode] =
     useState<TeePositionsByCode>({});
-  const [playingTeeCode, setPlayingTeeCode] = useState<TeeSetCode>("WHT");
+  const [playingTeeCode, setPlayingTeeCode] = useState<TeeSetCode>("BLK");
   // Salidas por hoyo del set activo (calibradas o default del catálogo).
   const teeCenters = useMemo<TeesByHole>(() => {
     const out: TeesByHole = {};
