@@ -160,20 +160,34 @@ export function aimWaypointIndex(p: LatLon, line: LatLon[]): number {
 }
 
 /**
- * Punto a N yardas hacia adelante siguiendo la línea central del fairway
- * (desde la posición actual del jugador).
+ * Punto de caída a N yardas sobre la centerline (desde la bola proyectada
+ * hacia adelante en el fairway).
  */
+export function landingAtYardsAlongCenterline(
+  from: LatLon,
+  line: LatLon[],
+  yards: number
+): LatLon {
+  if (line.length < 2 || yards <= 0) return from;
+
+  const cum = centerlineCumulativeYards(line);
+  const proj = projectOntoCenterline(from, line);
+  const endYards = proj.yardsAlong + yards;
+  return pointAtCumulativeYards(line, cum, endYards);
+}
+
+/** @deprecated Use landingAtYardsAlongCenterline */
 export function pointAtYardsAlongCenterline(
   from: LatLon,
   line: LatLon[],
   yards: number
 ): LatLon {
-  return buildCenterlinePreviewPath(from, line, yards).landing;
+  return landingAtYardsAlongCenterline(from, line, yards);
 }
 
 /**
- * Línea verde de preview: centerline en el fairway; si el carry alcanza el
- * green (distancia recta bola→centro), siempre recta al centro del green.
+ * Preview verde: línea recta bola→caída. La caída va en la centerline del
+ * fairway; si el carry alcanza el green, caída en el centro del green.
  */
 export function buildShotPreviewLine(
   from: LatLon,
@@ -190,26 +204,26 @@ export function buildShotPreviewLine(
     greenCenter.lon
   );
 
+  let landing: LatLon;
   if (plannedYards >= ydsToGreen - 0.5) {
-    return { path: [from, greenCenter], landing: greenCenter };
+    landing = greenCenter;
+  } else if (centerline && centerline.length >= 2) {
+    landing = landingAtYardsAlongCenterline(from, centerline, plannedYards);
+  } else {
+    const bearing = bearingDegrees(
+      from.lat,
+      from.lon,
+      greenCenter.lat,
+      greenCenter.lon
+    );
+    landing = pointAtBearingYards(
+      from.lat,
+      from.lon,
+      bearing,
+      plannedYards
+    );
   }
 
-  if (centerline && centerline.length >= 2) {
-    return buildCenterlinePreviewPath(from, centerline, plannedYards);
-  }
-
-  const bearing = bearingDegrees(
-    from.lat,
-    from.lon,
-    greenCenter.lat,
-    greenCenter.lon
-  );
-  const landing = pointAtBearingYards(
-    from.lat,
-    from.lon,
-    bearing,
-    plannedYards
-  );
   return { path: [from, landing], landing };
 }
 
@@ -309,38 +323,4 @@ function pointAtCumulativeYards(
     }
   }
   return line[line.length - 1];
-}
-
-/** Preview por centerline (solo cuando el carry NO alcanza el green). */
-function buildCenterlinePreviewPath(
-  from: LatLon,
-  line: LatLon[],
-  plannedYards: number
-): { path: LatLon[]; landing: LatLon } {
-  if (line.length < 2 || plannedYards <= 0) {
-    return { path: [from], landing: from };
-  }
-
-  const cum = centerlineCumulativeYards(line);
-  const proj = projectOntoCenterline(from, line);
-  const endYards = proj.yardsAlong + plannedYards;
-  const landing = pointAtCumulativeYards(line, cum, endYards);
-
-  const path: LatLon[] = [from];
-  if (yardsBetween(from.lat, from.lon, proj.point.lat, proj.point.lon) >= 2) {
-    path.push(proj.point);
-  }
-
-  for (let i = 0; i < line.length; i++) {
-    if (cum[i] <= proj.yardsAlong + 0.5) continue;
-    if (cum[i] >= endYards - 0.5) break;
-    path.push(line[i]);
-  }
-
-  const last = path[path.length - 1];
-  if (yardsBetween(last.lat, last.lon, landing.lat, landing.lon) >= 1) {
-    path.push(landing);
-  }
-
-  return { path, landing };
 }

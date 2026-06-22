@@ -788,7 +788,10 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        const midPt = previewPath[Math.floor(previewPath.length / 2)] ?? landing;
+        const midPt = {
+          lat: (playBallPoint.lat + landing.lat) / 2,
+          lon: (playBallPoint.lon + landing.lon) / 2,
+        };
         L.marker([midPt.lat, midPt.lon], {
           icon: L.divIcon({
             className: "",
