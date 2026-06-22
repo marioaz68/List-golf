@@ -2672,15 +2672,29 @@ export default function DistanciasClient({
         )}
       </div>
 
-      {/* Solo una ✕ para cerrar, en la esquina superior derecha (no tapa el
-          green, que ahora va arriba al centro). */}
-      <Link
-        href="/"
-        aria-label="Cerrar"
-        className="absolute right-2 top-2 z-[1000] flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
-      >
-        ✕
-      </Link>
+      {/* ✕ cerrar + total de golpes en el hoyo (al lado izquierdo). */}
+      <div className="absolute right-2 top-2 z-[1000] flex items-center gap-2">
+        {hasTeeMark && !farFromCourse && !needsTeeMark ? (
+          <div
+            className="flex min-w-[2.75rem] flex-col items-center justify-center rounded-full border border-white/30 bg-black/55 px-2 py-0.5 shadow-lg backdrop-blur-sm"
+            aria-label={`${holeStrokeCount} golpe${holeStrokeCount === 1 ? "" : "s"} en el hoyo ${activeHole}`}
+          >
+            <span className="text-[8px] font-bold uppercase leading-none text-slate-400">
+              H{activeHole}
+            </span>
+            <span className="text-3xl font-black tabular-nums leading-none text-white">
+              {holeStrokeCount}
+            </span>
+          </div>
+        ) : null}
+        <Link
+          href="/"
+          aria-label="Cerrar"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+        >
+          ✕
+        </Link>
+      </div>
 
       {!farFromCourse && roundTeeConfirmed && !showRoundTeePicker ? (
         <div
@@ -2773,7 +2787,7 @@ export default function DistanciasClient({
       ) : null}
 
       {greenPuttAdjust && !farFromCourse ? (
-        <div className="pointer-events-none absolute inset-x-0 top-[24%] z-[1090] flex justify-center px-4">
+        <div className="pointer-events-none absolute bottom-[6.75rem] right-2 z-[1090]">
           <GreenPuttDistancePanel
             puttYards={greenPuttAdjust.puttYards}
             measuredYards={greenPuttAdjust.measuredYards}
