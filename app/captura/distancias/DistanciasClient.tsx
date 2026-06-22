@@ -46,6 +46,7 @@ import {
   type LieKind,
 } from "@/lib/distances/detectLie";
 import {
+  ballAtPuttYardsFromHole,
   isTapInPutt,
   holedPinPosition,
   puttDistanceToHole,
@@ -62,6 +63,7 @@ import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
+import { GreenPuttDistancePanel } from "@/components/captura/GreenPuttDistancePanel";
 import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
@@ -263,6 +265,14 @@ export default function DistanciasClient({
     strokeCount: number;
     hole: number;
     centerYards: number;
+  } | null>(null);
+  /** Tras tocar el green: ajustar yardas al hoyo sobre la línea marcada. */
+  const [greenPuttAdjust, setGreenPuttAdjust] = useState<{
+    markLat: number;
+    markLon: number;
+    measuredYards: number;
+    puttYards: number;
+    mode: "landing" | "relocate";
   } | null>(null);
   /** Fuerza remount/reencuadre del mapa al cambiar de hoyo. */
   const [mapFrameEpoch, setMapFrameEpoch] = useState(0);
@@ -1487,6 +1497,7 @@ export default function DistanciasClient({
       setTargetYards(0);
       setShotsDetailOpen(false);
       setHoleFinishPrompt(null);
+      setGreenPuttAdjust(null);
       setMapFramingLock(null);
       setHoleCorrectionMode(false);
       if (!keepShotPlan) {
@@ -1702,10 +1713,226 @@ export default function DistanciasClient({
 
   const holeMeta = activeHolePoints;
 
+  const greenPuttTapEnabled = useMemo(
+    () =>
+      !!(
+        currentBallLie?.onGreen &&
+        hasTeeMark &&
+        !needsTeeMark &&
+        !pendingShot &&
+        !pendingWaterDrop &&
+        !shotPlanOpen &&
+        !holeFinishPrompt &&
+        !distanceMode &&
+        !showRoundTeePicker &&
+        !greenPuttAdjust &&
+        activeHolePoints?.center
+      ),
+    [
+      currentBallLie?.onGreen,
+      hasTeeMark,
+      needsTeeMark,
+      pendingShot,
+      pendingWaterDrop,
+      shotPlanOpen,
+      holeFinishPrompt,
+      distanceMode,
+      showRoundTeePicker,
+      greenPuttAdjust,
+      activeHolePoints?.center,
+    ]
+  );
+
+  const greenPuttPreview = useMemo(() => {
+    if (!greenPuttAdjust || !activeHolePoints?.center) return null;
+    const mark = { lat: greenPuttAdjust.markLat, lon: greenPuttAdjust.markLon };
+    const ball = ballAtPuttYardsFromHole(
+      activeHolePoints.center,
+      mark,
+      greenPuttAdjust.puttYards
+    );
+    return {
+      ball,
+      mark,
+      puttYds: greenPuttAdjust.puttYards,
+    };
+  }, [greenPuttAdjust, activeHolePoints]);
+
+  const applyPendingShotLanding = useCallback(
+    (lat: number, lon: number) => {
+      if (!pendingShot || !activeHolePoints || geo.status !== "ok") return;
+      const lie = detectLieForPoint(lat, lon);
+      const centerYds = puttDistanceToHole(
+        { lat, lon },
+        activeHolePoints.center
+      );
+      const landing = snapLandingToGreenCenter(
+        { lat, lon },
+        activeHolePoints.center,
+        lie.onGreen ? centerYds : undefined
+      );
+      const actual = strokeActualYards(
+        pendingShot.from,
+        landing,
+        lie.kind,
+        pendingShot.catalogId
+      );
+      let next = completeShotArrival(
+        holeShotsStore,
+        activeHole,
+        pendingShot.id,
+        landing,
+        actual,
+        lie.kind
+      );
+      setPendingTap(null);
+      setDistanceMode(false);
+      setMeasureFromPhoneOnce(false);
+      setTapPoint(null);
+
+      if (lie.kind === "ob") {
+        const replayFrom = {
+          lat: pendingShot.from.lat,
+          lon: pendingShot.from.lon,
+        };
+        pinMapFraming(replayFrom);
+        const penalized = ensureObPenaltyStroke(
+          next,
+          activeHole,
+          pendingShot.id,
+          replayFrom
+        );
+        next = penalized.store;
+        const strokeCount = completedStrokeCount(next, activeHole);
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        setArrivalToast(
+          `OB · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · vuelves a jugar desde donde estabas`
+        );
+        openPlanFromPoint(replayFrom.lat, replayFrom.lon);
+        return;
+      }
+
+      if (lie.kind === "water") {
+        const replayFrom = {
+          lat: pendingShot.from.lat,
+          lon: pendingShot.from.lon,
+        };
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        next = ensureWaterPenaltyStroke(
+          next,
+          activeHole,
+          pendingShot.id,
+          replayFrom
+        );
+        const strokeCount = completedStrokeCount(next, activeHole);
+        setHoleShotsStore(next);
+        saveHoleShots(next, bagScope);
+        pinMapFraming({ lat, lon });
+        setArrivalToast(
+          `Lago · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · toca atrás del lago donde jugarás`
+        );
+        return;
+      }
+
+      const toGreen = greenDistancesForHole(
+        landing.lat,
+        landing.lon,
+        activeHolePoints
+      );
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+
+      if (shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)) {
+        const strokeCount = finishPromptStrokeCount(next, activeHole);
+        pinMapFraming(landing);
+        showHoleFinishPrompt(
+          landing.lat,
+          landing.lon,
+          strokeCount,
+          toGreen.center,
+          lieArrivalPhrase(lie.kind)
+        );
+        return;
+      }
+
+      setArrivalToast(
+        `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
+      );
+      pinMapFraming(landing);
+      openPlanFromPoint(landing.lat, landing.lon);
+    },
+    [
+      pendingShot,
+      activeHolePoints,
+      geo.status,
+      detectLieForPoint,
+      holeShotsStore,
+      activeHole,
+      bagScope,
+      pinMapFraming,
+      openPlanFromPoint,
+      showHoleFinishPrompt,
+    ]
+  );
+
+  const confirmGreenPuttAdjust = useCallback(() => {
+    if (!greenPuttAdjust || !activeHolePoints?.center) return;
+    const mark = { lat: greenPuttAdjust.markLat, lon: greenPuttAdjust.markLon };
+    const ball = ballAtPuttYardsFromHole(
+      activeHolePoints.center,
+      mark,
+      greenPuttAdjust.puttYards
+    );
+    const landing = snapLandingToGreenCenter(
+      ball,
+      activeHolePoints.center,
+      greenPuttAdjust.puttYards
+    );
+
+    if (greenPuttAdjust.mode === "relocate") {
+      const lie = detectLieForPoint(landing.lat, landing.lon);
+      if (!lie.onGreen) {
+        setArrivalToast("Mantén la bola en el green");
+        return;
+      }
+      const next = relocateBallOnGreen(
+        holeShotsStore,
+        activeHole,
+        landing,
+        lie.kind
+      );
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      pinMapFraming(landing);
+      setGreenPuttAdjust(null);
+      setArrivalToast(`${greenPuttAdjust.puttYards} yds al hoyo`);
+      return;
+    }
+
+    if (!pendingShot) {
+      setGreenPuttAdjust(null);
+      return;
+    }
+    applyPendingShotLanding(landing.lat, landing.lon);
+    setGreenPuttAdjust(null);
+  }, [
+    greenPuttAdjust,
+    activeHolePoints,
+    detectLieForPoint,
+    holeShotsStore,
+    activeHole,
+    bagScope,
+    pinMapFraming,
+    pendingShot,
+    applyPendingShotLanding,
+  ]);
+
   const onMapTap = useCallback(
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
-      if (holeFinishPrompt) return;
+      if (holeFinishPrompt || greenPuttAdjust) return;
 
       if (pendingWaterDrop) {
         const dropLie = detectLieForPoint(lat, lon);
@@ -1758,104 +1985,40 @@ export default function DistanciasClient({
         }
         const lie = detectLieForPoint(lat, lon);
         const toGreenBefore = greenDistancesForHole(lat, lon, activeHolePoints);
-        const landing = snapLandingToGreenCenter(
-          { lat, lon },
-          activeHolePoints.center,
-          toGreenBefore.center
-        );
-        const actual = strokeActualYards(
-          pendingShot.from,
-          landing,
-          lie.kind,
-          pendingShot.catalogId
-        );
-        let next = completeShotArrival(
-          holeShotsStore,
-          activeHole,
-          pendingShot.id,
-          landing,
-          actual,
-          lie.kind
-        );
-        setPendingTap(null);
-        setDistanceMode(false);
-        setMeasureFromPhoneOnce(false);
-        setTapPoint(null);
-
-        if (lie.kind === "ob") {
-          const replayFrom = {
-            lat: pendingShot.from.lat,
-            lon: pendingShot.from.lon,
-          };
-          pinMapFraming(replayFrom);
-          const penalized = ensureObPenaltyStroke(
-            next,
-            activeHole,
-            pendingShot.id,
-            replayFrom
-          );
-          next = penalized.store;
-          const strokeCount = completedStrokeCount(next, activeHole);
-          setHoleShotsStore(next);
-          saveHoleShots(next, bagScope);
-          setArrivalToast(
-            `OB · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · vuelves a jugar desde donde estabas`
-          );
-          openPlanFromPoint(replayFrom.lat, replayFrom.lon);
-          return;
-        }
-
-        if (lie.kind === "water") {
-          const replayFrom = {
-            lat: pendingShot.from.lat,
-            lon: pendingShot.from.lon,
-          };
-          setHoleShotsStore(next);
-          saveHoleShots(next, bagScope);
-          next = ensureWaterPenaltyStroke(
-            next,
-            activeHole,
-            pendingShot.id,
-            replayFrom
-          );
-          const strokeCount = completedStrokeCount(next, activeHole);
-          setHoleShotsStore(next);
-          saveHoleShots(next, bagScope);
+        if (lie.onGreen) {
+          const measured = puttYardsFromCenter(toGreenBefore.center);
+          setGreenPuttAdjust({
+            markLat: lat,
+            markLon: lon,
+            measuredYards: measured,
+            puttYards: measured,
+            mode: "landing",
+          });
           pinMapFraming({ lat, lon });
-          setArrivalToast(
-            `Lago · golpe ${pendingShot.strokeNo} + castigo (+1) = ${strokeCount} golpes · toca atrás del lago donde jugarás`
-          );
           return;
         }
+        applyPendingShotLanding(lat, lon);
+        return;
+      }
 
-        const toGreen = greenDistancesForHole(
-          landing.lat,
-          landing.lon,
-          activeHolePoints
-        );
-        setHoleShotsStore(next);
-        saveHoleShots(next, bagScope);
-
-        if (
-          shouldPromptHoleFinish(toGreen.center, pendingShot, lie.kind)
-        ) {
-          const strokeCount = finishPromptStrokeCount(next, activeHole);
-          pinMapFraming(landing);
-          showHoleFinishPrompt(
-            landing.lat,
-            landing.lon,
-            strokeCount,
-            toGreen.center,
-            lieArrivalPhrase(lie.kind)
+      if (greenPuttTapEnabled) {
+        const lie = detectLieForPoint(lat, lon);
+        if (lie.onGreen) {
+          const measured = puttDistanceToHole(
+            { lat, lon },
+            activeHolePoints.center
           );
+          setGreenPuttAdjust({
+            markLat: lat,
+            markLon: lon,
+            measuredYards: measured,
+            puttYards: measured,
+            mode: "relocate",
+          });
+          pinMapFraming({ lat, lon });
           return;
         }
-
-        setArrivalToast(
-          `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
-        );
-        pinMapFraming(landing);
-        openPlanFromPoint(lat, lon);
+        setArrivalToast("Mantén la bola en el green");
         return;
       }
 
@@ -1889,6 +2052,9 @@ export default function DistanciasClient({
       pinMapFraming,
       pendingWaterDrop,
       showRoundTeePicker,
+      greenPuttAdjust,
+      greenPuttTapEnabled,
+      applyPendingShotLanding,
     ]
   );
 
@@ -2278,71 +2444,6 @@ export default function DistanciasClient({
     pinMapFraming,
   ]);
 
-  const greenBallDragEnabled = useMemo(
-    () =>
-      !!(
-        currentBallLie?.onGreen &&
-        hasTeeMark &&
-        !needsTeeMark &&
-        !pendingShot &&
-        !pendingWaterDrop &&
-        !shotPlanOpen &&
-        !holeFinishPrompt &&
-        !distanceMode &&
-        !showRoundTeePicker &&
-        activeHolePoints?.center
-      ),
-    [
-      currentBallLie?.onGreen,
-      hasTeeMark,
-      needsTeeMark,
-      pendingShot,
-      pendingWaterDrop,
-      shotPlanOpen,
-      holeFinishPrompt,
-      distanceMode,
-      showRoundTeePicker,
-      activeHolePoints?.center,
-    ]
-  );
-
-  const handleGreenBallRelocate = useCallback(
-    (lat: number, lon: number) => {
-      if (!activeHolePoints?.center || !currentBallLie?.onGreen) return;
-      const lie = detectLieForPoint(lat, lon);
-      if (!lie.onGreen) {
-        setArrivalToast("Mantén la bola en el green");
-        return;
-      }
-      const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
-      const position = snapLandingToGreenCenter(
-        { lat, lon },
-        activeHolePoints.center,
-        toGreen.center
-      );
-      const puttYds = puttDistanceToHole(position, activeHolePoints.center);
-      const next = relocateBallOnGreen(
-        holeShotsStore,
-        activeHole,
-        position,
-        lie.kind
-      );
-      setHoleShotsStore(next);
-      saveHoleShots(next, bagScope);
-      pinMapFraming(position);
-      setArrivalToast(`${puttYds} yds al hoyo`);
-    },
-    [
-      activeHolePoints,
-      currentBallLie?.onGreen,
-      detectLieForPoint,
-      holeShotsStore,
-      activeHole,
-      bagScope,
-      pinMapFraming,
-    ]
-  );
-
   const returnToResumeHole = useCallback(() => {
     if (resumeHole == null) return;
     setHoleCorrectionMode(false);
@@ -2418,8 +2519,7 @@ export default function DistanciasClient({
             ballOnGreen={currentBallLie?.onGreen ?? false}
             greenCenterPoint={activeHolePoints?.center ?? null}
             shotPreview={shotPlanOpen ? shotPreview : null}
-            greenBallDragEnabled={greenBallDragEnabled}
-            onGreenBallRelocate={handleGreenBallRelocate}
+            greenPuttPreview={greenPuttPreview}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -2527,6 +2627,23 @@ export default function DistanciasClient({
               {waterDropError}
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {greenPuttAdjust && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[24%] z-[1090] flex justify-center px-4">
+          <GreenPuttDistancePanel
+            puttYards={greenPuttAdjust.puttYards}
+            measuredYards={greenPuttAdjust.measuredYards}
+            mode={greenPuttAdjust.mode}
+            onPuttYardsChange={(yards) =>
+              setGreenPuttAdjust((prev) =>
+                prev ? { ...prev, puttYards: yards } : null
+              )
+            }
+            onConfirm={confirmGreenPuttAdjust}
+            onCancel={() => setGreenPuttAdjust(null)}
+          />
         </div>
       ) : null}
 

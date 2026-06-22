@@ -1,6 +1,8 @@
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import { yardsBetween } from "@/lib/distances/ccqHolePoints";
 import type { LieKind } from "@/lib/distances/detectLie";
 import type { LatLon } from "@/lib/distances/holeBoundary";
+import { pointAtBearingYards } from "@/lib/distances/shotTrajectory";
 
 /** Distancia al centro (yds) para preguntar si el hoyo terminó. */
 export const HOLE_COMPLETE_MAX_CENTER_YDS = 1;
@@ -66,6 +68,27 @@ export function puttYardsFromCenter(centerYards: number): number {
 /** Distancia al hoyo desde la bola (1 yd) — para putts y estadística. */
 export function puttDistanceToHole(ball: LatLon, center: LatLon): number {
   return puttYardsFromCenter(yardsToGreenCenter(ball, center));
+}
+
+/**
+ * Bola a N yardas del hoyo, en la línea hoyo → punto marcado en el mapa.
+ * Si el marcado queda más lejos o cerca, se acorta o alarga sobre esa misma línea.
+ */
+export function ballAtPuttYardsFromHole(
+  center: LatLon,
+  markPoint: LatLon,
+  puttYards: number
+): LatLon {
+  const yds = puttYardsFromCenter(puttYards);
+  if (yds <= 1) {
+    return { lat: center.lat, lon: center.lon };
+  }
+  const markDist = yardsToGreenCenter(markPoint, center);
+  const bearing =
+    markDist < 0.5
+      ? 0
+      : bearingDegrees(center.lat, center.lon, markPoint.lat, markPoint.lon);
+  return pointAtBearingYards(center.lat, center.lon, bearing, yds);
 }
 
 /** Yardas reales de un golpe (putt en green: 1 yd; resto: paso 5). */
