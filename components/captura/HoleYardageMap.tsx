@@ -70,7 +70,7 @@ interface HoleYardageMapProps {
   teeMarkPoint?: { lat: number; lon: number } | null;
   /** Si true, el jugador debe marcar salida antes de D/G. */
   needsTeeMark?: boolean;
-  /** Salida calibrada lista; falta confirmar bastón en el panel. */
+  /** Falta confirmar bastón en el panel (salida o golpe siguiente). */
   awaitingClubAtTee?: boolean;
   /** Salida ya marcada pero aún corregible (sin golpes confirmados). */
   teeAdjustMode?: boolean;

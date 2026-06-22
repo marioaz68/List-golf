@@ -856,8 +856,8 @@ export default function DistanciasClient({
     [holeShotsStore, activeHole]
   );
 
-  const waitingForClubAtTee =
-    hasTeeMark && holeStrokeCount === 0 && pendingShot == null;
+  const waitingForClubSelection =
+    hasTeeMark && pendingShot == null && !pendingWaterDrop;
 
   // Fija el hoyo mientras falta marcar salida para que el círculo verde no
   // salte a otro hoyo si el GPS auto-detecta mal.
@@ -1648,15 +1648,19 @@ export default function DistanciasClient({
         return;
       }
 
-      if (waitingForClubAtTee) {
+      if (waitingForClubSelection) {
         setArrivalToast("Selecciona bastón");
-        if (!shotPlanOpen && teeMark) {
-          openPlanFromPoint(teeMark.lat, teeMark.lon);
+        if (!shotPlanOpen) {
+          const from =
+            lastBallPosition(
+              holeShotsStore,
+              activeHole,
+              catalogTeeForHole ?? undefined
+            ) ?? teeMark;
+          if (from) openPlanFromPoint(from.lat, from.lon);
         }
         return;
       }
-
-      if (shotPlanOpen && !pendingShot) return;
 
       if (pendingShot) {
         if (!hasTeeMark) {
@@ -1778,9 +1782,10 @@ export default function DistanciasClient({
       geo,
       activeHolePoints,
       needsTeeMark,
-      waitingForClubAtTee,
+      waitingForClubSelection,
       teeMark,
       hasTeeMark,
+      catalogTeeForHole,
       markTeeAt,
       shotPlanOpen,
       pendingShot,
@@ -2246,7 +2251,7 @@ export default function DistanciasClient({
             }
             teeMarkPoint={teeMark}
             needsTeeMark={needsTeeMark}
-            awaitingClubAtTee={waitingForClubAtTee}
+            awaitingClubAtTee={waitingForClubSelection}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
             waterDropMode={!!pendingWaterDrop}
