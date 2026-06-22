@@ -74,6 +74,42 @@ export function arcBulgeYards(carryYards: number, launchDeg: number): number {
   return Math.min(raw, Math.max(18, carryYards * 0.62));
 }
 
+/** Altura máxima estimada del vuelo (yds) según carry y ángulo de lanzamiento. */
+export function flightApexHeightYards(
+  carryYards: number,
+  launchDeg: number
+): number {
+  if (launchDeg <= 0 || carryYards <= 5) return 0;
+  const rad = (launchDeg * Math.PI) / 180;
+  const h = (carryYards * Math.tan(rad)) / 3.2;
+  return Math.max(1, Math.round(h));
+}
+
+/** Perfil lateral del vuelo: distancia (x) vs altura (y) en yardas. */
+export function buildFlightProfilePoints(
+  carryYards: number,
+  launchDeg: number,
+  steps = 32
+): Array<{ x: number; y: number }> {
+  if (carryYards <= 0) return [{ x: 0, y: 0 }];
+  const apex = flightApexHeightYards(carryYards, launchDeg);
+  if (apex <= 0) {
+    return [
+      { x: 0, y: 0 },
+      { x: carryYards, y: 0 },
+    ];
+  }
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push({
+      x: t * carryYards,
+      y: 4 * apex * t * (1 - t),
+    });
+  }
+  return pts;
+}
+
 /** Punto geográfico a N yardas y rumbo dado (0 = norte). */
 export function pointAtBearingYards(
   lat: number,

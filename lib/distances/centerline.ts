@@ -1,4 +1,7 @@
 import type { LatLon } from "@/lib/distances/holeBoundary";
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
+import { yardsBetween } from "@/lib/distances/ccqHolePoints";
+import { pointAtBearingYards } from "@/lib/distances/shotTrajectory";
 
 /** GeoJSON LineString mínimo (coordenadas [lon, lat]). */
 export type LineStringGeo = { type: "LineString"; coordinates: [number, number][] };
@@ -154,4 +157,35 @@ export function centerlineSegmentIndex(p: LatLon, line: LatLon[]): number {
 export function aimWaypointIndex(p: LatLon, line: LatLon[]): number {
   if (line.length <= 1) return line.length - 1;
   return centerlineSegmentIndex(p, line) + 1;
+}
+
+/**
+ * Punto a N yardas hacia adelante siguiendo la línea central del fairway
+ * (desde la posición actual del jugador).
+ */
+export function pointAtYardsAlongCenterline(
+  from: LatLon,
+  line: LatLon[],
+  yards: number
+): LatLon {
+  if (line.length < 2 || yards <= 0) return from;
+
+  const segIdx = centerlineSegmentIndex(from, line);
+  let remaining = yards;
+
+  for (let i = segIdx; i < line.length - 1 && remaining > 0; i++) {
+    const a = i === segIdx ? from : line[i];
+    const b = line[i + 1];
+    const segYds = yardsBetween(a.lat, a.lon, b.lat, b.lon);
+    if (remaining <= segYds) {
+      const bearing = bearingDegrees(a.lat, a.lon, b.lat, b.lon);
+      return pointAtBearingYards(a.lat, a.lon, bearing, remaining);
+    }
+    remaining -= segYds;
+  }
+
+  const a = line[line.length - 2];
+  const b = line[line.length - 1];
+  const bearing = bearingDegrees(a.lat, a.lon, b.lat, b.lon);
+  return pointAtBearingYards(b.lat, b.lon, bearing, remaining);
 }

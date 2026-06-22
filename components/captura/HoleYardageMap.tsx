@@ -7,7 +7,7 @@ import {
   type ReferencePointWithYards,
   yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
-import { centerlineSegmentIndex } from "@/lib/distances/centerline";
+import { pointAtYardsAlongCenterline, centerlineSegmentIndex } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import {
   buildShotArc,
@@ -753,26 +753,39 @@ export function HoleYardageMap({
         shotPreview &&
         shotPreview.plannedYards > 0 &&
         playBallPoint &&
-        greenCenterPoint
+        ((centerline != null && centerline.length >= 2) || greenCenterPoint)
       ) {
         const launch = launchAngleForClub(
           shotPreview.catalogId,
           shotPreview.swing
         );
-        const aimBearing = bearingDegrees(
-          playBallPoint.lat,
-          playBallPoint.lon,
-          greenCenterPoint.lat,
-          greenCenterPoint.lon
-        );
-        const arc = buildShotArc(
-          playBallPoint,
-          aimBearing,
-          shotPreview.plannedYards,
-          launch
-        );
+        let arcPoints: Array<{ lat: number; lon: number }>;
+        let landing: { lat: number; lon: number };
+        if (centerline && centerline.length >= 2) {
+          landing = pointAtYardsAlongCenterline(
+            playBallPoint,
+            centerline,
+            shotPreview.plannedYards
+          );
+          arcPoints = buildShotArcBetween(playBallPoint, landing, launch);
+        } else {
+          const aimBearing = bearingDegrees(
+            playBallPoint.lat,
+            playBallPoint.lon,
+            greenCenterPoint!.lat,
+            greenCenterPoint!.lon
+          );
+          const arc = buildShotArc(
+            playBallPoint,
+            aimBearing,
+            shotPreview.plannedYards,
+            launch
+          );
+          arcPoints = arc.points;
+          landing = arc.landing;
+        }
         L.polyline(
-          arc.points.map((p) => [p.lat, p.lon] as [number, number]),
+          arcPoints.map((p) => [p.lat, p.lon] as [number, number]),
           {
             color: "#34d399",
             weight: launch >= 28 ? 4 : launch >= 18 ? 3.5 : 3,
@@ -782,7 +795,7 @@ export function HoleYardageMap({
           }
         ).addTo(layerGroup);
 
-        L.circleMarker([arc.landing.lat, arc.landing.lon], {
+        L.circleMarker([landing.lat, landing.lon], {
           radius: 6,
           color: "#6ee7b7",
           fillColor: "#34d399",
@@ -791,8 +804,8 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        const apexIdx = Math.floor(arc.points.length / 2);
-        const apex = arc.points[apexIdx];
+        const apexIdx = Math.floor(arcPoints.length / 2);
+        const apex = arcPoints[apexIdx];
         L.marker([apex.lat, apex.lon], {
           icon: L.divIcon({
             className: "",
