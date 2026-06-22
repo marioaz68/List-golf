@@ -815,6 +815,21 @@ export default function DistanciasClient({
     return CCQ_HOLE_POINTS[activeHole] ?? null;
   }, [holeGreen, activeHole]);
 
+  const greenPuttPreview = useMemo(() => {
+    if (!greenPuttAdjust || !activeHolePoints?.center) return null;
+    const mark = { lat: greenPuttAdjust.markLat, lon: greenPuttAdjust.markLon };
+    const ball = ballAtPuttYardsFromHole(
+      activeHolePoints.center,
+      mark,
+      greenPuttAdjust.puttYards
+    );
+    return {
+      ball,
+      mark,
+      puttYds: greenPuttAdjust.puttYards,
+    };
+  }, [greenPuttAdjust, activeHolePoints]);
+
   const pendingShot = useMemo(
     () => pendingShotOnHole(holeShotsStore, activeHole),
     [holeShotsStore, activeHole]
@@ -974,6 +989,14 @@ export default function DistanciasClient({
 
   const liveGreenYds = useMemo(() => {
     if (!activeHolePoints || needsTeeMark) return null;
+    if (greenPuttPreview) {
+      const dist = greenDistancesForHole(
+        greenPuttPreview.ball.lat,
+        greenPuttPreview.ball.lon,
+        activeHolePoints
+      );
+      return { ...dist, center: greenPuttPreview.puttYds };
+    }
     if (tapPoint) {
       return greenDistancesForHole(
         tapPoint.lat,
@@ -999,10 +1022,18 @@ export default function DistanciasClient({
       return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
     }
     return null;
-  }, [activeHolePoints, needsTeeMark, tapPoint, lastBall, teeMark, geo]);
+  }, [activeHolePoints, needsTeeMark, tapPoint, lastBall, teeMark, geo, greenPuttPreview]);
 
   const playGreenYds = useMemo(() => {
     if (!activeHolePoints || needsTeeMark) return null;
+    if (greenPuttPreview) {
+      const dist = greenDistancesForHole(
+        greenPuttPreview.ball.lat,
+        greenPuttPreview.ball.lon,
+        activeHolePoints
+      );
+      return { ...dist, center: greenPuttPreview.puttYds };
+    }
     if (tapPoint) {
       return greenDistancesForHole(
         tapPoint.lat,
@@ -1028,7 +1059,7 @@ export default function DistanciasClient({
       return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
     }
     return null;
-  }, [lastBall, teeMark, activeHolePoints, needsTeeMark, geo, tapPoint]);
+  }, [lastBall, teeMark, activeHolePoints, needsTeeMark, geo, tapPoint, greenPuttPreview]);
 
   const topGreenYds = useMemo(() => {
     return playGreenYds;
@@ -1155,23 +1186,27 @@ export default function DistanciasClient({
   );
 
   const openPlanFromPoint = useCallback(
-    (lat: number, lon: number) => {
+    (lat: number, lon: number, puttYardsOverride?: number) => {
       if (!activeHolePoints) return;
       const dist = greenDistancesForHole(lat, lon, activeHolePoints);
       const lie = detectLieForPoint(lat, lon);
       const onGreen = lie.onGreen;
       const inBunker = lie.inBunker;
       const lieKind = lie.kind;
-      const yardsToGreen = onGreen
-        ? puttYardsFromCenter(dist.center)
-        : Math.round(dist.center / 5) * 5;
+      const yardsToGreen =
+        onGreen && puttYardsOverride != null
+          ? puttYardsFromCenter(puttYardsOverride)
+          : onGreen
+            ? puttYardsFromCenter(dist.center)
+            : Math.round(dist.center / 5) * 5;
       if (yardsToGreen <= 0) return;
       setShotPreview(null);
       setPlanContext({
         yardsToGreen,
         greenDist: {
           front: dist.front,
-          center: dist.center,
+          center:
+            onGreen && puttYardsOverride != null ? yardsToGreen : dist.center,
           back: dist.back,
         },
         lieKind,
@@ -1183,6 +1218,29 @@ export default function DistanciasClient({
       setShotPlanOpen(true);
     },
     [activeHolePoints, detectLieForPoint, activeHole, greenPolygonsByHole]
+  );
+
+  const syncPuttYardsForGreen = useCallback(
+    (puttYards: number, ballLat: number, ballLon: number) => {
+      if (!activeHolePoints) return;
+      const dist = greenDistancesForHole(ballLat, ballLon, activeHolePoints);
+      const lie = detectLieForPoint(ballLat, ballLon);
+      const yardsToGreen = puttYardsFromCenter(puttYards);
+      setTargetYards(yardsToGreen);
+      setPlanContext({
+        yardsToGreen,
+        greenDist: {
+          front: dist.front,
+          center: yardsToGreen,
+          back: dist.back,
+        },
+        lieKind: lie.kind,
+        onGreen: lie.onGreen,
+        inBunker: lie.inBunker,
+      });
+      setPlanSession((s) => s + 1);
+    },
+    [activeHolePoints, detectLieForPoint]
   );
 
   const correctLastShotLanding = useCallback(
@@ -1222,6 +1280,9 @@ export default function DistanciasClient({
     onGreen: boolean;
   } | null => {
     if (!hasTeeMark || !ballPointForLie) return null;
+    if (greenPuttAdjust) {
+      return { kind: "green", onGreen: true };
+    }
     if (shotPlanOpen && planContext) {
       return {
         kind: planContext.lieKind,
@@ -1259,6 +1320,44 @@ export default function DistanciasClient({
     activeHolePoints,
     activeHole,
     greenPolygonsByHole,
+    greenPuttAdjust,
+  ]);
+
+  /** Pill superior: yardas al hoyo sincronizadas con el ajuste de putt. */
+  const topBarDisplay = useMemo(() => {
+    if (greenPuttPreview) {
+      return {
+        center: greenPuttPreview.puttYds,
+        onGreen: true,
+        label: topGreenLabel,
+      };
+    }
+    if (currentBallLie?.onGreen) {
+      const center =
+        planContext?.onGreen && planContext.yardsToGreen > 0
+          ? planContext.yardsToGreen
+          : topGreenYds
+            ? puttYardsFromCenter(topGreenYds.center)
+            : null;
+      if (center == null) return null;
+      return {
+        center,
+        onGreen: true,
+        label: topGreenLabel,
+      };
+    }
+    if (!topGreenYds) return null;
+    return {
+      center: topGreenYds.center,
+      onGreen: false,
+      label: topGreenLabel,
+    };
+  }, [
+    greenPuttPreview,
+    currentBallLie?.onGreen,
+    planContext,
+    topGreenYds,
+    topGreenLabel,
   ]);
 
   const markTeeAt = useCallback(
@@ -1625,10 +1724,14 @@ export default function DistanciasClient({
   }, [arrivalToast, needsTeeMark, holeFinishPrompt]);
 
   useEffect(() => {
-    if (needsTeeMark || shotPlanOpen || pendingTap) return;
+    if (needsTeeMark || shotPlanOpen || pendingTap || greenPuttAdjust) return;
     if (distanceMode && tapPoint) return;
     if (liveGreenYds) {
-      setTargetYards(Math.round(liveGreenYds.center / 5) * 5);
+      setTargetYards(
+        currentBallLie?.onGreen
+          ? puttYardsFromCenter(liveGreenYds.center)
+          : Math.round(liveGreenYds.center / 5) * 5
+      );
     }
   }, [
     liveGreenYds?.center,
@@ -1639,7 +1742,18 @@ export default function DistanciasClient({
     pendingTap,
     tapPoint,
     teeMark,
+    greenPuttAdjust,
+    currentBallLie?.onGreen,
   ]);
+
+  useEffect(() => {
+    if (!greenPuttPreview) return;
+    syncPuttYardsForGreen(
+      greenPuttPreview.puttYds,
+      greenPuttPreview.ball.lat,
+      greenPuttPreview.ball.lon
+    );
+  }, [greenPuttPreview, syncPuttYardsForGreen]);
 
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
@@ -1661,6 +1775,29 @@ export default function DistanciasClient({
 
   const greenYds = useMemo(() => {
     if (!activeHolePoints) return null;
+    if (greenPuttPreview) {
+      const dist = greenDistancesForHole(
+        greenPuttPreview.ball.lat,
+        greenPuttPreview.ball.lon,
+        activeHolePoints
+      );
+      return { ...dist, center: greenPuttPreview.puttYds };
+    }
+    if (
+      currentBallLie?.onGreen &&
+      planContext?.onGreen &&
+      planContext.yardsToGreen > 0
+    ) {
+      const from = lastBall ?? teeMark;
+      if (from) {
+        const dist = greenDistancesForHole(
+          from.lat,
+          from.lon,
+          activeHolePoints
+        );
+        return { ...dist, center: planContext.yardsToGreen };
+      }
+    }
     if (needsTeeMark && catalogTeeForHole) {
       return greenDistancesForHole(
         catalogTeeForHole.lat,
@@ -1684,7 +1821,17 @@ export default function DistanciasClient({
     }
     if (geo.status !== "ok") return null;
     return greenDistancesForHole(geo.lat, geo.lon, activeHolePoints);
-  }, [geo, activeHolePoints, lastBall, teeMark, needsTeeMark, catalogTeeForHole]);
+  }, [
+    geo,
+    activeHolePoints,
+    lastBall,
+    teeMark,
+    needsTeeMark,
+    catalogTeeForHole,
+    greenPuttPreview,
+    currentBallLie?.onGreen,
+    planContext,
+  ]);
 
   const refPoints = useMemo(() => {
     if (!activeHolePoints) return [];
@@ -1743,23 +1890,8 @@ export default function DistanciasClient({
     ]
   );
 
-  const greenPuttPreview = useMemo(() => {
-    if (!greenPuttAdjust || !activeHolePoints?.center) return null;
-    const mark = { lat: greenPuttAdjust.markLat, lon: greenPuttAdjust.markLon };
-    const ball = ballAtPuttYardsFromHole(
-      activeHolePoints.center,
-      mark,
-      greenPuttAdjust.puttYards
-    );
-    return {
-      ball,
-      mark,
-      puttYds: greenPuttAdjust.puttYards,
-    };
-  }, [greenPuttAdjust, activeHolePoints]);
-
   const applyPendingShotLanding = useCallback(
-    (lat: number, lon: number) => {
+    (lat: number, lon: number, puttYards?: number) => {
       if (!pendingShot || !activeHolePoints || geo.status !== "ok") return;
       const lie = detectLieForPoint(lat, lon);
       const centerYds = puttDistanceToHole(
@@ -1861,7 +1993,11 @@ export default function DistanciasClient({
         `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
       );
       pinMapFraming(landing);
-      openPlanFromPoint(landing.lat, landing.lon);
+      openPlanFromPoint(
+        landing.lat,
+        landing.lon,
+        lie.onGreen ? puttYards ?? puttYardsFromCenter(toGreen.center) : undefined
+      );
     },
     [
       pendingShot,
@@ -1907,7 +2043,10 @@ export default function DistanciasClient({
       saveHoleShots(next, bagScope);
       pinMapFraming(landing);
       setGreenPuttAdjust(null);
-      setArrivalToast(`${greenPuttAdjust.puttYards} yds al hoyo`);
+      const puttYds = greenPuttAdjust.puttYards;
+      syncPuttYardsForGreen(puttYds, landing.lat, landing.lon);
+      setArrivalToast(`${puttYds} yds al hoyo`);
+      openPlanFromPoint(landing.lat, landing.lon, puttYds);
       return;
     }
 
@@ -1915,7 +2054,8 @@ export default function DistanciasClient({
       setGreenPuttAdjust(null);
       return;
     }
-    applyPendingShotLanding(landing.lat, landing.lon);
+    const puttYds = greenPuttAdjust.puttYards;
+    applyPendingShotLanding(landing.lat, landing.lon, puttYds);
     setGreenPuttAdjust(null);
   }, [
     greenPuttAdjust,
@@ -1927,6 +2067,8 @@ export default function DistanciasClient({
     pinMapFraming,
     pendingShot,
     applyPendingShotLanding,
+    syncPuttYardsForGreen,
+    openPlanFromPoint,
   ]);
 
   const onMapTap = useCallback(
@@ -2993,13 +3135,13 @@ export default function DistanciasClient({
         />
       ) : null}
 
-      {topGreenYds && !farFromCourse && !needsTeeMark ? (
+      {topBarDisplay && !farFromCourse && !needsTeeMark ? (
         <MapFocusTopBar
           demoMode={demoMode}
-          greenCenterYards={topGreenYds.center}
-          positionLabel={topGreenLabel}
+          greenCenterYards={topBarDisplay.center}
+          positionLabel={topBarDisplay.label}
           lieKind={currentBallLie?.kind ?? null}
-          onGreen={currentBallLie?.onGreen ?? false}
+          onGreen={topBarDisplay.onGreen}
         />
       ) : null}
 
