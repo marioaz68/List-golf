@@ -104,6 +104,12 @@ interface ShotPlanPanelProps {
     plannedYards: number;
   }) => void;
   onCancel: () => void;
+  /** Vista previa en mapa al mover bastón o yardas. */
+  onPreviewChange?: (preview: {
+    catalogId: string;
+    swing: SwingKind;
+    plannedYards: number;
+  }) => void;
   /** +1 por clic: BI, zanja, perdida y otros (OB y lago = automático). */
   onAddPenalty?: (reason: ManualPenaltyReason) => void;
   /** Vuelve a pedir tocar el mapa para el último golpe ya confirmado. */
@@ -120,6 +126,7 @@ export function ShotPlanPanel({
   inBunker = false,
   onConfirm,
   onCancel,
+  onPreviewChange,
   onAddPenalty,
   onCorrectLastLanding,
 }: ShotPlanPanelProps) {
@@ -197,6 +204,15 @@ export function ShotPlanPanel({
           activePick,
           onGreen
         );
+
+  useEffect(() => {
+    if (!activePick || plannedYards <= 0) return;
+    onPreviewChange?.({
+      catalogId: activePick.catalogId,
+      swing: activePick.swing,
+      plannedYards,
+    });
+  }, [activePick, plannedYards, onPreviewChange]);
 
   const handleClubChange = (label: string) => {
     const found = picks.find((p) => p.label === label);

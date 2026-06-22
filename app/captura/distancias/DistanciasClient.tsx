@@ -30,6 +30,7 @@ import {
   loadPlayingTeeCode,
   savePlayingTeeCode,
 } from "@/lib/distances/playerTeeSet";
+import type { ShotPreview } from "@/lib/distances/shotTrajectory";
 import {
   CCQ_CALIBRATION_TEE_SETS,
   resolveTeePosition,
@@ -246,6 +247,7 @@ export default function DistanciasClient({
     onGreen: boolean;
     inBunker: boolean;
   } | null>(null);
+  const [shotPreview, setShotPreview] = useState<ShotPreview | null>(null);
   const [shotsDetailOpen, setShotsDetailOpen] = useState(false);
   const [measureFromPhoneOnce, setMeasureFromPhoneOnce] = useState(false);
   const [distanceMode, setDistanceMode] = useState(false);
@@ -1030,8 +1032,13 @@ export default function DistanciasClient({
     setPendingTap(null);
     setShotPlanOpen(false);
     setPlanContext(null);
+    setShotPreview(null);
     setDistanceMode(false);
     setMeasureFromPhoneOnce(false);
+  }, []);
+
+  const handleShotPreviewChange = useCallback((preview: ShotPreview) => {
+    setShotPreview(preview);
   }, []);
 
   const detectLieForPoint = useCallback(
@@ -1125,6 +1132,7 @@ export default function DistanciasClient({
         ? puttYardsFromCenter(dist.center)
         : Math.round(dist.center / 5) * 5;
       if (yardsToGreen <= 0) return;
+      setShotPreview(null);
       setPlanContext({
         yardsToGreen,
         greenDist: {
@@ -1995,6 +2003,7 @@ export default function DistanciasClient({
         saveHoleShots(store, bagScope);
         setShotPlanOpen(false);
         setPlanContext(null);
+        setShotPreview(null);
         pinMapFraming(from);
         const strokeCount = finishPromptStrokeCount(store, activeHole);
         showHoleFinishPrompt(
@@ -2011,6 +2020,7 @@ export default function DistanciasClient({
       saveHoleShots(store, bagScope);
       setShotPlanOpen(false);
       setPlanContext(null);
+      setShotPreview(null);
       setMapFramingLock(null);
       setArrivalToast(
         "Golpe registrado · al llegar toca donde quedó la bola"
@@ -2319,6 +2329,7 @@ export default function DistanciasClient({
             }
             ballOnGreen={currentBallLie?.onGreen ?? false}
             greenCenterPoint={activeHolePoints?.center ?? null}
+            shotPreview={shotPlanOpen ? shotPreview : null}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">
@@ -2760,10 +2771,12 @@ export default function DistanciasClient({
           onGreen={planContext.onGreen}
           inBunker={planContext.inBunker}
           onConfirm={handleConfirmPlan}
+          onPreviewChange={handleShotPreviewChange}
           onAddPenalty={handleAddPenalty}
           onCancel={() => {
             setShotPlanOpen(false);
             setPlanContext(null);
+            setShotPreview(null);
           }}
           onCorrectLastLanding={
             lastCompletedShotOnHole && !pendingShot

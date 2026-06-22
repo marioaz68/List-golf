@@ -9,6 +9,11 @@ import {
 } from "@/lib/distances/ccqHolePoints";
 import { centerlineSegmentIndex } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
+import {
+  buildShotArc,
+  launchAngleForClub,
+  type ShotPreview,
+} from "@/lib/distances/shotTrajectory";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
 import {
   MAP_SCALE,
@@ -92,6 +97,8 @@ interface HoleYardageMapProps {
   ballOnGreen?: boolean;
   /** Centro calibrado del green (punto «Centro»): ancla la bandera del hoyo. */
   greenCenterPoint?: LatLon | null;
+  /** Vista previa de trayectoria mientras se elige bastón. */
+  shotPreview?: ShotPreview | null;
 }
 
 function yardLabel(yards: number): string {
@@ -150,6 +157,7 @@ export function HoleYardageMap({
   catalogTeePoint = null,
   ballOnGreen = false,
   greenCenterPoint = null,
+  shotPreview = null,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -721,6 +729,65 @@ export function HoleYardageMap({
         ).addTo(layerGroup);
       }
 
+      if (
+        shotPreview &&
+        shotPreview.plannedYards > 0 &&
+        playBallPoint &&
+        greenCenterPoint
+      ) {
+        const launch = launchAngleForClub(
+          shotPreview.catalogId,
+          shotPreview.swing
+        );
+        const aimBearing = bearingDegrees(
+          playBallPoint.lat,
+          playBallPoint.lon,
+          greenCenterPoint.lat,
+          greenCenterPoint.lon
+        );
+        const arc = buildShotArc(
+          playBallPoint,
+          aimBearing,
+          shotPreview.plannedYards,
+          launch
+        );
+        L.polyline(
+          arc.points.map((p) => [p.lat, p.lon] as [number, number]),
+          {
+            color: "#34d399",
+            weight: 3,
+            opacity: 0.92,
+            dashArray: launch > 0 ? undefined : "4,6",
+            interactive: false,
+          }
+        ).addTo(layerGroup);
+
+        L.circleMarker([arc.landing.lat, arc.landing.lon], {
+          radius: 6,
+          color: "#6ee7b7",
+          fillColor: "#34d399",
+          fillOpacity: 0.55,
+          weight: 2,
+          interactive: false,
+        }).addTo(layerGroup);
+
+        const apexIdx = Math.floor(arc.points.length / 2);
+        const apex = arc.points[apexIdx];
+        L.marker([apex.lat, apex.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="background:rgba(6,78,59,0.92);color:#a7f3d0;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:800;font-family:Arial,sans-serif;border:1px solid rgba(52,211,153,0.5);">${shotPreview.plannedYards} yds</div>`,
+              bearing
+            ),
+            iconSize: [44, 14],
+            iconAnchor: [22, 7],
+          }),
+          interactive: false,
+          zIndexOffset: 640,
+        }).addTo(layerGroup);
+      }
+
       const showPhoneDot =
         !needsTeeMark &&
         !waterDropMode &&
@@ -927,6 +994,7 @@ export function HoleYardageMap({
     catalogTeePoint,
     ballOnGreen,
     greenCenterPoint,
+    shotPreview,
     needsTeeMark,
     teeAdjustMode,
     size.w,
