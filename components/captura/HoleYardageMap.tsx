@@ -7,7 +7,11 @@ import {
   type ReferencePointWithYards,
   yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
-import { pointAtYardsAlongCenterline, centerlineSegmentIndex } from "@/lib/distances/centerline";
+import {
+  pointAtYardsAlongCenterline,
+  buildShotPreviewAlongCenterline,
+  centerlineSegmentIndex,
+} from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import {
   pointAtBearingYards,
@@ -753,26 +757,48 @@ export function HoleYardageMap({
         playBallPoint &&
         ((centerline != null && centerline.length >= 2) || greenCenterPoint)
       ) {
+        let previewPath: Array<{ lat: number; lon: number }>;
         let landing: { lat: number; lon: number };
-        if (centerline && centerline.length >= 2) {
+        if (centerline && centerline.length >= 2 && greenCenterPoint) {
+          const preview = buildShotPreviewAlongCenterline(
+            playBallPoint,
+            centerline,
+            shotPreview.plannedYards,
+            greenCenterPoint
+          );
+          previewPath = preview.path;
+          landing = preview.landing;
+        } else if (centerline && centerline.length >= 2) {
           landing = pointAtYardsAlongCenterline(
             playBallPoint,
             centerline,
             shotPreview.plannedYards
           );
+          previewPath = [playBallPoint, landing];
         } else {
+          const ydsToGreen = yardsBetween(
+            playBallPoint.lat,
+            playBallPoint.lon,
+            greenCenterPoint!.lat,
+            greenCenterPoint!.lon
+          );
           const aimBearing = bearingDegrees(
             playBallPoint.lat,
             playBallPoint.lon,
             greenCenterPoint!.lat,
             greenCenterPoint!.lon
           );
-          landing = pointAtBearingYards(
-            playBallPoint.lat,
-            playBallPoint.lon,
-            aimBearing,
-            shotPreview.plannedYards
-          );
+          if (shotPreview.plannedYards >= ydsToGreen - 0.5) {
+            landing = greenCenterPoint!;
+          } else {
+            landing = pointAtBearingYards(
+              playBallPoint.lat,
+              playBallPoint.lon,
+              aimBearing,
+              shotPreview.plannedYards
+            );
+          }
+          previewPath = [playBallPoint, landing];
         }
         const labelBearing = bearingDegrees(
           playBallPoint.lat,
@@ -781,10 +807,7 @@ export function HoleYardageMap({
           landing.lon
         );
         L.polyline(
-          [
-            [playBallPoint.lat, playBallPoint.lon],
-            [landing.lat, landing.lon],
-          ],
+          previewPath.map((p) => [p.lat, p.lon] as [number, number]),
           {
             color: "#34d399",
             weight: 3,
@@ -802,11 +825,8 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        const mid = {
-          lat: (playBallPoint.lat + landing.lat) / 2,
-          lon: (playBallPoint.lon + landing.lon) / 2,
-        };
-        L.marker([mid.lat, mid.lon], {
+        const midPt = previewPath[Math.floor(previewPath.length / 2)] ?? landing;
+        L.marker([midPt.lat, midPt.lon], {
           icon: L.divIcon({
             className: "",
             html: uprightHtml(
