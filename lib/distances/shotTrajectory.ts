@@ -1,3 +1,5 @@
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
+import { yardsBetween } from "@/lib/distances/ccqHolePoints";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 
 const EARTH_RADIUS_M = 6371000;
@@ -42,6 +44,14 @@ export type ShotPreview = {
   plannedYards: number;
 };
 
+export type CompletedShotArc = {
+  strokeNo: number;
+  from: { lat: number; lon: number };
+  to: { lat: number; lon: number };
+  catalogId: string;
+  swing: SwingKind;
+};
+
 export function launchAngleForClub(
   catalogId: string,
   swing: SwingKind
@@ -49,6 +59,19 @@ export function launchAngleForClub(
   const row = LAUNCH_ANGLE_BY_CLUB[catalogId];
   if (!row) return swing === "full" ? 22 : 20;
   return swing === "full" ? row.full : row.three_quarter;
+}
+
+/** Proporción lateral de comba según grados de lanzamiento (más loft = más curva). */
+export function arcBulgeRatio(launchDeg: number): number {
+  if (launchDeg <= 0) return 0;
+  const t = Math.min(1, launchDeg / 36);
+  return 0.12 + Math.pow(t, 1.35) * 0.58;
+}
+
+export function arcBulgeYards(carryYards: number, launchDeg: number): number {
+  if (launchDeg <= 0 || carryYards <= 0) return 0;
+  const raw = carryYards * arcBulgeRatio(launchDeg);
+  return Math.min(raw, Math.max(18, carryYards * 0.62));
 }
 
 /** Punto geográfico a N yardas y rumbo dado (0 = norte). */
@@ -80,13 +103,54 @@ export function pointAtBearingYards(
   };
 }
 
-/** Curva de vuelo en planta (Bezier) según ángulo de lanzamiento. */
+function quadraticArcPoints(
+  from: { lat: number; lon: number },
+  to: { lat: number; lon: number },
+  launchDeg: number,
+  segments: number
+): Array<{ lat: number; lon: number }> {
+  const carryYards = yardsBetween(from.lat, from.lon, to.lat, to.lon);
+  if (launchDeg <= 0 || carryYards <= 5) {
+    return [from, to];
+  }
+
+  const bearing = bearingDegrees(from.lat, from.lon, to.lat, to.lon);
+  const bulgeYds = arcBulgeYards(carryYards, launchDeg);
+  const mid = {
+    lat: (from.lat + to.lat) / 2,
+    lon: (from.lon + to.lon) / 2,
+  };
+  const ctrl = pointAtBearingYards(mid.lat, mid.lon, bearing + 90, bulgeYds);
+
+  const points: Array<{ lat: number; lon: number }> = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const u = 1 - t;
+    points.push({
+      lat: u * u * from.lat + 2 * u * t * ctrl.lat + t * t * to.lat,
+      lon: u * u * from.lon + 2 * u * t * ctrl.lon + t * t * to.lon,
+    });
+  }
+  return points;
+}
+
+/** Curva entre salida real y caída marcada (golpes confirmados). */
+export function buildShotArcBetween(
+  from: { lat: number; lon: number },
+  to: { lat: number; lon: number },
+  launchDeg: number,
+  segments = 32
+): Array<{ lat: number; lon: number }> {
+  return quadraticArcPoints(from, to, launchDeg, segments);
+}
+
+/** Curva de vuelo en planta hacia rumbo + carry (preview al elegir bastón). */
 export function buildShotArc(
   from: { lat: number; lon: number },
   bearingDeg: number,
   carryYards: number,
   launchDeg: number,
-  segments = 24
+  segments = 32
 ): {
   points: Array<{ lat: number; lon: number }>;
   landing: { lat: number; lon: number };
@@ -97,29 +161,6 @@ export function buildShotArc(
     bearingDeg,
     carryYards
   );
-
-  if (launchDeg <= 0 || carryYards <= 5) {
-    return { points: [from, landing], landing };
-  }
-
-  const bulgeRatio = Math.min(0.2, (launchDeg / 90) * 0.16);
-  const bulgeYds = carryYards * bulgeRatio;
-  const mid = pointAtBearingYards(
-    from.lat,
-    from.lon,
-    bearingDeg,
-    carryYards / 2
-  );
-  const ctrl = pointAtBearingYards(mid.lat, mid.lon, bearingDeg + 90, bulgeYds);
-
-  const points: Array<{ lat: number; lon: number }> = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const u = 1 - t;
-    points.push({
-      lat: u * u * from.lat + 2 * u * t * ctrl.lat + t * t * landing.lat,
-      lon: u * u * from.lon + 2 * u * t * ctrl.lon + t * t * landing.lon,
-    });
-  }
+  const points = quadraticArcPoints(from, landing, launchDeg, segments);
   return { points, landing };
 }

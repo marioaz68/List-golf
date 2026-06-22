@@ -11,7 +11,9 @@ import { centerlineSegmentIndex } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import {
   buildShotArc,
+  buildShotArcBetween,
   launchAngleForClub,
+  type CompletedShotArc,
   type ShotPreview,
 } from "@/lib/distances/shotTrajectory";
 import type { Polygon } from "@/lib/telegram/ritmo/geometry";
@@ -81,6 +83,8 @@ interface HoleYardageMapProps {
   teeAdjustMode?: boolean;
   /** Posiciones fijas donde quedó la bola (golpes ya confirmados). */
   shotLandings?: Array<{ lat: number; lon: number; strokeNo: number }>;
+  /** Trayectorias curvas de golpes ya confirmados (salida → caída). */
+  completedShotArcs?: CompletedShotArc[];
   /** Bola actual: última posición de juego (no GPS al planear golpe). */
   playBallPoint?: { lat: number; lon: number } | null;
   /** Marca suelta tras lago: sin bola azul que tape el mapa. */
@@ -149,6 +153,7 @@ export function HoleYardageMap({
   awaitingClubAtTee = false,
   teeAdjustMode = false,
   shotLandings = [],
+  completedShotArcs = [],
   playBallPoint = null,
   waterDropMode = false,
   awaitingLandingMode = false,
@@ -709,6 +714,21 @@ export function HoleYardageMap({
         ).addTo(layerGroup);
       }
 
+      for (const arc of completedShotArcs) {
+        const launch = launchAngleForClub(arc.catalogId, arc.swing);
+        const points = buildShotArcBetween(arc.from, arc.to, launch);
+        L.polyline(
+          points.map((p) => [p.lat, p.lon] as [number, number]),
+          {
+            color: "#fbbf24",
+            weight: launch >= 28 ? 4 : launch >= 18 ? 3.5 : 3,
+            opacity: 0.88,
+            dashArray: launch <= 0 ? "4,6" : undefined,
+            interactive: false,
+          }
+        ).addTo(layerGroup);
+      }
+
       for (const land of shotLandings) {
         L.marker(
           [land.lat, land.lon],
@@ -755,7 +775,7 @@ export function HoleYardageMap({
           arc.points.map((p) => [p.lat, p.lon] as [number, number]),
           {
             color: "#34d399",
-            weight: 3,
+            weight: launch >= 28 ? 4 : launch >= 18 ? 3.5 : 3,
             opacity: 0.92,
             dashArray: launch > 0 ? undefined : "4,6",
             interactive: false,
@@ -986,6 +1006,7 @@ export function HoleYardageMap({
     lineFromLon,
     teeMarkPoint,
     shotLandings,
+    completedShotArcs,
     playBallPoint,
     waterDropMode,
     awaitingLandingMode,

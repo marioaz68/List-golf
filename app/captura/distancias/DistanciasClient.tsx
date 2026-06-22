@@ -884,6 +884,27 @@ export default function DistanciasClient({
     [shotsOnHole]
   );
 
+  const completedShotArcs = useMemo(
+    () =>
+      shotsOnHole
+        .filter(
+          (s) =>
+            s.completedAt != null &&
+            s.to &&
+            !s.isPenalty &&
+            s.catalogId !== "penalty"
+        )
+        .sort((a, b) => a.strokeNo - b.strokeNo)
+        .map((s) => ({
+          strokeNo: s.strokeNo,
+          from: s.from,
+          to: s.to!,
+          catalogId: s.catalogId,
+          swing: s.swing,
+        })),
+    [shotsOnHole]
+  );
+
   const playBallPoint = useMemo(() => {
     if (pendingShot?.from) return pendingShot.from;
     if (mapFramingLock) {
@@ -2315,6 +2336,7 @@ export default function DistanciasClient({
             needsTeeMark={needsTeeMark}
             awaitingClubAtTee={waitingForClubSelection}
             shotLandings={shotLandings}
+            completedShotArcs={completedShotArcs}
             playBallPoint={playBallPoint}
             waterDropMode={!!pendingWaterDrop}
             awaitingLandingMode={
