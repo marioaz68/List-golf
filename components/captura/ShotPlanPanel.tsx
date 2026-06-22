@@ -300,15 +300,16 @@ export function ShotPlanPanel({
         <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
           <div className="w-[3.25rem]">
             <VerticalRoller
-              className="h-[4.5rem] w-full"
+              className="h-[7rem] w-full"
               values={clubLabels}
+              itemKeys={picks.map((p) => p.key)}
               value={activePick.label}
               onChange={handleClubChange}
             />
           </div>
           <div className="w-[2.75rem]">
             <VerticalRoller
-              className="h-[4.5rem] w-full"
+              className="h-[7rem] w-full"
               values={yardLabels}
               value={String(plannedYards)}
               onChange={handleYardChange}

@@ -7,6 +7,8 @@ interface VerticalRollerProps {
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  /** Claves estables por ítem (evita colisiones en listas largas). */
+  itemKeys?: string[];
 }
 
 /** Índice del primer botón (hay un spacer arriba). */
@@ -18,6 +20,7 @@ export function VerticalRoller({
   value,
   onChange,
   className = "",
+  itemKeys,
 }: VerticalRollerProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const ignoreScrollRef = useRef(true);
@@ -92,11 +95,11 @@ export function VerticalRoller({
         className="h-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="h-[32%] shrink-0" aria-hidden />
-        {values.map((label) => {
+        {values.map((label, i) => {
           const active = label === value;
           return (
             <button
-              key={label}
+              key={itemKeys?.[i] ?? label}
               type="button"
               onClick={() => onChange(label)}
               className={[

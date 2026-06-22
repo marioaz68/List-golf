@@ -26,6 +26,8 @@ const DEFAULT_ENABLED = new Set([
   "5w",
   "4h",
   "5h",
+  "4i",
+  "5i",
   "6i",
   "7i",
   "8i",
@@ -94,7 +96,7 @@ function mergeWithCatalog(bag: PlayerBag): PlayerBag {
       byId.set(id, { ...c, catalogId: id });
     }
   }
-  return {
+  return migrateTypicalIrons({
     version: 1,
     clubs: CLUB_CATALOG.map((cat) => {
       const existing = byId.get(cat.id);
@@ -106,7 +108,32 @@ function mergeWithCatalog(bag: PlayerBag): PlayerBag {
         yardsThreeQuarter: defaultThreeQuarterYards(cat.defaultYardsFull),
       };
     }),
-  };
+  });
+}
+
+/** Si ya juegas 6i–9i, activa 4i/5i en bolsas guardadas sin esos hierros. */
+function migrateTypicalIrons(bag: PlayerBag): PlayerBag {
+  const byId = new Map(bag.clubs.map((c) => [c.catalogId, c]));
+  const midIronsOn = ["6i", "7i", "8i", "9i"].every((id) => byId.get(id)?.enabled);
+  if (!midIronsOn) return bag;
+
+  let changed = false;
+  const clubs = bag.clubs.map((c) => {
+    if ((c.catalogId === "4i" || c.catalogId === "5i") && !c.enabled) {
+      changed = true;
+      return { ...c, enabled: true };
+    }
+    return c;
+  });
+  return changed ? { ...bag, clubs } : bag;
+}
+
+function sortBagClubs(clubs: PlayerBagClub[]): PlayerBagClub[] {
+  return [...clubs].sort(
+    (a, b) =>
+      (CLUB_BY_ID[a.catalogId]?.sortOrder ?? 999) -
+      (CLUB_BY_ID[b.catalogId]?.sortOrder ?? 999)
+  );
 }
 
 export function getEnabledBagClubs(bag: PlayerBag): PlayerBagClub[] {
@@ -119,12 +146,14 @@ export function getEnabledBagClubs(bag: PlayerBag): PlayerBagClub[] {
 
 /** Bastones del roll bar: incluye putter si está activo en la bolsa. */
 export function getShotPlanBagClubs(bag: PlayerBag): PlayerBagClub[] {
-  return bag.clubs.filter((c) => {
-    if (!c.enabled) return false;
-    const cat = CLUB_BY_ID[c.catalogId];
-    if (!cat) return false;
-    return cat.category === "putter" || cat.defaultYardsFull > 0;
-  });
+  return sortBagClubs(
+    bag.clubs.filter((c) => {
+      if (!c.enabled) return false;
+      const cat = CLUB_BY_ID[c.catalogId];
+      if (!cat) return false;
+      return cat.category === "putter" || cat.defaultYardsFull > 0;
+    })
+  );
 }
 
 export function clubLabel(catalogId: string): string {

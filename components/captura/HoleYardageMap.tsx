@@ -10,9 +10,7 @@ import {
 import { pointAtYardsAlongCenterline, centerlineSegmentIndex } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import {
-  buildShotArc,
-  buildShotArcBetween,
-  launchAngleForClub,
+  pointAtBearingYards,
   type CompletedShotArc,
   type ShotPreview,
 } from "@/lib/distances/shotTrajectory";
@@ -715,15 +713,15 @@ export function HoleYardageMap({
       }
 
       for (const arc of completedShotArcs) {
-        const launch = launchAngleForClub(arc.catalogId, arc.swing);
-        const points = buildShotArcBetween(arc.from, arc.to, launch);
         L.polyline(
-          points.map((p) => [p.lat, p.lon] as [number, number]),
+          [
+            [arc.from.lat, arc.from.lon],
+            [arc.to.lat, arc.to.lon],
+          ],
           {
             color: "#fbbf24",
-            weight: launch >= 28 ? 4 : launch >= 18 ? 3.5 : 3,
+            weight: 3,
             opacity: 0.88,
-            dashArray: launch <= 0 ? "4,6" : undefined,
             interactive: false,
           }
         ).addTo(layerGroup);
@@ -755,11 +753,6 @@ export function HoleYardageMap({
         playBallPoint &&
         ((centerline != null && centerline.length >= 2) || greenCenterPoint)
       ) {
-        const launch = launchAngleForClub(
-          shotPreview.catalogId,
-          shotPreview.swing
-        );
-        let arcPoints: Array<{ lat: number; lon: number }>;
         let landing: { lat: number; lon: number };
         if (centerline && centerline.length >= 2) {
           landing = pointAtYardsAlongCenterline(
@@ -767,7 +760,6 @@ export function HoleYardageMap({
             centerline,
             shotPreview.plannedYards
           );
-          arcPoints = buildShotArcBetween(playBallPoint, landing, launch);
         } else {
           const aimBearing = bearingDegrees(
             playBallPoint.lat,
@@ -775,22 +767,28 @@ export function HoleYardageMap({
             greenCenterPoint!.lat,
             greenCenterPoint!.lon
           );
-          const arc = buildShotArc(
-            playBallPoint,
+          landing = pointAtBearingYards(
+            playBallPoint.lat,
+            playBallPoint.lon,
             aimBearing,
-            shotPreview.plannedYards,
-            launch
+            shotPreview.plannedYards
           );
-          arcPoints = arc.points;
-          landing = arc.landing;
         }
+        const labelBearing = bearingDegrees(
+          playBallPoint.lat,
+          playBallPoint.lon,
+          landing.lat,
+          landing.lon
+        );
         L.polyline(
-          arcPoints.map((p) => [p.lat, p.lon] as [number, number]),
+          [
+            [playBallPoint.lat, playBallPoint.lon],
+            [landing.lat, landing.lon],
+          ],
           {
             color: "#34d399",
-            weight: launch >= 28 ? 4 : launch >= 18 ? 3.5 : 3,
+            weight: 3,
             opacity: 0.92,
-            dashArray: launch > 0 ? undefined : "4,6",
             interactive: false,
           }
         ).addTo(layerGroup);
@@ -804,14 +802,16 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        const apexIdx = Math.floor(arcPoints.length / 2);
-        const apex = arcPoints[apexIdx];
-        L.marker([apex.lat, apex.lon], {
+        const mid = {
+          lat: (playBallPoint.lat + landing.lat) / 2,
+          lon: (playBallPoint.lon + landing.lon) / 2,
+        };
+        L.marker([mid.lat, mid.lon], {
           icon: L.divIcon({
             className: "",
             html: uprightHtml(
               `<div style="background:rgba(6,78,59,0.92);color:#a7f3d0;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:800;font-family:Arial,sans-serif;border:1px solid rgba(52,211,153,0.5);">${shotPreview.plannedYards} yds</div>`,
-              bearing
+              labelBearing
             ),
             iconSize: [44, 14],
             iconAnchor: [22, 7],

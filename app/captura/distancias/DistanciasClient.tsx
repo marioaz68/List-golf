@@ -66,7 +66,6 @@ import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
 import { RoundTeePickerOverlay } from "@/components/captura/RoundTeePickerOverlay";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
-import { ShotFlightSideView } from "@/components/captura/ShotFlightSideView";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
   defaultPlayerBag,
@@ -212,13 +211,10 @@ export default function DistanciasClient({
   const searchParams = useSearchParams();
   const demoMode =
     demoModeProp || searchParams.get("prueba") === "1";
-  const showFlight3D =
-    demoMode || searchParams.get("trayectoria3d") === "1";
 
   const pruebaHref = useMemo(() => {
     const p = new URLSearchParams(searchParams.toString());
     p.set("prueba", "1");
-    p.set("trayectoria3d", "1");
     return `/captura/distancias?${p.toString()}`;
   }, [searchParams]);
 
@@ -616,7 +612,7 @@ export default function DistanciasClient({
   // Si el GPS te ubica a más de este radio del green más cercano, no medimos
   // (evita yardas absurdas cuando alguien abre la pantalla desde su casa lejos).
   const farFromCourse =
-    !showFlight3D &&
+    !demoMode &&
     geo.status === "ok" &&
     nearest != null &&
     nearest.distanceMeters > MAX_DISTANCE_FROM_COURSE_M;
@@ -2781,16 +2777,6 @@ export default function DistanciasClient({
           </div>
         ) : null}
       </div>
-
-      {showFlight3D &&
-      !farFromCourse &&
-      hasTeeMark &&
-      (shotPreview || completedShotArcs.length > 0) ? (
-        <ShotFlightSideView
-          preview={shotPlanOpen ? shotPreview : null}
-          completedArcs={completedShotArcs}
-        />
-      ) : null}
 
       {shotPlanOpen &&
       planContext &&
