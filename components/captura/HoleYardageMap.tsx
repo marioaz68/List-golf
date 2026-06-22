@@ -8,13 +8,11 @@ import {
   yardsBetween,
 } from "@/lib/distances/ccqHolePoints";
 import {
-  pointAtYardsAlongCenterline,
-  buildShotPreviewAlongCenterline,
+  buildShotPreviewLine,
   centerlineSegmentIndex,
 } from "@/lib/distances/centerline";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import {
-  pointAtBearingYards,
   type CompletedShotArc,
   type ShotPreview,
 } from "@/lib/distances/shotTrajectory";
@@ -755,51 +753,16 @@ export function HoleYardageMap({
         shotPreview &&
         shotPreview.plannedYards > 0 &&
         playBallPoint &&
-        ((centerline != null && centerline.length >= 2) || greenCenterPoint)
+        greenCenterPoint
       ) {
-        let previewPath: Array<{ lat: number; lon: number }>;
-        let landing: { lat: number; lon: number };
-        if (centerline && centerline.length >= 2 && greenCenterPoint) {
-          const preview = buildShotPreviewAlongCenterline(
-            playBallPoint,
-            centerline,
-            shotPreview.plannedYards,
-            greenCenterPoint
-          );
-          previewPath = preview.path;
-          landing = preview.landing;
-        } else if (centerline && centerline.length >= 2) {
-          landing = pointAtYardsAlongCenterline(
-            playBallPoint,
-            centerline,
-            shotPreview.plannedYards
-          );
-          previewPath = [playBallPoint, landing];
-        } else {
-          const ydsToGreen = yardsBetween(
-            playBallPoint.lat,
-            playBallPoint.lon,
-            greenCenterPoint!.lat,
-            greenCenterPoint!.lon
-          );
-          const aimBearing = bearingDegrees(
-            playBallPoint.lat,
-            playBallPoint.lon,
-            greenCenterPoint!.lat,
-            greenCenterPoint!.lon
-          );
-          if (shotPreview.plannedYards >= ydsToGreen - 0.5) {
-            landing = greenCenterPoint!;
-          } else {
-            landing = pointAtBearingYards(
-              playBallPoint.lat,
-              playBallPoint.lon,
-              aimBearing,
-              shotPreview.plannedYards
-            );
-          }
-          previewPath = [playBallPoint, landing];
-        }
+        const preview = buildShotPreviewLine(
+          playBallPoint,
+          shotPreview.plannedYards,
+          greenCenterPoint,
+          centerline
+        );
+        const previewPath = preview.path;
+        const landing = preview.landing;
         const labelBearing = bearingDegrees(
           playBallPoint.lat,
           playBallPoint.lon,

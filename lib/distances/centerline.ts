@@ -1,5 +1,7 @@
 import type { LatLon } from "@/lib/distances/holeBoundary";
+import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import { yardsBetween } from "@/lib/distances/ccqHolePoints";
+import { pointAtBearingYards } from "@/lib/distances/shotTrajectory";
 
 /** GeoJSON LineString mínimo (coordenadas [lon, lat]). */
 export type LineStringGeo = { type: "LineString"; coordinates: [number, number][] };
@@ -166,8 +168,59 @@ export function pointAtYardsAlongCenterline(
   line: LatLon[],
   yards: number
 ): LatLon {
-  return buildShotPreviewAlongCenterline(from, line, yards, line[line.length - 1])
-    .landing;
+  return buildCenterlinePreviewPath(from, line, yards).landing;
+}
+
+/**
+ * Línea verde de preview: centerline en el fairway; si el carry alcanza el
+ * green (distancia recta bola→centro), siempre recta al centro del green.
+ */
+export function buildShotPreviewLine(
+  from: LatLon,
+  plannedYards: number,
+  greenCenter: LatLon,
+  centerline?: LatLon[] | null
+): { path: LatLon[]; landing: LatLon } {
+  if (plannedYards <= 0) return { path: [from], landing: from };
+
+  const ydsToGreen = yardsBetween(
+    from.lat,
+    from.lon,
+    greenCenter.lat,
+    greenCenter.lon
+  );
+
+  if (plannedYards >= ydsToGreen - 0.5) {
+    return { path: [from, greenCenter], landing: greenCenter };
+  }
+
+  if (centerline && centerline.length >= 2) {
+    return buildCenterlinePreviewPath(from, centerline, plannedYards);
+  }
+
+  const bearing = bearingDegrees(
+    from.lat,
+    from.lon,
+    greenCenter.lat,
+    greenCenter.lon
+  );
+  const landing = pointAtBearingYards(
+    from.lat,
+    from.lon,
+    bearing,
+    plannedYards
+  );
+  return { path: [from, landing], landing };
+}
+
+/** @deprecated Use buildShotPreviewLine */
+export function buildShotPreviewAlongCenterline(
+  from: LatLon,
+  line: LatLon[],
+  plannedYards: number,
+  greenCenter: LatLon
+): { path: LatLon[]; landing: LatLon } {
+  return buildShotPreviewLine(from, plannedYards, greenCenter, line);
 }
 
 /** Distancias acumuladas (yds) desde line[0] a cada vértice. */
@@ -258,35 +311,11 @@ function pointAtCumulativeYards(
   return line[line.length - 1];
 }
 
-/** Yardas acumuladas hasta el vértice más cercano al centro del green. */
-function greenCenterYardsAlong(line: LatLon[], greenCenter: LatLon): number {
-  const cum = centerlineCumulativeYards(line);
-  let bestIdx = line.length - 1;
-  let bestD = Infinity;
-  for (let i = 0; i < line.length; i++) {
-    const d = yardsBetween(
-      line[i].lat,
-      line[i].lon,
-      greenCenter.lat,
-      greenCenter.lon
-    );
-    if (d < bestD) {
-      bestD = d;
-      bestIdx = i;
-    }
-  }
-  return cum[bestIdx];
-}
-
-/**
- * Preview verde: sigue la centerline hacia adelante; si el carry alcanza el
- * green, la caída queda en el centro del green.
- */
-export function buildShotPreviewAlongCenterline(
+/** Preview por centerline (solo cuando el carry NO alcanza el green). */
+function buildCenterlinePreviewPath(
   from: LatLon,
   line: LatLon[],
-  plannedYards: number,
-  greenCenter: LatLon
+  plannedYards: number
 ): { path: LatLon[]; landing: LatLon } {
   if (line.length < 2 || plannedYards <= 0) {
     return { path: [from], landing: from };
@@ -294,15 +323,8 @@ export function buildShotPreviewAlongCenterline(
 
   const cum = centerlineCumulativeYards(line);
   const proj = projectOntoCenterline(from, line);
-  const greenYards = greenCenterYardsAlong(line, greenCenter);
-  const forwardToGreen = Math.max(0, greenYards - proj.yardsAlong);
-  const reachGreen = plannedYards >= forwardToGreen - 0.5;
-  const endYards = reachGreen
-    ? greenYards
-    : proj.yardsAlong + plannedYards;
-  const landing = reachGreen
-    ? greenCenter
-    : pointAtCumulativeYards(line, cum, endYards);
+  const endYards = proj.yardsAlong + plannedYards;
+  const landing = pointAtCumulativeYards(line, cum, endYards);
 
   const path: LatLon[] = [from];
   if (yardsBetween(from.lat, from.lon, proj.point.lat, proj.point.lon) >= 2) {
@@ -316,9 +338,7 @@ export function buildShotPreviewAlongCenterline(
   }
 
   const last = path[path.length - 1];
-  if (
-    yardsBetween(last.lat, last.lon, landing.lat, landing.lon) >= 1
-  ) {
+  if (yardsBetween(last.lat, last.lon, landing.lat, landing.lon) >= 1) {
     path.push(landing);
   }
 

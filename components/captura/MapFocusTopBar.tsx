@@ -40,7 +40,7 @@ export function MapFocusTopBar({
             {positionLabel}
           </span>
           <span className="text-[9px] font-bold uppercase text-emerald-400/90">
-            {onGreen ? "al hoyo" : "al green"}
+            {onGreen ? "al hoyo" : "al centro"}
           </span>
           <span className="text-lg font-black leading-none text-white">
             {displayYards}

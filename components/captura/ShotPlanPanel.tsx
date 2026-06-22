@@ -275,7 +275,7 @@ export function ShotPlanPanel({
           <LieChip kind={lieKind} size="sm" />
           <span className="text-[9px] font-bold text-slate-500">·</span>
           <span className="text-[9px] font-bold text-emerald-300">
-            {onGreen || shortGameReach
+            {onGreen
               ? `${yardsToGreen} al hoyo`
               : `${yardsToGreen} al centro`}
           </span>
