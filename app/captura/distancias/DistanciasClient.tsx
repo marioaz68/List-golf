@@ -48,9 +48,11 @@ import {
 import {
   isTapInPutt,
   holedPinPosition,
+  puttDistanceToHole,
   puttYardsFromCenter,
   shouldPromptHoleFinish,
   snapLandingToGreenCenter,
+  strokeActualYards,
 } from "@/lib/distances/holeComplete";
 import {
   buildCourseHolesCollection,
@@ -100,6 +102,7 @@ import {
   recordGivenPutt,
   recordHoledPutt,
   removeLastShotOnHole,
+  relocateBallOnGreen,
   resetShotArrival,
   roundNineLabel,
   roundStrokeTotals,
@@ -1760,14 +1763,12 @@ export default function DistanciasClient({
           activeHolePoints.center,
           toGreenBefore.center
         );
-        const actual = Math.round(
-          yardsBetween(
-            pendingShot.from.lat,
-            pendingShot.from.lon,
-            landing.lat,
-            landing.lon
-          ) / 5
-        ) * 5;
+        const actual = strokeActualYards(
+          pendingShot.from,
+          landing,
+          lie.kind,
+          pendingShot.catalogId
+        );
         let next = completeShotArrival(
           holeShotsStore,
           activeHole,
@@ -2277,6 +2278,71 @@ export default function DistanciasClient({
     pinMapFraming,
   ]);
 
+  const greenBallDragEnabled = useMemo(
+    () =>
+      !!(
+        currentBallLie?.onGreen &&
+        hasTeeMark &&
+        !needsTeeMark &&
+        !pendingShot &&
+        !pendingWaterDrop &&
+        !shotPlanOpen &&
+        !holeFinishPrompt &&
+        !distanceMode &&
+        !showRoundTeePicker &&
+        activeHolePoints?.center
+      ),
+    [
+      currentBallLie?.onGreen,
+      hasTeeMark,
+      needsTeeMark,
+      pendingShot,
+      pendingWaterDrop,
+      shotPlanOpen,
+      holeFinishPrompt,
+      distanceMode,
+      showRoundTeePicker,
+      activeHolePoints?.center,
+    ]
+  );
+
+  const handleGreenBallRelocate = useCallback(
+    (lat: number, lon: number) => {
+      if (!activeHolePoints?.center || !currentBallLie?.onGreen) return;
+      const lie = detectLieForPoint(lat, lon);
+      if (!lie.onGreen) {
+        setArrivalToast("Mantén la bola en el green");
+        return;
+      }
+      const toGreen = greenDistancesForHole(lat, lon, activeHolePoints);
+      const position = snapLandingToGreenCenter(
+        { lat, lon },
+        activeHolePoints.center,
+        toGreen.center
+      );
+      const puttYds = puttDistanceToHole(position, activeHolePoints.center);
+      const next = relocateBallOnGreen(
+        holeShotsStore,
+        activeHole,
+        position,
+        lie.kind
+      );
+      setHoleShotsStore(next);
+      saveHoleShots(next, bagScope);
+      pinMapFraming(position);
+      setArrivalToast(`${puttYds} yds al hoyo`);
+    },
+    [
+      activeHolePoints,
+      currentBallLie?.onGreen,
+      detectLieForPoint,
+      holeShotsStore,
+      activeHole,
+      bagScope,
+      pinMapFraming,
+    ]
+  );
+
   const returnToResumeHole = useCallback(() => {
     if (resumeHole == null) return;
     setHoleCorrectionMode(false);
@@ -2352,6 +2418,8 @@ export default function DistanciasClient({
             ballOnGreen={currentBallLie?.onGreen ?? false}
             greenCenterPoint={activeHolePoints?.center ?? null}
             shotPreview={shotPlanOpen ? shotPreview : null}
+            greenBallDragEnabled={greenBallDragEnabled}
+            onGreenBallRelocate={handleGreenBallRelocate}
           />
         ) : (
           <div className="flex h-full items-center justify-center bg-slate-900 px-6 text-center text-sm text-slate-300">

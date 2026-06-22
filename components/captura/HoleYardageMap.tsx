@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { puttDistanceToHole } from "@/lib/distances/holeComplete";
 import { MapZoomControl } from "@/components/captura/MapZoomControl";
 import { bearingDegrees } from "@/lib/distances/ccqGreens";
 import {
@@ -103,6 +104,9 @@ interface HoleYardageMapProps {
   greenCenterPoint?: LatLon | null;
   /** Vista previa de trayectoria mientras se elige bastón. */
   shotPreview?: ShotPreview | null;
+  /** En green: clic derecho o mantener pulsado para mover la bola. */
+  greenBallDragEnabled?: boolean;
+  onGreenBallRelocate?: (lat: number, lon: number) => void;
 }
 
 function yardLabel(yards: number): string {
@@ -163,6 +167,8 @@ export function HoleYardageMap({
   ballOnGreen = false,
   greenCenterPoint = null,
   shotPreview = null,
+  greenBallDragEnabled = false,
+  onGreenBallRelocate,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +188,15 @@ export function HoleYardageMap({
   const awaitingLandingModeRef = useRef(awaitingLandingMode);
   const waterDropModeRef = useRef(waterDropMode);
   const ballOnGreenRef = useRef(ballOnGreen);
+  const greenBallDragEnabledRef = useRef(greenBallDragEnabled);
+  const onGreenBallRelocateRef = useRef(onGreenBallRelocate);
+  const greenCenterRef = useRef(greenCenterPoint);
+  const dragLockRef = useRef(false);
+  const [greenDragPreview, setGreenDragPreview] = useState<{
+    lat: number;
+    lon: number;
+    puttYds: number;
+  } | null>(null);
   const greenFitPointsRef = useRef<Array<{ lat: number; lon: number }> | null>(
     null
   );
@@ -196,6 +211,9 @@ export function HoleYardageMap({
   awaitingLandingModeRef.current = awaitingLandingMode;
   waterDropModeRef.current = waterDropMode;
   ballOnGreenRef.current = ballOnGreen;
+  greenBallDragEnabledRef.current = greenBallDragEnabled;
+  onGreenBallRelocateRef.current = onGreenBallRelocate;
+  greenCenterRef.current = greenCenterPoint;
   sizeRef.current = size;
   playerPosRef.current = { lat: playerLat, lon: playerLon };
 
@@ -259,6 +277,7 @@ export function HoleYardageMap({
 
       const onTap = (e: MouseEvent | TouchEvent) => {
         if (!onMapTapRef.current || !mapRef.current) return;
+        if (dragLockRef.current) return;
         if (!isYardageMapSurfaceTap(e.target)) return;
         const isTouch = e.type === "touchend";
         if (!isTouch && Date.now() - lastTouchEndAtRef.current < 500) {
@@ -325,6 +344,147 @@ export function HoleYardageMap({
     const t = window.setTimeout(() => map.invalidateSize(), 250);
     return () => window.clearTimeout(t);
   }, [mapReady]);
+
+  /** En green: clic derecho o mantener pulsado → arrastrar bola con distancia al hoyo. */
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !greenBallDragEnabled) return;
+
+    let dragging = false;
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    const clientToLatLng = (clientX: number, clientY: number) => {
+      const rect = container.getBoundingClientRect();
+      const L = (window as unknown as { L?: unknown }).L;
+      if (!mapRef.current || !L) return null;
+      return screenToLatLng(
+        clientX,
+        clientY,
+        rect,
+        bearingRef.current,
+        mapRef.current,
+        L as Parameters<typeof screenToLatLng>[4]
+      );
+    };
+
+    const previewAt = (lat: number, lon: number) => {
+      const center = greenCenterRef.current;
+      if (!center) return;
+      const puttYds = puttDistanceToHole({ lat, lon }, center);
+      setGreenDragPreview({ lat, lon, puttYds });
+    };
+
+    const clearLongPress = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    };
+
+    const startDrag = (clientX: number, clientY: number) => {
+      if (!greenBallDragEnabledRef.current || !ballOnGreenRef.current) return;
+      dragging = true;
+      dragLockRef.current = true;
+      const ll = clientToLatLng(clientX, clientY);
+      if (ll) previewAt(ll.lat, ll.lng);
+    };
+
+    const moveDrag = (clientX: number, clientY: number) => {
+      if (!dragging) return;
+      const ll = clientToLatLng(clientX, clientY);
+      if (ll) previewAt(ll.lat, ll.lng);
+    };
+
+    const endDrag = (clientX: number, clientY: number) => {
+      clearLongPress();
+      if (!dragging) return;
+      dragging = false;
+      const ll = clientToLatLng(clientX, clientY);
+      setGreenDragPreview(null);
+      if (ll) onGreenBallRelocateRef.current?.(ll.lat, ll.lng);
+      window.setTimeout(() => {
+        dragLockRef.current = false;
+      }, 450);
+    };
+
+    const onContextMenu = (e: MouseEvent) => {
+      if (!greenBallDragEnabledRef.current || !ballOnGreenRef.current) return;
+      e.preventDefault();
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 2) return;
+      if (!isYardageMapSurfaceTap(e.target)) return;
+      e.preventDefault();
+      startDrag(e.clientX, e.clientY);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      moveDrag(e.clientX, e.clientY);
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      endDrag(e.clientX, e.clientY);
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (!greenBallDragEnabledRef.current || !ballOnGreenRef.current) return;
+      if (e.touches.length !== 1) return;
+      if (!isYardageMapSurfaceTap(e.target)) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      clearLongPress();
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        startDrag(touchStartX, touchStartY);
+      }, 480);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragging && longPressTimer && e.touches.length === 1) {
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        if (Math.hypot(dx, dy) > 12) clearLongPress();
+      }
+      if (dragging && e.touches.length === 1) {
+        e.preventDefault();
+        moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (dragging && e.changedTouches.length > 0) {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        endDrag(t.clientX, t.clientY);
+        return;
+      }
+      clearLongPress();
+    };
+
+    container.addEventListener("contextmenu", onContextMenu);
+    container.addEventListener("mousedown", onMouseDown, { capture: true });
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: false });
+    container.addEventListener("touchend", onTouchEnd, { passive: false });
+
+    return () => {
+      clearLongPress();
+      container.removeEventListener("contextmenu", onContextMenu);
+      container.removeEventListener("mousedown", onMouseDown, { capture: true });
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      container.removeEventListener("touchstart", onTouchStart);
+      container.removeEventListener("touchmove", onTouchMove);
+      container.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [greenBallDragEnabled]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -739,14 +899,61 @@ export function HoleYardageMap({
         ).addTo(layerGroup);
       }
 
-      if (playBallPoint && !waterDropMode) {
+      const activeBall =
+        greenDragPreview ??
+        (playBallPoint ? { lat: playBallPoint.lat, lon: playBallPoint.lon } : null);
+
+      if (activeBall && !waterDropMode) {
         L.marker(
-          [playBallPoint.lat, playBallPoint.lon],
+          [activeBall.lat, activeBall.lon],
           {
-            ...ballMarkerOptions(L, golfBallHtml(9, "#3b82f6"), 9),
+            ...ballMarkerOptions(
+              L,
+              golfBallHtml(9, greenDragPreview ? "#22d3ee" : "#3b82f6"),
+              9
+            ),
             zIndexOffset: 900,
           }
         ).addTo(layerGroup);
+      }
+
+      if (greenDragPreview && greenCenterPoint) {
+        L.polyline(
+          [
+            [greenDragPreview.lat, greenDragPreview.lon],
+            [greenCenterPoint.lat, greenCenterPoint.lon],
+          ],
+          {
+            color: "#22d3ee",
+            weight: 3,
+            opacity: 0.95,
+            dashArray: "6 4",
+            interactive: false,
+          }
+        ).addTo(layerGroup);
+        const midPt = {
+          lat: (greenDragPreview.lat + greenCenterPoint.lat) / 2,
+          lon: (greenDragPreview.lon + greenCenterPoint.lon) / 2,
+        };
+        const labelBearing = bearingDegrees(
+          greenDragPreview.lat,
+          greenDragPreview.lon,
+          greenCenterPoint.lat,
+          greenCenterPoint.lon
+        );
+        L.marker([midPt.lat, midPt.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: uprightHtml(
+              `<div style="background:rgba(8,47,73,0.94);color:#a5f3fc;padding:2px 7px;border-radius:8px;font-size:11px;font-weight:800;font-family:Arial,sans-serif;border:1px solid rgba(34,211,238,0.55);">${greenDragPreview.puttYds} yds al hoyo</div>`,
+              labelBearing
+            ),
+            iconSize: [72, 18],
+            iconAnchor: [36, 9],
+          }),
+          interactive: false,
+          zIndexOffset: 950,
+        }).addTo(layerGroup);
       }
 
       if (
@@ -1015,6 +1222,7 @@ export function HoleYardageMap({
     ballOnGreen,
     greenCenterPoint,
     shotPreview,
+    greenDragPreview,
     needsTeeMark,
     teeAdjustMode,
     size.w,
@@ -1055,11 +1263,13 @@ export function HoleYardageMap({
       >
         {needsTeeMark
           ? "Paso 1 · toca el tee en el mapa"
-          : awaitingClubAtTee
-            ? "Selecciona bastón · la salida no se mueve"
-            : teeAdjustMode
-              ? "Toca el tee en el mapa para corregir la salida"
-              : "Toca el mapa · D distancia · G golpe"}
+          : greenBallDragEnabled
+            ? "Green · clic derecho o mantén pulsado para mover la bola"
+            : awaitingClubAtTee
+              ? "Selecciona bastón · la salida no se mueve"
+              : teeAdjustMode
+                ? "Toca el tee en el mapa para corregir la salida"
+                : "Toca el mapa · D distancia · G golpe"}
       </div>
       {mapReady ? (
         <MapZoomControl

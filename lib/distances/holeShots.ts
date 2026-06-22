@@ -4,6 +4,7 @@ import {
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import type { LieKind } from "@/lib/distances/detectLie";
+import { yardsBetween } from "@/lib/distances/ccqHolePoints";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 
@@ -792,6 +793,65 @@ export function cancelPendingShot(
     byHole: {
       ...store.byHole,
       [key]: prev.filter((s) => s.id !== shotId),
+    },
+  };
+}
+
+/** Reposiciona la bola en el green (clic derecho / arrastre). */
+export function relocateBallOnGreen(
+  store: HoleShotsStore,
+  hole: number,
+  position: LatLon,
+  lieKind: LieKind
+): HoleShotsStore {
+  const key = String(hole);
+  const prev = store.byHole[key] ?? [];
+  const pending = pendingShotOnHole(store, hole);
+
+  if (pending && !pending.isPenalty) {
+    return {
+      ...store,
+      byHole: {
+        ...store.byHole,
+        [key]: prev.map((s) =>
+          s.id === pending.id ? { ...s, from: { ...position } } : s
+        ),
+      },
+    };
+  }
+
+  const last = lastCompletedShot(store, hole);
+  if (!last || last.isPenalty || !last.to) return store;
+
+  const actualYards =
+    lieKind === "green"
+      ? Math.max(
+          1,
+          Math.round(
+            yardsBetween(
+              last.from.lat,
+              last.from.lon,
+              position.lat,
+              position.lon
+            )
+          )
+        )
+      : last.actualYards;
+
+  return {
+    ...store,
+    byHole: {
+      ...store.byHole,
+      [key]: prev.map((s) =>
+        s.id === last.id
+          ? {
+              ...s,
+              to: { ...position },
+              lieKind,
+              actualYards: actualYards ?? s.actualYards,
+            }
+          : s
+      ),
     },
   };
 }

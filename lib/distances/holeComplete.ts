@@ -63,6 +63,25 @@ export function puttYardsFromCenter(centerYards: number): number {
   return Math.max(1, Math.round(centerYards));
 }
 
+/** Distancia al hoyo desde la bola (1 yd) — para putts y estadística. */
+export function puttDistanceToHole(ball: LatLon, center: LatLon): number {
+  return puttYardsFromCenter(yardsToGreenCenter(ball, center));
+}
+
+/** Yardas reales de un golpe (putt en green: 1 yd; resto: paso 5). */
+export function strokeActualYards(
+  from: LatLon,
+  to: LatLon,
+  lieKind?: LieKind,
+  catalogId?: string
+): number {
+  const raw = yardsBetween(from.lat, from.lon, to.lat, to.lon);
+  if (lieKind === "green" || catalogId === "putter") {
+    return Math.max(1, Math.round(raw));
+  }
+  return Math.round(raw / 5) * 5;
+}
+
 export function yardsToGreenCenter(point: LatLon, center: LatLon): number {
   return yardsBetween(point.lat, point.lon, center.lat, center.lon);
 }
