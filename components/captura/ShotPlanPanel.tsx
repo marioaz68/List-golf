@@ -151,10 +151,12 @@ export function ShotPlanPanel({
     clubKey: string;
     plannedYards: number;
   } | null>(null);
+  const [clubConfirmed, setClubConfirmed] = useState(false);
 
   /** Nueva distancia/lie = nuevo golpe; limpiar elección manual previa. */
   useEffect(() => {
     setUserPick(null);
+    setClubConfirmed(false);
   }, [yardsToGreen, inBunker, onGreen, lieKind]);
 
   const userSelectedPick = userPick
@@ -310,15 +312,19 @@ export function ShotPlanPanel({
       <div className="flex flex-col justify-center gap-1">
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            setClubConfirmed(true);
             onConfirm({
               catalogId: activePick.catalogId,
               swing: activePick.swing,
               plannedYards,
-            })
-          }
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-lg font-black text-white shadow active:scale-95"
-          aria-label="Guardar plan"
+            });
+          }}
+          className={[
+            "flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-lg font-black text-white shadow active:scale-95",
+            !clubConfirmed ? "yardage-club-confirm-blink ring-2 ring-emerald-300/90" : "",
+          ].join(" ")}
+          aria-label="Confirmar bastón"
         >
           ✓
         </button>
