@@ -856,7 +856,7 @@ export default function DistanciasClient({
     [holeShotsStore, activeHole]
   );
 
-  const canAdjustTee =
+  const waitingForClubAtTee =
     hasTeeMark && holeStrokeCount === 0 && pendingShot == null;
 
   // Fija el hoyo mientras falta marcar salida para que el círculo verde no
@@ -1643,8 +1643,16 @@ export default function DistanciasClient({
         return;
       }
 
-      if (needsTeeMark || canAdjustTee) {
+      if (needsTeeMark) {
         markTeeAt(lat, lon);
+        return;
+      }
+
+      if (waitingForClubAtTee) {
+        setArrivalToast("Selecciona bastón");
+        if (!shotPlanOpen && teeMark) {
+          openPlanFromPoint(teeMark.lat, teeMark.lon);
+        }
         return;
       }
 
@@ -1770,7 +1778,8 @@ export default function DistanciasClient({
       geo,
       activeHolePoints,
       needsTeeMark,
-      canAdjustTee,
+      waitingForClubAtTee,
+      teeMark,
       hasTeeMark,
       markTeeAt,
       shotPlanOpen,
@@ -2237,7 +2246,7 @@ export default function DistanciasClient({
             }
             teeMarkPoint={teeMark}
             needsTeeMark={needsTeeMark}
-            teeAdjustMode={canAdjustTee}
+            awaitingClubAtTee={waitingForClubAtTee}
             shotLandings={shotLandings}
             playBallPoint={playBallPoint}
             waterDropMode={!!pendingWaterDrop}
@@ -2247,9 +2256,7 @@ export default function DistanciasClient({
             waterDropFocusPoints={waterDropFocusPoints}
             mapFramingPoint={mapFramingPoint}
             catalogTeePoint={
-              (needsTeeMark || canAdjustTee) && catalogTeeForHole
-                ? catalogTeeForHole
-                : null
+              needsTeeMark && catalogTeeForHole ? catalogTeeForHole : null
             }
             ballOnGreen={currentBallLie?.onGreen ?? false}
             greenCenterPoint={activeHolePoints?.center ?? null}

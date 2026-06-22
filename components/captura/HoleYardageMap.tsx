@@ -70,6 +70,8 @@ interface HoleYardageMapProps {
   teeMarkPoint?: { lat: number; lon: number } | null;
   /** Si true, el jugador debe marcar salida antes de D/G. */
   needsTeeMark?: boolean;
+  /** Salida calibrada lista; falta confirmar bastón en el panel. */
+  awaitingClubAtTee?: boolean;
   /** Salida ya marcada pero aún corregible (sin golpes confirmados). */
   teeAdjustMode?: boolean;
   /** Posiciones fijas donde quedó la bola (golpes ya confirmados). */
@@ -137,6 +139,7 @@ export function HoleYardageMap({
   lineFromLon,
   teeMarkPoint = null,
   needsTeeMark = false,
+  awaitingClubAtTee = false,
   teeAdjustMode = false,
   shotLandings = [],
   playBallPoint = null,
@@ -964,9 +967,11 @@ export function HoleYardageMap({
       >
         {needsTeeMark
           ? "Paso 1 · toca el tee en el mapa"
-          : teeAdjustMode
-            ? "Toca el tee en el mapa para corregir la salida"
-            : "Toca el mapa · D distancia · G golpe"}
+          : awaitingClubAtTee
+            ? "Selecciona bastón · la salida no se mueve"
+            : teeAdjustMode
+              ? "Toca el tee en el mapa para corregir la salida"
+              : "Toca el mapa · D distancia · G golpe"}
       </div>
       {mapReady ? (
         <MapZoomControl
