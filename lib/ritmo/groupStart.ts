@@ -1,6 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseTeeDateTime } from "@/lib/telegram/ritmo/paceCalculator";
 
+/** Referencia de inicio para ritmo al avisar una salida por Telegram. */
+export type RitmoStartMode = "scheduled" | "now";
+
+/** Hora de salida programada (tee_time + fecha de ronda, zona México). */
+export function scheduledGroupStartDate(
+  roundDate: string | null | undefined,
+  teeTime: string | null | undefined
+): Date | null {
+  const date = String(roundDate ?? "").trim();
+  const time = String(teeTime ?? "").trim();
+  if (!date || !time) return null;
+  return parseTeeDateTime(date, time);
+}
+
 /** Instante de referencia para ritmo: salida real > tee programado. */
 export function resolveGroupStartDate(args: {
   actualStartAt: string | null | undefined;

@@ -10,7 +10,11 @@ import {
   ensureDailyRoundBase,
 } from "@/lib/dailyRounds/seedSchedule";
 import { maxPlayersForDate } from "@/lib/dailyRounds/salidaCapacity";
-import { markGroupStarted } from "@/lib/ritmo/groupStart";
+import {
+  markGroupStarted,
+  scheduledGroupStartDate,
+  type RitmoStartMode,
+} from "@/lib/ritmo/groupStart";
 import { assignCaddieToEntry } from "@/lib/caddies/assignCaddieToEntry";
 import {
   notifyDailyRoundGroupStart,
@@ -475,6 +479,8 @@ export async function startAndNotifySalida(input: {
   tournamentId: string;
   roundId: string;
   groupId: string;
+  /** Ritmo del campo: hora del tee programado o momento del aviso. */
+  ritmoStartMode?: RitmoStartMode;
 }): Promise<
   { ok: boolean; error?: string } & Partial<DailyNotifyResult>
 > {
@@ -485,11 +491,64 @@ export async function startAndNotifySalida(input: {
   const tournamentId = String(input.tournamentId ?? "").trim();
   const roundId = String(input.roundId ?? "").trim();
   const groupId = String(input.groupId ?? "").trim();
+  const ritmoStartMode: RitmoStartMode =
+    input.ritmoStartMode === "now" ? "now" : "scheduled";
   if (!tournamentId || !roundId || !groupId) {
     return { ok: false, error: "Faltan datos de la salida." };
   }
 
-  await markGroupStarted(admin, groupId);
+  const [{ data: group }, { data: round }] = await Promise.all([
+    admin
+      .from("pairing_groups")
+      .select("id, tee_time, actual_start_at")
+      .eq("id", groupId)
+      .maybeSingle(),
+    admin
+      .from("rounds")
+      .select("round_date")
+      .eq("id", roundId)
+      .maybeSingle(),
+  ]);
+
+  if (!group?.id) {
+    return { ok: false, error: "Salida no encontrada." };
+  }
+
+  const alreadyStarted = Boolean(group.actual_start_at);
+
+  if (!alreadyStarted) {
+    if (ritmoStartMode === "scheduled") {
+      const scheduled = scheduledGroupStartDate(
+        round?.round_date ?? null,
+        group.tee_time ?? null
+      );
+      if (!scheduled) {
+        return {
+          ok: false,
+          error:
+            "No hay hora programada en esta salida. Usa «hora actual» o asigna tee time.",
+        };
+      }
+      await markGroupStarted(admin, groupId, {
+        startedAt: scheduled,
+        force: true,
+      });
+    } else {
+      await markGroupStarted(admin, groupId);
+    }
+  } else if (ritmoStartMode === "scheduled") {
+    const scheduled = scheduledGroupStartDate(
+      round?.round_date ?? null,
+      group.tee_time ?? null
+    );
+    if (scheduled) {
+      await markGroupStarted(admin, groupId, {
+        startedAt: scheduled,
+        force: true,
+      });
+    }
+  }
+
   const notify = await notifyDailyRoundGroupStart(admin, {
     tournamentId,
     roundId,

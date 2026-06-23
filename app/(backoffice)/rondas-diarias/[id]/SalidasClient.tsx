@@ -10,6 +10,10 @@ import {
   removeCaddieFromSalida,
   startAndNotifySalida,
 } from "../actions";
+import {
+  formatStartTimeMexico,
+  type RitmoStartMode,
+} from "@/lib/ritmo/groupStart";
 
 export type SalidaPlayer = {
   memberId: string;
@@ -179,9 +183,14 @@ export default function SalidasClient({
     });
   };
 
-  const handleStart = (groupId: string) => {
+  const handleStart = (groupId: string, ritmoStartMode: RitmoStartMode) => {
     startTransition(async () => {
-      const res = await startAndNotifySalida({ tournamentId, roundId, groupId });
+      const res = await startAndNotifySalida({
+        tournamentId,
+        roundId,
+        groupId,
+        ritmoStartMode,
+      });
       if (!res.ok) return showFlash("err", res.error ?? "No se pudo avisar.");
       const sent = res.sent ?? 0;
       const failed = res.failed ?? 0;
@@ -267,6 +276,11 @@ export default function SalidasClient({
               </div>
             ) : (
               <div className="space-y-4">
+                <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+                  Al avisar por Telegram, elige si el <strong>ritmo del campo</strong>{" "}
+                  se calcula desde la <strong>hora programada</strong> del tee o desde la{" "}
+                  <strong>hora actual</strong> (útil si avisas antes de la salida real).
+                </p>
                 {bands.map(([band, rows]) => (
                   <div key={band}>
                     <div className="mb-1 px-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
@@ -277,6 +291,7 @@ export default function SalidasClient({
                         <SalidaItem
                           key={s.groupId}
                           salida={s}
+                          roundDate={roundDate}
                           groupSize={groupSize}
                           clubId={clubId}
                           playersCatalog={playersCatalog}
@@ -410,6 +425,7 @@ function PlayingToday({
 
 function SalidaItem({
   salida,
+  roundDate,
   groupSize,
   clubId,
   playersCatalog,
@@ -424,6 +440,7 @@ function SalidaItem({
   onStart,
 }: {
   salida: SalidaRow;
+  roundDate: string | null;
   groupSize: number;
   clubId: string | null;
   playersCatalog: PlayerCatalogRow[];
@@ -435,11 +452,15 @@ function SalidaItem({
   onRemove: (memberId: string) => void;
   onAssignCaddie: (groupId: string, entryId: string, caddieId: string) => void;
   onRemoveCaddie: (entryId: string) => void;
-  onStart: (groupId: string) => void;
+  onStart: (groupId: string, ritmoStartMode: RitmoStartMode) => void;
 }) {
   const started = Boolean(salida.startedAt);
   const count = salida.players.length;
   const full = count >= groupSize;
+  const teeLabel = salida.teeTime?.slice(0, 5) ?? null;
+  const [ritmoStartMode, setRitmoStartMode] = useState<RitmoStartMode>(
+    teeLabel ? "scheduled" : "now"
+  );
 
   return (
     <div className={started ? "bg-emerald-50/40" : ""}>
@@ -511,6 +532,55 @@ function SalidaItem({
             </p>
           )}
 
+          {started && salida.startedAt ? (
+            <p className="mt-2 text-[11px] text-emerald-700">
+              Ritmo del campo desde:{" "}
+              <strong>{formatStartTimeMexico(salida.startedAt)}</strong>
+              {roundDate ? ` · ${roundDate}` : ""}
+            </p>
+          ) : null}
+
+          {count > 0 ? (
+            <fieldset className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <legend className="px-1 text-[11px] font-semibold text-slate-600">
+                Ritmo del campo
+              </legend>
+              <div className="space-y-1.5 text-xs text-slate-700">
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name={`ritmo-${salida.groupId}`}
+                    checked={ritmoStartMode === "scheduled"}
+                    disabled={!teeLabel}
+                    onChange={() => setRitmoStartMode("scheduled")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Hora programada del tee
+                    {teeLabel ? (
+                      <strong className="ml-1 text-slate-900">{teeLabel}</strong>
+                    ) : (
+                      <span className="ml-1 text-slate-400">(sin tee time)</span>
+                    )}
+                  </span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-2">
+                  <input
+                    type="radio"
+                    name={`ritmo-${salida.groupId}`}
+                    checked={ritmoStartMode === "now"}
+                    onChange={() => setRitmoStartMode("now")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Hora actual{" "}
+                    <span className="text-slate-500">(al pulsar Avisar Telegram)</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+          ) : null}
+
           <div className="mt-3 flex items-center justify-between gap-2">
             <button
               type="button"
@@ -522,7 +592,7 @@ function SalidaItem({
             <button
               type="button"
               disabled={busy || count === 0}
-              onClick={() => onStart(salida.groupId)}
+              onClick={() => onStart(salida.groupId, ritmoStartMode)}
               className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {started ? "Reenviar Telegram" : "Avisar Telegram"}
