@@ -64,7 +64,19 @@ function storageKey(scope?: string): string {
 export function loadPlayerBag(scope?: string): PlayerBag {
   if (typeof window === "undefined") return defaultPlayerBag();
   try {
-    const raw = window.localStorage.getItem(storageKey(scope));
+    const scopedKey = scope?.trim() ? storageKey(scope.trim()) : null;
+    if (scopedKey) {
+      const scopedRaw = window.localStorage.getItem(scopedKey);
+      if (scopedRaw) {
+        const parsed = JSON.parse(scopedRaw) as PlayerBag;
+        if (parsed?.version === 1 && Array.isArray(parsed.clubs)) {
+          return mergeWithCatalog(parsed);
+        }
+      }
+      // Misma bolsa que sin ?tg= si aún no guardaste con el id de Telegram.
+      return loadPlayerBag(undefined);
+    }
+    const raw = window.localStorage.getItem(storageKey());
     if (!raw) return defaultPlayerBag();
     const parsed = JSON.parse(raw) as PlayerBag;
     if (parsed?.version !== 1 || !Array.isArray(parsed.clubs)) {

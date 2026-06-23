@@ -2,7 +2,9 @@ import {
   carryYards,
   CLUB_BY_ID,
   defaultThreeQuarterYards,
+  FINE_YARD_ROLLER_MAX,
   MIN_YARD_PICK,
+  SHORT_GAME_LW_MAX_YARDS,
   shouldSuggestPutter,
   yardRangeValues,
   type SwingKind,
@@ -54,13 +56,38 @@ export function lwThreeQuarterCarryYards(clubs: PlayerBagClub[]): number {
   return defaultThreeQuarterYards(cat.defaultYardsFull);
 }
 
-/** Distancia corta: dentro del alcance del LW 3/4. */
+/** Distancia corta (≤60 yd al centro): LW 3/4 y yardas exactas al green. */
+export function isShortGameDistance(yardsToGreen: number): boolean {
+  return yardsToGreen > 0 && yardsToGreen <= SHORT_GAME_LW_MAX_YARDS;
+}
+
+/** @deprecated Usar isShortGameDistance — mantiene compatibilidad con alcance LW en bolsa. */
 export function isWithinLwThreeQuarterReach(
   yardsToGreen: number,
   clubs: PlayerBagClub[]
 ): boolean {
-  const max = lwThreeQuarterCarryYards(clubs);
-  return max > 0 && yardsToGreen > 0 && yardsToGreen <= max;
+  return isShortGameDistance(yardsToGreen);
+}
+
+function pickLwThreeQuarterPlan(clubs: PlayerBagClub[]): ClubPickPlan | null {
+  const lw = clubs.find((c) => c.catalogId === "lw" && c.enabled);
+  if (!lw) return null;
+  const cat = CLUB_BY_ID.lw;
+  if (!cat) return null;
+  const carry = carryYards(lw.yardsFull, lw.yardsThreeQuarter, "three_quarter");
+  if (carry <= 0) return null;
+  return {
+    catalogId: "lw",
+    swing: "three_quarter",
+    carryYards: carry,
+    shortLabel: cat.shortLabel,
+    rollerLabel: `${cat.shortLabel} 3/4`,
+  };
+}
+
+/** Yardas enteras al centro del green (sin redondear a 5). */
+export function yardsToGreenCenterRounded(yardsToGreen: number): number {
+  return Math.max(MIN_YARD_PICK, Math.round(yardsToGreen));
 }
 
 /**
@@ -77,11 +104,11 @@ export function defaultPlannedYardsForShot(
   if (onGreen || pick?.catalogId === "putter") {
     return puttYardsFromCenter(yardsToGreen);
   }
-  if (isWithinLwThreeQuarterReach(yardsToGreen, clubs)) {
-    return Math.max(MIN_YARD_PICK, Math.round(yardsToGreen));
+  if (isShortGameDistance(yardsToGreen)) {
+    return yardsToGreenCenterRounded(yardsToGreen);
   }
   if (pick && pick.carryYards > 0) return pick.carryYards;
-  return MIN_YARD_PICK;
+  return Math.max(MIN_YARD_PICK, Math.round(yardsToGreen / 5) * 5);
 }
 
 /** LW en trampa (3/4 preferido); si no está en bolsa, la cuña más alta disponible. */
@@ -163,6 +190,11 @@ export function pickBestClubAndCarry(
   if (inBunker) {
     const bunkerPick = pickBunkerClub(clubs);
     if (bunkerPick) return bunkerPick;
+  }
+
+  if (!onGreenLie && isShortGameDistance(targetYards)) {
+    const lwPick = pickLwThreeQuarterPlan(clubs);
+    if (lwPick) return lwPick;
   }
 
   if (
@@ -290,6 +322,35 @@ export function suggestClub(
   onGreen?: boolean
 ): ClubSuggestion | null {
   return rankClubsForTarget(clubs, targetYards, swing, greenDist, onGreen)[0] ?? null;
+}
+
+/** Valores del rodillo de yardas según distancia y bastón. */
+export function shotPlanYardRollerValues(args: {
+  yardsToGreen: number;
+  plannedYards: number;
+  isPutter: boolean;
+  shortGame: boolean;
+}): number[] {
+  const { yardsToGreen, plannedYards, isPutter, shortGame } = args;
+  if (isPutter) {
+    const hi = Math.max(FINE_YARD_ROLLER_MAX, puttYardsFromCenter(yardsToGreen) + 8);
+    return yardRangeValues(1, hi, 1);
+  }
+  if (yardsToGreen <= FINE_YARD_ROLLER_MAX || shortGame) {
+    const center = yardsToGreenCenterRounded(yardsToGreen);
+    const span = yardsToGreen <= FINE_YARD_ROLLER_MAX ? 12 : 20;
+    return yardRangeValues(
+      Math.max(1, center - span),
+      center + span,
+      1
+    );
+  }
+  const anchor = Math.max(5, Math.round(plannedYards / 5) * 5);
+  return yardRangeValues(
+    Math.max(5, anchor - 45),
+    Math.min(300, anchor + 45),
+    5
+  );
 }
 
 /** Valores para el roller: distancia al green ± rango, paso 5 yds. */

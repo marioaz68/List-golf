@@ -82,7 +82,11 @@ import {
   savePlayerBag,
   type PlayerBag,
 } from "@/lib/distances/playerBag";
-import type { GreenDistances } from "@/lib/distances/suggestClub";
+import {
+  isShortGameDistance,
+  yardsToGreenCenterRounded,
+  type GreenDistances,
+} from "@/lib/distances/suggestClub";
 import {
   addPlannedShot,
   addManualPenaltyStroke,
@@ -1217,7 +1221,9 @@ export default function DistanciasClient({
           ? puttYardsFromCenter(puttYardsOverride)
           : onGreen
             ? puttYardsFromCenter(dist.center)
-            : Math.round(dist.center / 5) * 5;
+            : isShortGameDistance(dist.center)
+              ? yardsToGreenCenterRounded(dist.center)
+              : Math.round(dist.center / 5) * 5;
       if (yardsToGreen <= 0) return;
       setShotPreview(null);
       setPlanContext({

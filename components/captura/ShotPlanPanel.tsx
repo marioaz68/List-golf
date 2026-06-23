@@ -5,15 +5,13 @@ import { VerticalRoller } from "@/components/captura/VerticalRoller";
 import {
   carryYards,
   CLUB_BY_ID,
-  MAX_YARD_PICK,
-  MIN_YARD_PICK,
-  yardRangeValues,
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import {
   defaultPlannedYardsForShot,
-  isWithinLwThreeQuarterReach,
+  isShortGameDistance,
   pickBestClubAndCarry,
+  shotPlanYardRollerValues,
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
 import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
@@ -174,26 +172,7 @@ export function ShotPlanPanel({
 
   const isPutter = activePick?.catalogId === "putter";
 
-  const shortGameReach = isWithinLwThreeQuarterReach(
-    yardsToGreen,
-    enabledClubs
-  );
-
-  const yardValues = useMemo(() => {
-    if (isPutter) {
-      const hi = Math.max(25, Math.min(60, puttYardsFromCenter(yardsToGreen) + 12));
-      return yardRangeValues(1, hi, 1);
-    }
-    if (shortGameReach) {
-      const center = Math.max(MIN_YARD_PICK, Math.round(yardsToGreen));
-      return yardRangeValues(
-        Math.max(MIN_YARD_PICK, center - 15),
-        center + 15,
-        1
-      );
-    }
-    return yardRangeValues(MIN_YARD_PICK, MAX_YARD_PICK, 5);
-  }, [isPutter, yardsToGreen, shortGameReach]);
+  const shortGame = isShortGameDistance(yardsToGreen) && !isPutter;
 
   const plannedYards =
     userPick != null && userSelectedPick
@@ -204,6 +183,17 @@ export function ShotPlanPanel({
           activePick,
           onGreen
         );
+
+  const yardValues = useMemo(
+    () =>
+      shotPlanYardRollerValues({
+        yardsToGreen,
+        plannedYards,
+        isPutter,
+        shortGame,
+      }),
+    [yardsToGreen, plannedYards, isPutter, shortGame]
+  );
 
   useEffect(() => {
     if (!activePick || plannedYards <= 0) return;
@@ -322,6 +312,11 @@ export function ShotPlanPanel({
           {activePick.short}
         </span>
         <span className="text-[9px] font-bold text-amber-300">{swingLabel}</span>
+        {activePick.carryYards > 0 && !isPutter ? (
+          <span className="text-[8px] font-semibold text-slate-400">
+            {activePick.carryYards} yd bolsa
+          </span>
+        ) : null}
         <span className="mt-0.5 text-base font-black leading-none text-emerald-300">
           {plannedYards}
         </span>

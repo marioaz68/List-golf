@@ -53,7 +53,13 @@ export const CLUB_BY_ID = Object.fromEntries(
 ) as Record<string, ClubCatalogEntry>;
 
 /** Mínimo en rollers de yardas (chip, bunker, putt largo). */
-export const MIN_YARD_PICK = 5;
+export const MIN_YARD_PICK = 1;
+
+/** Distancia corta: priorizar LW 3/4 y yardas al centro del green. */
+export const SHORT_GAME_LW_MAX_YARDS = 60;
+
+/** Rodillo de yardas en pasos de 1 yd (putt o muy cerca del hoyo). */
+export const FINE_YARD_ROLLER_MAX = 25;
 
 /** Máximo en rollers de yardas (driver / layup largo). */
 export const MAX_YARD_PICK = 300;
@@ -61,17 +67,14 @@ export const MAX_YARD_PICK = 300;
 /** Distancia al green (yds) a partir de la cual se sugiere putter. */
 export const PUTTER_MAX_YARDS = 55;
 
-/** En green o muy cerca: priorizar putter. */
+/** En green: putter. Fuera del green se usa LW hasta {@link SHORT_GAME_LW_MAX_YARDS}. */
 export function shouldSuggestPutter(
   targetYards: number,
   greenDist?: { front: number; center: number; back: number } | null,
   onGreen?: boolean
 ): boolean {
   if (onGreen) return true;
-  if (targetYards <= 30) return true;
-  if (!greenDist) return targetYards <= PUTTER_MAX_YARDS;
-  if (greenDist.front <= 18 && targetYards <= 45) return true;
-  return targetYards <= PUTTER_MAX_YARDS && greenDist.back <= 20;
+  return false;
 }
 
 /** 3/4 ≈ 75 % de la yarda full (redondeada a 5 yds). */
