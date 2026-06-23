@@ -68,7 +68,12 @@ import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
+import {
+  YardageStatsSheet,
+  YardageStatsSummaryCompact,
+} from "@/components/captura/YardageStatsSheet";
 import { RoundTeePickerOverlay } from "@/components/captura/RoundTeePickerOverlay";
+import { computeRoundYardageStats } from "@/lib/distances/yardageStats";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
@@ -233,6 +238,7 @@ export default function DistanciasClient({
   /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
   const [targetYards, setTargetYards] = useState(0);
   const [bagOpen, setBagOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
   /** Demo golpes: toque pendiente D/G, plan abierto, medir una vez desde teléfono. */
   const [holeShotsStore, setHoleShotsStore] = useState<HoleShotsStore>(() =>
@@ -363,6 +369,19 @@ export default function DistanciasClient({
     searchParams.get("tg")?.trim() ||
     searchParams.get("me")?.trim() ||
     undefined;
+
+  const parByHole = useMemo(() => {
+    const out: Record<number, number> = {};
+    for (let h = 1; h <= 18; h++) {
+      out[h] = CCQ_HOLE_POINTS[h]?.par ?? 4;
+    }
+    return out;
+  }, []);
+
+  const roundYardageStats = useMemo(
+    () => computeRoundYardageStats(holeShotsStore, parByHole),
+    [holeShotsStore, parByHole]
+  );
 
   useEffect(() => {
     setPlayingTeeCode(loadPlayingTeeCode(bagScope));
@@ -2713,16 +2732,28 @@ export default function DistanciasClient({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        onClick={() => setBagOpen(true)}
+      <div
         className={[
-          "absolute left-2 z-[1000] rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95",
+          "absolute left-2 z-[1000] flex gap-1.5",
           demoMode ? "top-11" : "top-2",
         ].join(" ")}
       >
-        Bolsa
-      </button>
+        <button
+          type="button"
+          onClick={() => setBagOpen(true)}
+          className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-emerald-200 shadow-lg backdrop-blur-sm active:scale-95"
+        >
+          Bolsa
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatsOpen(true)}
+          className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-sky-200 shadow-lg backdrop-blur-sm active:scale-95"
+          aria-label="Estadísticas de la ronda"
+        >
+          Stats
+        </button>
+      </div>
 
       {demoMode ? (
         <div className="pointer-events-none absolute left-2 top-2 z-[1000]">
@@ -2740,6 +2771,13 @@ export default function DistanciasClient({
           savePlayerBag(bag, bagScope);
           setBagOpen(false);
         }}
+      />
+
+      <YardageStatsSheet
+        open={statsOpen}
+        store={holeShotsStore}
+        pars={parByHole}
+        onClose={() => setStatsOpen(false)}
       />
 
       <HoleShotsDetailSheet
@@ -2883,10 +2921,21 @@ export default function DistanciasClient({
                 </p>
               </div>
             </div>
+            <YardageStatsSummaryCompact stats={roundYardageStats} />
+            <button
+              type="button"
+              onClick={() => {
+                setRoundSummary(null);
+                setStatsOpen(true);
+              }}
+              className="mt-2 w-full rounded-lg border border-sky-400/50 bg-sky-950/80 px-3 py-2 text-[11px] font-black text-sky-100 active:scale-[0.98]"
+            >
+              Ver reporte completo
+            </button>
             <button
               type="button"
               onClick={() => setRoundSummary(null)}
-              className="mt-3 w-full rounded-lg bg-amber-500 px-3 py-2.5 text-xs font-black text-black active:scale-[0.98]"
+              className="mt-2 w-full rounded-lg bg-amber-500 px-3 py-2.5 text-xs font-black text-black active:scale-[0.98]"
             >
               Entendido
             </button>
