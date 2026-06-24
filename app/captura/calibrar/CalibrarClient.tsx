@@ -658,6 +658,45 @@ export default function CalibrarClient({ tg }: { tg: string }) {
     void appendPoint(lat, lon);
   };
 
+  /** Usa la ubicación GPS del celular para añadir la posición actual.
+   *  - Si estamos en modo `tee` o `green` guarda directamente.
+   *  - Si estamos en modo de "agregar tocando" añade el punto al contorno.
+   *  - Muestra mensajes y no ocupa espacio extra en la UI (botón pequeño).
+   */
+  const handlePlaceGps = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      flash("err", "GPS no disponible en este dispositivo.");
+      return;
+    }
+    flash("ok", "Obteniendo posición GPS…");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        try {
+          if (mode === "green") {
+            await saveGreen(selectedGreen, lat, lon);
+          } else if (mode === "tee") {
+            await saveTee(lat, lon);
+          } else {
+            if (!activeKind || !addingCorner) {
+              flash("err", "Activa 'Agregar tocando' antes de usar GPS.");
+              return;
+            }
+            await appendPoint(lat, lon);
+          }
+          flash("ok", "Punto GPS agregado.");
+        } catch (e) {
+          flash("err", e instanceof Error ? e.message : "Error al usar GPS");
+        }
+      },
+      (err) => {
+        flash("err", `No se pudo obtener GPS: ${err.message}`);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   const switchMode = (next: SimpleCalibrarMode) => {
     setMode(next);
     setSelectedVertex(0);
@@ -785,6 +824,17 @@ export default function CalibrarClient({ tg }: { tg: string }) {
             Guardando…
           </div>
         ) : null}
+
+        {/* Botón GPS: pequeño, semitransparente y no obstruye marcadores ni la barra inferior */}
+        <button
+          type="button"
+          onClick={handlePlaceGps}
+          className="absolute right-3 bottom-28 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-sm"
+          aria-label="Usar GPS para colocar punto"
+          title="Asignar desde GPS"
+        >
+          📍
+        </button>
       </div>
 
       {/* Barra inferior fija y pequeña */}
