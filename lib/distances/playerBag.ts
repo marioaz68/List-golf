@@ -145,7 +145,7 @@ export function configurePlayerBagSync(ctx: PlayerBagSyncContext | null): void {
 export function retryPendingPlayerBagSync(): void {
   if (typeof window === "undefined") return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  void flushPendingPlayerBagRemoteSync();
+  void flushPlayerBagRemoteSync();
 }
 
 export function queuePlayerBagRemoteSync(
