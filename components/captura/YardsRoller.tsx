@@ -23,6 +23,7 @@ export function YardsRoller({
   const idleText = size === "sm" ? "text-[10px]" : "text-xs";
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const skipScrollRef = useRef(false);
+  const scrollCommitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -35,7 +36,7 @@ export function YardsRoller({
     el.scrollTo({ left, behavior: "smooth" });
   }, [value, values]);
 
-  const handleScroll = () => {
+  const commitNearestValue = () => {
     const el = scrollerRef.current;
     if (!el || !values.length) return;
     const center = el.scrollLeft + el.clientWidth / 2;
@@ -60,12 +61,38 @@ export function YardsRoller({
     }
   };
 
+  const handleScroll = () => {
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    scrollCommitTimerRef.current = window.setTimeout(commitNearestValue, 110);
+  };
+
+  const handleInteractionEnd = () => {
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    commitNearestValue();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scrollCommitTimerRef.current) {
+        window.clearTimeout(scrollCommitTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className={`relative ${className}`}>
       <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-px -translate-x-1/2 bg-amber-400/90" />
       <div
+        key={`${value}-${values.join("|")}`}
         ref={scrollerRef}
         onScroll={handleScroll}
+        onTouchEnd={handleInteractionEnd}
+        onMouseUp={handleInteractionEnd}
+        onPointerUp={handleInteractionEnd}
         className={`flex ${hClass} snap-x snap-mandatory overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
       >
         <div className="w-[42%] shrink-0" aria-hidden />

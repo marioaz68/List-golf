@@ -25,6 +25,7 @@ export function VerticalRoller({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const ignoreScrollRef = useRef(true);
   const mountedRef = useRef(false);
+  const scrollCommitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -50,10 +51,9 @@ export function VerticalRoller({
         ignoreScrollRef.current = false;
       });
     });
-  }, [value, values.join("\0")]);
+  }, [value, values]);
 
-  const handleScroll = () => {
-    if (ignoreScrollRef.current) return;
+  const commitNearestValue = () => {
     const el = scrollerRef.current;
     if (!el || !values.length) return;
 
@@ -78,6 +78,29 @@ export function VerticalRoller({
     }
   };
 
+  const handleScroll = () => {
+    if (ignoreScrollRef.current) return;
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    scrollCommitTimerRef.current = window.setTimeout(commitNearestValue, 110);
+  };
+
+  const handleInteractionEnd = () => {
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    commitNearestValue();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scrollCommitTimerRef.current) {
+        window.clearTimeout(scrollCommitTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div
       className={`relative overflow-hidden ${className}`}
@@ -90,8 +113,12 @@ export function VerticalRoller({
     >
       <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 h-px -translate-y-1/2 bg-amber-400/80" />
       <div
+        key={`${value}-${values.join("|")}`}
         ref={scrollerRef}
         onScroll={handleScroll}
+        onTouchEnd={handleInteractionEnd}
+        onMouseUp={handleInteractionEnd}
+        onPointerUp={handleInteractionEnd}
         className="h-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="h-[32%] shrink-0" aria-hidden />
