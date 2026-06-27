@@ -244,6 +244,7 @@ export default function DistanciasClient({
   const [bagOpen, setBagOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
+  const bagRef = useRef<PlayerBag>(defaultPlayerBag());
   /** Demo golpes: toque pendiente D/G, plan abierto, medir una vez desde teléfono. */
   const [holeShotsStore, setHoleShotsStore] = useState<HoleShotsStore>(() =>
     loadHoleShots(undefined)
@@ -369,10 +370,22 @@ export default function DistanciasClient({
     lon: number;
   } | null>(null);
 
-  const bagScope =
-    searchParams.get("tg")?.trim() ||
-    searchParams.get("me")?.trim() ||
-    undefined;
+  const bagScope = useMemo(() => {
+    const entryId =
+      searchParams.get("me")?.trim() ||
+      searchParams.get("entry_id")?.trim() ||
+      null;
+    const caddieId =
+      searchParams.get("caddie")?.trim() ||
+      searchParams.get("caddie_id")?.trim() ||
+      null;
+    const telegramUserId = searchParams.get("tg")?.trim() || null;
+
+    if (entryId) return entryId;
+    if (telegramUserId) return telegramUserId;
+    if (caddieId) return `caddie:${caddieId}`;
+    return undefined;
+  }, [searchParams]);
 
   const parByHole = useMemo(() => {
     const out: Record<number, number> = {};
@@ -412,6 +425,10 @@ export default function DistanciasClient({
   useEffect(() => {
     configureHoleShotsSync(shotsSyncCtx);
   }, [shotsSyncCtx]);
+
+  useEffect(() => {
+    bagRef.current = bag;
+  }, [bag]);
 
   useEffect(() => {
     setBag(loadPlayerBag(bagScope));
@@ -2227,6 +2244,26 @@ export default function DistanciasClient({
     ]
   );
 
+  const handleBallPointDrag = useCallback(
+    (lat: number, lon: number) => {
+      if (tapPoint) {
+        const nextYards = measureAnchor
+          ? yardsBetween(measureAnchor.lat, measureAnchor.lon, lat, lon)
+          : tapPoint.yards;
+        const toGreen = activeHolePoints
+          ? greenDistancesForHole(lat, lon, activeHolePoints)
+          : null;
+        setTapPoint({ lat, lon, yards: Math.round(nextYards) });
+        setTargetYards(toGreen ? Math.round(toGreen.center / 5) * 5 : 0);
+        setPendingTap(null);
+        setDistanceMode(true);
+        return;
+      }
+      setPendingTap({ lat, lon });
+    },
+    [activeHolePoints, measureAnchor, tapPoint]
+  );
+
   const handleChooseDistance = useCallback(() => {
     if (!pendingTap || geo.status !== "ok" || !activeHolePoints || !measureAnchor)
       return;
@@ -2414,10 +2451,11 @@ export default function DistanciasClient({
 
   const handleBagChange = useCallback(
     (next: PlayerBag) => {
+      bagRef.current = next;
       setBag(next);
-      savePlayerBag(next, bagScope);
+      savePlayerBag(next, bagScope, bagSyncCtx);
     },
-    [bagScope]
+    [bagScope, bagSyncCtx]
   );
 
   // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
@@ -2663,6 +2701,7 @@ export default function DistanciasClient({
             tapPoint={tapPoint}
             pendingTapPoint={pendingTap}
             onMapTap={onMapTap}
+            onBallPointDrag={handleBallPointDrag}
             lineFromLat={
               tapPoint && measureAnchor ? measureAnchor.lat : undefined
             }
@@ -2789,7 +2828,7 @@ export default function DistanciasClient({
         bag={bag}
         onChange={handleBagChange}
         onClose={() => {
-          savePlayerBag(bag, bagScope);
+          savePlayerBag(bagRef.current, bagScope, bagSyncCtx);
           setBagOpen(false);
         }}
       />

@@ -54,6 +54,12 @@ export interface TapPoint {
   yards: number;
 }
 
+type BallPointDragEvent = {
+  target: {
+    getLatLng: () => { lat: number; lon: number };
+  };
+};
+
 interface HoleYardageMapProps {
   holeNo: number;
   par?: number;
@@ -109,6 +115,8 @@ interface HoleYardageMapProps {
     mark: LatLon;
     puttYds: number;
   } | null;
+  /** Permite ajustar la posición marcada arrastrando el marcador en el mapa. */
+  onBallPointDrag?: (lat: number, lon: number) => void;
 }
 
 function yardLabel(yards: number): string {
@@ -170,11 +178,14 @@ export function HoleYardageMap({
   greenCenterPoint = null,
   shotPreview = null,
   greenPuttPreview = null,
+  onBallPointDrag,
 }: HoleYardageMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rotatorRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const layersRef = useRef<any>(null);
   const bearingRef = useRef(0);
   // Último hoyo encuadrado: al cambiar de hoyo recolocamos la vista; en
@@ -687,17 +698,37 @@ export function HoleYardageMap({
           interactive: false,
         }).addTo(layerGroup);
 
-        L.marker(
+        const tapMarker = L.marker(
           [tapPoint.lat, tapPoint.lon],
-          ballMarkerOptions(L, golfBallHtml(9, "#ec4899"), 9)
-        ).addTo(layerGroup);
+          {
+            ...ballMarkerOptions(L, golfBallHtml(9, "#ec4899"), 9),
+            draggable: Boolean(onBallPointDrag),
+          }
+        );
+        if (onBallPointDrag) {
+          tapMarker.on("dragend", (event: BallPointDragEvent) => {
+            const ll = event.target.getLatLng();
+            onBallPointDrag(ll.lat, ll.lng);
+          });
+        }
+        tapMarker.addTo(layerGroup);
       }
 
       if (pendingTapPoint && !tapPoint) {
-        L.marker(
+        const pendingMarker = L.marker(
           [pendingTapPoint.lat, pendingTapPoint.lon],
-          ballMarkerOptions(L, golfBallHtml(9, "#a855f7"), 9)
-        ).addTo(layerGroup);
+          {
+            ...ballMarkerOptions(L, golfBallHtml(9, "#a855f7"), 9),
+            draggable: Boolean(onBallPointDrag),
+          }
+        );
+        if (onBallPointDrag) {
+          pendingMarker.on("dragend", (event: BallPointDragEvent) => {
+            const ll = event.target.getLatLng();
+            onBallPointDrag(ll.lat, ll.lng);
+          });
+        }
+        pendingMarker.addTo(layerGroup);
       }
 
       // Marcadores fijos del hoyo: salida + cada golpe confirmado (no se quitan).
@@ -1091,6 +1122,7 @@ export function HoleYardageMap({
     greenCenterPoint,
     shotPreview,
     greenPuttPreview,
+    onBallPointDrag,
     needsTeeMark,
     teeAdjustMode,
     size.w,
