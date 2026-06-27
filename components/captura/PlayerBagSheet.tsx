@@ -9,7 +9,6 @@ import {
 } from "@/lib/distances/clubCatalog";
 import {
   defaultPlayerBag,
-  savePlayerBag,
   type PlayerBag,
   type PlayerBagClub,
 } from "@/lib/distances/playerBag";
@@ -50,19 +49,22 @@ export function PlayerBagSheet({
     catalogId: string;
     field: YardField;
   } | null>(null);
+  const [draftBag, setDraftBag] = useState<PlayerBag>(bag);
 
   if (!open) return null;
 
   const updateClub = (catalogId: string, patch: Partial<PlayerBagClub>) => {
-    onChange({
-      ...bag,
-      clubs: bag.clubs.map((c) =>
+    const next = {
+      ...draftBag,
+      clubs: draftBag.clubs.map((c) =>
         c.catalogId === catalogId ? { ...c, ...patch } : c
       ),
-    });
+    };
+    setDraftBag(next);
+    onChange(next);
   };
 
-  const enabledCount = bag.clubs.filter((c) => c.enabled).length;
+  const enabledCount = draftBag.clubs.filter((c) => c.enabled).length;
   const visibleCategories =
     filter === "all" ? ALL_CATEGORIES : ([filter] as const);
 
@@ -87,8 +89,8 @@ export function PlayerBagSheet({
               type="button"
               onClick={() => {
                 const fresh = defaultPlayerBag();
+                setDraftBag(fresh);
                 onChange(fresh);
-                savePlayerBag(fresh);
                 setEditing(null);
               }}
               className="shrink-0 text-[10px] font-semibold text-amber-400"
@@ -126,7 +128,7 @@ export function PlayerBagSheet({
                 ) : null}
                 <div className="space-y-0.5">
                   {items.map((catEntry) => {
-                    const row = bag.clubs.find(
+                    const row = draftBag.clubs.find(
                       (c) => c.catalogId === catEntry.id
                     );
                     if (!row) return null;
@@ -242,7 +244,7 @@ export function PlayerBagSheet({
           <button
             type="button"
             onClick={() => {
-              savePlayerBag(bag);
+              onChange(draftBag);
               onClose();
             }}
             className="w-full rounded-lg bg-emerald-600 py-2 text-xs font-black text-white active:scale-[0.98]"

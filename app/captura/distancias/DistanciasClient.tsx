@@ -248,6 +248,7 @@ export default function DistanciasClient({
   const [bagOpen, setBagOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
+  const bagRef = useRef<PlayerBag>(bag);
   /** Demo golpes: toque pendiente D/G, plan abierto, medir una vez desde teléfono. */
   const [holeShotsStore, setHoleShotsStore] = useState<HoleShotsStore>(() =>
     loadHoleShots(undefined)
@@ -446,6 +447,10 @@ export default function DistanciasClient({
     window.addEventListener("online", handleOnline);
     return () => window.removeEventListener("online", handleOnline);
   }, [demoMode]);
+
+  useEffect(() => {
+    bagRef.current = bag;
+  }, [bag]);
 
   useEffect(() => {
     setBag(loadPlayerBag(bagScope));
@@ -2462,6 +2467,7 @@ export default function DistanciasClient({
 
   const handleBagChange = useCallback(
     (next: PlayerBag) => {
+      bagRef.current = next;
       setBag(next);
       savePlayerBag(next, bagScope, bagSyncCtx);
     },
@@ -2834,7 +2840,7 @@ export default function DistanciasClient({
         bag={bag}
         onChange={handleBagChange}
         onClose={() => {
-          savePlayerBag(bag, bagScope);
+          savePlayerBag(bagRef.current, bagScope, bagSyncCtx);
           setBagOpen(false);
         }}
       />
