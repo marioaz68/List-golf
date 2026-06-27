@@ -23,6 +23,7 @@ export function YardsRoller({
   const idleText = size === "sm" ? "text-[10px]" : "text-xs";
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const skipScrollRef = useRef(false);
+  const scrollCommitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -35,7 +36,7 @@ export function YardsRoller({
     el.scrollTo({ left, behavior: "smooth" });
   }, [value, values]);
 
-  const handleScroll = () => {
+  const commitNearestValue = () => {
     const el = scrollerRef.current;
     if (!el || !values.length) return;
     const center = el.scrollLeft + el.clientWidth / 2;
@@ -59,6 +60,21 @@ export function YardsRoller({
       });
     }
   };
+
+  const handleScroll = () => {
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    scrollCommitTimerRef.current = window.setTimeout(commitNearestValue, 110);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scrollCommitTimerRef.current) {
+        window.clearTimeout(scrollCommitTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className={`relative ${className}`}>

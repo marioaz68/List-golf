@@ -25,6 +25,7 @@ export function VerticalRoller({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const ignoreScrollRef = useRef(true);
   const mountedRef = useRef(false);
+  const scrollCommitTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -50,10 +51,9 @@ export function VerticalRoller({
         ignoreScrollRef.current = false;
       });
     });
-  }, [value, values.join("\0")]);
+  }, [value, values]);
 
-  const handleScroll = () => {
-    if (ignoreScrollRef.current) return;
+  const commitNearestValue = () => {
     const el = scrollerRef.current;
     if (!el || !values.length) return;
 
@@ -77,6 +77,22 @@ export function VerticalRoller({
       onChange(next);
     }
   };
+
+  const handleScroll = () => {
+    if (ignoreScrollRef.current) return;
+    if (scrollCommitTimerRef.current) {
+      window.clearTimeout(scrollCommitTimerRef.current);
+    }
+    scrollCommitTimerRef.current = window.setTimeout(commitNearestValue, 110);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (scrollCommitTimerRef.current) {
+        window.clearTimeout(scrollCommitTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div

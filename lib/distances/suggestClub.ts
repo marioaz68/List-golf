@@ -63,27 +63,12 @@ export function isShortGameDistance(yardsToGreen: number): boolean {
 
 /** @deprecated Usar isShortGameDistance — mantiene compatibilidad con alcance LW en bolsa. */
 export function isWithinLwThreeQuarterReach(
-  yardsToGreen: number,
-  clubs: PlayerBagClub[]
+  yardsToGreen: number
 ): boolean {
   return isShortGameDistance(yardsToGreen);
 }
 
-function pickLwThreeQuarterPlan(clubs: PlayerBagClub[]): ClubPickPlan | null {
-  const lw = clubs.find((c) => c.catalogId === "lw" && c.enabled);
-  if (!lw) return null;
-  const cat = CLUB_BY_ID.lw;
-  if (!cat) return null;
-  const carry = carryYards(lw.yardsFull, lw.yardsThreeQuarter, "three_quarter");
-  if (carry <= 0) return null;
-  return {
-    catalogId: "lw",
-    swing: "three_quarter",
-    carryYards: carry,
-    shortLabel: cat.shortLabel,
-    rollerLabel: `${cat.shortLabel} 3/4`,
-  };
-}
+// pickLwThreeQuarterPlan removed — selection logic now handled in pickBestClubAndCarry
 
 /** Yardas enteras al centro del green (sin redondear a 5). */
 export function yardsToGreenCenterRounded(yardsToGreen: number): number {
@@ -192,9 +177,21 @@ export function pickBestClubAndCarry(
     if (bunkerPick) return bunkerPick;
   }
 
-  if (!onGreenLie && isShortGameDistance(targetYards)) {
-    const lwPick = pickLwThreeQuarterPlan(clubs);
-    if (lwPick) return lwPick;
+  // If the ball is close (< SHORT_GAME_LW_MAX_YARDS), prefer LW and use
+  // the exact distance to center as planned carry.
+  if (!onGreenLie && targetYards > 0 && targetYards <= SHORT_GAME_LW_MAX_YARDS) {
+    const lw = clubs.find((c) => c.catalogId === "lw" && c.enabled);
+    if (lw) {
+      const cat = CLUB_BY_ID.lw;
+      const swing: SwingKind = lw.yardsThreeQuarter > 0 ? "three_quarter" : "full";
+      return {
+        catalogId: "lw",
+        swing,
+        carryYards: yardsToGreenCenterRounded(targetYards),
+        shortLabel: cat.shortLabel,
+        rollerLabel: `${cat.shortLabel}`,
+      };
+    }
   }
 
   if (
@@ -211,42 +208,78 @@ export function pickBestClubAndCarry(
     };
   }
 
-  let best: ClubPickPlan | null = null;
-  let bestScore = Infinity;
+  // Build candidate list (both full and 3/4 where available).
+  const candidates: Array<{
+    catalogId: string;
+    swing: SwingKind;
+    carry: number;
+    shortLabel: string;
+  }> = [];
 
   for (const c of clubs) {
     const cat = CLUB_BY_ID[c.catalogId];
     if (!cat || cat.category === "putter") continue;
-
     for (const swing of ["full", "three_quarter"] as SwingKind[]) {
       const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
       if (carry <= 0) continue;
-      const score = scoreCandidate(carry, targetYards);
-      if (
-        score < bestScore ||
-        (score === bestScore &&
-          best &&
-          (carry > best.carryYards ||
-            (carry === best.carryYards &&
-              swing === "full" &&
-              best.swing === "three_quarter")))
-      ) {
-        bestScore = score;
-        best = {
-          catalogId: c.catalogId,
-          swing,
-          carryYards: carry,
-          shortLabel: cat.shortLabel,
-          rollerLabel:
-            swing === "three_quarter"
-              ? `${cat.shortLabel} 3/4`
-              : `${cat.shortLabel} full`,
-        };
-      }
+      candidates.push({ catalogId: c.catalogId, swing, carry, shortLabel: cat.shortLabel });
     }
   }
 
-  return best;
+  if (!candidates.length) return null;
+
+  // 1) Exact carry match: prefer full over three_quarter when tie.
+  const exact = candidates.filter((x) => x.carry === targetYards);
+  if (exact.length > 0) {
+    exact.sort((a, b) => {
+      if (a.carry !== b.carry) return b.carry - a.carry;
+      if (a.swing === b.swing) return 0;
+      return a.swing === "full" ? -1 : 1;
+    });
+    const pick = exact[0];
+    return {
+      catalogId: pick.catalogId,
+      swing: pick.swing,
+      carryYards: pick.carry,
+      shortLabel: pick.shortLabel,
+      rollerLabel: pick.swing === "three_quarter" ? `${pick.shortLabel} 3/4` : `${pick.shortLabel} full`,
+    };
+  }
+
+  // 2) Find the smallest carry that is >= target (next-up).
+  const higher = candidates.filter((x) => x.carry >= targetYards).sort((a, b) => {
+    if (a.carry !== b.carry) return a.carry - b.carry; // prefer smaller carry above target
+    if (a.swing === b.swing) return 0;
+    return a.swing === "full" ? -1 : 1; // prefer full
+  });
+  if (higher.length > 0) {
+    const pick = higher[0];
+    return {
+      catalogId: pick.catalogId,
+      swing: pick.swing,
+      carryYards: pick.carry,
+      shortLabel: pick.shortLabel,
+      rollerLabel: pick.swing === "three_quarter" ? `${pick.shortLabel} 3/4` : `${pick.shortLabel} full`,
+    };
+  }
+
+  // 3) Fallback: nearest by absolute difference; tie-breaker prefers larger carry and full.
+  candidates.sort((a, b) => {
+    const da = Math.abs(a.carry - targetYards);
+    const db = Math.abs(b.carry - targetYards);
+    if (da !== db) return da - db;
+    if (a.carry !== b.carry) return b.carry - a.carry; // prefer larger carry
+    if (a.swing === b.swing) return 0;
+    return a.swing === "full" ? -1 : 1;
+  });
+  const best = candidates[0];
+  return {
+    catalogId: best.catalogId,
+    swing: best.swing,
+    carryYards: best.carry,
+    shortLabel: best.shortLabel,
+    rollerLabel: best.swing === "three_quarter" ? `${best.shortLabel} 3/4` : `${best.shortLabel} full`,
+  };
 }
 
 /**
@@ -283,7 +316,14 @@ export function rankClubsForTarget(
       })
       .filter((x): x is NonNullable<typeof x> => x != null)
       .sort((a, b) => a.score - b.score)
-      .map(({ score: _, ...rest }) => rest);
+      .map((x) => ({
+        catalogId: x.catalogId,
+        label: x.label,
+        shortLabel: x.shortLabel,
+        carryYards: x.carryYards,
+        targetYards: x.targetYards,
+        gapYards: x.gapYards,
+      }));
     return [putter, ...others];
   }
 
@@ -307,7 +347,14 @@ export function rankClubsForTarget(
     .filter((x): x is NonNullable<typeof x> => x != null);
 
   candidates.sort((a, b) => a.score - b.score);
-  return candidates.map(({ score: _, ...rest }) => rest);
+  return candidates.map((x) => ({
+    catalogId: x.catalogId,
+    label: x.label,
+    shortLabel: x.shortLabel,
+    carryYards: x.carryYards,
+    targetYards: x.targetYards,
+    gapYards: x.gapYards,
+  }));
 }
 
 /**

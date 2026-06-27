@@ -77,10 +77,14 @@ import { computeRoundYardageStats } from "@/lib/distances/yardageStats";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
+  configurePlayerBagSync,
   defaultPlayerBag,
   loadPlayerBag,
+  loadPlayerBagRemote,
+  retryPendingPlayerBagSync,
   savePlayerBag,
   type PlayerBag,
+  type PlayerBagSyncContext,
 } from "@/lib/distances/playerBag";
 import {
   isShortGameDistance,
@@ -409,12 +413,50 @@ export default function DistanciasClient({
     };
   }, [searchParams, demoMode]);
 
+  const bagSyncCtx = useMemo((): PlayerBagSyncContext => {
+    const entryId =
+      searchParams.get("me")?.trim() ||
+      searchParams.get("entry_id")?.trim() ||
+      null;
+    const caddieId =
+      searchParams.get("caddie")?.trim() ||
+      searchParams.get("caddie_id")?.trim() ||
+      null;
+    const telegramUserId = searchParams.get("tg")?.trim() || null;
+    return {
+      entryId,
+      caddieId,
+      telegramUserId,
+      disabled: demoMode,
+    };
+  }, [searchParams, demoMode]);
+
   useEffect(() => {
     configureHoleShotsSync(shotsSyncCtx);
   }, [shotsSyncCtx]);
 
   useEffect(() => {
+    configurePlayerBagSync(bagSyncCtx);
+  }, [bagSyncCtx]);
+
+  useEffect(() => {
+    if (demoMode) return;
+    retryPendingPlayerBagSync();
+    const handleOnline = () => retryPendingPlayerBagSync();
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [demoMode]);
+
+  useEffect(() => {
     setBag(loadPlayerBag(bagScope));
+    if (!demoMode) {
+      void loadPlayerBagRemote(bagScope, bagSyncCtx).then((remoteBag) => {
+        if (remoteBag) {
+          setBag(remoteBag);
+          savePlayerBag(remoteBag, bagScope, bagSyncCtx);
+        }
+      });
+    }
     const local = loadHoleShots(bagScope);
     setHoleShotsStore(local);
     if (demoMode) return;
@@ -433,7 +475,7 @@ export default function DistanciasClient({
     return () => {
       cancelled = true;
     };
-  }, [bagScope, demoMode, shotsSyncCtx]);
+  }, [bagScope, demoMode, bagSyncCtx, shotsSyncCtx]);
 
   useEffect(() => {
     if (!demoMode) return;
@@ -2225,6 +2267,14 @@ export default function DistanciasClient({
     ]
   );
 
+  const handleUseGpsBallPosition = useCallback(() => {
+    if (geo.status !== "ok" || !activeHolePoints) {
+      setArrivalToast("Espera a que el GPS tenga señal para usar tu posición");
+      return;
+    }
+    onMapTap(geo.lat, geo.lon);
+  }, [activeHolePoints, geo, onMapTap, setArrivalToast]);
+
   const handleChooseDistance = useCallback(() => {
     if (!pendingTap || geo.status !== "ok" || !activeHolePoints || !measureAnchor)
       return;
@@ -2413,9 +2463,9 @@ export default function DistanciasClient({
   const handleBagChange = useCallback(
     (next: PlayerBag) => {
       setBag(next);
-      savePlayerBag(next, bagScope);
+      savePlayerBag(next, bagScope, bagSyncCtx);
     },
-    [bagScope]
+    [bagScope, bagSyncCtx]
   );
 
   // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
@@ -2758,6 +2808,16 @@ export default function DistanciasClient({
           aria-label="Estadísticas de la ronda"
         >
           Stats
+        </button>
+        <button
+          type="button"
+          onClick={handleUseGpsBallPosition}
+          disabled={demoMode || farFromCourse || geo.status !== "ok"}
+          className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-amber-200 shadow-lg backdrop-blur-sm active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label="Usar GPS para marcar dónde quedó la bola"
+          title="Usar la posición GPS actual para marcar dónde quedó la bola"
+        >
+          📍 Bola GPS
         </button>
       </div>
 

@@ -56,7 +56,7 @@ export const CLUB_BY_ID = Object.fromEntries(
 export const MIN_YARD_PICK = 1;
 
 /** Distancia corta: priorizar LW 3/4 y yardas al centro del green. */
-export const SHORT_GAME_LW_MAX_YARDS = 60;
+export const SHORT_GAME_LW_MAX_YARDS = 75;
 
 /** Rodillo de yardas en pasos de 1 yd (putt o muy cerca del hoyo). */
 export const FINE_YARD_ROLLER_MAX = 25;
