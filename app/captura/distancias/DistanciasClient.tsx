@@ -217,6 +217,10 @@ function timeAgo(ms: number): string {
   return `${Math.round(min / 60)}h`;
 }
 
+function nextHoleNumber(hole: number): number {
+  return hole >= 18 ? 1 : hole + 1;
+}
+
 export default function DistanciasClient({
   demoMode: demoModeProp = false,
 }: {
@@ -726,7 +730,7 @@ export default function DistanciasClient({
         return seedAutoHole(pos, courseHoles, greenCenters, teeCenters, centerlines);
       }
       // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
-      const expectedNext = (prev % 18) + 1;
+      const expectedNext = nextHoleNumber(prev);
       if (insideHole !== expectedNext) {
         autoCandidateRef.current = { hole: 0, count: 0 };
         return prev;
@@ -758,7 +762,7 @@ export default function DistanciasClient({
 
   useEffect(() => {
     if (manualHole == null || insideHole == null) return;
-    const expectedNext = (manualHole % 18) + 1;
+    const expectedNext = nextHoleNumber(manualHole);
     if (insideHole !== expectedNext) return;
     // Si retrocediste con ‹ estando físicamente más adelante (p. ej. en el 18
     // mirando el 17), no interpretar el GPS como “avance” al hoyo siguiente.
@@ -1515,7 +1519,7 @@ export default function DistanciasClient({
           : recordHoledPutt(holeShotsStore, hole, pin);
       const startHole = inferRoundStartHole(holeShotsStore);
       const finishingRound = isRoundFinishingHole(hole, startHole);
-      const nextHoleNum = (hole % 18) + 1;
+      const nextHoleNum = nextHoleNumber(hole);
       let nextStore = finishingRound
         ? result.store
         : clearHoleShots(result.store, nextHoleNum);
