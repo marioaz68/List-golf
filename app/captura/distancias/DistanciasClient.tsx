@@ -1401,6 +1401,7 @@ export default function DistanciasClient({
       if (resumeHole == null && !holeCorrectionMode) {
         setResumeHole(activeHole);
       }
+      setAutoHole(activeHole);
       setManualHole(activeHole);
       setPendingTap(null);
       setDistanceMode(false);
@@ -1457,6 +1458,7 @@ export default function DistanciasClient({
         return next;
       });
       if (resumeHole == null) setResumeHole(activeHole);
+      setAutoHole(activeHole);
       setManualHole(activeHole);
       autoPlanHoleRef.current = null;
       pinMapFraming({ lat: tee.lat, lon: tee.lon });
@@ -2501,6 +2503,7 @@ export default function DistanciasClient({
       setMapFramingLock(null);
       autoPlanHoleRef.current = null;
       pendingHoleTeePlanRef.current = null;
+      setAutoHole(n);
       setManualHole(n);
       setResumeHole(n);
       setHoleCorrectionMode(false);
@@ -2758,6 +2761,18 @@ export default function DistanciasClient({
           aria-label="Estadísticas de la ronda"
         >
           Stats
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (geo.status === "ok") {
+              openPlanFromPoint(geo.lat, geo.lon);
+            }
+          }}
+          className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-amber-200 shadow-lg backdrop-blur-sm active:scale-95"
+          aria-label="Usar la ubicación GPS como bola"
+        >
+          📍 Bola GPS
         </button>
       </div>
 

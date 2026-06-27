@@ -56,7 +56,7 @@ export function lwThreeQuarterCarryYards(clubs: PlayerBagClub[]): number {
   return defaultThreeQuarterYards(cat.defaultYardsFull);
 }
 
-/** Distancia corta (≤60 yd al centro): LW 3/4 y yardas exactas al green. */
+/** Distancia corta (≤75 yd al centro): LW 3/4 y yardas exactas al green. */
 export function isShortGameDistance(yardsToGreen: number): boolean {
   return yardsToGreen > 0 && yardsToGreen <= SHORT_GAME_LW_MAX_YARDS;
 }
@@ -211,8 +211,11 @@ export function pickBestClubAndCarry(
     };
   }
 
-  let best: ClubPickPlan | null = null;
-  let bestScore = Infinity;
+  let bestExact: ClubPickPlan | null = null;
+  let bestOverTarget: ClubPickPlan | null = null;
+  let bestOverTargetGap = Infinity;
+  let bestFallback: ClubPickPlan | null = null;
+  let bestFallbackScore = Infinity;
 
   for (const c of clubs) {
     const cat = CLUB_BY_ID[c.catalogId];
@@ -221,32 +224,56 @@ export function pickBestClubAndCarry(
     for (const swing of ["full", "three_quarter"] as SwingKind[]) {
       const carry = carryYards(c.yardsFull, c.yardsThreeQuarter, swing);
       if (carry <= 0) continue;
+
+      const candidate: ClubPickPlan = {
+        catalogId: c.catalogId,
+        swing,
+        carryYards: carry,
+        shortLabel: cat.shortLabel,
+        rollerLabel:
+          swing === "three_quarter"
+            ? `${cat.shortLabel} 3/4`
+            : `${cat.shortLabel} full`,
+      };
+
       const score = scoreCandidate(carry, targetYards);
-      if (
-        score < bestScore ||
-        (score === bestScore &&
-          best &&
-          (carry > best.carryYards ||
-            (carry === best.carryYards &&
-              swing === "full" &&
-              best.swing === "three_quarter")))
-      ) {
-        bestScore = score;
-        best = {
-          catalogId: c.catalogId,
-          swing,
-          carryYards: carry,
-          shortLabel: cat.shortLabel,
-          rollerLabel:
-            swing === "three_quarter"
-              ? `${cat.shortLabel} 3/4`
-              : `${cat.shortLabel} full`,
-        };
+      if (score === 0) {
+        if (
+          !bestExact ||
+          (bestExact.swing === "three_quarter" && candidate.swing === "full")
+        ) {
+          bestExact = candidate;
+        }
+        continue;
+      }
+
+      if (carry >= targetYards) {
+        const gap = carry - targetYards;
+        const isBetterOverTarget =
+          !bestOverTarget ||
+          gap < bestOverTargetGap ||
+          (gap === bestOverTargetGap &&
+            (candidate.swing === "full" && bestOverTarget.swing === "three_quarter"));
+        if (isBetterOverTarget) {
+          bestOverTarget = candidate;
+          bestOverTargetGap = gap;
+        }
+        continue;
+      }
+
+      const isBetterFallback =
+        !bestFallback ||
+        score < bestFallbackScore ||
+        (score === bestFallbackScore &&
+          (candidate.swing === "full" && bestFallback.swing === "three_quarter"));
+      if (isBetterFallback) {
+        bestFallback = candidate;
+        bestFallbackScore = score;
       }
     }
   }
 
-  return best;
+  return bestExact ?? bestOverTarget ?? bestFallback;
 }
 
 /**
