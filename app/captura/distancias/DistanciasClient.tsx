@@ -2469,9 +2469,9 @@ export default function DistanciasClient({
     (next: PlayerBag) => {
       bagRef.current = next;
       setBag(next);
-      savePlayerBag(next, bagScope, bagSyncCtx);
+      savePlayerBag(next, bagScope);
     },
-    [bagScope, bagSyncCtx]
+    [bagScope]
   );
 
   // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
@@ -2840,7 +2840,7 @@ export default function DistanciasClient({
         bag={bag}
         onChange={handleBagChange}
         onClose={() => {
-          savePlayerBag(bagRef.current, bagScope, bagSyncCtx);
+          savePlayerBag(bagRef.current, bagScope);
           setBagOpen(false);
         }}
       />

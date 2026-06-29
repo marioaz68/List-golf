@@ -54,6 +54,11 @@ export interface TapPoint {
   yards: number;
 }
 
+type BallPointDragEvent = {
+  target: {
+    getLatLng: () => { lat: number; lng: number };
+  };
+};
 interface HoleYardageMapProps {
   holeNo: number;
   par?: number;
