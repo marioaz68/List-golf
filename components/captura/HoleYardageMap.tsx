@@ -56,7 +56,7 @@ export interface TapPoint {
 
 type BallPointDragEvent = {
   target: {
-    getLatLng: () => { lat: number; lon: number };
+    getLatLng: () => { lat: number; lng: number };
   };
 };
 
