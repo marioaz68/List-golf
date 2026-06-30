@@ -1,0 +1,233 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Almacén de posiciones de la bandera (pin) por hoyo.
+ *
+ * - course_hole_flag_positions: histórico (la vigente = la más reciente).
+ * - telegram_flag_sessions: hoyo activo de captura por encargado en Telegram.
+ *
+ * Reutilizable desde el webhook de Telegram y desde la mini app / API.
+ */
+
+export type FlagSource = "gps" | "map";
+
+/** Fecha de hoy en horario de México (YYYY-MM-DD). Igual que en ritmo. */
+export function todayMexicoDate(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export interface SaveFlagArgs {
+  courseId: string;
+  hole: number;
+  lat: number;
+  lon: number;
+  source: FlagSource;
+  effectiveDate?: string | null;
+  chatId?: string | null;
+  profileId?: string | null;
+  accuracyM?: number | null;
+  note?: string | null;
+}
+
+/** Inserta una posición de bandera (siempre append: deja histórico). */
+export async function saveFlagPosition(
+  admin: SupabaseClient,
+  args: SaveFlagArgs
+): Promise<void> {
+  const { error } = await admin.from("course_hole_flag_positions").insert({
+    course_id: args.courseId,
+    hole_number: args.hole,
+    lat: args.lat,
+    lon: args.lon,
+    source: args.source,
+    effective_date: args.effectiveDate || todayMexicoDate(),
+    captured_by_chat_id: args.chatId ?? null,
+    captured_by_profile_id: args.profileId ?? null,
+    accuracy_m: args.accuracyM ?? null,
+    note: args.note ?? null,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export interface FlagPositionRow {
+  hole_number: number;
+  lat: number;
+  lon: number;
+  source: FlagSource;
+  effective_date: string;
+  created_at: string;
+}
+
+/** Posición vigente (más reciente) de cada hoyo de un campo. */
+export async function loadLatestFlags(
+  admin: SupabaseClient,
+  courseId: string
+): Promise<Map<number, FlagPositionRow>> {
+  const { data, error } = await admin
+    .from("course_hole_flag_positions")
+    .select("hole_number, lat, lon, source, effective_date, created_at")
+    .eq("course_id", courseId)
+    .order("effective_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const latest = new Map<number, FlagPositionRow>();
+  for (const r of (data ?? []) as FlagPositionRow[]) {
+    // Como vienen ordenados desc, el primero por hoyo es el vigente.
+    if (!latest.has(r.hole_number)) latest.set(r.hole_number, r);
+  }
+  return latest;
+}
+
+/** Posición vigente de un solo hoyo (o null si nunca se ha capturado). */
+export async function loadLatestFlagForHole(
+  admin: SupabaseClient,
+  courseId: string,
+  hole: number
+): Promise<FlagPositionRow | null> {
+  const { data, error } = await admin
+    .from("course_hole_flag_positions")
+    .select("hole_number, lat, lon, source, effective_date, created_at")
+    .eq("course_id", courseId)
+    .eq("hole_number", hole)
+    .order("effective_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as FlagPositionRow | null) ?? null;
+}
+
+// ── Sesión activa de captura (Telegram) ──────────────────────────────────────
+
+export interface FlagSession {
+  telegram_user_id: string;
+  course_id: string;
+  hole_number: number;
+  effective_date: string;
+}
+
+export async function setFlagSession(
+  admin: SupabaseClient,
+  args: { telegramUserId: string; courseId: string; hole: number; effectiveDate?: string | null }
+): Promise<void> {
+  const { error } = await admin.from("telegram_flag_sessions").upsert(
+    {
+      telegram_user_id: args.telegramUserId,
+      course_id: args.courseId,
+      hole_number: args.hole,
+      effective_date: args.effectiveDate || todayMexicoDate(),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "telegram_user_id" }
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function getFlagSession(
+  admin: SupabaseClient,
+  telegramUserId: string
+): Promise<FlagSession | null> {
+  const { data, error } = await admin
+    .from("telegram_flag_sessions")
+    .select("telegram_user_id, course_id, hole_number, effective_date")
+    .eq("telegram_user_id", telegramUserId)
+    .maybeSingle();
+  if (error) {
+    console.error("FLAG SESSION GET:", error);
+    return null;
+  }
+  return (data as FlagSession | null) ?? null;
+}
+
+export async function clearFlagSession(
+  admin: SupabaseClient,
+  telegramUserId: string
+): Promise<void> {
+  await admin
+    .from("telegram_flag_sessions")
+    .delete()
+    .eq("telegram_user_id", telegramUserId);
+}
+
+// ── Autorización del encargado de banderas ───────────────────────────────────
+
+export interface FlagKeeper {
+  profileId: string;
+  name: string;
+}
+
+function fullName(first: string | null, last: string | null): string {
+  return [first, last].filter(Boolean).join(" ").trim() || "encargado";
+}
+
+/**
+ * Resuelve un telegram_user_id a un perfil con rol flag_keeper activo.
+ * El bot guarda el chat_id en profiles.telegram_chat_id al vincular
+ * (/soy_banderas email). En chat privado, chat_id === telegram_user_id.
+ */
+export async function resolveFlagKeeper(
+  admin: SupabaseClient,
+  telegramUserId: string
+): Promise<FlagKeeper | null> {
+  const tg = String(telegramUserId ?? "").trim();
+  if (!tg) return null;
+
+  const { data: profile, error } = await admin
+    .from("profiles")
+    .select("id, first_name, last_name, is_active")
+    .eq("telegram_chat_id", tg)
+    .maybeSingle();
+  if (error) {
+    console.error("FLAG KEEPER PROFILE LOOKUP:", error);
+    return null;
+  }
+  if (!profile || (profile as { is_active?: boolean }).is_active === false) {
+    return null;
+  }
+
+  const profileId = (profile as { id: string }).id;
+  if (!(await profileHasFlagKeeperRole(admin, profileId))) return null;
+
+  return {
+    profileId,
+    name: fullName(
+      (profile as { first_name: string | null }).first_name,
+      (profile as { last_name: string | null }).last_name
+    ),
+  };
+}
+
+/** True si el profile tiene el rol flag_keeper activo (global o de club). */
+export async function profileHasFlagKeeperRole(
+  admin: SupabaseClient,
+  profileId: string
+): Promise<boolean> {
+  // Rol a nivel club (lo más común, igual que marshal).
+  const clubRoles = await admin
+    .from("user_club_roles")
+    .select("roles:role_id(code), is_active")
+    .eq("user_id", profileId)
+    .eq("is_active", true);
+  if (hasFlagRole(clubRoles.data)) return true;
+
+  // Respaldo: rol global.
+  const globalRoles = await admin
+    .from("user_global_roles")
+    .select("roles:role_id(code), is_active")
+    .eq("user_id", profileId)
+    .eq("is_active", true);
+  return hasFlagRole(globalRoles.data);
+}
+
+function hasFlagRole(rows: unknown): boolean {
+  return ((rows as Array<{ roles: unknown }> | null) ?? []).some((r) => {
+    const role = Array.isArray(r.roles) ? r.roles[0] : r.roles;
+    return (role as { code?: string } | null)?.code === "flag_keeper";
+  });
+}

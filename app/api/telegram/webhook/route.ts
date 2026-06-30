@@ -47,6 +47,13 @@ import {
   isCalibrarCommand,
   buildCalibrarReply,
 } from "@/lib/telegram/calibrarCommand";
+import {
+  isBanderaCommand,
+  isSoyBanderasCommand,
+  buildBanderaReply,
+} from "@/lib/telegram/banderas/commands";
+import { handleFlagLocationUpdate } from "@/lib/telegram/banderas/handleFlagLocationUpdate";
+import { profileHasFlagKeeperRole } from "@/lib/flags/flagStore";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -153,6 +160,32 @@ export async function POST(req: Request) {
       chatType,
     });
     const command = parseTelegramCommand(text);
+
+    // === BANDERAS: ubicación con sesión de bandera abierta ===
+    // Si el encargado escribió /BANDERA N, su ubicación es el pin de ese hoyo.
+    // Si no hay sesión, handled:false y cae al ritmo de juego normal.
+    if (parsed.location && userId && supabase) {
+      const flag = await handleFlagLocationUpdate(supabase, {
+        telegramUserId: userId,
+        lat: parsed.location.lat,
+        lon: parsed.location.lon,
+        accuracy: parsed.location.accuracy,
+        isLiveUpdate: parsed.isEditedMessage,
+      });
+      if (flag.handled) {
+        if (flag.silent) {
+          return NextResponse.json({ ok: true, banderas: "silent_update" });
+        }
+        if (flag.reply) {
+          await sendTelegramMessage({
+            chatId: chatId || userId,
+            text: flag.reply,
+            buttons: flag.buttons,
+          });
+        }
+        return NextResponse.json({ ok: true, banderas: "position_saved" });
+      }
+    }
 
     // === RITMO DE JUEGO: Live Location ===
     // Si el update trae una ubicación (compartida o live), procesarla y salir.
@@ -263,6 +296,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, distances: "link_sent" });
     }
 
+    // === BANDERAS: comando /BANDERA(S) — menú o abrir sesión en un hoyo ===
+    if (isBanderaCommand(command) && userId && supabase) {
+      const reply = await buildBanderaReply(supabase, userId, text);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, banderas: "menu_sent" });
+    }
+
     // === RITMO DE JUEGO: comando RITMO (jugador o caddie del grupo) ===
     // Se resuelve por sí mismo (jugador o caddie), así que va antes de la
     // identificación de jugador para que también funcione con caddies.
@@ -367,6 +411,71 @@ export async function POST(req: Request) {
                 .delete()
                 .eq("telegram_user_id", userId);
             }
+          }
+        }
+      }
+    } else if (isSoyBanderasCommand(text)) {
+      // Vinculación del encargado de banderas: "/soy_banderas email@dominio.com".
+      // El email debe existir en profiles y tener rol flag_keeper asignado.
+      const match = (text || "")
+        .trim()
+        .match(/^\/?soy_?(?:banderas|flag)\s+(\S+)/i);
+      const emailArg = match?.[1]?.trim().toLowerCase() || "";
+      if (!emailArg) {
+        replyText = [
+          "Para vincularte como Encargado de banderas envía:",
+          "",
+          "/soy_banderas tu_email@dominio.com",
+          "",
+          "Usa el mismo email con el que el comité te dio de alta.",
+        ].join("\n");
+      } else {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("id, email, first_name, last_name, is_active")
+          .eq("email", emailArg)
+          .maybeSingle();
+
+        if (profileError) {
+          console.error("TELEGRAM BANDERAS PROFILE LOOKUP:", profileError);
+          replyText = "Ocurrió un error buscando tu perfil.";
+        } else if (!profile) {
+          replyText = `No encontré el email ${emailArg} en List.golf. Pide al comité que te dé de alta primero.`;
+        } else if (profile.is_active === false) {
+          replyText = "Tu cuenta está inactiva. Contacta al comité.";
+        } else if (!(await profileHasFlagKeeperRole(supabase, profile.id))) {
+          replyText =
+            "Tu cuenta existe pero no tiene rol de Encargado de banderas. Pide al comité que te lo asigne y vuelve a intentarlo.";
+        } else {
+          const updates: Record<string, unknown> = {
+            telegram_chat_id: chatId || userId,
+          };
+          if (username) updates.telegram_username = username;
+
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update(updates)
+            .eq("id", profile.id);
+
+          if (updateError) {
+            console.error("TELEGRAM BANDERAS UPDATE:", updateError);
+            replyText =
+              "No pude guardar tu chat_id. Intenta otra vez o avisa al comité.";
+          } else {
+            const name =
+              formatPlayerName(profile.first_name, profile.last_name) || emailArg;
+            replyText = [
+              `✅ Listo ${name}, estás vinculado como Encargado de banderas.`,
+              "",
+              "Para registrar un green: escribe el hoyo (ej. /BANDERA 1),",
+              "párate junto a la bandera y comparte tu ubicación.",
+              "",
+              "Escribe /BANDERAS para ver el menú y el mapa.",
+            ].join("\n");
+            await supabase
+              .from("telegram_pending_links")
+              .delete()
+              .eq("telegram_user_id", userId);
           }
         }
       }

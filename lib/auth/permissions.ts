@@ -9,6 +9,7 @@ export type AppRole =
   | "viewer"
   | "handicap_committee"
   | "marshal"
+  | "flag_keeper"        // encargado de banderas — registra el pin de los 18 greens
   | "restaurante"        // MANAGER del restaurante — todo F&B sin filtrar
   | "mesero"             // staff de piso — /fb-mesero
   | "cocinero"           // staff de cocina — /fb-cocina + /fb-mesero
@@ -31,6 +32,7 @@ export type AppModule =
   | "reports"
   | "comite-handicap"
   | "captura-telegram"
+  | "banderas"       // posición de la bandera/pin en los 18 greens
   | "fb"             // gate global — cualquier rol F&B pasa
   | "fb-manage"      // panel manager: admin, cuentas, reportes, disputas, mesas-qr
   | "fb-kitchen"     // vista cocina
@@ -163,6 +165,15 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "marshal",
   ],
 
+  // Banderas: posición del pin en los 18 greens. El encargado de banderas
+  // solo entra aquí; el staff que organiza el torneo también puede revisarlo.
+  banderas: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "flag_keeper",
+  ],
+
   // F&B (Food & Beverage): backoffice del menú + cocina + carrito bar.
   // Gate global — cualquier rol F&B autoriza entrar al backoffice; cada
   // pantalla se gatea con un sub-módulo más estricto (ver abajo).
@@ -246,6 +257,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/users",
   "/comite-handicap",
   "/captura-telegram",
+  "/banderas",
   "/fb-admin",
   "/fb-cocina",
   "/fb-carrito-bar",
@@ -281,6 +293,7 @@ export function normalizeRole(role: string | null | undefined): AppRole | null {
     "viewer",
     "handicap_committee",
     "marshal",
+    "flag_keeper",
     "restaurante",
     "mesero",
     "cocinero",
@@ -307,6 +320,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";
+  if (pathname.startsWith("/banderas")) return "banderas";
   if (
     pathname.startsWith("/fb-admin") ||
     pathname.startsWith("/fb-cocina") ||
