@@ -83,6 +83,10 @@ import {
   type PlayerBag,
 } from "@/lib/distances/playerBag";
 import {
+  loadPlayerBagRemote,
+  queuePlayerBagRemoteSync,
+} from "@/lib/distances/syncPlayerBagRemote";
+import {
   isShortGameDistance,
   yardsToGreenCenterRounded,
   type GreenDistances,
@@ -450,6 +454,14 @@ export default function DistanciasClient({
       if (merged !== local) {
         saveHoleShots(merged, bagScope);
       }
+    });
+    // Bolsa guardada del servidor (alta única por jugador). Si existe, gana
+    // sobre la local/por defecto y se cachea en localStorage.
+    void loadPlayerBagRemote(bagScope, shotsSyncCtx).then((remoteBag) => {
+      if (cancelled || !remoteBag) return;
+      bagRef.current = remoteBag;
+      setBag(remoteBag);
+      savePlayerBag(remoteBag, bagScope);
     });
     return () => {
       cancelled = true;
@@ -2458,8 +2470,9 @@ export default function DistanciasClient({
       bagRef.current = next;
       setBag(next);
       savePlayerBag(next, bagScope);
+      queuePlayerBagRemoteSync(next, bagScope, shotsSyncCtx);
     },
-    [bagScope]
+    [bagScope, shotsSyncCtx]
   );
 
   // Semáforo de ritmo: solo si la URL trae identidad (me / caddie / tg).
@@ -2833,6 +2846,7 @@ export default function DistanciasClient({
         onChange={handleBagChange}
         onClose={() => {
           savePlayerBag(bagRef.current, bagScope);
+          queuePlayerBagRemoteSync(bagRef.current, bagScope, shotsSyncCtx);
           setBagOpen(false);
         }}
       />

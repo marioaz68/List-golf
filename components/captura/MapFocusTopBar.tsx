@@ -1,6 +1,5 @@
 "use client";
 
-import { LieChip } from "@/components/captura/LieChip";
 import { puttYardsFromCenter } from "@/lib/distances/holeComplete";
 import type { LieKind } from "@/lib/distances/detectLie";
 
@@ -16,7 +15,6 @@ interface MapFocusTopBarProps {
 export function MapFocusTopBar({
   greenCenterYards,
   positionLabel,
-  lieKind = null,
   onGreen = false,
   demoMode,
 }: MapFocusTopBarProps) {
@@ -32,9 +30,6 @@ export function MapFocusTopBar({
       ].join(" ")}
     >
       <div className="flex max-w-[min(100vw-1rem,22rem)] flex-col items-center gap-1">
-        {lieKind ? (
-          <LieChip kind={lieKind} size="md" />
-        ) : null}
         <div className="flex items-center gap-2 rounded-full border border-emerald-500/40 bg-black/85 px-3 py-1 shadow-lg backdrop-blur-md">
           <span className="text-[9px] font-semibold text-slate-400">
             {positionLabel}
