@@ -20,6 +20,38 @@ function isPlayerBag(raw: unknown): raw is PlayerBag {
   return o.version === 1 && Array.isArray(o.clubs);
 }
 
+/**
+ * Llave ESTABLE de la bolsa por jugador. La bolsa pertenece a la persona, no
+ * a la ronda: por eso normalizamos entry_id/telegram al player_id subyacente y
+ * usamos `player:{id}`. Así la misma bolsa se reusa entre torneos y rondas
+ * diarias. Si no se resuelve jugador (p. ej. caddie), devolvemos null y el
+ * llamador usa la scope_key original.
+ */
+async function resolvePlayerBagKey(
+  admin: ReturnType<typeof createAdminClient>,
+  ids: { entryId: string | null; telegramUserId: string | null }
+): Promise<string | null> {
+  if (ids.entryId) {
+    const { data } = await admin
+      .from("tournament_entries")
+      .select("player_id")
+      .eq("id", ids.entryId)
+      .maybeSingle();
+    const pid = (data as { player_id?: string | null } | null)?.player_id;
+    if (pid) return `player:${pid}`;
+  }
+  if (ids.telegramUserId) {
+    const { data } = await admin
+      .from("players")
+      .select("id")
+      .eq("telegram_user_id", ids.telegramUserId)
+      .maybeSingle();
+    const pid = (data as { id?: string | null } | null)?.id;
+    if (pid) return `player:${pid}`;
+  }
+  return null;
+}
+
 async function resolveRoundAndCourse(
   admin: ReturnType<typeof createAdminClient>,
   entryId: string | null,
@@ -70,30 +102,42 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const entryId = norm(request.nextUrl.searchParams.get("entry_id"));
+  const telegramRaw = norm(request.nextUrl.searchParams.get("telegram_user_id"));
+  const telegramUserId =
+    telegramRaw && /^\d+$/.test(telegramRaw) ? telegramRaw : null;
+
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("yardage_player_bags")
-      .select("payload, updated_at, payload_version")
-      .eq("scope_key", scopeKey)
-      .maybeSingle();
 
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    }
-    if (!data?.payload || !isPlayerBag(data.payload)) {
-      return NextResponse.json({ ok: true, payload: null }, { status: 200 });
+    // Buscar primero por la llave estable de jugador; si no hay, por la
+    // scope_key original (compatibilidad con bolsas guardadas antes).
+    const playerKey = await resolvePlayerBagKey(admin, { entryId, telegramUserId });
+    const keysToTry = playerKey ? [playerKey, scopeKey] : [scopeKey];
+
+    for (const key of keysToTry) {
+      const { data, error } = await admin
+        .from("yardage_player_bags")
+        .select("payload, updated_at, payload_version")
+        .eq("scope_key", key)
+        .maybeSingle();
+      if (error) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+      if (data?.payload && isPlayerBag(data.payload)) {
+        return NextResponse.json(
+          {
+            ok: true,
+            payload: data.payload,
+            updatedAt: data.updated_at,
+            payloadVersion: data.payload_version,
+          },
+          { status: 200 }
+        );
+      }
     }
 
-    return NextResponse.json(
-      {
-        ok: true,
-        payload: data.payload,
-        updatedAt: data.updated_at,
-        payloadVersion: data.payload_version,
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({ ok: true, payload: null }, { status: 200 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
@@ -135,8 +179,14 @@ export async function POST(request: Request) {
       telegramUserId
     );
 
+    // Guardar bajo la llave ESTABLE de jugador cuando se pueda resolver, para
+    // que la bolsa persista entre rondas/torneos. Si no (caddie u otro), se usa
+    // la scope_key original.
+    const playerKey = await resolvePlayerBagKey(admin, { entryId, telegramUserId });
+    const effectiveKey = playerKey ?? scopeKey;
+
     const row = {
-      scope_key: scopeKey,
+      scope_key: effectiveKey,
       entry_id: resolved.entryId,
       caddie_id: caddieId,
       telegram_user_id: telegramUserId,

@@ -230,8 +230,16 @@ export async function loadPlayerBagRemote(
   if (!key) return null;
 
   try {
+    // Mandamos también la identidad para que el servidor normalice la bolsa
+    // por JUGADOR (no por entry_id, que cambia en cada ronda/torneo).
+    const params = new URLSearchParams({ scope_key: key });
+    if (activeCtx?.entryId) params.set("entry_id", activeCtx.entryId);
+    if (activeCtx?.caddieId) params.set("caddie_id", activeCtx.caddieId);
+    if (activeCtx?.telegramUserId)
+      params.set("telegram_user_id", activeCtx.telegramUserId);
+
     const res = await fetch(
-      `/api/captura/distancias/bag?scope_key=${encodeURIComponent(key)}`,
+      `/api/captura/distancias/bag?${params.toString()}`,
       { cache: "no-store" }
     );
     if (!res.ok) return null;

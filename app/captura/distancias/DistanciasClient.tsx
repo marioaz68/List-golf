@@ -2762,7 +2762,7 @@ export default function DistanciasClient({
         )}
       </div>
 
-      {/* ✕ cerrar + total de golpes en el hoyo (al lado izquierdo). */}
+      {/* ← regresar al menú + total de golpes en el hoyo (al lado izquierdo). */}
       <div className="absolute right-2 top-2 z-[1000] flex items-center gap-2">
         {hasTeeMark && !farFromCourse && !needsTeeMark ? (
           <div
@@ -2779,29 +2779,12 @@ export default function DistanciasClient({
         ) : null}
         <Link
           href="/"
-          aria-label="Cerrar"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+          aria-label="Regresar al menú principal"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/55 text-xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
         >
-          ✕
+          ←
         </Link>
       </div>
-
-      {!farFromCourse && roundTeeConfirmed && !showRoundTeePicker ? (
-        <div
-          className="pointer-events-none absolute inset-x-12 top-2 z-[1000] flex justify-center"
-          data-yardage-map-ui
-        >
-          <div
-            className={[
-              "rounded-full border px-3 py-1 text-[10px] font-black shadow-lg backdrop-blur-md",
-              CCQ_CALIBRATION_TEE_SETS.find((t) => t.code === playingTeeCode)
-                ?.chipClass ?? "border-white/30 bg-black/70 text-white",
-            ].join(" ")}
-          >
-            Salida {teeSetLabel(playingTeeCode)}
-          </div>
-        </div>
-      ) : null}
 
       <div
         className={[

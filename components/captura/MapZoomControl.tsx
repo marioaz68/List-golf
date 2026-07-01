@@ -8,7 +8,8 @@ interface MapZoomControlProps {
   canZoomOut?: boolean;
 }
 
-/** +/− con porcentaje, esquina inferior derecha del mapa. */
+/** +/− con porcentaje, pegado al borde derecho y centrado verticalmente
+ *  (para no tapar la información de la parte inferior). */
 export function MapZoomControl({
   percent,
   onZoomIn,
@@ -23,7 +24,7 @@ export function MapZoomControl({
   return (
     <div
       data-yardage-map-ui
-      className="pointer-events-auto absolute bottom-[7rem] right-2 z-[1020] flex flex-col items-center gap-0.5 rounded-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md"
+      className="pointer-events-auto absolute right-0 top-1/2 z-[1020] flex -translate-y-1/2 flex-col items-center gap-0.5 rounded-l-lg border border-white/20 bg-black/80 p-1 shadow-lg backdrop-blur-md"
       onPointerDown={stopMapTap}
       onClick={stopMapTap}
     >
