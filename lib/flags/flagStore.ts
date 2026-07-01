@@ -198,6 +198,10 @@ function fullName(first: string | null, last: string | null): string {
 
 /**
  * Resuelve un telegram_user_id a un perfil con rol flag_keeper activo.
+ *
+ * Política: solo capturan banderas los usuarios a quienes el admin les asignó
+ * el rol "Encargado de banderas". El rol se puede dar a CUALQUIER usuario que
+ * el admin elija (varios profesores, sin límite), pero es él quien lo habilita.
  * El bot guarda el chat_id en profiles.telegram_chat_id al vincular
  * (/soy_banderas email). En chat privado, chat_id === telegram_user_id.
  */

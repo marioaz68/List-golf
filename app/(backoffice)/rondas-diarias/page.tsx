@@ -188,6 +188,29 @@ export default async function RondasDiariasPage() {
     ? allCourses.filter((c) => !c.clubId || allowedClubIds!.has(c.clubId))
     : allCourses;
 
+  // Ordenar los clubs por MÁS USADO en rondas diarias (frecuencia de uso),
+  // desempatando alfabéticamente. Así el club más usado aparece primero y
+  // queda preseleccionado al crear una ronda nueva.
+  try {
+    const { data: usageRows } = await admin
+      .from("tournaments")
+      .select("club_id")
+      .eq("kind", "daily_round")
+      .not("club_id", "is", null);
+    const usageByClub = new Map<string, number>();
+    for (const r of (usageRows ?? []) as Array<{ club_id: string | null }>) {
+      if (!r.club_id) continue;
+      const k = String(r.club_id);
+      usageByClub.set(k, (usageByClub.get(k) ?? 0) + 1);
+    }
+    clubs.sort((a, b) => {
+      const diff = (usageByClub.get(b.id) ?? 0) - (usageByClub.get(a.id) ?? 0);
+      return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    });
+  } catch (e) {
+    console.error("rondas-diarias orden club más usado:", e);
+  }
+
   return (
     <RondasDiariasClient
       rows={rows}

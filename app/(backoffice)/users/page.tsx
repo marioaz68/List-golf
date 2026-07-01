@@ -255,6 +255,8 @@ function formatRoleLabel(code: string) {
       return "Caddie Manager";
     case "marshal":
       return "Marshal / Juez de campo";
+    case "flag_keeper":
+      return "Encargado de banderas";
     default:
       return code;
   }
@@ -573,6 +575,7 @@ export default async function UsersPage({
     ? [
         "club_admin",
         "marshal",
+        "flag_keeper",
         "viewer",
         "score_capture",
         "caddie_manager",
@@ -583,6 +586,7 @@ export default async function UsersPage({
     : isClubAdmin
       ? [
           "marshal",
+          "flag_keeper",
           "viewer",
           "score_capture",
           "caddie_manager",
