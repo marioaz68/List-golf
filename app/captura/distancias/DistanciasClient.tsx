@@ -66,6 +66,7 @@ import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet"
 import { GreenPuttDistancePanel } from "@/components/captura/GreenPuttDistancePanel";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
+import { FlagPositionSheet } from "@/components/captura/FlagPositionSheet";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
 import {
   YardageStatsSheet,
@@ -246,6 +247,8 @@ export default function DistanciasClient({
   const [targetYards, setTargetYards] = useState(0);
   /** true si el objetivo del hoyo activo es la bandera del día (no el centro). */
   const [pinFromFlag, setPinFromFlag] = useState(false);
+  /** Hoja con la posición de la bandera del hoyo (referencia para el jugador). */
+  const [flagSheetOpen, setFlagSheetOpen] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
@@ -2840,6 +2843,14 @@ export default function DistanciasClient({
         </button>
         <button
           type="button"
+          onClick={() => setFlagSheetOpen(true)}
+          className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-amber-200 shadow-lg backdrop-blur-sm active:scale-95"
+          aria-label="Ver posición de la bandera"
+        >
+          🚩 Bandera
+        </button>
+        <button
+          type="button"
           onClick={handleUseGpsBallPosition}
           disabled={demoMode || farFromCourse || geo.status !== "ok"}
           className="rounded-full border border-white/30 bg-black/55 px-2.5 py-1.5 text-[11px] font-black text-amber-200 shadow-lg backdrop-blur-sm active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2888,6 +2899,14 @@ export default function DistanciasClient({
           holeNo={activeHole}
           selectedCode={playingTeeCode}
           onSelect={confirmRoundTee}
+        />
+      ) : null}
+
+      {flagSheetOpen ? (
+        <FlagPositionSheet
+          hole={activeHole}
+          courseId={defaultDistanciasCourseId()}
+          onClose={() => setFlagSheetOpen(false)}
         />
       ) : null}
 

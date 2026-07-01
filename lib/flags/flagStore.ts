@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Reutilizable desde el webhook de Telegram y desde la mini app / API.
  */
 
-export type FlagSource = "gps" | "map";
+export type FlagSource = "gps" | "map" | "yards";
 
 /** Fecha de hoy en horario de México (YYYY-MM-DD). Igual que en ritmo. */
 export function todayMexicoDate(): string {
@@ -34,6 +34,11 @@ export interface SaveFlagArgs {
   profileId?: string | null;
   accuracyM?: number | null;
   note?: string | null;
+  // Datos del pin sheet (captura por yardas), para referencia del jugador.
+  color?: string | null;
+  side?: string | null;
+  depthYards?: number | null;
+  edgeYards?: number | null;
 }
 
 /** Inserta una posición de bandera (siempre append: deja histórico). */
@@ -53,6 +58,10 @@ export async function saveFlagPosition(
     captured_by_profile_id: args.profileId ?? null,
     accuracy_m: args.accuracyM ?? null,
     note: args.note ?? null,
+    color: args.color ?? null,
+    side: args.side ?? null,
+    depth_yards: args.depthYards ?? null,
+    edge_yards: args.edgeYards ?? null,
   });
   if (error) throw new Error(error.message);
 }
@@ -65,6 +74,10 @@ export interface FlagPositionRow {
   effective_date: string;
   valid_until: string | null;
   created_at: string;
+  color: string | null;
+  side: string | null;
+  depth_yards: number | null;
+  edge_yards: number | null;
 }
 
 /** Filtro de vigencia: ya empezó (effective_date <= hoy) y no ha vencido
@@ -78,7 +91,7 @@ function applyValidityFilter<T>(query: T, today: string): T {
 }
 
 const FLAG_COLUMNS =
-  "hole_number, lat, lon, source, effective_date, valid_until, created_at";
+  "hole_number, lat, lon, source, effective_date, valid_until, created_at, color, side, depth_yards, edge_yards";
 
 /** Posición VIGENTE de cada hoyo (respeta la ventana de vigencia). Si la
  *  bandera de un hoyo ya venció, ese hoyo no aparece → Yardas usa el centro. */

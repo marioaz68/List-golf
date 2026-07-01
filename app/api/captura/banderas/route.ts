@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { CCQ_COURSE_ID } from "@/lib/distances/courseReferencePoints";
 import { loadGreenOverrideForHole } from "@/lib/distances/loadGreenPoints";
+import { loadHolePolygons } from "@/lib/distances/calibrationStore";
+import { parseBoundaryGeoJson, ringFromPolygon, type LatLon } from "@/lib/distances/holeBoundary";
+import {
+  computeFlagPosition,
+  type FlagColor,
+  type FlagSide,
+} from "@/lib/flags/pinSheetGeometry";
 import {
   loadLatestFlagForHole,
   resolveFlagKeeper,
@@ -15,7 +22,31 @@ function parseHole(v: unknown): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 18 ? n : null;
 }
 
-/** GET ?tg=&hole=&course_id= → centro del green + bandera vigente del hoyo. */
+/** Circunferencia calibrada del green del hoyo (anillo con más vértices). */
+async function loadGreenRing(
+  admin: ReturnType<typeof createAdminClient>,
+  courseId: string,
+  hole: number
+): Promise<LatLon[] | null> {
+  try {
+    const rows = await loadHolePolygons(admin, courseId, hole, "green");
+    let best: LatLon[] | null = null;
+    for (const r of rows) {
+      const poly = parseBoundaryGeoJson(r.geojson);
+      if (!poly) continue;
+      const ring = ringFromPolygon(poly);
+      if (ring.length >= 3 && (!best || ring.length > best.length)) best = ring;
+    }
+    return best;
+  } catch {
+    return null;
+  }
+}
+
+const COLORS = new Set<FlagColor>(["roja", "blanca", "azul"]);
+const SIDES = new Set<FlagSide>(["left", "right"]);
+
+/** GET ?tg=&hole=&course_id= → geometría del green + bandera vigente. */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const tg = (url.searchParams.get("tg") ?? "").trim();
@@ -34,13 +65,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const green = await loadGreenOverrideForHole(courseId, hole);
+    const ring = await loadGreenRing(admin, courseId, hole);
     const flag = await loadLatestFlagForHole(admin, courseId, hole);
     return NextResponse.json({
       ok: true,
       hole,
-      greenCenter: green.center ? { lat: green.center.lat, lon: green.center.lon } : null,
-      greenFront: green.front ? { lat: green.front.lat, lon: green.front.lon } : null,
-      greenBack: green.back ? { lat: green.back.lat, lon: green.back.lon } : null,
+      greenCenter: green.center ?? null,
+      greenFront: green.front ?? null,
+      greenBack: green.back ?? null,
+      greenRing: ring,
       flag: flag
         ? {
             lat: flag.lat,
@@ -48,6 +81,10 @@ export async function GET(request: NextRequest) {
             source: flag.source,
             effective_date: flag.effective_date,
             valid_until: flag.valid_until,
+            color: flag.color,
+            side: flag.side,
+            depth_yards: flag.depth_yards,
+            edge_yards: flag.edge_yards,
           }
         : null,
     });
@@ -57,7 +94,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** POST {tg, course_id, hole, lat, lon, note} → guarda el pin ajustado en mapa. */
+/**
+ * POST {tg, course_id, hole, color, side, depth_yards, edge_yards, valid_until}
+ * Captura por yardas: calcula lat/lon con la geometría del green y guarda.
+ */
 export async function POST(request: NextRequest) {
   let body: Record<string, unknown>;
   try {
@@ -68,17 +108,28 @@ export async function POST(request: NextRequest) {
 
   const tg = String(body.tg ?? "").trim();
   const hole = parseHole(body.hole);
-  const lat = Number(body.lat);
-  const lon = Number(body.lon);
   const courseId = String(body.course_id ?? "").trim() || CCQ_COURSE_ID;
+  const color = String(body.color ?? "").trim() as FlagColor;
+  const side = String(body.side ?? "").trim() as FlagSide;
+  const depthYards = Number(body.depth_yards);
+  const edgeYards = Number(body.edge_yards);
   const validUntilRaw = String(body.valid_until ?? "").trim();
   const validUntil = /^\d{4}-\d{2}-\d{2}$/.test(validUntilRaw) ? validUntilRaw : null;
 
   if (!hole) {
     return NextResponse.json({ ok: false, error: "hole inválido" }, { status: 400 });
   }
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return NextResponse.json({ ok: false, error: "lat/lon inválidos" }, { status: 400 });
+  if (!COLORS.has(color)) {
+    return NextResponse.json({ ok: false, error: "color inválido" }, { status: 400 });
+  }
+  if (!SIDES.has(side)) {
+    return NextResponse.json({ ok: false, error: "lado inválido" }, { status: 400 });
+  }
+  if (!Number.isFinite(depthYards) || depthYards < 0 || depthYards > 60) {
+    return NextResponse.json({ ok: false, error: "yardas de profundidad inválidas" }, { status: 400 });
+  }
+  if (!Number.isFinite(edgeYards) || edgeYards < 0 || edgeYards > 40) {
+    return NextResponse.json({ ok: false, error: "yardas a la orilla inválidas" }, { status: 400 });
   }
 
   const admin = createAdminClient();
@@ -88,18 +139,39 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const green = await loadGreenOverrideForHole(courseId, hole);
+    const ring = await loadGreenRing(admin, courseId, hole);
+    const pos = computeFlagPosition(
+      {
+        front: green.front,
+        back: green.back,
+        center: green.center,
+        ring,
+      },
+      { color, side, depthYards, edgeYards }
+    );
+    if (!pos) {
+      return NextResponse.json(
+        { ok: false, error: "El green de este hoyo no está calibrado (frente/atrás)." },
+        { status: 400 }
+      );
+    }
+
     await saveFlagPosition(admin, {
       courseId,
       hole,
-      lat,
-      lon,
-      source: "map",
+      lat: pos.lat,
+      lon: pos.lon,
+      source: "yards",
       validUntil,
       chatId: tg,
       profileId: keeper.profileId,
-      note: typeof body.note === "string" ? body.note : null,
+      color,
+      side,
+      depthYards,
+      edgeYards,
     });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, lat: pos.lat, lon: pos.lon });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error guardando bandera";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
