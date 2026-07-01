@@ -370,6 +370,9 @@ export default function DistanciasClient({
   // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
   // re-encuadrar el mapa constantemente.
   const lastPosRef = useRef<{ lat: number; lon: number } | null>(null);
+  // Errores de GPS transitorios consecutivos (kCLErrorDomain / POSITION_UNAVAILABLE)
+  // sin haber tenido posición aún. Solo mostramos error tras varios seguidos.
+  const geoFailCountRef = useRef(0);
   // Hoyo detectado en el momento que el usuario fijó el hoyo a mano. Al entrar
   // a un hoyo distinto (el GPS detecta otro polígono), se reanuda el automático.
   const manualAtDetectedRef = useRef<number | null>(null);
@@ -531,6 +534,7 @@ export default function DistanciasClient({
           return;
         }
         lastPosRef.current = { lat, lon };
+        geoFailCountRef.current = 0;
         setGeo({
           status: "ok",
           lat,
@@ -540,17 +544,30 @@ export default function DistanciasClient({
         });
       },
       (err) => {
+        // Permiso bloqueado: sí es un error de acción del usuario.
         if (err.code === 1) {
           setGeo({
             status: "denied",
             message:
               "Permiso de ubicación bloqueado. Habilita el GPS para esta página.",
           });
-        } else {
+          return;
+        }
+        // Errores transitorios (código 2/3: kCLErrorDomain, sin señal, timeout).
+        // Si ya teníamos una posición, la conservamos y seguimos intentando en
+        // silencio (no rompemos el mapa). El watch se recupera solo.
+        if (lastPosRef.current) return;
+        // Aún sin posición: mostramos "esperando" y solo tras varios fallos
+        // seguidos avisamos, en vez de soltar el error crudo de iOS.
+        geoFailCountRef.current += 1;
+        if (geoFailCountRef.current >= 5) {
           setGeo({
             status: "error",
-            message: err.message || "Error obteniendo posición.",
+            message:
+              "No se pudo obtener el GPS. Revisa la señal y los permisos de ubicación.",
           });
+        } else {
+          setGeo({ status: "requesting" });
         }
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
