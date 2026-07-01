@@ -174,6 +174,8 @@ type GeoState =
 /** Radio (m) desde el green más cercano dentro del cual la pantalla mide
  *  yardas. Generoso para cubrir el campo + el fraccionamiento aledaño. */
 const MAX_DISTANCE_FROM_COURSE_M = 300;
+const GREEN_ENTRY_DWELL_MS = 4000;
+const GREEN_PUTT_MAX_YARDS = 35;
 
 type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
 
@@ -185,6 +187,16 @@ interface PaceState {
   hoyo?: number | null;
   windowStart?: string | null;
   windowEnd?: string | null;
+}
+
+interface GreenEntryPuttPrompt {
+  hole: number;
+  detectedAt: number;
+  entryLat: number;
+  entryLon: number;
+  pendingShotId: string | null;
+  puttCount: number;
+  puttYards: number[];
 }
 
 const PACE_STYLE: Record<
@@ -293,6 +305,8 @@ export default function DistanciasClient({
     puttYards: number;
     mode: "landing" | "relocate";
   } | null>(null);
+  const [greenEntryPuttPrompt, setGreenEntryPuttPrompt] =
+    useState<GreenEntryPuttPrompt | null>(null);
   /** Fuerza remount/reencuadre del mapa al cambiar de hoyo. */
   const [mapFrameEpoch, setMapFrameEpoch] = useState(0);
   /** Tras OB: fija foto en el tramo donde pegaste, no en la salida ni en el OB. */
@@ -369,6 +383,9 @@ export default function DistanciasClient({
     return out;
   }, [playingTeeCode, teePositionsByCode]);
   const watchIdRef = useRef<number | null>(null);
+  const greenEntryInsideSinceRef = useRef<number | null>(null);
+  const greenEntryPromptedHoleRef = useRef<number | null>(null);
+  const greenEntrySuppressUntilRef = useRef(0);
   // Última posición aceptada. Sirve para ignorar el micro-jitter del GPS
   // (cambios de 1-2 m cada segundo aunque estés parado) que hacía parpadear y
   // re-encuadrar el mapa constantemente.
@@ -1603,6 +1620,178 @@ export default function DistanciasClient({
     ]
   );
 
+  const advanceAfterAutoGreenPutts = useCallback(
+    (storeAfterClose: HoleShotsStore, hole: number, totalStrokes: number) => {
+      const startHole = inferRoundStartHole(storeAfterClose);
+      const finishingRound = isRoundFinishingHole(hole, startHole);
+      const nextHoleNum = (hole % 18) + 1;
+      let nextStore = finishingRound
+        ? storeAfterClose
+        : clearHoleShots(storeAfterClose, nextHoleNum);
+      const nextTee = finishingRound
+        ? null
+        : resolveTeePosition(nextHoleNum, playingTeeCode, teePositionsByCode);
+      if (nextTee) {
+        nextStore = setHoleTeeMark(nextStore, nextHoleNum, nextTee);
+      }
+
+      setHoleShotsStore(nextStore);
+      saveHoleShots(nextStore, bagScope);
+      setGreenEntryPuttPrompt(null);
+      resetTapUi();
+      setTapPoint(null);
+      setPendingTap(null);
+      autoCandidateRef.current = { hole: 0, count: 0 };
+
+      if (finishingRound) {
+        const totals = roundStrokeTotals(storeAfterClose, startHole);
+        setRoundSummary(totals);
+        setArrivalToast(
+          `Ronda terminada · ${totals.total} golpes (${totals.firstNine} + ${totals.secondNine})`
+        );
+        return;
+      }
+
+      setAutoHole(nextHoleNum);
+      setManualHole(nextHoleNum);
+      setResumeHole(nextHoleNum);
+      setTargetYards(0);
+      if (demoMode) setDemoProgress(0);
+      autoPlanHoleRef.current = null;
+      if (nextTee) {
+        pinMapFraming({ lat: nextTee.lat, lon: nextTee.lon });
+        pendingHoleTeePlanRef.current = {
+          hole: nextHoleNum,
+          lat: nextTee.lat,
+          lon: nextTee.lon,
+        };
+      }
+      const teeLabel = nextTee
+        ? ` · Salida ${teeSetLabel(playingTeeCode)} lista`
+        : "";
+      setArrivalToast(
+        `Hoyo ${hole} terminado (${totalStrokes} golpes) · Hoyo ${nextHoleNum}${teeLabel}`
+      );
+    },
+    [
+      playingTeeCode,
+      teePositionsByCode,
+      bagScope,
+      resetTapUi,
+      demoMode,
+      pinMapFraming,
+    ]
+  );
+
+  const handleUndoGreenEntryPuttPrompt = useCallback(() => {
+    greenEntrySuppressUntilRef.current = Date.now() + 30_000;
+    setGreenEntryPuttPrompt(null);
+    setArrivalToast("Lectura GPS descartada · sigue jugando");
+  }, []);
+
+  const handleConfirmGreenEntryPutts = useCallback(() => {
+    if (!greenEntryPuttPrompt || !activeHolePoints?.center) return;
+    const puttCount = Math.max(1, greenEntryPuttPrompt.puttCount);
+    const normalizedYards = greenEntryPuttPrompt.puttYards
+      .slice(0, puttCount)
+      .map((v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return NaN;
+        return Math.max(0, Math.min(GREEN_PUTT_MAX_YARDS, Math.round(n)));
+      });
+    if (normalizedYards.some((v) => Number.isNaN(v))) {
+      setArrivalToast("Captura las yardas de todos los putts");
+      return;
+    }
+
+    let nextStore = holeShotsStore;
+    const pin = holedPinPosition(activeHolePoints.center);
+    let from =
+      lastBallPosition(nextStore, activeHole, catalogTeeForHole ?? undefined) ??
+      holeTeeMark(nextStore, activeHole) ?? {
+        lat: greenEntryPuttPrompt.entryLat,
+        lon: greenEntryPuttPrompt.entryLon,
+      };
+
+    if (greenEntryPuttPrompt.pendingShotId) {
+      const pending = pendingShotOnHole(nextStore, activeHole);
+      if (!pending || pending.id !== greenEntryPuttPrompt.pendingShotId) {
+        setArrivalToast("No se encontró el golpe pendiente a cerrar");
+        return;
+      }
+      const puttYdsAtEntry = puttDistanceToHole(
+        {
+          lat: greenEntryPuttPrompt.entryLat,
+          lon: greenEntryPuttPrompt.entryLon,
+        },
+        activeHolePoints.center
+      );
+      const landing = snapLandingToGreenCenter(
+        {
+          lat: greenEntryPuttPrompt.entryLat,
+          lon: greenEntryPuttPrompt.entryLon,
+        },
+        activeHolePoints.center,
+        puttYdsAtEntry
+      );
+      const actual = strokeActualYards(
+        pending.from,
+        landing,
+        "green",
+        pending.catalogId
+      );
+      nextStore = completeShotArrival(
+        nextStore,
+        activeHole,
+        pending.id,
+        landing,
+        actual,
+        "green"
+      );
+      from = landing;
+    }
+
+    for (let i = 0; i < puttCount; i++) {
+      const puttYds = Math.max(1, normalizedYards[i] ?? 1);
+      const planned = addPlannedShot(
+        nextStore,
+        activeHole,
+        from,
+        "putter",
+        "full",
+        puttYds
+      );
+      const to =
+        i === puttCount - 1
+          ? pin
+          : snapLandingToGreenCenter(
+              ballAtPuttYardsFromHole(activeHolePoints.center, from, puttYds),
+              activeHolePoints.center,
+              puttYds
+            );
+      nextStore = completeShotArrival(
+        planned.store,
+        activeHole,
+        planned.shot.id,
+        to,
+        puttYds,
+        "green"
+      );
+      from = to;
+    }
+
+    const totalStrokes = completedStrokeCount(nextStore, activeHole);
+    greenEntryPromptedHoleRef.current = activeHole;
+    advanceAfterAutoGreenPutts(nextStore, activeHole, totalStrokes);
+  }, [
+    greenEntryPuttPrompt,
+    activeHolePoints,
+    holeShotsStore,
+    activeHole,
+    catalogTeeForHole,
+    advanceAfterAutoGreenPutts,
+  ]);
+
   const showHoleFinishPrompt = useCallback(
     (
       lat: number,
@@ -1667,8 +1856,11 @@ export default function DistanciasClient({
       setShotsDetailOpen(false);
       setHoleFinishPrompt(null);
       setGreenPuttAdjust(null);
+      setGreenEntryPuttPrompt(null);
       setMapFramingLock(null);
       setHoleCorrectionMode(false);
+      greenEntryInsideSinceRef.current = null;
+      greenEntryPromptedHoleRef.current = null;
       if (!keepShotPlan) {
         setShotPlanOpen(false);
         autoPlanHoleRef.current = null;
@@ -1839,6 +2031,75 @@ export default function DistanciasClient({
       greenPuttPreview.ball.lon
     );
   }, [greenPuttPreview, syncPuttYardsForGreen]);
+
+  useEffect(() => {
+    if (
+      geo.status !== "ok" ||
+      !activeHolePoints?.center ||
+      farFromCourse ||
+      needsTeeMark ||
+      !hasTeeMark ||
+      pendingWaterDrop ||
+      holeFinishPrompt ||
+      roundSummary
+    ) {
+      greenEntryInsideSinceRef.current = null;
+      return;
+    }
+    if (greenEntryPromptedHoleRef.current === activeHole) return;
+    if (greenEntryPuttPrompt) return;
+    if (Date.now() < greenEntrySuppressUntilRef.current) return;
+
+    const onGreenByGps = detectLieForPoint(geo.lat, geo.lon).onGreen;
+    if (!onGreenByGps) {
+      greenEntryInsideSinceRef.current = null;
+      return;
+    }
+
+    if (greenEntryInsideSinceRef.current == null) {
+      greenEntryInsideSinceRef.current = Date.now();
+      return;
+    }
+
+    if (Date.now() - greenEntryInsideSinceRef.current < GREEN_ENTRY_DWELL_MS) {
+      return;
+    }
+
+    const pending = pendingShotOnHole(holeShotsStore, activeHole);
+    const measured = Math.max(
+      1,
+      Math.min(
+        GREEN_PUTT_MAX_YARDS,
+        puttDistanceToHole({ lat: geo.lat, lon: geo.lon }, activeHolePoints.center)
+      )
+    );
+    greenEntryInsideSinceRef.current = null;
+    pinMapFraming(activeHolePoints.center);
+    setGreenEntryPuttPrompt({
+      hole: activeHole,
+      detectedAt: Date.now(),
+      entryLat: geo.lat,
+      entryLon: geo.lon,
+      pendingShotId: pending?.id ?? null,
+      puttCount: 2,
+      puttYards: [measured, 1],
+    });
+    setArrivalToast("Entraste al green · captura putts para cerrar el hoyo");
+  }, [
+    geo,
+    activeHole,
+    activeHolePoints,
+    detectLieForPoint,
+    farFromCourse,
+    needsTeeMark,
+    hasTeeMark,
+    pendingWaterDrop,
+    holeFinishPrompt,
+    roundSummary,
+    greenEntryPuttPrompt,
+    holeShotsStore,
+    pinMapFraming,
+  ]);
 
   // Demo en casa: posición simulada tee→green (sin GPS ni límite de 300 m).
   useEffect(() => {
@@ -2159,7 +2420,7 @@ export default function DistanciasClient({
   const onMapTap = useCallback(
     (lat: number, lon: number) => {
       if (geo.status !== "ok" || !activeHolePoints) return;
-      if (holeFinishPrompt || greenPuttAdjust) return;
+      if (holeFinishPrompt || greenPuttAdjust || greenEntryPuttPrompt) return;
 
       if (pendingWaterDrop) {
         const dropLie = detectLieForPoint(lat, lon);
@@ -2282,6 +2543,7 @@ export default function DistanciasClient({
       pendingWaterDrop,
       showRoundTeePicker,
       greenPuttAdjust,
+      greenEntryPuttPrompt,
       greenPuttTapEnabled,
       applyPendingShotLanding,
     ]
@@ -2768,7 +3030,9 @@ export default function DistanciasClient({
                 ? catalogTeeForHole
                 : null
             }
-            ballOnGreen={currentBallLie?.onGreen ?? false}
+            ballOnGreen={
+              greenEntryPuttPrompt != null || (currentBallLie?.onGreen ?? false)
+            }
             greenCenterPoint={activeHolePoints?.center ?? null}
             shotPreview={shotPlanOpen ? shotPreview : null}
             greenPuttPreview={greenPuttPreview}
@@ -2952,6 +3216,91 @@ export default function DistanciasClient({
             onConfirm={confirmGreenPuttAdjust}
             onCancel={() => setGreenPuttAdjust(null)}
           />
+        </div>
+      ) : null}
+
+      {greenEntryPuttPrompt && !farFromCourse ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[20%] z-[1093] flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-sm rounded-xl border-2 border-emerald-400/60 bg-emerald-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
+            <p className="text-center text-xs font-black text-emerald-50">
+              Green detectado · Hoyo {greenEntryPuttPrompt.hole}
+            </p>
+            <p className="mt-1 text-center text-[11px] font-semibold text-emerald-200">
+              GPS estable hace {timeAgo(greenEntryPuttPrompt.detectedAt)} · captura obligatoria de putts
+            </p>
+
+            <div className="mt-3 rounded-lg border border-white/15 bg-black/35 p-3">
+              <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                Cantidad de putts
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={6}
+                value={greenEntryPuttPrompt.puttCount}
+                onChange={(e) => {
+                  const count = Math.max(1, Math.min(6, Number(e.target.value) || 1));
+                  setGreenEntryPuttPrompt((prev) => {
+                    if (!prev) return prev;
+                    const y = prev.puttYards.slice(0, count);
+                    while (y.length < count) y.push(1);
+                    return { ...prev, puttCount: count, puttYards: y };
+                  });
+                }}
+                className="mt-1 w-full rounded-md border border-white/20 bg-black/50 px-2 py-1.5 text-sm font-black text-white outline-none"
+              />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {greenEntryPuttPrompt.puttYards
+                  .slice(0, greenEntryPuttPrompt.puttCount)
+                  .map((yds, idx) => (
+                    <label
+                      key={`putt-yard-${idx + 1}`}
+                      className="rounded-md border border-white/10 bg-black/30 px-2 py-1"
+                    >
+                      <span className="block text-[10px] font-bold text-slate-300">
+                        Putt {idx + 1} (0-{GREEN_PUTT_MAX_YARDS})
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={GREEN_PUTT_MAX_YARDS}
+                        value={yds}
+                        onChange={(e) => {
+                          const raw = Number(e.target.value);
+                          const val = Number.isFinite(raw)
+                            ? Math.max(0, Math.min(GREEN_PUTT_MAX_YARDS, Math.round(raw)))
+                            : 0;
+                          setGreenEntryPuttPrompt((prev) => {
+                            if (!prev) return prev;
+                            const next = [...prev.puttYards];
+                            next[idx] = val;
+                            return { ...prev, puttYards: next };
+                          });
+                        }}
+                        className="mt-1 w-full rounded-md border border-white/20 bg-black/50 px-2 py-1.5 text-sm font-black text-white outline-none"
+                      />
+                    </label>
+                  ))}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleConfirmGreenEntryPutts}
+                className="rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-black text-white active:scale-[0.98]"
+              >
+                Guardar putts y cerrar hoyo
+              </button>
+              <button
+                type="button"
+                onClick={handleUndoGreenEntryPuttPrompt}
+                className="rounded-lg border border-amber-400/50 bg-amber-950/80 px-3 py-2 text-[11px] font-bold text-amber-200 active:scale-[0.98]"
+              >
+                Deshacer (detección errónea)
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
