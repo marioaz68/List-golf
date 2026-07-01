@@ -2740,13 +2740,27 @@ export default function DistanciasClient({
             </span>
           </div>
         ) : null}
-        <Link
-          href="/"
-          aria-label="Regresar al menú principal"
+        <button
+          type="button"
+          onClick={() => {
+            const w = window as unknown as {
+              Telegram?: { WebApp?: { close?: () => void } };
+            };
+            // En Telegram: cerrar la mini app vuelve al chat/menú del bot.
+            if (w?.Telegram?.WebApp?.close) {
+              w.Telegram.WebApp.close();
+              return;
+            }
+            // Navegador in-app: regresar a la página anterior si la hay.
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              window.history.back();
+            }
+          }}
+          aria-label="Regresar al menú anterior"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/30 bg-black/55 text-xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
         >
           ←
-        </Link>
+        </button>
       </div>
 
       <div
