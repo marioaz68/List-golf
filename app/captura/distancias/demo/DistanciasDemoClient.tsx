@@ -185,13 +185,13 @@ export default function DistanciasDemoClient() {
         )}
       </div>
 
-      {/* Solo ✕ para cerrar (no tapa el green, que va arriba al centro). */}
+      {/* ← regresar (de la prueba a Yardas real). */}
       <Link
         href="/captura/distancias"
-        aria-label="Cerrar"
-        className="absolute right-2 top-2 z-[1000] flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-base font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
+        aria-label="Regresar"
+        className="absolute right-2 top-2 z-[1000] flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/55 text-xl font-bold leading-none text-white shadow-lg backdrop-blur-sm active:scale-95"
       >
-        ✕
+        ←
       </Link>
 
       {/* Etiqueta de modo prueba, arriba a la izquierda (fuera del green). */}
