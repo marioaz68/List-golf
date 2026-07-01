@@ -298,7 +298,7 @@ export async function POST(req: Request) {
 
     // === BANDERAS: comando /BANDERA(S) — menú o abrir sesión en un hoyo ===
     if (isBanderaCommand(command) && userId && supabase) {
-      const reply = await buildBanderaReply(supabase, userId, text);
+      const reply = await buildBanderaReply(supabase, userId, text, username);
       await sendTelegramMessage({
         chatId: chatId || userId,
         text: reply.text,

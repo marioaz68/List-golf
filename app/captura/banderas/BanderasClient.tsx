@@ -134,6 +134,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     if (!data?.greenFront || !data.greenBack || !data.greenCenter) return null;
     const flagLL =
       previewFlag ?? (data.flag ? { lat: data.flag.lat, lon: data.flag.lon } : null);
+    const zone: "front" | "middle" | "back" =
+      color === "azul" ? "back" : color === "blanca" ? "middle" : "front";
     return normalizeGreenDiagram({
       front: data.greenFront,
       back: data.greenBack,
@@ -142,8 +144,10 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       flag: flagLL,
       width: VIEW_W,
       height: VIEW_H,
+      zone,
+      side: side ?? undefined,
     });
-  }, [data, previewFlag]);
+  }, [data, previewFlag, color, side]);
 
   const save = useCallback(async () => {
     if (!inputsReady || !color || !side) {
@@ -224,6 +228,37 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           {/* etiquetas frente/atrás */}
           <text x={VIEW_W / 2} y={VIEW_H - 6} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">FRENTE (entrada)</text>
           <text x={VIEW_W / 2} y={14} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">ATRÁS</text>
+          {/* escuadra 90°: profundidad + lateral */}
+          {diagram?.flag && diagram.depthEdge ? (
+            <g>
+              <line x1={diagram.flag.x} y1={diagram.flag.y} x2={diagram.depthEdge.x} y2={diagram.depthEdge.y} stroke="#fbbf24" strokeWidth="1.75" strokeDasharray="4 3" />
+              {depthYards.trim() !== "" ? (
+                <text x={diagram.flag.x + 6} y={(diagram.flag.y + diagram.depthEdge.y) / 2} fontSize="12" fill="#fde68a" fontWeight="bold">{depthYards} yd</text>
+              ) : null}
+            </g>
+          ) : null}
+          {diagram?.flag && diagram.lateralEdge ? (
+            <g>
+              <line x1={diagram.flag.x} y1={diagram.flag.y} x2={diagram.lateralEdge.x} y2={diagram.lateralEdge.y} stroke="#fbbf24" strokeWidth="1.75" strokeDasharray="4 3" />
+              {edgeYards.trim() !== "" ? (
+                <text x={(diagram.flag.x + diagram.lateralEdge.x) / 2} y={diagram.flag.y - 6} textAnchor="middle" fontSize="12" fill="#fde68a" fontWeight="bold">{edgeYards} yd</text>
+              ) : null}
+            </g>
+          ) : null}
+          {diagram?.flag && diagram.depthEdge && diagram.lateralEdge ? (
+            <polyline
+              points={(() => {
+                const s = 9;
+                const sx = diagram.lateralEdge.x > diagram.flag.x ? 1 : -1;
+                const sy = diagram.depthEdge.y > diagram.flag.y ? 1 : -1;
+                const f = diagram.flag;
+                return `${f.x + sx * s},${f.y} ${f.x + sx * s},${f.y + sy * s} ${f.x},${f.y + sy * s}`;
+              })()}
+              fill="none"
+              stroke="#fde68a"
+              strokeWidth="1.5"
+            />
+          ) : null}
           {/* bandera */}
           {diagram?.flag ? (
             <g>

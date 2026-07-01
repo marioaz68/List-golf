@@ -68,6 +68,12 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
     };
   }, [hole, courseId]);
 
+  const zone: "front" | "middle" | "back" =
+    data?.flag?.color === "azul"
+      ? "back"
+      : data?.flag?.color === "blanca"
+        ? "middle"
+        : "front";
   const diagram =
     data?.greenFront && data.greenBack && data.greenCenter
       ? normalizeGreenDiagram({
@@ -78,6 +84,8 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
           flag: data.flag ? { lat: data.flag.lat, lon: data.flag.lon } : null,
           width: VIEW_W,
           height: VIEW_H,
+          zone,
+          side: (data?.flag?.side as "left" | "right") ?? undefined,
         })
       : null;
 
@@ -129,6 +137,73 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
                 )}
                 <text x={VIEW_W / 2} y={VIEW_H - 6} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">FRENTE (entrada)</text>
                 <text x={VIEW_W / 2} y={14} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">ATRÁS</text>
+
+                {/* Escuadra 90°: profundidad + lateral con yardas */}
+                {diagram?.flag && diagram.depthEdge ? (
+                  <g>
+                    <line
+                      x1={diagram.flag.x}
+                      y1={diagram.flag.y}
+                      x2={diagram.depthEdge.x}
+                      y2={diagram.depthEdge.y}
+                      stroke="#fbbf24"
+                      strokeWidth="1.75"
+                      strokeDasharray="4 3"
+                    />
+                    {flag?.depth_yards != null ? (
+                      <text
+                        x={diagram.flag.x + 6}
+                        y={(diagram.flag.y + diagram.depthEdge.y) / 2}
+                        fontSize="12"
+                        fill="#fde68a"
+                        fontWeight="bold"
+                      >
+                        {flag.depth_yards} yd
+                      </text>
+                    ) : null}
+                  </g>
+                ) : null}
+                {diagram?.flag && diagram.lateralEdge ? (
+                  <g>
+                    <line
+                      x1={diagram.flag.x}
+                      y1={diagram.flag.y}
+                      x2={diagram.lateralEdge.x}
+                      y2={diagram.lateralEdge.y}
+                      stroke="#fbbf24"
+                      strokeWidth="1.75"
+                      strokeDasharray="4 3"
+                    />
+                    {flag?.edge_yards != null ? (
+                      <text
+                        x={(diagram.flag.x + diagram.lateralEdge.x) / 2}
+                        y={diagram.flag.y - 6}
+                        textAnchor="middle"
+                        fontSize="12"
+                        fill="#fde68a"
+                        fontWeight="bold"
+                      >
+                        {flag.edge_yards} yd
+                      </text>
+                    ) : null}
+                  </g>
+                ) : null}
+                {/* Marca de ángulo recto en la bandera */}
+                {diagram?.flag && diagram.depthEdge && diagram.lateralEdge ? (
+                  <polyline
+                    points={(() => {
+                      const s = 9;
+                      const sx = diagram.lateralEdge.x > diagram.flag.x ? 1 : -1;
+                      const sy = diagram.depthEdge.y > diagram.flag.y ? 1 : -1;
+                      const f = diagram.flag;
+                      return `${f.x + sx * s},${f.y} ${f.x + sx * s},${f.y + sy * s} ${f.x},${f.y + sy * s}`;
+                    })()}
+                    fill="none"
+                    stroke="#fde68a"
+                    strokeWidth="1.5"
+                  />
+                ) : null}
+
                 {diagram?.flag ? (
                   <g>
                     <circle cx={diagram.flag.x} cy={diagram.flag.y} r="6" fill={dot} stroke="#000" strokeWidth="1" />

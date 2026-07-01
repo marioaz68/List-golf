@@ -15,9 +15,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { telegramAppUrl } from "@/lib/telegram/appUrl";
 import { CCQ_COURSE_ID } from "@/lib/distances/courseReferencePoints";
 import {
+  autoLinkFlagKeeperByUsername,
   loadLatestFlags,
   resolveFlagKeeper,
-  setFlagSession,
 } from "@/lib/flags/flagStore";
 
 const BANDERA_COMMANDS = new Set([
@@ -96,52 +96,29 @@ export async function buildBanderaReply(
   admin: SupabaseClient,
   telegramUserId: string,
   text: string | null | undefined,
+  username?: string | null,
   courseId: string = CCQ_COURSE_ID
 ): Promise<BanderaReply> {
   const tg = String(telegramUserId ?? "").trim();
 
-  const keeper = await resolveFlagKeeper(admin, tg);
+  // Autoriza por número ya vinculado; si no, intenta auto-vincular por @usuario.
+  const keeper =
+    (await resolveFlagKeeper(admin, tg)) ??
+    (await autoLinkFlagKeeperByUsername(admin, tg, username));
+
   if (!keeper) {
     return {
       text: [
         "🚩 Banderas — acceso restringido",
         "",
         "Este módulo es solo para el encargado de banderas.",
-        "Si te toca cargar las banderas, vincúlate primero:",
-        "",
-        "/soy_banderas tu_email@dominio.com",
-        "",
-        "Usa el mismo email con el que el comité te dio de alta.",
+        "Pide al comité que te asigne el rol y registre tu @usuario de Telegram;",
+        "luego solo escribe /BANDERAS y entra.",
       ].join("\n"),
     };
   }
 
   const hole = parseHoleArg(text);
-
-  if (hole) {
-    const validUntil = parseValidUntil(text);
-    await setFlagSession(admin, { telegramUserId: tg, courseId, hole, validUntil });
-    const vigencia = validUntil
-      ? `Vigencia: hasta el ${validUntil} (después vuelve al centro).`
-      : "Vigencia: hasta la próxima captura.";
-    return {
-      text: [
-        `🚩 Hoyo ${hole} listo, ${keeper.name}.`,
-        "",
-        "Párate JUNTO a la bandera y comparte tu ubicación:",
-        "📎 (clip) → Ubicación → Enviar mi ubicación actual.",
-        "",
-        "La guardo como el pin del hoyo " + hole + " y avanzo sola al siguiente.",
-        vigencia,
-        "",
-        "Para fijar vigencia: /BANDERA " + hole + " hasta 2026-07-03  ·  o  /BANDERA " + hole + " por 3",
-        "¿No te gusta cómo quedó? Toca el botón para ajustarla en el mapa.",
-      ].join("\n"),
-      buttons: [[{ text: `🗺️ Ajustar hoyo ${hole} en el mapa`, url: mapButtonUrl(tg, hole) }]],
-    };
-  }
-
-  // Menú con estado: cuántos hoyos ya tienen bandera vigente.
   let savedCount = 0;
   try {
     const latest = await loadLatestFlags(admin, courseId);
@@ -156,12 +133,11 @@ export async function buildBanderaReply(
       "",
       `Hoyos con bandera registrada: ${savedCount}/18.`,
       "",
-      "Para registrar un green por GPS:",
-      "1) Escribe el hoyo, p. ej.  /BANDERA 1",
-      "2) Párate junto a la bandera y comparte tu ubicación.",
-      "",
-      "O abre el mapa satélite y arrastra el pin de cada hoyo.",
+      "Abre la pantalla para capturar por yardas:",
+      "elige color (roja/blanca/azul), lado y las 2 yardas.",
     ].join("\n"),
-    buttons: [[{ text: "🗺️ Abrir mapa de banderas", url: mapButtonUrl(tg, null) }]],
+    buttons: [
+      [{ text: "🚩 Abrir captura de banderas", url: mapButtonUrl(tg, hole) }],
+    ],
   };
 }

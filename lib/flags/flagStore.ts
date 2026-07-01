@@ -250,6 +250,50 @@ export async function resolveFlagKeeper(
   };
 }
 
+/**
+ * Auto-vincula al encargado por su @usuario de Telegram: si un perfil con rol
+ * flag_keeper tiene ese telegram_username, le guarda el chat_id (su número) y
+ * lo devuelve. Así basta escribir /BANDERAS sin teclear correos ni números.
+ */
+export async function autoLinkFlagKeeperByUsername(
+  admin: SupabaseClient,
+  telegramUserId: string,
+  username: string | null | undefined
+): Promise<FlagKeeper | null> {
+  const uname = String(username ?? "").trim().replace(/^@/, "");
+  const tg = String(telegramUserId ?? "").trim();
+  if (!uname || !tg) return null;
+
+  const { data, error } = await admin
+    .from("profiles")
+    .select("id, first_name, last_name, is_active, telegram_username")
+    .ilike("telegram_username", uname);
+  if (error) {
+    console.error("FLAG AUTOLINK LOOKUP:", error);
+    return null;
+  }
+
+  for (const p of (data ?? []) as Array<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    is_active: boolean | null;
+  }>) {
+    if (p.is_active === false) continue;
+    if (!(await profileHasFlagKeeperRole(admin, p.id))) continue;
+    const { error: upErr } = await admin
+      .from("profiles")
+      .update({ telegram_chat_id: tg })
+      .eq("id", p.id);
+    if (upErr) {
+      console.error("FLAG AUTOLINK UPDATE:", upErr);
+      continue;
+    }
+    return { profileId: p.id, name: fullName(p.first_name, p.last_name) };
+  }
+  return null;
+}
+
 /** True si el profile tiene el rol flag_keeper activo (global o de club). */
 export async function profileHasFlagKeeperRole(
   admin: SupabaseClient,
