@@ -300,6 +300,9 @@ export default function DistanciasClient({
   } | null>(null);
   /** Hoyo donde seguías jugando antes de regresar con las flechas. */
   const [resumeHole, setResumeHole] = useState<number | null>(null);
+  /** true una vez que se cargaron los golpes guardados desde bagScope. Evita
+   *  que el menú de salida se abra por un instante antes de recuperar la ronda. */
+  const [shotsHydrated, setShotsHydrated] = useState(false);
   /** Modo corrección: quitar golpes con ✕ y re-anotar el hoyo. */
   const [holeCorrectionMode, setHoleCorrectionMode] = useState(false);
   /** Resumen al terminar la ronda (18 hoyos). */
@@ -467,6 +470,7 @@ export default function DistanciasClient({
     }
     const local = loadHoleShots(bagScope);
     setHoleShotsStore(local);
+    setShotsHydrated(true);
     if (demoMode) return;
     let cancelled = false;
     void loadHoleShotsMerged(local, bagScope, shotsSyncCtx).then((merged) => {
@@ -1656,20 +1660,26 @@ export default function DistanciasClient({
   useEffect(() => {
     const startHole = inferRoundStartHole(holeShotsStore);
     if (hasHoleTeeMark(holeShotsStore, startHole)) {
+      // Ya hay ronda en curso (salida marcada): confirma y cierra el menú por
+      // si se alcanzó a abrir mientras cargaba.
       setRoundTeeConfirmed(true);
+      setShowRoundTeePicker(false);
     }
   }, [holeShotsStore]);
 
   useEffect(() => {
+    if (!shotsHydrated) return; // esperar a recuperar la ronda guardada
     if (farFromCourse && !demoMode) return;
     if (roundTeeConfirmed) return;
     if (!needsTeeMark) return;
     if (hasLoggedShotsOnHole(holeShotsStore, activeHole)) return;
     const startHole = inferRoundStartHole(holeShotsStore);
+    if (hasHoleTeeMark(holeShotsStore, startHole)) return; // ronda ya iniciada
     if (activeHole !== startHole) return;
     if (activeHole !== 1 && activeHole !== 10) return;
     setShowRoundTeePicker(true);
   }, [
+    shotsHydrated,
     demoMode,
     farFromCourse,
     roundTeeConfirmed,
