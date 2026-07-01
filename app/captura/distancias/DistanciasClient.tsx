@@ -3267,7 +3267,6 @@ export default function DistanciasClient({
           demoMode={demoMode}
           greenCenterYards={topBarDisplay.center}
           positionLabel={topBarDisplay.label}
-          lieKind={currentBallLie?.kind ?? null}
           onGreen={topBarDisplay.onGreen}
         />
       ) : null}
