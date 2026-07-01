@@ -43,6 +43,40 @@ export function parseHoleArg(text: string | null | undefined): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 18 ? n : null;
 }
 
+/** Fecha de hoy en horario de México (YYYY-MM-DD). */
+function todayMx(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Extrae la ventana de vigencia del texto:
+ *   "hasta 2026-07-03"  → esa fecha
+ *   "por 3" / "por 3 dias" → hoy + 2 (3 días contando hoy)
+ * Si no trae nada → null (vigente hasta la próxima captura).
+ */
+export function parseValidUntil(text: string | null | undefined): string | null {
+  const t = (text || "").trim();
+
+  const hasta = t.match(/hasta\s+(\d{4}-\d{2}-\d{2})/i);
+  if (hasta) return hasta[1];
+
+  const por = t.match(/por\s+(\d{1,2})\s*(?:d[ií]as?)?/i);
+  if (por) {
+    const days = Number(por[1]);
+    if (Number.isInteger(days) && days >= 1 && days <= 60) {
+      const base = new Date(`${todayMx()}T12:00:00`);
+      base.setDate(base.getDate() + (days - 1));
+      return base.toISOString().slice(0, 10);
+    }
+  }
+  return null;
+}
+
 function mapButtonUrl(tg: string, hole: number | null): string {
   const base = `${telegramAppUrl()}/captura/banderas?tg=${encodeURIComponent(tg)}`;
   return hole ? `${base}&hole=${hole}` : base;
@@ -85,7 +119,11 @@ export async function buildBanderaReply(
   const hole = parseHoleArg(text);
 
   if (hole) {
-    await setFlagSession(admin, { telegramUserId: tg, courseId, hole });
+    const validUntil = parseValidUntil(text);
+    await setFlagSession(admin, { telegramUserId: tg, courseId, hole, validUntil });
+    const vigencia = validUntil
+      ? `Vigencia: hasta el ${validUntil} (después vuelve al centro).`
+      : "Vigencia: hasta la próxima captura.";
     return {
       text: [
         `🚩 Hoyo ${hole} listo, ${keeper.name}.`,
@@ -94,6 +132,9 @@ export async function buildBanderaReply(
         "📎 (clip) → Ubicación → Enviar mi ubicación actual.",
         "",
         "La guardo como el pin del hoyo " + hole + " y avanzo sola al siguiente.",
+        vigencia,
+        "",
+        "Para fijar vigencia: /BANDERA " + hole + " hasta 2026-07-03  ·  o  /BANDERA " + hole + " por 3",
         "¿No te gusta cómo quedó? Toca el botón para ajustarla en el mapa.",
       ].join("\n"),
       buttons: [[{ text: `🗺️ Ajustar hoyo ${hole} en el mapa`, url: mapButtonUrl(tg, hole) }]],

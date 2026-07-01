@@ -6,6 +6,7 @@ import {
   rowToGreenOverride,
   type HoleGreenOverride,
 } from "@/lib/distances/greenPoints";
+import { loadLatestFlagForHole } from "@/lib/flags/flagStore";
 
 export async function loadGreenOverridesForCourse(
   courseId: string
@@ -44,17 +45,33 @@ export async function loadGreenOverrideForHole(
     ? rowToGreenOverride(data as Record<string, unknown>)
     : null;
   const resolved = resolveHoleGreenPoints(holeNumber, override);
+
+  // Bandera del día: si el hoyo tiene una posición de bandera capturada, el
+  // "centro" (objetivo principal de Yardas) apunta a la bandera. Si NO hay
+  // bandera, se queda con el centro del green calibrado (comportamiento previo).
+  const flag = await loadLatestFlagForHole(admin, courseId, holeNumber);
+  const usingFlag = !!flag;
+  const center = usingFlag
+    ? { lat: flag!.lat, lon: flag!.lon }
+    : resolved.center;
+
   return {
     hole: holeNumber,
-    source: override && hasGreenOverride(override) ? "db" : "default",
+    // source "db" hace que el cliente use front/center/back que devolvemos.
+    // Lo forzamos también cuando hay bandera, aunque el green no esté calibrado.
+    source: (override && hasGreenOverride(override)) || usingFlag ? "db" : "default",
     saved: {
       front: !!override?.front,
       center: !!override?.center,
       back: !!override?.back,
     },
     front: resolved.front,
-    center: resolved.center,
+    center,
     back: resolved.back,
+    // Metadatos de la bandera del día (para indicador "🚩 pin del día").
+    pin: usingFlag ? { lat: flag!.lat, lon: flag!.lon } : null,
+    pinFromFlag: usingFlag,
+    flagDate: flag?.effective_date ?? null,
   };
 }
 

@@ -13,7 +13,13 @@ interface Props {
 
 interface HoleData {
   greenCenter: { lat: number; lon: number } | null;
-  flag: { lat: number; lon: number; source: string; effective_date: string } | null;
+  flag: {
+    lat: number;
+    lon: number;
+    source: string;
+    effective_date: string;
+    valid_until: string | null;
+  } | null;
 }
 
 const DEFAULT_CENTER: [number, number] = [20.5625, -100.4078];
@@ -22,6 +28,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [hole, setHole] = useState<number>(initialHole);
   const [pos, setPos] = useState<{ lat: number; lon: number } | null>(null);
   const [info, setInfo] = useState<HoleData | null>(null);
+  const [validUntil, setValidUntil] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string>("");
@@ -98,6 +105,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           return;
         }
         setInfo({ greenCenter: data.greenCenter, flag: data.flag });
+        setValidUntil(data.flag?.valid_until ?? "");
         const start = data.flag ?? data.greenCenter;
         const map = mapRef.current;
         if (start && map) {
@@ -144,14 +152,29 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       const res = await fetch(`/api/captura/banderas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tg, hole, lat: pos.lat, lon: pos.lon }),
+        body: JSON.stringify({
+          tg,
+          hole,
+          lat: pos.lat,
+          lon: pos.lon,
+          valid_until: validUntil || null,
+        }),
       });
       const data = (await res.json()) as { ok: boolean; error?: string };
       if (data.ok) {
         setMsg(`✅ Bandera del hoyo ${hole} guardada.`);
         setInfo((prev) =>
           prev
-            ? { ...prev, flag: { lat: pos.lat, lon: pos.lon, source: "map", effective_date: "" } }
+            ? {
+                ...prev,
+                flag: {
+                  lat: pos.lat,
+                  lon: pos.lon,
+                  source: "map",
+                  effective_date: "",
+                  valid_until: validUntil || null,
+                },
+              }
             : prev
         );
       } else {
@@ -162,7 +185,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [pos, tg, hole]);
+  }, [pos, tg, hole, validUntil]);
 
   const prev = () => setHole((h) => (h <= 1 ? 18 : h - 1));
   const next = () => setHole((h) => (h >= 18 ? 1 : h + 1));
@@ -221,6 +244,27 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       )}
 
       <div className="border-t border-slate-800 px-3 py-3">
+        <label className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-300">
+          <span>Válida hasta (opcional):</span>
+          <input
+            type="date"
+            value={validUntil}
+            onChange={(e) => setValidUntil(e.target.value)}
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+          />
+        </label>
+        <p className="mb-2 text-[11px] text-slate-500">
+          Si la dejas vacía, vale hasta la próxima captura. Pasada la fecha sin
+          recaptura, Yardas vuelve al centro del green.
+        </p>
+        {validUntil && (
+          <button
+            onClick={() => setValidUntil("")}
+            className="mb-2 text-[11px] text-amber-300 underline"
+          >
+            Quitar fecha (vale hasta próxima captura)
+          </button>
+        )}
         <button
           onClick={save}
           disabled={saving || !pos}

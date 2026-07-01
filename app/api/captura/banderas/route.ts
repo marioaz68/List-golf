@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
             lon: flag.lon,
             source: flag.source,
             effective_date: flag.effective_date,
+            valid_until: flag.valid_until,
           }
         : null,
     });
@@ -70,6 +71,8 @@ export async function POST(request: NextRequest) {
   const lat = Number(body.lat);
   const lon = Number(body.lon);
   const courseId = String(body.course_id ?? "").trim() || CCQ_COURSE_ID;
+  const validUntilRaw = String(body.valid_until ?? "").trim();
+  const validUntil = /^\d{4}-\d{2}-\d{2}$/.test(validUntilRaw) ? validUntilRaw : null;
 
   if (!hole) {
     return NextResponse.json({ ok: false, error: "hole inválido" }, { status: 400 });
@@ -91,6 +94,7 @@ export async function POST(request: NextRequest) {
       lat,
       lon,
       source: "map",
+      validUntil,
       chatId: tg,
       profileId: keeper.profileId,
       note: typeof body.note === "string" ? body.note : null,

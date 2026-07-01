@@ -16,6 +16,7 @@ import {
 import { obLineFromGeojson } from "@/lib/distances/detectLie";
 import { parseBoundaryGeoJson } from "@/lib/distances/holeBoundary";
 import { indexTeePositionRows } from "@/lib/distances/teePositions";
+import { loadLatestFlags } from "@/lib/flags/flagStore";
 import type { LatLon, Polygon } from "@/lib/telegram/ritmo/geometry";
 
 export const dynamic = "force-dynamic";
@@ -118,16 +119,28 @@ export async function GET(request: NextRequest) {
     const overrideByHole = new Map(
       overrides.map((o) => [o.holeNumber, o])
     );
+    // Banderas del día por hoyo: si existe, el center apunta a la bandera; si
+    // no, se queda con el centro del green (comportamiento previo).
+    const flagsByHole = await loadLatestFlags(admin, courseId);
     const greens = Array.from({ length: 18 }, (_, i) => {
       const hole = i + 1;
       const override = overrideByHole.get(hole) ?? null;
       const resolved = resolveHoleGreenPoints(hole, override);
+      const flag = flagsByHole.get(hole);
+      const usingFlag = !!flag;
+      const center = usingFlag
+        ? { lat: flag!.lat, lon: flag!.lon }
+        : resolved.center;
       return {
         hole_number: hole,
-        source: override && hasGreenOverride(override) ? "db" : "default",
+        source:
+          (override && hasGreenOverride(override)) || usingFlag ? "db" : "default",
         front: resolved.front,
-        center: resolved.center,
+        center,
         back: resolved.back,
+        pin: usingFlag ? { lat: flag!.lat, lon: flag!.lon } : null,
+        pinFromFlag: usingFlag,
+        flagDate: flag?.effective_date ?? null,
       };
     });
 

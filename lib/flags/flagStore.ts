@@ -28,6 +28,8 @@ export interface SaveFlagArgs {
   lon: number;
   source: FlagSource;
   effectiveDate?: string | null;
+  /** Último día vigente. NULL = hasta la próxima captura. */
+  validUntil?: string | null;
   chatId?: string | null;
   profileId?: string | null;
   accuracyM?: number | null;
@@ -46,6 +48,7 @@ export async function saveFlagPosition(
     lon: args.lon,
     source: args.source,
     effective_date: args.effectiveDate || todayMexicoDate(),
+    valid_until: args.validUntil ?? null,
     captured_by_chat_id: args.chatId ?? null,
     captured_by_profile_id: args.profileId ?? null,
     accuracy_m: args.accuracyM ?? null,
@@ -60,18 +63,35 @@ export interface FlagPositionRow {
   lon: number;
   source: FlagSource;
   effective_date: string;
+  valid_until: string | null;
   created_at: string;
 }
 
-/** Posición vigente (más reciente) de cada hoyo de un campo. */
+/** Filtro de vigencia: ya empezó (effective_date <= hoy) y no ha vencido
+ *  (valid_until nulo o >= hoy). Se aplica a las consultas de bandera vigente. */
+function applyValidityFilter<T>(query: T, today: string): T {
+  // Supabase query builder: encadenamos lte + or.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (query as any)
+    .lte("effective_date", today)
+    .or(`valid_until.is.null,valid_until.gte.${today}`);
+}
+
+const FLAG_COLUMNS =
+  "hole_number, lat, lon, source, effective_date, valid_until, created_at";
+
+/** Posición VIGENTE de cada hoyo (respeta la ventana de vigencia). Si la
+ *  bandera de un hoyo ya venció, ese hoyo no aparece → Yardas usa el centro. */
 export async function loadLatestFlags(
   admin: SupabaseClient,
   courseId: string
 ): Promise<Map<number, FlagPositionRow>> {
-  const { data, error } = await admin
+  const today = todayMexicoDate();
+  const base = admin
     .from("course_hole_flag_positions")
-    .select("hole_number, lat, lon, source, effective_date, created_at")
-    .eq("course_id", courseId)
+    .select(FLAG_COLUMNS)
+    .eq("course_id", courseId);
+  const { data, error } = await applyValidityFilter(base, today)
     .order("effective_date", { ascending: false })
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
@@ -84,17 +104,19 @@ export async function loadLatestFlags(
   return latest;
 }
 
-/** Posición vigente de un solo hoyo (o null si nunca se ha capturado). */
+/** Posición VIGENTE de un solo hoyo (o null si no hay vigente → centro). */
 export async function loadLatestFlagForHole(
   admin: SupabaseClient,
   courseId: string,
   hole: number
 ): Promise<FlagPositionRow | null> {
-  const { data, error } = await admin
+  const today = todayMexicoDate();
+  const base = admin
     .from("course_hole_flag_positions")
-    .select("hole_number, lat, lon, source, effective_date, created_at")
+    .select(FLAG_COLUMNS)
     .eq("course_id", courseId)
-    .eq("hole_number", hole)
+    .eq("hole_number", hole);
+  const { data, error } = await applyValidityFilter(base, today)
     .order("effective_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)
@@ -110,11 +132,18 @@ export interface FlagSession {
   course_id: string;
   hole_number: number;
   effective_date: string;
+  valid_until: string | null;
 }
 
 export async function setFlagSession(
   admin: SupabaseClient,
-  args: { telegramUserId: string; courseId: string; hole: number; effectiveDate?: string | null }
+  args: {
+    telegramUserId: string;
+    courseId: string;
+    hole: number;
+    effectiveDate?: string | null;
+    validUntil?: string | null;
+  }
 ): Promise<void> {
   const { error } = await admin.from("telegram_flag_sessions").upsert(
     {
@@ -122,6 +151,7 @@ export async function setFlagSession(
       course_id: args.courseId,
       hole_number: args.hole,
       effective_date: args.effectiveDate || todayMexicoDate(),
+      valid_until: args.validUntil ?? null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "telegram_user_id" }
@@ -135,7 +165,7 @@ export async function getFlagSession(
 ): Promise<FlagSession | null> {
   const { data, error } = await admin
     .from("telegram_flag_sessions")
-    .select("telegram_user_id, course_id, hole_number, effective_date")
+    .select("telegram_user_id, course_id, hole_number, effective_date, valid_until")
     .eq("telegram_user_id", telegramUserId)
     .maybeSingle();
   if (error) {

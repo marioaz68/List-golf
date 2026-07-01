@@ -50,6 +50,7 @@ export async function handleFlagLocationUpdate(
       lon,
       source: "gps",
       effectiveDate: session.effective_date,
+      validUntil: session.valid_until,
       chatId: telegramUserId,
       profileId: keeper.profileId,
       accuracyM: input.accuracy ?? null,
@@ -73,6 +74,7 @@ export async function handleFlagLocationUpdate(
     courseId: session.course_id,
     hole: nextHole,
     effectiveDate: session.effective_date,
+    validUntil: session.valid_until,
   });
 
   const mapUrl = `${telegramAppUrl()}/captura/banderas?tg=${encodeURIComponent(

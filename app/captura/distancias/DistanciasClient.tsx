@@ -245,6 +245,8 @@ export default function DistanciasClient({
   const [tapPoint, setTapPoint] = useState<TapPoint | null>(null);
   /** Yardas al centro del green desde el punto tocado (objetivo de golpe). */
   const [targetYards, setTargetYards] = useState(0);
+  /** true si el objetivo del hoyo activo es la bandera del día (no el centro). */
+  const [pinFromFlag, setPinFromFlag] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [bag, setBag] = useState<PlayerBag>(() => defaultPlayerBag());
@@ -837,8 +839,12 @@ export default function DistanciasClient({
           center?: { lat: number; lon: number };
           back?: { lat: number; lon: number };
           source?: string;
+          pinFromFlag?: boolean;
         };
         if (cancelled) return;
+
+        // ¿El objetivo del hoyo es la bandera del día? (para el rótulo).
+        setPinFromFlag(!!(greenData.ok && greenData.pinFromFlag));
 
         if (ptsData.ok && ptsData.points) {
           setCustomPoints(
@@ -872,6 +878,7 @@ export default function DistanciasClient({
         if (!cancelled) {
           setCustomPoints([]);
           setHoleGreen(CCQ_HOLE_POINTS[activeHole] ?? null);
+          setPinFromFlag(false);
         }
       }
     })();
@@ -1463,10 +1470,11 @@ export default function DistanciasClient({
         if (toGreen > 0) setTargetYards(toGreen);
         pinMapFraming({ lat, lon });
         openPlanFromPoint(lat, lon);
+        const targetLabel = pinFromFlag ? "a la bandera 🚩" : "al centro";
         setArrivalToast(
           wasMarked
-            ? `Salida corregida · ${toGreen} yds al centro`
-            : `Salida marcada · ${toGreen} yds al centro`
+            ? `Salida corregida · ${toGreen} yds ${targetLabel}`
+            : `Salida marcada · ${toGreen} yds ${targetLabel}`
         );
       } else {
         setShotPlanOpen(false);
@@ -1482,6 +1490,7 @@ export default function DistanciasClient({
       pinMapFraming,
       resumeHole,
       holeCorrectionMode,
+      pinFromFlag,
     ]
   );
 
