@@ -2185,7 +2185,9 @@ export default function DistanciasClient({
           pinMapFraming({ lat, lon });
           return;
         }
-        applyPendingShotLanding(lat, lon);
+        // No marcar el golpe directo: mostrar botones D/G para que el usuario
+        // elija — D = solo medir distancia a ese punto; G = ahí quedó la bola.
+        setPendingTap({ lat, lon });
         return;
       }
 
@@ -2285,6 +2287,12 @@ export default function DistanciasClient({
       setPendingTap(null);
       return;
     }
+    // Si hay un golpe pendiente (ya elegiste bastón), "G" = ahí quedó la bola.
+    if (pendingShot && pendingTap) {
+      applyPendingShotLanding(pendingTap.lat, pendingTap.lon);
+      setPendingTap(null);
+      return;
+    }
     if (pendingTap) {
       pinMapFraming(pendingTap);
       openPlanFromPoint(pendingTap.lat, pendingTap.lon);
@@ -2293,7 +2301,15 @@ export default function DistanciasClient({
       openPlanFromPoint(playFromPoint.lat, playFromPoint.lon);
     }
     setPendingTap(null);
-  }, [hasTeeMark, pendingTap, playFromPoint, openPlanFromPoint, pinMapFraming]);
+  }, [
+    hasTeeMark,
+    pendingShot,
+    pendingTap,
+    applyPendingShotLanding,
+    playFromPoint,
+    openPlanFromPoint,
+    pinMapFraming,
+  ]);
 
   const handleAddPenalty = useCallback(
     (reason: ManualPenaltyReason) => {
