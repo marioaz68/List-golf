@@ -351,6 +351,8 @@ export default function DistanciasClient({
   const [playingTeeCode, setPlayingTeeCode] = useState<TeeSetCode>("BLK");
   const [showRoundTeePicker, setShowRoundTeePicker] = useState(false);
   const [roundTeeConfirmed, setRoundTeeConfirmed] = useState(false);
+  /** Hoyo de salida elegido en el menú (1 o 10). */
+  const [roundStartHole, setRoundStartHole] = useState<number | null>(null);
   // Salidas por hoyo del set activo (calibradas o default del catálogo).
   const teeCenters = useMemo<TeesByHole>(() => {
     const out: TeesByHole = {};
@@ -1458,39 +1460,39 @@ export default function DistanciasClient({
   );
 
   const confirmRoundTee = useCallback(
-    (code: TeeSetCode) => {
+    (code: TeeSetCode, startHole: number) => {
       setPlayingTeeCode(code);
       savePlayingTeeCode(code, bagScope);
       setRoundTeeConfirmed(true);
       setShowRoundTeePicker(false);
-      const tee = resolveTeePosition(activeHole, code, teePositionsByCode);
+      setRoundStartHole(startHole);
+      setManualHole(startHole);
+      const tee = resolveTeePosition(startHole, code, teePositionsByCode);
       if (!tee) {
         setArrivalToast(
-          `Salida ${teeSetLabel(code)} sin calibrar en H${activeHole}`
+          `Salida ${teeSetLabel(code)} sin calibrar en H${startHole}`
         );
         return;
       }
       setHoleShotsStore((prev) => {
-        const next = setHoleTeeMark(prev, activeHole, tee);
+        const next = setHoleTeeMark(prev, startHole, tee);
         saveHoleShots(next, bagScope);
         return next;
       });
-      if (resumeHole == null) setResumeHole(activeHole);
-      setManualHole(activeHole);
+      if (resumeHole == null) setResumeHole(startHole);
       autoPlanHoleRef.current = null;
       pinMapFraming({ lat: tee.lat, lon: tee.lon });
       pendingHoleTeePlanRef.current = {
-        hole: activeHole,
+        hole: startHole,
         lat: tee.lat,
         lon: tee.lon,
       };
       setArrivalToast(
-        `Salida ${teeSetLabel(code)} · todo el campo · elige bastón`
+        `Salida ${teeSetLabel(code)} · hoyo ${startHole} · elige bastón`
       );
     },
     [
       bagScope,
-      activeHole,
       teePositionsByCode,
       pinMapFraming,
       resumeHole,
@@ -3059,34 +3061,13 @@ export default function DistanciasClient({
         ) : null}
         <div className="pointer-events-none flex items-center justify-between gap-1.5 px-2 pb-2">
           <div className="pointer-events-auto flex items-center gap-1.5">
-            {/* Comenzar la vuelta en la salida del 1 o del 10. */}
+            {/* Salida elegida en el menú (1 o 10). Solo informativo. */}
             <div className="flex flex-col gap-0.5">
-              <button
-                type="button"
-                onClick={() => startAtHole(1)}
-                aria-label="Comenzar en el hoyo 1"
-                className={[
-                  "rounded-md border px-2 py-0.5 text-[10px] font-black leading-tight shadow-lg backdrop-blur-sm active:scale-95",
-                  activeHole === 1
-                    ? "border-amber-300 bg-amber-500 text-black"
-                    : "border-white/30 bg-black/60 text-amber-100",
-                ].join(" ")}
-              >
-                Salir 1
-              </button>
-              <button
-                type="button"
-                onClick={() => startAtHole(10)}
-                aria-label="Comenzar en el hoyo 10"
-                className={[
-                  "rounded-md border px-2 py-0.5 text-[10px] font-black leading-tight shadow-lg backdrop-blur-sm active:scale-95",
-                  activeHole === 10
-                    ? "border-amber-300 bg-amber-500 text-black"
-                    : "border-white/30 bg-black/60 text-amber-100",
-                ].join(" ")}
-              >
-                Salir 10
-              </button>
+              {roundStartHole != null ? (
+                <div className="rounded-md border border-amber-300/60 bg-black/60 px-2 py-0.5 text-[10px] font-black leading-tight text-amber-100 shadow-lg backdrop-blur-sm">
+                  Salida H{roundStartHole}
+                </div>
+              ) : null}
               {canOfferHoleCorrection && !holeCorrectionMode ? (
                 <button
                   type="button"
