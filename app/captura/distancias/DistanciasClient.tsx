@@ -64,7 +64,6 @@ import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
 import { GreenPuttDistancePanel } from "@/components/captura/GreenPuttDistancePanel";
-import { MapFocusTopBar } from "@/components/captura/MapFocusTopBar";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { PlayerBagSheet } from "@/components/captura/PlayerBagSheet";
@@ -1403,42 +1402,6 @@ export default function DistanciasClient({
   ]);
 
   /** Pill superior: yardas al hoyo sincronizadas con el ajuste de putt. */
-  const topBarDisplay = useMemo(() => {
-    if (greenPuttPreview) {
-      return {
-        center: greenPuttPreview.puttYds,
-        onGreen: true,
-        label: topGreenLabel,
-      };
-    }
-    if (currentBallLie?.onGreen) {
-      const center =
-        planContext?.onGreen && planContext.yardsToGreen > 0
-          ? planContext.yardsToGreen
-          : topGreenYds
-            ? puttYardsFromCenter(topGreenYds.center)
-            : null;
-      if (center == null) return null;
-      return {
-        center,
-        onGreen: true,
-        label: topGreenLabel,
-      };
-    }
-    if (!topGreenYds) return null;
-    return {
-      center: topGreenYds.center,
-      onGreen: false,
-      label: topGreenLabel,
-    };
-  }, [
-    greenPuttPreview,
-    currentBallLie?.onGreen,
-    planContext,
-    topGreenYds,
-    topGreenLabel,
-  ]);
-
   const markTeeAt = useCallback(
     (lat: number, lon: number) => {
       const wasMarked = hasHoleTeeMark(holeShotsStore, activeHole);
@@ -3262,14 +3225,8 @@ export default function DistanciasClient({
         />
       ) : null}
 
-      {topBarDisplay && !farFromCourse && !needsTeeMark ? (
-        <MapFocusTopBar
-          demoMode={demoMode}
-          greenCenterYards={topBarDisplay.center}
-          positionLabel={topBarDisplay.label}
-          onGreen={topBarDisplay.onGreen}
-        />
-      ) : null}
+      {/* Barra superior de yardas removida: la info al green (ENT/CEN/FON)
+          ya se muestra en la parte inferior. */}
 
       {/* Fuera del rango del club */}
       {farFromCourse ? (
