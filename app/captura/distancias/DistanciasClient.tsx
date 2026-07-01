@@ -1657,29 +1657,38 @@ export default function DistanciasClient({
     prevActiveHoleRef.current = activeHole;
   }, [activeHole]);
 
-  useEffect(() => {
-    const startHole = inferRoundStartHole(holeShotsStore);
-    if (hasHoleTeeMark(holeShotsStore, startHole)) {
-      // Ya hay ronda en curso (salida marcada): confirma y cierra el menú por
-      // si se alcanzó a abrir mientras cargaba.
-      setRoundTeeConfirmed(true);
-      setShowRoundTeePicker(false);
-    }
+  // ¿La ronda ya empezó? True si hay CUALQUIER salida marcada o golpe guardado
+  // en el store (robusto: no depende de inferir bien el hoyo de salida).
+  const roundAlreadyStarted = useMemo(() => {
+    const teeMarks = Object.keys(holeShotsStore.teeMarkByHole ?? {}).length > 0;
+    const anyShots = Object.values(holeShotsStore.byHole ?? {}).some(
+      (arr) => Array.isArray(arr) && arr.length > 0
+    );
+    return teeMarks || anyShots;
   }, [holeShotsStore]);
 
   useEffect(() => {
+    if (roundAlreadyStarted) {
+      // Ronda en curso: confirma y cierra el menú por si se abrió al cargar.
+      setRoundTeeConfirmed(true);
+      setShowRoundTeePicker(false);
+    }
+  }, [roundAlreadyStarted]);
+
+  useEffect(() => {
     if (!shotsHydrated) return; // esperar a recuperar la ronda guardada
+    if (roundAlreadyStarted) return; // ya iniciada: nunca re-preguntar
     if (farFromCourse && !demoMode) return;
     if (roundTeeConfirmed) return;
     if (!needsTeeMark) return;
     if (hasLoggedShotsOnHole(holeShotsStore, activeHole)) return;
     const startHole = inferRoundStartHole(holeShotsStore);
-    if (hasHoleTeeMark(holeShotsStore, startHole)) return; // ronda ya iniciada
     if (activeHole !== startHole) return;
     if (activeHole !== 1 && activeHole !== 10) return;
     setShowRoundTeePicker(true);
   }, [
     shotsHydrated,
+    roundAlreadyStarted,
     demoMode,
     farFromCourse,
     roundTeeConfirmed,
