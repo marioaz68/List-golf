@@ -38,6 +38,11 @@ type SatMap = {
   setView: (center: [number, number], zoom?: number) => void;
   invalidateSize: () => void;
   remove: () => void;
+  getSize: () => { x: number; y: number };
+  getCenter: () => unknown;
+  latLngToContainerPoint: (latlng: unknown) => { x: number; y: number };
+  containerPointToLatLng: (point: unknown) => unknown;
+  panTo: (latlng: unknown, opts?: { animate?: boolean }) => void;
 };
 
 const YARD_M = 0.9144;
@@ -85,6 +90,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string>("");
   const mapWrapRef = useRef<HTMLDivElement | null>(null);
+  const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<SatMap | null>(null);
   const layerRef = useRef<{ remove: () => void } | null>(null);
 
@@ -206,6 +212,17 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     };
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
+  const mapRotationDeg = useMemo(() => {
+    if (!data?.greenFront || !data?.greenBack) return 0;
+    const fb = latLonToEN(data.greenBack, data.greenFront);
+    const norm = Math.hypot(fb.e, fb.n);
+    if (norm < 0.1) return 0;
+    // Coordenadas de pantalla: x=east, y=down=-north.
+    const theta = Math.atan2(-fb.n, fb.e);
+    const target = Math.PI / 2; // frente hacia abajo => atras arriba
+    return ((target - theta) * 180) / Math.PI;
+  }, [data?.greenFront, data?.greenBack]);
+
   useEffect(() => {
     if (!mapWrapRef.current || !displayFlag) return;
 
@@ -238,30 +255,13 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       const fg = L.featureGroup().addTo(map);
       layerRef.current = fg;
 
+      // Usamos la calibracion para encuadre/calculo, pero no pintamos overlays.
       const fitPoints: LL[] = [displayFlag];
       if (data?.greenRing && data.greenRing.length >= 3) {
-        L.polygon(
-          data.greenRing.map((p) => [p.lat, p.lon]),
-          {
-            color: "#4ade80",
-            weight: 2,
-            fillColor: "#22c55e",
-            fillOpacity: 0.14,
-          }
-        ).addTo(fg);
         fitPoints.push(...data.greenRing);
       }
       for (const b of data?.bunkerRings ?? []) {
         if (!Array.isArray(b) || b.length < 3) continue;
-        L.polygon(
-          b.map((p) => [p.lat, p.lon]),
-          {
-            color: "#f59e0b",
-            weight: 1.5,
-            fillColor: "#fbbf24",
-            fillOpacity: 0.22,
-          }
-        ).addTo(fg);
         fitPoints.push(...b);
       }
 
@@ -343,13 +343,25 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       } else {
         map.setView([displayFlag.lat, displayFlag.lon], 20);
       }
+
+      // Fija el punto "atras" del green cerca de la parte superior en todos los hoyos.
+      if (data?.greenBack) {
+        const size = map.getSize();
+        const backPt = map.latLngToContainerPoint([data.greenBack.lat, data.greenBack.lon]);
+        const centerPt = map.latLngToContainerPoint(map.getCenter());
+        const targetY = Math.max(28, size.y * 0.17);
+        const dy = targetY - backPt.y;
+        const nextCenter = map.containerPointToLatLng(L.point(centerPt.x, centerPt.y - dy));
+        map.panTo(nextCenter, { animate: false });
+      }
+
       map.invalidateSize();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot]);
+  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot, data?.greenBack]);
 
   useEffect(() => {
     return () => {
@@ -430,13 +442,16 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       {/* Vista satélite del green (con trampas calibradas) */}
       <div className="flex justify-center px-3">
-        <div className="w-full max-w-[280px]">
+        <div ref={mapViewportRef} className="w-full max-w-[336px] overflow-hidden rounded-xl border border-emerald-400/40">
           <div
             ref={mapWrapRef}
-            className="h-[320px] w-full overflow-hidden rounded-xl border border-emerald-400/40"
+            className="h-[384px] w-full"
+            style={{ transform: `scale(1.2) rotate(${mapRotationDeg}deg)`, transformOrigin: "center center" }}
             role="img"
             aria-label="Foto satélite del green con trampas y escuadra de bandera"
           />
+        </div>
+        <div className="w-full max-w-[336px]">
           <div className="mt-1 flex items-center justify-between px-1 text-[10px] font-bold text-slate-300">
             <span>FRENTE (entrada)</span>
             <span>ATRÁS</span>
