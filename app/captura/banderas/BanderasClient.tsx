@@ -99,7 +99,7 @@ const HOLE_FRAME_OVERRIDES: Record<
   { bunkerRadiusMeters?: number; pad?: number; fallbackZoom?: number }
 > = {
   // Hoyo 7: un poco mas cerca sin llegar al encuadre super cerrado.
-  7: { bunkerRadiusMeters: 45, pad: 0.08, fallbackZoom: 20.7 },
+  7: { bunkerRadiusMeters: 45, pad: 0.075, fallbackZoom: 20.7 },
   // Hoyo 17: abrir ligeramente para que no se recorte parte del green.
   17: { pad: 0.07, fallbackZoom: 20.8 },
 };
