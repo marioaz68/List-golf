@@ -92,6 +92,8 @@ const COLORS: { code: FlagColor; label: string; dot: string; zona: string }[] = 
   { code: "azul", label: "Azul", dot: "#3b82f6", zona: "atrás" },
 ];
 
+const TIGHT_FRAME_HOLES = new Set([4, 7, 14, 15, 16, 17, 18]);
+
 export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [hole, setHole] = useState<number>(initialHole);
   const [data, setData] = useState<HoleData | null>(null);
@@ -239,6 +241,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     };
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
+  const useTightFrame = TIGHT_FRAME_HOLES.has(hole);
+
   useEffect(() => {
     const mapTarget = displayFlag ?? data?.greenCenter ?? data?.greenBack ?? data?.greenFront;
     if (!mapWrapRef.current || !mapTarget) return;
@@ -287,6 +291,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         if (!Array.isArray(ring) || ring.length < 3) return false;
         const c = centroid(ring);
         if (!c) return false;
+        if (useTightFrame) return false;
         // Solo trampas del entorno del green para no abrir el zoom de todo el hoyo.
         return distanceMeters(greenAnchor, c) <= 80;
       });
@@ -333,9 +338,9 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
-        map.fitBounds(bounds.pad(0.16), { animate: false });
+        map.fitBounds(bounds.pad(useTightFrame ? 0.05 : 0.16), { animate: false });
       } else {
-        map.setView([mapTarget.lat, mapTarget.lon], 20);
+        map.setView([mapTarget.lat, mapTarget.lon], useTightFrame ? 21 : 20);
       }
 
       // Alineacion fija para todos los hoyos: back/after arriba-centro.
@@ -380,6 +385,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     data?.greenBack,
     escuadraGeo,
     flagColorDot,
+    useTightFrame,
     mapRotationDeg,
   ]);
 
