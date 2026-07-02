@@ -199,10 +199,15 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     return {
       depthEdge,
       lateralEdge,
-      depthMid: midpoint(displayFlag, depthEdge),
-      edgeMid: midpoint(displayFlag, lateralEdge),
-      depthLabel: depthYards.trim() ? `${depthYards} yd` : null,
-      edgeLabel: edgeYards.trim() ? `${edgeYards} yd` : null,
+      labelPos: midpoint(midpoint(displayFlag, depthEdge), midpoint(displayFlag, lateralEdge)),
+      labelText:
+        depthYards.trim() && edgeYards.trim()
+          ? `${depthYards.trim()} x ${edgeYards.trim()} yd`
+          : depthYards.trim()
+            ? `${depthYards.trim()} yd`
+            : edgeYards.trim()
+              ? `${edgeYards.trim()} yd`
+              : null,
     };
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
@@ -265,54 +270,18 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       if (escuadraGeo) {
         L.polyline(
           [
-            [displayFlag.lat, displayFlag.lon],
             [escuadraGeo.depthEdge.lat, escuadraGeo.depthEdge.lon],
-          ],
-          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
-        ).addTo(fg);
-        L.polyline(
-          [
             [displayFlag.lat, displayFlag.lon],
             [escuadraGeo.lateralEdge.lat, escuadraGeo.lateralEdge.lon],
           ],
-          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
+          { color: "#fbbf24", weight: 2.5 }
         ).addTo(fg);
 
-        const sq = 2.8;
-        const c = displayFlag;
-        const d = escuadraGeo.depthEdge;
-        const l = escuadraGeo.lateralEdge;
-        const de = latLonToEN(c, d);
-        const le = latLonToEN(c, l);
-        const dn = Math.hypot(de.e, de.n) || 1;
-        const ln = Math.hypot(le.e, le.n) || 1;
-        const dp = { e: (de.e / dn) * sq, n: (de.n / dn) * sq };
-        const lp = { e: (le.e / ln) * sq, n: (le.n / ln) * sq };
-        const p1 = enToLatLon(c, lp.e, lp.n);
-        const p2 = enToLatLon(c, lp.e + dp.e, lp.n + dp.n);
-        const p3 = enToLatLon(c, dp.e, dp.n);
-        L.polyline(
-          [
-            [p1.lat, p1.lon],
-            [p2.lat, p2.lon],
-            [p3.lat, p3.lon],
-          ],
-          { color: "#fde68a", weight: 2 }
-        ).addTo(fg);
-
-        if (escuadraGeo.depthLabel) {
-          L.marker([escuadraGeo.depthMid.lat, escuadraGeo.depthMid.lon], {
+        if (escuadraGeo.labelText) {
+          L.marker([escuadraGeo.labelPos.lat, escuadraGeo.labelPos.lon], {
             icon: L.divIcon({
               className: "",
-              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.depthLabel}</div>`,
-            }),
-          }).addTo(fg);
-        }
-        if (escuadraGeo.edgeLabel) {
-          L.marker([escuadraGeo.edgeMid.lat, escuadraGeo.edgeMid.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.edgeLabel}</div>`,
+              html: `<div style=\"font-size:12px;font-weight:800;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap\">${escuadraGeo.labelText}</div>`,
             }),
           }).addTo(fg);
         }
@@ -322,7 +291,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
-        map.fitBounds(bounds.pad(0.45), { animate: false });
+        map.fitBounds(bounds.pad(0.08), { animate: false });
       } else {
         map.setView([displayFlag.lat, displayFlag.lon], 20);
       }
@@ -415,7 +384,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         <div className="w-full max-w-none overflow-hidden rounded-none border-y border-emerald-400/40 sm:max-w-[360px] sm:rounded-xl sm:border">
           <div
             ref={mapWrapRef}
-            className="h-[44vh] min-h-[360px] w-full sm:h-[360px]"
+            className="h-[56vh] min-h-[430px] w-full sm:h-[390px]"
             role="img"
             aria-label="Foto satélite del green con trampas y escuadra de bandera"
           />
