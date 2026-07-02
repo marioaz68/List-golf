@@ -38,11 +38,6 @@ type SatMap = {
   setView: (center: [number, number], zoom?: number) => void;
   invalidateSize: () => void;
   remove: () => void;
-  getSize: () => { x: number; y: number };
-  getCenter: () => unknown;
-  latLngToContainerPoint: (latlng: unknown) => { x: number; y: number };
-  containerPointToLatLng: (point: unknown) => unknown;
-  panTo: (latlng: unknown, opts?: { animate?: boolean }) => void;
 };
 
 const YARD_M = 0.9144;
@@ -90,7 +85,6 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string>("");
   const mapWrapRef = useRef<HTMLDivElement | null>(null);
-  const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<SatMap | null>(null);
   const layerRef = useRef<{ remove: () => void } | null>(null);
 
@@ -211,17 +205,6 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       edgeLabel: edgeYards.trim() ? `${edgeYards} yd` : null,
     };
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
-
-  const mapRotationDeg = useMemo(() => {
-    if (!data?.greenFront || !data?.greenBack) return 0;
-    const fb = latLonToEN(data.greenBack, data.greenFront);
-    const norm = Math.hypot(fb.e, fb.n);
-    if (norm < 0.1) return 0;
-    // Coordenadas de pantalla: x=east, y=down=-north.
-    const theta = Math.atan2(-fb.n, fb.e);
-    const target = Math.PI / 2; // frente hacia abajo => atras arriba
-    return ((target - theta) * 180) / Math.PI;
-  }, [data?.greenFront, data?.greenBack]);
 
   useEffect(() => {
     if (!mapWrapRef.current || !displayFlag) return;
@@ -344,24 +327,13 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         map.setView([displayFlag.lat, displayFlag.lon], 20);
       }
 
-      // Fija el punto "atras" del green cerca de la parte superior en todos los hoyos.
-      if (data?.greenBack) {
-        const size = map.getSize();
-        const backPt = map.latLngToContainerPoint([data.greenBack.lat, data.greenBack.lon]);
-        const centerPt = map.latLngToContainerPoint(map.getCenter());
-        const targetY = Math.max(28, size.y * 0.17);
-        const dy = targetY - backPt.y;
-        const nextCenter = map.containerPointToLatLng(L.point(centerPt.x, centerPt.y - dy));
-        map.panTo(nextCenter, { animate: false });
-      }
-
       map.invalidateSize();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot, data?.greenBack]);
+  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot]);
 
   useEffect(() => {
     return () => {
@@ -421,9 +393,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           <div className="truncate text-sm font-bold text-amber-200">
             🚩 Banderas — {keeperName}
           </div>
-          <div className="text-[11px] text-slate-400">
-            Captura por yardas · frente abajo, atrás arriba
-          </div>
+          <div className="text-[11px] text-slate-400">Captura por yardas</div>
         </div>
         <Link href="/" className="shrink-0 rounded-md border border-slate-700 px-2 py-1 text-xs">
           Salir
@@ -442,16 +412,15 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       {/* Vista satélite del green (con trampas calibradas) */}
       <div className="flex justify-center px-3">
-        <div ref={mapViewportRef} className="w-full max-w-[336px] overflow-hidden rounded-xl border border-emerald-400/40">
+        <div className="w-full max-w-[320px] overflow-hidden rounded-xl border border-emerald-400/40">
           <div
             ref={mapWrapRef}
-            className="h-[384px] w-full"
-            style={{ transform: `scale(1.2) rotate(${mapRotationDeg}deg)`, transformOrigin: "center center" }}
+            className="h-[352px] w-full"
             role="img"
             aria-label="Foto satélite del green con trampas y escuadra de bandera"
           />
         </div>
-        <div className="w-full max-w-[336px]">
+        <div className="w-full max-w-[320px]">
           <div className="mt-1 flex items-center justify-between px-1 text-[10px] font-bold text-slate-300">
             <span>FRENTE (entrada)</span>
             <span>ATRÁS</span>
