@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { addSatelliteLayers, loadLeaflet } from "@/components/captura/mapRotation";
 import {
   computeFlagPosition,
   type FlagColor,
   type FlagSide,
 } from "@/lib/flags/pinSheetGeometry";
-import { normalizeGreenDiagram } from "@/lib/flags/greenDiagram";
 
 interface Props {
   tg: string;
@@ -21,6 +21,7 @@ interface HoleData {
   greenFront: LL | null;
   greenBack: LL | null;
   greenRing: LL[] | null;
+  bunkerRings?: LL[][];
   flag: {
     lat: number;
     lon: number;
@@ -32,14 +33,45 @@ interface HoleData {
   } | null;
 }
 
+type SatMap = {
+  fitBounds: (bounds: unknown, opts?: { animate?: boolean }) => void;
+  setView: (center: [number, number], zoom?: number) => void;
+  invalidateSize: () => void;
+  remove: () => void;
+};
+
+const YARD_M = 0.9144;
+const M_PER_DEG_LAT = 111_320;
+
+function metersPerDegLon(lat: number): number {
+  return M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+}
+
+function latLonToEN(origin: LL, point: LL): { e: number; n: number } {
+  const mLon = metersPerDegLon(origin.lat);
+  return {
+    e: (point.lon - origin.lon) * mLon,
+    n: (point.lat - origin.lat) * M_PER_DEG_LAT,
+  };
+}
+
+function enToLatLon(origin: LL, e: number, n: number): LL {
+  const mLon = metersPerDegLon(origin.lat);
+  return {
+    lat: origin.lat + n / M_PER_DEG_LAT,
+    lon: origin.lon + (mLon > 0 ? e / mLon : 0),
+  };
+}
+
+function midpoint(a: LL, b: LL): LL {
+  return { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+}
+
 const COLORS: { code: FlagColor; label: string; dot: string; zona: string }[] = [
   { code: "roja", label: "Roja", dot: "#ef4444", zona: "adelante" },
   { code: "blanca", label: "Blanca", dot: "#e5e7eb", zona: "medio" },
   { code: "azul", label: "Azul", dot: "#3b82f6", zona: "atrás" },
 ];
-
-const VIEW_W = 260;
-const VIEW_H = 320;
 
 export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [hole, setHole] = useState<number>(initialHole);
@@ -52,6 +84,9 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string>("");
+  const mapWrapRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<SatMap | null>(null);
+  const layerRef = useRef<{ remove: () => void } | null>(null);
 
   const loadHole = useCallback(
     async (h: number) => {
@@ -73,6 +108,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           greenFront: d.greenFront,
           greenBack: d.greenBack,
           greenRing: d.greenRing,
+          bunkerRings: Array.isArray(d.bunkerRings) ? d.bunkerRings : [],
           flag: d.flag,
         });
         // Precargar con la bandera vigente si existe.
@@ -130,24 +166,203 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     );
   }, [data, inputsReady, color, side, depthNum, edgeNum]);
 
-  const diagram = useMemo(() => {
-    if (!data?.greenFront || !data.greenBack || !data.greenCenter) return null;
-    const flagLL =
-      previewFlag ?? (data.flag ? { lat: data.flag.lat, lon: data.flag.lon } : null);
-    const zone: "front" | "middle" | "back" =
-      color === "azul" ? "back" : color === "blanca" ? "middle" : "front";
-    return normalizeGreenDiagram({
-      front: data.greenFront,
-      back: data.greenBack,
-      center: data.greenCenter,
-      ring: data.greenRing,
-      flag: flagLL,
-      width: VIEW_W,
-      height: VIEW_H,
-      zone,
-      side: side ?? undefined,
-    });
-  }, [data, previewFlag, color, side]);
+  const displayFlag = useMemo(
+    () =>
+      previewFlag ??
+      (data?.flag ? { lat: data.flag.lat, lon: data.flag.lon } : null),
+    [previewFlag, data?.flag]
+  );
+
+  const flagColorDot =
+    COLORS.find((c) => c.code === color)?.dot ?? "#f59e0b";
+
+  const escuadraGeo = useMemo(() => {
+    if (!displayFlag || !data?.greenFront || !data?.greenBack) return null;
+    const front = data.greenFront;
+    const back = data.greenBack;
+    const fb = latLonToEN(front, back);
+    const norm = Math.hypot(fb.e, fb.n);
+    if (norm < 0.1) return null;
+
+    const axis = { e: fb.e / norm, n: fb.n / norm };
+    const right = { e: axis.n, n: -axis.e };
+    const left = { e: -axis.n, n: axis.e };
+
+    const depthMeters = Math.max(0, (Number(depthYards) || 0) * YARD_M);
+    const edgeMeters = Math.max(0, (Number(edgeYards) || 0) * YARD_M);
+    const depthDir = color === "azul" ? axis : { e: -axis.e, n: -axis.n };
+    const latDir = side === "right" ? right : left;
+
+    const depthEdge = enToLatLon(displayFlag, depthDir.e * depthMeters, depthDir.n * depthMeters);
+    const lateralEdge = enToLatLon(displayFlag, latDir.e * edgeMeters, latDir.n * edgeMeters);
+
+    return {
+      depthEdge,
+      lateralEdge,
+      depthMid: midpoint(displayFlag, depthEdge),
+      edgeMid: midpoint(displayFlag, lateralEdge),
+      depthLabel: depthYards.trim() ? `${depthYards} yd` : null,
+      edgeLabel: edgeYards.trim() ? `${edgeYards} yd` : null,
+    };
+  }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
+
+  useEffect(() => {
+    if (!mapWrapRef.current || !displayFlag) return;
+
+    let cancelled = false;
+    (async () => {
+      const L = await loadLeaflet();
+      if (cancelled || !mapWrapRef.current) return;
+
+      if (!mapRef.current) {
+        mapRef.current = L.map(mapWrapRef.current, {
+          zoomControl: false,
+          attributionControl: false,
+          dragging: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          scrollWheelZoom: false,
+          boxZoom: false,
+          keyboard: false,
+          tap: false,
+        });
+        addSatelliteLayers(mapRef.current, L);
+      }
+
+      const map = mapRef.current;
+      if (!map) return;
+      if (layerRef.current) {
+        layerRef.current.remove();
+        layerRef.current = null;
+      }
+      const fg = L.featureGroup().addTo(map);
+      layerRef.current = fg;
+
+      const fitPoints: LL[] = [displayFlag];
+      if (data?.greenRing && data.greenRing.length >= 3) {
+        L.polygon(
+          data.greenRing.map((p) => [p.lat, p.lon]),
+          {
+            color: "#4ade80",
+            weight: 2,
+            fillColor: "#22c55e",
+            fillOpacity: 0.14,
+          }
+        ).addTo(fg);
+        fitPoints.push(...data.greenRing);
+      }
+      for (const b of data?.bunkerRings ?? []) {
+        if (!Array.isArray(b) || b.length < 3) continue;
+        L.polygon(
+          b.map((p) => [p.lat, p.lon]),
+          {
+            color: "#f59e0b",
+            weight: 1.5,
+            fillColor: "#fbbf24",
+            fillOpacity: 0.22,
+          }
+        ).addTo(fg);
+        fitPoints.push(...b);
+      }
+
+      const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
+        radius: 6,
+        color: "#111827",
+        weight: 1.5,
+        fillColor: flagColorDot,
+        fillOpacity: 1,
+      }).addTo(fg);
+      pin.bindTooltip("🚩", {
+        permanent: true,
+        direction: "top",
+        offset: [0, -8],
+        className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
+      });
+
+      if (escuadraGeo) {
+        L.polyline(
+          [
+            [displayFlag.lat, displayFlag.lon],
+            [escuadraGeo.depthEdge.lat, escuadraGeo.depthEdge.lon],
+          ],
+          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
+        ).addTo(fg);
+        L.polyline(
+          [
+            [displayFlag.lat, displayFlag.lon],
+            [escuadraGeo.lateralEdge.lat, escuadraGeo.lateralEdge.lon],
+          ],
+          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
+        ).addTo(fg);
+
+        const sq = 2.8;
+        const c = displayFlag;
+        const d = escuadraGeo.depthEdge;
+        const l = escuadraGeo.lateralEdge;
+        const de = latLonToEN(c, d);
+        const le = latLonToEN(c, l);
+        const dn = Math.hypot(de.e, de.n) || 1;
+        const ln = Math.hypot(le.e, le.n) || 1;
+        const dp = { e: (de.e / dn) * sq, n: (de.n / dn) * sq };
+        const lp = { e: (le.e / ln) * sq, n: (le.n / ln) * sq };
+        const p1 = enToLatLon(c, lp.e, lp.n);
+        const p2 = enToLatLon(c, lp.e + dp.e, lp.n + dp.n);
+        const p3 = enToLatLon(c, dp.e, dp.n);
+        L.polyline(
+          [
+            [p1.lat, p1.lon],
+            [p2.lat, p2.lon],
+            [p3.lat, p3.lon],
+          ],
+          { color: "#fde68a", weight: 2 }
+        ).addTo(fg);
+
+        if (escuadraGeo.depthLabel) {
+          L.marker([escuadraGeo.depthMid.lat, escuadraGeo.depthMid.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.depthLabel}</div>`,
+            }),
+          }).addTo(fg);
+        }
+        if (escuadraGeo.edgeLabel) {
+          L.marker([escuadraGeo.edgeMid.lat, escuadraGeo.edgeMid.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.edgeLabel}</div>`,
+            }),
+          }).addTo(fg);
+        }
+
+        fitPoints.push(escuadraGeo.depthEdge, escuadraGeo.lateralEdge);
+      }
+
+      if (fitPoints.length > 1) {
+        const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
+        map.fitBounds(bounds.pad(0.45), { animate: false });
+      } else {
+        map.setView([displayFlag.lat, displayFlag.lon], 20);
+      }
+      map.invalidateSize();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot]);
+
+  useEffect(() => {
+    return () => {
+      if (layerRef.current) {
+        layerRef.current.remove();
+        layerRef.current = null;
+      }
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   const save = useCallback(async () => {
     if (!inputsReady || !color || !side) {
@@ -187,9 +402,6 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const prev = () => setHole((h) => (h <= 1 ? 18 : h - 1));
   const next = () => setHole((h) => (h >= 18 ? 1 : h + 1));
 
-  const flagColorDot =
-    COLORS.find((c) => c.code === color)?.dot ?? "#f59e0b";
-
   return (
     <div className="flex min-h-dvh flex-col bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between gap-2 border-b border-slate-800 px-3 py-2">
@@ -216,58 +428,20 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         <button onClick={next} className="rounded-md bg-slate-800 px-3 py-2 text-lg font-bold" aria-label="Siguiente hoyo">›</button>
       </div>
 
-      {/* Diagrama del green (orientación fija) */}
+      {/* Vista satélite del green (con trampas calibradas) */}
       <div className="flex justify-center px-3">
-        <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="w-full max-w-[280px]" role="img" aria-label="Diagrama del green">
-          <rect x="0" y="0" width={VIEW_W} height={VIEW_H} fill="#0b1220" rx="12" />
-          {diagram?.ok && diagram.ringPoints ? (
-            <polygon points={diagram.ringPoints} fill="#14532d" stroke="#4ade80" strokeWidth="2" />
-          ) : (
-            <ellipse cx={VIEW_W / 2} cy={VIEW_H / 2} rx={VIEW_W / 3} ry={VIEW_H / 3} fill="#14532d" stroke="#4ade80" strokeWidth="2" />
-          )}
-          {/* etiquetas frente/atrás */}
-          <text x={VIEW_W / 2} y={VIEW_H - 6} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">FRENTE (entrada)</text>
-          <text x={VIEW_W / 2} y={14} textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="bold">ATRÁS</text>
-          {/* escuadra 90°: profundidad + lateral */}
-          {diagram?.flag && diagram.depthEdge ? (
-            <g>
-              <line x1={diagram.flag.x} y1={diagram.flag.y} x2={diagram.depthEdge.x} y2={diagram.depthEdge.y} stroke="#fbbf24" strokeWidth="1.75" strokeDasharray="4 3" />
-              {depthYards.trim() !== "" ? (
-                <text x={diagram.flag.x + 6} y={(diagram.flag.y + diagram.depthEdge.y) / 2} fontSize="12" fill="#fde68a" fontWeight="bold">{depthYards} yd</text>
-              ) : null}
-            </g>
-          ) : null}
-          {diagram?.flag && diagram.lateralEdge ? (
-            <g>
-              <line x1={diagram.flag.x} y1={diagram.flag.y} x2={diagram.lateralEdge.x} y2={diagram.lateralEdge.y} stroke="#fbbf24" strokeWidth="1.75" strokeDasharray="4 3" />
-              {edgeYards.trim() !== "" ? (
-                <text x={(diagram.flag.x + diagram.lateralEdge.x) / 2} y={diagram.flag.y - 6} textAnchor="middle" fontSize="12" fill="#fde68a" fontWeight="bold">{edgeYards} yd</text>
-              ) : null}
-            </g>
-          ) : null}
-          {diagram?.flag && diagram.depthEdge && diagram.lateralEdge ? (
-            <polyline
-              points={(() => {
-                const s = 9;
-                const sx = diagram.lateralEdge.x > diagram.flag.x ? 1 : -1;
-                const sy = diagram.depthEdge.y > diagram.flag.y ? 1 : -1;
-                const f = diagram.flag;
-                return `${f.x + sx * s},${f.y} ${f.x + sx * s},${f.y + sy * s} ${f.x},${f.y + sy * s}`;
-              })()}
-              fill="none"
-              stroke="#fde68a"
-              strokeWidth="1.5"
-            />
-          ) : null}
-          {/* bandera */}
-          {diagram?.flag ? (
-            <g>
-              <circle cx={diagram.flag.x} cy={diagram.flag.y} r="6" fill={flagColorDot} stroke="#000" strokeWidth="1" />
-              <line x1={diagram.flag.x} y1={diagram.flag.y} x2={diagram.flag.x} y2={diagram.flag.y - 16} stroke="#000" strokeWidth="1.5" />
-              <polygon points={`${diagram.flag.x},${diagram.flag.y - 16} ${diagram.flag.x + 10},${diagram.flag.y - 13} ${diagram.flag.x},${diagram.flag.y - 10}`} fill={flagColorDot} />
-            </g>
-          ) : null}
-        </svg>
+        <div className="w-full max-w-[280px]">
+          <div
+            ref={mapWrapRef}
+            className="h-[320px] w-full overflow-hidden rounded-xl border border-emerald-400/40"
+            role="img"
+            aria-label="Foto satélite del green con trampas y escuadra de bandera"
+          />
+          <div className="mt-1 flex items-center justify-between px-1 text-[10px] font-bold text-slate-300">
+            <span>FRENTE (entrada)</span>
+            <span>ATRÁS</span>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-3 px-3 py-2">

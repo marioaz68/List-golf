@@ -43,6 +43,27 @@ async function loadGreenRing(
   }
 }
 
+async function loadKindRings(
+  admin: ReturnType<typeof createAdminClient>,
+  courseId: string,
+  hole: number,
+  kind: "green" | "bunker"
+): Promise<LatLon[][]> {
+  try {
+    const rows = await loadHolePolygons(admin, courseId, hole, kind);
+    const out: LatLon[][] = [];
+    for (const r of rows) {
+      const poly = parseBoundaryGeoJson(r.geojson);
+      if (!poly) continue;
+      const ring = ringFromPolygon(poly);
+      if (ring.length >= 3) out.push(ring);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 const COLORS = new Set<FlagColor>(["roja", "blanca", "azul"]);
 const SIDES = new Set<FlagSide>(["left", "right"]);
 
@@ -66,6 +87,7 @@ export async function GET(request: NextRequest) {
   try {
     const green = await loadGreenOverrideForHole(courseId, hole);
     const ring = await loadGreenRing(admin, courseId, hole);
+    const bunkerRings = await loadKindRings(admin, courseId, hole, "bunker");
     const flag = await loadLatestFlagForHole(admin, courseId, hole);
     return NextResponse.json({
       ok: true,
@@ -74,6 +96,7 @@ export async function GET(request: NextRequest) {
       greenFront: green.front ?? null,
       greenBack: green.back ?? null,
       greenRing: ring,
+      bunkerRings,
       flag: flag
         ? {
             lat: flag.lat,
