@@ -93,8 +93,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     const norm = Math.hypot(axis.e, axis.n);
     if (norm < 0.1) return 0;
 
-    const screenAngle = Math.atan2(axis.e, -axis.n);
-    return ((screenAngle * 180) / Math.PI + 180) % 360;
+    const screenAngle = (Math.atan2(-axis.n, axis.e) * 180) / Math.PI;
+    return -90 - screenAngle;
   }, [data?.greenFront, data?.greenBack]);
 
   const loadHole = useCallback(
