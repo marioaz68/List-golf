@@ -94,7 +94,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     if (norm < 0.1) return 0;
 
     const screenAngle = Math.atan2(axis.e, -axis.n);
-    return (screenAngle * 180) / Math.PI;
+    return ((screenAngle * 180) / Math.PI + 180) % 360;
   }, [data?.greenFront, data?.greenBack]);
 
   const loadHole = useCallback(
@@ -391,7 +391,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       {/* Vista satélite del green (con trampas calibradas) */}
       <div className="flex justify-center px-0 sm:px-3">
         <div className="w-full max-w-none overflow-hidden rounded-none border-y border-emerald-400/40 sm:max-w-[360px] sm:rounded-xl sm:border">
-            <div style={{ transform: `rotate(${mapRotationDeg}deg)`, transformOrigin: "center center" }}>
+            <div key={hole} style={{ transform: `rotate(${mapRotationDeg}deg)`, transformOrigin: "center center" }}>
               <div
                 ref={mapWrapRef}
                 className="h-[56vh] min-h-[430px] w-full sm:h-[390px]"
