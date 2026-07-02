@@ -87,6 +87,15 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const mapWrapRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<SatMap | null>(null);
   const layerRef = useRef<{ remove: () => void } | null>(null);
+  const mapRotationDeg = useMemo(() => {
+    if (!data?.greenFront || !data?.greenBack) return 0;
+    const axis = latLonToEN(data.greenFront, data.greenBack);
+    const norm = Math.hypot(axis.e, axis.n);
+    if (norm < 0.1) return 0;
+
+    const screenAngle = Math.atan2(axis.e, -axis.n);
+    return (screenAngle * 180) / Math.PI;
+  }, [data?.greenFront, data?.greenBack]);
 
   const loadHole = useCallback(
     async (h: number) => {
@@ -291,7 +300,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
-        map.fitBounds(bounds.pad(0.08), { animate: false });
+        map.fitBounds(bounds.pad(0.16), { animate: false });
       } else {
         map.setView([displayFlag.lat, displayFlag.lon], 20);
       }
@@ -382,12 +391,14 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       {/* Vista satélite del green (con trampas calibradas) */}
       <div className="flex justify-center px-0 sm:px-3">
         <div className="w-full max-w-none overflow-hidden rounded-none border-y border-emerald-400/40 sm:max-w-[360px] sm:rounded-xl sm:border">
-          <div
-            ref={mapWrapRef}
-            className="h-[56vh] min-h-[430px] w-full sm:h-[390px]"
-            role="img"
-            aria-label="Foto satélite del green con trampas y escuadra de bandera"
-          />
+            <div style={{ transform: `rotate(${mapRotationDeg}deg)`, transformOrigin: "center center" }}>
+              <div
+                ref={mapWrapRef}
+                className="h-[56vh] min-h-[430px] w-full sm:h-[390px]"
+                role="img"
+                aria-label="Foto satélite del green con trampas y escuadra de bandera"
+              />
+            </div>
           <div className="flex items-center justify-between px-1 py-1 text-[10px] font-bold text-slate-300 sm:px-2">
             <span>FRENTE (entrada)</span>
             <span>ATRÁS</span>
