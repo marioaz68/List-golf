@@ -310,7 +310,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         });
       }
 
-      if (escuadraGeo) {
+      if (escuadraGeo && displayFlag) {
         L.polyline(
           [
             [escuadraGeo.depthEdge.lat, escuadraGeo.depthEdge.lon],
