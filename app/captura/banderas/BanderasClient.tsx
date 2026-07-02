@@ -94,6 +94,15 @@ const COLORS: { code: FlagColor; label: string; dot: string; zona: string }[] = 
 
 const TIGHT_FRAME_HOLES = new Set([4, 15, 16, 17, 18]);
 const MEDIUM_FRAME_HOLES = new Set([7, 14]);
+const HOLE_FRAME_OVERRIDES: Record<
+  number,
+  { bunkerRadiusMeters?: number; pad?: number; fallbackZoom?: number }
+> = {
+  // Hoyo 7: un poco mas cerca sin llegar al encuadre super cerrado.
+  7: { bunkerRadiusMeters: 45, pad: 0.08, fallbackZoom: 20.7 },
+  // Hoyo 17: abrir ligeramente para que no se recorte parte del green.
+  17: { pad: 0.07, fallbackZoom: 20.8 },
+};
 
 export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   const [hole, setHole] = useState<number>(initialHole);
@@ -289,7 +298,12 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         if (data?.greenCenter) fitPoints.push(data.greenCenter);
       }
 
-      const bunkerRadiusMeters = useTightFrame ? 0 : useMediumFrame ? 55 : 80;
+      const frameOverride = HOLE_FRAME_OVERRIDES[hole];
+      const bunkerRadiusMeters =
+        frameOverride?.bunkerRadiusMeters ??
+        (useTightFrame ? 0 : useMediumFrame ? 55 : 80);
+      const fitPad = frameOverride?.pad ?? (useTightFrame ? 0.05 : useMediumFrame ? 0.1 : 0.16);
+      const fallbackZoom = frameOverride?.fallbackZoom ?? (useTightFrame ? 21 : useMediumFrame ? 20.5 : 20);
       const nearbyBunkers = (data?.bunkerRings ?? []).filter((ring) => {
         if (!Array.isArray(ring) || ring.length < 3) return false;
         const c = centroid(ring);
@@ -341,9 +355,9 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
-        map.fitBounds(bounds.pad(useTightFrame ? 0.05 : useMediumFrame ? 0.1 : 0.16), { animate: false });
+        map.fitBounds(bounds.pad(fitPad), { animate: false });
       } else {
-        map.setView([mapTarget.lat, mapTarget.lon], useTightFrame ? 21 : useMediumFrame ? 20.5 : 20);
+        map.setView([mapTarget.lat, mapTarget.lon], fallbackZoom);
       }
 
       // Alineacion fija para todos los hoyos: back/after arriba-centro.
@@ -390,6 +404,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     flagColorDot,
     useTightFrame,
     useMediumFrame,
+    hole,
     mapRotationDeg,
   ]);
 
