@@ -100,8 +100,8 @@ const HOLE_FRAME_OVERRIDES: Record<
 > = {
   // Hoyo 7: un poco mas cerca sin llegar al encuadre super cerrado.
   7: { bunkerRadiusMeters: 45, pad: 0.075, fallbackZoom: 20.7 },
-  // Hoyo 17: abrir ligeramente para que no se recorte parte del green.
-  17: { pad: 0.07, fallbackZoom: 20.8 },
+  // Hoyo 17: abrir un poco mas para que no se recorte el lado izquierdo.
+  17: { pad: 0.09, fallbackZoom: 20.6 },
 };
 
 export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
