@@ -411,17 +411,15 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       </div>
 
       {/* Vista satélite del green (con trampas calibradas) */}
-      <div className="flex justify-center px-3">
-        <div className="w-full max-w-[320px] overflow-hidden rounded-xl border border-emerald-400/40">
+      <div className="flex justify-center px-0 sm:px-3">
+        <div className="w-full max-w-none overflow-hidden rounded-none border-y border-emerald-400/40 sm:max-w-[360px] sm:rounded-xl sm:border">
           <div
             ref={mapWrapRef}
-            className="h-[352px] w-full"
+            className="h-[44vh] min-h-[360px] w-full sm:h-[360px]"
             role="img"
             aria-label="Foto satélite del green con trampas y escuadra de bandera"
           />
-        </div>
-        <div className="w-full max-w-[320px]">
-          <div className="mt-1 flex items-center justify-between px-1 text-[10px] font-bold text-slate-300">
+          <div className="flex items-center justify-between px-1 py-1 text-[10px] font-bold text-slate-300 sm:px-2">
             <span>FRENTE (entrada)</span>
             <span>ATRÁS</span>
           </div>
