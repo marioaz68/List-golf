@@ -67,6 +67,22 @@ function midpoint(a: LL, b: LL): LL {
   return { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
 }
 
+function distanceMeters(a: LL, b: LL): number {
+  const d = latLonToEN(a, b);
+  return Math.hypot(d.e, d.n);
+}
+
+function centroid(points: LL[]): LL | null {
+  if (!points.length) return null;
+  let lat = 0;
+  let lon = 0;
+  for (const p of points) {
+    lat += p.lat;
+    lon += p.lon;
+  }
+  return { lat: lat / points.length, lon: lon / points.length };
+}
+
 const COLORS: { code: FlagColor; label: string; dot: string; zona: string }[] = [
   { code: "roja", label: "Roja", dot: "#ef4444", zona: "adelante" },
   { code: "blanca", label: "Blanca", dot: "#e5e7eb", zona: "medio" },
@@ -252,13 +268,25 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       const fg = L.featureGroup().addTo(map);
       layerRef.current = fg;
 
-      // Usamos la calibracion para encuadre/calculo, pero no pintamos overlays.
+      // Encuadre estable: green + bunkers cercanos al green (no todo el hoyo).
       const fitPoints: LL[] = [displayFlag];
+      const greenAnchor = data?.greenCenter ?? data?.greenBack ?? data?.greenFront ?? displayFlag;
       if (data?.greenRing && data.greenRing.length >= 3) {
         fitPoints.push(...data.greenRing);
+      } else {
+        if (data?.greenFront) fitPoints.push(data.greenFront);
+        if (data?.greenBack) fitPoints.push(data.greenBack);
+        if (data?.greenCenter) fitPoints.push(data.greenCenter);
       }
-      for (const b of data?.bunkerRings ?? []) {
-        if (!Array.isArray(b) || b.length < 3) continue;
+
+      const nearbyBunkers = (data?.bunkerRings ?? []).filter((ring) => {
+        if (!Array.isArray(ring) || ring.length < 3) return false;
+        const c = centroid(ring);
+        if (!c) return false;
+        // Solo trampas del entorno del green para no abrir el zoom de todo el hoyo.
+        return distanceMeters(greenAnchor, c) <= 80;
+      });
+      for (const b of nearbyBunkers) {
         fitPoints.push(...b);
       }
 
@@ -295,7 +323,6 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           }).addTo(fg);
         }
 
-        fitPoints.push(escuadraGeo.depthEdge, escuadraGeo.lateralEdge);
       }
 
       if (fitPoints.length > 1) {
@@ -311,7 +338,16 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot]);
+  }, [
+    displayFlag,
+    data?.greenRing,
+    data?.bunkerRings,
+    data?.greenCenter,
+    data?.greenFront,
+    data?.greenBack,
+    escuadraGeo,
+    flagColorDot,
+  ]);
 
   useEffect(() => {
     return () => {
