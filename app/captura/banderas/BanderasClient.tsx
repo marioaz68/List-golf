@@ -36,6 +36,9 @@ interface HoleData {
 type SatMap = {
   fitBounds: (bounds: unknown, opts?: { animate?: boolean }) => void;
   setView: (center: [number, number], zoom?: number) => void;
+  panBy: (offset: [number, number], opts?: { animate?: boolean }) => void;
+  latLngToContainerPoint: (latlng: [number, number]) => { x: number; y: number };
+  getSize: () => { x: number; y: number };
   invalidateSize: () => void;
   remove: () => void;
 };
@@ -237,7 +240,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
   useEffect(() => {
-    if (!mapWrapRef.current || !displayFlag) return;
+    const mapTarget = displayFlag ?? data?.greenCenter ?? data?.greenBack ?? data?.greenFront;
+    if (!mapWrapRef.current || !mapTarget) return;
 
     let cancelled = false;
     (async () => {
@@ -269,8 +273,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       layerRef.current = fg;
 
       // Encuadre estable: green + bunkers cercanos al green (no todo el hoyo).
-      const fitPoints: LL[] = [displayFlag];
-      const greenAnchor = data?.greenCenter ?? data?.greenBack ?? data?.greenFront ?? displayFlag;
+      const fitPoints: LL[] = [mapTarget];
+      const greenAnchor = data?.greenCenter ?? data?.greenBack ?? data?.greenFront ?? mapTarget;
       if (data?.greenRing && data.greenRing.length >= 3) {
         fitPoints.push(...data.greenRing);
       } else {
@@ -290,19 +294,21 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         fitPoints.push(...b);
       }
 
-      const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
-        radius: 6,
-        color: "#111827",
-        weight: 1.5,
-        fillColor: flagColorDot,
-        fillOpacity: 1,
-      }).addTo(fg);
-      pin.bindTooltip("🚩", {
-        permanent: true,
-        direction: "top",
-        offset: [0, -8],
-        className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
-      });
+      if (displayFlag) {
+        const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
+          radius: 6,
+          color: "#111827",
+          weight: 1.5,
+          fillColor: flagColorDot,
+          fillOpacity: 1,
+        }).addTo(fg);
+        pin.bindTooltip("🚩", {
+          permanent: true,
+          direction: "top",
+          offset: [0, -8],
+          className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
+        });
+      }
 
       if (escuadraGeo) {
         L.polyline(
@@ -329,7 +335,34 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
         map.fitBounds(bounds.pad(0.16), { animate: false });
       } else {
-        map.setView([displayFlag.lat, displayFlag.lon], 20);
+        map.setView([mapTarget.lat, mapTarget.lon], 20);
+      }
+
+      // Alineacion fija para todos los hoyos: back/after arriba-centro.
+      if (data?.greenBack) {
+        const size = map.getSize();
+        const cx = size.x / 2;
+        const cy = size.y / 2;
+        const targetX = cx;
+        const targetY = Math.max(28, size.y * 0.12);
+        const rad = (mapRotationDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        for (let i = 0; i < 8; i++) {
+          const p = map.latLngToContainerPoint([data.greenBack.lat, data.greenBack.lon]);
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          const rx = cx + dx * cos - dy * sin;
+          const ry = cy + dx * sin + dy * cos;
+          const errX = targetX - rx;
+          const errY = targetY - ry;
+          if (Math.abs(errX) < 1 && Math.abs(errY) < 1) break;
+
+          const ux = errX * cos + errY * sin;
+          const uy = -errX * sin + errY * cos;
+          map.panBy([-ux, -uy], { animate: false });
+        }
       }
 
       map.invalidateSize();
@@ -347,6 +380,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     data?.greenBack,
     escuadraGeo,
     flagColorDot,
+    mapRotationDeg,
   ]);
 
   useEffect(() => {
