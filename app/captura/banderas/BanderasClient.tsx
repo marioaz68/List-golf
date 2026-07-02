@@ -101,7 +101,7 @@ const HOLE_FRAME_OVERRIDES: Record<
   // Hoyo 7: un poco mas cerca sin llegar al encuadre super cerrado.
   7: { bunkerRadiusMeters: 45, pad: 0.075, fallbackZoom: 20.7 },
   // Hoyo 17: abrir un poco mas para que no se recorte el lado izquierdo.
-  17: { pad: 0.09, fallbackZoom: 20.6 },
+  17: { pad: 0.1, fallbackZoom: 20.5 },
 };
 
 export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
@@ -367,6 +367,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
         const cy = size.y / 2;
         const targetX = cx;
         const targetY = Math.max(28, size.y * 0.12);
+        const lockHorizontalCenter = hole !== 17;
         const rad = (mapRotationDeg * Math.PI) / 180;
         const cos = Math.cos(rad);
         const sin = Math.sin(rad);
@@ -377,7 +378,7 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           const dy = p.y - cy;
           const rx = cx + dx * cos - dy * sin;
           const ry = cy + dx * sin + dy * cos;
-          const errX = targetX - rx;
+          const errX = lockHorizontalCenter ? targetX - rx : 0;
           const errY = targetY - ry;
           if (Math.abs(errX) < 1 && Math.abs(errY) < 1) break;
 
