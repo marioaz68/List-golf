@@ -36,6 +36,9 @@ interface HoleData {
 type SatMap = {
   fitBounds: (bounds: unknown, opts?: { animate?: boolean }) => void;
   setView: (center: [number, number], zoom?: number) => void;
+  panBy: (offset: [number, number], opts?: { animate?: boolean }) => void;
+  latLngToContainerPoint: (latlng: [number, number]) => { x: number; y: number };
+  getSize: () => { x: number; y: number };
   invalidateSize: () => void;
   remove: () => void;
 };
@@ -65,6 +68,22 @@ function enToLatLon(origin: LL, e: number, n: number): LL {
 
 function midpoint(a: LL, b: LL): LL {
   return { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+}
+
+function distanceMeters(a: LL, b: LL): number {
+  const d = latLonToEN(a, b);
+  return Math.hypot(d.e, d.n);
+}
+
+function centroid(points: LL[]): LL | null {
+  if (!points.length) return null;
+  let lat = 0;
+  let lon = 0;
+  for (const p of points) {
+    lat += p.lat;
+    lon += p.lon;
+  }
+  return { lat: lat / points.length, lon: lon / points.length };
 }
 
 const COLORS: { code: FlagColor; label: string; dot: string; zona: string }[] = [
@@ -221,7 +240,8 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
   useEffect(() => {
-    if (!mapWrapRef.current || !displayFlag) return;
+    const mapTarget = displayFlag ?? data?.greenCenter ?? data?.greenBack ?? data?.greenFront;
+    if (!mapWrapRef.current || !mapTarget) return;
 
     let cancelled = false;
     (async () => {
@@ -252,31 +272,45 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       const fg = L.featureGroup().addTo(map);
       layerRef.current = fg;
 
-      // Usamos la calibracion para encuadre/calculo, pero no pintamos overlays.
-      const fitPoints: LL[] = [displayFlag];
+      // Encuadre estable: green + bunkers cercanos al green (no todo el hoyo).
+      const fitPoints: LL[] = [mapTarget];
+      const greenAnchor = data?.greenCenter ?? data?.greenBack ?? data?.greenFront ?? mapTarget;
       if (data?.greenRing && data.greenRing.length >= 3) {
         fitPoints.push(...data.greenRing);
+      } else {
+        if (data?.greenFront) fitPoints.push(data.greenFront);
+        if (data?.greenBack) fitPoints.push(data.greenBack);
+        if (data?.greenCenter) fitPoints.push(data.greenCenter);
       }
-      for (const b of data?.bunkerRings ?? []) {
-        if (!Array.isArray(b) || b.length < 3) continue;
+
+      const nearbyBunkers = (data?.bunkerRings ?? []).filter((ring) => {
+        if (!Array.isArray(ring) || ring.length < 3) return false;
+        const c = centroid(ring);
+        if (!c) return false;
+        // Solo trampas del entorno del green para no abrir el zoom de todo el hoyo.
+        return distanceMeters(greenAnchor, c) <= 80;
+      });
+      for (const b of nearbyBunkers) {
         fitPoints.push(...b);
       }
 
-      const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
-        radius: 6,
-        color: "#111827",
-        weight: 1.5,
-        fillColor: flagColorDot,
-        fillOpacity: 1,
-      }).addTo(fg);
-      pin.bindTooltip("🚩", {
-        permanent: true,
-        direction: "top",
-        offset: [0, -8],
-        className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
-      });
+      if (displayFlag) {
+        const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
+          radius: 6,
+          color: "#111827",
+          weight: 1.5,
+          fillColor: flagColorDot,
+          fillOpacity: 1,
+        }).addTo(fg);
+        pin.bindTooltip("🚩", {
+          permanent: true,
+          direction: "top",
+          offset: [0, -8],
+          className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
+        });
+      }
 
-      if (escuadraGeo) {
+      if (escuadraGeo && displayFlag) {
         L.polyline(
           [
             [escuadraGeo.depthEdge.lat, escuadraGeo.depthEdge.lon],
@@ -295,14 +329,40 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           }).addTo(fg);
         }
 
-        fitPoints.push(escuadraGeo.depthEdge, escuadraGeo.lateralEdge);
       }
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
         map.fitBounds(bounds.pad(0.16), { animate: false });
       } else {
-        map.setView([displayFlag.lat, displayFlag.lon], 20);
+        map.setView([mapTarget.lat, mapTarget.lon], 20);
+      }
+
+      // Alineacion fija para todos los hoyos: back/after arriba-centro.
+      if (data?.greenBack) {
+        const size = map.getSize();
+        const cx = size.x / 2;
+        const cy = size.y / 2;
+        const targetX = cx;
+        const targetY = Math.max(28, size.y * 0.12);
+        const rad = (mapRotationDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        for (let i = 0; i < 8; i++) {
+          const p = map.latLngToContainerPoint([data.greenBack.lat, data.greenBack.lon]);
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          const rx = cx + dx * cos - dy * sin;
+          const ry = cy + dx * sin + dy * cos;
+          const errX = targetX - rx;
+          const errY = targetY - ry;
+          if (Math.abs(errX) < 1 && Math.abs(errY) < 1) break;
+
+          const ux = errX * cos + errY * sin;
+          const uy = -errX * sin + errY * cos;
+          map.panBy([-ux, -uy], { animate: false });
+        }
       }
 
       map.invalidateSize();
@@ -311,7 +371,17 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [displayFlag, data?.greenRing, data?.bunkerRings, escuadraGeo, flagColorDot]);
+  }, [
+    displayFlag,
+    data?.greenRing,
+    data?.bunkerRings,
+    data?.greenCenter,
+    data?.greenFront,
+    data?.greenBack,
+    escuadraGeo,
+    flagColorDot,
+    mapRotationDeg,
+  ]);
 
   useEffect(() => {
     return () => {
