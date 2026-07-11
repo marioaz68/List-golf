@@ -108,6 +108,7 @@ import {
   lastBallPosition,
   lastCompletedShot,
   inferRoundStartHole,
+  isHoleFinished,
   isRoundFinishingHole,
   loadHoleShots,
   penaltyReasonLabel,
@@ -801,6 +802,12 @@ export default function DistanciasClient({
       }
       // Solo aceptamos el hoyo siguiente en orden (envuelve 18→1).
       const expectedNext = (prev % 18) + 1;
+      // NO avanzar hasta TERMINAR el hoyo actual (putts registrados). Aunque el
+      // GPS entre al polígono del siguiente hoyo, nos quedamos en el actual.
+      if (!isHoleFinished(holeShotsStore, prev)) {
+        autoCandidateRef.current = { hole: 0, count: 0 };
+        return prev;
+      }
       if (insideHole !== expectedNext) {
         autoCandidateRef.current = { hole: 0, count: 0 };
         return prev;
@@ -817,7 +824,7 @@ export default function DistanciasClient({
       }
       return prev;
     });
-  }, [insideHole, geo, courseHoles, greenCenters, teeCenters, centerlines]);
+  }, [insideHole, geo, courseHoles, greenCenters, teeCenters, centerlines, holeShotsStore]);
 
   const activeHole = manualHole ?? autoHole ?? nearestHole;
 
@@ -837,11 +844,13 @@ export default function DistanciasClient({
     // Si retrocediste con ‹ estando físicamente más adelante (p. ej. en el 18
     // mirando el 17), no interpretar el GPS como “avance” al hoyo siguiente.
     if (!wasOnManualHoleRef.current) return;
+    // No soltar el hoyo fijado a mano hasta TERMINAR el actual (putts registrados).
+    if (!isHoleFinished(holeShotsStore, manualHole)) return;
     wasOnManualHoleRef.current = false;
     setAutoHole(expectedNext);
     setManualHole(null);
     setTapPoint(null);
-  }, [insideHole, manualHole]);
+  }, [insideHole, manualHole, holeShotsStore]);
 
   const catalogTeeForHole = useMemo(
     () => resolveTeePosition(activeHole, playingTeeCode, teePositionsByCode),
@@ -1508,18 +1517,25 @@ export default function DistanciasClient({
       setShowRoundTeePicker(false);
       setRoundStartHole(startHole);
       setManualHole(startHole);
+      // Ancla la ronda al hoyo de salida (10 → 11 → 12…): siembra el auto-hoyo y
+      // persiste roundStartHole en el store, para que la secuencia y el grabado de
+      // golpes/putts NO se vayan al hoyo 1/2 por el auto-detect del GPS.
+      setAutoHole(startHole);
+      autoCandidateRef.current = { hole: 0, count: 0 };
+      wasOnManualHoleRef.current = true;
       const tee = resolveTeePosition(startHole, code, teePositionsByCode);
+      setHoleShotsStore((prev) => {
+        let next = withRoundStartHole(prev, startHole);
+        if (tee) next = setHoleTeeMark(next, startHole, tee);
+        saveHoleShots(next, bagScope);
+        return next;
+      });
       if (!tee) {
         setArrivalToast(
           `Salida ${teeSetLabel(code)} sin calibrar en H${startHole}`
         );
         return;
       }
-      setHoleShotsStore((prev) => {
-        const next = setHoleTeeMark(prev, startHole, tee);
-        saveHoleShots(next, bagScope);
-        return next;
-      });
       if (resumeHole == null) setResumeHole(startHole);
       autoPlanHoleRef.current = null;
       pinMapFraming({ lat: tee.lat, lon: tee.lon });
@@ -2052,6 +2068,14 @@ export default function DistanciasClient({
 
     const onGreenByGps = detectLieForPoint(geo.lat, geo.lon).onGreen;
     if (!onGreenByGps) {
+      greenEntryInsideSinceRef.current = null;
+      return;
+    }
+    // La bola debe estar en el green por un GOLPE CAPTURADO (no solo por estar
+    // parado en el área): sólo pedimos putts si el último golpe completado del
+    // hoyo dejó la bola en green.
+    const lastShotForGreen = lastCompletedShot(holeShotsStore, activeHole);
+    if (lastShotForGreen?.lieKind !== "green") {
       greenEntryInsideSinceRef.current = null;
       return;
     }
