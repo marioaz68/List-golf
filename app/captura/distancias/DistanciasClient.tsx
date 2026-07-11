@@ -845,7 +845,15 @@ export default function DistanciasClient({
     // mirando el 17), no interpretar el GPS como “avance” al hoyo siguiente.
     if (!wasOnManualHoleRef.current) return;
     // No soltar el hoyo fijado a mano hasta TERMINAR el actual (putts registrados).
-    if (!isHoleFinished(holeShotsStore, manualHole)) return;
+    // Si el GPS ya se adelantó al siguiente hoyo pero éste no está cerrado, avisamos
+    // con un letrero y NO cambiamos de hoyo: el jugador captura su golpe tocando el
+    // mapa con el dedo y el golpe queda anclado al hoyo actual.
+    if (!isHoleFinished(holeShotsStore, manualHole)) {
+      setArrivalToast(
+        `Termina el hoyo ${manualHole}: marca tu golpe tocando el mapa`
+      );
+      return;
+    }
     wasOnManualHoleRef.current = false;
     setAutoHole(expectedNext);
     setManualHole(null);
@@ -1438,7 +1446,12 @@ export default function DistanciasClient({
       ballPointForLie.lat,
       ballPointForLie.lon
     );
-    return { kind: detected.kind, onGreen: detected.onGreen };
+    // onGreen NO se activa sólo por GPS / estar parado en el green. Únicamente un
+    // GOLPE capturado que deje la bola en green (rama de arriba) o el modo putt
+    // explícito encienden la captura de putts. Aquí conservamos el 'kind' para el
+    // chip de terreno, pero onGreen=false para no abrir la pantalla de putts antes
+    // de marcar el golpe anterior en el green.
+    return { kind: detected.kind, onGreen: false };
   }, [
     hasTeeMark,
     ballPointForLie,
