@@ -30,5 +30,9 @@
 	<array>
 		<string>workout-processing</string>
 	</array>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Usamos HealthKit para llevar la sesión de actividad mientras detectamos tus tiros.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Usamos HealthKit para llevar la sesión de actividad mientras detectamos tus tiros.</string>
 </dict>
 </plist>
