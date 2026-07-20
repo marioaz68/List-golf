@@ -60,6 +60,8 @@ interface GpsChipProps {
   /** UUID del grupo (siempre disponible en la URL de la Mini App). */
   groupId: string | null;
   className?: string;
+  /** Si es true, enciende el GPS al abrir (salvo que el jugador lo haya apagado). */
+  autoStart?: boolean;
 }
 
 export default function GpsChip({
@@ -67,6 +69,7 @@ export default function GpsChip({
   caddieId = null,
   groupId,
   className,
+  autoStart = false,
 }: GpsChipProps) {
   const [state, setState] = useState<ChipState>("off");
   const [hoyo, setHoyo] = useState<number | null>(null);
@@ -160,7 +163,7 @@ export default function GpsChip({
       stopWatching();
       setState("off");
       try {
-        sessionStorage.removeItem(key);
+        sessionStorage.setItem(key, "off");
       } catch {
         // ignore
       }
@@ -193,8 +196,11 @@ export default function GpsChip({
     async function tryAutoStart() {
       // Respaldo: sessionStorage (misma sesión, post-reload)
       let armedBySession = false;
+      let offBySession = false;
       try {
-        armedBySession = sessionStorage.getItem(key) === "1";
+        const flag = sessionStorage.getItem(key);
+        armedBySession = flag === "1";
+        offBySession = flag === "off";
       } catch {
         armedBySession = false;
       }
@@ -220,7 +226,8 @@ export default function GpsChip({
 
       if (cancelled) return;
 
-      if (granted || armedBySession) {
+      if (offBySession) return;
+      if (granted || armedBySession || autoStart) {
         startWatching();
       }
     }

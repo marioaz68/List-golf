@@ -21,6 +21,14 @@ export function RoundTeePickerOverlay({
   return (
     <div className="pointer-events-none absolute inset-0 z-[1120] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
       <div className="pointer-events-auto w-full max-w-sm rounded-2xl border-2 border-emerald-400/50 bg-slate-950 px-4 py-4 shadow-2xl">
+        <a
+          href="/manual.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-3 flex items-center justify-center gap-1 rounded-xl border border-emerald-400/50 bg-emerald-500/10 px-3 py-2 text-[12px] font-black text-emerald-200 active:scale-[0.98]"
+        >
+          📖 ¿Primera vez? Lee el manual
+        </a>
         {/* 1) ¿Por dónde sales? */}
         <p className="text-center text-base font-black text-emerald-50">
           ¿Por dónde sales?

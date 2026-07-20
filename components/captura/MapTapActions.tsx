@@ -13,11 +13,11 @@ export function MapTapActions({
   onCancel,
 }: MapTapActionsProps) {
   return (
-    <div className="pointer-events-auto flex items-center justify-center gap-2">
+    <div className="pointer-events-auto flex items-center justify-center gap-4">
       <button
         type="button"
         onClick={onDistance}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-sky-400/50 bg-sky-950/90 text-sm font-black text-sky-200 shadow-lg active:scale-95"
+        className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-sky-400/60 bg-sky-950/90 text-3xl font-black text-sky-200 shadow-xl active:scale-95"
         aria-label="Distancia"
       >
         D
@@ -25,7 +25,7 @@ export function MapTapActions({
       <button
         type="button"
         onClick={onShot}
-        className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-400/50 bg-emerald-950/90 text-sm font-black text-emerald-200 shadow-lg active:scale-95"
+        className="flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-emerald-400/60 bg-emerald-950/90 text-3xl font-black text-emerald-200 shadow-xl active:scale-95"
         aria-label="Golpe"
       >
         G
@@ -33,7 +33,7 @@ export function MapTapActions({
       <button
         type="button"
         onClick={onCancel}
-        className="flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-[10px] font-bold text-slate-400"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-base font-bold text-slate-300"
         aria-label="Cancelar"
       >
         ✕
