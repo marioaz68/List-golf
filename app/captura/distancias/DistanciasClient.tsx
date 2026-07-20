@@ -77,6 +77,7 @@ import {
 import { RoundTeePickerOverlay } from "@/components/captura/RoundTeePickerOverlay";
 import { computeRoundYardageStats } from "@/lib/distances/yardageStats";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
+import { ClubSuggestOverlay } from "@/components/captura/ClubSuggestOverlay";
 import { ShotResultOverlay } from "@/components/captura/ShotResultOverlay";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
@@ -2977,6 +2978,40 @@ export default function DistanciasClient({
     ]
   );
 
+  const [clubSuggest, setClubSuggest] = useState<{
+    plan: { catalogId: string; swing: SwingKind; plannedYards: number };
+    suggestion: { club: string; shots: number; avg_yards: number; consistency: number };
+  } | null>(null);
+  const handleConfirmWithSuggest = useCallback(
+    async (plan: { catalogId: string; swing: SwingKind; plannedYards: number }) => {
+      const entryId = (searchParams.get("me") || searchParams.get("entry_id") || "").trim();
+      if (!entryId || plan.catalogId === "putter" || !(plan.plannedYards > 0)) {
+        handleConfirmPlan(plan);
+        return;
+      }
+      try {
+        const res = await fetch("/api/captura/suggest-club", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entry_id: entryId,
+            distance: plan.plannedYards,
+            club: plan.catalogId,
+          }),
+        });
+        const j = await res.json().catch(() => null);
+        if (j && j.ok && j.suggestion) {
+          setClubSuggest({ plan, suggestion: j.suggestion });
+          return;
+        }
+      } catch {
+        // si la sugerencia falla o tarda, seguimos sin bloquear el juego
+      }
+      handleConfirmPlan(plan);
+    },
+    [handleConfirmPlan, searchParams]
+  );
+
   const measureFromPhoneNow = useCallback(() => {
     if (geo.status !== "ok" || !tapPoint) return;
     setMeasureFromPhoneOnce(true);
@@ -3965,7 +4000,7 @@ export default function DistanciasClient({
           lieKind={planContext.lieKind}
           onGreen={planContext.onGreen}
           inBunker={planContext.inBunker}
-          onConfirm={handleConfirmPlan}
+          onConfirm={handleConfirmWithSuggest}
           onPreviewChange={handleShotPreviewChange}
           onAddPenalty={handleAddPenalty}
           onCancel={() => {
@@ -3989,6 +4024,26 @@ export default function DistanciasClient({
           strokeNo={shotResult.strokeNo}
           lie={shotResult.lie}
           onClose={() => setShotResult(null)}
+        />
+      ) : null}
+
+      {clubSuggest ? (
+        <ClubSuggestOverlay
+          chosenCatalogId={clubSuggest.plan.catalogId}
+          plannedYards={clubSuggest.plan.plannedYards}
+          suggestion={clubSuggest.suggestion}
+          onUseMine={() => {
+            const p = clubSuggest.plan;
+            setClubSuggest(null);
+            handleConfirmPlan(p);
+          }}
+          onUseSuggested={() => {
+            const p = clubSuggest.plan;
+            const sClub = clubSuggest.suggestion.club;
+            setClubSuggest(null);
+            handleConfirmPlan({ ...p, catalogId: sClub });
+          }}
+          onBack={() => setClubSuggest(null)}
         />
       ) : null}
 
