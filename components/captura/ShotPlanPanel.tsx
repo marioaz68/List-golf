@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { VerticalRoller } from "@/components/captura/VerticalRoller";
 import {
   carryYards,
   CLUB_BY_ID,
@@ -86,6 +85,69 @@ function pickToClubPick(
   );
 }
 
+/** Stepper vertical grande con flechas ▲▼ (fácil de usar con el dedo). */
+function ArrowStepper({
+  caption,
+  value,
+  sub,
+  onUp,
+  onDown,
+  upDisabled,
+  downDisabled,
+  valueClassName = "text-3xl",
+}: {
+  caption: string;
+  value: string;
+  sub?: string | null;
+  onUp: () => void;
+  onDown: () => void;
+  upDisabled?: boolean;
+  downDisabled?: boolean;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onUp();
+        }}
+        disabled={upDisabled}
+        className="flex h-11 w-14 items-center justify-center rounded-lg bg-white/15 text-2xl font-black text-white active:scale-90 disabled:opacity-30"
+        aria-label={`Subir ${caption}`}
+      >
+        ▲
+      </button>
+      <div className="flex min-w-[4.5rem] flex-col items-center rounded-lg bg-black/60 px-2 py-1">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          {caption}
+        </span>
+        <span className={`font-black leading-none text-white ${valueClassName}`}>
+          {value}
+        </span>
+        {sub ? (
+          <span className="mt-0.5 text-[9px] font-semibold text-slate-400">
+            {sub}
+          </span>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDown();
+        }}
+        disabled={downDisabled}
+        className="flex h-11 w-14 items-center justify-center rounded-lg bg-white/15 text-2xl font-black text-white active:scale-90 disabled:opacity-30"
+        aria-label={`Bajar ${caption}`}
+      >
+        ▼
+      </button>
+    </div>
+  );
+}
+
 interface ShotPlanPanelProps {
   bag: PlayerBag;
   /** Yardas al centro del green desde la bola / salida actual. */
@@ -114,7 +176,7 @@ interface ShotPlanPanelProps {
   onCorrectLastLanding?: () => void;
 }
 
-/** Rollers abajo-izquierda: bastón sugerido por yardas de bolsa vs distancia al green. */
+/** Panel abajo-izquierda: bastón sugerido por yardas de bolsa vs distancia al green. */
 export function ShotPlanPanel({
   bag,
   yardsToGreen,
@@ -149,8 +211,6 @@ export function ShotPlanPanel({
     () => pickToClubPick(picks, autoPlan),
     [picks, autoPlan]
   );
-
-  const clubLabels = useMemo(() => picks.map((p) => p.label), [picks]);
 
   const [userPick, setUserPick] = useState<{
     clubKey: string;
@@ -230,11 +290,6 @@ export function ShotPlanPanel({
     }));
   };
 
-  const yardLabels = useMemo(
-    () => yardValues.map((y) => String(y)),
-    [yardValues]
-  );
-
   if (!picks.length || yardsToGreen <= 0) {
     return (
       <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] rounded-lg border border-amber-500/40 bg-black/90 px-2 py-1.5 text-[10px] text-amber-200">
@@ -258,20 +313,51 @@ export function ShotPlanPanel({
       ? "3/4"
       : "full";
 
+  // Índice del bastón activo para navegar con las flechas.
+  const clubIdx = Math.max(
+    0,
+    picks.findIndex((p) => p.key === activePick.key)
+  );
+
+  const stepClub = (dir: -1 | 1) => {
+    const next = picks[clubIdx + dir];
+    if (next) handleClubChange(next.label);
+  };
+
+  // Índice de la yarda actual dentro de la lista de valores permitidos.
+  const yardIdx = (() => {
+    if (!yardValues.length) return -1;
+    let best = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < yardValues.length; i++) {
+      const d = Math.abs(yardValues[i] - plannedYards);
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = i;
+      }
+    }
+    return best;
+  })();
+
+  // Yardas: ▲ = más lejos (valor mayor), ▼ = más cerca (valor menor).
+  const stepYard = (dir: -1 | 1) => {
+    if (yardIdx < 0) return;
+    const next = yardValues[yardIdx + dir];
+    if (next != null) handleYardChange(String(next));
+  };
+
   return (
-    <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] flex items-stretch gap-1">
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center justify-center gap-1 rounded-md bg-black/80 px-1.5 py-0.5">
+    <div className="pointer-events-auto fixed bottom-[7.5rem] left-2 z-[1060] flex items-stretch gap-2">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-center gap-1.5 rounded-md bg-black/80 px-2 py-1">
           <LieChip kind={lieKind} size="sm" />
-          <span className="text-[9px] font-bold text-slate-500">·</span>
-          <span className="text-[9px] font-bold text-emerald-300">
-            {onGreen
-              ? `${yardsToGreen} al hoyo`
-              : `${yardsToGreen} al centro`}
+          <span className="text-[10px] font-bold text-slate-500">·</span>
+          <span className="text-[11px] font-bold text-emerald-300">
+            {onGreen ? `${yardsToGreen} al hoyo` : `${yardsToGreen} al centro`}
           </span>
         </div>
         {onAddPenalty ? (
-          <div className="grid max-w-[9.75rem] grid-cols-3 gap-0.5">
+          <div className="grid max-w-[12rem] grid-cols-3 gap-1">
             {MANUAL_PENALTY_OPTIONS.map(({ reason, label }) => (
               <button
                 key={reason}
@@ -280,48 +366,41 @@ export function ShotPlanPanel({
                   e.stopPropagation();
                   onAddPenalty(reason);
                 }}
-                className="rounded-md border border-red-500/40 bg-red-950/90 px-0.5 py-0.5 text-[7px] font-black leading-tight text-red-100 active:scale-95"
+                className="rounded-md border border-red-500/40 bg-red-950/90 px-1 py-1 text-[9px] font-black leading-tight text-red-100 active:scale-95"
               >
                 {label}
               </button>
             ))}
           </div>
         ) : null}
-        <div className="flex gap-0.5 rounded-lg border border-white/20 bg-black/90 p-0.5 shadow-lg backdrop-blur-md">
-          <div className="w-[3.25rem]">
-            <VerticalRoller
-              className="h-[7rem] w-full"
-              values={clubLabels}
-              itemKeys={picks.map((p) => p.key)}
-              value={activePick.label}
-              onChange={handleClubChange}
-            />
-          </div>
-          <div className="w-[2.75rem]">
-            <VerticalRoller
-              className="h-[7rem] w-full"
-              values={yardLabels}
-              value={String(plannedYards)}
-              onChange={handleYardChange}
-            />
-          </div>
+        <div className="flex gap-3 rounded-2xl border border-white/20 bg-black/90 p-3 shadow-lg backdrop-blur-md">
+          <ArrowStepper
+            caption="Bastón"
+            value={activePick.short}
+            sub={swingLabel}
+            valueClassName="text-2xl"
+            onUp={() => stepClub(-1)}
+            onDown={() => stepClub(1)}
+            upDisabled={clubIdx <= 0}
+            downDisabled={clubIdx >= picks.length - 1}
+          />
+          <ArrowStepper
+            caption="Yardas"
+            value={String(plannedYards)}
+            sub={
+              activePick.carryYards > 0 && !isPutter
+                ? `${activePick.carryYards} yd bolsa`
+                : null
+            }
+            valueClassName="text-3xl"
+            onUp={() => stepYard(1)}
+            onDown={() => stepYard(-1)}
+            upDisabled={yardIdx < 0 || yardIdx >= yardValues.length - 1}
+            downDisabled={yardIdx <= 0}
+          />
         </div>
       </div>
-      <div className="flex min-w-[3.5rem] flex-col items-center justify-center rounded-lg border border-amber-500/30 bg-black/90 px-1.5 py-0.5 shadow-lg">
-        <span className="text-sm font-black leading-none text-white">
-          {activePick.short}
-        </span>
-        <span className="text-[9px] font-bold text-amber-300">{swingLabel}</span>
-        {activePick.carryYards > 0 && !isPutter ? (
-          <span className="text-[8px] font-semibold text-slate-400">
-            {activePick.carryYards} yd bolsa
-          </span>
-        ) : null}
-        <span className="mt-0.5 text-base font-black leading-none text-emerald-300">
-          {plannedYards}
-        </span>
-      </div>
-      <div className="flex flex-col justify-center gap-1">
+      <div className="flex flex-col justify-center gap-2">
         <button
           type="button"
           onClick={() => {
@@ -333,7 +412,7 @@ export function ShotPlanPanel({
             });
           }}
           className={[
-            "flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-lg font-black text-white shadow active:scale-95",
+            "flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-3xl font-black text-white shadow active:scale-95",
             !clubConfirmed ? "yardage-club-confirm-blink ring-2 ring-emerald-300/90" : "",
           ].join(" ")}
           aria-label="Confirmar bastón"
@@ -344,7 +423,7 @@ export function ShotPlanPanel({
           type="button"
           onClick={onCorrectLastLanding ?? onCancel}
           className={[
-            "flex h-7 w-9 items-center justify-center rounded-full text-[10px] font-bold active:scale-95",
+            "flex h-11 w-14 items-center justify-center rounded-full text-lg font-bold active:scale-95",
             onCorrectLastLanding
               ? "border border-amber-500/50 bg-amber-950/90 text-amber-100"
               : "bg-white/10 text-slate-300",
@@ -366,7 +445,7 @@ export function ShotPlanPanel({
           <button
             type="button"
             onClick={onCancel}
-            className="text-[8px] font-bold leading-tight text-slate-400 underline active:scale-95"
+            className="text-[10px] font-bold leading-tight text-slate-400 underline active:scale-95"
           >
             cerrar
           </button>
