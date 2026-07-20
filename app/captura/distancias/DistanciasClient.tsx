@@ -63,6 +63,7 @@ import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
+import GpsChip from "@/components/captura/GpsChip";
 import { GreenPuttDistancePanel } from "@/components/captura/GreenPuttDistancePanel";
 import { GreenBallCoordPad, type GreenBallCoord } from "@/components/captura/GreenBallCoordPad";
 import { LieChip } from "@/components/captura/LieChip";
@@ -3895,6 +3896,20 @@ export default function DistanciasClient({
 
         {/* Barra de ritmo delgada, pegada al borde inferior */}
         {!farFromCourse ? <PaceBannerThin pace={demoMode ? null : pace} /> : null}
+        {!demoMode &&
+        !farFromCourse &&
+        (searchParams.get("me") ||
+          searchParams.get("entry_id") ||
+          searchParams.get("caddie") ||
+          searchParams.get("caddie_id")) ? (
+          <div className="pointer-events-auto mx-2 mb-1 flex justify-end">
+            <GpsChip
+              entryId={searchParams.get("me") || searchParams.get("entry_id")}
+              caddieId={searchParams.get("caddie") || searchParams.get("caddie_id")}
+              groupId={searchParams.get("group_id")}
+            />
+          </div>
+        ) : null}
         {demoMode ? (
           <div className="pointer-events-auto mx-2 mb-1 rounded-lg bg-black/75 px-3 py-2 backdrop-blur-sm">
             <div className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-300">
