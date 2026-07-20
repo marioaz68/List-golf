@@ -8,6 +8,7 @@ import {
   shotsForHole,
   type HoleShotsStore,
 } from "@/lib/distances/holeShots";
+import { formatWatchSwingMetricsShort } from "@/lib/distances/swingMetrics";
 
 interface HoleShotsDetailSheetProps {
   open: boolean;
@@ -122,6 +123,11 @@ export function HoleShotsDetailSheet({
                       </>
                     )}
                   </div>
+                  {s.swingMetrics ? (
+                    <div className="mt-1 text-[10px] text-violet-300">
+                      ⌚ {formatWatchSwingMetricsShort(s.swingMetrics)}
+                    </div>
+                  ) : null}
                 </li>
               );
             })}

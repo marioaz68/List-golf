@@ -64,6 +64,7 @@ import type { FeatureCollection, Polygon } from "@/lib/telegram/ritmo/geometry";
 import type { TapPoint } from "@/components/captura/HoleYardageMap";
 import { HoleShotsDetailSheet } from "@/components/captura/HoleShotsDetailSheet";
 import { GreenPuttDistancePanel } from "@/components/captura/GreenPuttDistancePanel";
+import { GreenBallCoordPad, type GreenBallCoord } from "@/components/captura/GreenBallCoordPad";
 import { LieChip } from "@/components/captura/LieChip";
 import { MapTapActions } from "@/components/captura/MapTapActions";
 import { FlagPositionSheet } from "@/components/captura/FlagPositionSheet";
@@ -91,6 +92,7 @@ import {
   yardsToGreenCenterRounded,
   type GreenDistances,
 } from "@/lib/distances/suggestClub";
+import { formatWatchSwingMetricsShort } from "@/lib/distances/swingMetrics";
 import {
   addPlannedShot,
   addManualPenaltyStroke,
@@ -100,6 +102,7 @@ import {
   ensureWaterPenaltyStroke,
   clearHoleShots,
   completeShotArrival,
+  findNewWatchShots,
   finishPromptStrokeCount,
   hasRemovableShotsOnHole,
   hasHoleTeeMark,
@@ -129,6 +132,7 @@ import {
   type HoleShotsStore,
   type ManualPenaltyReason,
   type RoundStrokeTotals,
+  shotClubLabel,
   withRoundStartHole,
 } from "@/lib/distances/holeShots";
 import {
@@ -176,6 +180,8 @@ type GeoState =
  *  yardas. Generoso para cubrir el campo + el fraccionamiento aledaño. */
 const MAX_DISTANCE_FROM_COURSE_M = 300;
 const GREEN_ENTRY_DWELL_MS = 4000;
+/** La captura de putts del green YA NO se abre sola al entrar; ahora es con botón. */
+const AUTO_GREEN_ENTRY_PROMPT = false;
 const GREEN_PUTT_MAX_YARDS = 35;
 
 type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
@@ -198,6 +204,54 @@ interface GreenEntryPuttPrompt {
   pendingShotId: string | null;
   puttCount: number;
   puttYards: number[];
+  /** GPS original de donde estabas parado (respaldo si no marcas coordenadas). */
+  gpsLat?: number;
+  gpsLon?: number;
+  /** Coordenadas de la bola en el green (pad A/I/D/F). */
+  ballCoord?: GreenBallCoord;
+}
+
+/** Media anchura típica del green (yardas) para ubicar la bola lateralmente.
+ *  Estimado; se afina en campo. */
+const GREEN_HALF_WIDTH_YARDS = 11;
+const YARD_TO_M = 0.9144;
+
+/** Calcula la posición GPS de la bola desde la geometría del green + coordenadas. */
+function computeGreenBallPoint(
+  green: { front: { lat: number; lon: number }; center: { lat: number; lon: number }; back: { lat: number; lon: number } } | null | undefined,
+  coord: GreenBallCoord
+): { lat: number; lon: number } | null {
+  if (!green?.front || !green?.back || !green?.center) return null;
+  const mLat = 110_574;
+  const mLon = (lat: number) => 111_320 * Math.cos((lat * Math.PI) / 180);
+  const en = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => ({
+    e: (b.lon - a.lon) * mLon(a.lat),
+    n: (b.lat - a.lat) * mLat,
+  });
+  const toLatLon = (o: { lat: number; lon: number }, e: number, n: number) => ({
+    lat: o.lat + n / mLat,
+    lon: o.lon + e / mLon(o.lat),
+  });
+  const fb = en(green.front, green.back);
+  const norm = Math.hypot(fb.e, fb.n);
+  if (norm < 0.1) return green.center;
+  const axis = { e: fb.e / norm, n: fb.n / norm }; // frente -> atrás
+  const right = { e: axis.n, n: -axis.e };
+
+  // Profundidad: desde el frente (hacia atrás) o desde el fondo (hacia el frente).
+  let depth = green.center;
+  const fbM = Math.max(0, coord.fbSteps) * YARD_TO_M;
+  if (coord.fb === "front") depth = toLatLon(green.front, axis.e * fbM, axis.n * fbM);
+  else if (coord.fb === "back") depth = toLatLon(green.back, -axis.e * fbM, -axis.n * fbM);
+
+  // Lateral: pasos a la orilla → desplazamiento desde el centro = media anchura - pasos.
+  if (coord.lr && coord.lrSteps > 0) {
+    const latYd = GREEN_HALF_WIDTH_YARDS - coord.lrSteps;
+    const latM = latYd * YARD_TO_M;
+    const dir = coord.lr === "right" ? right : { e: -right.e, n: -right.n };
+    return toLatLon(depth, dir.e * latM, dir.n * latM);
+  }
+  return depth;
 }
 
 const PACE_STYLE: Record<
@@ -270,6 +324,7 @@ export default function DistanciasClient({
   const [holeShotsStore, setHoleShotsStore] = useState<HoleShotsStore>(() =>
     loadHoleShots(undefined)
   );
+  const holeShotsStoreRef = useRef(holeShotsStore);
   const [pendingTap, setPendingTap] = useState<{ lat: number; lon: number } | null>(
     null
   );
@@ -514,6 +569,36 @@ export default function DistanciasClient({
   }, [bagScope, demoMode, bagSyncCtx, shotsSyncCtx]);
 
   useEffect(() => {
+    holeShotsStoreRef.current = holeShotsStore;
+  }, [holeShotsStore]);
+
+  /** Sincroniza golpes del Apple Watch fusionados en servidor (punto 3). */
+  useEffect(() => {
+    if (demoMode || !shotsHydrated) return;
+    const poll = () => {
+      const local = holeShotsStoreRef.current;
+      void loadHoleShotsMerged(local, bagScope, shotsSyncCtx).then((merged) => {
+        const watchShots = findNewWatchShots(local, merged);
+        if (watchShots.length === 0 && merged === local) return;
+        setHoleShotsStore(merged);
+        saveHoleShots(merged, bagScope);
+        if (watchShots.length > 0) {
+          const s = watchShots[watchShots.length - 1]!;
+          const label = shotClubLabel(s.catalogId, s.swing, s.isPenalty, s.penaltyReason);
+          const metrics = s.swingMetrics
+            ? ` · ${formatWatchSwingMetricsShort(s.swingMetrics)}`
+            : "";
+          setArrivalToast(`⌚ Watch · H${s.hole} · ${label}${metrics}`);
+          setResumeHole((prev) => prev ?? s.hole);
+          setManualHole(s.hole);
+        }
+      });
+    };
+    const id = window.setInterval(poll, 12_000);
+    return () => window.clearInterval(id);
+  }, [bagScope, demoMode, shotsHydrated, shotsSyncCtx]);
+
+  useEffect(() => {
     if (!demoMode) return;
     setHoleShotsStore((prev) => {
       const next = clearHoleShots(prev, 1);
@@ -533,6 +618,42 @@ export default function DistanciasClient({
     if (tg) parts.push(`tg=${encodeURIComponent(tg)}`);
     return parts.join("&");
   }, [searchParams]);
+
+  // ── Puente Yardas → Tarjeta del grupo ────────────────────────────────
+  // Manda el score del hoyo (total de golpes) a la tarjeta del grupo con el
+  // mismo endpoint que usa la tarjeta. mode "approve" = no queda en rojo.
+  // NO navega: la app sigue al siguiente hoyo como siempre.
+  const saveHoleScoreToCard = useCallback(
+    async (hole: number, strokes: number) => {
+      if (demoMode) return;
+      const groupId = searchParams.get("group_id")?.trim();
+      const me =
+        (searchParams.get("me") || searchParams.get("entry_id"))?.trim() || "";
+      const caddie =
+        (searchParams.get("caddie") || searchParams.get("caddie_id"))?.trim() ||
+        null;
+      if (!groupId || !me || !Number.isFinite(strokes) || strokes <= 0) return;
+      try {
+        await fetch("/api/captura/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            group_id: groupId,
+            entry_id: me,
+            hole,
+            strokes,
+            mode: "approve",
+            role: "player",
+            me_entry_id: me,
+            caddie_id: caddie,
+          }),
+        });
+      } catch {
+        /* Si falla la red, la ronda sigue; los golpes ya quedaron locales. */
+      }
+    },
+    [demoMode, searchParams]
+  );
 
   useEffect(() => {
     if (demoMode) return;
@@ -1612,6 +1733,7 @@ export default function DistanciasClient({
         setArrivalToast(
           `Ronda terminada · ${totals.total} golpes (${totals.firstNine} + ${totals.secondNine})`
         );
+        void saveHoleScoreToCard(hole, result.totalStrokes ?? strokeCount);
         return;
       }
 
@@ -1635,6 +1757,7 @@ export default function DistanciasClient({
       setArrivalToast(
         `Hoyo ${hole} terminado${howLabel} (${totalStrokes} golpes) · Hoyo ${nextHoleNum}${teeLabel}`
       );
+      void saveHoleScoreToCard(hole, totalStrokes);
     },
     [
       holeFinishPrompt,
@@ -1646,6 +1769,7 @@ export default function DistanciasClient({
       playingTeeCode,
       teePositionsByCode,
       pinMapFraming,
+      saveHoleScoreToCard,
     ]
   );
 
@@ -1678,6 +1802,7 @@ export default function DistanciasClient({
         setArrivalToast(
           `Ronda terminada · ${totals.total} golpes (${totals.firstNine} + ${totals.secondNine})`
         );
+        void saveHoleScoreToCard(hole, totalStrokes);
         return;
       }
 
@@ -1701,6 +1826,7 @@ export default function DistanciasClient({
       setArrivalToast(
         `Hoyo ${hole} terminado (${totalStrokes} golpes) · Hoyo ${nextHoleNum}${teeLabel}`
       );
+      void saveHoleScoreToCard(hole, totalStrokes);
     },
     [
       playingTeeCode,
@@ -1709,6 +1835,7 @@ export default function DistanciasClient({
       resetTapUi,
       demoMode,
       pinMapFraming,
+      saveHoleScoreToCard,
     ]
   );
 
@@ -1717,6 +1844,50 @@ export default function DistanciasClient({
     setGreenEntryPuttPrompt(null);
     setArrivalToast("Lectura GPS descartada · sigue jugando");
   }, []);
+
+  /** Abre MANUALMENTE la captura de putts del green (botón). */
+  const openGreenPuttCapture = useCallback(() => {
+    if (geo.status !== "ok" || !activeHolePoints?.center) {
+      setArrivalToast("Sin GPS estable o green del hoyo aún");
+      return;
+    }
+    const pending = pendingShotOnHole(holeShotsStore, activeHole);
+    pinMapFraming(activeHolePoints.center);
+    setGreenEntryPuttPrompt({
+      hole: activeHole,
+      detectedAt: Date.now(),
+      entryLat: geo.lat,
+      entryLon: geo.lon,
+      gpsLat: geo.lat,
+      gpsLon: geo.lon,
+      ballCoord: { fb: null, fbSteps: 0, lr: null, lrSteps: 0 },
+      pendingShotId: pending?.id ?? null,
+      puttCount: 2,
+      // 1er putt arranca en 15 yd (punto medio para ajustar rápido); los demás en 1.
+      puttYards: [15, 1],
+    });
+  }, [geo, activeHolePoints, holeShotsStore, activeHole, pinMapFraming]);
+
+  /** Al cambiar el pad de coordenadas, recalcula la posición de la bola. */
+  const handleBallCoordChange = useCallback((c: GreenBallCoord) => {
+    setGreenEntryPuttPrompt((prev) => {
+      if (!prev) return prev;
+      const anySet = (c.fb && c.fbSteps > 0) || (c.lr && c.lrSteps > 0);
+      const pt = anySet ? computeGreenBallPoint(activeHolePoints, c) : null;
+      const eff = pt ?? { lat: prev.gpsLat ?? prev.entryLat, lon: prev.gpsLon ?? prev.entryLon };
+      return { ...prev, ballCoord: c, entryLat: eff.lat, entryLon: eff.lon };
+    });
+  }, [activeHolePoints]);
+
+  // Mantén el hoyo del panel del green sincronizado con el hoyo ACTIVO
+  // (para que al cambiar de hoyo con las flechas, la captura se guarde ahí).
+  useEffect(() => {
+    setGreenEntryPuttPrompt((prev) => {
+      if (!prev || prev.hole === activeHole) return prev;
+      const pend = pendingShotOnHole(holeShotsStore, activeHole);
+      return { ...prev, hole: activeHole, pendingShotId: pend?.id ?? null };
+    });
+  }, [activeHole, holeShotsStore]);
 
   const handleConfirmGreenEntryPutts = useCallback(() => {
     if (!greenEntryPuttPrompt || !activeHolePoints?.center) return;
@@ -2062,6 +2233,12 @@ export default function DistanciasClient({
   }, [greenPuttPreview, syncPuttYardsForGreen]);
 
   useEffect(() => {
+    // Desactivado: la captura del green ahora se abre con un botón manual,
+    // no automáticamente al entrar (evita que salte antes de grabar la bola).
+    if (!AUTO_GREEN_ENTRY_PROMPT) {
+      greenEntryInsideSinceRef.current = null;
+      return;
+    }
     if (
       geo.status !== "ok" ||
       !activeHolePoints?.center ||
@@ -3256,36 +3433,112 @@ export default function DistanciasClient({
         </div>
       ) : null}
 
+      {!greenEntryPuttPrompt &&
+      !farFromCourse &&
+      activeHolePoints?.center &&
+      !holeFinishPrompt &&
+      !roundSummary ? (
+        <div className="pointer-events-none absolute right-0 top-[64%] z-[1021] flex justify-end">
+          <button
+            type="button"
+            data-yardage-map-ui
+            aria-label="Capturar green (bola + putts)"
+            title="Capturar green"
+            onClick={openGreenPuttCapture}
+            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-l-lg border border-white/20 bg-black/80 text-lg shadow-lg backdrop-blur-md"
+          >
+            ⛳️
+          </button>
+        </div>
+      ) : null}
+
       {greenEntryPuttPrompt && !farFromCourse ? (
-        <div className="pointer-events-none absolute inset-x-0 top-[20%] z-[1093] flex justify-center px-4">
-          <div className="pointer-events-auto w-full max-w-sm rounded-xl border-2 border-emerald-400/60 bg-emerald-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
-            <p className="text-center text-xs font-black text-emerald-50">
-              Green detectado · Hoyo {greenEntryPuttPrompt.hole}
-            </p>
+        <div className="pointer-events-none absolute inset-x-0 top-[6%] z-[1093] flex justify-center px-4">
+          <div className="pointer-events-auto relative max-h-[86vh] w-full max-w-sm overflow-y-auto overscroll-contain rounded-xl border-2 border-emerald-400/60 bg-emerald-950/98 px-4 py-3 shadow-2xl backdrop-blur-md">
+            <button
+              type="button"
+              aria-label="Volver a yardas (sin guardar)"
+              onClick={() => setGreenEntryPuttPrompt(null)}
+              className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/60 text-xl font-black text-white active:scale-95"
+            >
+              ←
+            </button>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                type="button"
+                aria-label="Hoyo anterior"
+                onClick={prevHole}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-black/50 text-xl font-black text-emerald-100 active:scale-95"
+              >
+                ‹
+              </button>
+              <span className="min-w-24 text-center text-base font-black text-emerald-50">
+                Hoyo {greenEntryPuttPrompt.hole}
+              </span>
+              <button
+                type="button"
+                aria-label="Hoyo siguiente"
+                onClick={nextHole}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-black/50 text-xl font-black text-emerald-100 active:scale-95"
+              >
+                ›
+              </button>
+            </div>
             <p className="mt-1 text-center text-[11px] font-semibold text-emerald-200">
-              GPS estable hace {timeAgo(greenEntryPuttPrompt.detectedAt)} · captura obligatoria de putts
+              Marca la posición de la bola en el green y los putts
             </p>
+
+            <div className="mt-3 rounded-lg border border-white/15 bg-black/35 p-3">
+              <label className="mb-2 block text-center text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                Posición de la bola (pasos a la orilla)
+              </label>
+              <GreenBallCoordPad
+                value={greenEntryPuttPrompt.ballCoord ?? { fb: null, fbSteps: 0, lr: null, lrSteps: 0 }}
+                onChange={handleBallCoordChange}
+              />
+            </div>
 
             <div className="mt-3 rounded-lg border border-white/15 bg-black/35 p-3">
               <label className="block text-[10px] font-bold uppercase tracking-wide text-slate-300">
                 Cantidad de putts
               </label>
-              <input
-                type="number"
-                min={1}
-                max={6}
-                value={greenEntryPuttPrompt.puttCount}
-                onChange={(e) => {
-                  const count = Math.max(1, Math.min(6, Number(e.target.value) || 1));
-                  setGreenEntryPuttPrompt((prev) => {
-                    if (!prev) return prev;
-                    const y = prev.puttYards.slice(0, count);
-                    while (y.length < count) y.push(1);
-                    return { ...prev, puttCount: count, puttYards: y };
-                  });
-                }}
-                className="mt-1 w-full rounded-md border border-white/20 bg-black/50 px-2 py-1.5 text-sm font-black text-white outline-none"
-              />
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Menos putts"
+                  onClick={() =>
+                    setGreenEntryPuttPrompt((prev) => {
+                      if (!prev) return prev;
+                      const count = Math.max(1, prev.puttCount - 1);
+                      const y = prev.puttYards.slice(0, count);
+                      while (y.length < count) y.push(1);
+                      return { ...prev, puttCount: count, puttYards: y };
+                    })
+                  }
+                  className="flex h-11 w-12 items-center justify-center rounded-md border border-white/25 bg-black/50 text-2xl font-black text-amber-300 active:bg-amber-400/20"
+                >
+                  −
+                </button>
+                <span className="flex-1 text-center text-2xl font-black tabular-nums text-white">
+                  {greenEntryPuttPrompt.puttCount}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Más putts"
+                  onClick={() =>
+                    setGreenEntryPuttPrompt((prev) => {
+                      if (!prev) return prev;
+                      const count = Math.min(6, prev.puttCount + 1);
+                      const y = prev.puttYards.slice(0, count);
+                      while (y.length < count) y.push(1);
+                      return { ...prev, puttCount: count, puttYards: y };
+                    })
+                  }
+                  className="flex h-11 w-12 items-center justify-center rounded-md border border-white/25 bg-black/50 text-2xl font-black text-amber-300 active:bg-amber-400/20"
+                >
+                  +
+                </button>
+              </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {greenEntryPuttPrompt.puttYards
                   .slice(0, greenEntryPuttPrompt.puttCount)
@@ -3294,28 +3547,42 @@ export default function DistanciasClient({
                       key={`putt-yard-${idx + 1}`}
                       className="rounded-md border border-white/10 bg-black/30 px-2 py-1"
                     >
-                      <span className="block text-[10px] font-bold text-slate-300">
-                        Putt {idx + 1} (0-{GREEN_PUTT_MAX_YARDS})
+                      <span className="block text-center text-[10px] font-bold text-slate-300">
+                        Putt {idx + 1} (yds)
                       </span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={GREEN_PUTT_MAX_YARDS}
-                        value={yds}
-                        onChange={(e) => {
-                          const raw = Number(e.target.value);
-                          const val = Number.isFinite(raw)
-                            ? Math.max(0, Math.min(GREEN_PUTT_MAX_YARDS, Math.round(raw)))
-                            : 0;
-                          setGreenEntryPuttPrompt((prev) => {
-                            if (!prev) return prev;
-                            const next = [...prev.puttYards];
-                            next[idx] = val;
-                            return { ...prev, puttYards: next };
-                          });
-                        }}
-                        className="mt-1 w-full rounded-md border border-white/20 bg-black/50 px-2 py-1.5 text-sm font-black text-white outline-none"
-                      />
+                      <div className="mt-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Menos yardas putt ${idx + 1}`}
+                          onClick={() =>
+                            setGreenEntryPuttPrompt((prev) => {
+                              if (!prev) return prev;
+                              const next = [...prev.puttYards];
+                              next[idx] = Math.max(0, (next[idx] ?? 0) - 1);
+                              return { ...prev, puttYards: next };
+                            })
+                          }
+                          className="flex h-10 w-9 items-center justify-center rounded-md border border-white/25 bg-black/50 text-xl font-black text-amber-300 active:bg-amber-400/20"
+                        >
+                          −
+                        </button>
+                        <span className="flex-1 text-center text-xl font-black tabular-nums text-white">{yds}</span>
+                        <button
+                          type="button"
+                          aria-label={`Más yardas putt ${idx + 1}`}
+                          onClick={() =>
+                            setGreenEntryPuttPrompt((prev) => {
+                              if (!prev) return prev;
+                              const next = [...prev.puttYards];
+                              next[idx] = Math.min(GREEN_PUTT_MAX_YARDS, (next[idx] ?? 0) + 1);
+                              return { ...prev, puttYards: next };
+                            })
+                          }
+                          className="flex h-10 w-9 items-center justify-center rounded-md border border-white/25 bg-black/50 text-xl font-black text-amber-300 active:bg-amber-400/20"
+                        >
+                          +
+                        </button>
+                      </div>
                     </label>
                   ))}
               </div>

@@ -1,0 +1,26 @@
+name: ListGolfWatch
+options:
+  bundleIdPrefix: club.listgolf
+  deploymentTarget:
+    watchOS: "10.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    DEVELOPMENT_TEAM: ""
+targets:
+  ListGolfWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: ListGolfWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: club.listgolf.mobile.watch
+        INFOPLIST_KEY_CFBundleDisplayName: List.Golf
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "List.Golf usa tu ubicación en el campo para medir yardas y detectar en qué hoyo estás."
+        INFOPLIST_KEY_NSHealthShareUsageDescription: "List.Golf registra una sesión de golf para mantener el GPS activo durante la ronda."
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: "List.Golf guarda el workout de golf al terminar la ronda."
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        TARGETED_DEVICE_FAMILY: "4"
+    entitlements:
+      path: ListGolfWatch/ListGolfWatch.entitlements

@@ -69,3 +69,58 @@ export async function sendPosition(
     return { ok: false, error: e?.message ?? "Red caída" };
   }
 }
+
+export interface SendWatchSwingInput {
+  caddieId: string | null;
+  entryId: string | null;
+  lat: number;
+  lon: number;
+  swingNo: number;
+  detectedAt: string;
+  backswingVelocityDps?: number;
+  forwardSwingVelocityDps?: number;
+  backswingClubDeg?: number;
+  forwardClubDeg?: number;
+}
+
+export interface SendWatchSwingResponse {
+  ok: boolean;
+  hoyo?: number | null;
+  id?: string;
+  yardage?: {
+    hole: number;
+    shotId: string;
+    scopeKey: string;
+  } | null;
+  error?: string;
+}
+
+export async function sendWatchSwing(
+  input: SendWatchSwingInput
+): Promise<SendWatchSwingResponse> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/captura/watch/swing`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        caddie_id: input.caddieId,
+        entry_id: input.entryId,
+        lat: input.lat,
+        lon: input.lon,
+        swing_no: input.swingNo,
+        detected_at: input.detectedAt,
+        backswing_velocity_dps: input.backswingVelocityDps,
+        forwardswing_velocity_dps: input.forwardSwingVelocityDps,
+        backswing_club_deg: input.backswingClubDeg,
+        forward_club_deg: input.forwardClubDeg,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      return { ok: false, error: text || `HTTP ${res.status}` };
+    }
+    return (await res.json()) as SendWatchSwingResponse;
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Red caída" };
+  }
+}

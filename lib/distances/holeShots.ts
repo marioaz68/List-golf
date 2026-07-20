@@ -4,6 +4,7 @@ import {
   type SwingKind,
 } from "@/lib/distances/clubCatalog";
 import type { LieKind } from "@/lib/distances/detectLie";
+import type { WatchSwingMetrics } from "@/lib/distances/swingMetrics";
 import { yardsBetween } from "@/lib/distances/ccqHolePoints";
 import type { LatLon } from "@/lib/distances/holeBoundary";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
@@ -22,6 +23,10 @@ export interface HoleShot {
   lieKind?: LieKind;
   /** Golpe de castigo (p. ej. OB stroke-and-distance). */
   isPenalty?: boolean;
+  /** Origen del registro (manual en mapa vs Apple Watch). */
+  source?: "manual" | "watch";
+  /** Métricas de swing del Apple Watch (velocidad y ángulo back/forward). */
+  swingMetrics?: WatchSwingMetrics;
   /** Motivo del castigo cuando isPenalty. */
   penaltyReason?: PenaltyReason;
   plannedAt: number;
@@ -220,6 +225,24 @@ export function mergeHoleShotsStores(
 
 export function shotsForHole(store: HoleShotsStore, hole: number): HoleShot[] {
   return store.byHole[String(hole)] ?? [];
+}
+
+/** Golpes nuevos del Watch tras merge remoto (para toast en mini-app). */
+export function findNewWatchShots(
+  prev: HoleShotsStore,
+  next: HoleShotsStore
+): HoleShot[] {
+  const prevIds = new Set<string>();
+  for (const shots of Object.values(prev.byHole ?? {})) {
+    for (const s of shots) prevIds.add(s.id);
+  }
+  const added: HoleShot[] = [];
+  for (const shots of Object.values(next.byHole ?? {})) {
+    for (const s of shots) {
+      if (!prevIds.has(s.id) && s.source === "watch") added.push(s);
+    }
+  }
+  return added;
 }
 
 export function holeTeeMark(
@@ -460,13 +483,14 @@ export function addPlannedShot(
   from: LatLon,
   catalogId: string,
   swing: SwingKind,
-  plannedYards: number
+  plannedYards: number,
+  options?: { id?: string; source?: HoleShot["source"]; swingMetrics?: WatchSwingMetrics }
 ): { store: HoleShotsStore; shot: HoleShot } {
   const key = String(hole);
   const prev = store.byHole[key] ?? [];
   const strokeNo = completedStrokeCount(store, hole) + 1;
   const shot: HoleShot = {
-    id: `${hole}-${Date.now()}-${strokeNo}`,
+    id: options?.id ?? `${hole}-${Date.now()}-${strokeNo}`,
     hole,
     strokeNo,
     catalogId,
@@ -475,6 +499,8 @@ export function addPlannedShot(
     actualYards: null,
     from: { ...from },
     to: null,
+    source: options?.source,
+    swingMetrics: options?.swingMetrics,
     plannedAt: Date.now(),
     completedAt: null,
   };

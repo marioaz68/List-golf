@@ -34,6 +34,7 @@ import {
   type MobileSession,
 } from "@/lib/auth";
 import { syncSessionToBackgroundStorage } from "@/lib/locationTask";
+import { syncAuthToWatch } from "@/lib/watchSync";
 
 export default function LoginScreen() {
   const [code, setCode] = useState("");
@@ -92,6 +93,7 @@ export default function LoginScreen() {
         caddieId: session.caddieId,
         entryId: session.entryId,
       });
+      await syncAuthToWatch();
       router.replace("/ritmo");
     } finally {
       setLoading(false);

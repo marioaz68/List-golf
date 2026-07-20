@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 
 interface VerticalRollerProps {
   values: string[];
@@ -94,16 +95,47 @@ export function VerticalRoller({
     };
   }, []);
 
+  const step = (delta: number) => {
+    const idx = values.indexOf(value);
+    if (idx < 0) return;
+    const ni = Math.min(values.length - 1, Math.max(0, idx + delta));
+    const next = values[ni];
+    if (next && next !== value) onChange(next);
+  };
+
+  const idx = values.indexOf(value);
+
   return (
-    <div
-      className={`relative overflow-hidden ${className}`}
-      style={{
-        maskImage:
-          "linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)",
-        WebkitMaskImage:
-          "linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)",
-      }}
-    >
+    <div className={`relative ${className}`}>
+      {/* Flechas de precisión (fuera de la máscara para que se vean bien). */}
+      <button
+        type="button"
+        aria-label="Subir"
+        onClick={() => step(-1)}
+        disabled={idx <= 0}
+        className="absolute inset-x-0 top-0 z-20 flex justify-center py-0.5 text-amber-300 disabled:opacity-25"
+      >
+        <ChevronUp className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Bajar"
+        onClick={() => step(1)}
+        disabled={idx < 0 || idx >= values.length - 1}
+        className="absolute inset-x-0 bottom-0 z-20 flex justify-center py-0.5 text-amber-300 disabled:opacity-25"
+      >
+        <ChevronDown className="h-4 w-4" />
+      </button>
+
+      <div
+        className="relative h-full overflow-hidden"
+        style={{
+          maskImage:
+            "linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, transparent, black 28%, black 72%, transparent)",
+        }}
+      >
       <div className="pointer-events-none absolute inset-x-0 top-1/2 z-10 h-px -translate-y-1/2 bg-amber-400/80" />
       <div
         ref={scrollerRef}
@@ -130,6 +162,7 @@ export function VerticalRoller({
           );
         })}
         <div className="h-[32%] shrink-0" aria-hidden />
+      </div>
       </div>
     </div>
   );

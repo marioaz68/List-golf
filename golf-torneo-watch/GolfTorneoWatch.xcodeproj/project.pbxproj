@@ -1,0 +1,318 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0378CC0147B937E436353607 /* SupabaseUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_B3054A62-1D95-4F90-8D27-8D9782816C2D" /* SupabaseUploader.swift */; };
+		12767E86EE7F7D2782AA13A0 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_E241F801-BD62-48A6-92BE-36A953D78C68" /* LocationManager.swift */; };
+		45783E3A437AC1AAB06F1776 /* RoundRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_C82AC308-A615-4F8C-BABB-9D4313CAED2B" /* RoundRecorder.swift */; };
+		5AF02C25BA7636E56013B625 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_94C61570-DF13-41B7-B5FB-76C34179B879" /* ContentView.swift */; };
+		6DEA0718177CD87D20B6C0A2 /* GolfTorneoWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_15D760EB-943E-4A0A-B95C-0A0455F83FD5" /* GolfTorneoWatchApp.swift */; };
+		84F7430567748B48DEB5F35F /* SwingAnalyzer.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_87B78DE6-CA4B-4931-B6FD-870566F137D2" /* SwingAnalyzer.swift */; };
+		8DAD2BBD899544A3CA8FAE05 /* WatchSwingUploader.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_68DF9C21-5779-4DD2-B69F-170F25944F4D" /* WatchSwingUploader.swift */; };
+		8EF3409863FB3BA91E4FCE9E /* MotionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_8A67005B-EC59-4DBA-934E-1A68797435D2" /* MotionRecorder.swift */; };
+		E77F81149A55B417CD48CF36 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_59DFF643-B26F-4782-BBDA-FC07F253665E" /* Models.swift */; };
+		F1EA876115104659A1FB5F35 /* SwingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_BA5FE667-188E-484F-ADAF-2B3D243C9178" /* SwingDetector.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		82514DE18C073F2AF8767BB6 /* GolfTorneoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GolfTorneoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		"TEMP_15D760EB-943E-4A0A-B95C-0A0455F83FD5" /* GolfTorneoWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GolfTorneoWatchApp.swift; sourceTree = "<group>"; };
+		"TEMP_59DFF643-B26F-4782-BBDA-FC07F253665E" /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		"TEMP_68DF9C21-5779-4DD2-B69F-170F25944F4D" /* WatchSwingUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSwingUploader.swift; sourceTree = "<group>"; };
+		"TEMP_87B78DE6-CA4B-4931-B6FD-870566F137D2" /* SwingAnalyzer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwingAnalyzer.swift; sourceTree = "<group>"; };
+		"TEMP_8A67005B-EC59-4DBA-934E-1A68797435D2" /* MotionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionRecorder.swift; sourceTree = "<group>"; };
+		"TEMP_94C61570-DF13-41B7-B5FB-76C34179B879" /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		"TEMP_B3054A62-1D95-4F90-8D27-8D9782816C2D" /* SupabaseUploader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseUploader.swift; sourceTree = "<group>"; };
+		"TEMP_BA5FE667-188E-484F-ADAF-2B3D243C9178" /* SwingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwingDetector.swift; sourceTree = "<group>"; };
+		"TEMP_C82AC308-A615-4F8C-BABB-9D4313CAED2B" /* RoundRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundRecorder.swift; sourceTree = "<group>"; };
+		"TEMP_E241F801-BD62-48A6-92BE-36A953D78C68" /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		786B71DC3007C85E00579789 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				"TEMP_94C61570-DF13-41B7-B5FB-76C34179B879" /* ContentView.swift */,
+				"TEMP_15D760EB-943E-4A0A-B95C-0A0455F83FD5" /* GolfTorneoWatchApp.swift */,
+				"TEMP_E241F801-BD62-48A6-92BE-36A953D78C68" /* LocationManager.swift */,
+				"TEMP_59DFF643-B26F-4782-BBDA-FC07F253665E" /* Models.swift */,
+				"TEMP_8A67005B-EC59-4DBA-934E-1A68797435D2" /* MotionRecorder.swift */,
+				"TEMP_C82AC308-A615-4F8C-BABB-9D4313CAED2B" /* RoundRecorder.swift */,
+				"TEMP_B3054A62-1D95-4F90-8D27-8D9782816C2D" /* SupabaseUploader.swift */,
+				"TEMP_87B78DE6-CA4B-4931-B6FD-870566F137D2" /* SwingAnalyzer.swift */,
+				"TEMP_BA5FE667-188E-484F-ADAF-2B3D243C9178" /* SwingDetector.swift */,
+				"TEMP_68DF9C21-5779-4DD2-B69F-170F25944F4D" /* WatchSwingUploader.swift */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		ACD83EA94440DC4C193169B0 = {
+			isa = PBXGroup;
+			children = (
+				E327FB52FA8CA10F10439BFA /* Products */,
+				786B71DC3007C85E00579789 /* Recovered References */,
+			);
+			sourceTree = "<group>";
+		};
+		E327FB52FA8CA10F10439BFA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				82514DE18C073F2AF8767BB6 /* GolfTorneoWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7EB2F8287A27E8ECD0C69084 /* GolfTorneoWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CE7E5AEA21584153F9A05841 /* Build configuration list for PBXNativeTarget "GolfTorneoWatch" */;
+			buildPhases = (
+				3A31198470710791CDC4119D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GolfTorneoWatch;
+			packageProductDependencies = (
+			);
+			productName = GolfTorneoWatch;
+			productReference = 82514DE18C073F2AF8767BB6 /* GolfTorneoWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8E82244C5F0C308343DDD50C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = B050BB3A84DEE3E9FE072C15 /* Build configuration list for PBXProject "GolfTorneoWatch" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = ACD83EA94440DC4C193169B0;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E327FB52FA8CA10F10439BFA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7EB2F8287A27E8ECD0C69084 /* GolfTorneoWatch */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3A31198470710791CDC4119D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5AF02C25BA7636E56013B625 /* ContentView.swift in Sources */,
+				6DEA0718177CD87D20B6C0A2 /* GolfTorneoWatchApp.swift in Sources */,
+				12767E86EE7F7D2782AA13A0 /* LocationManager.swift in Sources */,
+				E77F81149A55B417CD48CF36 /* Models.swift in Sources */,
+				8EF3409863FB3BA91E4FCE9E /* MotionRecorder.swift in Sources */,
+				45783E3A437AC1AAB06F1776 /* RoundRecorder.swift in Sources */,
+				0378CC0147B937E436353607 /* SupabaseUploader.swift in Sources */,
+				84F7430567748B48DEB5F35F /* SwingAnalyzer.swift in Sources */,
+				F1EA876115104659A1FB5F35 /* SwingDetector.swift in Sources */,
+				8DAD2BBD899544A3CA8FAE05 /* WatchSwingUploader.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1B5D8C649558D5B906CD2F54 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		1D616748D82C6E986BB777FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GolfTorneoWatch.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FGZAJ22RZL;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = club.listgolf.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		1DAC2F753B22E6D42365869A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GolfTorneoWatch.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FGZAJ22RZL;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = club.listgolf.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		7FC2591EE2CA3E818C622B2F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B050BB3A84DEE3E9FE072C15 /* Build configuration list for PBXProject "GolfTorneoWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B5D8C649558D5B906CD2F54 /* Debug */,
+				7FC2591EE2CA3E818C622B2F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		CE7E5AEA21584153F9A05841 /* Build configuration list for PBXNativeTarget "GolfTorneoWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D616748D82C6E986BB777FA /* Debug */,
+				1DAC2F753B22E6D42365869A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8E82244C5F0C308343DDD50C /* Project object */;
+}

@@ -75,9 +75,16 @@ EXPO_PUBLIC_API_BASE_URL=https://staging.listgolf.club
 - `lib/telegram/ritmo/mobileCode.ts` — comando `/codigo` en el bot
 - `supabase/migrations/20260605120000_mobile_auth_codes.sql` — tabla de códigos
 
+## Apple Watch (watchOS)
+
+App nativa para yardas + swing en el reloj. Ver **`watch/README.md`**.
+
+- **Fase 1**: GPS (`CoreLocation`) + detección de swing (`CoreMotion`) + workout golf (`HealthKit`) — local en el Watch
+- **Fase 2**: sync con backend vía iPhone / red del Watch
+
 ## Estado del proyecto
 
 - **Fase 1 (este commit)**: scaffolding + login + GPS background ✅
 - **Fase 2**: build AAB y prueba con 2-3 caddies
 - **Fase 3**: agregar captura de scores en la app (opcional)
-- **Fase 4** (futuro): iOS con cuenta de Apple Developer ($99/año)
+- **Fase 4**: iOS + Apple Watch (`mobile/watch/`) con cuenta Apple Developer ($99/año)

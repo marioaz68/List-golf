@@ -1,0 +1,33 @@
+# Especificación de proyecto para XcodeGen.
+# Genera GolfTorneoWatch.xcodeproj ya configurado (permisos, HealthKit,
+# background modes) para que solo abras y corras.
+name: GolfTorneoWatch
+options:
+  bundleIdPrefix: club.listgolf
+  deploymentTarget:
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+targets:
+  GolfTorneoWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - path: .
+        includes:
+          - "*.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: club.listgolf.watch
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # Usamos un Info.plist EXPLÍCITO (evita el bug de XcodeGen que omite
+        # WKApplication en apps de reloj independientes).
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Info.plist
+    entitlements:
+      path: GolfTorneoWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

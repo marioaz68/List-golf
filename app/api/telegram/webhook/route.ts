@@ -38,6 +38,10 @@ import {
   buildMisRondasReply,
 } from "@/lib/telegram/handicap/misRondasCommand";
 import {
+  isStatsCommand,
+  buildStatsReply,
+} from "@/lib/telegram/statsCommand";
+import {
   isDistancesCommand,
   isDistancesDemoCommand,
   buildDistancesReply,
@@ -283,6 +287,17 @@ export async function POST(req: Request) {
         buttons: reply.buttons,
       });
       return NextResponse.json({ ok: true, distances_demo: "link_sent" });
+    }
+
+    // === ESTADISTICAS: /ESTADISTICAS — mini app con ficha personal del jugador ===
+    if (text && isStatsCommand(text)) {
+      const reply = buildStatsReply();
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, stats: "link_sent" });
     }
 
     // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===

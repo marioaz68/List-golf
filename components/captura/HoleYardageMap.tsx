@@ -1132,7 +1132,7 @@ export function HoleYardageMap({
       </div>
       <div
         data-yardage-map-ui
-        className="pointer-events-none absolute left-2 top-14 z-[1010] max-w-[11rem] rounded-md bg-black/70 px-2 py-1 text-[9px] leading-tight text-slate-300"
+        className="pointer-events-none absolute left-2 top-20 z-[1010] max-w-[11rem] rounded-md bg-black/70 px-2 py-1 text-[9px] leading-tight text-slate-300"
       >
         {needsTeeMark
           ? "Paso 1 · toca el tee en el mapa"

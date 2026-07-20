@@ -27,6 +27,11 @@ import {
   stopBackgroundTracking,
   syncSessionToBackgroundStorage,
 } from "@/lib/locationTask";
+import {
+  getWatchPhoneStatus,
+  isWatchSyncAvailable,
+} from "listgolf-watch-sync";
+import { syncAuthToWatch } from "@/lib/watchSync";
 
 type ChipState = "off" | "starting" | "on" | "error";
 
@@ -39,6 +44,12 @@ export default function RitmoScreen() {
   const [session, setSession] = useState<MobileSession | null>(null);
   const [state, setState] = useState<ChipState>("off");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [watchStatus, setWatchStatus] = useState({
+    available: false,
+    paired: false,
+    installed: false,
+    reachable: false,
+  });
 
   // Cargar sesión + estado inicial del tracking
   useEffect(() => {
@@ -57,6 +68,7 @@ export default function RitmoScreen() {
         caddieId: s.caddieId,
         entryId: s.entryId,
       });
+      await syncAuthToWatch();
       setSession(s);
       const running = await isBackgroundTrackingActive();
       if (!cancelled) setState(running ? "on" : "off");
@@ -65,6 +77,22 @@ export default function RitmoScreen() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    if (!isWatchSyncAvailable()) return;
+    const tick = () => {
+      const s = getWatchPhoneStatus();
+      setWatchStatus({
+        available: true,
+        paired: s.paired,
+        installed: s.watchAppInstalled,
+        reachable: s.reachable,
+      });
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
   }, []);
 
   const onToggle = useCallback(async () => {
@@ -214,6 +242,32 @@ export default function RitmoScreen() {
           }}
         >
           <Text style={{ color: "#fca5a5", fontSize: 12 }}>{errorMsg}</Text>
+        </View>
+      ) : null}
+
+      {watchStatus.available ? (
+        <View
+          style={{
+            backgroundColor: "rgba(34,197,94,0.10)",
+            borderColor: "rgba(34,197,94,0.35)",
+            borderWidth: 1,
+            borderRadius: 10,
+            padding: 14,
+            marginBottom: 16,
+          }}
+        >
+          <Text style={{ color: "#86efac", fontSize: 13, fontWeight: "600", marginBottom: 6 }}>
+            Apple Watch
+          </Text>
+          <Text style={{ color: "#cbd5e1", fontSize: 12, lineHeight: 18 }}>
+            {watchStatus.paired
+              ? watchStatus.installed
+                ? watchStatus.reachable
+                  ? "Reloj conectado · GPS y swings se envían al servidor."
+                  : "App instalada · abre List.Golf en el Watch e inicia ronda."
+                : "Instala List.Golf en el Apple Watch desde la app Watch."
+              : "Empareja un Apple Watch para yardas en muñeca."}
+          </Text>
         </View>
       ) : null}
 

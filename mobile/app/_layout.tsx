@@ -6,6 +6,9 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 // TaskManager.defineTask se ejecuta antes de cualquier navegación, así el
 // task de background está registrado cuando el OS despierta la app.
 import "@/lib/locationTask";
+import { startWatchSyncBridge } from "@/lib/watchSync";
+
+startWatchSyncBridge();
 
 export default function RootLayout() {
   return (

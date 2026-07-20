@@ -13,7 +13,10 @@ export function getTelegramBotUrl() {
 
 export type TelegramInlineButton = {
   text: string;
-  url: string;
+  /** Botón que abre un link normal (navegador in-app, sin initData). */
+  url?: string;
+  /** Botón que abre una Mini App DENTRO de Telegram (inyecta initData firmado). */
+  web_app?: string;
 };
 
 export async function sendTelegramMessage(params: {
@@ -49,7 +52,11 @@ export async function sendTelegramMessage(params: {
   if (params.buttons && params.buttons.length > 0) {
     body.reply_markup = {
       inline_keyboard: params.buttons.map((row) =>
-        row.map((b) => ({ text: b.text, url: b.url }))
+        row.map((b) =>
+          b.web_app
+            ? { text: b.text, web_app: { url: b.web_app } }
+            : { text: b.text, url: b.url }
+        )
       ),
     };
   }
