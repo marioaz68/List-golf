@@ -452,6 +452,7 @@ export type ApproachBucket = {
 export type ApproachRow = {
   shot_id: string;
   hole: number;
+  club: string | null;
   planned: number;
   actual: number | null;
   vs_plan: number | null;
@@ -488,6 +489,7 @@ export async function getApproachList(
   return (d.shots ?? []).map((r: Record<string, unknown>) => ({
     shot_id: String(r.shot_id ?? ""),
     hole: num(r.hole) ?? 0,
+    club: (r.club as string | null) ?? null,
     planned: num(r.planned) ?? 0,
     actual: num(r.actual),
     vs_plan: num(r.vs_plan),

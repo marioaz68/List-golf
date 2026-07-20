@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const { data: exRows } = await admin.from("yardage_excluded_shots").select("shot_id").eq("player_id", playerId);
   const excluded = new Set((exRows ?? []).map((r) => (r as { shot_id: string }).shot_id));
 
-  const shots: Array<{ shot_id: string; hole: number; planned: number; actual: number | null; vs_plan: number | null; date: string | null; excluded: boolean }> = [];
+  const shots: Array<{ shot_id: string; hole: number; club: string | null; planned: number; actual: number | null; vs_plan: number | null; date: string | null; excluded: boolean }> = [];
   for (const r of rows) {
     if (r.club === "putter" || r.club === "penalty") continue;
     const planned = n(r.planned_yards);
@@ -57,6 +57,7 @@ export async function POST(req: Request) {
     shots.push({
       shot_id: r.shot_id,
       hole: r.hole ?? 0,
+      club: r.club,
       planned: Math.round(planned),
       actual: actual == null ? null : Math.round(actual),
       vs_plan: actual != null && planned > 0 ? Math.round((actual / planned) * 100) : null,

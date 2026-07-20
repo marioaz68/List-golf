@@ -1305,6 +1305,7 @@ function ApproachListDetail({ initData, min, max, label, rangeKey, onBack, onCha
               <tr>
                 <th className="px-2 py-2">Fecha</th>
                 <th className="px-2 py-2 text-right">Hoyo</th>
+                <th className="px-2 py-2">Bastón</th>
                 <th className="px-2 py-2 text-right">Plan</th>
                 <th className="px-2 py-2 text-right">Real</th>
                 <th className="px-2 py-2 text-right">%</th>
@@ -1316,6 +1317,7 @@ function ApproachListDetail({ initData, min, max, label, rangeKey, onBack, onCha
                 <tr key={p.shot_id} className="border-t" style={{ borderColor: C.border, opacity: p.excluded ? 0.45 : 1 }}>
                   <td className="px-2 py-2" style={{ color: C.hint }}>{fmtDate(p.date)}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{p.hole}</td>
+                  <td className="px-2 py-2">{clubLabel(p.club)}</td>
                   <td className="px-2 py-2 text-right tabular-nums" style={{ color: C.hint }}>{p.planned} yd</td>
                   <td className="px-2 py-2 text-right tabular-nums font-medium">{p.actual != null ? `${p.actual} yd` : "—"}</td>
                   <td className="px-2 py-2 text-right tabular-nums" style={{ color: vsPlanColor(p.vs_plan) }}>{p.vs_plan != null ? `${p.vs_plan}%` : "—"}</td>
