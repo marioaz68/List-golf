@@ -77,6 +77,7 @@ import {
 import { RoundTeePickerOverlay } from "@/components/captura/RoundTeePickerOverlay";
 import { computeRoundYardageStats } from "@/lib/distances/yardageStats";
 import { ShotPlanPanel } from "@/components/captura/ShotPlanPanel";
+import { ShotResultOverlay } from "@/components/captura/ShotResultOverlay";
 import type { SwingKind } from "@/lib/distances/clubCatalog";
 import {
   configurePlayerBagSync,
@@ -2451,6 +2452,12 @@ export default function DistanciasClient({
     ]
   );
 
+  const [shotResult, setShotResult] = useState<{
+    catalogId: string;
+    planned: number;
+    actual: number;
+    strokeNo: number;
+  } | null>(null);
   const applyPendingShotLanding = useCallback(
     (lat: number, lon: number, puttYards?: number) => {
       if (!pendingShot || !activeHolePoints || geo.status !== "ok") return;
@@ -2553,6 +2560,18 @@ export default function DistanciasClient({
       setArrivalToast(
         `Golpe ${pendingShot.strokeNo}: ${actual} yds · ${lieArrivalPhrase(lie.kind)} · al green ${toGreen.center}`
       );
+      if (
+        pendingShot.catalogId !== "putter" &&
+        pendingShot.plannedYards > 0 &&
+        actual > 0
+      ) {
+        setShotResult({
+          catalogId: pendingShot.catalogId,
+          planned: pendingShot.plannedYards,
+          actual,
+          strokeNo: pendingShot.strokeNo,
+        });
+      }
       pinMapFraming(landing);
       openPlanFromPoint(
         landing.lat,
@@ -3957,6 +3976,16 @@ export default function DistanciasClient({
               ? () => correctLastShotLanding()
               : undefined
           }
+        />
+      ) : null}
+
+      {shotResult ? (
+        <ShotResultOverlay
+          catalogId={shotResult.catalogId}
+          planned={shotResult.planned}
+          actual={shotResult.actual}
+          strokeNo={shotResult.strokeNo}
+          onClose={() => setShotResult(null)}
         />
       ) : null}
 
