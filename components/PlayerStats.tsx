@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   ChevronLeft, ChevronRight, Flag, Gauge, Ruler, Target, CircleDot,
-  Timer, TrendingUp,
+  Timer, TrendingUp, Crosshair,
 } from "lucide-react";
 import {
   getPlayerStats,
@@ -17,9 +17,13 @@ import {
   getPuttStats,
   getPuttList,
   getGreenMap,
+  getApproachStats,
+  getApproachList,
   type PuttBucket,
   type PuttRow,
   type GreenMapData,
+  type ApproachBucket,
+  type ApproachRow,
   type ClubDistance,
   type ClubShot,
   type HoleStats,
@@ -44,7 +48,7 @@ const C = {
   accent: "#34d399",
 };
 
-type View = "home" | "bastones" | "hoyos" | "tiros" | "putts" | "clubDetail" | "holeDetail";
+type View = "home" | "bastones" | "hoyos" | "tiros" | "putts" | "approach" | "clubDetail" | "holeDetail";
 type SelectedClub = { club: string; swing: "full" | "three_quarter" };
 
 // Etiquetas cortas para que quepan mejor en la tabla.
@@ -141,6 +145,8 @@ export default function PlayerStats({ initData }: { initData?: string }) {
           subtitle={loading ? "…" : `${totalShots} tiros`} onClick={() => setView("tiros")} />
         <MenuRow icon={<CircleDot className="h-5 w-5" />} title="Putts"
           subtitle={loading ? "…" : `${putts} putts`} onClick={() => setView("putts")} />
+        <MenuRow icon={<Crosshair className="h-5 w-5" />} title="Approach"
+          subtitle="Tiros de menos de 60 yardas" onClick={() => setView("approach")} />
       </div>
     );
   }
@@ -172,10 +178,10 @@ export default function PlayerStats({ initData }: { initData?: string }) {
   }
 
   // ---------- DETALLE DE MÓDULO ----------
-  const titles: Record<"bastones" | "hoyos" | "tiros" | "putts", string> = {
-    bastones: "Bastones", hoyos: "Hoyos", tiros: "Tiros", putts: "Putts",
+  const titles: Record<"bastones" | "hoyos" | "tiros" | "putts" | "approach", string> = {
+    bastones: "Bastones", hoyos: "Hoyos", tiros: "Tiros", putts: "Putts", approach: "Approach",
   };
-  const moduleView = view as "bastones" | "hoyos" | "tiros" | "putts";
+  const moduleView = view as "bastones" | "hoyos" | "tiros" | "putts" | "approach";
 
   return (
     <div className="space-y-4" style={{ color: C.text }}>
@@ -209,6 +215,7 @@ export default function PlayerStats({ initData }: { initData?: string }) {
             />
           )}
           {view === "putts" && idata && <PuttsModule initData={idata} rangeKey={rangeKey} />}
+          {view === "approach" && idata && <ApproachModule initData={idata} rangeKey={rangeKey} />}
         </>
       )}
     </div>
@@ -1147,6 +1154,182 @@ function ClubShotsDetail({ initData, club, swing, onBack, onChanged }: {
       <p className="text-xs" style={{ color: C.hint }}>
         Marca la casilla para excluir un golpe malo: deja de contar en el promedio. Puedes reincluirlo cuando quieras.
       </p>
+    </div>
+  );
+}
+
+const APPROACH_BUCKETS: { key: string; min: number; max: number | null }[] = [
+  { key: "0-10", min: 0, max: 10 },
+  { key: "11-20", min: 11, max: 20 },
+  { key: "21-30", min: 21, max: 30 },
+  { key: "31-40", min: 31, max: 40 },
+  { key: "41-50", min: 41, max: 50 },
+  { key: "51-60", min: 51, max: 60 },
+];
+
+function ApproachModule({ initData, rangeKey }: { initData: string; rangeKey: string }) {
+  const [buckets, setBuckets] = useState<ApproachBucket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sel, setSel] = useState<{ key: string; min: number; max: number | null } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const d = await getApproachStats(initData, fetchOptsFromKey(rangeKey));
+        if (active) setBuckets(d);
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : "Error al cargar approach");
+      } finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [initData, rangeKey, reloadKey]);
+
+  if (sel) {
+    return (
+      <ApproachListDetail
+        initData={initData} min={sel.min} max={sel.max} label={sel.key} rangeKey={rangeKey}
+        onBack={() => setSel(null)} onChanged={() => setReloadKey((k) => k + 1)}
+      />
+    );
+  }
+
+  if (loading) return <div className="p-4 text-sm" style={{ color: C.hint }}>Cargando…</div>;
+  if (error) return <div className="p-4 text-sm" style={{ color: "#f87171" }}>{error}</div>;
+  const cellBorder: CSSProperties = { borderColor: C.border };
+  const byKey = new Map(buckets.map((b) => [b.key, b]));
+
+  return (
+    <div className="space-y-2">
+      <div className="overflow-hidden rounded-lg border" style={cellBorder}>
+        <table className="w-full text-sm">
+          <thead className="text-left text-xs uppercase tracking-wide" style={{ background: C.headerBg, color: C.hint }}>
+            <tr>
+              <th className="px-2 py-2">Dist plan (yd)</th>
+              <th className="px-2 py-2 text-right">% vs plan</th>
+              <th className="px-2 py-2 text-right">Prom real</th>
+              <th className="px-2 py-2 text-right">Tiros</th>
+              <th className="px-2 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {APPROACH_BUCKETS.map((bk) => {
+              const b = byKey.get(bk.key);
+              return (
+                <tr key={bk.key} className="cursor-pointer border-t" style={cellBorder} onClick={() => setSel(bk)}>
+                  <td className="px-2 py-2 font-medium">{bk.key}</td>
+                  <td className="px-2 py-2 text-right tabular-nums font-medium" style={{ color: vsPlanColor(b?.avg_vs_plan ?? null) }}>
+                    {b?.avg_vs_plan != null ? `${b.avg_vs_plan}%` : "—"}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">{b?.avg_yards != null ? `${b.avg_yards} yd` : "—"}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" style={{ color: C.hint }}>{b?.shots ?? 0}</td>
+                  <td className="px-2 py-2 text-right"><ChevronRight className="inline h-4 w-4" style={{ color: C.hint }} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs" style={{ color: C.hint }}>
+        Solo tiros de menos de 60 yardas planeadas (sin putts). &ldquo;% vs plan&rdquo; = real ÷ planeado promedio (100 = clavaste la distancia). &ldquo;Prom real&rdquo; = yardas reales promedio. Toca un rango para ver y depurar los tiros.
+      </p>
+    </div>
+  );
+}
+
+function ApproachListDetail({ initData, min, max, label, rangeKey, onBack, onChanged }: {
+  initData: string; min: number; max: number | null; label: string; rangeKey: string;
+  onBack: () => void; onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<ApproachRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true); setError(null);
+      try {
+        const r = await getApproachList(initData, min, max, fetchOptsFromKey(rangeKey));
+        if (active) setRows(r);
+      } catch (e) {
+        if (active) setError(e instanceof Error ? e.message : "Error al cargar approach");
+      } finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [initData, min, max, rangeKey]);
+
+  const incl = rows.filter((p) => !p.excluded && p.vs_plan != null).map((p) => p.vs_plan as number);
+  const avgVs = incl.length ? Math.round(incl.reduce((a, b) => a + b, 0) / incl.length) : null;
+
+  async function toggle(p: ApproachRow) {
+    const next = !p.excluded;
+    setBusy(p.shot_id);
+    setRows((prev) => prev.map((x) => (x.shot_id === p.shot_id ? { ...x, excluded: next } : x)));
+    try {
+      await setShotExcluded(initData, p.shot_id, next);
+      onChanged();
+    } catch {
+      setRows((prev) => prev.map((x) => (x.shot_id === p.shot_id ? { ...x, excluded: !next } : x)));
+    } finally { setBusy(null); }
+  }
+
+  const cellBorder: CSSProperties = { borderColor: C.border };
+  return (
+    <div className="space-y-4" style={{ color: C.text }}>
+      <button onClick={onBack} className="flex items-center gap-1 text-sm" style={{ color: C.accent }}>
+        <ChevronLeft className="h-4 w-4" /> Approach
+      </button>
+      <h2 className="text-lg font-bold" style={{ color: C.text }}>Approach {label} yds</h2>
+
+      <div className="rounded-lg border p-3" style={{ background: C.card, borderColor: C.border }}>
+        <div className="text-xs" style={{ color: C.hint }}>% vs plan (sin excluidos)</div>
+        <div className="text-2xl font-semibold tabular-nums" style={{ color: C.text }}>{avgVs != null ? `${avgVs}%` : "—"}</div>
+        <div className="text-xs" style={{ color: C.hint }}>{incl.length} de {rows.length} tiros cuentan</div>
+      </div>
+
+      {loading ? (
+        <div className="p-4 text-sm" style={{ color: C.hint }}>Cargando…</div>
+      ) : error ? (
+        <div className="p-4 text-sm" style={{ color: "#f87171" }}>{error}</div>
+      ) : rows.length === 0 ? (
+        <EmptyNote>No hay approaches en este rango.</EmptyNote>
+      ) : (
+        <div className="overflow-hidden rounded-lg border" style={cellBorder}>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide" style={{ background: C.headerBg, color: C.hint }}>
+              <tr>
+                <th className="px-2 py-2">Fecha</th>
+                <th className="px-2 py-2 text-right">Hoyo</th>
+                <th className="px-2 py-2 text-right">Plan</th>
+                <th className="px-2 py-2 text-right">Real</th>
+                <th className="px-2 py-2 text-right">%</th>
+                <th className="px-2 py-2 text-center">Excl.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.shot_id} className="border-t" style={{ borderColor: C.border, opacity: p.excluded ? 0.45 : 1 }}>
+                  <td className="px-2 py-2" style={{ color: C.hint }}>{fmtDate(p.date)}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{p.hole}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" style={{ color: C.hint }}>{p.planned} yd</td>
+                  <td className="px-2 py-2 text-right tabular-nums font-medium">{p.actual != null ? `${p.actual} yd` : "—"}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" style={{ color: vsPlanColor(p.vs_plan) }}>{p.vs_plan != null ? `${p.vs_plan}%` : "—"}</td>
+                  <td className="px-2 py-2 text-center">
+                    <input type="checkbox" checked={p.excluded} disabled={busy === p.shot_id}
+                      onChange={() => toggle(p)} style={{ accentColor: "#f87171", width: 18, height: 18 }} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs" style={{ color: C.hint }}>Marca la casilla para excluir un approach malo; deja de contar en los promedios.</p>
     </div>
   );
 }

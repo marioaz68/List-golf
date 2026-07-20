@@ -440,3 +440,58 @@ export async function setShotExcluded(initData: string, shotId: string, excluded
     throw new Error(j?.error ?? "No se pudo actualizar");
   }
 }
+
+
+// ---------- Módulo Approach (<60 yds planeadas) ----------
+export type ApproachBucket = {
+  key: string;
+  shots: number;
+  avg_yards: number | null;
+  avg_vs_plan: number | null;
+};
+export type ApproachRow = {
+  shot_id: string;
+  hole: number;
+  planned: number;
+  actual: number | null;
+  vs_plan: number | null;
+  date: string | null;
+  excluded: boolean;
+};
+
+export async function getApproachStats(
+  initData: string, opts: { range?: DateRange; last?: boolean } = {}
+): Promise<ApproachBucket[]> {
+  const res = await fetch("/api/mobile/stats/approach", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initData, last: opts.last ?? false, from: opts.range?.from, to: opts.range?.to }),
+  });
+  if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error ?? "No se pudieron cargar los approaches"); }
+  const d = await res.json();
+  return (d.buckets ?? []).map((r: Record<string, unknown>) => ({
+    key: String(r.key ?? ""),
+    shots: num(r.shots) ?? 0,
+    avg_yards: num(r.avg_yards),
+    avg_vs_plan: num(r.avg_vs_plan),
+  })) as ApproachBucket[];
+}
+
+export async function getApproachList(
+  initData: string, min: number, max: number | null, opts: { range?: DateRange; last?: boolean } = {}
+): Promise<ApproachRow[]> {
+  const res = await fetch("/api/mobile/stats/approach-list", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initData, min, max, last: opts.last ?? false, from: opts.range?.from, to: opts.range?.to }),
+  });
+  if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error ?? "No se pudieron cargar los approaches"); }
+  const d = await res.json();
+  return (d.shots ?? []).map((r: Record<string, unknown>) => ({
+    shot_id: String(r.shot_id ?? ""),
+    hole: num(r.hole) ?? 0,
+    planned: num(r.planned) ?? 0,
+    actual: num(r.actual),
+    vs_plan: num(r.vs_plan),
+    date: (r.date as string | null) ?? null,
+    excluded: Boolean(r.excluded),
+  })) as ApproachRow[];
+}
