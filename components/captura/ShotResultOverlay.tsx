@@ -2,11 +2,21 @@
 
 import { CLUB_BY_ID } from "@/lib/distances/clubCatalog";
 
+const LIE_LABEL: Record<string, string> = {
+  fairway: "Calle",
+  rough: "Rough",
+  bunker: "Búnker",
+  green: "Green",
+  water: "Lago",
+  ob: "Fuera (OB)",
+};
+
 interface ShotResultOverlayProps {
   catalogId: string;
   planned: number;
   actual: number;
   strokeNo: number;
+  lie?: string | null;
   onClose: () => void;
 }
 
@@ -16,9 +26,11 @@ export function ShotResultOverlay({
   planned,
   actual,
   strokeNo,
+  lie,
   onClose,
 }: ShotResultOverlayProps) {
   const club = CLUB_BY_ID[catalogId]?.shortLabel ?? catalogId;
+  const lieLabel = lie ? LIE_LABEL[lie] ?? null : null;
   const diff = actual - planned;
   const absDiff = Math.abs(diff);
   const near = absDiff <= 5;
@@ -41,6 +53,11 @@ export function ShotResultOverlay({
         <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
           Golpe {strokeNo} · {club}
         </div>
+        {lieLabel ? (
+          <div className="mt-2 inline-block rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-bold text-slate-200">
+            Terminó en: {lieLabel}
+          </div>
+        ) : null}
         <div className="mt-4 flex items-stretch justify-center gap-3">
           <div className="flex-1 rounded-2xl bg-white/5 py-3">
             <div className="text-[10px] font-bold uppercase text-slate-400">Plan</div>

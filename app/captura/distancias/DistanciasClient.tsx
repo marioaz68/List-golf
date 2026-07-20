@@ -2457,6 +2457,7 @@ export default function DistanciasClient({
     planned: number;
     actual: number;
     strokeNo: number;
+    lie: string | null;
   } | null>(null);
   const applyPendingShotLanding = useCallback(
     (lat: number, lon: number, puttYards?: number) => {
@@ -2570,6 +2571,7 @@ export default function DistanciasClient({
           planned: pendingShot.plannedYards,
           actual,
           strokeNo: pendingShot.strokeNo,
+          lie: lie.kind,
         });
       }
       pinMapFraming(landing);
@@ -3985,6 +3987,7 @@ export default function DistanciasClient({
           planned={shotResult.planned}
           actual={shotResult.actual}
           strokeNo={shotResult.strokeNo}
+          lie={shotResult.lie}
           onClose={() => setShotResult(null)}
         />
       ) : null}
