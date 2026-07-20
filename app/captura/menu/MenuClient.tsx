@@ -235,12 +235,39 @@ export default function MenuClient({
   const isPickup = selectedVenue?.type === "restaurant";
   const needsPrepay = isPickup || isHomeDelivery;
 
+  // Manda al ritmo la ubicación GPS real de quien captura el pedido.
+  // No bloquea el pedido: si el navegador niega permiso, simplemente no
+  // aporta punto. El backend ignora pings imprecisos para avanzar el hoyo.
+  const pingMyPosition = useCallback(() => {
+    if (!meEntryId && !caddieId) return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        void fetch("/api/captura/position", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            entry_id: meEntryId,
+            caddie_id: caddieId,
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          }),
+        }).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+    );
+  }, [meEntryId, caddieId]);
+
   const confirmOrder = useCallback(async () => {
     if (cart.length === 0 || !selectedVenue) return;
     if (!meEntryId && !caddieId && !playerId) {
       setSubmitError("No te tengo identificado. Reabre el link del bot (escribe MENU).");
       return;
     }
+    // Afinar el ritmo con la ubicación real de quien captura (no bloquea).
+    pingMyPosition();
     const homeDelivery = selectedVenue.code === "cart_fracc";
     if (homeDelivery && !homeAddress.trim()) {
       setSubmitError("Escribe tu domicilio de entrega (calle, número/lote).");
@@ -302,6 +329,7 @@ export default function MenuClient({
     orderNotes,
     clearCart,
     startCheckout,
+    pingMyPosition,
   ]);
 
   // ============ Mis pedidos + estado de cuenta + favoritos ============
