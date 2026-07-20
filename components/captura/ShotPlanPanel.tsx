@@ -95,6 +95,7 @@ function ArrowStepper({
   upDisabled,
   downDisabled,
   valueClassName = "text-3xl",
+  subClassName = "mt-1 text-base font-black text-amber-300",
 }: {
   caption: string;
   value: string;
@@ -104,6 +105,7 @@ function ArrowStepper({
   upDisabled?: boolean;
   downDisabled?: boolean;
   valueClassName?: string;
+  subClassName?: string;
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -127,7 +129,7 @@ function ArrowStepper({
           {value}
         </span>
         {sub ? (
-          <span className="mt-0.5 text-[9px] font-semibold text-slate-400">
+          <span className={subClassName}>
             {sub}
           </span>
         ) : null}
@@ -379,6 +381,7 @@ export function ShotPlanPanel({
             value={activePick.short}
             sub={swingLabel}
             valueClassName="text-2xl"
+            subClassName="mt-1 text-2xl font-black text-amber-300"
             onUp={() => stepClub(-1)}
             onDown={() => stepClub(1)}
             upDisabled={clubIdx <= 0}
@@ -393,6 +396,7 @@ export function ShotPlanPanel({
                 : null
             }
             valueClassName="text-3xl"
+            subClassName="mt-1 text-xs font-bold text-slate-300"
             onUp={() => stepYard(1)}
             onDown={() => stepYard(-1)}
             upDisabled={yardIdx < 0 || yardIdx >= yardValues.length - 1}
