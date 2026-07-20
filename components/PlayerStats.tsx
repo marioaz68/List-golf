@@ -1299,31 +1299,31 @@ function ApproachListDetail({ initData, min, max, label, rangeKey, onBack, onCha
       ) : rows.length === 0 ? (
         <EmptyNote>No hay approaches en este rango.</EmptyNote>
       ) : (
-        <div className="overflow-hidden rounded-lg border" style={cellBorder}>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide" style={{ background: C.headerBg, color: C.hint }}>
+        <div className="overflow-x-auto rounded-lg border" style={cellBorder}>
+          <table className="w-full text-xs">
+            <thead className="text-left text-[10px] uppercase tracking-wide" style={{ background: C.headerBg, color: C.hint }}>
               <tr>
-                <th className="px-2 py-2">Fecha</th>
-                <th className="px-2 py-2 text-right">Hoyo</th>
-                <th className="px-2 py-2">Bastón</th>
-                <th className="px-2 py-2 text-right">Plan</th>
-                <th className="px-2 py-2 text-right">Real</th>
-                <th className="px-2 py-2 text-right">%</th>
-                <th className="px-2 py-2 text-center">Excl.</th>
+                <th className="px-1 py-2">Fecha</th>
+                <th className="px-1 py-2 text-right">H</th>
+                <th className="px-1 py-2">Bastón</th>
+                <th className="px-1 py-2 text-right">Plan</th>
+                <th className="px-1 py-2 text-right">Real</th>
+                <th className="px-1 py-2 text-right">%</th>
+                <th className="px-1 py-2 text-center">Excl</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => (
                 <tr key={p.shot_id} className="border-t" style={{ borderColor: C.border, opacity: p.excluded ? 0.45 : 1 }}>
-                  <td className="px-2 py-2" style={{ color: C.hint }}>{fmtDate(p.date)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{p.hole}</td>
-                  <td className="px-2 py-2">{clubLabel(p.club)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums" style={{ color: C.hint }}>{p.planned} yd</td>
-                  <td className="px-2 py-2 text-right tabular-nums font-medium">{p.actual != null ? `${p.actual} yd` : "—"}</td>
-                  <td className="px-2 py-2 text-right tabular-nums" style={{ color: vsPlanColor(p.vs_plan) }}>{p.vs_plan != null ? `${p.vs_plan}%` : "—"}</td>
-                  <td className="px-2 py-2 text-center">
+                  <td className="px-1 py-2" style={{ color: C.hint }}>{fmtDate(p.date)}</td>
+                  <td className="px-1 py-2 text-right tabular-nums">{p.hole}</td>
+                  <td className="px-1 py-2">{clubLabel(p.club)}</td>
+                  <td className="px-1 py-2 text-right tabular-nums" style={{ color: C.hint }}>{p.planned}</td>
+                  <td className="px-1 py-2 text-right tabular-nums font-medium">{p.actual != null ? p.actual : "—"}</td>
+                  <td className="px-1 py-2 text-right tabular-nums" style={{ color: vsPlanColor(p.vs_plan) }}>{p.vs_plan != null ? `${p.vs_plan}%` : "—"}</td>
+                  <td className="px-1 py-2 text-center">
                     <input type="checkbox" checked={p.excluded} disabled={busy === p.shot_id}
-                      onChange={() => toggle(p)} style={{ accentColor: "#f87171", width: 18, height: 18 }} />
+                      onChange={() => toggle(p)} style={{ accentColor: "#f87171", width: 16, height: 16 }} />
                   </td>
                 </tr>
               ))}
