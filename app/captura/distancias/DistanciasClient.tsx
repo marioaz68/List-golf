@@ -3261,9 +3261,9 @@ export default function DistanciasClient({
   ]);
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100 md:px-16">
+    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
       {/* Mapa a pantalla completa */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 md:inset-x-16">
         {geo.status === "ok" && greenYds && !farFromCourse ? (
           <HoleYardageMap
             key={`yardage-h${activeHole}-e${mapFrameEpoch}`}
