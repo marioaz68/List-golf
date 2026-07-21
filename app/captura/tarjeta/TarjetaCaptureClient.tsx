@@ -1071,7 +1071,7 @@ export default function TarjetaCaptureClient({
   }
 
   return (
-    <div className="w-full bg-slate-100">
+    <div className="w-full bg-slate-100 md:pt-16">
       <div className="flex w-full justify-center bg-slate-100">
         <div className="w-full max-w-[390px] md:max-w-none md:mx-16 bg-slate-100 pb-28">
           <div className="flex items-center justify-between gap-2 bg-black px-2 py-2 text-white">

@@ -465,7 +465,7 @@ export default function MenuClient({
 
   // ============ Render ============
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-slate-100 text-slate-900 md:pt-16">
       <div className="mx-auto max-w-md bg-[#eef3f7] pb-28">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-black px-3 py-2 text-white">
           <div>

@@ -118,7 +118,7 @@ export default function CarritoOperadorClient({ venue, carts, initialOrders }: P
   ).length;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
+    <div className="min-h-screen bg-slate-900 text-slate-100 md:pt-16">
       <div className="mx-auto max-w-md pb-24">
         {/* Header */}
         <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-900/95 backdrop-blur px-3 py-3">

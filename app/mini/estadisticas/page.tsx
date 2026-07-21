@@ -35,7 +35,7 @@ export default function MiniAppStatsPage() {
         }}
       />
       <main
-        className="mx-auto min-h-screen max-w-xl p-4"
+        className="mx-auto min-h-screen max-w-xl md:max-w-none md:mx-16 p-4 md:pt-16"
         style={{
           background: "var(--tg-theme-bg-color, #17171c)",
           color: "var(--tg-theme-text-color, #f2f2f7)",

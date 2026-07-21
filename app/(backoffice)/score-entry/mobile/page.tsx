@@ -1428,7 +1428,7 @@ function MobileScoreEntryContent() {
   const signedCount = players.filter((player) => signatures[player.id]).length;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="min-h-screen bg-slate-100 text-slate-900 md:pt-16">
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-[#eef3f7]">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-2 bg-black px-3 py-2 text-white">
           <div>
