@@ -294,7 +294,7 @@ export function ShotPlanPanel({
 
   if (!picks.length || yardsToGreen <= 0) {
     return (
-      <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 z-[1060] rounded-lg border border-amber-500/40 bg-black/90 px-2 py-1.5 text-[10px] text-amber-200">
+      <div className="pointer-events-auto fixed bottom-[9.5rem] left-2 md:left-16 z-[1060] rounded-lg border border-amber-500/40 bg-black/90 px-2 py-1.5 text-[10px] text-amber-200">
         {yardsToGreen <= 0
           ? "Esperando distancia al green…"
           : "Activa bastones en Bolsa."}
@@ -349,7 +349,7 @@ export function ShotPlanPanel({
   };
 
   return (
-    <div className="pointer-events-auto fixed bottom-[7.5rem] left-2 z-[1060] flex items-stretch gap-2">
+    <div className="pointer-events-auto fixed bottom-[7.5rem] left-2 md:left-16 z-[1060] flex items-stretch gap-2">
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-center gap-1.5 rounded-md bg-black/80 px-2 py-1">
           <LieChip kind={lieKind} size="sm" />
