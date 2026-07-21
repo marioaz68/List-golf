@@ -187,6 +187,7 @@ export function HoleYardageMap({
   const framedHoleRef = useRef<number | null>(null);
   const framedSegmentRef = useRef<number>(0);
   const framedPosRef = useRef<string>("");
+  const framedSizeRef = useRef<string>("");
   const autoZoomRef = useRef(17);
   const userZoomDeltaRef = useRef(0);
   const framingAnchorRef = useRef<{ lat: number; lon: number } | null>(null);
@@ -930,11 +931,17 @@ export function HoleYardageMap({
             framingPos.lon * 1e5
           )}`;
           const recenterPos = framedPosRef.current !== posKey;
+          const sizeKey = viewportW + "x" + viewportH;
+          const recenterSize =
+            framedSizeRef.current !== "" && framedSizeRef.current !== sizeKey;
           framedHoleRef.current = holeNo;
           framedSegmentRef.current = effectiveSegIdx;
           framedPosRef.current = posKey;
+          framedSizeRef.current = sizeKey;
           const shouldReframe =
-            recenterHole || (!userPin && (recenterSeg || recenterPos));
+            recenterHole ||
+            recenterSize ||
+            (!userPin && (recenterSeg || recenterPos));
           if (
             shouldReframe &&
             landingMarkMode &&
