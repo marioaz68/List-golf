@@ -3261,7 +3261,7 @@ export default function DistanciasClient({
   ]);
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100">
+    <div className="relative h-dvh w-full overflow-hidden bg-black text-slate-100 md:px-16">
       {/* Mapa a pantalla completa */}
       <div className="absolute inset-0">
         {geo.status === "ok" && greenYds && !farFromCourse ? (
