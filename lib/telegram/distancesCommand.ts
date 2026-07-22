@@ -30,13 +30,18 @@ function appUrl(): string {
   return telegramAppUrl();
 }
 
-export function buildDistancesReply(telegramUserId?: string | null): {
+export function buildDistancesReply(
+  telegramUserId?: string | null,
+  entryId?: string | null
+): {
   text: string;
   buttons: { text: string; url: string }[][];
 } {
   const tg = String(telegramUserId ?? "").trim();
+  const me = String(entryId ?? "").trim();
+  const meParam = me ? "&me=" + encodeURIComponent(me) : "";
   const url = tg
-    ? `${appUrl()}/captura/distancias?tg=${encodeURIComponent(tg)}`
+    ? `${appUrl()}/captura/distancias?tg=${encodeURIComponent(tg)}${meParam}`
     : `${appUrl()}/captura/distancias`;
   return {
     text: [

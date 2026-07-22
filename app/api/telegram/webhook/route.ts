@@ -302,7 +302,25 @@ export async function POST(req: Request) {
 
     // === RANGEFINDER: /DISTANCIAS o /YARDAS — mini app con yardas al green ===
     if (text && isDistancesCommand(text)) {
-      const reply = buildDistancesReply(userId);
+      let distEntryId: string | null = null;
+      if (supabase && userId) {
+        const { data: distPlayer } = await supabase
+          .from("players")
+          .select("id")
+          .eq("telegram_user_id", userId)
+          .maybeSingle();
+        if (distPlayer?.id) {
+          const { data: distEntry } = await supabase
+            .from("tournament_entries")
+            .select("id")
+            .eq("player_id", distPlayer.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          distEntryId = distEntry?.id ?? null;
+        }
+      }
+      const reply = buildDistancesReply(userId, distEntryId);
       await sendTelegramMessage({
         chatId: chatId || userId,
         text: reply.text,
