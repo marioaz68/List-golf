@@ -34,5 +34,7 @@
 	<string>Usamos HealthKit para llevar la sesión de actividad mientras detectamos tus tiros.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Usamos HealthKit para llevar la sesión de actividad mientras detectamos tus tiros.</string>
+	<key>WKWatchOnly</key>
+	<true/>
 </dict>
 </plist>
