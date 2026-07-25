@@ -36,11 +36,11 @@ struct ContentView: View {
             } label: {
                 Label("Iniciar ronda", systemImage: "play.fill")
             }
-            .disabled(!MotionRecorder.isSupported)
+            // isSupported: aviso informativo (no bloquea; watchOS 26 puede dar falso negativo)
 
             if !MotionRecorder.isSupported {
-                Text("Requiere Apple Watch Series 8 / Ultra o posterior.")
-                    .font(.footnote).foregroundStyle(.orange).multilineTextAlignment(.center)
+                Text("Nota: este reloj reporta no soportar captura de alta frecuencia; se intentara igual.")
+                    .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             if recorder.entryId == nil {
                 Text("Falta vincular tu cuenta (entry_id).")

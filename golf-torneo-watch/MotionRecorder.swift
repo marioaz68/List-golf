@@ -42,9 +42,10 @@ final class MotionRecorder: NSObject, ObservableObject {
 
     /// Inicia la sesión de workout + el streaming de acelerómetro.
     func start() async {
-        guard Self.isSupported else {
-            lastError = "Este reloj no soporta captura de alta frecuencia (requiere Series 8 / Ultra)."
-            return
+        if !Self.isSupported {
+            // watchOS 26 puede reportar falso negativo; lo intentamos igual y
+            // si la API falla de verdad, el catch de abajo mostrara el error.
+            lastError = nil
         }
         await startWorkout()
         do {
