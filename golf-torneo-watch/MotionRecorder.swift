@@ -25,6 +25,10 @@ final class MotionRecorder: NSObject, ObservableObject {
     @Published var isRunning = false
     @Published var lastError: String?
 
+    /// Contadores de diagnóstico (visibles en la consola de Xcode).
+    private var accelCount = 0
+    private var motionCount = 0
+
     /// ¿El reloj soporta la API de alta frecuencia?
     static var isSupported: Bool {
         CMBatchedSensorManager.isAccelerometerSupported
@@ -35,27 +39,55 @@ final class MotionRecorder: NSObject, ObservableObject {
         let types: Set = [HKObjectType.workoutType()]
         do {
             try await healthStore.requestAuthorization(toShare: types, read: types)
+            print("[Golf] HealthKit autorizado (o ya estaba).")
         } catch {
             lastError = "HealthKit: \(error.localizedDescription)"
+            print("[Golf] Error HealthKit: \(error.localizedDescription)")
+        }
+        // Movimiento y estado físico (comparte permiso con el sensor de alta frecuencia).
+        await requestMotionPermission()
+    }
+
+    /// Fuerza el prompt de "Movimiento y estado físico" (Motion & Fitness).
+    private func requestMotionPermission() async {
+        guard CMMotionActivityManager.isActivityAvailable() else {
+            print("[Golf] Motion activity no disponible en este dispositivo.")
+            return
+        }
+        let mgr = CMMotionActivityManager()
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            mgr.queryActivityStarting(from: Date().addingTimeInterval(-60), to: Date(), to: .main) { _, error in
+                if let error {
+                    print("[Golf] Motion query error: \(error.localizedDescription)")
+                } else {
+                    print("[Golf] Permiso de Movimiento OK (o ya concedido).")
+                }
+                cont.resume()
+            }
         }
     }
 
     /// Inicia la sesión de workout + el streaming de acelerómetro.
     func start() async {
+        print("[Golf] start() llamado. isSupported=\(Self.isSupported)")
         if !Self.isSupported {
             // watchOS 26 puede reportar falso negativo; lo intentamos igual y
             // si la API falla de verdad, el catch de abajo mostrara el error.
             lastError = nil
         }
         await startWorkout()
+        // Damos un instante a que la sesión de workout quede activa antes del sensor.
+        try? await Task.sleep(nanoseconds: 700_000_000)
         do {
             try batched.startAccelerometerUpdates()
             try batched.startDeviceMotionUpdates()
             isRunning = true
+            print("[Golf] Acelerometro + deviceMotion iniciados. Escuchando lotes...")
             Task { await streamAccelerometer() }
             Task { await streamDeviceMotion() }
         } catch {
             lastError = "No se pudo iniciar el acelerómetro: \(error.localizedDescription)"
+            print("[Golf] ERROR al iniciar sensor: \(error.localizedDescription)")
         }
     }
 
@@ -64,6 +96,7 @@ final class MotionRecorder: NSObject, ObservableObject {
         batched.stopDeviceMotionUpdates()
         session?.end()
         isRunning = false
+        print("[Golf] stop(). accelCount=\(accelCount) motionCount=\(motionCount)")
     }
 
     /// Copia del buffer de movimiento en este instante (para analizar el swing).
@@ -79,8 +112,10 @@ final class MotionRecorder: NSObject, ObservableObject {
             let s = try HKWorkoutSession(healthStore: healthStore, configuration: config)
             session = s
             s.startActivity(with: Date())
+            print("[Golf] Workout de golf iniciado.")
         } catch {
             lastError = "No se pudo iniciar el workout: \(error.localizedDescription)"
+            print("[Golf] ERROR workout: \(error.localizedDescription)")
         }
     }
 
@@ -91,11 +126,16 @@ final class MotionRecorder: NSObject, ObservableObject {
                 for sample in batch {
                     let a = sample.acceleration
                     let m = sqrt(a.x*a.x + a.y*a.y + a.z*a.z)
+                    accelCount += 1
+                    if accelCount % 800 == 0 {
+                        print("[Golf] accel muestras=\(accelCount) ultima_mag=\(String(format: "%.2f", m))g")
+                    }
                     onSample?(m, sample.timestamp)
                 }
             }
         } catch {
             await MainActor.run { self.lastError = "Stream: \(error.localizedDescription)" }
+            print("[Golf] ERROR stream accel: \(error.localizedDescription)")
         }
     }
 
@@ -111,6 +151,7 @@ final class MotionRecorder: NSObject, ObservableObject {
                         accX: dm.userAcceleration.x, accY: dm.userAcceleration.y, accZ: dm.userAcceleration.z
                     )
                     motionBuffer.append(s)
+                    motionCount += 1
                     if motionBuffer.count > bufferCapacity {
                         motionBuffer.removeFirst(motionBuffer.count - bufferCapacity)
                     }
@@ -118,6 +159,7 @@ final class MotionRecorder: NSObject, ObservableObject {
             }
         } catch {
             await MainActor.run { self.lastError = "DeviceMotion: \(error.localizedDescription)" }
+            print("[Golf] ERROR stream deviceMotion: \(error.localizedDescription)")
         }
     }
 }
