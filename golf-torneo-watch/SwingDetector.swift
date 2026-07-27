@@ -19,18 +19,18 @@ final class SwingDetector {
     // MARK: - Parámetros (ajustables con datos reales)
 
     /// Umbral de disparo del pico de impacto (g).
-    var thresholdG: Double = 6.0
+    var thresholdG: Double = 4.0
     /// Umbral de "liberación": el pico se cierra al bajar de aquí (histéresis).
-    var releaseG: Double = 3.0
+    var releaseG: Double = 2.0
     /// Tiempo mínimo entre impactos (s) para no duplicar el mismo golpe.
     var refractory: TimeInterval = 2.0
     /// Ventana previa al impacto donde buscamos evidencia de swing (s).
     var preWindow: TimeInterval = 0.6
     /// Actividad media mínima (g por encima del reposo de 1g) en la ventana
     /// previa para aceptar que hubo un swing y no un golpe seco aislado.
-    var minPreActivityG: Double = 0.35
+    var minPreActivityG: Double = 0.25
     /// El pico debe superar a la línea base reciente por al menos esto (g).
-    var minProminenceG: Double = 4.0
+    var minProminenceG: Double = 2.5
     /// Duración máxima que puede durar el pico por encima del umbral (s).
     var maxPeakDuration: TimeInterval = 0.15
 

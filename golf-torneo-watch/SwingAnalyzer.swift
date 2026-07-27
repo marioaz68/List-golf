@@ -22,9 +22,9 @@ enum SwingAnalyzer {
     private static let RAD2DEG = 180.0 / Double.pi
 
     /// Velocidad angular pico mínima del downswing (°/s) para aceptar el swing.
-    private static let minForwardPeakDps = 120.0
+    private static let minForwardPeakDps = 80.0
     /// Recorrido angular mínimo del downswing (grados) para aceptar el swing.
-    private static let minForwardDeg = 20.0
+    private static let minForwardDeg = 12.0
 
     static func analyze(_ buffer: [MotionSample]) -> SwingMetrics? {
         guard buffer.count > 20 else { return nil }
