@@ -11,7 +11,7 @@ struct ContentView: View {
     @StateObject private var recorder = RoundRecorder()
 
     // TODO: reemplazar por el entry_id real (guardado tras vincular con el bot).
-    private let testEntryId = "7881a9d1-b45e-4fc9-bbff-5ed337be7e6a"   // Mario — Sabado 25 Jul 2026, ronda 1 (7:00)
+    private let testEntryId = "f7154b41-b2cb-4999-bfab-455530cc28b9"   // Mario — Martes 28 Jul 2026, ronda 1 (salida 9:00 por hoyo 10)
 
     var body: some View {
         NavigationStack {
