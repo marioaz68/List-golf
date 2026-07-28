@@ -5,7 +5,10 @@ import {
   resolveContextFromEntry,
 } from "@/lib/captura/positionFromActor";
 import { resolveRitmoContext } from "@/lib/telegram/ritmo/handleLocationUpdate";
-import type { HoleShotsStore } from "@/lib/distances/holeShots";
+import {
+  mergeHoleShotsStores,
+  type HoleShotsStore,
+} from "@/lib/distances/holeShots";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +63,13 @@ async function resolveRoundAndCourse(
   return { roundId: null, courseId: null, entryId: null };
 }
 
+/** Llave canonica POR JUGADOR: si hay entry_id, todos sus dispositivos
+ *  (telefono/iPad/caddie con me=) comparten la misma fila. Si no,
+ *  cae a la llave del dispositivo (comportamiento anterior). */
+function canonicalScopeKey(entryId: string | null, fallback: string): string {
+  return entryId ? `entry:${entryId}` : fallback;
+}
+
 /** GET /api/captura/distancias/shots?scope_key= */
 export async function GET(request: NextRequest) {
   const scopeKey = norm(request.nextUrl.searchParams.get("scope_key"));
@@ -70,12 +80,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const entryIdParam = norm(request.nextUrl.searchParams.get("entry_id"));
+  const readKey = canonicalScopeKey(entryIdParam, scopeKey);
+
   try {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("yardage_shot_logs")
       .select("payload, updated_at, payload_version")
-      .eq("scope_key", scopeKey)
+      .eq("scope_key", readKey)
       .maybeSingle();
 
     if (error) {
@@ -135,16 +148,30 @@ export async function POST(request: Request) {
       telegramUserId
     );
 
+    const canonicalKey = canonicalScopeKey(entryId, scopeKey);
+
+    // Fusion en servidor: no pisar los golpes de otro dispositivo del
+    // mismo jugador. Leemos lo que hay, lo unimos y guardamos.
+    let merged: HoleShotsStore = payload;
+    const { data: existing } = await admin
+      .from("yardage_shot_logs")
+      .select("payload")
+      .eq("scope_key", canonicalKey)
+      .maybeSingle();
+    if (existing?.payload && isHoleShotsStore(existing.payload)) {
+      merged = mergeHoleShotsStores(existing.payload, payload);
+    }
+
     const row = {
-      scope_key: scopeKey,
+      scope_key: canonicalKey,
       entry_id: resolved.entryId,
       caddie_id: caddieId,
       telegram_user_id: telegramUserId,
       round_id: resolved.roundId,
       course_id: resolved.courseId,
-      payload,
+      payload: merged,
       payload_version:
-        typeof payload.version === "number" ? payload.version : 2,
+        typeof merged.version === "number" ? merged.version : 2,
       updated_at: new Date().toISOString(),
     };
 

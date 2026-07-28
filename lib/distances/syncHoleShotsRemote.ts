@@ -87,8 +87,13 @@ export async function loadHoleShotsMerged(
   if (!key) return local;
 
   try {
+    const qs = new URLSearchParams({ scope_key: key });
+    const c = ctx ?? syncCtx;
+    if (c?.entryId) qs.set("entry_id", c.entryId);
+    if (c?.caddieId) qs.set("caddie_id", c.caddieId);
+    if (c?.telegramUserId) qs.set("telegram_user_id", c.telegramUserId);
     const res = await fetch(
-      `/api/captura/distancias/shots?scope_key=${encodeURIComponent(key)}`,
+      `/api/captura/distancias/shots?${qs.toString()}`,
       { cache: "no-store" }
     );
     if (!res.ok) return local;
