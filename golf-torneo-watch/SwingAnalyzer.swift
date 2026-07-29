@@ -26,6 +26,14 @@ enum SwingAnalyzer {
     /// Recorrido angular mínimo del downswing (grados) para aceptar el swing.
     private static let minForwardDeg = 12.0
 
+    /// Diferencia de angulo (rad -> grados) normalizada a [-180, 180].
+    private static func angleDeltaDeg(_ a: Double, _ b: Double) -> Double {
+        var d = (b - a) * RAD2DEG
+        while d > 180 { d -= 360 }
+        while d < -180 { d += 360 }
+        return d
+    }
+
     static func analyze(_ buffer: [MotionSample]) -> SwingMetrics? {
         guard buffer.count > 20 else { return nil }
 
@@ -83,11 +91,23 @@ enum SwingAnalyzer {
         // suficientes, NO es un swing real → se descarta.
         guard fwdDps >= minForwardPeakDps, fwdDeg >= minForwardDeg else { return nil }
 
+        // Angulo de muneca (actitud) en address (inicio del backswing) y en el
+        // impacto. El delta por eje es la senal del "flip": cuanto y hacia donde
+        // giro la muneca lider entre que empezaste y el momento del impacto.
+        let addr = buffer[startIdx]
+        let imp = buffer[impactIdx]
+        let dPitch = angleDeltaDeg(addr.pitch, imp.pitch).rounded()
+        let dRoll = angleDeltaDeg(addr.roll, imp.roll).rounded()
+        let dYaw = angleDeltaDeg(addr.yaw, imp.yaw).rounded()
+
         return SwingMetrics(
             backswingVelocityDps: backDps,
             forwardSwingVelocityDps: fwdDps,
             backswingClubDeg: backDeg,
-            forwardClubDeg: fwdDeg
+            forwardClubDeg: fwdDeg,
+            wristDeltaPitchDeg: dPitch,
+            wristDeltaRollDeg: dRoll,
+            wristDeltaYawDeg: dYaw
         )
     }
 }

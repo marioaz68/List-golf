@@ -21,6 +21,11 @@ struct SwingMetrics: Codable {
     var forwardSwingVelocityDps: Double  // velocidad angular pico del downswing (°/s)
     var backswingClubDeg: Double         // grados recorridos en el backswing
     var forwardClubDeg: Double           // grados recorridos en el downswing
+    // Angulo de muneca (actitud) entre address e impacto, por eje, en grados.
+    // En la calibracion (1-B/2) decidimos cual eje = flexion/extension (el del flip).
+    var wristDeltaPitchDeg: Double
+    var wristDeltaRollDeg: Double
+    var wristDeltaYawDeg: Double
 }
 
 /// Evento de swing que se envía al endpoint /api/captura/watch/swing.
@@ -37,6 +42,9 @@ struct WatchSwingEvent: Codable {
     let forwardswing_velocity_dps: Double
     let backswing_club_deg: Double
     let forward_club_deg: Double
+    let wrist_delta_pitch_deg: Double
+    let wrist_delta_roll_deg: Double
+    let wrist_delta_yaw_deg: Double
 }
 
 /// Modo de la ronda elegido por el jugador antes de salir.

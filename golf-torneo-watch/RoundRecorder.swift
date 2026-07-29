@@ -75,7 +75,10 @@ final class RoundRecorder: ObservableObject {
             backswing_velocity_dps: metrics.backswingVelocityDps,
             forwardswing_velocity_dps: metrics.forwardSwingVelocityDps,
             backswing_club_deg: metrics.backswingClubDeg,
-            forward_club_deg: metrics.forwardClubDeg
+            forward_club_deg: metrics.forwardClubDeg,
+            wrist_delta_pitch_deg: metrics.wristDeltaPitchDeg,
+            wrist_delta_roll_deg: metrics.wristDeltaRollDeg,
+            wrist_delta_yaw_deg: metrics.wristDeltaYawDeg
         )
 
         let ok = await uploader.send(event)
