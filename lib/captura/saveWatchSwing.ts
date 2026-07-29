@@ -80,6 +80,9 @@ export async function saveWatchSwing(
     forwardswing_velocity_dps: swingMetrics?.forwardSwingVelocityDps ?? null,
     backswing_club_deg: swingMetrics?.backswingClubDeg ?? null,
     forward_club_deg: swingMetrics?.forwardClubDeg ?? null,
+    wrist_delta_pitch_deg: swingMetrics?.wristDeltaPitchDeg ?? null,
+    wrist_delta_roll_deg: swingMetrics?.wristDeltaRollDeg ?? null,
+    wrist_delta_yaw_deg: swingMetrics?.wristDeltaYawDeg ?? null,
   };
 
   const { data, error } = await supabase

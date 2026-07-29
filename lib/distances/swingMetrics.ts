@@ -3,6 +3,9 @@ export interface WatchSwingMetrics {
   forwardSwingVelocityDps: number;
   backswingClubDeg: number;
   forwardClubDeg: number;
+  wristDeltaPitchDeg?: number | null;
+  wristDeltaRollDeg?: number | null;
+  wristDeltaYawDeg?: number | null;
 }
 
 export function parseWatchSwingMetrics(
@@ -34,6 +37,9 @@ export function parseWatchSwingMetrics(
     forwardSwingVelocityDps,
     backswingClubDeg,
     forwardClubDeg,
+    wristDeltaPitchDeg: num("wrist_delta_pitch_deg"),
+    wristDeltaRollDeg: num("wrist_delta_roll_deg"),
+    wristDeltaYawDeg: num("wrist_delta_yaw_deg"),
   };
 }
 
