@@ -24,6 +24,15 @@ function ventajaTxt(pct: number | null): string {
   return `${pct}%`;
 }
 
+function hora(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Mexico_City",
+  });
+}
+
 function formatoTxt(f: string): string {
   if (f === "low_high") return "Parejas · bola baja y bola alta";
   if (f === "singles") return "Individual";
@@ -264,10 +273,95 @@ function SessionBlock({ session }: { session: RyderSession }) {
   );
 }
 
+/* ------------------------------------------------------------- salidas ---- */
+
+function TeeSheet({ data }: { data: RyderPublicData }) {
+  const bloques = data.copas
+    .map((cup) => {
+      const manana = cup.sesiones.find((s) => s.scoring_format === "low_high");
+      if (!manana) return null;
+      return { cup, manana, hoyo: manana.start_tees?.[0] ?? 99 };
+    })
+    .filter((b): b is { cup: RyderCup; manana: RyderSession; hoyo: number } => b !== null)
+    .sort((a, b) => a.hoyo - b.hoyo);
+
+  if (bloques.length === 0) {
+    return (
+      <p className="rounded-lg border border-emerald-600/40 bg-emerald-900/40 px-3 py-3 text-[12px] text-emerald-200/60">
+        Todavía no hay salidas publicadas.
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      {bloques.map(({ cup, manana, hoyo }) => {
+        const matches = [...manana.matches].sort((a, b) =>
+          (a.tee_time ?? "").localeCompare(b.tee_time ?? "")
+        );
+        return (
+          <section key={cup.category_id} className="mb-5">
+            <header className="mb-2">
+              <h3 className="text-sm font-semibold text-white">
+                Hoyo {hoyo} · {cup.categoria}
+              </h3>
+              <p className="text-[11px] text-emerald-200/70">
+                {matches.length} grupo{matches.length === 1 ? "" : "s"} ·{" "}
+                {ventajaTxt(manana.handicap_allowance_pct)}
+              </p>
+            </header>
+            {matches.length === 0 ? (
+              <p className="rounded-lg border border-emerald-600/40 bg-emerald-900/40 px-3 py-3 text-[12px] text-emerald-200/60">
+                Todavía no hay grupos publicados.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {matches.map((match) => (
+                  <li
+                    key={match.match_id}
+                    className="flex items-center gap-2 rounded-lg border border-emerald-600/40 bg-emerald-900/40 px-3 py-2.5"
+                  >
+                    <span className="w-12 shrink-0 text-[13px] font-semibold text-white tabular-nums">
+                      {hora(match.tee_time)}
+                    </span>
+                    <span className="w-7 shrink-0 text-[10px] text-emerald-200/60">
+                      G{match.grupo ?? "—"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${HOME.bg}`} />
+                        <span className="truncate text-[13px] text-white">
+                          {match.arriba}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${AWAY.bg}`} />
+                        <span className="truncate text-[13px] text-amber-100/80">
+                          {match.abajo}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+      <p className="rounded-lg border border-emerald-600/40 bg-emerald-900/40 px-3 py-3 text-[11px] leading-relaxed text-emerald-200/70">
+        Por la tarde salen los mismos grupos en el mismo orden y por el mismo hoyo,
+        conforme terminen la vuelta de la mañana. Los cuatro jugadores vuelven a salir
+        juntos para disputar dos partidos individuales.
+      </p>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- pagina ---- */
 
 export default function RyderCups({ data }: { data: RyderPublicData }) {
   const [cat, setCat] = useState(data.copas[0]?.categoria_code ?? "");
+  const [vista, setVista] = useState<"marcador" | "salidas">("marcador");
   const activa = data.copas.find((c) => c.categoria_code === cat) ?? data.copas[0];
 
   const fecha = new Date(`${data.fecha}T12:00:00`).toLocaleDateString("es-MX", {
@@ -302,15 +396,42 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
         ))}
       </nav>
 
-      {activa && (
-        <>
-          <div className="mb-5">
-            <Scoreboard cup={activa} />
-          </div>
-          {activa.sesiones.map((s) => (
-            <SessionBlock key={s.session_id} session={s} />
-          ))}
-        </>
+      <nav className="mb-4 flex gap-2" aria-label="Vista">
+        <button
+          type="button"
+          onClick={() => setVista("marcador")}
+          aria-pressed={vista === "marcador"}
+          className={`flex-1 text-xs ${
+            vista === "marcador" ? "btn3d btn3d-green" : "btn3d"
+          }`}
+        >
+          Marcador
+        </button>
+        <button
+          type="button"
+          onClick={() => setVista("salidas")}
+          aria-pressed={vista === "salidas"}
+          className={`flex-1 text-xs ${
+            vista === "salidas" ? "btn3d btn3d-green" : "btn3d"
+          }`}
+        >
+          Salidas
+        </button>
+      </nav>
+
+      {vista === "salidas" ? (
+        <TeeSheet data={data} />
+      ) : (
+        activa && (
+          <>
+            <div className="mb-5">
+              <Scoreboard cup={activa} />
+            </div>
+            {activa.sesiones.map((s) => (
+              <SessionBlock key={s.session_id} session={s} />
+            ))}
+          </>
+        )
       )}
 
       <footer className="mt-6 border-t border-emerald-600/30 pt-3 text-[11px] leading-relaxed text-emerald-200/60">

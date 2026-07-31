@@ -217,6 +217,9 @@ export default async function PublicTournamentPage({
   const isMatchPlayTournament = isMatchPlayFormat(
     typedTournament.settings ?? null
   );
+  const isRyderTournament =
+    (typedTournament.settings as { format?: { matchplay_variant?: string } } | null)
+      ?.format?.matchplay_variant === "ryder";
 
   if (view === "bracket" && !isMatchPlayTournament) {
     const qs = new URLSearchParams({ view: "live" });
@@ -231,7 +234,11 @@ export default async function PublicTournamentPage({
     !isEmbed &&
     view === "bracket"
   ) {
-    redirect(`/torneos/${id}/cuadro-vivo`);
+    redirect(
+      isRyderTournament
+        ? `/torneos/${id}/ryder`
+        : `/torneos/${id}/cuadro-vivo`
+    );
   }
   const posterUrl = typedTournament.poster_path
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/tournament-posters/${typedTournament.poster_path}`
@@ -1574,7 +1581,14 @@ export default async function PublicTournamentPage({
                 </Link>
               ) : null}
 
-              {isMatchPlayTournament ? (
+              {isRyderTournament ? (
+                <Link
+                  href={`/torneos/${id}/ryder`}
+                  className="inline-flex items-center justify-center rounded-full border border-amber-400/50 bg-amber-950/40 px-3 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-900/60"
+                >
+                  🏆 Copa Ryder
+                </Link>
+              ) : isMatchPlayTournament ? (
                 <>
                   <Link
                     href={`/torneos/${id}/cuadro-vivo`}
