@@ -8,6 +8,10 @@ import {
   isLowHighMatchDecidedAt,
   formatLowHighDecisionResult,
 } from "@/lib/matchplay/scoring/lowHigh";
+import {
+  isSinglesMatchDecidedAt,
+  formatSinglesDecisionResult,
+} from "@/lib/matchplay/scoring/singles";
 import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { createAdminClient } from "@/utils/supabase/admin";
 
@@ -111,6 +115,7 @@ export async function GET(req: Request) {
   let decidedAtHole: number | null = null;
   let decidedAtPlayoffHole: number | undefined;
   let viaPlayoff = false;
+  const isSingles = match.scoring_format === "singles";
   const lineByHole = match.holes.map((h) => {
     const tpRaw = Number(h.top_points ?? 0);
     const bpRaw = Number(h.bottom_points ?? 0);
@@ -166,12 +171,19 @@ export async function GET(req: Request) {
           viaPlayoff = true;
         }
       } else {
-        const winner = isLowHighMatchDecidedAt({
-          top_total: topAcc,
-          bottom_total: bottomAcc,
-          hole_no: h.hole_no,
-          holes_in_match: match.holes_in_match,
-        });
+        const winner = isSingles
+          ? isSinglesMatchDecidedAt({
+              top_total: topAcc,
+              bottom_total: bottomAcc,
+              hole_no: h.hole_no,
+              holes_in_match: match.holes_in_match,
+            })
+          : isLowHighMatchDecidedAt({
+              top_total: topAcc,
+              bottom_total: bottomAcc,
+              hole_no: h.hole_no,
+              holes_in_match: match.holes_in_match,
+            });
         if (winner) decidedAtHole = h.hole_no;
       }
     }
@@ -187,13 +199,22 @@ export async function GET(req: Request) {
   let finalStatus: string = match.status;
   if (decidedAtHole != null) {
     const winnerLabel = topAcc > bottomAcc ? match.top_label : match.bottom_label;
-    finalResultText = formatLowHighDecisionResult({
-      winner_label: winnerLabel,
-      top_total: topAcc,
-      bottom_total: bottomAcc,
-      decided_at_hole: decidedAtHole,
-      holes_in_match: match.holes_in_match,
-    });
+    finalResultText = isSingles
+      ? formatSinglesDecisionResult({
+          winner_label: winnerLabel,
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          decided_at_hole: decidedAtHole,
+          holes_in_match: match.holes_in_match,
+          via_playoff: viaPlayoff,
+        })
+      : formatLowHighDecisionResult({
+          winner_label: winnerLabel,
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          decided_at_hole: decidedAtHole,
+          holes_in_match: match.holes_in_match,
+        });
     finalStatus = "completed";
   }
 
@@ -221,6 +242,7 @@ export async function GET(req: Request) {
       top_players: match.top_players,
       bottom_players: match.bottom_players,
       pair_format: match.pair_format,
+      scoring_format: match.scoring_format,
       allowance_pct: match.allowance_pct,
       holes_in_match: match.holes_in_match,
       last_hole_played: lastHolePlayed,

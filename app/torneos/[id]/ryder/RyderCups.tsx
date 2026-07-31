@@ -120,49 +120,6 @@ function Scoreboard({ cup }: { cup: RyderCup }) {
   );
 }
 
-/* ----------------------------------------------------------------- hoyos --- */
-
-function Holes({ match }: { match: RyderMatch }) {
-  if (!match.hoyos.length) {
-    return (
-      <p className="px-3 pb-3 text-[11px] text-emerald-200/60">
-        Sin hoyos capturados.
-      </p>
-    );
-  }
-  return (
-    <div className="horizontal-scroll px-3 pb-3">
-      <div className="flex gap-1">
-        {match.hoyos.map((h) => {
-          const g = h.arriba > h.abajo ? "home" : h.abajo > h.arriba ? "away" : null;
-          return (
-            <div key={h.hole_no} className="w-9 shrink-0 text-center">
-              <div className="text-[9px] text-emerald-200/50">{h.hole_no}</div>
-              <div
-                className={`rounded py-0.5 text-[11px] font-semibold tabular-nums ${
-                  g === "home"
-                    ? `${HOME.bg} ${HOME.fg}`
-                    : g === "away"
-                      ? `${AWAY.bg} ${AWAY.fg}`
-                      : "bg-emerald-950/60 text-emerald-200"
-                }`}
-              >
-                {match.scoring_format === "low_high"
-                  ? `${pts(h.arriba)}-${pts(h.abajo)}`
-                  : g === null
-                    ? "T"
-                    : g === "home"
-                      ? "▲"
-                      : "▼"}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------ match card --- */
 
 function MatchCard({
@@ -173,9 +130,16 @@ function MatchCard({
   puntosPorPartido: number;
 }) {
   const [abierto, setAbierto] = useState(false);
-  const cerrado = match.puntos_arriba !== null;
+  const cerrado = match.status === "completed" || match.puntos_arriba !== null;
   const ganaHome = cerrado && (match.puntos_arriba ?? 0) > (match.puntos_abajo ?? 0);
   const ganaAway = cerrado && (match.puntos_abajo ?? 0) > (match.puntos_arriba ?? 0);
+  const empatePts =
+    cerrado &&
+    match.puntos_arriba !== null &&
+    match.puntos_abajo !== null &&
+    match.puntos_arriba === match.puntos_abajo;
+  const homeTag = !empatePts && ganaHome ? "UP" : !empatePts && ganaAway ? "DN" : null;
+  const awayTag = !empatePts && ganaAway ? "UP" : !empatePts && ganaHome ? "DN" : null;
 
   return (
     <li className="overflow-hidden rounded-lg border border-emerald-600/40 bg-emerald-900/40">
@@ -185,12 +149,25 @@ function MatchCard({
         aria-expanded={abierto}
         className="w-full px-3 py-2.5 text-left hover:bg-emerald-800/40 focus-visible:bg-emerald-800/40 focus-visible:outline-none"
       >
-        <div className="mb-1.5 flex items-baseline justify-between gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-emerald-200/60">
-            Grupo {match.grupo} {cerrado ? "· Final" : match.thru > 0 ? "· En juego" : ""}
-          </span>
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="text-[10px] uppercase tracking-wider text-emerald-200/60">
+              Grupo {match.grupo}{" "}
+              {cerrado ? "· Final" : match.thru > 0 ? "· En juego" : ""}
+            </span>
+            {cerrado && match.hoyo_decidido != null ? (
+              <div className="leading-none">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">
+                  HOYO
+                </div>
+                <div className="text-3xl font-bold text-white tabular-nums">
+                  {match.hoyo_decidido}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <span
-            className={`rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+            className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
               match.ventaja === "home"
                 ? `${HOME.bg} ${HOME.fg}`
                 : match.ventaja === "away"
@@ -211,8 +188,13 @@ function MatchCard({
           >
             {match.arriba}
           </span>
-          <span className="shrink-0 text-[13px] font-semibold text-white tabular-nums">
-            {pts(match.puntos_arriba)}
+          <span className="flex shrink-0 items-baseline gap-1">
+            {homeTag ? (
+              <span className="text-[9px] font-bold text-emerald-200/70">{homeTag}</span>
+            ) : null}
+            <span className="text-[13px] font-semibold text-white tabular-nums">
+              {pts(match.puntos_arriba)}
+            </span>
           </span>
         </div>
 
@@ -225,17 +207,35 @@ function MatchCard({
           >
             {match.abajo}
           </span>
-          <span className="shrink-0 text-[13px] font-semibold text-amber-300 tabular-nums">
-            {pts(match.puntos_abajo)}
+          <span className="flex shrink-0 items-baseline gap-1">
+            {awayTag ? (
+              <span className="text-[9px] font-bold text-amber-200/70">{awayTag}</span>
+            ) : null}
+            <span className="text-[13px] font-semibold text-amber-300 tabular-nums">
+              {pts(match.puntos_abajo)}
+            </span>
           </span>
         </div>
 
-        <p className="mt-1.5 text-[10px] text-emerald-200/50">
-          {puntosPorPartido} punto{puntosPorPartido === 1 ? "" : "s"} en juego
-          {match.thru > 0 && !cerrado ? ` · hoyo ${match.thru}` : ""}
-        </p>
+        {match.resultado_texto ? (
+          <p className="mt-1.5 text-[11px] text-emerald-200/70">{match.resultado_texto}</p>
+        ) : (
+          <p className="mt-1.5 text-[10px] text-emerald-200/50">
+            {puntosPorPartido} punto{puntosPorPartido === 1 ? "" : "s"} en juego
+            {match.thru > 0 && !cerrado ? ` · hoyo ${match.thru}` : ""}
+          </p>
+        )}
       </button>
-      {abierto && <Holes match={match} />}
+      {abierto ? (
+        <div className="border-t border-emerald-600/30 px-3 py-2.5">
+          <p className="text-[12px] font-semibold text-emerald-50">
+            {match.resultado_texto ?? match.estado}
+          </p>
+          <p className="mt-1 text-[11px] text-emerald-200/60">
+            El detalle hoyo por hoyo llega en la siguiente versión.
+          </p>
+        </div>
+      ) : null}
     </li>
   );
 }

@@ -32,6 +32,8 @@ export type RyderMatch = {
   ventaja: "home" | "away" | "tied" | null;
   tee_time: string | null;
   starting_hole: number | null;
+  resultado_texto: string | null;
+  hoyo_decidido: number | null;
 };
 
 export type RyderSession = {
@@ -73,43 +75,81 @@ export type RyderPublicData = {
   copas: RyderCup[];
 };
 
-function resolverEstado(
-  hoyos: RyderMatch["hoyos"],
-  formato: string,
-  holesInMatch: number,
-  cerrado: boolean,
-  halved: boolean
-): { estado: string; ventaja: RyderMatch["ventaja"] } {
-  if (!hoyos.length) {
-    return { estado: cerrado ? "final" : "por jugar", ventaja: null };
-  }
-  const thru = hoyos.length;
-  const restantes = Math.max(0, holesInMatch - thru);
+function hoyoFromResultText(resultText: string | null): number | null {
+  if (!resultText) return null;
+  const m = resultText.match(/H(\d+)/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
 
-  if (formato === "low_high") {
-    const a = hoyos.reduce((n, h) => n + h.arriba, 0);
-    const b = hoyos.reduce((n, h) => n + h.abajo, 0);
-    const ventaja = a > b ? "home" : b > a ? "away" : "tied";
-    const txt = `${a}-${b} pts`;
-    return { estado: cerrado ? txt : `${txt} · ${thru}`, ventaja };
-  }
+function matchEstado(args: {
+  cerrado: boolean;
+  empate: boolean;
+  hoyoDecidido: number | null;
+}): string {
+  if (!args.cerrado) return "por jugar";
+  if (args.empate) return "TIED";
+  if (args.hoyoDecidido != null) return `H${args.hoyoDecidido}`;
+  return "FINAL";
+}
 
-  let arriba = 0;
-  let abajo = 0;
-  for (const h of hoyos) {
-    if (h.arriba > h.abajo) arriba += 1;
-    else if (h.abajo > h.arriba) abajo += 1;
+function matchVentaja(args: {
+  cerrado: boolean;
+  winnerPairId: string | null;
+  topPairId: string | null;
+  bottomPairId: string | null;
+  isHalved: boolean;
+}): RyderMatch["ventaja"] {
+  if (
+    args.winnerPairId &&
+    args.topPairId &&
+    args.winnerPairId === args.topPairId
+  ) {
+    return "home";
   }
-  const lead = arriba - abajo;
-  const ventaja = lead > 0 ? "home" : lead < 0 ? "away" : "tied";
+  if (
+    args.winnerPairId &&
+    args.bottomPairId &&
+    args.winnerPairId === args.bottomPairId
+  ) {
+    return "away";
+  }
+  if (args.cerrado && (args.isHalved || !args.winnerPairId)) return "tied";
+  if (!args.cerrado) return null;
+  return null;
+}
 
-  if (cerrado) {
-    if (halved || lead === 0) return { estado: "TIED", ventaja: "tied" };
-    if (restantes === 0) return { estado: `${Math.abs(lead)} UP`, ventaja };
-    return { estado: `${Math.abs(lead)}&${restantes}`, ventaja };
+function matchPoints(args: {
+  pointsTop: number | null;
+  pointsBottom: number | null;
+  cerrado: boolean;
+  isHalved: boolean;
+  winnerPairId: string | null;
+  topPairId: string | null;
+  bottomPairId: string | null;
+  pointsPerMatch: number;
+}): { arriba: number | null; abajo: number | null } {
+  if (args.pointsTop !== null) {
+    return {
+      arriba: Number(args.pointsTop),
+      abajo:
+        args.pointsBottom === null ? null : Number(args.pointsBottom),
+    };
   }
-  if (lead === 0) return { estado: `AS · ${thru}`, ventaja };
-  return { estado: `${Math.abs(lead)} UP · ${thru}`, ventaja };
+  if (!args.cerrado) return { arriba: null, abajo: null };
+  if (args.isHalved || !args.winnerPairId) {
+    const half = args.pointsPerMatch / 2;
+    return { arriba: half, abajo: half };
+  }
+  if (args.winnerPairId === args.topPairId) {
+    return { arriba: args.pointsPerMatch, abajo: 0 };
+  }
+  if (args.winnerPairId === args.bottomPairId) {
+    return { arriba: 0, abajo: args.pointsPerMatch };
+  }
+  const half = args.pointsPerMatch / 2;
+  return { arriba: half, abajo: half };
 }
 
 function resolverResultado(
@@ -173,28 +213,12 @@ export async function loadRyderPublic(
     .select(`
       id, session_id, round_no, position_no, status, is_halved,
       points_top, points_bottom, scheduled_at,
+      result_text, winner_pair_id, top_pair_id, bottom_pair_id,
       top:top_pair_id ( team_name ),
       bottom:bottom_pair_id ( team_name )
     `)
     .eq("tournament_id", tournamentId)
     .order("position_no", { ascending: true });
-
-  const { data: hoyosRaw } = await db
-    .from("matchplay_hole_results")
-    .select("match_id, hole_no, top_points, bottom_points")
-    .in("match_id", (matchesRaw ?? []).map((m: any) => m.id))
-    .order("hole_no", { ascending: true });
-
-  const hoyosPorMatch = new Map<string, RyderMatch["hoyos"]>();
-  for (const h of hoyosRaw ?? []) {
-    const arr = hoyosPorMatch.get((h as any).match_id) ?? [];
-    arr.push({
-      hole_no: (h as any).hole_no,
-      arriba: Number((h as any).top_points ?? 0),
-      abajo: Number((h as any).bottom_points ?? 0),
-    });
-    hoyosPorMatch.set((h as any).match_id, arr);
-  }
 
   const copas: RyderCup[] = cupsRaw.map((cup: any) => {
     const filas = (marcador ?? []).filter((m: any) => m.category_id === cup.category_id);
@@ -217,61 +241,81 @@ export async function loadRyderPublic(
 
     const sesiones: RyderSession[] = (sesionesRaw ?? [])
       .filter((s: any) => s.category_id === cup.category_id)
-      .map((s: any) => ({
-        session_id: s.id,
-        session_no: s.session_no,
-        nombre: s.name,
-        scoring_format: s.scoring_format,
-        handicap_allowance_pct:
-          s.handicap_allowance_pct === null ? null : Number(s.handicap_allowance_pct),
-        start_mode: s.start_mode,
-        start_tees: s.start_tees ?? null,
-        puntos_por_partido: Number(s.points_per_match ?? 1),
-        partidos_esperados: s.match_count ?? null,
-        matches: (matchesRaw ?? [])
-          .filter((m: any) => m.session_id === s.id)
-          .map((m: any) => {
-            const hoyos = hoyosPorMatch.get(m.id) ?? [];
-            const acum = hoyos.reduce(
-              (a, h) => ({ arriba: a.arriba + h.arriba, abajo: a.abajo + h.abajo }),
-              { arriba: 0, abajo: 0 }
-            );
-            const cerrado = m.points_top !== null;
-            const est = resolverEstado(
-              hoyos,
-              s.scoring_format,
-              18,
-              cerrado,
-              Boolean(m.is_halved)
-            );
-            return {
-              match_id: m.id,
-              session_no: s.session_no,
-              position_no: m.position_no,
-              grupo:
-                s.scoring_format === "singles"
-                  ? Math.ceil(m.position_no / 2)
-                  : m.position_no,
-              scoring_format: s.scoring_format,
-              status: m.status,
-              arriba: m.top?.team_name ?? "-",
-              abajo: m.bottom?.team_name ?? "-",
-              puntos_arriba: m.points_top === null ? null : Number(m.points_top),
-              puntos_abajo: m.points_bottom === null ? null : Number(m.points_bottom),
-              is_halved: Boolean(m.is_halved),
-              marcador:
-                s.scoring_format === "low_high" && hoyos.length
-                  ? `${acum.arriba}-${acum.abajo}`
-                  : null,
-              hoyos,
-              thru: hoyos.length,
-              estado: est.estado,
-              ventaja: est.ventaja,
-              tee_time: m.scheduled_at ?? null,
-              starting_hole: s.start_tees?.[0] ?? null,
-            } as RyderMatch;
-          }),
-      }));
+      .map((s: any) => {
+        const pointsPerMatch = Number(s.points_per_match ?? 1);
+        return {
+          session_id: s.id,
+          session_no: s.session_no,
+          nombre: s.name,
+          scoring_format: s.scoring_format,
+          handicap_allowance_pct:
+            s.handicap_allowance_pct === null ? null : Number(s.handicap_allowance_pct),
+          start_mode: s.start_mode,
+          start_tees: s.start_tees ?? null,
+          puntos_por_partido: pointsPerMatch,
+          partidos_esperados: s.match_count ?? null,
+          matches: (matchesRaw ?? [])
+            .filter((m: any) => m.session_id === s.id)
+            .map((m: any) => {
+              const cerrado = m.status === "completed";
+              const resultText =
+                typeof m.result_text === "string" ? m.result_text : null;
+              const hoyoDecidido = hoyoFromResultText(resultText);
+              const winnerPairId = m.winner_pair_id ?? null;
+              const topPairId = m.top_pair_id ?? null;
+              const bottomPairId = m.bottom_pair_id ?? null;
+              const isHalved = Boolean(m.is_halved);
+              const empate = cerrado && (isHalved || !winnerPairId);
+              const ventaja = matchVentaja({
+                cerrado,
+                winnerPairId,
+                topPairId,
+                bottomPairId,
+                isHalved,
+              });
+              const puntos = matchPoints({
+                pointsTop: m.points_top === null ? null : Number(m.points_top),
+                pointsBottom:
+                  m.points_bottom === null ? null : Number(m.points_bottom),
+                cerrado,
+                isHalved,
+                winnerPairId,
+                topPairId,
+                bottomPairId,
+                pointsPerMatch,
+              });
+              return {
+                match_id: m.id,
+                session_no: s.session_no,
+                position_no: m.position_no,
+                grupo:
+                  s.scoring_format === "singles"
+                    ? Math.ceil(m.position_no / 2)
+                    : m.position_no,
+                scoring_format: s.scoring_format,
+                status: m.status,
+                arriba: m.top?.team_name ?? "-",
+                abajo: m.bottom?.team_name ?? "-",
+                puntos_arriba: puntos.arriba,
+                puntos_abajo: puntos.abajo,
+                is_halved: isHalved,
+                marcador: null,
+                hoyos: [],
+                thru: hoyoDecidido ?? 0,
+                estado: matchEstado({
+                  cerrado,
+                  empate,
+                  hoyoDecidido,
+                }),
+                ventaja,
+                tee_time: m.scheduled_at ?? null,
+                starting_hole: s.start_tees?.[0] ?? null,
+                resultado_texto: resultText,
+                hoyo_decidido: hoyoDecidido,
+              } as RyderMatch;
+            }),
+        };
+      });
 
     const base = {
       category_id: cup.category_id,

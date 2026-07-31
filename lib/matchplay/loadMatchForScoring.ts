@@ -13,6 +13,10 @@ import type {
   LowHighPlayerGross,
   LowHighHoleBreakdown,
 } from "./scoring/lowHigh";
+import {
+  scoreSinglesHole,
+  type SinglesHoleBreakdown,
+} from "./scoring/singles";
 import type {
   MatchPlayHandicapAllowance,
   MatchPlayPairFormat,
@@ -27,7 +31,9 @@ export type MatchHoleScoreRow = {
   top_points: number | null;
   bottom_points: number | null;
   match_status_after: string | null;
-  detail_json: { breakdown?: LowHighHoleBreakdown } | null;
+  detail_json: {
+    breakdown?: LowHighHoleBreakdown | SinglesHoleBreakdown;
+  } | null;
 };
 
 export type MatchForScoring = {
@@ -41,6 +47,8 @@ export type MatchForScoring = {
   top_pair_id: string | null;
   bottom_pair_id: string | null;
   winner_pair_id: string | null;
+  /** Formato de la sesión Ryder (`low_high` | `singles`). Null en Calcutta. */
+  scoring_format: string | null;
   /** AS al 18 con puntos jugados → necesita muerte súbita. */
   needs_playoff?: boolean;
   /** Match decidido en muerte súbita (hoyos 19..27). */
@@ -78,12 +86,25 @@ export async function loadMatchForScoring(
   const { data: match, error } = await supabase
     .from("matchplay_matches")
     .select(
-      "id, tournament_id, bracket_id, round_no, position_no, status, result_text, top_pair_id, bottom_pair_id, winner_pair_id"
+      "id, tournament_id, bracket_id, round_no, position_no, status, result_text, top_pair_id, bottom_pair_id, winner_pair_id, session_id"
     )
     .eq("id", matchId)
     .maybeSingle();
 
   if (error || !match) return null;
+
+  let sessionFormat: string | null = null;
+  let sessionRoundId: string | null = null;
+  if (match.session_id) {
+    const { data: ses } = await supabase
+      .from("matchplay_sessions")
+      .select("scoring_format, round_id")
+      .eq("id", match.session_id)
+      .maybeSingle();
+    sessionFormat = ses?.scoring_format ?? null;
+    sessionRoundId = ses?.round_id ? String(ses.round_id) : null;
+  }
+  const isSingles = sessionFormat === "singles";
 
   const { data: rules } = await supabase
     .from("tournament_matchplay_rules")
@@ -94,7 +115,8 @@ export async function loadMatchForScoring(
     .maybeSingle();
 
   const pair_format = (rules?.pair_format ?? "fourball") as MatchPlayPairFormat;
-  if (pair_format !== "low_high") return null;
+  // Calcutta / parejas: exige pair_format low_high. Singles Ryder: ramifica por sesión.
+  if (!isSingles && pair_format !== "low_high") return null;
 
   const teamsData = await loadMatchPlayTeamsData(match.tournament_id);
   const teamById = new Map(teamsData.teams.map((t) => [t.id, t]));
@@ -159,6 +181,17 @@ export async function loadMatchForScoring(
   const holesInMatch =
     rules?.holes_per_match === 9 ? 9 : 18;
 
+  const allowance_pct = resolveMatchHandicapPct({
+    match_type: rules?.match_type === "individual" ? "individual" : "pairs",
+    pair_format,
+    handicap_allowance: (rules?.handicap_allowance ??
+      "custom") as MatchPlayHandicapAllowance,
+    handicap_allowance_custom_pct:
+      rules?.handicap_allowance_pct != null
+        ? Number(rules.handicap_allowance_pct)
+        : null,
+  });
+
   // Fallback: si no hay rows en `matchplay_hole_results` (porque la captura
   // se hace en stroke play), derivamos los puntos y los strokes por jugador
   // directamente desde `hole_scores`. Sin esto, el detalle del match en la
@@ -185,174 +218,300 @@ export async function loadMatchForScoring(
   const bottomAEntry = bottom?.player_a ?? null;
   const bottomBEntry = bottom?.player_b ?? null;
 
-  if (
+  const puedeDerivar =
     noOfficialHoles &&
     topAEntry &&
-    topBEntry &&
     bottomAEntry &&
-    bottomBEntry
-  ) {
-    const { data: roundRow } = await supabase
-      .from("rounds")
-      .select("id")
-      .eq("tournament_id", match.tournament_id)
-      .eq("round_no", match.round_no)
-      .maybeSingle();
-    const roundId = roundRow?.id ? String(roundRow.id) : null;
+    (isSingles || (topBEntry && bottomBEntry));
+
+  if (puedeDerivar) {
+    // Ryder: la sesión apunta a la ronda correcta (hay 2 rondas con el mismo
+    // round_no, una por categoría). Calcutta: sin session_id → busca por round_no.
+    let roundId: string | null = sessionRoundId ? String(sessionRoundId) : null;
+    if (!roundId) {
+      const { data: roundRow } = await supabase
+        .from("rounds")
+        .select("id")
+        .eq("tournament_id", match.tournament_id)
+        .eq("round_no", match.round_no)
+        .maybeSingle();
+      roundId = roundRow?.id ? String(roundRow.id) : null;
+    }
     if (roundId) {
-      const synthetic: DerivedMatchRow = {
-        id: match.id,
-        bracket_id: String(match.bracket_id ?? ""),
-        round_no: match.round_no,
-        position_no: match.position_no,
-        top_pair_id: match.top_pair_id,
-        bottom_pair_id: match.bottom_pair_id,
-        winner_pair_id: match.winner_pair_id,
-        status: "scheduled",
-        result_text: null,
-        round_id: roundId,
-        group_id: "official",
-        group_no: null,
-        top_a_entry_id: topAEntry.id,
-        top_b_entry_id: topBEntry.id,
-        bottom_a_entry_id: bottomAEntry.id,
-        bottom_b_entry_id: bottomBEntry.id,
-      };
-      const derived = await deriveMatchHolesFromStrokes(
-        supabase,
-        match.tournament_id,
-        [synthetic]
-      );
-      const pointsByHole = new Map(
-        derived.holes
-          .filter((h) => h.match_id === match.id)
-          .map((h) => [h.hole_no, h])
-      );
-      const decision = derived.decisions.get(match.id);
-      const summary = derived.summaries.get(match.id);
-      derivedPlayoffInfo = {
-        needs_playoff: Boolean(summary?.needs_playoff),
-        via_playoff: Boolean(decision?.via_playoff),
-        playoff_decided_hole: decision?.playoff_hole,
-      };
-
-      // Cargar strokes brutos de los 4 jugadores en la ronda calendario.
-      const playerIds = [
-        topAEntry.player_id,
-        topBEntry.player_id,
-        bottomAEntry.player_id,
-        bottomBEntry.player_id,
-      ];
-      const { data: rsRows } = await supabase
-        .from("round_scores")
-        .select("id, player_id")
-        .eq("round_id", roundId)
-        .in("player_id", playerIds);
-      const rsByPlayer = new Map<string, string>();
-      for (const rs of (rsRows ?? []) as Array<{
-        id: string;
-        player_id: string;
-      }>) {
-        rsByPlayer.set(String(rs.player_id), String(rs.id));
-      }
-      const rsToPlayer = new Map<string, string>();
-      for (const [pid, rsid] of rsByPlayer) rsToPlayer.set(rsid, pid);
-      const rsIds = Array.from(rsByPlayer.values());
-      const strokesByPlayerHole = new Map<
-        string,
-        Map<number, number | null>
-      >();
-      if (rsIds.length > 0) {
-        const { data: hs } = await supabase
-          .from("hole_scores")
-          .select("round_score_id, hole_number, hole_no, strokes")
-          .in("round_score_id", rsIds);
-        for (const r of (hs ?? []) as Array<{
-          round_score_id: string;
-          hole_number: number | null;
-          hole_no: number | null;
-          strokes: number | null;
+      // Singles: golpes A vs A + puntos con scoreSinglesHole (nunca lowHigh).
+      if (isSingles) {
+        const playerIds = [topAEntry.player_id, bottomAEntry.player_id];
+        const { data: rsRows } = await supabase
+          .from("round_scores")
+          .select("id, player_id")
+          .eq("round_id", roundId)
+          .in("player_id", playerIds);
+        const rsByPlayer = new Map<string, string>();
+        for (const rs of (rsRows ?? []) as Array<{
+          id: string;
+          player_id: string;
         }>) {
-          const rid = String(r.round_score_id);
-          const pid = rsToPlayer.get(rid);
-          if (!pid) continue;
-          const hn = r.hole_number ?? r.hole_no;
-          if (hn == null) continue;
-          const m =
-            strokesByPlayerHole.get(pid) ??
-            new Map<number, number | null>();
-          m.set(
-            Number(hn),
-            r.strokes != null ? Number(r.strokes) : null
-          );
-          strokesByPlayerHole.set(pid, m);
+          rsByPlayer.set(String(rs.player_id), String(rs.id));
         }
-      }
-      function strokeFor(
-        playerId: string,
-        holeNo: number
-      ): number | null {
-        return strokesByPlayerHole.get(playerId)?.get(holeNo) ?? null;
-      }
+        const rsToPlayer = new Map<string, string>();
+        for (const [pid, rsid] of rsByPlayer) rsToPlayer.set(rsid, pid);
+        const rsIds = Array.from(rsByPlayer.values());
+        const strokesByPlayerHole = new Map<
+          string,
+          Map<number, number | null>
+        >();
+        if (rsIds.length > 0) {
+          const { data: hs } = await supabase
+            .from("hole_scores")
+            .select("round_score_id, hole_number, hole_no, strokes")
+            .in("round_score_id", rsIds);
+          for (const r of (hs ?? []) as Array<{
+            round_score_id: string;
+            hole_number: number | null;
+            hole_no: number | null;
+            strokes: number | null;
+          }>) {
+            const rid = String(r.round_score_id);
+            const pid = rsToPlayer.get(rid);
+            if (!pid) continue;
+            const hn = r.hole_number ?? r.hole_no;
+            if (hn == null) continue;
+            const m =
+              strokesByPlayerHole.get(pid) ??
+              new Map<number, number | null>();
+            m.set(
+              Number(hn),
+              r.strokes != null ? Number(r.strokes) : null
+            );
+            strokesByPlayerHole.set(pid, m);
+          }
+        }
+        function strokeFor(
+          playerId: string,
+          holeNo: number
+        ): number | null {
+          return strokesByPlayerHole.get(playerId)?.get(holeNo) ?? null;
+        }
 
-      const buildRow = (hole_no: number) => {
-        const pt = pointsByHole.get(hole_no);
-        return {
-          hole_no,
-          top_player_a_strokes: strokeFor(topAEntry.player_id, hole_no),
-          top_player_b_strokes: strokeFor(topBEntry.player_id, hole_no),
-          bottom_player_a_strokes: strokeFor(
-            bottomAEntry.player_id,
-            hole_no
-          ),
-          bottom_player_b_strokes: strokeFor(
-            bottomBEntry.player_id,
-            hole_no
-          ),
-          top_points: pt?.top_points ?? null,
-          bottom_points: pt?.bottom_points ?? null,
-          match_status_after: pt?.match_status_after ?? null,
-          detail_json: pt?.breakdown
-            ? { breakdown: pt.breakdown }
-            : null,
+        // Live scoring: strokes desde hole_scores + puntos con
+        // scoreSinglesHole (no lowHigh). Calcutta/parejas no pasan por aquí.
+        const hiTuple: [number, number] = [
+          topPlayers[0].hi,
+          bottomPlayers[0].hi,
+        ];
+        const phTuple: [number | null, number | null] = [
+          topPlayers[0].ph,
+          bottomPlayers[0].ph,
+        ];
+        let topRunning = 0;
+        let bottomRunning = 0;
+
+        const buildSinglesRow = (hole_no: number) => {
+          const topStrokes = strokeFor(topAEntry.player_id, hole_no);
+          const bottomStrokes = strokeFor(bottomAEntry.player_id, hole_no);
+          let top_points: number | null = null;
+          let bottom_points: number | null = null;
+          let match_status_after: string | null = null;
+          let detail_json: MatchHoleScoreRow["detail_json"] = null;
+
+          if (topStrokes != null && bottomStrokes != null) {
+            const result = scoreSinglesHole({
+              hole_no,
+              gross: { top: topStrokes, bottom: bottomStrokes },
+              hi: hiTuple,
+              playing_handicaps: phTuple,
+              allowance_pct,
+              strokeIndexByHole: strokeIndexByHole,
+              top_total_before: topRunning,
+              bottom_total_before: bottomRunning,
+              holes_in_match: holesInMatch,
+            });
+            if (result) {
+              top_points = result.top_points;
+              bottom_points = result.bottom_points;
+              match_status_after = result.match_status_after;
+              detail_json = { breakdown: result.breakdown };
+              topRunning += result.top_points;
+              bottomRunning += result.bottom_points;
+            }
+          }
+
+          return {
+            hole_no,
+            top_player_a_strokes: topStrokes,
+            top_player_b_strokes: null,
+            bottom_player_a_strokes: bottomStrokes,
+            bottom_player_b_strokes: null,
+            top_points,
+            bottom_points,
+            match_status_after,
+            detail_json,
+          };
         };
-      };
 
-      const regular = Array.from({ length: holesInMatch }, (_, i) =>
-        buildRow(i + 1)
-      );
+        const regular = Array.from({ length: holesInMatch }, (_, i) =>
+          buildSinglesRow(i + 1)
+        );
 
-      // Hoyos del desempate (1..9 físico → almacenados como 19..27).
-      // Solo agregamos los hoyos donde haya algún stroke o algún punto;
-      // así si todavía no se inicia el desempate, no aparecen filas
-      // vacías. Una vez se captura cualquier hoyo 19..27, lo incluimos.
-      const playoffRows: typeof regular = [];
-      for (let p = 1; p <= 9; p++) {
-        const hole_no = 18 + p;
-        const pt = pointsByHole.get(hole_no);
-        const anyStroke =
-          strokeFor(topAEntry.player_id, hole_no) != null ||
-          strokeFor(topBEntry.player_id, hole_no) != null ||
-          strokeFor(bottomAEntry.player_id, hole_no) != null ||
-          strokeFor(bottomBEntry.player_id, hole_no) != null;
-        if (!pt && !anyStroke) continue;
-        playoffRows.push(buildRow(hole_no));
+        const playoffRows: typeof regular = [];
+        for (let p = 1; p <= 9; p++) {
+          const hole_no = 18 + p;
+          const anyStroke =
+            strokeFor(topAEntry.player_id, hole_no) != null ||
+            strokeFor(bottomAEntry.player_id, hole_no) != null;
+          if (!anyStroke) continue;
+          playoffRows.push(buildSinglesRow(hole_no));
+        }
+
+        derivedHoleRows = [...regular, ...playoffRows];
+        derivedPlayoffInfo = {
+          needs_playoff: false,
+          via_playoff: false,
+        };
+      } else if (topBEntry && bottomBEntry) {
+        const synthetic: DerivedMatchRow = {
+          id: match.id,
+          bracket_id: String(match.bracket_id ?? ""),
+          round_no: match.round_no,
+          position_no: match.position_no,
+          top_pair_id: match.top_pair_id,
+          bottom_pair_id: match.bottom_pair_id,
+          winner_pair_id: match.winner_pair_id,
+          status: "scheduled",
+          result_text: null,
+          round_id: roundId,
+          group_id: "official",
+          group_no: null,
+          top_a_entry_id: topAEntry.id,
+          top_b_entry_id: topBEntry.id,
+          bottom_a_entry_id: bottomAEntry.id,
+          bottom_b_entry_id: bottomBEntry.id,
+        };
+        const derived = await deriveMatchHolesFromStrokes(
+          supabase,
+          match.tournament_id,
+          [synthetic]
+        );
+        const pointsByHole = new Map(
+          derived.holes
+            .filter((h) => h.match_id === match.id)
+            .map((h) => [h.hole_no, h])
+        );
+        const decision = derived.decisions.get(match.id);
+        const summary = derived.summaries.get(match.id);
+        derivedPlayoffInfo = {
+          needs_playoff: Boolean(summary?.needs_playoff),
+          via_playoff: Boolean(decision?.via_playoff),
+          playoff_decided_hole: decision?.playoff_hole,
+        };
+
+        // Cargar strokes brutos de los 4 jugadores en la ronda calendario.
+        const playerIds = [
+          topAEntry.player_id,
+          topBEntry.player_id,
+          bottomAEntry.player_id,
+          bottomBEntry.player_id,
+        ];
+        const { data: rsRows } = await supabase
+          .from("round_scores")
+          .select("id, player_id")
+          .eq("round_id", roundId)
+          .in("player_id", playerIds);
+        const rsByPlayer = new Map<string, string>();
+        for (const rs of (rsRows ?? []) as Array<{
+          id: string;
+          player_id: string;
+        }>) {
+          rsByPlayer.set(String(rs.player_id), String(rs.id));
+        }
+        const rsToPlayer = new Map<string, string>();
+        for (const [pid, rsid] of rsByPlayer) rsToPlayer.set(rsid, pid);
+        const rsIds = Array.from(rsByPlayer.values());
+        const strokesByPlayerHole = new Map<
+          string,
+          Map<number, number | null>
+        >();
+        if (rsIds.length > 0) {
+          const { data: hs } = await supabase
+            .from("hole_scores")
+            .select("round_score_id, hole_number, hole_no, strokes")
+            .in("round_score_id", rsIds);
+          for (const r of (hs ?? []) as Array<{
+            round_score_id: string;
+            hole_number: number | null;
+            hole_no: number | null;
+            strokes: number | null;
+          }>) {
+            const rid = String(r.round_score_id);
+            const pid = rsToPlayer.get(rid);
+            if (!pid) continue;
+            const hn = r.hole_number ?? r.hole_no;
+            if (hn == null) continue;
+            const m =
+              strokesByPlayerHole.get(pid) ??
+              new Map<number, number | null>();
+            m.set(
+              Number(hn),
+              r.strokes != null ? Number(r.strokes) : null
+            );
+            strokesByPlayerHole.set(pid, m);
+          }
+        }
+        function strokeFor(
+          playerId: string,
+          holeNo: number
+        ): number | null {
+          return strokesByPlayerHole.get(playerId)?.get(holeNo) ?? null;
+        }
+
+        const buildRow = (hole_no: number) => {
+          const pt = pointsByHole.get(hole_no);
+          return {
+            hole_no,
+            top_player_a_strokes: strokeFor(topAEntry.player_id, hole_no),
+            top_player_b_strokes: strokeFor(topBEntry.player_id, hole_no),
+            bottom_player_a_strokes: strokeFor(
+              bottomAEntry.player_id,
+              hole_no
+            ),
+            bottom_player_b_strokes: strokeFor(
+              bottomBEntry.player_id,
+              hole_no
+            ),
+            top_points: pt?.top_points ?? null,
+            bottom_points: pt?.bottom_points ?? null,
+            match_status_after: pt?.match_status_after ?? null,
+            detail_json: pt?.breakdown
+              ? { breakdown: pt.breakdown }
+              : null,
+          };
+        };
+
+        const regular = Array.from({ length: holesInMatch }, (_, i) =>
+          buildRow(i + 1)
+        );
+
+        // Hoyos del desempate (1..9 físico → almacenados como 19..27).
+        // Solo agregamos los hoyos donde haya algún stroke o algún punto;
+        // así si todavía no se inicia el desempate, no aparecen filas
+        // vacías. Una vez se captura cualquier hoyo 19..27, lo incluimos.
+        const playoffRows: typeof regular = [];
+        for (let p = 1; p <= 9; p++) {
+          const hole_no = 18 + p;
+          const pt = pointsByHole.get(hole_no);
+          const anyStroke =
+            strokeFor(topAEntry.player_id, hole_no) != null ||
+            strokeFor(topBEntry.player_id, hole_no) != null ||
+            strokeFor(bottomAEntry.player_id, hole_no) != null ||
+            strokeFor(bottomBEntry.player_id, hole_no) != null;
+          if (!pt && !anyStroke) continue;
+          playoffRows.push(buildRow(hole_no));
+        }
+
+        derivedHoleRows = [...regular, ...playoffRows];
       }
-
-      derivedHoleRows = [...regular, ...playoffRows];
     }
   }
-
-  const allowance_pct = resolveMatchHandicapPct({
-    match_type: rules?.match_type === "individual" ? "individual" : "pairs",
-    pair_format,
-    handicap_allowance: (rules?.handicap_allowance ??
-      "custom") as MatchPlayHandicapAllowance,
-    handicap_allowance_custom_pct:
-      rules?.handicap_allowance_pct != null
-        ? Number(rules.handicap_allowance_pct)
-        : null,
-  });
 
   const existingByHole = new Map(
     (holeRows ?? []).map((h) => [h.hole_no, h])
@@ -402,6 +561,7 @@ export async function loadMatchForScoring(
     top_pair_id: match.top_pair_id,
     bottom_pair_id: match.bottom_pair_id,
     winner_pair_id: match.winner_pair_id,
+    scoring_format: sessionFormat,
     needs_playoff: derivedPlayoffInfo?.needs_playoff ?? false,
     via_playoff: derivedPlayoffInfo?.via_playoff ?? false,
     playoff_decided_hole: derivedPlayoffInfo?.playoff_decided_hole,
