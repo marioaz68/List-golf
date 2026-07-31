@@ -144,18 +144,10 @@ export default function AsignarCaddieClient({
       <input
         autoFocus
         type="search"
-        placeholder="Buscar caddie por nombre, apodo o teléfono…"
+        placeholder="Buscar por apodo o nombre"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        style={{
-          height: 38,
-          padding: "0 12px",
-          fontSize: 14,
-          border: "1px solid #cbd5e1",
-          borderRadius: 8,
-          outline: "none",
-          background: "#fff",
-        }}
+        className="h-[38px] w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-500 focus:ring-1 focus:ring-slate-400"
       />
 
       <div
