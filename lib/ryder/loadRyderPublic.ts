@@ -1,4 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  loadMatchForScoring,
+  type MatchForScoring,
+} from "@/lib/matchplay/loadMatchForScoring";
+import {
+  isLowHighMatchDecidedAt,
+  formatLowHighDecisionResult,
+} from "@/lib/matchplay/scoring/lowHigh";
+import {
+  isSinglesMatchDecidedAt,
+  formatSinglesDecisionResult,
+} from "@/lib/matchplay/scoring/singles";
 
 export type RyderTeamStanding = {
   team_id: string;
@@ -22,8 +34,12 @@ export type RyderMatch = {
   status: string;
   arriba: string;
   abajo: string;
+  /** Puntos de copa que aporta el match (null si aún no está decidido). */
   puntos_arriba: number | null;
   puntos_abajo: number | null;
+  /** Totales acumulados del scoring del match (hoyos). */
+  top_total: number;
+  bottom_total: number;
   is_halved: boolean;
   marcador: string | null;
   hoyos: Array<{ hole_no: number; arriba: number; abajo: number }>;
@@ -75,81 +91,207 @@ export type RyderPublicData = {
   copas: RyderCup[];
 };
 
-function hoyoFromResultText(resultText: string | null): number | null {
-  if (!resultText) return null;
-  const m = resultText.match(/H(\d+)/);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) ? n : null;
+function holeHasScore(h: MatchForScoring["holes"][number]): boolean {
+  return (
+    h.top_points != null ||
+    h.bottom_points != null ||
+    h.top_player_a_strokes != null ||
+    h.top_player_b_strokes != null ||
+    h.bottom_player_a_strokes != null ||
+    h.bottom_player_b_strokes != null
+  );
 }
 
 function matchEstado(args: {
   cerrado: boolean;
   empate: boolean;
+  thru: number;
   hoyoDecidido: number | null;
 }): string {
-  if (!args.cerrado) return "por jugar";
+  if (!args.cerrado && args.thru <= 0) return "por jugar";
   if (args.empate) return "TIED";
-  if (args.hoyoDecidido != null) return `H${args.hoyoDecidido}`;
-  return "FINAL";
+  if (args.cerrado && args.hoyoDecidido != null) return `H${args.hoyoDecidido}`;
+  if (args.cerrado) return "FINAL";
+  if (args.thru > 0) return `H${args.thru}`;
+  return "por jugar";
 }
 
-function matchVentaja(args: {
+type LiveSummary = {
+  top_total: number;
+  bottom_total: number;
+  thru: number;
+  decided_at_hole: number | null;
   cerrado: boolean;
-  winnerPairId: string | null;
-  topPairId: string | null;
-  bottomPairId: string | null;
-  isHalved: boolean;
-}): RyderMatch["ventaja"] {
-  if (
-    args.winnerPairId &&
-    args.topPairId &&
-    args.winnerPairId === args.topPairId
-  ) {
-    return "home";
-  }
-  if (
-    args.winnerPairId &&
-    args.bottomPairId &&
-    args.winnerPairId === args.bottomPairId
-  ) {
-    return "away";
-  }
-  if (args.cerrado && (args.isHalved || !args.winnerPairId)) return "tied";
-  if (!args.cerrado) return null;
-  return null;
-}
+  empate: boolean;
+  needs_playoff: boolean;
+  resultado_texto: string | null;
+  scoring_format: string;
+  hoyos: Array<{ hole_no: number; arriba: number; abajo: number }>;
+  status: string;
+};
 
-function matchPoints(args: {
-  pointsTop: number | null;
-  pointsBottom: number | null;
-  cerrado: boolean;
-  isHalved: boolean;
-  winnerPairId: string | null;
-  topPairId: string | null;
-  bottomPairId: string | null;
-  pointsPerMatch: number;
-}): { arriba: number | null; abajo: number | null } {
-  if (args.pointsTop !== null) {
+function summarizeScoring(
+  scoring: MatchForScoring | null,
+  sessionFormat: string
+): LiveSummary {
+  if (!scoring) {
     return {
-      arriba: Number(args.pointsTop),
-      abajo:
-        args.pointsBottom === null ? null : Number(args.pointsBottom),
+      top_total: 0,
+      bottom_total: 0,
+      thru: 0,
+      decided_at_hole: null,
+      cerrado: false,
+      empate: false,
+      needs_playoff: false,
+      resultado_texto: null,
+      scoring_format: sessionFormat,
+      hoyos: [],
+      status: "scheduled",
     };
   }
-  if (!args.cerrado) return { arriba: null, abajo: null };
-  if (args.isHalved || !args.winnerPairId) {
-    const half = args.pointsPerMatch / 2;
+
+  const scoringFormat = scoring.scoring_format ?? sessionFormat;
+  const isSingles = scoringFormat === "singles";
+  const holesInMatch = scoring.holes_in_match;
+
+  let topAcc = 0;
+  let bottomAcc = 0;
+  let thru = 0;
+  let decidedAtHole: number | null = null;
+  let lastStatus: string | null = null;
+  const hoyos: LiveSummary["hoyos"] = [];
+
+  for (const h of scoring.holes) {
+    if (!holeHasScore(h)) continue;
+    const isPlayoff = h.hole_no > holesInMatch;
+    const physicalThru = isPlayoff ? holesInMatch : h.hole_no;
+
+    if (h.top_points != null || h.bottom_points != null) {
+      hoyos.push({
+        hole_no: h.hole_no,
+        arriba: Number(h.top_points ?? 0),
+        abajo: Number(h.bottom_points ?? 0),
+      });
+    }
+
+    if (decidedAtHole != null) continue;
+
+    const tp = Number(h.top_points ?? 0);
+    const bp = Number(h.bottom_points ?? 0);
+    // Solo sumar puntos cuando el motor ya los calculó; si solo hay strokes
+    // sin puntos, no mueven el acumulado (evita falsos 0-0 con thru).
+    if (h.top_points != null || h.bottom_points != null) {
+      topAcc += tp;
+      bottomAcc += bp;
+    }
+    thru = Math.max(thru, physicalThru);
+    if (h.match_status_after) lastStatus = h.match_status_after;
+
+    if (isPlayoff) {
+      if (tp !== bp) decidedAtHole = h.hole_no;
+      continue;
+    }
+
+    const winner = isSingles
+      ? isSinglesMatchDecidedAt({
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          hole_no: h.hole_no,
+          holes_in_match: holesInMatch,
+        })
+      : isLowHighMatchDecidedAt({
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          hole_no: h.hole_no,
+          holes_in_match: holesInMatch,
+        });
+    if (winner) decidedAtHole = h.hole_no;
+  }
+
+  const allHolesPlayed = thru >= holesInMatch;
+  const needsPlayoff =
+    Boolean(scoring.needs_playoff) ||
+    (allHolesPlayed &&
+      topAcc === bottomAcc &&
+      thru > 0 &&
+      decidedAtHole == null);
+
+  const empate =
+    allHolesPlayed &&
+    topAcc === bottomAcc &&
+    thru > 0 &&
+    !needsPlayoff &&
+    decidedAtHole == null;
+
+  const cerrado =
+    decidedAtHole != null ||
+    empate ||
+    (allHolesPlayed && topAcc !== bottomAcc && thru > 0);
+
+  let resultado_texto: string | null = null;
+  if (cerrado && !empate && decidedAtHole != null) {
+    const winnerLabel =
+      topAcc > bottomAcc ? scoring.top_label : scoring.bottom_label;
+    resultado_texto = isSingles
+      ? formatSinglesDecisionResult({
+          winner_label: winnerLabel,
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          decided_at_hole: decidedAtHole,
+          holes_in_match: holesInMatch,
+          via_playoff: decidedAtHole > holesInMatch,
+        })
+      : formatLowHighDecisionResult({
+          winner_label: winnerLabel,
+          top_total: topAcc,
+          bottom_total: bottomAcc,
+          decided_at_hole: Math.min(decidedAtHole, holesInMatch),
+          holes_in_match: holesInMatch,
+        });
+  } else if (empate) {
+    resultado_texto = isSingles ? "AS" : `H${holesInMatch} · AS`;
+  } else {
+    resultado_texto =
+      lastStatus ??
+      (typeof scoring.result_text === "string" ? scoring.result_text : null);
+  }
+
+  return {
+    top_total: topAcc,
+    bottom_total: bottomAcc,
+    thru,
+    decided_at_hole: decidedAtHole,
+    cerrado,
+    empate,
+    needs_playoff: needsPlayoff,
+    resultado_texto,
+    scoring_format: scoringFormat,
+    hoyos,
+    status: cerrado ? "completed" : thru > 0 ? "in_progress" : "scheduled",
+  };
+}
+
+function cupPointsFromLive(
+  live: LiveSummary,
+  pointsPerMatch: number
+): { arriba: number | null; abajo: number | null } {
+  if (!live.cerrado) return { arriba: null, abajo: null };
+  if (live.empate || live.top_total === live.bottom_total) {
+    const half = pointsPerMatch / 2;
     return { arriba: half, abajo: half };
   }
-  if (args.winnerPairId === args.topPairId) {
-    return { arriba: args.pointsPerMatch, abajo: 0 };
+  if (live.top_total > live.bottom_total) {
+    return { arriba: pointsPerMatch, abajo: 0 };
   }
-  if (args.winnerPairId === args.bottomPairId) {
-    return { arriba: 0, abajo: args.pointsPerMatch };
-  }
-  const half = args.pointsPerMatch / 2;
-  return { arriba: half, abajo: half };
+  return { arriba: 0, abajo: pointsPerMatch };
+}
+
+function liveVentaja(live: LiveSummary): RyderMatch["ventaja"] {
+  if (live.thru <= 0 && !live.cerrado) return null;
+  if (live.top_total > live.bottom_total) return "home";
+  if (live.bottom_total > live.top_total) return "away";
+  if (live.thru > 0 || live.cerrado) return "tied";
+  return null;
 }
 
 function resolverResultado(
@@ -163,15 +305,24 @@ function resolverResultado(
   const repartidos = home.puntos + away.puntos;
 
   if (home.puntos >= meta) {
-    return { estado: "definido", texto: `${home.equipo} gana ${home.puntos}-${away.puntos}` };
+    return {
+      estado: "definido",
+      texto: `${home.equipo} gana ${home.puntos}-${away.puntos}`,
+    };
   }
   if (away.puntos >= meta) {
-    return { estado: "definido", texto: `${away.equipo} gana ${away.puntos}-${home.puntos}` };
+    return {
+      estado: "definido",
+      texto: `${away.equipo} gana ${away.puntos}-${home.puntos}`,
+    };
   }
-  if (repartidos >= cup.puntos_totales) {
-    return { estado: "empate", texto: `${cup.tie_label} ${home.puntos}-${away.puntos}` };
+  if (repartidos >= cup.puntos_totales && cup.puntos_totales > 0) {
+    return {
+      estado: "empate",
+      texto: `${cup.tie_label} ${home.puntos}-${away.puntos}`,
+    };
   }
-  const faltan = cup.puntos_totales - repartidos;
+  const faltan = Math.max(0, cup.puntos_totales - repartidos);
   return {
     estado: "en_juego",
     texto: `${home.puntos}-${away.puntos} · ${faltan} punto${faltan === 1 ? "" : "s"} en juego`,
@@ -193,7 +344,9 @@ export async function loadRyderPublic(
 
   const { data: cupsRaw } = await db
     .from("matchplay_ryder_cups")
-    .select("category_id, name, edition, retain_on_tie, tie_label, series_home_wins, series_away_wins, series_ties")
+    .select(
+      "category_id, name, edition, retain_on_tie, tie_label, series_home_wins, series_away_wins, series_ties"
+    )
     .eq("tournament_id", tournamentId);
   if (!cupsRaw?.length) return null;
 
@@ -204,37 +357,51 @@ export async function loadRyderPublic(
 
   const { data: sesionesRaw } = await db
     .from("matchplay_sessions")
-    .select("id, session_no, name, scoring_format, category_id, match_count, points_per_match, handicap_allowance_pct, start_mode, start_tees")
+    .select(
+      "id, session_no, name, scoring_format, category_id, match_count, points_per_match, handicap_allowance_pct, start_mode, start_tees"
+    )
     .eq("tournament_id", tournamentId)
     .order("session_no", { ascending: true });
 
   const { data: matchesRaw } = await db
     .from("matchplay_matches")
-    .select(`
-      id, session_id, round_no, position_no, status, is_halved,
-      points_top, points_bottom, scheduled_at,
-      result_text, winner_pair_id, top_pair_id, bottom_pair_id,
+    .select(
+      `
+      id, session_id, round_no, position_no, scheduled_at,
+      top_pair_id, bottom_pair_id,
       top:top_pair_id ( team_name ),
       bottom:bottom_pair_id ( team_name )
-    `)
+    `
+    )
     .eq("tournament_id", tournamentId)
     .order("position_no", { ascending: true });
 
+  const matchList = matchesRaw ?? [];
+  const scoringPairs = await Promise.all(
+    matchList.map(async (m: { id: string }) => {
+      const scoring = await loadMatchForScoring(m.id);
+      return [m.id, scoring] as const;
+    })
+  );
+  const scoringById = new Map<string, MatchForScoring | null>(scoringPairs);
+
   const copas: RyderCup[] = cupsRaw.map((cup: any) => {
-    const filas = (marcador ?? []).filter((m: any) => m.category_id === cup.category_id);
+    const filas = (marcador ?? []).filter(
+      (m: any) => m.category_id === cup.category_id
+    );
     const primera = filas[0] as any;
 
-    const equipos: RyderTeamStanding[] = filas
+    const equiposBase: RyderTeamStanding[] = filas
       .map((m: any) => ({
         team_id: m.team_id,
-        side: m.side,
+        side: m.side as "home" | "away",
         equipo: m.equipo,
         color_hex: m.color_hex,
-        puntos: Number(m.puntos ?? 0),
-        ganados: Number(m.ganados ?? 0),
-        empatados: Number(m.empatados ?? 0),
-        perdidos: Number(m.perdidos ?? 0),
-        en_juego: Number(m.en_juego ?? 0),
+        puntos: 0,
+        ganados: 0,
+        empatados: 0,
+        perdidos: 0,
+        en_juego: 0,
         campeon_vigente: Boolean(m.campeon_vigente),
       }))
       .sort((a, b) => (a.side === "home" ? -1 : 1));
@@ -243,79 +410,122 @@ export async function loadRyderPublic(
       .filter((s: any) => s.category_id === cup.category_id)
       .map((s: any) => {
         const pointsPerMatch = Number(s.points_per_match ?? 1);
+        const sessionFormat = String(s.scoring_format ?? "");
         return {
           session_id: s.id,
           session_no: s.session_no,
           nombre: s.name,
-          scoring_format: s.scoring_format,
+          scoring_format: sessionFormat,
           handicap_allowance_pct:
-            s.handicap_allowance_pct === null ? null : Number(s.handicap_allowance_pct),
+            s.handicap_allowance_pct === null
+              ? null
+              : Number(s.handicap_allowance_pct),
           start_mode: s.start_mode,
           start_tees: s.start_tees ?? null,
           puntos_por_partido: pointsPerMatch,
           partidos_esperados: s.match_count ?? null,
-          matches: (matchesRaw ?? [])
+          matches: matchList
             .filter((m: any) => m.session_id === s.id)
             .map((m: any) => {
-              const cerrado = m.status === "completed";
-              const resultText =
-                typeof m.result_text === "string" ? m.result_text : null;
-              const hoyoDecidido = hoyoFromResultText(resultText);
-              const winnerPairId = m.winner_pair_id ?? null;
-              const topPairId = m.top_pair_id ?? null;
-              const bottomPairId = m.bottom_pair_id ?? null;
-              const isHalved = Boolean(m.is_halved);
-              const empate = cerrado && (isHalved || !winnerPairId);
-              const ventaja = matchVentaja({
-                cerrado,
-                winnerPairId,
-                topPairId,
-                bottomPairId,
-                isHalved,
-              });
-              const puntos = matchPoints({
-                pointsTop: m.points_top === null ? null : Number(m.points_top),
-                pointsBottom:
-                  m.points_bottom === null ? null : Number(m.points_bottom),
-                cerrado,
-                isHalved,
-                winnerPairId,
-                topPairId,
-                bottomPairId,
-                pointsPerMatch,
-              });
+              const scoring = scoringById.get(m.id) ?? null;
+              const live = summarizeScoring(scoring, sessionFormat);
+              const puntos = cupPointsFromLive(live, pointsPerMatch);
+              const ventaja = liveVentaja(live);
+              const hoyoDecidido =
+                live.decided_at_hole != null
+                  ? Math.min(live.decided_at_hole, live.thru || live.decided_at_hole)
+                  : null;
+
               return {
                 match_id: m.id,
                 session_no: s.session_no,
                 position_no: m.position_no,
                 grupo:
-                  s.scoring_format === "singles"
+                  sessionFormat === "singles"
                     ? Math.ceil(m.position_no / 2)
                     : m.position_no,
-                scoring_format: s.scoring_format,
-                status: m.status,
-                arriba: m.top?.team_name ?? "-",
-                abajo: m.bottom?.team_name ?? "-",
+                scoring_format: live.scoring_format || sessionFormat,
+                status: live.status,
+                arriba:
+                  scoring?.top_label ?? m.top?.team_name ?? "-",
+                abajo:
+                  scoring?.bottom_label ?? m.bottom?.team_name ?? "-",
                 puntos_arriba: puntos.arriba,
                 puntos_abajo: puntos.abajo,
-                is_halved: isHalved,
+                top_total: live.top_total,
+                bottom_total: live.bottom_total,
+                is_halved: live.empate,
                 marcador: null,
-                hoyos: [],
-                thru: hoyoDecidido ?? 0,
+                hoyos: live.hoyos,
+                thru: live.thru,
                 estado: matchEstado({
-                  cerrado,
-                  empate,
+                  cerrado: live.cerrado,
+                  empate: live.empate,
+                  thru: live.thru,
                   hoyoDecidido,
                 }),
                 ventaja,
                 tee_time: m.scheduled_at ?? null,
                 starting_hole: s.start_tees?.[0] ?? null,
-                resultado_texto: resultText,
+                resultado_texto: live.resultado_texto,
                 hoyo_decidido: hoyoDecidido,
               } as RyderMatch;
             }),
         };
       });
+
+    const home = equiposBase.find((e) => e.side === "home");
+    const away = equiposBase.find((e) => e.side === "away");
+
+    let ps = 0;
+    let pc = 0;
+    let cerrados = 0;
+    let totales = 0;
+
+    for (const ses of sesiones) {
+      for (const m of ses.matches) {
+        totales += 1;
+        if (m.puntos_arriba !== null) {
+          cerrados += 1;
+          const pa = m.puntos_arriba;
+          const pb = m.puntos_abajo ?? 0;
+          ps += pa;
+          pc += pb;
+          if (home && away) {
+            home.puntos += pa;
+            away.puntos += pb;
+            if (pa > pb) {
+              home.ganados += 1;
+              away.perdidos += 1;
+            } else if (pb > pa) {
+              away.ganados += 1;
+              home.perdidos += 1;
+            } else {
+              home.empatados += 1;
+              away.empatados += 1;
+            }
+          }
+        } else {
+          if (home) home.en_juego += 1;
+          if (away) away.en_juego += 1;
+          // Proyectado: acredita al que va arriba aunque no haya cerrado.
+          if (m.ventaja === "home") {
+            ps += ses.puntos_por_partido;
+            pc += 0;
+          } else if (m.ventaja === "away") {
+            ps += 0;
+            pc += ses.puntos_por_partido;
+          } else if (m.ventaja === "tied") {
+            ps += ses.puntos_por_partido / 2;
+            pc += ses.puntos_por_partido / 2;
+          }
+        }
+      }
+    }
+
+    // Proyectado de cerrados ya está en ps/pc; los en juego se sumaron arriba.
+    // Los cerrados también deben contar en proyectado (= puntos reales + proyección).
+    // Ya están sumados en el branch puntos_arriba !== null.
 
     const base = {
       category_id: cup.category_id,
@@ -332,35 +542,10 @@ export async function loadRyderPublic(
       tie_label: cup.tie_label ?? "Empate",
       puntos_totales: Number(primera?.puntos_totales ?? 0),
       puntos_para_ganar: Number(primera?.puntos_para_ganar ?? 0),
-      ...(() => {
-        let ps = 0;
-        let pc = 0;
-        let cerrados = 0;
-        let totales = 0;
-        for (const ses of sesiones) {
-          for (const m of ses.matches) {
-            totales += 1;
-            if (m.puntos_arriba !== null) {
-              cerrados += 1;
-              ps += m.puntos_arriba;
-              pc += m.puntos_abajo ?? 0;
-            } else if (m.ventaja === "home") {
-              ps += ses.puntos_por_partido;
-            } else if (m.ventaja === "away") {
-              pc += ses.puntos_por_partido;
-            } else if (m.ventaja === "tied") {
-              ps += ses.puntos_por_partido / 2;
-              pc += ses.puntos_por_partido / 2;
-            }
-          }
-        }
-        return {
-          proyectado: { socios: ps, caddies: pc },
-          partidos_cerrados: cerrados,
-          partidos_totales: totales,
-        };
-      })(),
-      equipos,
+      proyectado: { socios: ps, caddies: pc },
+      partidos_cerrados: cerrados,
+      partidos_totales: totales,
+      equipos: equiposBase,
       sesiones,
     };
 
