@@ -7,6 +7,7 @@ import type {
   RyderMatch,
   RyderSession,
 } from "@/lib/ryder/loadRyderPublic";
+import RyderMatchDetail from "./RyderMatchDetail";
 
 /* Socios en blanco y Caddies en ambar: el color guardado de Socios (#0B3D2E)
    es casi el fondo del sitio (#065f46) y seria invisible. */
@@ -125,11 +126,12 @@ function Scoreboard({ cup }: { cup: RyderCup }) {
 function MatchCard({
   match,
   puntosPorPartido,
+  onOpen,
 }: {
   match: RyderMatch;
   puntosPorPartido: number;
+  onOpen: () => void;
 }) {
-  const [abierto, setAbierto] = useState(false);
   const cerrado = match.puntos_arriba !== null;
   const ganaHome = match.ventaja === "home";
   const ganaAway = match.ventaja === "away";
@@ -152,8 +154,7 @@ function MatchCard({
     <li className="overflow-hidden rounded-lg border border-emerald-600/40 bg-emerald-900/40">
       <button
         type="button"
-        onClick={() => setAbierto((v) => !v)}
-        aria-expanded={abierto}
+        onClick={onOpen}
         className="w-full px-3 py-2.5 text-left hover:bg-emerald-800/40 focus-visible:bg-emerald-800/40 focus-visible:outline-none"
       >
         <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -230,30 +231,23 @@ function MatchCard({
             {match.thru > 0 && !cerrado ? ` · hoyo ${match.thru}` : ""}
           </p>
         )}
+        <p className="mt-1.5 text-[10px] text-emerald-300/70">
+          Tocar para ver detalle hoyo por hoyo →
+        </p>
       </button>
-      {abierto ? (
-        <div className="border-t border-emerald-600/30 px-3 py-2.5">
-          <p className="text-[12px] font-semibold text-emerald-50">
-            {match.resultado_texto ?? match.estado}
-          </p>
-          {match.hoyos.length > 0 ? (
-            <p className="mt-1 text-[11px] text-emerald-200/60 tabular-nums">
-              {match.top_total}–{match.bottom_total} pts · thru {match.thru}
-            </p>
-          ) : (
-            <p className="mt-1 text-[11px] text-emerald-200/60">
-              El detalle hoyo por hoyo llega en la siguiente versión.
-            </p>
-          )}
-        </div>
-      ) : null}
     </li>
   );
 }
 
 /* -------------------------------------------------------------- sesion ---- */
 
-function SessionBlock({ session }: { session: RyderSession }) {
+function SessionBlock({
+  session,
+  onOpenMatch,
+}: {
+  session: RyderSession;
+  onOpenMatch: (match: RyderMatch, session: RyderSession) => void;
+}) {
   return (
     <section className="mb-5">
       <header className="mb-2">
@@ -276,6 +270,7 @@ function SessionBlock({ session }: { session: RyderSession }) {
               key={m.match_id}
               match={m}
               puntosPorPartido={session.puntos_por_partido}
+              onOpen={() => onOpenMatch(m, session)}
             />
           ))}
         </ul>
@@ -373,6 +368,10 @@ function TeeSheet({ data }: { data: RyderPublicData }) {
 export default function RyderCups({ data }: { data: RyderPublicData }) {
   const [cat, setCat] = useState(data.copas[0]?.categoria_code ?? "");
   const [vista, setVista] = useState<"marcador" | "salidas">("marcador");
+  const [detail, setDetail] = useState<{
+    matchId: string;
+    headerLabel: string;
+  } | null>(null);
   const activa = data.copas.find((c) => c.categoria_code === cat) ?? data.copas[0];
 
   const fecha = new Date(`${data.fecha}T12:00:00`).toLocaleDateString("es-MX", {
@@ -381,6 +380,15 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
     month: "long",
     year: "numeric",
   });
+
+  const openMatch = (match: RyderMatch, session: RyderSession) => {
+    const formato =
+      session.scoring_format === "singles" ? "Individual" : "Parejas";
+    setDetail({
+      matchId: match.match_id,
+      headerLabel: `Grupo ${match.grupo ?? "—"} · ${formato}`,
+    });
+  };
 
   return (
     <main className="report-printable mx-auto w-full max-w-3xl px-3 py-5 sm:px-5">
@@ -439,7 +447,11 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
               <Scoreboard cup={activa} />
             </div>
             {activa.sesiones.map((s) => (
-              <SessionBlock key={s.session_id} session={s} />
+              <SessionBlock
+                key={s.session_id}
+                session={s}
+                onOpenMatch={openMatch}
+              />
             ))}
           </>
         )
@@ -470,6 +482,14 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
           de esta edición.
         </p>
       </footer>
+
+      <RyderMatchDetail
+        open={detail != null}
+        onClose={() => setDetail(null)}
+        tournamentId={data.tournament_id}
+        matchId={detail?.matchId ?? null}
+        headerLabel={detail?.headerLabel}
+      />
     </main>
   );
 }
