@@ -137,18 +137,9 @@ function MatchCard({
   const ganaAway = match.ventaja === "away";
   const homeTag = ganaHome ? "UP" : ganaAway ? "DN" : null;
   const awayTag = ganaAway ? "UP" : ganaHome ? "DN" : null;
-  const scoreTop =
-    cerrado
-      ? match.puntos_arriba
-      : match.thru > 0
-        ? match.top_total
-        : null;
-  const scoreBottom =
-    cerrado
-      ? match.puntos_abajo
-      : match.thru > 0
-        ? match.bottom_total
-        : null;
+  // Columna de puntos = aporte a la copa (null si aún no terminó).
+  const scoreTop = match.puntos_arriba;
+  const scoreBottom = match.puntos_abajo;
 
   return (
     <li className="overflow-hidden rounded-lg border border-emerald-600/40 bg-emerald-900/40">
@@ -161,7 +152,13 @@ function MatchCard({
           <div className="flex min-w-0 items-center gap-3">
             <span className="text-[10px] uppercase tracking-wider text-emerald-200/60">
               Grupo {match.grupo}{" "}
-              {cerrado ? "· Final" : match.thru > 0 ? "· En juego" : ""}
+              {match.is_halved
+                ? "· Empate"
+                : cerrado
+                  ? "· Final"
+                  : match.thru > 0
+                    ? "· En juego"
+                    : ""}
             </span>
             <div className="leading-none">
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">
