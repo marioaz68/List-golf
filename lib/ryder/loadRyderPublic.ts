@@ -100,18 +100,9 @@ function matchEstado(args: {
   cerrado: boolean;
   empate: boolean;
   thru: number;
-  hoyoDecidido: number | null;
-  holesInMatch: number;
 }): string {
   if (!args.cerrado && args.thru <= 0) return "por jugar";
   if (args.empate) return "EMPATE";
-  if (
-    args.cerrado &&
-    args.hoyoDecidido != null &&
-    args.hoyoDecidido < args.holesInMatch
-  ) {
-    return `H${args.hoyoDecidido}`;
-  }
   if (args.cerrado) return "FINAL";
   if (args.thru > 0) return `H${args.thru}`;
   return "por jugar";
@@ -138,19 +129,21 @@ function fmtHolePts(n: number): string {
 /**
  * Regla Ryder: terminado si ya se jugaron todos los hoyos, o si la
  * diferencia de puntos de hoyo supera lo que queda por repartir.
- * Un AS al 18 es empate (medio punto de copa), no playoff.
+ * `playedThrough` es el número de hoyo (como lowHigh/singles), no el
+ * conteo de hoyos con puntos — hoyos incompletos no deben retrasar el cierre.
+ * Un AS al 18 es empate (medio / 1 punto de copa), no playoff.
  */
 function isMatchTerminado(args: {
-  thru: number;
+  playedThrough: number;
   holesInMatch: number;
   topTotal: number;
   bottomTotal: number;
   puntosPorHoyo: number;
 }): boolean {
-  const restantes = Math.max(0, args.holesInMatch - args.thru);
+  const restantes = Math.max(0, args.holesInMatch - args.playedThrough);
   const diff = Math.abs(args.topTotal - args.bottomTotal);
   return (
-    args.thru >= args.holesInMatch ||
+    args.playedThrough >= args.holesInMatch ||
     diff > restantes * args.puntosPorHoyo
   );
 }
@@ -182,7 +175,8 @@ function summarizeScoring(
 
   let topAcc = 0;
   let bottomAcc = 0;
-  let thru = 0;
+  let holesWithPoints = 0;
+  let playedThrough = 0;
   let decidedAtHole: number | null = null;
   let lastStatus: string | null = null;
   const hoyos: LiveSummary["hoyos"] = [];
@@ -192,35 +186,39 @@ function summarizeScoring(
     if (!holeHasScore(h)) continue;
 
     if (h.top_points != null || h.bottom_points != null) {
+      // Tras el cierre matemático el motor deja 0–0 en hoyos posteriores;
+      // no los sumamos al marcador ni atrasamos el hoyo de decisión.
+      if (decidedAtHole != null && h.hole_no > decidedAtHole) {
+        if (h.match_status_after) lastStatus = h.match_status_after;
+        continue;
+      }
+
       hoyos.push({
         hole_no: h.hole_no,
         arriba: Number(h.top_points ?? 0),
         abajo: Number(h.bottom_points ?? 0),
       });
-    }
 
-    const tp = Number(h.top_points ?? 0);
-    const bp = Number(h.bottom_points ?? 0);
-    if (h.top_points != null || h.bottom_points != null) {
-      topAcc += tp;
-      bottomAcc += bp;
-      thru += 1;
-    }
-    if (h.match_status_after) lastStatus = h.match_status_after;
+      topAcc += Number(h.top_points ?? 0);
+      bottomAcc += Number(h.bottom_points ?? 0);
+      holesWithPoints += 1;
+      playedThrough = Math.max(playedThrough, h.hole_no);
 
-    if (decidedAtHole == null) {
-      const early = isMatchTerminado({
-        thru,
-        holesInMatch,
-        topTotal: topAcc,
-        bottomTotal: bottomAcc,
-        puntosPorHoyo,
-      });
-      // Cierre anticipado: terminó antes del último hoyo con un ganador.
-      if (early && thru < holesInMatch && topAcc !== bottomAcc) {
-        decidedAtHole = h.hole_no;
+      if (decidedAtHole == null) {
+        const early = isMatchTerminado({
+          playedThrough: h.hole_no,
+          holesInMatch,
+          topTotal: topAcc,
+          bottomTotal: bottomAcc,
+          puntosPorHoyo,
+        });
+        // Cierre anticipado: terminó antes del último hoyo con un ganador.
+        if (early && h.hole_no < holesInMatch && topAcc !== bottomAcc) {
+          decidedAtHole = h.hole_no;
+        }
       }
     }
+    if (h.match_status_after) lastStatus = h.match_status_after;
   }
 
   // Hoyos de desempate (19+): solo si ya hubo AS al 18 y se capturaron.
@@ -238,29 +236,31 @@ function summarizeScoring(
   }
 
   const terminado = isMatchTerminado({
-    thru,
+    playedThrough,
     holesInMatch,
     topTotal: topAcc,
     bottomTotal: bottomAcc,
     puntosPorHoyo,
   });
   const diff = topAcc - bottomAcc;
-  const empate = terminado && diff === 0 && thru > 0;
-  const cerrado = terminado && thru > 0;
+  const empate = terminado && diff === 0 && holesWithPoints > 0;
+  const cerrado = terminado && holesWithPoints > 0;
 
   if (cerrado && !empate && decidedAtHole == null) {
-    decidedAtHole = Math.min(thru, holesInMatch);
+    decidedAtHole = Math.min(playedThrough, holesInMatch);
   }
 
   const thruDisplay =
-    hoyos.length > 0
-      ? Math.max(
-          ...hoyos
-            .filter((h) => h.hole_no <= holesInMatch)
-            .map((h) => h.hole_no),
-          0
-        )
-      : 0;
+    cerrado && decidedAtHole != null
+      ? decidedAtHole
+      : hoyos.length > 0
+        ? Math.max(
+            ...hoyos
+              .filter((h) => h.hole_no <= holesInMatch)
+              .map((h) => h.hole_no),
+            0
+          )
+        : 0;
 
   let resultado_texto: string | null = null;
   if (empate) {
@@ -292,7 +292,7 @@ function summarizeScoring(
   return {
     top_total: topAcc,
     bottom_total: bottomAcc,
-    thru: thruDisplay || thru,
+    thru: thruDisplay || playedThrough,
     decided_at_hole: decidedAtHole,
     cerrado,
     empate,
@@ -300,7 +300,11 @@ function summarizeScoring(
     resultado_texto,
     scoring_format: scoringFormat,
     hoyos,
-    status: cerrado ? "completed" : thru > 0 ? "in_progress" : "scheduled",
+    status: cerrado
+      ? "completed"
+      : holesWithPoints > 0
+        ? "in_progress"
+        : "scheduled",
   };
 }
 
@@ -464,10 +468,6 @@ export async function loadRyderPublic(
               const live = summarizeScoring(scoring, sessionFormat);
               const puntos = cupPointsFromLive(live, pointsPerMatch);
               const ventaja = liveVentaja(live);
-              const hoyoDecidido =
-                live.decided_at_hole != null
-                  ? Math.min(live.decided_at_hole, live.thru || live.decided_at_hole)
-                  : null;
 
               return {
                 match_id: m.id,
@@ -495,14 +495,12 @@ export async function loadRyderPublic(
                   cerrado: live.cerrado,
                   empate: live.empate,
                   thru: live.thru,
-                  hoyoDecidido,
-                  holesInMatch: scoring?.holes_in_match ?? 18,
                 }),
                 ventaja,
                 tee_time: m.scheduled_at ?? null,
                 starting_hole: s.start_tees?.[0] ?? null,
                 resultado_texto: live.resultado_texto,
-                hoyo_decidido: hoyoDecidido,
+                hoyo_decidido: live.decided_at_hole,
               } as RyderMatch;
             }),
         };

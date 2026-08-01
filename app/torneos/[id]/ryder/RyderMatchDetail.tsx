@@ -199,7 +199,29 @@ export default function RyderMatchDetail({
             setDetail(null);
           }
         } else {
-          setDetail(j.match);
+          // Ryder: un AS al 18 es resultado válido (medio / 1 pt de copa).
+          // El API de matchplay marca needs_playoff por el Calcutta; aquí se ignora.
+          const raw = j.match;
+          const tiedAt18 =
+            raw.holes_in_match > 0 &&
+            Number(raw.top_total) === Number(raw.bottom_total) &&
+            (Boolean(raw.needs_playoff) ||
+              raw.last_hole_played >= raw.holes_in_match);
+          const fmtPts = (n: number) =>
+            Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+          setDetail({
+            ...raw,
+            needs_playoff: false,
+            via_playoff: false,
+            playoff_decided_hole: undefined,
+            holes: (raw.holes ?? []).filter((h) => h.hole_no <= 18),
+            result_text: tiedAt18
+              ? `AS · ${fmtPts(Number(raw.top_total))}-${fmtPts(Number(raw.bottom_total))} en hoyos · Empate de copa`
+              : raw.result_text,
+            decided_at_hole: tiedAt18
+              ? raw.holes_in_match
+              : raw.decided_at_hole,
+          });
           setError(null);
         }
       } catch (e) {
@@ -242,6 +264,12 @@ export default function RyderMatchDetail({
   const formatHint = isSingles
     ? "Individual · 1 punto por hoyo"
     : "Parejas · bola baja y bola alta";
+  const isHalved =
+    detail != null &&
+    Number(detail.top_total) === Number(detail.bottom_total) &&
+    detail.last_hole_played >= detail.holes_in_match &&
+    detail.holes_in_match > 0;
+  const cupHalfLabel = isSingles ? "½ punto de copa" : "1 punto de copa";
 
   return (
     <div
@@ -270,7 +298,12 @@ export default function RyderMatchDetail({
             ) : null}
             {detail ? (
               <p className="mt-0.5 text-[11px] text-emerald-200/70">
-                {detail.decided_at_hole != null ? (
+                {isHalved ? (
+                  <span className="font-semibold text-emerald-300">
+                    Empate al hoyo {detail.holes_in_match}: {cupHalfLabel} a
+                    cada lado
+                  </span>
+                ) : detail.decided_at_hole != null ? (
                   <span className="font-semibold text-emerald-300">
                     Match decidido en hoyo {detail.decided_at_hole} de{" "}
                     {detail.holes_in_match}
@@ -280,7 +313,7 @@ export default function RyderMatchDetail({
                 ) : (
                   `Aún no inicia · Allowance ${detail.allowance_pct}%`
                 )}
-                {detail.decided_at_hole != null ? (
+                {detail.decided_at_hole != null || isHalved ? (
                   <span>
                     {" "}
                     · Allowance {detail.allowance_pct}%
@@ -342,25 +375,28 @@ export default function RyderMatchDetail({
             </section>
           ) : null}
 
+          {detail && isHalved ? (
+            <div className="rounded-lg border border-emerald-400/40 bg-emerald-900/50 p-2.5 text-[11px] text-emerald-100">
+              <p className="font-bold text-emerald-200">Empate · resultado final</p>
+              <p className="mt-0.5 text-emerald-200/80">
+                Cada lado se lleva {cupHalfLabel} (
+                {isSingles
+                  ? "el partido vale 1 punto"
+                  : "el partido vale 2 puntos"}
+                ).
+              </p>
+            </div>
+          ) : null}
+
           {detail ? (
             <section>
-              <h3 className="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-emerald-200/80">
-                <span>Tarjeta del match (brutos)</span>
-                {detail.needs_playoff ||
-                detail.holes.some((h) => h.hole_no > 18) ? (
-                  <span className="inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-200">
-                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    Desempate appended → scroll →
-                  </span>
-                ) : null}
+              <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200/80">
+                Tarjeta del match (brutos)
               </h3>
               <HoleTable
                 holes={detail.holes.filter((h) => h.hole_no <= 18)}
-                playoffHoles={detail.holes.filter((h) => h.hole_no > 18)}
-                showPlayoff={
-                  Boolean(detail.needs_playoff) ||
-                  detail.holes.some((h) => h.hole_no > 18)
-                }
+                playoffHoles={[]}
+                showPlayoff={false}
                 topPlayers={topPlayers}
                 bottomPlayers={bottomPlayers}
                 topLabel={topName}
@@ -368,23 +404,16 @@ export default function RyderMatchDetail({
                 allowancePct={detail.allowance_pct}
                 isSingles={Boolean(isSingles)}
                 decidedAtHole={
-                  detail.decided_at_hole != null && detail.decided_at_hole <= 18
-                    ? detail.decided_at_hole
-                    : null
+                  isHalved
+                    ? null
+                    : detail.decided_at_hole != null &&
+                        detail.decided_at_hole <= 18
+                      ? detail.decided_at_hole
+                      : null
                 }
-                decidedAtPlayoffHole={detail.playoff_decided_hole ?? null}
+                decidedAtPlayoffHole={null}
               />
             </section>
-          ) : null}
-
-          {detail && detail.via_playoff && detail.decided_at_hole != null ? (
-            <PayerBanner
-              topLabel={topName}
-              bottomLabel={bottomName}
-              topPts={detail.top_total}
-              bottomPts={detail.bottom_total}
-              playoffHole={detail.playoff_decided_hole ?? null}
-            />
           ) : null}
         </div>
       </div>

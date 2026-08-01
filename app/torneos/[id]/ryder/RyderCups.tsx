@@ -461,22 +461,21 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
           acreditados a quien va arriba en ese momento.
         </p>
         <p className="mb-1">
-          En los <b>individuales</b>: <b>3&amp;2</b> es tres arriba con dos por jugar,{" "}
-          <b>1 UP</b> es uno arriba al hoyo 18, <b>AS</b> es empatado y <b>TIED</b> es
-          empate final. En la tira, ▲ y ▼ marcan quién ganó el hoyo y <b>T</b> que se
-          empató.
+          En los <b>individuales</b> cada partido vale 1 punto de copa.{" "}
+          <b>3&amp;2</b> es tres arriba con dos por jugar; <b>AS</b> al 18 es empate
+          y reparte <b>½</b> a cada lado.
         </p>
         <p className="mb-1">
-          En las <b>parejas</b> el marcador va en puntos, no en hoyos, porque cada hoyo
-          reparte dos: uno a la bola baja neta y uno a la bola alta. Ahí nadie puede
-          levantar la bola: quien no termina el hoyo pierde el punto de bola alta de su
-          pareja.
+          En las <b>parejas</b> cada partido vale 2 puntos de copa y cada hoyo
+          reparte dos (bola baja neta y bola alta). Un AS al 18 da <b>1</b> punto
+          de copa a cada equipo. Quien no termina el hoyo pierde el punto de bola
+          alta de su pareja.
         </p>
         <p>
           Las dos copas son independientes y cada una se gana con{" "}
-          {pts(activa?.puntos_para_ganar ?? 0)}. Un empate no lo gana nadie: se registra
-          como <b>{activa?.tie_label ?? "Empate"}</b> y el trofeo se queda con su placa
-          de esta edición.
+          {pts(activa?.puntos_para_ganar ?? 0)}. Si al final la serie queda empatada,
+          se registra como <b>{activa?.tie_label ?? "Empate"}</b> y el trofeo se
+          queda con su placa de esta edición.
         </p>
       </footer>
 
