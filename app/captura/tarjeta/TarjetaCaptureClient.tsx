@@ -948,10 +948,14 @@ export default function TarjetaCaptureClient({
    * es jugador (?me=...) intenta ir directo a su categoría; si es caddie
    * usa la categoría del primer jugador que supervisa; si no, no se
    * agrega category_id (mostrará la pestaña por defecto).
+   * Copa Ryder: va a /torneos/{id}/ryder (sin view=live).
    */
   const liveLeaderboardUrl = useMemo(() => {
     const tid = meta.tournamentId?.trim();
     if (!tid) return null;
+    if (meta.matchplayVariant === "ryder") {
+      return `/torneos/${tid}/ryder`;
+    }
     let preferredEntryId: string | null = null;
     if (meta.myEntryId) preferredEntryId = meta.myEntryId;
     else if (meta.caddieForEntryIds.length > 0) {
@@ -966,7 +970,13 @@ export default function TarjetaCaptureClient({
     sp.set("view", "live");
     const qs = sp.toString();
     return `/torneos/${tid}${qs ? `?${qs}` : ""}`;
-  }, [meta.tournamentId, meta.myEntryId, meta.caddieForEntryIds, meta.players]);
+  }, [
+    meta.tournamentId,
+    meta.matchplayVariant,
+    meta.myEntryId,
+    meta.caddieForEntryIds,
+    meta.players,
+  ]);
 
   // Cantidad de pendientes que ME tocan aprobar
   const pendingForMeCount = useMemo(() => {

@@ -128,10 +128,11 @@ export async function loadGroupCapture(
 
   let tournamentId: string | null = null;
   let tournamentName: string | null = null;
+  let matchplayVariant: string | null = null;
 
   const { data: roundRow } = await supabase
     .from("rounds")
-    .select("tournament_id, round_no, tournaments(name)")
+    .select("tournament_id, round_no, tournaments(name, settings)")
     .eq("id", roundId)
     .maybeSingle();
 
@@ -140,10 +141,27 @@ export async function loadGroupCapture(
     typeof roundRow?.round_no === "number" ? roundRow.round_no : null;
   const t = roundRow?.tournaments;
   const tRow = Array.isArray(t) ? t[0] : t;
-  tournamentName =
-    tRow && typeof tRow === "object" && "name" in tRow
-      ? safeString((tRow as { name?: string }).name) || null
-      : null;
+  if (tRow && typeof tRow === "object") {
+    tournamentName =
+      "name" in tRow
+        ? safeString((tRow as { name?: string }).name) || null
+        : null;
+    const settings =
+      "settings" in tRow
+        ? (tRow as { settings?: unknown }).settings
+        : null;
+    const variant =
+      settings &&
+      typeof settings === "object" &&
+      settings !== null &&
+      "format" in settings &&
+      (settings as { format?: { matchplay_variant?: unknown } }).format
+        ?.matchplay_variant;
+    matchplayVariant =
+      typeof variant === "string" && variant.trim()
+        ? variant.trim()
+        : null;
+  }
 
   const { data: memberRows } = await supabase
     .from("pairing_group_members")
@@ -168,6 +186,7 @@ export async function loadGroupCapture(
           : null,
       teeTime: safeString(groupRow?.tee_time) || null,
       tournamentName,
+      matchplayVariant,
       roundNo,
       bracketRoundLabel: null,
       players: [],
@@ -406,6 +425,7 @@ export async function loadGroupCapture(
       typeof groupRow?.starting_hole === "number" ? groupRow.starting_hole : null,
     teeTime: safeString(groupRow?.tee_time) || null,
     tournamentName,
+    matchplayVariant,
     roundNo,
     bracketRoundLabel,
     players,

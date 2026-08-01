@@ -125,6 +125,8 @@ export type GroupCapturePayload = {
   startingHole: number | null;
   teeTime: string | null;
   tournamentName: string | null;
+  /** `settings.format.matchplay_variant` del torneo (`"ryder"` | undefined). */
+  matchplayVariant: string | null;
   /** Número de ronda del torneo (rounds.round_no), p. ej. 2. */
   roundNo: number | null;
   /** Etiqueta de la etapa del cuadro de match play: "Octavos", "Cuartos",

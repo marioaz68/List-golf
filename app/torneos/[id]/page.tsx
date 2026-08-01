@@ -221,6 +221,10 @@ export default async function PublicTournamentPage({
     (typedTournament.settings as { format?: { matchplay_variant?: string } } | null)
       ?.format?.matchplay_variant === "ryder";
 
+  if (isRyderTournament && !isEmbed) {
+    redirect(`/torneos/${id}/ryder`);
+  }
+
   if (view === "bracket" && !isMatchPlayTournament) {
     const qs = new URLSearchParams({ view: "live" });
     if (isEmbed) qs.set("embed", "1");
@@ -1581,14 +1585,7 @@ export default async function PublicTournamentPage({
                 </Link>
               ) : null}
 
-              {isRyderTournament ? (
-                <Link
-                  href={`/torneos/${id}/ryder`}
-                  className="inline-flex items-center justify-center rounded-full border border-amber-400/50 bg-amber-950/40 px-3 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-900/60"
-                >
-                  🏆 Copa Ryder
-                </Link>
-              ) : isMatchPlayTournament ? (
+              {isMatchPlayTournament ? (
                 <>
                   <Link
                     href={`/torneos/${id}/cuadro-vivo`}
