@@ -1154,6 +1154,15 @@ function HoleTable({
   const hasPar = holes.some((h) => h.par != null);
   const hasSI = holes.some((h) => h.stroke_index != null);
 
+  /** Indexar por hole_no: el API no garantiza array[0] === hoyo 1. */
+  const holeByNo = new Map<number, HoleDetail>();
+  for (const h of holes) {
+    if (h.hole_no >= 1 && h.hole_no <= 18) holeByNo.set(h.hole_no, h);
+  }
+  function holeAt(n: number): HoleDetail | undefined {
+    return holeByNo.get(n) ?? holes[n - 1];
+  }
+
   // Hoyos del desempate (1..9 físico) indexados por playoff_hole.
   const playoffByPos = new Map<number, HoleDetail>();
   for (const ph of playoffHoles) {
@@ -1243,8 +1252,10 @@ function HoleTable({
   ): number | null {
     let total = 0;
     let any = false;
-    for (let h = from; h <= to; h++) {
-      const v = netOf(holes[h - 1]!, who);
+    for (let n = from; n <= to; n++) {
+      const h = holeAt(n);
+      if (!h) return null;
+      const v = netOf(h, who);
       if (v == null) return null;
       total += Number(v);
       any = true;
@@ -1254,8 +1265,8 @@ function HoleTable({
 
   function sumPar(from: number, to: number): number | null {
     let total = 0;
-    for (let h = from; h <= to; h++) {
-      const p = holes[h - 1]?.par;
+    for (let n = from; n <= to; n++) {
+      const p = holeAt(n)?.par;
       if (p == null) return null;
       total += Number(p);
     }
@@ -1289,7 +1300,7 @@ function HoleTable({
   }
 
   function diffAt(holeNo: number): number | null {
-    const h = holes[holeNo - 1];
+    const h = holeAt(holeNo);
     if (!h || !h.has_score) return null;
     return Number(h.top_cum ?? 0) - Number(h.bottom_cum ?? 0);
   }
@@ -1580,7 +1591,7 @@ function HoleTable({
                   key={`par-${i + 1}`}
                   className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold`}
                 >
-                  {holes[i]?.par ?? "—"}
+                  {holeAt(i + 1)?.par ?? "—"}
                 </td>
               ))}
               <td className={`${subTd} bg-emerald-950/80`}>
@@ -1597,7 +1608,7 @@ function HoleTable({
                   key={`par-${i + 10}`}
                   className={`${cellTd} bg-emerald-950/80 text-[10px] font-semibold`}
                 >
-                  {holes[i + 9]?.par ?? "—"}
+                  {holeAt(i + 10)?.par ?? "—"}
                 </td>
               ))}
               <td className={`${subTd} bg-emerald-950/80`}>
@@ -1624,7 +1635,7 @@ function HoleTable({
                           i === 0 ? "border-l-2 border-l-amber-400/40" : ""
                         }`}
                       >
-                        {ph?.par ?? holes[i]?.par ?? "—"}
+                        {ph?.par ?? holeAt(i + 1)?.par ?? "—"}
                       </td>
                     );
                   })
@@ -1651,9 +1662,9 @@ function HoleTable({
                 <td
                   key={`si-${i + 1}`}
                   className={`${cellTd} bg-amber-950/30 text-[10px] font-semibold`}
-                  title={`Hoyo ${i + 1} · Ventaja ${holes[i]?.stroke_index ?? "—"}`}
+                  title={`Hoyo ${i + 1} · Ventaja ${holeAt(i + 1)?.stroke_index ?? "—"}`}
                 >
-                  {holes[i]?.stroke_index ?? "—"}
+                  {holeAt(i + 1)?.stroke_index ?? "—"}
                 </td>
               ))}
               <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
@@ -1661,9 +1672,9 @@ function HoleTable({
                 <td
                   key={`si-${i + 10}`}
                   className={`${cellTd} bg-amber-950/30 text-[10px] font-semibold`}
-                  title={`Hoyo ${i + 10} · Ventaja ${holes[i + 9]?.stroke_index ?? "—"}`}
+                  title={`Hoyo ${i + 10} · Ventaja ${holeAt(i + 10)?.stroke_index ?? "—"}`}
                 >
-                  {holes[i + 9]?.stroke_index ?? "—"}
+                  {holeAt(i + 10)?.stroke_index ?? "—"}
                 </td>
               ))}
               <td className={`${subTd} bg-amber-950/30 text-slate-500`}>—</td>
@@ -1678,10 +1689,10 @@ function HoleTable({
                           i === 0 ? "border-l-2 border-l-amber-400/40" : ""
                         }`}
                         title={`PD${i + 1} (físico ${i + 1}) · Ventaja ${
-                          ph?.stroke_index ?? holes[i]?.stroke_index ?? "—"
+                          ph?.stroke_index ?? holeAt(i + 1)?.stroke_index ?? "—"
                         }`}
                       >
-                        {ph?.stroke_index ?? holes[i]?.stroke_index ?? "—"}
+                        {ph?.stroke_index ?? holeAt(i + 1)?.stroke_index ?? "—"}
                       </td>
                     );
                   })
@@ -1725,7 +1736,8 @@ function HoleTable({
                   </div>
                 </td>
                 {Array.from({ length: 9 }, (_, i) => {
-                  const h = holes[i]!;
+                  const h = holeAt(i + 1);
+                  if (!h) return <td key={`c-${p.key}-${i + 1}`} className={cellTd}>—</td>;
                   const r = role(h, p.key);
                   return (
                     <td
@@ -1745,7 +1757,8 @@ function HoleTable({
                   {hasPar ? fmtToPar(outTp) : fmtStroke(outStr)}
                 </td>
                 {Array.from({ length: 9 }, (_, i) => {
-                  const h = holes[i + 9]!;
+                  const h = holeAt(i + 10);
+                  if (!h) return <td key={`c-${p.key}-${i + 10}`} className={cellTd}>—</td>;
                   const r = role(h, p.key);
                   return (
                     <td
@@ -1793,7 +1806,7 @@ function HoleTable({
                           {ph ? (
                             <StrokeMark
                               strokes={netOf(ph, p.key)}
-                              par={ph.par ?? holes[i]?.par ?? null}
+                              par={ph.par ?? holeAt(i + 1)?.par ?? null}
                               handicapReceived={strokesReceivedOnHole(ph, p.key)}
                               gross={grossOf(ph, p.key)}
                             />

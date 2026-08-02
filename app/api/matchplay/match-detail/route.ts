@@ -39,6 +39,24 @@ export async function GET(req: Request) {
 
   const admin = createAdminClient();
 
+  function isRyderSettings(settings: unknown): boolean {
+    if (!settings || typeof settings !== "object") return false;
+    const format = (settings as { format?: { matchplay_variant?: unknown } })
+      .format;
+    return format?.matchplay_variant === "ryder";
+  }
+
+  /** Público, o Copa Ryder (la página /ryder ya es accesible aunque
+   *  is_public=false en torneos de prueba / prep). */
+  function tournamentDetailAllowed(t: {
+    is_public?: boolean | null;
+    settings?: unknown;
+  } | null): boolean {
+    if (!t) return false;
+    if (t.is_public !== false) return true;
+    return isRyderSettings(t.settings);
+  }
+
   if (isDerivedMatchId(matchId)) {
     if (!tournamentId) {
       return NextResponse.json(
@@ -49,11 +67,11 @@ export async function GET(req: Request) {
 
     const { data: tournament } = await admin
       .from("tournaments")
-      .select("is_public")
+      .select("is_public, settings")
       .eq("id", tournamentId)
       .maybeSingle();
 
-    if (!tournament || tournament.is_public === false) {
+    if (!tournamentDetailAllowed(tournament)) {
       return NextResponse.json(
         { ok: false, error: "no disponible" },
         { status: 404 }
@@ -86,11 +104,11 @@ export async function GET(req: Request) {
 
   const { data: tournament } = await admin
     .from("tournaments")
-    .select("is_public")
+    .select("is_public, settings")
     .eq("id", mp.tournament_id)
     .maybeSingle();
 
-  if (tournament?.is_public === false) {
+  if (!tournamentDetailAllowed(tournament)) {
     return NextResponse.json(
       { ok: false, error: "no disponible" },
       { status: 404 }
