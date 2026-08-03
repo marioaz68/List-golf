@@ -130,24 +130,26 @@ function fmtHolePts(n: number): string {
 
 /**
  * Regla Ryder: terminado si ya se jugaron todos los hoyos, o si la
- * diferencia de puntos de hoyo supera lo que queda por repartir.
- * `playedThrough` es el número de hoyo (como lowHigh/singles), no el
- * conteo de hoyos con puntos — hoyos incompletos no deben retrasar el cierre.
- * Un AS al 18 es empate (medio / 1 punto de copa), no playoff.
+ * diferencia de puntos supera lo que aún se puede repartir.
+ *
+ * Importante en parejas: cada hoyo reparte puntosPorHoyo (=1 singles, =2 low_high).
+ * `thru` = hoyos con puntos reales capturados (no el hole_no del campo:
+ * en shotgun / captura parcial hole_no haría cerrar de más).
+ * Dormie (diff === restantes * puntosPorHoyo) sigue abierto: aún se empata.
+ * Un AS al 18 es empate de copa, no playoff.
  */
 function isMatchTerminado(args: {
-  playedThrough: number;
+  thru: number;
   holesInMatch: number;
   topTotal: number;
   bottomTotal: number;
   puntosPorHoyo: number;
 }): boolean {
-  const restantes = Math.max(0, args.holesInMatch - args.playedThrough);
+  const restantes = Math.max(0, args.holesInMatch - args.thru);
   const diff = Math.abs(args.topTotal - args.bottomTotal);
-  return (
-    args.playedThrough >= args.holesInMatch ||
-    diff > restantes * args.puntosPorHoyo
-  );
+  const decidido = diff > restantes * args.puntosPorHoyo;
+  const terminado = decidido || args.thru >= args.holesInMatch;
+  return terminado;
 }
 
 function summarizeScoring(
@@ -171,15 +173,20 @@ function summarizeScoring(
     };
   }
 
-  const scoringFormat = scoring.scoring_format ?? sessionFormat;
+  // Preferir el formato de la sesión Ryder (singles vs parejas).
+  const scoringFormat =
+    sessionFormat === "singles" || sessionFormat === "low_high"
+      ? sessionFormat
+      : (scoring.scoring_format ?? sessionFormat);
   const isSingles = scoringFormat === "singles";
   const holesInMatch = scoring.holes_in_match;
-  const puntosPorHoyo = isSingles ? 1 : 2;
+  // Explícito: 1 pt/hoyo individual, 2 pts/hoyo en parejas (low/high).
+  const puntosPorHoyo = scoringFormat === "singles" ? 1 : 2;
 
   let topAcc = 0;
   let bottomAcc = 0;
   let holesWithPoints = 0;
-  let playedThrough = 0;
+  let lastHoleNo = 0;
   let decidedAtHole: number | null = null;
   let lastStatus: string | null = null;
   const hoyos: LiveSummary["hoyos"] = [];
@@ -189,35 +196,44 @@ function summarizeScoring(
     if (!holeHasScore(h)) continue;
 
     if (h.top_points != null || h.bottom_points != null) {
-      // Tras el cierre matemático el motor deja 0–0 en hoyos posteriores;
-      // no los sumamos al marcador ni atrasamos el hoyo de decisión.
-      if (decidedAtHole != null && h.hole_no > decidedAtHole) {
+      const topPts = Number(h.top_points ?? 0);
+      const botPts = Number(h.bottom_points ?? 0);
+
+      // Tras nuestro cierre matemático no sumamos más.
+      if (decidedAtHole != null) {
+        if (h.match_status_after) lastStatus = h.match_status_after;
+        continue;
+      }
+      // 0–0 = relleno del motor post-“Decidido” (a veces con strokes capturados).
+      // No reparte puntos ni avanza thru para la regla de cierre.
+      if (topPts === 0 && botPts === 0) {
         if (h.match_status_after) lastStatus = h.match_status_after;
         continue;
       }
 
       hoyos.push({
         hole_no: h.hole_no,
-        arriba: Number(h.top_points ?? 0),
-        abajo: Number(h.bottom_points ?? 0),
+        arriba: topPts,
+        abajo: botPts,
       });
 
-      topAcc += Number(h.top_points ?? 0);
-      bottomAcc += Number(h.bottom_points ?? 0);
+      topAcc += topPts;
+      bottomAcc += botPts;
       holesWithPoints += 1;
-      playedThrough = Math.max(playedThrough, h.hole_no);
+      lastHoleNo = Math.max(lastHoleNo, h.hole_no);
 
       if (decidedAtHole == null) {
         const early = isMatchTerminado({
-          playedThrough: h.hole_no,
+          thru: holesWithPoints,
           holesInMatch,
           topTotal: topAcc,
           bottomTotal: bottomAcc,
           puntosPorHoyo,
         });
-        // Cierre anticipado: terminó antes del último hoyo con un ganador.
-        if (early && h.hole_no < holesInMatch && topAcc !== bottomAcc) {
-          decidedAtHole = h.hole_no;
+        // Cierre anticipado: lead estrictamente mayor a lo repartible.
+        if (early && holesWithPoints < holesInMatch && topAcc !== bottomAcc) {
+          // thru = hoyos que repartieron puntos (no hole_no del campo).
+          decidedAtHole = holesWithPoints;
         }
       }
     }
@@ -239,7 +255,7 @@ function summarizeScoring(
   }
 
   const terminado = isMatchTerminado({
-    playedThrough,
+    thru: holesWithPoints,
     holesInMatch,
     topTotal: topAcc,
     bottomTotal: bottomAcc,
@@ -250,23 +266,19 @@ function summarizeScoring(
   const cerrado = terminado && holesWithPoints > 0;
 
   if (cerrado && !empate && decidedAtHole == null) {
-    decidedAtHole = Math.min(playedThrough, holesInMatch);
+    decidedAtHole = Math.min(holesWithPoints, holesInMatch);
   }
 
+  // En juego: hoyos con puntos. Cerrado anticipado: thr = decision count.
   const thruDisplay =
     cerrado && decidedAtHole != null
       ? decidedAtHole
-      : hoyos.length > 0
-        ? Math.max(
-            ...hoyos
-              .filter((h) => h.hole_no <= holesInMatch)
-              .map((h) => h.hole_no),
-            0
-          )
-        : 0;
+      : holesWithPoints > 0
+        ? holesWithPoints
+        : lastHoleNo;
 
   let resultado_texto: string | null = null;
-  const thruH = thruDisplay || playedThrough;
+  const thruH = thruDisplay || holesWithPoints;
   if (empate) {
     resultado_texto = `AS · ${fmtHolePts(topAcc)}-${fmtHolePts(bottomAcc)} en hoyos`;
   } else if (cerrado && decidedAtHole != null) {
@@ -324,22 +336,23 @@ function summarizeScoring(
 }
 
 /**
- * Aporte a la copa en tiempo real: quien va arriba se lleva el partido
- * completo (o medio cada uno si hay empate parcial). null solo si no ha
- * empezado (0 hoyos con score).
+ * Aporte a la copa (no los puntos de hoyo): como máximo `pointsPerMatch`
+ * por partido (1 individual, 2 parejas). Quien va arriba se lleva el match
+ * completo; empate parcial = mitad cada uno. Nunca suma los totales de hoyo.
  */
 function cupPointsFromLive(
   live: LiveSummary,
   pointsPerMatch: number
 ): { arriba: number | null; abajo: number | null } {
   if (live.holes_scored <= 0) return { arriba: null, abajo: null };
+  const cap = Number(pointsPerMatch) > 0 ? Number(pointsPerMatch) : 1;
   if (live.top_total > live.bottom_total) {
-    return { arriba: pointsPerMatch, abajo: 0 };
+    return { arriba: cap, abajo: 0 };
   }
   if (live.top_total < live.bottom_total) {
-    return { arriba: 0, abajo: pointsPerMatch };
+    return { arriba: 0, abajo: cap };
   }
-  const half = pointsPerMatch / 2;
+  const half = cap / 2;
   return { arriba: half, abajo: half };
 }
 
