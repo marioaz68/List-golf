@@ -28,7 +28,7 @@ export type RyderMatch = {
   status: string;
   arriba: string;
   abajo: string;
-  /** Puntos de copa que aporta el match (null si aún no está decidido). */
+  /** Puntos de copa en tiempo real (null = partido sin empezar). */
   puntos_arriba: number | null;
   puntos_abajo: number | null;
   /** Totales acumulados del scoring del match (hoyos). */
@@ -112,6 +112,8 @@ type LiveSummary = {
   top_total: number;
   bottom_total: number;
   thru: number;
+  /** Hoyos con puntos de match capturados (0 = no ha empezado). */
+  holes_scored: number;
   decided_at_hole: number | null;
   cerrado: boolean;
   empate: boolean;
@@ -157,6 +159,7 @@ function summarizeScoring(
       top_total: 0,
       bottom_total: 0,
       thru: 0,
+      holes_scored: 0,
       decided_at_hole: null,
       cerrado: false,
       empate: false,
@@ -263,6 +266,7 @@ function summarizeScoring(
         : 0;
 
   let resultado_texto: string | null = null;
+  const thruH = thruDisplay || playedThrough;
   if (empate) {
     resultado_texto = `AS · ${fmtHolePts(topAcc)}-${fmtHolePts(bottomAcc)} en hoyos`;
   } else if (cerrado && decidedAtHole != null) {
@@ -283,6 +287,20 @@ function summarizeScoring(
           decided_at_hole: decidedAtHole,
           holes_in_match: holesInMatch,
         });
+  } else if (holesWithPoints > 0) {
+    // En juego: marcador vivo (no espera a cerrar el match).
+    if (isSingles) {
+      const lead = Math.abs(diff);
+      if (lead === 0) {
+        resultado_texto = `AS · H${thruH}`;
+      } else {
+        const trailing =
+          diff > 0 ? scoring.bottom_label : scoring.top_label;
+        resultado_texto = `${trailing} · ${fmtHolePts(lead)} abajo · H${thruH}`;
+      }
+    } else {
+      resultado_texto = `${fmtHolePts(topAcc)}-${fmtHolePts(bottomAcc)} pts`;
+    }
   } else {
     resultado_texto =
       lastStatus ??
@@ -292,7 +310,8 @@ function summarizeScoring(
   return {
     top_total: topAcc,
     bottom_total: bottomAcc,
-    thru: thruDisplay || playedThrough,
+    thru: thruH,
+    holes_scored: holesWithPoints,
     decided_at_hole: decidedAtHole,
     cerrado,
     empate,
@@ -308,19 +327,24 @@ function summarizeScoring(
   };
 }
 
+/**
+ * Aporte a la copa en tiempo real: quien va arriba se lleva el partido
+ * completo (o medio cada uno si hay empate parcial). null solo si no ha
+ * empezado (0 hoyos con score).
+ */
 function cupPointsFromLive(
   live: LiveSummary,
   pointsPerMatch: number
 ): { arriba: number | null; abajo: number | null } {
-  if (!live.cerrado) return { arriba: null, abajo: null };
-  if (live.empate || live.top_total === live.bottom_total) {
-    const half = pointsPerMatch / 2;
-    return { arriba: half, abajo: half };
-  }
+  if (live.holes_scored <= 0) return { arriba: null, abajo: null };
   if (live.top_total > live.bottom_total) {
     return { arriba: pointsPerMatch, abajo: 0 };
   }
-  return { arriba: 0, abajo: pointsPerMatch };
+  if (live.top_total < live.bottom_total) {
+    return { arriba: 0, abajo: pointsPerMatch };
+  }
+  const half = pointsPerMatch / 2;
+  return { arriba: half, abajo: half };
 }
 
 function liveVentaja(live: LiveSummary): RyderMatch["ventaja"] {
@@ -517,15 +541,24 @@ export async function loadRyderPublic(
     for (const ses of sesiones) {
       for (const m of ses.matches) {
         totales += 1;
-        if (m.puntos_arriba !== null) {
+        const started = m.puntos_arriba !== null;
+        const finished =
+          m.status === "completed" || Boolean(m.is_halved);
+
+        if (!started) continue;
+
+        const pa = m.puntos_arriba ?? 0;
+        const pb = m.puntos_abajo ?? 0;
+        ps += pa;
+        pc += pb;
+        if (home && away) {
+          home.puntos += pa;
+          away.puntos += pb;
+        }
+
+        if (finished) {
           cerrados += 1;
-          const pa = m.puntos_arriba;
-          const pb = m.puntos_abajo ?? 0;
-          ps += pa;
-          pc += pb;
           if (home && away) {
-            home.puntos += pa;
-            away.puntos += pb;
             if (pa > pb) {
               home.ganados += 1;
               away.perdidos += 1;
@@ -540,24 +573,9 @@ export async function loadRyderPublic(
         } else {
           if (home) home.en_juego += 1;
           if (away) away.en_juego += 1;
-          // Proyectado: acredita al que va arriba aunque no haya cerrado.
-          if (m.ventaja === "home") {
-            ps += ses.puntos_por_partido;
-            pc += 0;
-          } else if (m.ventaja === "away") {
-            ps += 0;
-            pc += ses.puntos_por_partido;
-          } else if (m.ventaja === "tied") {
-            ps += ses.puntos_por_partido / 2;
-            pc += ses.puntos_por_partido / 2;
-          }
         }
       }
     }
-
-    // Proyectado de cerrados ya está en ps/pc; los en juego se sumaron arriba.
-    // Los cerrados también deben contar en proyectado (= puntos reales + proyección).
-    // Ya están sumados en el branch puntos_arriba !== null.
 
     const base = {
       category_id: cup.category_id,
@@ -574,6 +592,7 @@ export async function loadRyderPublic(
       tie_label: cup.tie_label ?? "Empate",
       puntos_totales: Number(primera?.puntos_totales ?? 0),
       puntos_para_ganar: Number(primera?.puntos_para_ganar ?? 0),
+      // Marcador = estado actual (vivos + cerrados). Sin proyección aparte.
       proyectado: { socios: ps, caddies: pc },
       partidos_cerrados: cerrados,
       partidos_totales: totales,

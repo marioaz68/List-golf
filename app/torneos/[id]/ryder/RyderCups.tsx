@@ -60,9 +60,6 @@ function Scoreboard({ cup }: { cup: RyderCup }) {
           <div className="mt-1 text-5xl font-bold leading-none text-white tabular-nums">
             {pts(home.puntos)}
           </div>
-          <div className="mt-1 text-[11px] text-emerald-200/70 tabular-nums">
-            proyectado {pts(cup.proyectado.socios)}
-          </div>
         </div>
 
         <div className="text-center">
@@ -75,7 +72,7 @@ function Scoreboard({ cup }: { cup: RyderCup }) {
           <div className="mt-2 text-[10px] text-emerald-200/60 tabular-nums">
             {cup.partidos_cerrados}/{cup.partidos_totales}
             <br />
-            partidos
+            cerrados
           </div>
         </div>
 
@@ -86,9 +83,6 @@ function Scoreboard({ cup }: { cup: RyderCup }) {
           </div>
           <div className="mt-1 text-5xl font-bold leading-none text-amber-300 tabular-nums">
             {pts(away.puntos)}
-          </div>
-          <div className="mt-1 text-[11px] text-emerald-200/70 tabular-nums">
-            proyectado {pts(cup.proyectado.caddies)}
           </div>
         </div>
       </div>
@@ -132,12 +126,14 @@ function MatchCard({
   puntosPorPartido: number;
   onOpen: () => void;
 }) {
-  const cerrado = match.puntos_arriba !== null;
+  const empezado = match.thru > 0 || match.puntos_arriba !== null;
+  const cerrado =
+    match.status === "completed" || Boolean(match.is_halved);
   const ganaHome = match.ventaja === "home";
   const ganaAway = match.ventaja === "away";
   const homeTag = ganaHome ? "UP" : ganaAway ? "DN" : null;
   const awayTag = ganaAway ? "UP" : ganaHome ? "DN" : null;
-  // Columna de puntos = aporte a la copa (null si aún no terminó).
+  // Columna de puntos = aporte a la copa en tiempo real (null si no ha empezado).
   const scoreTop = match.puntos_arriba;
   const scoreBottom = match.puntos_abajo;
 
@@ -224,8 +220,9 @@ function MatchCard({
           <p className="mt-1.5 text-[11px] text-emerald-200/70">{match.resultado_texto}</p>
         ) : (
           <p className="mt-1.5 text-[10px] text-emerald-200/50">
-            {puntosPorPartido} punto{puntosPorPartido === 1 ? "" : "s"} en juego
-            {match.thru > 0 && !cerrado ? ` · hoyo ${match.thru}` : ""}
+            {empezado
+              ? "En juego"
+              : `${puntosPorPartido} punto${puntosPorPartido === 1 ? "" : "s"} en juego`}
           </p>
         )}
         <p className="mt-1.5 text-[10px] text-emerald-300/70">
@@ -457,8 +454,8 @@ export default function RyderCups({ data }: { data: RyderPublicData }) {
       <footer className="mt-6 border-t border-emerald-600/30 pt-3 text-[11px] leading-relaxed text-emerald-200/60">
         <p className="mb-1.5 font-semibold text-emerald-100">Cómo leer el marcador</p>
         <p className="mb-1">
-          <b>Proyectado</b> suma los puntos ya cerrados más los partidos en juego
-          acreditados a quien va arriba en ese momento.
+          El marcador suma en tiempo real el aporte de cada partido según quién
+          va arriba en ese momento (cerrados e en juego).
         </p>
         <p className="mb-1">
           En los <b>individuales</b> cada partido vale 1 punto de copa.{" "}
