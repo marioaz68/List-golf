@@ -288,18 +288,14 @@ function summarizeScoring(
           holes_in_match: holesInMatch,
         });
   } else if (holesWithPoints > 0) {
-    // En juego: marcador vivo (no espera a cerrar el match).
-    if (isSingles) {
-      const lead = Math.abs(diff);
-      if (lead === 0) {
-        resultado_texto = `AS · H${thruH}`;
-      } else {
-        const trailing =
-          diff > 0 ? scoring.bottom_label : scoring.top_label;
-        resultado_texto = `${trailing} · ${fmtHolePts(lead)} abajo · H${thruH}`;
-      }
+    // En juego: diferencia (no acumulados de hoyo), con nombre del que va arriba.
+    const lead = Math.abs(diff);
+    if (lead === 0) {
+      resultado_texto = `Empatados · H${thruH}`;
     } else {
-      resultado_texto = `${fmtHolePts(topAcc)}-${fmtHolePts(bottomAcc)} pts`;
+      const leader =
+        diff > 0 ? scoring.top_label : scoring.bottom_label;
+      resultado_texto = `${leader} · ${fmtHolePts(lead)} arriba · H${thruH}`;
     }
   } else {
     resultado_texto =
