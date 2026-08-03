@@ -131,11 +131,6 @@ function MatchCard({
     match.status === "completed" || Boolean(match.is_halved);
   const ganaHome = match.ventaja === "home";
   const ganaAway = match.ventaja === "away";
-  const homeTag = ganaHome ? "UP" : ganaAway ? "DN" : null;
-  const awayTag = ganaAway ? "UP" : ganaHome ? "DN" : null;
-  // Columna de puntos = aporte a la copa en tiempo real (null si no ha empezado).
-  const scoreTop = match.puntos_arriba;
-  const scoreBottom = match.puntos_abajo;
 
   return (
     <li className="overflow-hidden rounded-lg border border-emerald-600/40 bg-emerald-900/40">
@@ -187,14 +182,6 @@ function MatchCard({
           >
             {match.arriba}
           </span>
-          <span className="flex shrink-0 items-baseline gap-1">
-            {homeTag ? (
-              <span className="text-[9px] font-bold text-emerald-200/70">{homeTag}</span>
-            ) : null}
-            <span className="text-[13px] font-semibold text-white tabular-nums">
-              {pts(scoreTop)}
-            </span>
-          </span>
         </div>
 
         <div className="mt-1 flex items-center gap-2">
@@ -206,18 +193,12 @@ function MatchCard({
           >
             {match.abajo}
           </span>
-          <span className="flex shrink-0 items-baseline gap-1">
-            {awayTag ? (
-              <span className="text-[9px] font-bold text-amber-200/70">{awayTag}</span>
-            ) : null}
-            <span className="text-[13px] font-semibold text-amber-300 tabular-nums">
-              {pts(scoreBottom)}
-            </span>
-          </span>
         </div>
 
         {match.resultado_texto ? (
-          <p className="mt-1.5 text-[11px] text-emerald-200/70">{match.resultado_texto}</p>
+          <p className="mt-1.5 text-[12px] font-semibold text-emerald-100">
+            {match.resultado_texto}
+          </p>
         ) : (
           <p className="mt-1.5 text-[10px] text-emerald-200/50">
             {empezado
