@@ -236,18 +236,34 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
     const depthEdge = enToLatLon(displayFlag, depthDir.e * depthMeters, depthDir.n * depthMeters);
     const lateralEdge = enToLatLon(displayFlag, latDir.e * edgeMeters, latDir.n * edgeMeters);
 
+    /** Punto medio del segmento, desplazado al exterior (~5 m). */
+    const labelOutside = (a: LL, b: LL, other: LL, meters: number): LL => {
+      const mid = midpoint(a, b);
+      const s = latLonToEN(a, b);
+      const len = Math.hypot(s.e, s.n) || 1;
+      const perp = { e: -s.n / len, n: s.e / len };
+      const toOther = latLonToEN(mid, other);
+      const towardOther = perp.e * toOther.e + perp.n * toOther.n;
+      const outward =
+        towardOther > 0 ? { e: -perp.e, n: -perp.n } : perp;
+      return enToLatLon(mid, outward.e * meters, outward.n * meters);
+    };
+
+    const LABEL_OFFSET_M = 5;
+    const depthText = depthYards.trim() || null;
+    const edgeText = edgeYards.trim() || null;
+
     return {
       depthEdge,
       lateralEdge,
-      labelPos: midpoint(midpoint(displayFlag, depthEdge), midpoint(displayFlag, lateralEdge)),
-      labelText:
-        depthYards.trim() && edgeYards.trim()
-          ? `${depthYards.trim()} x ${edgeYards.trim()} yd`
-          : depthYards.trim()
-            ? `${depthYards.trim()} yd`
-            : edgeYards.trim()
-              ? `${edgeYards.trim()} yd`
-              : null,
+      depthLabelPos: depthText
+        ? labelOutside(displayFlag, depthEdge, lateralEdge, LABEL_OFFSET_M)
+        : null,
+      edgeLabelPos: edgeText
+        ? labelOutside(displayFlag, lateralEdge, depthEdge, LABEL_OFFSET_M)
+        : null,
+      depthLabelText: depthText,
+      edgeLabelText: edgeText,
     };
   }, [displayFlag, data?.greenFront, data?.greenBack, color, side, depthYards, edgeYards]);
 
@@ -317,19 +333,14 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
       }
 
       if (displayFlag) {
-        const pin = L.circleMarker([displayFlag.lat, displayFlag.lon], {
+        // Solo punto en el vértice (sin icono 🚩 que tapa la escuadra).
+        L.circleMarker([displayFlag.lat, displayFlag.lon], {
           radius: 6,
           color: "#111827",
           weight: 1.5,
           fillColor: flagColorDot,
           fillOpacity: 1,
         }).addTo(fg);
-        pin.bindTooltip("🚩", {
-          permanent: true,
-          direction: "top",
-          offset: [0, -8],
-          className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
-        });
       }
 
       if (escuadraGeo && displayFlag) {
@@ -342,15 +353,37 @@ export default function BanderasClient({ tg, keeperName, initialHole }: Props) {
           { color: "#fbbf24", weight: 2.5 }
         ).addTo(fg);
 
-        if (escuadraGeo.labelText) {
-          L.marker([escuadraGeo.labelPos.lat, escuadraGeo.labelPos.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div style=\"font-size:12px;font-weight:800;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap\">${escuadraGeo.labelText}</div>`,
-            }),
-          }).addTo(fg);
-        }
+        // Texto horizontal respecto a la pantalla (contrarrotar el mapa)
+        // y centrado sobre el ancla.
+        const labelHtml = (text: string) =>
+          `<div style="transform:translate(-50%,-50%) rotate(${-mapRotationDeg}deg);transform-origin:center center;font-size:13px;font-weight:800;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;line-height:1">${text}</div>`;
 
+        if (escuadraGeo.depthLabelText && escuadraGeo.depthLabelPos) {
+          L.marker(
+            [escuadraGeo.depthLabelPos.lat, escuadraGeo.depthLabelPos.lon],
+            {
+              icon: L.divIcon({
+                className: "",
+                html: labelHtml(escuadraGeo.depthLabelText),
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+            }
+          ).addTo(fg);
+        }
+        if (escuadraGeo.edgeLabelText && escuadraGeo.edgeLabelPos) {
+          L.marker(
+            [escuadraGeo.edgeLabelPos.lat, escuadraGeo.edgeLabelPos.lon],
+            {
+              icon: L.divIcon({
+                className: "",
+                html: labelHtml(escuadraGeo.edgeLabelText),
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+            }
+          ).addTo(fg);
+        }
       }
 
       if (fitPoints.length > 1) {
