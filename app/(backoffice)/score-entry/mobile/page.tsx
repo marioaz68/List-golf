@@ -10,7 +10,11 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
-import { PICKED_UP_STROKES } from "@/lib/captura/types";
+import {
+  PICKED_UP_STROKES,
+  type GroupMatchPlayCapture,
+  type GroupMatchPlayProgressionRow,
+} from "@/lib/captura/types";
 import BackButton from "@/components/captura/BackButton";
 import GpsChip from "@/components/captura/GpsChip";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
@@ -61,7 +65,94 @@ type PlayerRow = {
   /** Match play: hoyos donde el jugador levantó (X). strokes = 10 en BD;
    *  la UI muestra X y pierde la bola alta automáticamente. */
   pickedUp?: Partial<Record<HoleNumber, boolean>>;
+  /** Golpes de ventaja por hoyo (match play bola baja/alta). */
+  strokesByHole?: Partial<Record<HoleNumber, number>>;
+  playingHandicap?: number | null;
+  ballRole?: "baja" | "alta" | null;
+  matchSide?: "top" | "bottom" | null;
 };
+
+function matchLeadTint(
+  lead: "top" | "bottom" | "as" | undefined,
+  label: string
+): string {
+  if (lead === "as" || label === "AS") return "text-slate-700";
+  if (lead === "top") return "text-cyan-700 font-bold";
+  if (lead === "bottom") return "text-fuchsia-700 font-bold";
+  if (label.startsWith("T+")) return "text-cyan-700 font-bold";
+  if (label.startsWith("B+")) return "text-fuchsia-700 font-bold";
+  return "text-slate-800 font-semibold";
+}
+
+/** Barra fija: estado del match + timeline hoyo a hoyo. */
+function MatchStatusBar({
+  matchPlay,
+  compact = false,
+}: {
+  matchPlay: GroupMatchPlayCapture;
+  compact?: boolean;
+}) {
+  const progression = matchPlay.progression ?? [];
+  return (
+    <div
+      className={[
+        "border border-emerald-300 bg-emerald-50 px-2 py-1.5 shadow-sm",
+        compact ? "rounded-t-lg" : "rounded-lg",
+      ].join(" ")}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-1">
+        <div className="text-[11px] font-bold text-emerald-950">Match</div>
+        <div className="text-[11px] font-semibold text-emerald-900">
+          {matchPlay.resultText}
+        </div>
+      </div>
+      {matchPlay.topLabel || matchPlay.bottomLabel ? (
+        <div className="mt-0.5 text-[9px] leading-snug text-emerald-900/85">
+          <span className="font-bold text-cyan-800">
+            {matchPlay.topShort ?? "A"}
+          </span>{" "}
+          {matchPlay.topLabel ?? "—"}
+          {"  vs  "}
+          <span className="font-bold text-fuchsia-800">
+            {matchPlay.bottomShort ?? "B"}
+          </span>{" "}
+          {matchPlay.bottomLabel ?? "—"}
+        </div>
+      ) : null}
+      {progression.length > 0 ? (
+        <div className="mt-1 flex gap-0.5 overflow-x-auto pb-0.5">
+          {progression.map((row: GroupMatchPlayProgressionRow) => {
+            const holeLabel =
+              row.hole_no > 18 ? `P${row.hole_no - 18}` : String(row.hole_no);
+            return (
+              <div
+                key={`mp-tl-${row.hole_no}`}
+                className="flex min-w-[28px] flex-col items-center rounded bg-white/80 px-0.5 py-0.5"
+                title={`${row.top_cum}–${row.bottom_cum} pts`}
+              >
+                <span className="text-[8px] font-semibold text-slate-500">
+                  {holeLabel}
+                </span>
+                <span
+                  className={[
+                    "text-[9px] leading-none",
+                    matchLeadTint(row.lead, row.label),
+                  ].join(" ")}
+                >
+                  {row.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-1 text-[9px] text-emerald-800/70">
+          Cuando los 4 anoten el hoyo, aquí va el estado del match.
+        </div>
+      )}
+    </div>
+  );
+}
 
 const HOLES_FRONT: HoleNumber[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const HOLES_BACK: HoleNumber[] = [10, 11, 12, 13, 14, 15, 16, 17, 18];
@@ -853,19 +944,9 @@ function MobileScoreEntryContent() {
   const [myWitnessName, setMyWitnessName] = useState<string | null>(null);
   /** Cuántos cambios tengo pendientes por aprobar (en celdas del jugador que atestiguo). */
   const [pendingForMeCount, setPendingForMeCount] = useState<number>(0);
-  /** Estado de match play del grupo: AS al 18 → desempate; o ya decidido. */
-  type GroupMatchPlay = {
-    decidedAtHole: number | null;
-    resultText: string;
-    holesRequired: number;
-    viaPlayoff?: boolean;
-    playoffHole?: number;
-    needsPlayoff?: boolean;
-    playoffPendingHole?: number;
-  };
-  const [matchPlayInfo, setMatchPlayInfo] = useState<GroupMatchPlay | null>(
-    null
-  );
+  /** Estado de match play del grupo (ventajas + progresión + cierre). */
+  const [matchPlayInfo, setMatchPlayInfo] =
+    useState<GroupMatchPlayCapture | null>(null);
   /**
    * Visibilidad de "Mi Score" + banner de testigo en la pestaña Tarjeta.
    * Se oculta al volver desde Anotar; el botón toggle siempre queda visible.
@@ -913,7 +994,7 @@ function MobileScoreEntryContent() {
             myEntryId?: string | null;
             caddieForEntryIds?: string[];
             witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
-            matchPlay?: GroupMatchPlay | null;
+            matchPlay?: GroupMatchPlayCapture | null;
             players: Array<{
               entryId: string;
               name: string;
@@ -922,6 +1003,10 @@ function MobileScoreEntryContent() {
               pickedUp?: Partial<Record<HoleNumber, boolean>>;
               privateScores?: PlayerRow["scores"];
               categoryId?: string | null;
+              strokesByHole?: Partial<Record<HoleNumber, number>>;
+              playingHandicap?: number | null;
+              ballRole?: "baja" | "alta" | null;
+              matchSide?: "top" | "bottom" | null;
               signatures?: {
                 signedByPlayerAt: string | null;
                 signedByWitnessAt: string | null;
@@ -1022,6 +1107,10 @@ function MobileScoreEntryContent() {
               scores,
               pending: { ...(p.pending ?? {}) },
               pickedUp: { ...(p.pickedUp ?? {}) },
+              strokesByHole: { ...(p.strokesByHole ?? {}) },
+              playingHandicap: p.playingHandicap ?? null,
+              ballRole: p.ballRole ?? null,
+              matchSide: p.matchSide ?? null,
             };
           })
         );
@@ -1551,7 +1640,13 @@ function MobileScoreEntryContent() {
             <main
               className={[
                 "flex-1 space-y-2 px-3 py-2",
-                activePlayerId ? "pb-44" : "pb-4",
+                activePlayerId
+                  ? matchPlayInfo
+                    ? "pb-72"
+                    : "pb-44"
+                  : matchPlayInfo
+                    ? "pb-36"
+                    : "pb-4",
               ].join(" ")}
             >
               {playoffCapture.orphanPlayoffScores ? (
@@ -1640,6 +1735,13 @@ function MobileScoreEntryContent() {
                     witnessTargetEntryId != null &&
                     player.id === witnessTargetEntryId;
                   const isPendingHole = Boolean(player.pending?.[currentHole]);
+                  const vent = player.strokesByHole?.[currentHole] ?? 0;
+                  const roleLabel =
+                    player.ballRole === "baja"
+                      ? "Baja"
+                      : player.ballRole === "alta"
+                        ? "Alta"
+                        : null;
 
                   return (
                     <div
@@ -1655,21 +1757,40 @@ function MobileScoreEntryContent() {
                             ? "border-sky-300 bg-sky-50"
                             : isWitnessTarget
                               ? "border-amber-400 bg-amber-50"
-                              : "border-slate-200 bg-white",
+                              : vent > 0
+                                ? "border-amber-300 bg-amber-50/40"
+                                : "border-slate-200 bg-white",
                       ].join(" ")}
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex flex-1 items-center gap-1 truncate text-[15px] font-semibold">
-                          <span className="truncate">{player.name}</span>
-                          {isWitnessTarget ? (
-                            <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-900">
-                              Testigo
-                            </span>
+                      <div className="mb-1 flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-1 truncate text-[15px] font-semibold">
+                            <span className="truncate">{player.name}</span>
+                            {isWitnessTarget ? (
+                              <span className="shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-900">
+                                Testigo
+                              </span>
+                            ) : null}
+                          </div>
+                          {roleLabel || player.playingHandicap != null ? (
+                            <div className="text-[10px] font-semibold leading-tight text-slate-500">
+                              {roleLabel}
+                              {player.playingHandicap != null
+                                ? `${roleLabel ? " · " : ""}PH ${player.playingHandicap}`
+                                : ""}
+                            </div>
                           ) : null}
                         </div>
 
-                        <div className="text-xs text-slate-500">
-                          {currentHoleScore ?? "-"}
+                        <div className="flex shrink-0 flex-col items-end gap-0.5">
+                          {vent > 0 ? (
+                            <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-950">
+                              ● {vent === 1 ? "1 ventaja" : `${vent} ventajas`}
+                            </span>
+                          ) : null}
+                          <div className="text-xs text-slate-500">
+                            {currentHoleScore ?? "-"}
+                          </div>
                         </div>
                       </div>
 
@@ -1678,12 +1799,34 @@ function MobileScoreEntryContent() {
                           type="button"
                           onClick={() => selectPlayer(player.id)}
                           className={[
-                            "flex h-11 w-[62px] shrink-0 items-center justify-center rounded-lg border text-2xl font-bold",
+                            "relative flex h-11 w-[62px] shrink-0 items-center justify-center rounded-lg border text-2xl font-bold",
                             isPendingHole
                               ? "border-red-700 bg-red-500 text-white"
-                              : "border-red-500 bg-red-50 text-black",
+                              : vent > 0
+                                ? "border-amber-500 bg-amber-50 text-black"
+                                : "border-red-500 bg-red-50 text-black",
                           ].join(" ")}
+                          title={
+                            vent > 0
+                              ? `Recibe ${vent} golpe${vent === 1 ? "" : "s"} de ventaja en este hoyo`
+                              : undefined
+                          }
                         >
+                          {vent > 0 ? (
+                            <span
+                              aria-hidden
+                              className="pointer-events-none absolute right-1 top-1 flex gap-px"
+                            >
+                              {Array.from({
+                                length: Math.min(vent, 2),
+                              }).map((_, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"
+                                />
+                              ))}
+                            </span>
+                          ) : null}
                           {currentHoleScore ?? ""}
                         </button>
 
@@ -1782,13 +1925,40 @@ function MobileScoreEntryContent() {
               </section>
             </main>
 
+            {/* Estado del match fijo abajo (sin keypad) */}
+            {matchPlayInfo && !activePlayerId ? (
+              <div className="fixed bottom-0 left-0 right-0 z-20">
+                <div className="mx-auto w-full max-w-md px-2 pb-2 pt-1">
+                  <MatchStatusBar matchPlay={matchPlayInfo} />
+                </div>
+              </div>
+            ) : null}
+
             {activePlayerId && (
               <div className="fixed bottom-0 left-0 right-0 z-30">
+                {matchPlayInfo ? (
+                  <div className="mx-auto w-full max-w-md px-2">
+                    <MatchStatusBar matchPlay={matchPlayInfo} compact />
+                  </div>
+                ) : null}
                 <div className="mx-auto w-full max-w-md border-t border-slate-200 bg-white p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold">
                     <span>{activePlayer?.name}</span>
                     <span className="text-slate-500">
-                      Hoyo {currentHole} · Par {PAR_BY_HOLE[currentHole]}
+                      Hoyo {currentHole > 18 ? `P${currentHole - 18}` : currentHole}{" "}
+                      · Par {PAR_BY_HOLE[currentHole]}
+                      {(() => {
+                        if (!activePlayer || activePlayer.id === ME_ID)
+                          return null;
+                        const vent =
+                          activePlayer.strokesByHole?.[currentHole] ?? 0;
+                        if (vent <= 0) return null;
+                        return (
+                          <span className="ml-1 font-bold text-amber-700">
+                            · {vent === 1 ? "1 ventaja" : `${vent} ventajas`}
+                          </span>
+                        );
+                      })()}
                     </span>
                   </div>
 
