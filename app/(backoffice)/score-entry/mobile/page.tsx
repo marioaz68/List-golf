@@ -17,6 +17,10 @@ import {
 } from "@/lib/captura/types";
 import BackButton from "@/components/captura/BackButton";
 import GpsChip from "@/components/captura/GpsChip";
+import {
+  buildCapturaMobileReturnPath,
+  withCapturaReturn,
+} from "@/components/captura/ReturnToCaptureBanner";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 
 /**
@@ -947,6 +951,10 @@ function MobileScoreEntryContent() {
   const [categoryByEntry, setCategoryByEntry] = useState<Record<string, string | null>>({});
   /** Tournament ID del grupo (para link a la página pública). */
   const [tournamentId, setTournamentId] = useState<string | null>(null);
+  /** `ryder` | null — para abrir /ryder en resultados en vivo. */
+  const [matchplayVariant, setMatchplayVariant] = useState<string | null>(
+    null
+  );
   /** Firmas de tarjeta por entry (player + witness). */
   type CardSig = {
     signedByPlayerAt: string | null;
@@ -1010,6 +1018,7 @@ function MobileScoreEntryContent() {
           ok?: boolean;
           data?: {
             tournamentId?: string | null;
+            matchplayVariant?: string | null;
             myEntryId?: string | null;
             caddieForEntryIds?: string[];
             witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
@@ -1041,6 +1050,11 @@ function MobileScoreEntryContent() {
         const myId = data.myEntryId ?? (meTrim || null);
         setMyEntryId(myId);
         setTournamentId(data.tournamentId ?? null);
+        setMatchplayVariant(
+          data.matchplayVariant != null
+            ? String(data.matchplayVariant)
+            : null
+        );
         setMatchPlayInfo(data.matchPlay ?? null);
         setCaddieForEntryIds(
           Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
@@ -1246,6 +1260,7 @@ function MobileScoreEntryContent() {
   /**
    * Link a resultados en vivo del torneo, filtrado a la categoría del
    * jugador identificado (o del primer jugador supervisado si es caddie).
+   * Incluye return_captura para regresar a la mini-app por Telegram.
    */
   const liveLeaderboardUrl = useMemo(() => {
     if (!tournamentId) return null;
@@ -1260,8 +1275,29 @@ function MobileScoreEntryContent() {
     const sp = new URLSearchParams();
     if (categoryId) sp.set("category_id", categoryId);
     sp.set("view", "live");
-    return `/torneos/${tournamentId}?${sp.toString()}`;
-  }, [tournamentId, viewerEntryId, caddieForEntryIds, categoryByEntry]);
+    let href =
+      matchplayVariant === "ryder"
+        ? `/torneos/${tournamentId}/ryder`
+        : `/torneos/${tournamentId}?${sp.toString()}`;
+    const capturaPath = groupId
+      ? buildCapturaMobileReturnPath({
+          groupId,
+          me: meFromUrl,
+          caddie: caddieFromUrl,
+        })
+      : null;
+    if (capturaPath) href = withCapturaReturn(href, capturaPath);
+    return href;
+  }, [
+    tournamentId,
+    matchplayVariant,
+    viewerEntryId,
+    caddieForEntryIds,
+    categoryByEntry,
+    groupId,
+    meFromUrl,
+    caddieFromUrl,
+  ]);
 
   function isHoleComplete(hole: HoleNumber) {
     // Match play: el hoyo se considera "completo" si todos los jugadores

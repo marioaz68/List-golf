@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { loadRyderPublic } from "@/lib/ryder/loadRyderPublic";
+import ReturnToCaptureBanner from "@/components/captura/ReturnToCaptureBanner";
 import RyderCups from "./RyderCups";
 
 export const revalidate = 30;
@@ -21,5 +22,10 @@ export default async function RyderPage({
   const data = await loadRyderPublic(db, id);
   if (!data) notFound();
 
-  return <RyderCups data={data} />;
+  return (
+    <>
+      <ReturnToCaptureBanner />
+      <RyderCups data={data} />
+    </>
+  );
 }

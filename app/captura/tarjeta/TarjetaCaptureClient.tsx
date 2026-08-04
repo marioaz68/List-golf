@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BackButton from "@/components/captura/BackButton";
 import BracketRoundBadge from "@/components/captura/BracketRoundBadge";
 import GpsChip from "@/components/captura/GpsChip";
+import {
+  buildCapturaMobileReturnPath,
+  withCapturaReturn,
+} from "@/components/captura/ReturnToCaptureBanner";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import {
   getScoreClass,
@@ -1032,29 +1036,39 @@ export default function TarjetaCaptureClient({
   const liveLeaderboardUrl = useMemo(() => {
     const tid = meta.tournamentId?.trim();
     if (!tid) return null;
+    let href: string;
     if (meta.matchplayVariant === "ryder") {
-      return `/torneos/${tid}/ryder`;
+      href = `/torneos/${tid}/ryder`;
+    } else {
+      let preferredEntryId: string | null = null;
+      if (meta.myEntryId) preferredEntryId = meta.myEntryId;
+      else if (meta.caddieForEntryIds.length > 0) {
+        preferredEntryId = meta.caddieForEntryIds[0] ?? null;
+      }
+      const targetPlayer = preferredEntryId
+        ? meta.players.find((p) => p.entryId === preferredEntryId) ?? null
+        : null;
+      const categoryId = targetPlayer?.categoryId ?? null;
+      const sp = new URLSearchParams();
+      if (categoryId) sp.set("category_id", categoryId);
+      sp.set("view", "live");
+      const qs = sp.toString();
+      href = `/torneos/${tid}${qs ? `?${qs}` : ""}`;
     }
-    let preferredEntryId: string | null = null;
-    if (meta.myEntryId) preferredEntryId = meta.myEntryId;
-    else if (meta.caddieForEntryIds.length > 0) {
-      preferredEntryId = meta.caddieForEntryIds[0] ?? null;
-    }
-    const targetPlayer = preferredEntryId
-      ? meta.players.find((p) => p.entryId === preferredEntryId) ?? null
-      : null;
-    const categoryId = targetPlayer?.categoryId ?? null;
-    const sp = new URLSearchParams();
-    if (categoryId) sp.set("category_id", categoryId);
-    sp.set("view", "live");
-    const qs = sp.toString();
-    return `/torneos/${tid}${qs ? `?${qs}` : ""}`;
+    const capturaPath = buildCapturaMobileReturnPath({
+      groupId: meta.groupId,
+      me: meta.myEntryId,
+      caddie: caddieIdParam,
+    });
+    return withCapturaReturn(href, capturaPath);
   }, [
     meta.tournamentId,
     meta.matchplayVariant,
     meta.myEntryId,
     meta.caddieForEntryIds,
     meta.players,
+    meta.groupId,
+    caddieIdParam,
   ]);
 
   // Cantidad de pendientes que ME tocan aprobar

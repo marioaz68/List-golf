@@ -10,6 +10,7 @@ import { buildLiveStrokeSnapshot } from "@/lib/matchplay/buildLiveStrokeSnapshot
 import AutoRefresh from "@/components/public/AutoRefresh";
 import type { TournamentSettings } from "@/types/tournament";
 import MatchesLiveGrid from "./MatchesLiveGrid";
+import ReturnToCaptureBanner from "@/components/captura/ReturnToCaptureBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -185,6 +186,7 @@ export default async function PublicMatchesLivePage(props: {
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
       <AutoRefresh intervalMs={10000} />
+      <ReturnToCaptureBanner className="-mx-3 mb-2 sm:-mx-5" />
       <MatchesLiveGrid
         tournamentId={tournamentId}
         tournamentName={tournament.name ?? "Torneo"}
