@@ -70,16 +70,27 @@ type ExtraRow = {
 };
 
 function AdvantageCell({ dots, rowH }: { dots: number; rowH: string }) {
+  // 1 golpe → 1 punto; 2 golpes (PH > 18 en SI) → 2 puntos.
+  // Siempre esquina superior derecha; centro vacío para anotar a mano.
+  const n = Math.min(Math.max(0, Math.trunc(Number(dots) || 0)), 2);
   return (
-    <td className="relative border border-black/40" style={{ height: rowH }}>
-      {dots > 0 ? (
-        <span className="pointer-events-none absolute right-[1.5px] top-[1.5px] flex gap-[1px]">
-          {Array.from({ length: Math.min(dots, 2) }).map((_, i) => (
-            <span
-              key={i}
-              className="inline-block h-[4px] w-[4px] rounded-full bg-black"
-            />
-          ))}
+    <td
+      className="relative border border-black/40 p-0 align-top"
+      style={{ height: rowH, minHeight: rowH, verticalAlign: "top" }}
+    >
+      {n > 0 ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute select-none"
+          style={{
+            top: 1,
+            right: 2,
+            fontSize: 9,
+            lineHeight: 1,
+            letterSpacing: n > 1 ? -0.5 : undefined,
+          }}
+        >
+          {"•".repeat(n)}
         </span>
       ) : null}
     </td>
@@ -246,8 +257,8 @@ function CardHeader({
         </span>
         {showAdvantageLegend ? (
           <span className="flex items-center gap-1">
-            <span className="inline-block h-[4px] w-[4px] rounded-full bg-black" />
-            = golpe de ventaja
+            <span style={{ fontSize: 9, lineHeight: 1 }}>•</span>
+            = 1 golpe de ventaja (esquina de la casilla; •• = 2)
           </span>
         ) : null}
       </div>
