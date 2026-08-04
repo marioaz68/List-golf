@@ -93,6 +93,13 @@ function MatchStatusBar({
   compact?: boolean;
 }) {
   const progression = matchPlay.progression ?? [];
+  const anyStrokeGiven = Object.values(matchPlay.strokesByEntry ?? {}).some(
+    (byHole) => Object.values(byHole ?? {}).some((n) => Number(n) > 0)
+  );
+  const allPhZero = Object.values(matchPlay.phByEntry ?? {}).every(
+    (ph) => ph == null || Number(ph) === 0
+  );
+
   return (
     <div
       className={[
@@ -119,6 +126,18 @@ function MatchStatusBar({
           {matchPlay.bottomLabel ?? "—"}
         </div>
       ) : null}
+      {!anyStrokeGiven ? (
+        <div className="mt-0.5 text-[9px] font-semibold text-slate-600">
+          {allPhZero
+            ? "Sin golpes de ventaja (scratch / PH 0). Nadie recibe en ningún hoyo."
+            : "Sin golpes de ventaja en este match (misma malla de hándicap)."}
+        </div>
+      ) : (
+        <div className="mt-0.5 text-[9px] text-amber-800">
+          ● = golpe de ventaja en ese hoyo (aparece en la tarjeta del jugador
+          que recibe).
+        </div>
+      )}
       {progression.length > 0 ? (
         <div className="mt-1 flex gap-0.5 overflow-x-auto pb-0.5">
           {progression.map((row: GroupMatchPlayProgressionRow) => {
@@ -1738,10 +1757,26 @@ function MobileScoreEntryContent() {
                   const vent = player.strokesByHole?.[currentHole] ?? 0;
                   const roleLabel =
                     player.ballRole === "baja"
-                      ? "Baja"
+                      ? "Bola baja"
                       : player.ballRole === "alta"
-                        ? "Alta"
+                        ? "Bola alta"
                         : null;
+                  const ph = player.playingHandicap;
+                  const scratch =
+                    ph != null && Number(ph) === 0 && vent === 0;
+                  const metaLine = (() => {
+                    if (scratch && roleLabel) {
+                      return `${roleLabel} · scratch`;
+                    }
+                    if (roleLabel || ph != null) {
+                      return `${roleLabel ?? ""}${
+                        ph != null
+                          ? `${roleLabel ? " · " : ""}PH ${ph}`
+                          : ""
+                      }`;
+                    }
+                    return null;
+                  })();
 
                   return (
                     <div
@@ -1772,12 +1807,9 @@ function MobileScoreEntryContent() {
                               </span>
                             ) : null}
                           </div>
-                          {roleLabel || player.playingHandicap != null ? (
+                          {metaLine ? (
                             <div className="text-[10px] font-semibold leading-tight text-slate-500">
-                              {roleLabel}
-                              {player.playingHandicap != null
-                                ? `${roleLabel ? " · " : ""}PH ${player.playingHandicap}`
-                                : ""}
+                              {metaLine}
                             </div>
                           ) : null}
                         </div>
