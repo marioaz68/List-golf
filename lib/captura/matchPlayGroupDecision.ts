@@ -287,7 +287,68 @@ export async function loadGroupMatchPlayStatus(
 
   const derived = await derivePairingGroupMatches(admin, tournamentId);
   const matchId = `derived-${roundId}-g${groupNo}`;
-  const match = derived.matches.find((m) => m.id === matchId);
+  let match = derived.matches.find((m) => m.id === matchId) ?? null;
+
+  // Miembros del grupo en orden de tarjeta (1..4).
+  // Si las parejas en matchplay_pair_teams están incompletas (falta B),
+  // rellenamos con estos ids para que la mini-app muestre ventajas y
+  // estado del match (caso real en Copa Ryder con 4 en la salida).
+  const { data: membersRaw } = await admin
+    .from("pairing_group_members")
+    .select("position, entry_id")
+    .eq("group_id", gid)
+    .order("position", { ascending: true });
+  const orderedEntryIds = ((membersRaw ?? []) as Array<{
+    position: number | null;
+    entry_id: string;
+  }>)
+    .map((m) => String(m.entry_id ?? "").trim())
+    .filter(Boolean);
+
+  if (orderedEntryIds.length >= 4) {
+    const [e1, e2, e3, e4] = orderedEntryIds;
+    const hasAll =
+      match?.top_a_entry_id &&
+      match?.top_b_entry_id &&
+      match?.bottom_a_entry_id &&
+      match?.bottom_b_entry_id;
+    if (!hasAll) {
+      match = {
+        id: matchId,
+        bracket_id: match?.bracket_id ?? `derived-${tournamentId}`,
+        round_no: match?.round_no ?? 1,
+        position_no: match?.position_no ?? groupNo,
+        top_pair_id: match?.top_pair_id ?? null,
+        bottom_pair_id: match?.bottom_pair_id ?? null,
+        winner_pair_id: match?.winner_pair_id ?? null,
+        status: "scheduled",
+        result_text: null,
+        round_id: roundId,
+        group_id: gid,
+        group_no: groupNo,
+        // Preferir lo que venía de teams; rellenar huecos por posición.
+        top_a_entry_id: match?.top_a_entry_id ?? e1!,
+        top_b_entry_id: match?.top_b_entry_id ?? e2!,
+        bottom_a_entry_id: match?.bottom_a_entry_id ?? e3!,
+        bottom_b_entry_id: match?.bottom_b_entry_id ?? e4!,
+      };
+      // Si se rellenó con solapamientos (mismo entry en 2 slots),
+      // usar el orden de la tarjeta de punta a punta.
+      const slots = [
+        match.top_a_entry_id,
+        match.top_b_entry_id,
+        match.bottom_a_entry_id,
+        match.bottom_b_entry_id,
+      ];
+      if (new Set(slots).size < 4) {
+        match.top_a_entry_id = e1!;
+        match.top_b_entry_id = e2!;
+        match.bottom_a_entry_id = e3!;
+        match.bottom_b_entry_id = e4!;
+      }
+    }
+  }
+
   if (
     !match ||
     !match.top_a_entry_id ||
