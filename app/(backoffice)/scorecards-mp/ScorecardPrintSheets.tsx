@@ -169,8 +169,8 @@ function HoleGrid({
           return (
             <tr key={row.label}>
               <td
-                className={`border border-black/40 px-1 font-semibold ${row.className ?? ""}`}
-                style={{ height: h }}
+                className={`border border-black/40 px-1 align-middle font-semibold ${row.className ?? ""}`}
+                style={{ height: h, minHeight: h }}
               >
                 {row.label}
               </td>
@@ -181,7 +181,7 @@ function HoleGrid({
                   rowH={h}
                 />
               ))}
-              <td className="border border-black/40" />
+              <td className="border border-black/40" style={{ height: h }} />
               {back.map((hole) => (
                 <AdvantageCell
                   key={hole}
@@ -189,8 +189,8 @@ function HoleGrid({
                   rowH={h}
                 />
               ))}
-              <td className="border border-black/40" />
-              <td className="border border-black/40" />
+              <td className="border border-black/40" style={{ height: h }} />
+              <td className="border border-black/40" style={{ height: h }} />
             </tr>
           );
         })}
@@ -298,6 +298,9 @@ export function MatchPlayScorecardSheet({
   }
 
   const isSingles = isRyder && card.scoringFormat === "singles";
+  // En Ryder la fila Match mide 12mm; el resto se compacta para no encimar el pie.
+  const baseRowH = isRyder ? "5mm" : "6.2mm";
+  const matchRowH = isRyder ? "12mm" : baseRowH;
   const scoreRows: ExtraRow[] = [];
   for (const p of card.topPlayers) {
     scoreRows.push({
@@ -320,7 +323,7 @@ export function MatchPlayScorecardSheet({
     scoreRows.push({
       label: "Match",
       className: "bg-amber-50 font-bold",
-      rowH: isRyder ? "12mm" : undefined,
+      rowH: matchRowH,
     });
   } else {
     scoreRows.push({ label: "Pts baja", className: "bg-cyan-50" });
@@ -328,7 +331,7 @@ export function MatchPlayScorecardSheet({
     scoreRows.push({
       label: "Match",
       className: "bg-amber-50 font-bold",
-      rowH: isRyder ? "12mm" : undefined,
+      rowH: matchRowH,
     });
   }
 
@@ -364,7 +367,11 @@ export function MatchPlayScorecardSheet({
         : "Pareja B";
 
   return (
-    <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
+    <article
+      className={`scorecard-half flex flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black ${
+        isRyder ? "h-[98mm]" : "h-[92mm]"
+      }`}
+    >
       <CardHeader
         meta={meta}
         subtitle={subtitle}
@@ -372,7 +379,7 @@ export function MatchPlayScorecardSheet({
         formatLegend={formatLegend}
         showAdvantageLegend={showAdvantageLegend}
       />
-      <div className="mt-1 grid grid-cols-2 gap-3">
+      <div className="mt-1 shrink-0 grid grid-cols-2 gap-3">
         <div>
           <div className="mb-0.5 text-[9px] font-bold uppercase text-cyan-800">
             {topSide} — {card.topLabel}
@@ -390,20 +397,23 @@ export function MatchPlayScorecardSheet({
           ))}
         </div>
       </div>
-      <div className="mt-1 min-h-0 flex-1">
+      {/* overflow-hidden: la fila Match alta no se pinta encima del pie */}
+      <div className="mt-1 min-h-0 flex-1 overflow-hidden">
         <HoleGrid
           parByHole={meta.parByHole}
           siByHole={meta.strokeIndexByHole}
           extraRows={scoreRows}
-          rowH="6.2mm"
+          rowH={baseRowH}
           holeOrder={holeOrder}
         />
       </div>
-      <footer className="mt-1 flex gap-4 border-t border-black/30 pt-1 text-[9px] font-semibold">
-        <span>Ganador: ☐ A ☐ B</span>
-        <span>Resultado: ____________</span>
-        <span>Firma A: __________</span>
-        <span>Firma B: __________</span>
+      <footer className="mt-1 shrink-0 border-t border-black/30 bg-white pt-1 text-[9px] font-semibold">
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+          <span>Ganador: ☐ A ☐ B</span>
+          <span>Resultado: ____________</span>
+          <span>Firma A: __________</span>
+          <span>Firma B: __________</span>
+        </div>
       </footer>
     </article>
   );
