@@ -98,6 +98,37 @@ function privateScoresFromPlayers(players: GroupCapturePlayer[]): ScoresByEntry 
   return map;
 }
 
+function StrokeDots({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute right-0 top-0 flex gap-px"
+      title={`${n} golpe${n === 1 ? "" : "s"} de ventaja`}
+    >
+      {Array.from({ length: Math.min(n, 2) }).map((_, i) => (
+        <span
+          key={i}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"
+        />
+      ))}
+    </span>
+  );
+}
+
+function matchLeadTint(
+  lead: "top" | "bottom" | "as" | undefined,
+  label: string
+): string {
+  if (lead === "as" || label === "AS") return "text-slate-700";
+  if (lead === "top") return "text-cyan-700 font-bold";
+  if (lead === "bottom") return "text-fuchsia-700 font-bold";
+  // Compat labels antiguos "T+N" / "B+N"
+  if (label.startsWith("T+")) return "text-cyan-700 font-bold";
+  if (label.startsWith("B+")) return "text-fuchsia-700 font-bold";
+  return "text-slate-800 font-semibold";
+}
+
 function PublicSection({
   title,
   holes,
@@ -116,6 +147,7 @@ function PublicSection({
   disabledHoles,
   lockedEntryIds,
   matchProgression,
+  matchLabels,
 }: {
   title: string;
   holes: HoleNumber[];
@@ -139,13 +171,18 @@ function PublicSection({
   disabledHoles?: Set<HoleNumber>;
   /** Jugadores con tarjeta cerrada — no permiten editar. */
   lockedEntryIds?: Set<string>;
-  /** Mapa hole_no → label "AS / T+1 / B+0.5". Si se proporciona,
-   *  añadimos una fila MATCH al final con el estado por hoyo. */
-  matchProgression?: Map<number, {
-    label: string;
-    top_cum: number;
-    bottom_cum: number;
-  }>;
+  /** Mapa hole_no → estado del match tras ese hoyo. */
+  matchProgression?: Map<
+    number,
+    {
+      label: string;
+      top_cum: number;
+      bottom_cum: number;
+      lead?: "top" | "bottom" | "as";
+    }
+  >;
+  /** Etiquetas de parejas para la fila MATCH. */
+  matchLabels?: { topShort?: string | null; bottomShort?: string | null };
 }) {
   const isHoleComplete = (hole: HoleNumber) =>
     players.length > 0 &&
@@ -238,7 +275,19 @@ function PublicSection({
                   ].join(" ")}
                 >
                   <td className="px-1 py-2 font-bold text-slate-900">
-                    {player.initials}
+                    <div>{player.initials}</div>
+                    {player.ballRole || player.playingHandicap != null ? (
+                      <div className="text-[8px] font-semibold leading-none text-slate-500">
+                        {player.ballRole === "baja"
+                          ? "Baja"
+                          : player.ballRole === "alta"
+                            ? "Alta"
+                            : ""}
+                        {player.playingHandicap != null
+                          ? `${player.ballRole ? " · " : ""}PH ${player.playingHandicap}`
+                          : ""}
+                      </div>
+                    ) : null}
                   </td>
                   {holes.map((hole) => {
                     const val = scores[hole];
@@ -256,8 +305,10 @@ function PublicSection({
                     const disabled =
                       (disabledHoles?.has(hole) ?? false) ||
                       (lockedEntryIds?.has(player.entryId) ?? false);
+                    const vent = player.strokesByHole?.[hole] ?? 0;
                     return (
-                      <td key={key} className="px-0 py-1 text-center">
+                      <td key={key} className="relative px-0 py-1 text-center">
+                        <StrokeDots n={vent} />
                         {isPickedUp ? (
                           <span
                             className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-[10px] font-extrabold text-amber-700"
@@ -273,12 +324,19 @@ function PublicSection({
                               if (disabled) return;
                               onCellTap(player.entryId, hole, "public");
                             }}
+                            title={
+                              vent > 0
+                                ? `Recibe ${vent} golpe${vent === 1 ? "" : "s"} de ventaja`
+                                : undefined
+                            }
                             className={[
                               "inline-flex h-6 w-6 items-center justify-center text-[10px] font-bold",
                               getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
                               isPending
                                 ? "bg-red-500 text-white"
-                                : "text-slate-900",
+                                : vent > 0
+                                  ? "bg-amber-50 text-slate-900"
+                                  : "text-slate-900",
                               isActive ? "ring-2 ring-sky-500 ring-offset-1" : "",
                               isSaving ? "opacity-60" : "",
                               disabled ? "cursor-not-allowed opacity-30" : "",
@@ -306,16 +364,25 @@ function PublicSection({
               );
             })}
 
-            {/* Fila MATCH: progresión del match hoyo por hoyo. Solo se
-                muestra si el grupo es match play (matchProgression
-                presente). Verde tenue como cabecera de pareja vs pareja. */}
+            {/* Fila MATCH: progresión del match hoyo por hoyo. */}
             {matchProgression && matchProgression.size > 0 ? (
               <tr className="border-t-2 border-emerald-400 bg-emerald-50">
                 <td
-                  className="px-1 py-1.5 text-[10px] font-bold tracking-wide text-emerald-900"
-                  title="Estado del match tras cada hoyo (puntos acumulados). AS = empate · T+N = top arriba · B+N = bottom arriba"
+                  className="px-1 py-1.5 text-[10px] font-bold leading-tight tracking-wide text-emerald-900"
+                  title="Estado del match tras cada hoyo. AS = empate; iniciales+N = esa pareja va arriba"
                 >
-                  MATCH
+                  <div>MATCH</div>
+                  {matchLabels?.topShort || matchLabels?.bottomShort ? (
+                    <div className="text-[8px] font-semibold text-emerald-800/80">
+                      <span className="text-cyan-700">
+                        {matchLabels.topShort ?? "A"}
+                      </span>
+                      <span className="text-slate-400">/</span>
+                      <span className="text-fuchsia-700">
+                        {matchLabels.bottomShort ?? "B"}
+                      </span>
+                    </div>
+                  ) : null}
                 </td>
                 {holes.map((hole) => {
                   const row = matchProgression.get(hole);
@@ -329,18 +396,12 @@ function PublicSection({
                       </td>
                     );
                   }
-                  const tint =
-                    row.label === "AS"
-                      ? "text-slate-700"
-                      : row.label.startsWith("T+")
-                        ? "text-cyan-700 font-bold"
-                        : "text-fuchsia-700 font-bold";
                   return (
                     <td
                       key={`mp-${title}-${hole}`}
                       className={[
                         "px-0 py-1.5 text-center text-[9px] leading-none",
-                        tint,
+                        matchLeadTint(row.lead, row.label),
                       ].join(" ")}
                       title={`${row.top_cum}–${row.bottom_cum} pts`}
                     >
@@ -544,23 +605,41 @@ export default function TarjetaCaptureClient({
 
   /**
    * Progresión del match hoyo por hoyo (match play). Mapa hole_no →
-   * { label, top_cum, bottom_cum } que se inyecta en cada PublicSection
-   * para dibujar la fila "MATCH" al pie de cada tramo.
+   * estado que se inyecta en cada PublicSection (fila MATCH).
    */
   const matchProgressionMap = useMemo(() => {
     const map = new Map<
       number,
-      { label: string; top_cum: number; bottom_cum: number }
+      {
+        label: string;
+        top_cum: number;
+        bottom_cum: number;
+        lead?: "top" | "bottom" | "as";
+      }
     >();
     for (const row of meta.matchPlay?.progression ?? []) {
       map.set(row.hole_no, {
         label: row.label,
         top_cum: row.top_cum,
         bottom_cum: row.bottom_cum,
+        lead: row.lead,
       });
     }
     return map.size > 0 ? map : undefined;
   }, [meta.matchPlay?.progression]);
+
+  const matchLabels = useMemo(
+    () =>
+      meta.matchPlay
+        ? {
+            topShort: meta.matchPlay.topShort,
+            bottomShort: meta.matchPlay.bottomShort,
+            topLabel: meta.matchPlay.topLabel,
+            bottomLabel: meta.matchPlay.bottomLabel,
+          }
+        : undefined,
+    [meta.matchPlay]
+  );
 
   const playoffCapture = useMemo(
     () =>
@@ -1188,7 +1267,40 @@ export default function TarjetaCaptureClient({
               <p className="mt-1 text-[10px] text-slate-500">
                 Toca un score para anotar. Si modificas un score con valor,
                 queda en rojo hasta que el testigo del jugador lo confirme.
+                {meta.matchPlay ? (
+                  <>
+                    {" "}
+                    <span className="font-semibold text-amber-700">
+                      ●
+                    </span>{" "}
+                    = golpe de ventaja en ese hoyo (bola baja vs baja / alta vs
+                    alta).
+                  </>
+                ) : null}
               </p>
+
+              {meta.matchPlay &&
+              (meta.matchPlay.topLabel || meta.matchPlay.bottomLabel) ? (
+                <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/80 px-2 py-1.5 text-[10px] text-emerald-950">
+                  <div className="font-bold">Parejas del match</div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <span>
+                      <span className="font-bold text-cyan-800">
+                        {meta.matchPlay.topShort ?? "A"}
+                      </span>
+                      {": "}
+                      {meta.matchPlay.topLabel ?? "—"}
+                    </span>
+                    <span>
+                      <span className="font-bold text-fuchsia-800">
+                        {meta.matchPlay.bottomShort ?? "B"}
+                      </span>
+                      {": "}
+                      {meta.matchPlay.bottomLabel ?? "—"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               {allCardsLocked ? (
                 <div className="mt-2 rounded-md border border-slate-400 bg-slate-100 px-2 py-1.5 text-center text-[11px] font-semibold text-slate-800">
@@ -1347,6 +1459,7 @@ export default function TarjetaCaptureClient({
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
+                  matchLabels={matchLabels}
                   lockedEntryIds={lockedEntryIds}
                 />
                 <PublicSection
@@ -1362,6 +1475,7 @@ export default function TarjetaCaptureClient({
                   witnessEntryIdForMe={witnessTargetForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
+                  matchLabels={matchLabels}
                   lockedEntryIds={lockedEntryIds}
                 />
 
@@ -1398,6 +1512,7 @@ export default function TarjetaCaptureClient({
                       rowAccent="text-amber-700"
                       disabledHoles={disabled}
                       matchProgression={matchProgressionMap}
+                      matchLabels={matchLabels}
                       lockedEntryIds={lockedEntryIds}
                     />
                   );
@@ -1440,6 +1555,72 @@ export default function TarjetaCaptureClient({
                 })}
               </>
             )}
+
+            {/* Barra inferior del match: estado y timeline hoyo por hoyo */}
+            {meta.matchPlay ? (
+              <div
+                className={[
+                  "rounded-lg border border-emerald-300 bg-emerald-50 p-2 shadow-sm",
+                  activeCell ? "mb-2" : "sticky bottom-0 z-40",
+                ].join(" ")}
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-1">
+                  <div className="text-[11px] font-bold text-emerald-950">
+                    Match
+                  </div>
+                  <div className="text-[11px] font-semibold text-emerald-900">
+                    {meta.matchPlay.resultText}
+                  </div>
+                </div>
+                {meta.matchPlay.topLabel || meta.matchPlay.bottomLabel ? (
+                  <div className="mt-0.5 text-[9px] text-emerald-900/80">
+                    <span className="font-bold text-cyan-800">
+                      {meta.matchPlay.topShort ?? "A"}
+                    </span>{" "}
+                    {meta.matchPlay.topLabel ?? "—"}
+                    {"  vs  "}
+                    <span className="font-bold text-fuchsia-800">
+                      {meta.matchPlay.bottomShort ?? "B"}
+                    </span>{" "}
+                    {meta.matchPlay.bottomLabel ?? "—"}
+                  </div>
+                ) : null}
+                {(meta.matchPlay.progression?.length ?? 0) > 0 ? (
+                  <div className="mt-1.5 flex gap-0.5 overflow-x-auto pb-0.5">
+                    {(meta.matchPlay.progression ?? []).map((row) => {
+                      const holeLabel =
+                        row.hole_no > 18
+                          ? `P${row.hole_no - 18}`
+                          : String(row.hole_no);
+                      return (
+                        <div
+                          key={`tl-${row.hole_no}`}
+                          className="flex min-w-[28px] flex-col items-center rounded bg-white/80 px-0.5 py-0.5"
+                          title={`${row.top_cum}–${row.bottom_cum} pts`}
+                        >
+                          <span className="text-[8px] font-semibold text-slate-500">
+                            {holeLabel}
+                          </span>
+                          <span
+                            className={[
+                              "text-[9px] leading-none",
+                              matchLeadTint(row.lead, row.label),
+                            ].join(" ")}
+                          >
+                            {row.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[9px] text-emerald-800/70">
+                    Aún no hay hoyos con 4 scores. El estado del match aparecerá
+                    aquí hoyo a hoyo.
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1449,14 +1630,27 @@ export default function TarjetaCaptureClient({
           <div className="mx-auto max-w-[390px]">
             <div className="mb-1 flex items-center justify-between text-xs">
               <span className="font-semibold text-slate-900">
-                {activePlayer.initials} · Hoyo {activeCell.hole} (Par{" "}
-                {PAR_BY_HOLE[activeCell.hole]})
+                {activePlayer.initials} · Hoyo{" "}
+                {activeCell.hole > 18
+                  ? `P${activeCell.hole - 18}`
+                  : activeCell.hole}{" "}
+                (Par {PAR_BY_HOLE[activeCell.hole]})
                 {activeCell.table === "private" ? " · Privada" : ""}
                 {activeCell.table === "public" &&
                 witnessTargetForMe === activeCell.entryId &&
                 pendingByEntry[activeCell.entryId]?.[activeCell.hole]
                   ? " · Aprobar"
                   : ""}
+                {(() => {
+                  const vent =
+                    activePlayer.strokesByHole?.[activeCell.hole] ?? 0;
+                  if (vent <= 0) return null;
+                  return (
+                    <span className="ml-1 font-bold text-amber-700">
+                      · {vent === 1 ? "1 ventaja" : `${vent} ventajas`}
+                    </span>
+                  );
+                })()}
               </span>
               <button
                 type="button"

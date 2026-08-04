@@ -6,34 +6,38 @@ import {
 } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import { findBracketMatchForPairs } from "@/lib/matchplay/consolationMatchPlay";
 import type { GroupMatchPlayProgressionRow } from "@/lib/captura/types";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
+import { pairLowHighStrokes } from "@/lib/matchplay/scoring/lowHigh";
+import {
+  strokeIndexForHole,
+  strokesReceivedOnHole,
+} from "@/lib/leaderboard/handicapStrokes";
+import {
+  effectivePhForMatchEntry,
+  type MatchEntryPhRow,
+} from "@/lib/matchplay/resolveEntryPhForMatch";
 
 export type GroupMatchPlayStatus = {
-  /** Hoyo en que la competencia de match quedó matemáticamente decidida
-   *  (1-18 normal; 19-27 si se decidió en desempate). null si AS al 18
-   *  con desempate aún en curso. */
   decidedAtHole: number | null;
-  /** Texto corto (ej. "6/4 · decidido en H16"). */
   resultText: string;
-  /** Hoyos que deben estar capturados para permitir firma. */
   holesRequired: number;
-  /** True si terminó vía desempate (decidedAtHole >= 19). */
   viaPlayoff?: boolean;
-  /** Posición del desempate donde se decidió (1-9), si aplica. */
   playoffHole?: number;
-  /** True si quedó AS al 18 y aún falta capturar el desempate. */
   needsPlayoff?: boolean;
-  /** Desempate en curso: hoyo (1-9) con captura incompleta. */
   playoffPendingHole?: number;
-  /** Progresión del match hoyo por hoyo (puntos acumulados + label). */
   progression?: GroupMatchPlayProgressionRow[];
-  /** Etiqueta corta de las parejas (top / bottom) para leyendas. */
   topLabel?: string | null;
   bottomLabel?: string | null;
-  /** `matchplay_matches.id` (cuadro oficial) si las parejas del grupo
-   *  coinciden con un match real publicado. null si el torneo todavía
-   *  no tiene cuadro publicado o el match no se encuentra. */
+  topShort?: string | null;
+  bottomShort?: string | null;
+  strokesByEntry?: Record<string, Partial<Record<number, number>>>;
+  phByEntry?: Record<string, number | null>;
+  ballRoleByEntry?: Record<string, "baja" | "alta">;
+  sideByEntry?: Record<string, "top" | "bottom">;
+  topEntryIds?: string[];
+  bottomEntryIds?: string[];
   matchplayMatchId?: string | null;
-  /** True si el match ya está marcado como `completed` en DB. */
   matchplayCompleted?: boolean;
 };
 
@@ -41,17 +45,44 @@ function formatPts(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
 }
 
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  if (parts.length === 1) return parts[0]!;
+  // Nombre + 1er apellido (sin segundo)
+  return `${parts[0]} ${parts[1]}`;
+}
+
+function initialsOf(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return ((parts[0]![0] ?? "") + (parts[1]![0] ?? "")).toUpperCase();
+  }
+  return (parts[0] ?? "—").slice(0, 2).toUpperCase();
+}
+
 /**
  * Etiqueta corta del estado del match tras un hoyo:
- *  - "AS" cuando los acumulados son iguales,
- *  - "T+N" / "B+N" indicando qué pareja va arriba (T=top, B=bottom)
- *    y por cuántos puntos. N puede ser decimal (0.5 cuando una sub-
- *    competencia del hoyo quedó halved).
+ *  - "AS" cuando empatados
+ *  - "A+N" / "B+N" con iniciales de cada pareja (A=top, B=bottom)
  */
-function buildProgressionLabel(top: number, bottom: number): string {
-  if (top === bottom) return "AS";
-  if (top > bottom) return `T+${formatPts(top - bottom)}`;
-  return `B+${formatPts(bottom - top)}`;
+function buildProgression(
+  top: number,
+  bottom: number,
+  topShort: string,
+  botShort: string
+): Pick<GroupMatchPlayProgressionRow, "label" | "lead"> {
+  if (top === bottom) return { label: "AS", lead: "as" };
+  if (top > bottom) {
+    return {
+      label: `${topShort}+${formatPts(top - bottom)}`,
+      lead: "top",
+    };
+  }
+  return {
+    label: `${botShort}+${formatPts(bottom - top)}`,
+    lead: "bottom",
+  };
 }
 
 function formatDecisionLabel(decision: DerivedMatchDecision): string {
@@ -64,8 +95,6 @@ function formatDecisionLabel(decision: DerivedMatchDecision): string {
     return `Desempate H${decision.playoff_hole} · ${lead} arriba`;
   }
 
-  // Cada hoyo otorga máximo 2 puntos en Bola Baja + Bola Alta, así que
-  // los puntos por jugar al cierre = hoyos restantes × 2.
   const pointsLeft = Math.max(0, 18 - decision.decided_at_hole) * 2;
   const tail = pointsLeft > 0 ? ` · ${pointsLeft} por jugar` : "";
   if (diffAbs === 0) {
@@ -74,9 +103,153 @@ function formatDecisionLabel(decision: DerivedMatchDecision): string {
   return `H${decision.decided_at_hole} · ${lead} arriba${tail}`;
 }
 
+function liveResultText(
+  topAcc: number,
+  botAcc: number,
+  holeNo: number,
+  topLabel: string,
+  botLabel: string
+): string {
+  if (topAcc === botAcc) {
+    return `Empatados · H${holeNo} (${formatPts(topAcc)}-${formatPts(botAcc)})`;
+  }
+  const lead = Math.abs(topAcc - botAcc);
+  const name = topAcc > botAcc ? topLabel : botLabel;
+  return `${name} · ${formatPts(lead)} arriba · H${holeNo}`;
+}
+
 /**
- * Si el grupo pertenece a un torneo match play (bola baja + alta) y el
- * partido ya quedó decidido antes del 18, devuelve el hoyo de cierre.
+ * Calcula golpes de ventaja por hoyo para los 4 jugadores del match
+ * (bola baja vs baja, alta vs alta), sin depender de scores capturados.
+ */
+async function computeStrokesForMatch(
+  admin: SupabaseClient,
+  tournamentId: string,
+  entryIds: [string, string, string, string]
+): Promise<{
+  strokesByEntry: Record<string, Partial<Record<number, number>>>;
+  phByEntry: Record<string, number | null>;
+  ballRoleByEntry: Record<string, "baja" | "alta">;
+  sideByEntry: Record<string, "top" | "bottom">;
+  names: Record<string, string>;
+}> {
+  const empty = {
+    strokesByEntry: {} as Record<string, Partial<Record<number, number>>>,
+    phByEntry: {} as Record<string, number | null>,
+    ballRoleByEntry: {} as Record<string, "baja" | "alta">,
+    sideByEntry: {} as Record<string, "top" | "bottom">,
+    names: {} as Record<string, string>,
+  };
+
+  const [layout, handicapCtx, entriesRes] = await Promise.all([
+    loadCourseLayoutForTournament(admin, tournamentId),
+    loadTournamentHandicapContext(admin, tournamentId),
+    admin
+      .from("tournament_entries")
+      .select(
+        "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, players(first_name, last_name, gender, birth_year, handicap_index, handicap_torneo)"
+      )
+      .in("id", entryIds),
+  ]);
+
+  const byId = new Map(
+    ((entriesRes.data ?? []) as Array<Record<string, unknown>>).map((e) => [
+      String(e.id),
+      e,
+    ])
+  );
+
+  const phList: number[] = [];
+  const names: Record<string, string> = {};
+
+  for (const eid of entryIds) {
+    const raw = byId.get(eid);
+    const p = raw?.players;
+    const player = (Array.isArray(p) ? p[0] : p) as {
+      first_name?: string | null;
+      last_name?: string | null;
+      gender?: string | null;
+      birth_year?: number | null;
+      handicap_index?: number | null;
+      handicap_torneo?: number | null;
+    } | null;
+
+    names[eid] = `${player?.first_name ?? ""} ${player?.last_name ?? ""}`.trim() || "—";
+
+    if (!raw) {
+      phList.push(0);
+      continue;
+    }
+    const row: MatchEntryPhRow = {
+      id: eid,
+      player_id: String(raw.player_id ?? ""),
+      category_id: (raw.category_id as string | null) ?? null,
+      handicap_index:
+        raw.handicap_index != null ? Number(raw.handicap_index) : null,
+      playing_handicap:
+        raw.playing_handicap != null ? Number(raw.playing_handicap) : null,
+      playing_handicap_override:
+        raw.playing_handicap_override != null
+          ? Number(raw.playing_handicap_override)
+          : null,
+      player: player ?? null,
+    };
+    const ph = effectivePhForMatchEntry(row, handicapCtx);
+    phList.push(ph != null && Number.isFinite(ph) ? Number(ph) : 0);
+  }
+
+  const phTuple = phList as [number, number, number, number];
+  const relative = pairLowHighStrokes(phTuple);
+
+  // Dentro de cada pareja: menor PH = baja.
+  const topALow = phTuple[0] <= phTuple[1];
+  const botALow = phTuple[2] <= phTuple[3];
+  const roles: Array<"baja" | "alta"> = [
+    topALow ? "baja" : "alta",
+    topALow ? "alta" : "baja",
+    botALow ? "baja" : "alta",
+    botALow ? "alta" : "baja",
+  ];
+  const sides: Array<"top" | "bottom"> = ["top", "top", "bottom", "bottom"];
+
+  const strokesByEntry: Record<string, Partial<Record<number, number>>> = {};
+  const phByEntry: Record<string, number | null> = {};
+  const ballRoleByEntry: Record<string, "baja" | "alta"> = {};
+  const sideByEntry: Record<string, "top" | "bottom"> = {};
+
+  entryIds.forEach((eid, i) => {
+    phByEntry[eid] = phList[i] ?? 0;
+    ballRoleByEntry[eid] = roles[i]!;
+    sideByEntry[eid] = sides[i]!;
+    const byHole: Partial<Record<number, number>> = {};
+    for (let hole = 1; hole <= 18; hole++) {
+      const si = strokeIndexForHole(hole, layout.strokeIndexByHole);
+      const n = strokesReceivedOnHole(relative[i]!, si);
+      if (n > 0) byHole[hole] = n;
+    }
+    // Desempate 19-27 = SI de 1-9
+    for (let hole = 19; hole <= 27; hole++) {
+      const src = hole - 18;
+      const si = strokeIndexForHole(src, layout.strokeIndexByHole);
+      const n = strokesReceivedOnHole(relative[i]!, si);
+      if (n > 0) byHole[hole] = n;
+    }
+    strokesByEntry[eid] = byHole;
+  });
+
+  return {
+    strokesByEntry,
+    phByEntry,
+    ballRoleByEntry,
+    sideByEntry,
+    names,
+  };
+}
+
+/**
+ * Si el grupo pertenece a un torneo match play (bola baja + alta),
+ * devuelve estado del partido + ventajas por hoyo + progresión.
+ * Aplica igual a Calcutta y Ryder (parejas).
  */
 export async function loadGroupMatchPlayStatus(
   admin: SupabaseClient,
@@ -125,12 +298,19 @@ export async function loadGroupMatchPlayStatus(
     return null;
   }
 
-  // Buscar match real en matchplay_matches para poder cerrarlo/avanzarlo.
+  const topEntryIds = [match.top_a_entry_id, match.top_b_entry_id];
+  const bottomEntryIds = [match.bottom_a_entry_id, match.bottom_b_entry_id];
+  const entryIds = [
+    match.top_a_entry_id,
+    match.top_b_entry_id,
+    match.bottom_a_entry_id,
+    match.bottom_b_entry_id,
+  ] as [string, string, string, string];
+
+  // Match real en cuadro (cierre / avance).
   let matchplayMatchId: string | null = null;
   let matchplayCompleted = false;
   if (match.top_pair_id && match.bottom_pair_id) {
-    // El cuadro principal explícitamente (no el de consolación, que también
-    // existe). findBracketMatchForPairs busca en ambos brackets.
     const { data: mainBracket } = await admin
       .from("matchplay_brackets")
       .select("id")
@@ -161,6 +341,46 @@ export async function loadGroupMatchPlayStatus(
     }
   }
 
+  // Ventajas + nombres (siempre; aunque aún no haya scores).
+  let strokePack: Awaited<ReturnType<typeof computeStrokesForMatch>>;
+  try {
+    strokePack = await computeStrokesForMatch(admin, tournamentId, entryIds);
+  } catch {
+    strokePack = {
+      strokesByEntry: {},
+      phByEntry: {},
+      ballRoleByEntry: {},
+      sideByEntry: {},
+      names: {},
+    };
+  }
+
+  const topNames = topEntryIds.map(
+    (id) => strokePack.names[id] ?? "—"
+  );
+  const botNames = bottomEntryIds.map(
+    (id) => strokePack.names[id] ?? "—"
+  );
+  const topLabel = topNames.map(shortName).join(" / ");
+  const bottomLabel = botNames.map(shortName).join(" / ");
+  const topShort = initialsOf(topNames[0] ?? "A");
+  const bottomShort = initialsOf(botNames[0] ?? "B");
+
+  const baseFields = {
+    topLabel,
+    bottomLabel,
+    topShort,
+    bottomShort,
+    strokesByEntry: strokePack.strokesByEntry,
+    phByEntry: strokePack.phByEntry,
+    ballRoleByEntry: strokePack.ballRoleByEntry,
+    sideByEntry: strokePack.sideByEntry,
+    topEntryIds,
+    bottomEntryIds,
+    matchplayMatchId,
+    matchplayCompleted,
+  };
+
   const { decisions, summaries, holes } = await deriveMatchHolesFromStrokes(
     admin,
     tournamentId,
@@ -169,10 +389,6 @@ export async function loadGroupMatchPlayStatus(
   const decision = decisions.get(matchId);
   const summary = summaries.get(matchId);
 
-  // ─── Construir progresión hoyo por hoyo ──────────────────────────────
-  // Sólo incluye hoyos del match (no `after_decision` extra que se sigan
-  // capturando como stroke play). Para cada hoyo: puntos acumulados +
-  // label "AS" / "T+N" / "B+N".
   const matchHoles = holes
     .filter((h) => h.match_id === matchId)
     .sort((a, b) => a.hole_no - b.hole_no);
@@ -180,8 +396,6 @@ export async function loadGroupMatchPlayStatus(
   let bottomAcc = 0;
   const progression: GroupMatchPlayProgressionRow[] = [];
   for (const h of matchHoles) {
-    // Si los puntos son 0/0 en un hoyo posterior al cierre, igual lo
-    // omitimos del display (no aporta a la lectura del match).
     if (
       decision?.decided_at_hole != null &&
       h.hole_no > decision.decided_at_hole &&
@@ -190,34 +404,35 @@ export async function loadGroupMatchPlayStatus(
     ) {
       continue;
     }
+    // Sólo hoyos con score real (o puntos no triviales / con captura)
+    if (h.top_points == null && h.bottom_points == null) continue;
+
     topAcc += Number(h.top_points ?? 0);
     bottomAcc += Number(h.bottom_points ?? 0);
+    const prog = buildProgression(
+      topAcc,
+      bottomAcc,
+      topShort,
+      bottomShort
+    );
     progression.push({
       hole_no: h.hole_no,
       top_cum: topAcc,
       bottom_cum: bottomAcc,
-      label: buildProgressionLabel(topAcc, bottomAcc),
+      label: prog.label,
+      lead: prog.lead,
     });
   }
-
-  // (DerivedMatchRow no incluye nombres de las parejas; el cliente las
-  //  rotula con los nombres de los jugadores del payload.)
-  const topLabel: string | null = null;
-  const bottomLabel: string | null = null;
 
   if (decision?.decided_at_hole) {
     return {
       decidedAtHole: decision.decided_at_hole,
       resultText: formatDecisionLabel(decision),
-      // Para firma: 18 si decidió antes; 18+playoff_hole si decidió en desempate.
       holesRequired: decision.decided_at_hole,
       viaPlayoff: decision.via_playoff,
       playoffHole: decision.playoff_hole,
       progression,
-      topLabel,
-      bottomLabel,
-      matchplayMatchId,
-      matchplayCompleted,
+      ...baseFields,
     };
   }
 
@@ -233,27 +448,33 @@ export async function loadGroupMatchPlayStatus(
       needsPlayoff: true,
       playoffPendingHole: pending,
       progression,
-      topLabel,
-      bottomLabel,
-      matchplayMatchId,
-      matchplayCompleted,
+      ...baseFields,
     };
   }
 
-  // Match aún en curso (sin decisión ni desempate). Igualmente devolvemos
-  // la progresión para que el cliente pueda dibujar la fila.
   if (progression.length > 0) {
+    const last = progression[progression.length - 1]!;
     return {
       decidedAtHole: null,
-      resultText: progression[progression.length - 1]!.label,
+      resultText: liveResultText(
+        last.top_cum,
+        last.bottom_cum,
+        last.hole_no,
+        topLabel,
+        bottomLabel
+      ),
       holesRequired: 18,
       progression,
-      topLabel,
-      bottomLabel,
-      matchplayMatchId,
-      matchplayCompleted,
+      ...baseFields,
     };
   }
 
-  return null;
+  // Sin scores: igual devolvemos ventajas + etiquetas para la mini app.
+  return {
+    decidedAtHole: null,
+    resultText: "Match aún sin puntos",
+    holesRequired: 18,
+    progression: [],
+    ...baseFields,
+  };
 }

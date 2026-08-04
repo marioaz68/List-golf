@@ -50,11 +50,36 @@ type ScoresByEntry = Record<string, HoleScores>;
 type PendingByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
 type PickedUpByEntry = Record<string, Partial<Record<HoleNumber, boolean>>>;
 
-/** Ventajas (stroke index) por hoyo — fallback si la API no lo trae
- *  todavía. Aquí no las pintamos (el backoffice las muestra solo como
- *  referencia visual), pero las dejamos disponibles para una extensión
- *  futura. */
-const SHOW_VENT_ROW = false;
+/** Ventajas por jugador/hoyo: puntos ámbar en cada celda cuando hay match play. */
+function StrokeDots({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute right-0 top-0 z-[1] flex gap-px"
+      title={`${n} golpe${n === 1 ? "" : "s"} de ventaja`}
+    >
+      {Array.from({ length: Math.min(n, 2) }).map((_, i) => (
+        <span
+          key={i}
+          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"
+        />
+      ))}
+    </span>
+  );
+}
+
+function matchLeadTint(
+  lead: "top" | "bottom" | "as" | undefined,
+  label: string
+): string {
+  if (lead === "as" || label === "AS") return "text-slate-700";
+  if (lead === "top") return "text-cyan-700 font-bold";
+  if (lead === "bottom") return "text-fuchsia-700 font-bold";
+  if (label.startsWith("T+")) return "text-cyan-700 font-bold";
+  if (label.startsWith("B+")) return "text-fuchsia-700 font-bold";
+  return "text-slate-800 font-semibold";
+}
 
 const scrollClass =
   "w-full min-w-0 overflow-x-auto overflow-y-visible overscroll-x-contain [-webkit-overflow-scrolling:touch]";
@@ -230,6 +255,7 @@ function ScoreCell({
   disabled,
   pickedUp,
   allowPickup,
+  strokeDots = 0,
 }: {
   entryId: string;
   hole: HoleNumber;
@@ -240,6 +266,8 @@ function ScoreCell({
   disabled: boolean;
   pickedUp?: boolean;
   allowPickup?: boolean;
+  /** Golpes de ventaja en este hoyo (punto ámbar). */
+  strokeDots?: number;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const serverDisplay = pickedUp ? "X" : value != null ? String(value) : "";
@@ -267,38 +295,50 @@ function ScoreCell({
       frame =
         "border-slate-800 bg-white shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(15_23_42)]";
     }
+  } else if (strokeDots > 0) {
+    frame = "border-amber-300 bg-amber-50/60";
   }
   const pendingClass =
     isPending && !pickedUp ? "bg-red-500 text-white border-red-700" : "";
   const savingClass = isSaving ? "opacity-60" : "";
 
   return (
-    <input
-      ref={inputRef}
-      data-score-cell="1"
-      data-entry-id={entryId}
-      data-hole={hole}
-      type="text"
-      inputMode={allowPickup ? "text" : "numeric"}
-      enterKeyHint="next"
-      autoComplete="off"
-      defaultValue={serverDisplay}
-      readOnly={disabled}
-      disabled={disabled}
-      title={
-        allowPickup
-          ? "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter. X: levantó."
-          : "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter."
-      }
-      onFocus={(e) => e.currentTarget.select()}
-      className={[
-        "mx-auto box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold text-gray-900 outline-none focus:ring-2 focus:ring-green-300",
-        frame,
-        pendingClass,
-        savingClass,
-        disabled ? "cursor-not-allowed opacity-40" : "",
-      ].join(" ")}
-    />
+    <div className="relative mx-auto inline-block">
+      <StrokeDots n={strokeDots} />
+      <input
+        ref={inputRef}
+        data-score-cell="1"
+        data-entry-id={entryId}
+        data-hole={hole}
+        type="text"
+        inputMode={allowPickup ? "text" : "numeric"}
+        enterKeyHint="next"
+        autoComplete="off"
+        defaultValue={serverDisplay}
+        readOnly={disabled}
+        disabled={disabled}
+        title={
+          [
+            allowPickup
+              ? "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter. X: levantó."
+              : "Score 1–15. Para 10–15 teclea dos dígitos. Hole-in-one: 1 + Enter.",
+            strokeDots > 0
+              ? `Recibe ${strokeDots} golpe${strokeDots === 1 ? "" : "s"} de ventaja.`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        }
+        onFocus={(e) => e.currentTarget.select()}
+        className={[
+          "box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold text-gray-900 outline-none focus:ring-2 focus:ring-green-300",
+          frame,
+          pendingClass,
+          savingClass,
+          disabled ? "cursor-not-allowed opacity-40" : "",
+        ].join(" ")}
+      />
+    </div>
   );
 }
 
@@ -349,6 +389,18 @@ function PlayerRow({
         <div className="truncate" title={player.name}>
           {shortName(player.name)}
         </div>
+        {player.ballRole || player.playingHandicap != null ? (
+          <div className="text-[8px] font-semibold leading-none text-slate-500">
+            {player.ballRole === "baja"
+              ? "Baja"
+              : player.ballRole === "alta"
+                ? "Alta"
+                : ""}
+            {player.playingHandicap != null
+              ? `${player.ballRole ? " · " : ""}PH ${player.playingHandicap}`
+              : ""}
+          </div>
+        ) : null}
       </td>
       {frontHoles.map((h) => (
         <td key={`f-${player.entryId}-${h}`} className={holeBodyCell}>
@@ -362,6 +414,7 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
+            strokeDots={player.strokesByHole?.[h] ?? 0}
           />
         </td>
       ))}
@@ -380,6 +433,7 @@ function PlayerRow({
             disabled={disabledHoles?.has(h) ?? false}
             pickedUp={Boolean(pickedUp?.[h])}
             allowPickup={allowPickup}
+            strokeDots={player.strokesByHole?.[h] ?? 0}
           />
         </td>
       ))}
@@ -417,25 +471,6 @@ function HoleTableHeader({
 
   return (
     <thead>
-      {SHOW_VENT_ROW ? (
-        <tr className="bg-white">
-          <th className={stickyLabelCell("bg-white")}>VENT</th>
-          {frontHoles.map((h) => (
-            <th key={`v-${h}`} className={holeMetaCell}>
-              {/* placeholder; las ventajas reales vienen del campo. */}
-              —
-            </th>
-          ))}
-          {isFullRound ? <th className={totalHeadCell} /> : null}
-          {backHoles.map((h) => (
-            <th key={`v-${h}`} className={holeMetaCell}>
-              —
-            </th>
-          ))}
-          {isFullRound ? <th className={totalHeadCell} /> : null}
-          <th className={totalHeadCell} />
-        </tr>
-      ) : null}
       <tr className="bg-gray-50">
         <th className={stickyLabelCell("bg-gray-50")}>HOYO</th>
         {frontHoles.map((h) => (
@@ -484,13 +519,22 @@ function MatchRow({
   holes,
   progressionMap,
   showInternalTotals,
+  topShort,
+  bottomShort,
 }: {
   holes: HoleNumber[];
   progressionMap: Map<
     number,
-    { label: string; top_cum: number; bottom_cum: number }
+    {
+      label: string;
+      top_cum: number;
+      bottom_cum: number;
+      lead?: "top" | "bottom" | "as";
+    }
   >;
   showInternalTotals: boolean;
+  topShort?: string | null;
+  bottomShort?: string | null;
 }) {
   const isFullRound =
     holes.length === 18 &&
@@ -509,16 +553,10 @@ function MatchRow({
         </td>
       );
     }
-    const tint =
-      row.label === "AS"
-        ? "text-slate-700"
-        : row.label.startsWith("T+")
-          ? "text-cyan-700 font-bold"
-          : "text-fuchsia-700 font-bold";
     return (
       <td
         key={`mp-${h}`}
-        className={`border-b border-gray-100 px-0 py-1 text-center text-[9px] leading-none ${tint}`}
+        className={`border-b border-gray-100 px-0 py-1 text-center text-[9px] leading-none ${matchLeadTint(row.lead, row.label)}`}
         title={`${row.top_cum}–${row.bottom_cum} pts`}
       >
         {row.label}
@@ -533,6 +571,13 @@ function MatchRow({
     <tr className="border-t-2 border-emerald-400 bg-emerald-50">
       <td className={stickyLabelCell("bg-emerald-50")}>
         <span className="font-bold text-emerald-900">MATCH</span>
+        {topShort || bottomShort ? (
+          <div className="text-[8px] font-semibold leading-none">
+            <span className="text-cyan-700">{topShort ?? "A"}</span>
+            <span className="text-slate-400">/</span>
+            <span className="text-fuchsia-700">{bottomShort ?? "B"}</span>
+          </div>
+        ) : null}
       </td>
       {frontHoles.map(cell)}
       {isFullRound && showInternalTotals ? (
@@ -987,6 +1032,9 @@ export default function GrupoCaptureClient({
             });
           } else if (ac?.attempted && !ac.closed && ac.error) {
             handleMatchAutoCloseError(ac.error);
+          } else if (meta.matchPlay) {
+            // Refrescar estado del match (progresión) sin esperar el poll.
+            void refreshGroupMeta();
           }
         }
       } catch {
@@ -997,9 +1045,11 @@ export default function GrupoCaptureClient({
     },
     [
       meta.groupId,
+      meta.matchPlay,
       onScoreSaved,
       handleMatchAutoClose,
       handleMatchAutoCloseError,
+      refreshGroupMeta,
     ]
   );
 
@@ -1136,13 +1186,19 @@ export default function GrupoCaptureClient({
   const progressionMap = useMemo(() => {
     const map = new Map<
       number,
-      { label: string; top_cum: number; bottom_cum: number }
+      {
+        label: string;
+        top_cum: number;
+        bottom_cum: number;
+        lead?: "top" | "bottom" | "as";
+      }
     >();
     for (const row of meta.matchPlay?.progression ?? []) {
       map.set(row.hole_no, {
         label: row.label,
         top_cum: row.top_cum,
         bottom_cum: row.bottom_cum,
+        lead: row.lead,
       });
     }
     return map;
@@ -1277,6 +1333,53 @@ export default function GrupoCaptureClient({
                 </span>
               ) : null}
             </div>
+            {meta.matchPlay.topLabel || meta.matchPlay.bottomLabel ? (
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+                <span>
+                  <span className="font-bold text-cyan-800">
+                    {meta.matchPlay.topShort ?? "A"}
+                  </span>
+                  {": "}
+                  {meta.matchPlay.topLabel}
+                </span>
+                <span>
+                  <span className="font-bold text-fuchsia-800">
+                    {meta.matchPlay.bottomShort ?? "B"}
+                  </span>
+                  {": "}
+                  {meta.matchPlay.bottomLabel}
+                </span>
+              </div>
+            ) : null}
+            {(meta.matchPlay.progression?.length ?? 0) > 0 ? (
+              <div className="mt-1.5 flex gap-0.5 overflow-x-auto pb-0.5">
+                {(meta.matchPlay.progression ?? []).map((row) => {
+                  const holeLabel =
+                    row.hole_no > 18
+                      ? `P${row.hole_no - 18}`
+                      : String(row.hole_no);
+                  return (
+                    <div
+                      key={`g-tl-${row.hole_no}`}
+                      className="flex min-w-[28px] flex-col items-center rounded bg-white/70 px-0.5 py-0.5"
+                      title={`${row.top_cum}–${row.bottom_cum} pts`}
+                    >
+                      <span className="text-[8px] font-semibold text-slate-500">
+                        {holeLabel}
+                      </span>
+                      <span
+                        className={[
+                          "text-[9px] leading-none",
+                          matchLeadTint(row.lead, row.label),
+                        ].join(" ")}
+                      >
+                        {row.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
 
             {/* CTA de cierre + avance al cuadro */}
             {meta.matchPlay.decidedAtHole != null &&
@@ -1368,6 +1471,8 @@ export default function GrupoCaptureClient({
                     holes={[...HOLES_FRONT, ...HOLES_BACK] as HoleNumber[]}
                     progressionMap={progressionMap}
                     showInternalTotals
+                    topShort={meta.matchPlay?.topShort}
+                    bottomShort={meta.matchPlay?.bottomShort}
                   />
                 ) : null}
               </tbody>
@@ -1382,6 +1487,9 @@ export default function GrupoCaptureClient({
                 {" · "}
                 <span className="font-semibold">X</span> = el jugador
                 levantó (perdió ese hoyo en match play).
+                {" · "}
+                <span className="font-semibold text-amber-600">●</span> = golpe
+                de ventaja (bola baja vs baja / alta vs alta).
               </>
             ) : null}
           </p>
@@ -1429,6 +1537,8 @@ export default function GrupoCaptureClient({
                       holes={HOLES_PLAYOFF}
                       progressionMap={progressionMap}
                       showInternalTotals={false}
+                      topShort={meta.matchPlay?.topShort}
+                      bottomShort={meta.matchPlay?.bottomShort}
                     />
                   ) : null}
                 </tbody>

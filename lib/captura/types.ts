@@ -73,6 +73,18 @@ export type GroupCapturePlayer = {
   signatures?: CardSignaturePayload;
   /** Tarjeta cerrada oficialmente (`scorecards.locked_at`). */
   lockedAt?: string | null;
+  /**
+   * Match play: golpes de ventaja recibidos por hoyo (0 omitido, 1 o 2).
+   * Precalculados con PH del match (bola baja vs baja / alta vs alta).
+   * Independiente del score capturado; el capturador ve quién recibe.
+   */
+  strokesByHole?: Partial<Record<HoleNumber, number>>;
+  /** PH de juego usado para el match (referencia en UI). */
+  playingHandicap?: number | null;
+  /** Rol de bola dentro de su pareja (low_high). */
+  ballRole?: "baja" | "alta" | null;
+  /** "top" | "bottom" pareja del match (para colorear MATCH). */
+  matchSide?: "top" | "bottom" | null;
 };
 
 export type WitnessAssignmentPayload = {
@@ -86,8 +98,10 @@ export type GroupMatchPlayProgressionRow = {
   hole_no: number;
   top_cum: number;
   bottom_cum: number;
-  /** Texto corto del estado tras el hoyo: "AS", "T+1", "B+0.5", etc. */
+  /** Texto corto del estado tras el hoyo: "AS", "A+1.5", "B+0.5", etc. */
   label: string;
+  /** Quién va arriba: top / bottom / empate. */
+  lead: "top" | "bottom" | "as";
 };
 
 /** Match play: estado de la competencia del grupo (decidida o necesita desempate). */
@@ -107,9 +121,26 @@ export type GroupMatchPlayCapture = {
   playoffPendingHole?: number;
   /** Progresión del match hoyo por hoyo (solo hoyos capturados). */
   progression?: GroupMatchPlayProgressionRow[];
-  /** Etiquetas opcionales de las parejas (para tooltip / leyenda). */
+  /** Etiquetas de las parejas (nombres cortos). */
   topLabel?: string | null;
   bottomLabel?: string | null;
+  /** Iniciales compactas para la fila MATCH (p. ej. "SC" / "CD"). */
+  topShort?: string | null;
+  bottomShort?: string | null;
+  /**
+   * Golpes de ventaja por entry y hoyo (precalculados).
+   * Clave: entryId → hole_no → golpes (1 o 2).
+   */
+  strokesByEntry?: Record<string, Partial<Record<number, number>>>;
+  /** PH por entry. */
+  phByEntry?: Record<string, number | null>;
+  /** Baja/alta por entry. */
+  ballRoleByEntry?: Record<string, "baja" | "alta">;
+  /** top/bottom pair por entry. */
+  sideByEntry?: Record<string, "top" | "bottom">;
+  /** entry_ids de cada pareja (orden: a, b). */
+  topEntryIds?: string[];
+  bottomEntryIds?: string[];
   /** `matchplay_matches.id` (cuadro oficial) si las parejas del grupo
    *  coinciden con un match real publicado. null si no hay cuadro. */
   matchplayMatchId?: string | null;

@@ -396,6 +396,34 @@ export async function loadGroupCapture(
     }
   }
 
+  // Match play (bola baja + alta): pegar PH / rol / ventajas en cada jugador
+  // para que la mini-app pinte puntos de ventaja en celdas sin un fetch extra.
+  if (matchPlay) {
+    const strokesByEntry = matchPlay.strokesByEntry ?? {};
+    const phByEntry = matchPlay.phByEntry ?? {};
+    const ballRoleByEntry = matchPlay.ballRoleByEntry ?? {};
+    const sideByEntry = matchPlay.sideByEntry ?? {};
+    for (const player of players) {
+      const byHole = strokesByEntry[player.entryId];
+      if (byHole) {
+        const strokesByHole: Partial<Record<HoleNumber, number>> = {};
+        for (const [k, v] of Object.entries(byHole)) {
+          const h = Number(k);
+          const n = Number(v);
+          if (h >= 1 && h <= 27 && n > 0) {
+            strokesByHole[h as HoleNumber] = n;
+          }
+        }
+        player.strokesByHole = strokesByHole;
+      }
+      if (player.entryId in phByEntry) {
+        player.playingHandicap = phByEntry[player.entryId] ?? null;
+      }
+      player.ballRole = ballRoleByEntry[player.entryId] ?? null;
+      player.matchSide = sideByEntry[player.entryId] ?? null;
+    }
+  }
+
   // Etiqueta de la etapa del cuadro (Octavos / Cuartos / Semifinal / Final /
   // Dieciseisavos). Se deriva de los pairings del torneo para que aparezca
   // aunque la tarjeta todavía no tenga scores capturados.
