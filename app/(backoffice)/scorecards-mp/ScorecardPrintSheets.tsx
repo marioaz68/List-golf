@@ -5,16 +5,26 @@ import type {
   PrintableStrokeCard,
 } from "@/lib/matchplay/loadPrintableMpScorecards";
 
-const HOLES = Array.from({ length: 18 }, (_, i) => i + 1);
+const DEFAULT_HOLES = Array.from({ length: 18 }, (_, i) => i + 1);
 
-function parOut(par: Record<number, number>) {
-  return HOLES.slice(0, 9).reduce((s, h) => s + (par[h] ?? 0), 0);
+/** Orden de juego a partir del hoyo de salida (p. ej. 10 → 10..18,1..9). */
+function holesInPlayOrder(startingHole: number | null | undefined): number[] {
+  const start =
+    typeof startingHole === "number" &&
+    Number.isFinite(startingHole) &&
+    startingHole >= 1 &&
+    startingHole <= 18
+      ? Math.floor(startingHole)
+      : 1;
+  if (start <= 1) return [...DEFAULT_HOLES];
+  const order: number[] = [];
+  for (let h = start; h <= 18; h++) order.push(h);
+  for (let h = 1; h < start; h++) order.push(h);
+  return order;
 }
-function parIn(par: Record<number, number>) {
-  return HOLES.slice(9).reduce((s, h) => s + (par[h] ?? 0), 0);
-}
-function parTot(par: Record<number, number>) {
-  return parOut(par) + parIn(par);
+
+function sumPar(par: Record<number, number>, holes: number[]) {
+  return holes.reduce((s, h) => s + (par[h] ?? 0), 0);
 }
 
 function GenderIcon({ g }: { g: "M" | "F" | "X" }) {
@@ -55,6 +65,8 @@ type ExtraRow = {
   className?: string;
   /** Golpes de ventaja por hoyo → punto en la esquina de la celda. */
   dotsByHole?: Record<number, number>;
+  /** Alto de fila (override del default del grid). */
+  rowH?: string;
 };
 
 function AdvantageCell({ dots, rowH }: { dots: number; rowH: string }) {
@@ -79,12 +91,19 @@ function HoleGrid({
   siByHole,
   extraRows,
   rowH,
+  holeOrder = DEFAULT_HOLES,
 }: {
   parByHole: Record<number, number>;
   siByHole: Record<number, number>;
   extraRows: ExtraRow[];
   rowH: string;
+  /** Orden de columnas (1–18 o 10–18,1–9). */
+  holeOrder?: number[];
 }) {
+  const holes = holeOrder.length === 18 ? holeOrder : DEFAULT_HOLES;
+  const front = holes.slice(0, 9);
+  const back = holes.slice(9);
+
   return (
     <table className="w-full border-collapse text-[9px]">
       <thead>
@@ -92,13 +111,13 @@ function HoleGrid({
           <th className="w-14 border border-black/40 bg-black/5 px-1 text-left">
             Hoyo
           </th>
-          {HOLES.slice(0, 9).map((h) => (
+          {front.map((h) => (
             <th key={h} className="border border-black/40 px-0.5 text-center">
               {h}
             </th>
           ))}
           <th className="border border-black/40 bg-black/5 px-0.5">OUT</th>
-          {HOLES.slice(9).map((h) => (
+          {back.map((h) => (
             <th key={h} className="border border-black/40 px-0.5 text-center">
               {h}
             </th>
@@ -108,35 +127,35 @@ function HoleGrid({
         </tr>
         <tr>
           <td className="border border-black/40 px-1 font-semibold">Par</td>
-          {HOLES.slice(0, 9).map((h) => (
+          {front.map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {parByHole[h] ?? "—"}
             </td>
           ))}
           <td className="border border-black/40 text-center font-semibold">
-            {parOut(parByHole)}
+            {sumPar(parByHole, front)}
           </td>
-          {HOLES.slice(9).map((h) => (
+          {back.map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {parByHole[h] ?? "—"}
             </td>
           ))}
           <td className="border border-black/40 text-center font-semibold">
-            {parIn(parByHole)}
+            {sumPar(parByHole, back)}
           </td>
           <td className="border border-black/40 text-center font-semibold">
-            {parTot(parByHole)}
+            {sumPar(parByHole, holes)}
           </td>
         </tr>
         <tr>
           <td className="border border-black/40 px-1 font-semibold">HCP</td>
-          {HOLES.slice(0, 9).map((h) => (
+          {front.map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {siByHole[h] ?? "—"}
             </td>
           ))}
           <td className="border border-black/40" />
-          {HOLES.slice(9).map((h) => (
+          {back.map((h) => (
             <td key={h} className="border border-black/40 text-center">
               {siByHole[h] ?? "—"}
             </td>
@@ -145,25 +164,36 @@ function HoleGrid({
         </tr>
       </thead>
       <tbody>
-        {extraRows.map((row) => (
-          <tr key={row.label}>
-            <td
-              className={`border border-black/40 px-1 font-semibold ${row.className ?? ""}`}
-              style={{ height: rowH }}
-            >
-              {row.label}
-            </td>
-            {HOLES.slice(0, 9).map((h) => (
-              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} rowH={rowH} />
-            ))}
-            <td className="border border-black/40" />
-            {HOLES.slice(9).map((h) => (
-              <AdvantageCell key={h} dots={row.dotsByHole?.[h] ?? 0} rowH={rowH} />
-            ))}
-            <td className="border border-black/40" />
-            <td className="border border-black/40" />
-          </tr>
-        ))}
+        {extraRows.map((row) => {
+          const h = row.rowH ?? rowH;
+          return (
+            <tr key={row.label}>
+              <td
+                className={`border border-black/40 px-1 font-semibold ${row.className ?? ""}`}
+                style={{ height: h }}
+              >
+                {row.label}
+              </td>
+              {front.map((hole) => (
+                <AdvantageCell
+                  key={hole}
+                  dots={row.dotsByHole?.[hole] ?? 0}
+                  rowH={h}
+                />
+              ))}
+              <td className="border border-black/40" />
+              {back.map((hole) => (
+                <AdvantageCell
+                  key={hole}
+                  dots={row.dotsByHole?.[hole] ?? 0}
+                  rowH={h}
+                />
+              ))}
+              <td className="border border-black/40" />
+              <td className="border border-black/40" />
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -174,11 +204,14 @@ function CardHeader({
   subtitle,
   groupLine,
   showAdvantageLegend = true,
+  formatLegend,
 }: {
   meta: PrintableScorecardsBundle;
   subtitle: string;
   groupLine: string;
   showAdvantageLegend?: boolean;
+  /** Si se pasa, reemplaza la leyenda de formato (p. ej. individuales Ryder). */
+  formatLegend?: string;
 }) {
   return (
     <header className="border-b border-black/40 pb-1">
@@ -208,8 +241,8 @@ function CardHeader({
       </div>
       <div className="mt-0.5 flex items-center justify-between text-[8px] text-black/70">
         <span>
-          {meta.pairFormatLabel} · {meta.allowancePct}% HI · 2 pts/hoyo (baja vs
-          baja, alta vs alta)
+          {formatLegend ??
+            `${meta.pairFormatLabel} · ${meta.allowancePct}% HI · 2 pts/hoyo (baja vs baja, alta vs alta)`}
         </span>
         {showAdvantageLegend ? (
           <span className="flex items-center gap-1">
@@ -229,52 +262,120 @@ export function MatchPlayScorecardSheet({
   card: PrintableMatchPlayCard;
   meta: PrintableScorecardsBundle;
 }) {
-  const kindLabel =
-    card.kind === "consolation_mp"
-      ? "Consolación Match Play"
-      : card.kind === "third_place"
-        ? "Match por 3er / 4to Lugar"
-        : "Cuadro principal";
-  const subtitle =
-    card.kind === "third_place"
-      ? `${kindLabel} · ${card.roundLabel}`
-      : `${kindLabel} · ${card.roundLabel} · G${card.groupNo ?? card.positionNo}`;
-  const groupLine =
-    card.kind === "third_place"
-      ? card.teeTime
-        ? `Salida ${card.teeTime}`
-        : "Salida por definir"
-      : [
-          card.teeTime ? `Salida ${card.teeTime}` : null,
-          `Match #${card.positionNo}`,
-        ]
-          .filter(Boolean)
-          .join(" · ");
+  const isRyder = meta.matchplayVariant === "ryder";
 
+  // Calcutta: etiquetas de ronda (Dieciseisavos, Octavos…) intactas.
+  // Ryder: "Parejas · 1a · G3" / "Salida HH:MM" (sin Match # del cuadro).
+  let subtitle: string;
+  let groupLine: string;
+  if (isRyder && card.ryderHeaderLine) {
+    subtitle = card.ryderHeaderLine;
+    groupLine = card.teeTime
+      ? `Salida ${card.teeTime}`
+      : "Salida por definir";
+  } else {
+    const kindLabel =
+      card.kind === "consolation_mp"
+        ? "Consolación Match Play"
+        : card.kind === "third_place"
+          ? "Match por 3er / 4to Lugar"
+          : "Cuadro principal";
+    subtitle =
+      card.kind === "third_place"
+        ? `${kindLabel} · ${card.roundLabel}`
+        : `${kindLabel} · ${card.roundLabel} · G${card.groupNo ?? card.positionNo}`;
+    groupLine =
+      card.kind === "third_place"
+        ? card.teeTime
+          ? `Salida ${card.teeTime}`
+          : "Salida por definir"
+        : [
+            card.teeTime ? `Salida ${card.teeTime}` : null,
+            `Match #${card.positionNo}`,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+  }
+
+  const isSingles = isRyder && card.scoringFormat === "singles";
   const scoreRows: ExtraRow[] = [];
   for (const p of card.topPlayers) {
     scoreRows.push({
-      label: `A ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+      label: isSingles
+        ? `A ${p.name.split(" ")[0]}`
+        : `A ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
       dotsByHole: p.strokesByHole,
     });
   }
   for (const p of card.bottomPlayers) {
     scoreRows.push({
-      label: `B ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+      label: isSingles
+        ? `B ${p.name.split(" ")[0]}`
+        : `B ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
       dotsByHole: p.strokesByHole,
     });
   }
-  scoreRows.push({ label: "Pts baja", className: "bg-cyan-50" });
-  scoreRows.push({ label: "Pts alta", className: "bg-violet-50" });
-  scoreRows.push({ label: "Match", className: "bg-amber-50 font-bold" });
+  if (isSingles) {
+    scoreRows.push({ label: "Pts hoyo", className: "bg-cyan-50" });
+    scoreRows.push({
+      label: "Match",
+      className: "bg-amber-50 font-bold",
+      rowH: isRyder ? "12mm" : undefined,
+    });
+  } else {
+    scoreRows.push({ label: "Pts baja", className: "bg-cyan-50" });
+    scoreRows.push({ label: "Pts alta", className: "bg-violet-50" });
+    scoreRows.push({
+      label: "Match",
+      className: "bg-amber-50 font-bold",
+      rowH: isRyder ? "12mm" : undefined,
+    });
+  }
+
+  const handicapBit = isRyder
+    ? (card.ryderHandicapLabel ?? "ventaja según sesión")
+    : `${meta.allowancePct}% HI`;
+
+  const formatLegend = isRyder
+    ? isSingles
+      ? `Individual · ${handicapBit} · 1 pt/hoyo`
+      : `${meta.pairFormatLabel} · ${handicapBit} · 2 pts/hoyo (baja vs baja, alta vs alta)`
+    : undefined;
+
+  const showAdvantageLegend = !(
+    isRyder && card.ryderHandicapLabel === "scratch"
+  );
+
+  const holeOrder = isRyder
+    ? holesInPlayOrder(card.startingHole)
+    : DEFAULT_HOLES;
+
+  const topSide =
+    isRyder && card.topSideLabel
+      ? card.topSideLabel
+      : isSingles
+        ? "Jugador A"
+        : "Pareja A";
+  const bottomSide =
+    isRyder && card.bottomSideLabel
+      ? card.bottomSideLabel
+      : isSingles
+        ? "Jugador B"
+        : "Pareja B";
 
   return (
     <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
-      <CardHeader meta={meta} subtitle={subtitle} groupLine={groupLine} />
+      <CardHeader
+        meta={meta}
+        subtitle={subtitle}
+        groupLine={groupLine}
+        formatLegend={formatLegend}
+        showAdvantageLegend={showAdvantageLegend}
+      />
       <div className="mt-1 grid grid-cols-2 gap-3">
         <div>
           <div className="mb-0.5 text-[9px] font-bold uppercase text-cyan-800">
-            Pareja A — {card.topLabel}
+            {topSide} — {card.topLabel}
           </div>
           {card.topPlayers.map((p, i) => (
             <PlayerLine key={i} p={p} />
@@ -282,7 +383,7 @@ export function MatchPlayScorecardSheet({
         </div>
         <div>
           <div className="mb-0.5 text-[9px] font-bold uppercase text-violet-800">
-            Pareja B — {card.bottomLabel}
+            {bottomSide} — {card.bottomLabel}
           </div>
           {card.bottomPlayers.map((p, i) => (
             <PlayerLine key={i} p={p} />
@@ -295,6 +396,7 @@ export function MatchPlayScorecardSheet({
           siByHole={meta.strokeIndexByHole}
           extraRows={scoreRows}
           rowH="6.2mm"
+          holeOrder={holeOrder}
         />
       </div>
       <footer className="mt-1 flex gap-4 border-t border-black/30 pt-1 text-[9px] font-semibold">
@@ -376,7 +478,7 @@ export function ScorecardPrintPages({
       {pages.map((pair, pi) => (
         <div
           key={pi}
-          className="print-page mx-auto flex w-full max-w-[287mm] flex-col gap-3 bg-white p-2 print:break-after-page"
+          className="print-page mx-auto flex w-full max-w-[267mm] flex-col gap-3 bg-white p-2 print:break-after-page"
         >
           {pair.map((item) =>
             item.type === "mp" ? (
@@ -398,7 +500,7 @@ export function ScorecardPrintPages({
       <style jsx global>{`
         @media print {
           @page {
-            size: A4 landscape;
+            size: letter landscape;
             margin: 6mm;
           }
           body * {
