@@ -69,25 +69,50 @@ type ExtraRow = {
   rowH?: string;
 };
 
-function AdvantageCell({ dots, rowH }: { dots: number; rowH: string }) {
+function AdvantageCell({
+  dots,
+  rowH,
+  isPlayerScoreRow,
+}: {
+  dots: number;
+  rowH: string;
+  /** Fila de jugador: casilla compacta, punto en esquina; otras filas = altura de renglón. */
+  isPlayerScoreRow?: boolean;
+}) {
   // 1 golpe → 1 punto; 2 golpes (PH > 18 en SI) → 2 puntos.
-  // Siempre esquina superior derecha; centro vacío para anotar a mano.
+  // Esquina superior derecha, bien pegados al borde (centro libre para anotar).
   const n = Math.min(Math.max(0, Math.trunc(Number(dots) || 0)), 2);
+  if (!isPlayerScoreRow) {
+    return (
+      <td
+        className="border border-black/40"
+        style={{ height: rowH, minHeight: rowH }}
+      />
+    );
+  }
   return (
     <td
-      className="relative border border-black/40 p-0 align-top"
-      style={{ height: rowH, minHeight: rowH, verticalAlign: "top" }}
+      className="relative border border-black/40 align-top"
+      style={{
+        position: "relative",
+        height: "16px",
+        minHeight: "16px",
+        padding: "1px 3px",
+        overflow: "visible",
+        verticalAlign: "top",
+      }}
     >
       {n > 0 ? (
         <span
           aria-hidden
           className="pointer-events-none absolute select-none"
           style={{
-            top: 1,
-            right: 2,
-            fontSize: 9,
+            position: "absolute",
+            top: -1,
+            right: 0,
+            fontSize: 8,
             lineHeight: 1,
-            letterSpacing: n > 1 ? -0.5 : undefined,
+            letterSpacing: -1,
           }}
         >
           {"•".repeat(n)}
@@ -177,11 +202,19 @@ function HoleGrid({
       <tbody>
         {extraRows.map((row) => {
           const h = row.rowH ?? rowH;
+          const isPlayerScoreRow = Boolean(row.dotsByHole);
+          const cellPad = isPlayerScoreRow
+            ? { padding: "1px 3px" as const }
+            : undefined;
           return (
             <tr key={row.label}>
               <td
                 className={`border border-black/40 px-1 align-middle font-semibold ${row.className ?? ""}`}
-                style={{ height: h, minHeight: h }}
+                style={{
+                  height: isPlayerScoreRow ? "16px" : h,
+                  minHeight: isPlayerScoreRow ? "16px" : h,
+                  ...cellPad,
+                }}
               >
                 {row.label}
               </td>
@@ -190,18 +223,38 @@ function HoleGrid({
                   key={hole}
                   dots={row.dotsByHole?.[hole] ?? 0}
                   rowH={h}
+                  isPlayerScoreRow={isPlayerScoreRow}
                 />
               ))}
-              <td className="border border-black/40" style={{ height: h }} />
+              <td
+                className="border border-black/40"
+                style={{
+                  height: isPlayerScoreRow ? "16px" : h,
+                  ...cellPad,
+                }}
+              />
               {back.map((hole) => (
                 <AdvantageCell
                   key={hole}
                   dots={row.dotsByHole?.[hole] ?? 0}
                   rowH={h}
+                  isPlayerScoreRow={isPlayerScoreRow}
                 />
               ))}
-              <td className="border border-black/40" style={{ height: h }} />
-              <td className="border border-black/40" style={{ height: h }} />
+              <td
+                className="border border-black/40"
+                style={{
+                  height: isPlayerScoreRow ? "16px" : h,
+                  ...cellPad,
+                }}
+              />
+              <td
+                className="border border-black/40"
+                style={{
+                  height: isPlayerScoreRow ? "16px" : h,
+                  ...cellPad,
+                }}
+              />
             </tr>
           );
         })}
@@ -257,8 +310,10 @@ function CardHeader({
         </span>
         {showAdvantageLegend ? (
           <span className="flex items-center gap-1">
-            <span style={{ fontSize: 9, lineHeight: 1 }}>•</span>
-            = 1 golpe de ventaja (esquina de la casilla; •• = 2)
+            <span style={{ fontSize: 8, lineHeight: 1, letterSpacing: -1 }}>
+              •
+            </span>
+            = 1 golpe de ventaja (esquina casilla; •• = 2)
           </span>
         ) : null}
       </div>
