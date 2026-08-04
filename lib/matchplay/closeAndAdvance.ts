@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
-import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
+import {
+  advanceWinnerInBracket,
+  isRyderCupMatch,
+  isRyderCupTournament,
+} from "@/lib/matchplay/advanceWinner";
 import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundGroup";
 import { notifyNextRoundGroupCreated } from "@/lib/matchplay/notifyNextRoundGroup";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
@@ -290,13 +294,26 @@ export async function closeMatchAndAdvanceForGroup(
   let nextTeeTime: string | null = null;
   let consolationNote = "";
 
+  // Copa Ryder: no hay avance de cuadro / consolación / 3er lugar.
+  const ryderMatch = await isRyderCupMatch(admin, matchplayMatchId);
+  const ryderTournament = await isRyderCupTournament(admin, tournamentId);
+
   // 8) Avanzar al ganador.
   //  - Cuadro principal: advanceWinnerInBracket (crea salida de la ronda
   //    siguiente con group_no = position_no).
   //  - Cuadro de consolación: advanceConsolationWinner (final de consolación
   //    con group_no desplazado tras el cuadro principal).
+  //  - Ryder: skip total (cada match aporta puntos a la copa).
   let adv: { advanced: boolean; next_match_id: string | null; message: string };
-  if (isMainBracketMatch) {
+
+  if (ryderMatch || ryderTournament) {
+    adv = {
+      advanced: false,
+      next_match_id: null,
+      message:
+        "Copa Ryder: el partido no avanza de ronda (aporta puntos a la copa).",
+    };
+  } else if (isMainBracketMatch) {
     adv = await advanceWinnerInBracket(admin, {
       match_id: matchplayMatchId,
       winner_pair_id: winnerPairId,
@@ -336,7 +353,7 @@ export async function closeMatchAndAdvanceForGroup(
 
   // Perdedores de la ronda configurada (ej. R3 cuartos) → consolación MP en
   // la ronda siguiente (G3–G4 en R4, después de semis G1–G2 del cuadro principal).
-  if (isMainBracketMatch && winnerPairId) {
+  if (!ryderMatch && !ryderTournament && isMainBracketMatch && winnerPairId) {
     const loserPairId =
       winnerPairId === topPairId ? bottomPairId : topPairId;
     const mainSize = await getMainBracketSize(admin, tournamentId);

@@ -5,6 +5,7 @@ import {
   getMainBracketSize,
 } from "@/lib/matchplay/consolationMatchPlay";
 import { maybeCreateNextRoundGroup } from "@/lib/matchplay/maybeCreateNextRoundGroup";
+import { isRyderCupTournament } from "@/lib/matchplay/advanceWinner";
 
 /** Partido por 3er/4to lugar en la ronda final del cuadro principal. */
 export const THIRD_PLACE_POSITION_NO = 2;
@@ -125,6 +126,16 @@ export async function routeLoserToThirdPlace(
     mainBracketSize: number;
   }
 ): Promise<RouteThirdPlaceLoserResult> {
+  if (await isRyderCupTournament(admin, params.tournamentId)) {
+    return {
+      routed: false,
+      thirdPlaceMatchId: null,
+      groupCreated: false,
+      groupNo: null,
+      message: "Copa Ryder: no aplica 3er/4to lugar.",
+    };
+  }
+
   const roundCount = roundCountForBracketSize(params.mainBracketSize);
   if (!isSemifinalRound(params.closedRoundNo, roundCount)) {
     return {
@@ -369,6 +380,14 @@ export async function syncThirdPlaceMatchFromSemis(
   admin: SupabaseClient,
   tournamentId: string
 ): Promise<{ synced: boolean; message: string }> {
+  // Copa Ryder: no hay 3er lugar ni semis de cuadro.
+  if (await isRyderCupTournament(admin, tournamentId)) {
+    return {
+      synced: false,
+      message: "Copa Ryder: no aplica match por 3er/4to lugar.",
+    };
+  }
+
   const mainBracketId = await getMainBracketId(admin, tournamentId);
   if (!mainBracketId) {
     return { synced: false, message: "Sin cuadro principal." };

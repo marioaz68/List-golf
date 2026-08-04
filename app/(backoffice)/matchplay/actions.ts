@@ -1288,19 +1288,37 @@ export async function saveLowHighMatchScores(formData: FormData) {
         ? matchUpdate.winner_pair_id
         : null;
 
+    // Solo cuadro de eliminación. Ryder (session_id) no avanza de ronda.
     if (finalize && winnerId && matchUpdate.status === "completed") {
-      const { advanceWinnerInBracket } = await import(
-        "@/lib/matchplay/advanceWinner"
-      );
-      const adv = await advanceWinnerInBracket(admin, {
-        match_id,
-        winner_pair_id: winnerId,
-      });
-      advanceNote = adv.advanced ? ` ${adv.message}` : "";
-      if (adv.next_group?.created || adv.next_group?.updated) {
-        revalidatePath("/tee-sheet");
-        revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
-        revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+      const { data: matchSessionRow } = await admin
+        .from("matchplay_matches")
+        .select("session_id")
+        .eq("id", match_id)
+        .maybeSingle();
+      const sessionId =
+        matchSessionRow &&
+        typeof (matchSessionRow as { session_id?: unknown }).session_id ===
+          "string"
+          ? String(
+              (matchSessionRow as { session_id: string }).session_id
+            ).trim()
+          : "";
+
+      // Si tiene session_id (Ryder), no se llama advanceWinnerInBracket.
+      if (!sessionId) {
+        const { advanceWinnerInBracket } = await import(
+          "@/lib/matchplay/advanceWinner"
+        );
+        const adv = await advanceWinnerInBracket(admin, {
+          match_id,
+          winner_pair_id: winnerId,
+        });
+        advanceNote = adv.advanced ? ` ${adv.message}` : "";
+        if (adv.next_group?.created || adv.next_group?.updated) {
+          revalidatePath("/tee-sheet");
+          revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+          revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+        }
       }
     }
 
@@ -1476,21 +1494,39 @@ export async function saveLowHighMatchScores(formData: FormData) {
       ? matchUpdate.winner_pair_id
       : null;
 
+  // Solo cuadro de eliminación. Ryder (session_id) no avanza de ronda.
   if (finalize && winnerId && matchUpdate.status === "completed") {
-    const { advanceWinnerInBracket } = await import(
-      "@/lib/matchplay/advanceWinner"
-    );
-    const adv = await advanceWinnerInBracket(admin, {
-      match_id,
-      winner_pair_id: winnerId,
-    });
-    advanceNote = adv.advanced ? ` ${adv.message}` : "";
-    // Si se generó la salida de la siguiente ronda, refresca los paneles
-    // de tee-sheet / matches-vivo / cuadro para que aparezca al instante.
-    if (adv.next_group?.created || adv.next_group?.updated) {
-      revalidatePath("/tee-sheet");
-      revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
-      revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    const { data: matchSessionRow } = await admin
+      .from("matchplay_matches")
+      .select("session_id")
+      .eq("id", match_id)
+      .maybeSingle();
+    const sessionId =
+      matchSessionRow &&
+      typeof (matchSessionRow as { session_id?: unknown }).session_id ===
+        "string"
+        ? String(
+            (matchSessionRow as { session_id: string }).session_id
+          ).trim()
+        : "";
+
+    // Si tiene session_id (Ryder), no se llama advanceWinnerInBracket.
+    if (!sessionId) {
+      const { advanceWinnerInBracket } = await import(
+        "@/lib/matchplay/advanceWinner"
+      );
+      const adv = await advanceWinnerInBracket(admin, {
+        match_id,
+        winner_pair_id: winnerId,
+      });
+      advanceNote = adv.advanced ? ` ${adv.message}` : "";
+      // Si se generó la salida de la siguiente ronda, refresca los paneles
+      // de tee-sheet / matches-vivo / cuadro para que aparezca al instante.
+      if (adv.next_group?.created || adv.next_group?.updated) {
+        revalidatePath("/tee-sheet");
+        revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+        revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+      }
     }
   }
 

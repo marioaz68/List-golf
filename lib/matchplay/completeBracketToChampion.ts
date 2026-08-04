@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
+import {
+  advanceWinnerInBracket,
+  isRyderCupTournament,
+} from "@/lib/matchplay/advanceWinner";
 
 export type CompleteBracketResult =
   | {
@@ -26,6 +29,13 @@ export async function completeBracketToChampion(
   tournamentId: string,
   bracketId: string
 ): Promise<CompleteBracketResult> {
+  if (await isRyderCupTournament(admin, tournamentId)) {
+    return {
+      ok: false,
+      error: "Copa Ryder: no hay cuadro de eliminación ni avance de ronda.",
+    };
+  }
+
   const seedByPair = new Map<string, number>();
   const { data: pairs } = await admin
     .from("matchplay_pair_teams")

@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { repairMatchplayFromR1 } from "@/lib/matchplay/repairMatchplayFromR1";
 import { completeBracketToChampion } from "@/lib/matchplay/completeBracketToChampion";
-import { advanceWinnerInBracket } from "@/lib/matchplay/advanceWinner";
+import {
+  advanceWinnerInBracket,
+  isRyderCupTournament,
+} from "@/lib/matchplay/advanceWinner";
 
 export type RunTestCycleResult =
   | {
@@ -22,6 +25,13 @@ export async function runMatchplayTestCycle(
   admin: SupabaseClient,
   tournamentId: string
 ): Promise<RunTestCycleResult> {
+  if (await isRyderCupTournament(admin, tournamentId)) {
+    return {
+      ok: false,
+      error: "Copa Ryder: el ciclo de prueba de bracket no aplica.",
+    };
+  }
+
   const repair = await repairMatchplayFromR1(admin, tournamentId);
   if (!repair.ok) return { ok: false, error: repair.error };
 

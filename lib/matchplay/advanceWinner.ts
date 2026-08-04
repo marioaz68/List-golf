@@ -18,10 +18,75 @@ export type AdvanceWinnerResult = {
 };
 
 /**
+ * Copa Ryder: cada partido tiene session_id y aporta puntos a la copa;
+ * no hay cuadro de eliminación. Nunca se debe llamar avance de bracket.
+ *
+ * Criterio a prueba de balas: si matchplay_matches.session_id está
+ * presente (y opcionalmente existe en matchplay_sessions) → es Ryder.
+ * Cualquier session_id no vacío bloquea el avance.
+ */
+export async function isRyderCupMatch(
+  admin: SupabaseClient,
+  matchId: string
+): Promise<boolean> {
+  const id = String(matchId ?? "").trim();
+  if (!id) return false;
+
+  const { data: match } = await admin
+    .from("matchplay_matches")
+    .select("session_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  const sessionId =
+    match && (match as { session_id?: unknown }).session_id != null
+      ? String((match as { session_id: unknown }).session_id).trim()
+      : "";
+  if (!sessionId) return false;
+
+  // Consulta matchplay_sessions: si existe, confirma Ryder. Aunque no
+  // exista la fila, session_id en el match ya es suficiente para bloquear.
+  await admin
+    .from("matchplay_sessions")
+    .select("id")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  return true;
+}
+
+/** Torneo con sesiones Ryder (no cuadro de eliminación). */
+export async function isRyderCupTournament(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<boolean> {
+  const tid = String(tournamentId ?? "").trim();
+  if (!tid) return false;
+
+  const { data: session } = await admin
+    .from("matchplay_sessions")
+    .select("id")
+    .eq("tournament_id", tid)
+    .limit(1)
+    .maybeSingle();
+  if (session?.id) return true;
+
+  const { data: cup } = await admin
+    .from("matchplay_ryder_cups")
+    .select("category_id")
+    .eq("tournament_id", tid)
+    .limit(1)
+    .maybeSingle();
+  return Boolean(cup?.category_id);
+}
+
+/**
  * Coloca al ganador en el slot del partido siguiente (cuadro eliminación
  * directa). Si el partido siguiente ya queda con AMBAS parejas, también
  * crea/actualiza automáticamente la salida (`pairing_group`) de esa ronda
  * en el calendario, salvo que se pase `autoCreateNextGroup: false`.
+ *
+ * NO-OP en Copa Ryder (match con session_id): no hay ronda siguiente.
  */
 export async function advanceWinnerInBracket(
   admin: SupabaseClient,
@@ -37,10 +102,21 @@ export async function advanceWinnerInBracket(
   const { match_id, winner_pair_id } = params;
   const autoCreate = params.autoCreateNextGroup !== false;
 
+  // Candado Ryder: session_id → partido de sesión, nunca avanza en bracket.
+  if (await isRyderCupMatch(admin, match_id)) {
+    return {
+      advanced: false,
+      next_match_id: null,
+      message:
+        "Copa Ryder: el partido no avanza de ronda (aporta puntos a la copa).",
+      next_group: null,
+    };
+  }
+
   const { data: match, error: matchErr } = await admin
     .from("matchplay_matches")
     .select(
-      "id, bracket_id, round_no, position_no, next_match_id, top_pair_id, bottom_pair_id, tournament_id"
+      "id, bracket_id, round_no, position_no, next_match_id, top_pair_id, bottom_pair_id, tournament_id, session_id"
     )
     .eq("id", match_id)
     .maybeSingle();
@@ -50,6 +126,20 @@ export async function advanceWinnerInBracket(
       advanced: false,
       next_match_id: null,
       message: matchErr?.message ?? "Partido no encontrado.",
+      next_group: null,
+    };
+  }
+
+  // Defensa en profundidad: session_id aunque la sesión se haya borrado.
+  if (
+    match.session_id != null &&
+    String(match.session_id).trim() !== ""
+  ) {
+    return {
+      advanced: false,
+      next_match_id: null,
+      message:
+        "Copa Ryder: el partido tiene session_id — no se avanza en bracket.",
       next_group: null,
     };
   }
