@@ -54,6 +54,8 @@ type MenuItem = {
   query?: Record<string, string>;
   requiresTournament?: boolean;
   requiresMatchPlayAuction?: boolean;
+  /** No arrastra tournament_id (vistas globales). */
+  ignoreTournament?: boolean;
 };
 
 type TournamentMini = {
@@ -207,10 +209,12 @@ export default function Sidebar() {
       },
       {
         // Debajo de captura de tarjetas: tablero ops de grupos sin anotar.
+        // Visible sin torneo seleccionado — lista todos los torneos con ronda hoy.
         nameKey: "seguimientoCaptura",
         href: "/seguimiento-captura",
         icon: Radio,
-        requiresTournament: true,
+        query: { scope: "all" },
+        ignoreTournament: true,
       },
       {
         nameKey: "scorecards",
@@ -421,7 +425,7 @@ export default function Sidebar() {
     // Mantener torneo activo en la URL en todo el backoffice (p. ej. /clubs, /courses).
     // Si no, al salir de pantallas "catálogo" se pierde tournament_id y en modo Operación
     // desaparecen inscripciones, salidas, etc. (solo quedan ítems sin requiresTournament).
-    if (tournamentId) {
+    if (tournamentId && !item.ignoreTournament) {
       params.set("tournament_id", tournamentId);
     }
 

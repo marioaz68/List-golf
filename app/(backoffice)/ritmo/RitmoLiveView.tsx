@@ -264,13 +264,7 @@ export default function RitmoLiveView({
           {courseName ? <span>· {courseName}</span> : null}
         </div>
         <Link
-          href={`/seguimiento-captura?tournament_id=${encodeURIComponent(
-            tournamentId
-          )}${
-            currentRoundId
-              ? `&round_id=${encodeURIComponent(currentRoundId)}`
-              : ""
-          }`}
+          href={`/seguimiento-captura?scope=all`}
           style={{
             display: "block",
             marginTop: 8,

@@ -34,19 +34,32 @@ export type SegGroup = {
   priority: number;
   capturaHref: string;
   scoreEntryHref: string;
+  tournamentId: string;
+  tournamentName: string;
+  courseName: string | null;
+  roundId: string;
+  roundNo: number | null;
+};
+
+export type TournamentFilterOption = {
+  id: string;
+  name: string;
 };
 
 type RoundOption = { id: string; round_no: number | null };
 
 type Props = {
-  tournamentId: string;
+  mode: "all" | "one";
+  tournamentId: string | null;
   tournamentName: string;
   courseName: string | null;
   roundLabel: string;
   rounds: RoundOption[];
   currentRoundId: string | null;
+  tournamentsToday: TournamentFilterOption[];
   groups: SegGroup[];
   computedAtISO: string;
+  todayLabel: string;
 };
 
 const KIND_META: Record<
@@ -115,14 +128,17 @@ function agoLabel(iso: string | null): string {
 }
 
 export default function SeguimientoCapturaLive({
+  mode,
   tournamentId,
   tournamentName,
   courseName,
   roundLabel,
   rounds,
   currentRoundId,
+  tournamentsToday,
   groups,
   computedAtISO,
+  todayLabel,
 }: Props) {
   const router = useRouter();
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -170,6 +186,8 @@ export default function SeguimientoCapturaLive({
       const silentA = a.minutesSinceLastCapture ?? 9999;
       const silentB = b.minutesSinceLastCapture ?? 9999;
       if (silentB !== silentA) return silentB - silentA;
+      const tn = a.tournamentName.localeCompare(b.tournamentName, "es");
+      if (tn !== 0) return tn;
       return a.number - b.number;
     });
   }, [groups]);
@@ -257,8 +275,9 @@ export default function SeguimientoCapturaLive({
               </span>
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
-              {tournamentName}
-              {courseName ? ` · ${courseName}` : ""} · {roundLabel}
+              {mode === "all"
+                ? `Todos los torneos con ronda el ${todayLabel}`
+                : `${tournamentName}${courseName ? ` · ${courseName}` : ""} · ${roundLabel}`}
             </div>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>
               Grupos que no capturan a tiempo · actualiza cada 20 s · mandar
@@ -266,25 +285,27 @@ export default function SeguimientoCapturaLive({
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link
-              href={`/ritmo?tournament_id=${encodeURIComponent(tournamentId)}${
-                currentRoundId
-                  ? `&round_id=${encodeURIComponent(currentRoundId)}`
-                  : ""
-              }`}
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                padding: "6px 12px",
-                borderRadius: 8,
-                background: "#1e293b",
-                color: "#e2e8f0",
-                textDecoration: "none",
-                border: "1px solid #334155",
-              }}
-            >
-              Mapa ritmo
-            </Link>
+            {tournamentId ? (
+              <Link
+                href={`/ritmo?tournament_id=${encodeURIComponent(tournamentId)}${
+                  currentRoundId
+                    ? `&round_id=${encodeURIComponent(currentRoundId)}`
+                    : ""
+                }`}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "#1e293b",
+                  color: "#e2e8f0",
+                  textDecoration: "none",
+                  border: "1px solid #334155",
+                }}
+              >
+                Mapa ritmo
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={() => router.refresh()}
@@ -305,7 +326,65 @@ export default function SeguimientoCapturaLive({
           </div>
         </div>
 
-        {rounds.length > 1 ? (
+        {/* Alcance: todos los torneos hoy / uno solo */}
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            flexWrap: "wrap",
+            marginTop: 10,
+            alignItems: "center",
+          }}
+        >
+          <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
+            TORNEO
+          </span>
+          <Link
+            href="/seguimiento-captura?scope=all"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "3px 10px",
+              borderRadius: 6,
+              textDecoration: "none",
+              background: mode === "all" ? "#2563eb" : "#1e293b",
+              color: mode === "all" ? "#fff" : "#cbd5e1",
+              border: `1px solid ${mode === "all" ? "#2563eb" : "#334155"}`,
+            }}
+          >
+            Todos hoy ({tournamentsToday.length})
+          </Link>
+          {tournamentsToday.map((t) => {
+            const active = mode === "one" && tournamentId === t.id;
+            return (
+              <Link
+                key={t.id}
+                href={`/seguimiento-captura?scope=one&tournament_id=${encodeURIComponent(
+                  t.id
+                )}`}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  textDecoration: "none",
+                  background: active ? "#2563eb" : "#1e293b",
+                  color: active ? "#fff" : "#cbd5e1",
+                  border: `1px solid ${active ? "#2563eb" : "#334155"}`,
+                  maxWidth: 180,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+                title={t.name}
+              >
+                {t.name}
+              </Link>
+            );
+          })}
+        </div>
+
+        {mode === "one" && rounds.length > 1 && tournamentId ? (
           <div
             style={{
               display: "flex",
@@ -323,7 +402,7 @@ export default function SeguimientoCapturaLive({
               return (
                 <Link
                   key={r.id}
-                  href={`/seguimiento-captura?tournament_id=${encodeURIComponent(
+                  href={`/seguimiento-captura?scope=one&tournament_id=${encodeURIComponent(
                     tournamentId
                   )}&round_id=${encodeURIComponent(r.id)}`}
                   style={{
@@ -393,7 +472,11 @@ export default function SeguimientoCapturaLive({
 
       <main style={{ flex: 1, padding: "12px 12px 28px", maxWidth: 920, width: "100%", margin: "0 auto" }}>
         {groups.length === 0 ? (
-          <EmptyBox>No hay grupos en esta ronda.</EmptyBox>
+          <EmptyBox>
+            {mode === "all"
+              ? "No hay grupos con ronda programada para hoy en ningún torneo."
+              : "No hay grupos en esta ronda."}
+          </EmptyBox>
         ) : visible.length === 0 ? (
           <EmptyBox>
             {onlyProblems ? (
@@ -465,6 +548,29 @@ export default function SeguimientoCapturaLive({
                           >
                             G{g.number}
                           </span>
+                          {mode === "all" ||
+                          (tournamentId &&
+                            g.tournamentId !== tournamentId) ? (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "#1e3a8a",
+                                background: "#dbeafe",
+                                border: "1px solid #93c5fd",
+                                padding: "2px 7px",
+                                borderRadius: 999,
+                                maxWidth: 160,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={g.tournamentName}
+                            >
+                              {g.tournamentName}
+                              {g.roundNo != null ? ` · R${g.roundNo}` : ""}
+                            </span>
+                          ) : null}
                           <span
                             style={{
                               fontSize: 10,
@@ -571,12 +677,8 @@ export default function SeguimientoCapturaLive({
                     </a>
                     <Link
                       href={`/ritmo?tournament_id=${encodeURIComponent(
-                        tournamentId
-                      )}${
-                        currentRoundId
-                          ? `&round_id=${encodeURIComponent(currentRoundId)}`
-                          : ""
-                      }`}
+                        g.tournamentId
+                      )}&round_id=${encodeURIComponent(g.roundId)}`}
                       style={actionBtn("#fff", "#0f172a", "#cbd5e1")}
                     >
                       Ver en ritmo
