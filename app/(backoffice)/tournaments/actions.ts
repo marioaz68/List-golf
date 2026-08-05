@@ -162,9 +162,7 @@ async function getCourseById(course_id: string) {
 
 /**
  * Clona la convocatoria (draft_json) de un torneo origen al nuevo torneo.
- * El draft es portable (no embebe tournament_id) y lleva categorías,
- * reglas de competencia/corte/premios y la config match play (consolaciones,
- * premios, calcuta). Se deja en estado "editing" para revisar antes de aplicar.
+ * @deprecated preferir cloneTournamentRules (copia completa).
  */
 async function copyConvocatoriaDraft(params: {
   admin: ReturnType<typeof createAdminClient>;
@@ -172,55 +170,15 @@ async function copyConvocatoriaDraft(params: {
   targetTournamentId: string;
   targetName: string;
 }) {
-  const { admin, sourceTournamentId, targetTournamentId, targetName } = params;
-
-  const { data: sourceConv, error: sourceConvError } = await admin
-    .from("tournament_convocatoria")
-    .select("draft_json, warnings, file_name")
-    .eq("tournament_id", sourceTournamentId)
-    .maybeSingle();
-
-  if (sourceConvError) {
-    // No bloquear la creación del torneo si falla la copia de convocatoria.
-    return;
-  }
-  if (!sourceConv?.draft_json) return;
-
-  const draft = sourceConv.draft_json as Record<string, unknown>;
-  const meta =
-    draft && typeof draft.meta === "object" && draft.meta
-      ? (draft.meta as Record<string, unknown>)
-      : {};
-
-  const clonedDraft = {
-    ...draft,
-    source: "template",
-    meta: { ...meta, title: targetName },
-  };
-
-  const now = new Date().toISOString();
-
-  const { error: insertConvError } = await admin
-    .from("tournament_convocatoria")
-    .upsert(
-      {
-        tournament_id: targetTournamentId,
-        file_name: sourceConv.file_name
-          ? `Clonado: ${sourceConv.file_name}`
-          : "Clonado de torneo anterior",
-        extracted_text: null,
-        draft_json: clonedDraft,
-        warnings: sourceConv.warnings ?? null,
-        status: "editing",
-        updated_at: now,
-      },
-      { onConflict: "tournament_id" }
-    );
-
-  if (insertConvError) {
-    // No bloquear la creación; el usuario puede cargar plantilla manualmente.
-    return;
-  }
+  const { cloneTournamentRules } = await import(
+    "@/lib/tournaments/cloneTournamentRules"
+  );
+  await cloneTournamentRules({
+    admin: params.admin,
+    sourceTournamentId: params.sourceTournamentId,
+    targetTournamentId: params.targetTournamentId,
+    targetName: params.targetName,
+  });
 }
 
 export async function createTournamentAndMaybeCopyCategories(
@@ -235,6 +193,7 @@ export async function createTournamentAndMaybeCopyCategories(
   const course_id = optStr(formData, "course_id");
   const start_date = optStr(formData, "start_date");
   const copy_from_tournament_id = optStr(formData, "copy_from_tournament_id");
+  const template_role = optStr(formData, "template_role") ?? "blank";
   const format_type = optStr(formData, "format_type") ?? "stroke";
   const posterFile = getPosterFile(formData);
 
@@ -254,35 +213,46 @@ export async function createTournamentAndMaybeCopyCategories(
       ? Math.min(64, Math.max(2, Number(bracket_size_raw)))
       : null;
 
-  const settings =
-    format_type === "matchplay"
-      ? {
-          format: {
-            format_type: "matchplay" as const,
-            round_count: bracket_round_count,
-            holes: holes_per_match,
-            scoring_mode: "gross" as const,
-          },
-          matchplay: {
-            match_type: match_play_type,
-            bracket_main_pairs: bracket_main_size,
-          },
-        }
-      : format_type === "stableford"
-        ? {
-            format: {
-              format_type: "stableford" as const,
-              round_count: 1,
-              holes: 18 as const,
-            },
-          }
-        : {
-            format: {
-              format_type: "stroke" as const,
-              round_count: 1,
-              holes: 18 as const,
-            },
-          };
+  const {
+    defaultSettingsForTemplateRole,
+  } = await import("@/lib/tournaments/templatePresets");
+  const { cloneTournamentRules } = await import(
+    "@/lib/tournaments/cloneTournamentRules"
+  );
+
+  // Si clona plantilla, settings se sobrescriben con el origen en cloneTournamentRules.
+  // Mientras tanto usar defaults según plantilla elegida o form format.
+  let settings: Record<string, unknown>;
+  if (
+    template_role === "anual" ||
+    template_role === "calcuta_mixto" ||
+    template_role === "ryder"
+  ) {
+    settings = defaultSettingsForTemplateRole(template_role);
+  } else if (format_type === "matchplay") {
+    settings = {
+      format: {
+        format_type: "matchplay" as const,
+        round_count: bracket_round_count,
+        holes: holes_per_match,
+        scoring_mode: "gross" as const,
+      },
+      matchplay: {
+        match_type: match_play_type,
+        bracket_main_pairs: bracket_main_size,
+      },
+    };
+  } else if (format_type === "stableford") {
+    settings = {
+      format: {
+        format_type: "stableford" as const,
+        round_count: 1,
+        holes: 18 as const,
+      },
+    };
+  } else {
+    settings = defaultSettingsForTemplateRole("blank");
+  }
 
   const club = await getActiveClubById(club_id);
 
@@ -368,56 +338,7 @@ export async function createTournamentAndMaybeCopyCategories(
   }
 
   if (copy_from_tournament_id) {
-    const { data: sourceCategories, error: sourceCategoriesError } =
-      await admin
-        .from("categories")
-        .select(`
-          code,
-          name,
-          gender,
-          min_age,
-          max_age,
-          handicap_min,
-          handicap_max,
-          sort_order,
-          is_active,
-          category_group,
-          handicap_percent_override,
-          allow_multiple_prizes_per_player,
-          default_prize_count
-        `)
-        .eq("tournament_id", copy_from_tournament_id)
-        .order("sort_order", { ascending: true });
-
-    if (sourceCategoriesError) throw new Error(sourceCategoriesError.message);
-
-    if (sourceCategories?.length) {
-      const rows = sourceCategories.map((c) => ({
-        tournament_id: tournament.id,
-        code: c.code ?? null,
-        name: c.name ?? null,
-        gender: c.gender ?? null,
-        min_age: c.min_age ?? null,
-        max_age: c.max_age ?? null,
-        handicap_min: c.handicap_min ?? null,
-        handicap_max: c.handicap_max ?? null,
-        sort_order: c.sort_order ?? null,
-        is_active: c.is_active ?? true,
-        category_group: c.category_group ?? "main",
-        handicap_percent_override: c.handicap_percent_override ?? null,
-        allow_multiple_prizes_per_player:
-          c.allow_multiple_prizes_per_player ?? false,
-        default_prize_count: c.default_prize_count ?? null,
-      }));
-
-      const { error: insertCategoriesError } = await admin
-        .from("categories")
-        .insert(rows);
-
-      if (insertCategoriesError) throw new Error(insertCategoriesError.message);
-    }
-
-    await copyConvocatoriaDraft({
+    await cloneTournamentRules({
       admin,
       sourceTournamentId: copy_from_tournament_id,
       targetTournamentId: tournament.id,

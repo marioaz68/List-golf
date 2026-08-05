@@ -7,15 +7,19 @@ import {
   createTournamentFormAction,
   type CreateTournamentFormState,
 } from "../actions";
+import {
+  TEMPLATE_PRESETS,
+  pickTemplateSourceIds,
+  type TemplateRole,
+  type TournamentLiteForTemplate,
+} from "@/lib/tournaments/templatePresets";
 
 const createTournamentInitialState: CreateTournamentFormState = {
   ok: false,
   message: "",
 };
 
-type TournamentOption = {
-  id: string;
-  name: string;
+type TournamentOption = TournamentLiteForTemplate & {
   created_at?: string;
 };
 
@@ -61,6 +65,8 @@ function clubLabel(club: ClubOption) {
   return club.short_name?.trim() || club.name?.trim() || "Club";
 }
 
+type TemplatePick = TemplateRole | "blank" | "other";
+
 export default function NewTournamentPage() {
   const [tournaments, setTournaments] = useState<TournamentOption[]>([]);
   const [clubs, setClubs] = useState<ClubOption[]>([]);
@@ -76,6 +82,7 @@ export default function NewTournamentPage() {
   const [clubId, setClubId] = useState("");
   const [courseId, setCourseId] = useState("");
   const [startDate, setStartDate] = useState("");
+  const [templatePick, setTemplatePick] = useState<TemplatePick>("anual");
   const [copyFromTournamentId, setCopyFromTournamentId] = useState("");
   const [formatType, setFormatType] = useState<
     "stroke" | "stableford" | "matchplay"
@@ -94,6 +101,35 @@ export default function NewTournamentPage() {
     createTournamentInitialState
   );
 
+  const templateSources = useMemo(
+    () => pickTemplateSourceIds(tournaments),
+    [tournaments]
+  );
+
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tournaments) {
+      m.set(t.id, t.short_name?.trim() || t.name?.trim() || t.id);
+    }
+    return m;
+  }, [tournaments]);
+
+  /** Id que se clonará según plantilla (null = blanco). */
+  const resolvedCopyFromId = useMemo(() => {
+    if (templatePick === "blank") return "";
+    if (templatePick === "other") return copyFromTournamentId;
+    return templateSources[templatePick] ?? "";
+  }, [templatePick, copyFromTournamentId, templateSources]);
+
+  useEffect(() => {
+    // Al elegir Anual/Calcuta/Ryder, sincroniza formato base del form.
+    if (templatePick === "anual") setFormatType("stroke");
+    if (templatePick === "calcuta_mixto" || templatePick === "ryder") {
+      setFormatType("matchplay");
+      setMatchPlayType("pairs");
+    }
+  }, [templatePick]);
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setClientError(null);
@@ -106,6 +142,21 @@ export default function NewTournamentPage() {
       setClientError("Selecciona un club.");
       return;
     }
+    if (
+      (templatePick === "anual" ||
+        templatePick === "calcuta_mixto" ||
+        templatePick === "ryder") &&
+      !resolvedCopyFromId
+    ) {
+      setClientError(
+        "No hay un torneo de referencia para esa plantilla. Elige “Otro torneo…” o crea desde cero y configura reglas."
+      );
+      return;
+    }
+    if (templatePick === "other" && !copyFromTournamentId) {
+      setClientError("Selecciona el torneo del que quieres clonar las reglas.");
+      return;
+    }
 
     const fd = new FormData();
     fd.set("name", name.trim());
@@ -115,7 +166,8 @@ export default function NewTournamentPage() {
     fd.set("course_id", courseId);
     fd.set("start_date", startDate);
     fd.set("format_type", formatType);
-    fd.set("copy_from_tournament_id", copyFromTournamentId);
+    fd.set("template_role", templatePick);
+    fd.set("copy_from_tournament_id", resolvedCopyFromId);
 
     if (formatType === "matchplay") {
       fd.set("match_play_type", matchPlayType);
@@ -142,10 +194,12 @@ export default function NewTournamentPage() {
       const [tournamentsRes, clubsRes, coursesRes] = await Promise.all([
         supabase
           .from("tournaments")
-          .select("id, name, created_at")
+          .select(
+            "id, name, short_name, start_date, settings, is_archived, kind, created_at"
+          )
           .neq("kind", "daily_round")
           .order("created_at", { ascending: false })
-          .limit(100),
+          .limit(120),
 
         supabase
           .from("clubs")
@@ -195,6 +249,9 @@ export default function NewTournamentPage() {
     return courses.filter((course) => course.club_id === clubId);
   }, [courses, clubId]);
 
+  const showBlankFormat =
+    templatePick === "blank" || templatePick === "other";
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold text-white">Nuevo torneo</h1>
@@ -207,17 +264,142 @@ export default function NewTournamentPage() {
           borderRadius: 12,
           background: "rgba(255,255,255,0.95)",
           boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          maxWidth: 760,
+          maxWidth: 820,
         }}
       >
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 14 }}>
+          {/* —— Plantillas —— */}
+          <div>
+            <div style={{ color: "#111827", fontWeight: 700, marginBottom: 8 }}>
+              Tipo / plantilla de reglas
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                gridTemplateColumns: "1fr",
+              }}
+            >
+              {TEMPLATE_PRESETS.map((p) => {
+                const active = templatePick === p.key;
+                const sourceId =
+                  p.key === "anual" ||
+                  p.key === "calcuta_mixto" ||
+                  p.key === "ryder"
+                    ? templateSources[p.key]
+                    : null;
+                const sourceLabel = sourceId
+                  ? nameById.get(sourceId) ?? "…"
+                  : p.key === "blank" || p.key === "other"
+                    ? null
+                    : "Sin torneo de referencia";
+
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => setTemplatePick(p.key)}
+                    style={{
+                      textAlign: "left",
+                      padding: "12px 14px",
+                      borderRadius: 10,
+                      border: active
+                        ? "2px solid #2563eb"
+                        : "1px solid #d1d5db",
+                      background: active ? "#eff6ff" : "#fff",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        alignItems: "baseline",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          color: "#0f172a",
+                          fontSize: 15,
+                        }}
+                      >
+                        {p.label}
+                      </span>
+                      {active ? (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            color: "#1d4ed8",
+                          }}
+                        >
+                          SELECCIONADO
+                        </span>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: "#475569",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {p.description}
+                    </div>
+                    {sourceLabel != null ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: sourceId ? "#047857" : "#b45309",
+                        }}
+                      >
+                        {sourceId
+                          ? `Fuente: ${sourceLabel}`
+                          : sourceLabel}
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {templatePick === "other" ? (
+            <label style={{ color: "#111827", fontWeight: 600 }}>
+              Torneo origen (clona todas las reglas)
+              <select
+                value={copyFromTournamentId}
+                onChange={(e) => setCopyFromTournamentId(e.target.value)}
+                style={fieldStyle}
+                disabled={loadingTournaments}
+              >
+                <option value="">
+                  {loadingTournaments
+                    ? "Cargando torneos..."
+                    : "Seleccionar torneo…"}
+                </option>
+                {tournaments.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.short_name?.trim() || t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Nombre del torneo
             <input
               name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej. Torneo Anual 2026"
+              placeholder="Ej. Torneo Anual 2027"
               style={fieldStyle}
               required
             />
@@ -229,124 +411,121 @@ export default function NewTournamentPage() {
               name="short_name"
               value={shortName}
               onChange={(e) => setShortName(e.target.value)}
-              placeholder="Ej. ANUAL 2026"
+              placeholder="Ej. ANUAL 2027"
               style={fieldStyle}
             />
           </label>
 
-          <label style={{ color: "#111827", fontWeight: 600 }}>
-            Formato del torneo
-            <select
-              name="format_type"
-              value={formatType}
-              onChange={(e) =>
-                setFormatType(
-                  e.target.value as "stroke" | "stableford" | "matchplay"
-                )
-              }
-              style={fieldStyle}
-            >
-              <option value="stroke">Stroke play (por golpes)</option>
-              <option value="stableford">Stableford (puntos)</option>
-              <option value="matchplay">Match play por parejas</option>
-            </select>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 12,
-                fontWeight: 400,
-                color: "#6b7280",
-              }}
-            >
-              {formatType === "matchplay"
-                ? "Cuadro de eliminación por parejas. Tras crear, configura la convocatoria match play."
-                : "Torneo por rondas y clasificación (1, 2, 3+ rondas según convocatoria)."}
-            </div>
-          </label>
-
-          {formatType === "matchplay" ? (
+          {showBlankFormat ? (
             <>
               <label style={{ color: "#111827", fontWeight: 600 }}>
-                Tipo de match play
+                Formato del torneo
                 <select
-                  name="match_play_type"
-                  value={matchPlayType}
+                  name="format_type"
+                  value={formatType}
                   onChange={(e) =>
-                    setMatchPlayType(e.target.value as "individual" | "pairs")
+                    setFormatType(
+                      e.target.value as "stroke" | "stableford" | "matchplay"
+                    )
                   }
                   style={fieldStyle}
                 >
-                  <option value="pairs">Por parejas (2 jugadores)</option>
-                  <option value="individual">Individual (1 jugador)</option>
+                  <option value="stroke">Stroke play (por golpes)</option>
+                  <option value="stableford">Stableford (puntos)</option>
+                  <option value="matchplay">Match play</option>
                 </select>
               </label>
-              <label style={{ color: "#111827", fontWeight: 600 }}>
-                Tamaño del cuadro
-                <select
-                  name="bracket_size"
-                  value={bracketSize}
-                  onChange={(e) => {
-                    setBracketSize(e.target.value);
-                    if (e.target.value !== "variable") {
-                      const rounds = Math.ceil(
-                        Math.log2(Number(e.target.value))
-                      );
-                      setBracketRoundCount(String(rounds));
-                    }
-                  }}
-                  style={fieldStyle}
-                >
-                  <option value="variable">Variable (con BYEs)</option>
-                  <option value="4">4 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
-                  <option value="8">8 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
-                  <option value="16">16 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
-                  <option value="32">32 {matchPlayType === "individual" ? "jugadores" : "parejas"}</option>
-                  <option value="64">64 {matchPlayType === "individual" ? "jugadores" : "parejas"} (máximo)</option>
-                </select>
-              </label>
-              <label style={{ color: "#111827", fontWeight: 600 }}>
-                Rondas del cuadro
-                <input
-                  type="number"
-                  name="bracket_round_count"
-                  min={1}
-                  max={8}
-                  value={bracketRoundCount}
-                  onChange={(e) => setBracketRoundCount(e.target.value)}
-                  style={fieldStyle}
-                />
-                <div
-                  style={{
-                    marginTop: 4,
-                    fontSize: 11,
-                    fontWeight: 400,
-                    color: "#6b7280",
-                  }}
-                >
-                  4 = 16, 5 = 32, 6 = 64 participantes. Ajustable después.
-                </div>
-              </label>
-              <label style={{ color: "#111827", fontWeight: 600 }}>
-                Hoyos por match
-                <select
-                  name="holes_per_match"
-                  value={holesPerMatch}
-                  onChange={(e) =>
-                    setHolesPerMatch(e.target.value as "9" | "18")
-                  }
-                  style={fieldStyle}
-                >
-                  <option value="18">18 hoyos</option>
-                  <option value="9">9 hoyos</option>
-                </select>
-              </label>
+
+              {formatType === "matchplay" ? (
+                <>
+                  <label style={{ color: "#111827", fontWeight: 600 }}>
+                    Tipo de match play
+                    <select
+                      value={matchPlayType}
+                      onChange={(e) =>
+                        setMatchPlayType(
+                          e.target.value as "individual" | "pairs"
+                        )
+                      }
+                      style={fieldStyle}
+                    >
+                      <option value="pairs">Por parejas</option>
+                      <option value="individual">Individual</option>
+                    </select>
+                  </label>
+                  <label style={{ color: "#111827", fontWeight: 600 }}>
+                    Tamaño del cuadro
+                    <select
+                      value={bracketSize}
+                      onChange={(e) => {
+                        setBracketSize(e.target.value);
+                        if (e.target.value !== "variable") {
+                          const rounds = Math.ceil(
+                            Math.log2(Number(e.target.value))
+                          );
+                          setBracketRoundCount(String(rounds));
+                        }
+                      }}
+                      style={fieldStyle}
+                    >
+                      <option value="variable">Variable (BYEs)</option>
+                      <option value="8">8</option>
+                      <option value="16">16</option>
+                      <option value="32">32</option>
+                      <option value="64">64</option>
+                    </select>
+                  </label>
+                  <label style={{ color: "#111827", fontWeight: 600 }}>
+                    Rondas del cuadro
+                    <input
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={bracketRoundCount}
+                      onChange={(e) => setBracketRoundCount(e.target.value)}
+                      style={fieldStyle}
+                    />
+                  </label>
+                  <label style={{ color: "#111827", fontWeight: 600 }}>
+                    Hoyos por match
+                    <select
+                      value={holesPerMatch}
+                      onChange={(e) =>
+                        setHolesPerMatch(e.target.value as "9" | "18")
+                      }
+                      style={fieldStyle}
+                    >
+                      <option value="18">18 hoyos</option>
+                      <option value="9">9 hoyos</option>
+                    </select>
+                  </label>
+                </>
+              ) : null}
             </>
-          ) : null}
+          ) : (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#475569",
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+                padding: "10px 12px",
+                lineHeight: 1.45,
+              }}
+            >
+              Al clonar plantilla se copian <b>todas las reglas</b> del torneo
+              fuente: convocatoria, categorías, premios, cortes, competencia,
+              tees, hoyos y reglas match play / calcuta / ryder.{" "}
+              <b>No</b> copia inscritos, salidas, resultados ni cuadros en vivo.
+              La convocatoria queda en borrador para revisarla y{" "}
+              <b>Aplicar</b>.
+            </div>
+          )}
 
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Estatus
             <select
-              name="status"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               style={fieldStyle}
@@ -360,12 +539,10 @@ export default function NewTournamentPage() {
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Club
             <select
-              name="club_id"
               value={clubId}
               onChange={(e) => {
                 const nextClubId = e.target.value;
                 setClubId(nextClubId);
-
                 if (
                   courseId &&
                   courses.find((c) => c.id === courseId)?.club_id !== nextClubId
@@ -380,7 +557,6 @@ export default function NewTournamentPage() {
               <option value="">
                 {loadingClubs ? "Cargando clubs..." : "Seleccionar club"}
               </option>
-
               {clubs.map((club) => (
                 <option key={club.id} value={club.id}>
                   {clubLabel(club)}
@@ -392,7 +568,6 @@ export default function NewTournamentPage() {
           <label style={{ color: "#111827", fontWeight: 600 }}>
             Campo
             <select
-              name="course_id"
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
               style={fieldStyle}
@@ -402,10 +577,9 @@ export default function NewTournamentPage() {
                 {!clubId
                   ? "Primero selecciona club"
                   : loadingCourses
-                  ? "Cargando campos..."
-                  : "Seleccionar campo"}
+                    ? "Cargando campos..."
+                    : "Seleccionar campo"}
               </option>
-
               {availableCourses.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.name}
@@ -414,13 +588,7 @@ export default function NewTournamentPage() {
             </select>
           </label>
 
-          <div
-            style={{
-              marginTop: -4,
-              fontSize: 12,
-              color: "#6b7280",
-            }}
-          >
+          <div style={{ fontSize: 12, color: "#6b7280" }}>
             Club seleccionado:{" "}
             {clubId ? clubLabel(clubsMap.get(clubId) as ClubOption) : "—"}
           </div>
@@ -429,7 +597,6 @@ export default function NewTournamentPage() {
             Fecha inicio
             <input
               type="date"
-              name="start_date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               style={fieldStyle}
@@ -458,43 +625,6 @@ export default function NewTournamentPage() {
             </div>
           ) : null}
 
-          <label style={{ color: "#111827", fontWeight: 600 }}>
-            Clonar configuración desde otro torneo
-            <select
-              name="copy_from_tournament_id"
-              value={copyFromTournamentId}
-              onChange={(e) => setCopyFromTournamentId(e.target.value)}
-              style={fieldStyle}
-              disabled={loadingTournaments}
-            >
-              <option value="">
-                {loadingTournaments
-                  ? "Cargando torneos..."
-                  : "No clonar / empezar desde cero"}
-              </option>
-
-              {tournaments.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <span
-              style={{
-                display: "block",
-                marginTop: 4,
-                fontWeight: 400,
-                fontSize: 12,
-                color: "#6b7280",
-              }}
-            >
-              Copia categorías y la convocatoria (reglas de competencia, cortes,
-              premios y, en match play, consolaciones y calcuta). Quedará en
-              borrador para revisarla y aplicarla. No copia inscripciones ni
-              resultados.
-            </span>
-          </label>
-
           <div
             style={{
               display: "flex",
@@ -515,9 +645,8 @@ export default function NewTournamentPage() {
             >
               {isPending ? "Creando torneo…" : "Crear torneo"}
             </button>
-
-            <a href="/categories" style={buttonStyle}>
-              Ir a categorías
+            <a href="/tournaments" style={buttonStyle}>
+              Cancelar
             </a>
           </div>
         </div>
