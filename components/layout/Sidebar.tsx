@@ -35,6 +35,7 @@ import {
   CalendarDays,
   Car,
   Gauge,
+  Radio,
   Gavel,
   Scale,
   Send,
@@ -232,6 +233,12 @@ export default function Sidebar() {
         nameKey: "ritmo",
         href: "/ritmo",
         icon: Gauge,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "seguimientoCaptura",
+        href: "/seguimiento-captura",
+        icon: Radio,
         requiresTournament: true,
       },
       {

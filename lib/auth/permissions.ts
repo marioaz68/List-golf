@@ -29,6 +29,7 @@ export type AppModule =
   | "leaderboard"
   | "caddies"
   | "ritmo"
+  | "seguimiento-captura"
   | "reports"
   | "comite-handicap"
   | "captura-telegram"
@@ -142,6 +143,19 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "marshal",
   ],
 
+  // Tablero ops: grupos retrasados en captura (marshals).
+  "seguimiento-captura": [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "entries_operator",
+    "caddie_manager",
+    "checkin",
+    "viewer",
+    "marshal",
+  ],
+
   reports: [
     "super_admin",
     "club_admin",
@@ -238,6 +252,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/leaderboard",
   "/caddies",
   "/ritmo",
+  "/seguimiento-captura",
   "/reports",
   "/tournaments",
   "/convocatoria",
@@ -317,6 +332,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/leaderboard")) return "leaderboard";
   if (pathname.startsWith("/caddies")) return "caddies";
   if (pathname.startsWith("/ritmo")) return "ritmo";
+  if (pathname.startsWith("/seguimiento-captura")) return "seguimiento-captura";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";
