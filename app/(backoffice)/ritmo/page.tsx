@@ -22,6 +22,7 @@ import {
   type GroupScoreMeta,
 } from "@/lib/ritmo/scoreProgress";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
+import { isOpsRoundClosed, todayMexicoDate } from "@/lib/ritmo/opsDay";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -73,17 +74,6 @@ const LOOKBACK_MINUTES = 90;
  *  ahora). Se usa para indicar en el dashboard si un grupo tiene 1, 2 o 3+
  *  dispositivos respaldándose mutuamente. */
 const ACTIVE_SOURCE_MINUTES = 5;
-
-/** Fecha de hoy en horario de México, formato YYYY-MM-DD. */
-function todayMexicoDate(): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Mexico_City",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return fmt.format(new Date());
-}
 
 function modalHole(holes: (number | null)[]): number | null {
   const counts = new Map<number, number>();
@@ -159,7 +149,7 @@ export default async function RitmoPage({
 
   const { data: tournamentRow } = await admin
     .from("tournaments")
-    .select("id, name, short_name, course_name, course_id")
+    .select("id, name, short_name, course_name, course_id, start_date, end_date")
     .eq("id", tournamentId)
     .maybeSingle();
 
@@ -169,6 +159,10 @@ export default async function RitmoPage({
     "Torneo";
   const courseName = (tournamentRow?.course_name as string | null) ?? null;
   const courseId = (tournamentRow?.course_id as string | null) ?? null;
+  const tournamentEndDate =
+    (tournamentRow?.end_date as string | null) ?? null;
+  const tournamentStartDate =
+    (tournamentRow?.start_date as string | null) ?? null;
   const mapUnsupported = !getCourseHoles(courseName);
 
   // Minutos objetivo por hoyo del campo (ritmo del torneo, editable).
@@ -185,10 +179,9 @@ export default async function RitmoPage({
     .order("round_no", { ascending: true });
   const rounds = (roundsRaw ?? []) as RoundRow[];
 
-  // Elegir ronda: query > ronda de hoy > ronda de la última posición > última.
-  // La ronda con fecha = hoy manda sobre el último ping para que, al cambiar
-  // de día, el mapa salte de inmediato a la ronda del día aunque todavía no
-  // haya GPS (en vez de quedarse anclado a la ronda de ayer).
+  // Elegir ronda: query > ronda de hoy (en vivo) > última ronda no cerrada
+  // del torneo. No anclar a GPS de ayer para que el retraso no “crezca”
+  // con el reloj tras terminar la jornada.
   const today = todayMexicoDate();
   let round: RoundRow | null =
     rounds.find((r) => r.id === queryRoundId) ?? null;
@@ -198,31 +191,45 @@ export default async function RitmoPage({
   }
 
   if (!round) {
-    const { data: lastPos } = await admin
-      .from("ritmo_positions")
-      .select("round_id, ts")
-      .eq("tournament_id", tournamentId)
-      .not("round_id", "is", null)
-      .order("ts", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const lastRoundId = (lastPos as { round_id?: string } | null)?.round_id;
-    if (lastRoundId) {
-      round = rounds.find((r) => r.id === lastRoundId) ?? null;
+    // Preferir la ronda más reciente que aún sea “de hoy o futura”
+    // respecto al calendario México; si todas pasaron, la última (histórica).
+    const openOrToday = rounds.filter(
+      (r) =>
+        !isOpsRoundClosed({
+          roundDate: r.round_date,
+          tournamentEndDate,
+          tournamentStartDate,
+          today,
+        })
+    );
+    if (openOrToday.length > 0) {
+      round = [...openOrToday].sort((a, b) =>
+        (b.round_date ?? "").localeCompare(a.round_date ?? "")
+      )[0]!;
+    } else {
+      round =
+        [...rounds]
+          .filter((r) => (r.round_date ?? "") <= today)
+          .sort((a, b) =>
+            (b.round_date ?? "").localeCompare(a.round_date ?? "")
+          )[0] ??
+        rounds[0] ??
+        null;
     }
   }
 
-  if (!round) {
-    round =
-      [...rounds]
-        .filter((r) => (r.round_date ?? "") <= today)
-        .sort((a, b) => (b.round_date ?? "").localeCompare(a.round_date ?? ""))[0] ??
-      rounds[0] ??
-      null;
-  }
-
   const computedAtISO = new Date().toISOString();
-  const roundLabel = round ? `Ronda ${round.round_no ?? "?"}` : "Sin ronda";
+  const opsClosed = round
+    ? isOpsRoundClosed({
+        roundDate: round.round_date,
+        tournamentEndDate,
+        tournamentStartDate,
+        today,
+      })
+    : true;
+  const roundLabel = round
+    ? `Ronda ${round.round_no ?? "?"}${opsClosed ? " · cerrada" : ""}`
+    : "Sin ronda";
 
   if (!round) {
     return (
@@ -375,11 +382,62 @@ export default async function RitmoPage({
       ? currentHoleFromHolesPlayed(scoreHolesPlayed, startHole)
       : null;
 
+    // Ronda/torneo cerrado: no medir ritmo contra reloj (evita “lentos” eternos).
+    if (opsClosed) {
+      const coverage = coverageByGroup.get(g.id);
+      const gpsState: GroupGpsState = gpsStateFromTimestamp(
+        lastTs,
+        STALE_MINUTES,
+        now
+      );
+      const playerRows = (memberRowsByGroup.get(g.id) ?? []).map((row) => {
+        const caddie = caddieByEntry.get(row.entryId) ?? null;
+        return {
+          name: row.name,
+          caddieName: caddie?.name ?? null,
+          caddieHasTelegram: caddie?.hasTelegram ?? false,
+        };
+      });
+      return {
+        id: g.id,
+        number: g.group_no ?? 0,
+        label: `Grupo ${g.group_no ?? "?"}`,
+        startingHole: startHole,
+        teeTime: g.tee_time,
+        actualStartAt: g.actual_start_at,
+        players,
+        playerRows,
+        status: "cerrado" as LiveStatus,
+        hoyo: scoreHole,
+        holeSource: scoreHolesPlayed > 0 ? "scores" : null,
+        detail: scoreFinished
+          ? "🏁 Terminó · ronda/torneo cerrado (sin retraso en vivo)"
+          : `Ronda/torneo cerrado · ${scoreHolesPlayed}/18 capturados (ritmo no se actualiza)`,
+        deltaMinutes: null,
+        lat: latest?.lat ?? null,
+        lon: latest?.lon ?? null,
+        lastTs,
+        stale,
+        gpsState,
+        activeSources: 0,
+        scoreHolesPlayed,
+        scoreFinished,
+        lastScoreTs: score?.lastCaptureTs ?? null,
+        caddies: coverage?.caddies ?? [],
+        playersWithTelegram: coverage?.playersWithTelegram ?? 0,
+        playerCount: coverage?.playerCount ?? players.length,
+      };
+    }
+
     // Fuente del hoyo: los escores capturados son la verdad del avance; el GPS
     // es respaldo (y da la posición en el mapa). Si hay captura, manda el score.
     let hoyoActual: number | null;
     let holeSource: "scores" | "gps" | null;
-    if (scoreHole != null) {
+    if (scoreFinished) {
+      // Ya terminó la tarjeta: no usar GPS para inventar ritmo “atrasado”.
+      hoyoActual = null;
+      holeSource = "scores";
+    } else if (scoreHole != null) {
       hoyoActual = scoreHole;
       holeSource = "scores";
     } else if (!stale && gpsHole != null) {
@@ -391,7 +449,7 @@ export default async function RitmoPage({
     }
 
     const pace = computePace({
-      hoyoActual,
+      hoyoActual: scoreFinished ? null : hoyoActual,
       teeTimeISO: g.tee_time,
       actualStartISO: g.actual_start_at,
       teeStartHole: startHole,
@@ -402,7 +460,10 @@ export default async function RitmoPage({
 
     let status: LiveStatus;
     let deltaMinutes: number | null = null;
-    if (hoyoActual == null) {
+    if (scoreFinished) {
+      status = "en_ritmo";
+      deltaMinutes = null;
+    } else if (hoyoActual == null) {
       status = "sin_datos";
     } else if (
       pace.kind === "en_ritmo" ||

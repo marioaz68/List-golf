@@ -4,6 +4,7 @@ import {
   type PerHoleMinutes,
 } from "@/lib/telegram/ritmo/paceCalculator";
 import { currentHoleFromHolesPlayed } from "@/lib/ritmo/scoreProgress";
+import { isOpsRoundClosed, todayMexicoDate } from "@/lib/ritmo/opsDay";
 
 /** Sin ni un hoyo capturado y ya pasan estos min → cruce crítico (mandar marshal). */
 export const SILENCE_ZERO_CRITICAL_MIN = 22;
@@ -21,7 +22,8 @@ export type CaptureLagKind =
   | "ok"
   | "no_salido"
   | "sin_hora"
-  | "terminado";
+  | "terminado"
+  | "cerrado";
 
 export type CaptureLagResult = {
   kind: CaptureLagKind;
@@ -73,6 +75,10 @@ export function evaluateCaptureLag(args: {
   actualStartISO?: string | null;
   startHole: number;
   roundDate: string | null;
+  tournamentEndDate?: string | null;
+  tournamentStartDate?: string | null;
+  /** Si true (o se deduce por fechas), no acumula retraso de reloj. */
+  opsClosed?: boolean;
   perHoleMinutes?: PerHoleMinutes | null;
   now?: Date;
 }): CaptureLagResult {
@@ -101,6 +107,44 @@ export function evaluateCaptureLag(args: {
         Math.round((now.getTime() - t) / 60000)
       );
     }
+  }
+
+  const today = todayMexicoDate(now);
+  const opsClosed =
+    args.opsClosed === true ||
+    isOpsRoundClosed({
+      roundDate: args.roundDate,
+      tournamentEndDate: args.tournamentEndDate,
+      tournamentStartDate: args.tournamentStartDate,
+      today,
+    });
+
+  // Ronda/torneo de fecha pasada: congelar reloj — no criticar por retraso acumulado.
+  if (opsClosed) {
+    if (holesPlayed >= 18) {
+      return {
+        kind: "terminado",
+        expectedHoles: 18,
+        holesPlayed: 18,
+        holesBehind: 0,
+        minutesSinceStart: null,
+        minutesSinceLastCapture,
+        captureHole: null,
+        reason: "18 hoyos · ronda cerrada",
+        priority: 95,
+      };
+    }
+    return {
+      kind: "cerrado",
+      expectedHoles: holesPlayed,
+      holesPlayed,
+      holesBehind: 0,
+      minutesSinceStart: null,
+      minutesSinceLastCapture,
+      captureHole,
+      reason: `Ronda cerrada (fecha pasada) · ${holesPlayed}/18 capturados`,
+      priority: 92,
+    };
   }
 
   if (holesPlayed >= 18) {

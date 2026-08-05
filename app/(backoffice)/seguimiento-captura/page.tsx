@@ -86,7 +86,7 @@ export default async function SeguimientoCapturaPage({
   if (!scopeAll && filterTournamentId) {
     const { data: tournamentRow } = await admin
       .from("tournaments")
-      .select("id, name, short_name, course_name, course_id")
+      .select("id, name, short_name, course_name, course_id, start_date, end_date")
       .eq("id", filterTournamentId)
       .maybeSingle();
 
@@ -96,6 +96,10 @@ export default async function SeguimientoCapturaPage({
       "Torneo";
     const courseName = (tournamentRow?.course_name as string | null) ?? null;
     const courseId = (tournamentRow?.course_id as string | null) ?? null;
+    const tournamentEndDate =
+      (tournamentRow?.end_date as string | null) ?? null;
+    const tournamentStartDate =
+      (tournamentRow?.start_date as string | null) ?? null;
 
     const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
       admin,
@@ -136,6 +140,8 @@ export default async function SeguimientoCapturaPage({
         roundId: round.id,
         roundNo: round.round_no,
         roundDate: round.round_date,
+        tournamentEndDate,
+        tournamentStartDate,
         now,
         perHoleMinutes,
       });
@@ -178,6 +184,8 @@ export default async function SeguimientoCapturaPage({
       roundId: slot.roundId,
       roundNo: slot.roundNo,
       roundDate: slot.roundDate,
+      tournamentEndDate: slot.tournament.endDate,
+      tournamentStartDate: slot.tournament.startDate,
       now,
       perHoleMinutes: per,
     });

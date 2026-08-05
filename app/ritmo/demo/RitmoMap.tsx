@@ -19,7 +19,7 @@ export interface GroupDot {
   lat: number;
   lon: number;
   hoyo: number;
-  status: "en_ritmo" | "adelantado" | "atrasado" | "sin_datos";
+  status: "en_ritmo" | "adelantado" | "atrasado" | "sin_datos" | "cerrado";
   label: string;
   detail?: string;
   role?: "normal" | "blocker" | "blocked";
@@ -31,6 +31,7 @@ const STATUS_COLOR: Record<GroupDot["status"], string> = {
   adelantado: "#3b82f6",
   atrasado: "#ef4444",
   sin_datos: "#6b7280",
+  cerrado: "#64748b",
 };
 const BLOCKED_COLOR = "#f59e0b"; // amarillo/naranja para "víctimas"
 

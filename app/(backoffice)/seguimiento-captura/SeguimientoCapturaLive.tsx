@@ -108,6 +108,12 @@ const KIND_META: Record<
     bg: "#eff6ff",
     border: "#3b82f6",
   },
+  cerrado: {
+    label: "CERRADA",
+    color: "#334155",
+    bg: "#f1f5f9",
+    border: "#64748b",
+  },
 };
 
 function formatTime(value: string | null): string {

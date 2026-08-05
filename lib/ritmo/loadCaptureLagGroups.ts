@@ -10,6 +10,7 @@ import {
 } from "@/lib/ritmo/scoreProgress";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 import { evaluateCaptureLag } from "@/lib/ritmo/captureLag";
+import { isOpsRoundClosed } from "@/lib/ritmo/opsDay";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
 
@@ -74,6 +75,8 @@ export async function loadCaptureLagGroupsForRound(
     roundId: string;
     roundNo: number | null;
     roundDate: string | null;
+    tournamentEndDate?: string | null;
+    tournamentStartDate?: string | null;
     now?: Date;
     perHoleMinutes?: PerHoleMinutes | null;
   }
@@ -158,6 +161,8 @@ export async function loadCaptureLagGroupsForRound(
       actualStartISO: g.actual_start_at,
       startHole,
       roundDate: args.roundDate,
+      tournamentEndDate: args.tournamentEndDate,
+      tournamentStartDate: args.tournamentStartDate,
       perHoleMinutes,
       now,
     });
@@ -204,6 +209,8 @@ export type TournamentBrief = {
   name: string;
   courseName: string | null;
   courseId: string | null;
+  startDate: string | null;
+  endDate: string | null;
 };
 
 /**
@@ -226,7 +233,7 @@ export async function loadTodayRoundsAcrossTournaments(
   let q = admin
     .from("rounds")
     .select(
-      "id, round_no, round_date, tournament_id, tournaments ( id, name, short_name, course_name, course_id, is_archived, status )"
+      "id, round_no, round_date, tournament_id, tournaments ( id, name, short_name, course_name, course_id, is_archived, status, start_date, end_date )"
     )
     .eq("round_date", today)
     .order("round_no", { ascending: true });
@@ -257,6 +264,8 @@ export async function loadTodayRoundsAcrossTournaments(
           course_id: string | null;
           is_archived: boolean | null;
           status: string | null;
+          start_date: string | null;
+          end_date: string | null;
         }
       | {
           id: string;
@@ -266,6 +275,8 @@ export async function loadTodayRoundsAcrossTournaments(
           course_id: string | null;
           is_archived: boolean | null;
           status: string | null;
+          start_date: string | null;
+          end_date: string | null;
         }[]
       | null;
   }[]) {
@@ -274,6 +285,17 @@ export async function loadTodayRoundsAcrossTournaments(
       : row.tournaments;
     if (!t?.id) continue;
     if (t.is_archived) continue;
+    // Torneo con end_date ya pasado no entra al tablero en vivo.
+    if (
+      isOpsRoundClosed({
+        roundDate: row.round_date,
+        tournamentEndDate: t.end_date,
+        tournamentStartDate: t.start_date,
+        today,
+      })
+    ) {
+      continue;
+    }
     const name =
       (t.short_name && String(t.short_name).trim()) ||
       (t.name && String(t.name).trim()) ||
@@ -284,6 +306,8 @@ export async function loadTodayRoundsAcrossTournaments(
         name,
         courseName: t.course_name ?? null,
         courseId: t.course_id ?? null,
+        startDate: t.start_date ?? null,
+        endDate: t.end_date ?? null,
       },
       roundId: row.id,
       roundNo: row.round_no,

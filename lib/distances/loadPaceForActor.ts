@@ -15,6 +15,7 @@ import {
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "@/lib/telegram/ritmo/paceCalculator";
+import { isOpsRoundClosed } from "@/lib/ritmo/opsDay";
 
 /** Color del semáforo de ritmo según minutos de atraso (positivo = atrasado). */
 export type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
@@ -138,6 +139,24 @@ export async function loadPaceForActor(
 
   // Hoyo: escores del grupo > el que mandó el cliente > moda GPS del grupo.
   const hoyo = await resolvePaceHole(supabase, ctx, input.hole ?? null);
+
+  // Ronda/torneo de fecha pasada: no acumular semáforo de retraso.
+  if (
+    isOpsRoundClosed({
+      roundDate: ctx.roundDate,
+    })
+  ) {
+    return {
+      ok: true,
+      status: "cerrado",
+      color: "none",
+      deltaMinutes: null,
+      hoyo,
+      message: "Ronda cerrada — el ritmo en vivo ya no se actualiza.",
+      windowStart: null,
+      windowEnd: null,
+    };
+  }
 
   const perHoleMinutes = await loadPerHoleMinutes(supabase, ctx.courseId);
   const pace = computePace({

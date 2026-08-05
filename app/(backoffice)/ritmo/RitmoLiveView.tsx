@@ -7,7 +7,12 @@ import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
 
-export type LiveStatus = "en_ritmo" | "adelantado" | "atrasado" | "sin_datos";
+export type LiveStatus =
+  | "en_ritmo"
+  | "adelantado"
+  | "atrasado"
+  | "sin_datos"
+  | "cerrado";
 export type GpsState = "live" | "stale" | "none";
 
 export type CaddieCoverageRow = {
@@ -81,6 +86,7 @@ const STATUS_COLOR: Record<LiveStatus, string> = {
   adelantado: "#3b82f6",
   atrasado: "#ef4444",
   sin_datos: "#6b7280",
+  cerrado: "#64748b",
 };
 
 const STATUS_RANK: Record<LiveStatus, number> = {
@@ -88,6 +94,7 @@ const STATUS_RANK: Record<LiveStatus, number> = {
   sin_datos: 1,
   en_ritmo: 2,
   adelantado: 3,
+  cerrado: 4,
 };
 
 function formatTime(value: string | null): string {
@@ -171,7 +178,13 @@ export default function RitmoLiveView({
 
   const withPosition = mapGroups.length;
   const counts = useMemo(() => {
-    const c = { atrasado: 0, en_ritmo: 0, adelantado: 0, sin_datos: 0 };
+    const c = {
+      atrasado: 0,
+      en_ritmo: 0,
+      adelantado: 0,
+      sin_datos: 0,
+      cerrado: 0,
+    };
     for (const g of groups) c[g.status] += 1;
     return c;
   }, [groups]);
@@ -345,6 +358,13 @@ export default function RitmoLiveView({
         <SummaryChip color={STATUS_COLOR.en_ritmo} n={counts.en_ritmo} label="en ritmo" />
         <SummaryChip color={STATUS_COLOR.adelantado} n={counts.adelantado} label="adelant." />
         <SummaryChip color={STATUS_COLOR.sin_datos} n={counts.sin_datos} label="sin ritmo" />
+        {counts.cerrado > 0 ? (
+          <SummaryChip
+            color={STATUS_COLOR.cerrado}
+            n={counts.cerrado}
+            label="cerrados"
+          />
+        ) : null}
       </div>
 
       {/* Cobertura GPS por grupo */}
@@ -1015,6 +1035,24 @@ function DeltaChip({
         }}
       >
         sin GPS
+      </span>
+    );
+  }
+  if (status === "cerrado") {
+    return (
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          padding: "2px 7px",
+          borderRadius: 4,
+          background: "#334155",
+          color: "#cbd5e1",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+        }}
+      >
+        cerrada
       </span>
     );
   }
