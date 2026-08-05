@@ -221,9 +221,18 @@ export default async function PublicTournamentPage({
   const isRyderTournament =
     (typedTournament.settings as { format?: { matchplay_variant?: string } } | null)
       ?.format?.matchplay_variant === "ryder";
+  /** Match play Calcuta (no Ryder): no hay clasificación stroke pública que mostrar. */
+  const isCalcutaTournament = isMatchPlayTournament && !isRyderTournament;
 
   if (isRyderTournament && !isEmbed) {
     redirect(`/torneos/${id}/ryder`);
+  }
+
+  if (isCalcutaTournament && view === "official") {
+    const qs = new URLSearchParams({ view: "live" });
+    if (isEmbed) qs.set("embed", "1");
+    if (isEmbed && fromAdmin) qs.set("from", "admin");
+    redirect(`/torneos/${id}?${qs.toString()}`);
   }
 
   if (view === "bracket" && !isMatchPlayTournament) {
@@ -1532,19 +1541,21 @@ export default async function PublicTournamentPage({
                 {pub.live}
               </Link>
 
-              <Link
-                scroll={false}
-                href={tHref({
-                  categoryId: selectedCategoryId || null,
-                  roundId: selectedRound?.id ?? null,
-                  view: "official",
-                })}
-                className={publicTournamentViewPillClasses(
-                  view === "official"
-                )}
-              >
-                {pub.leaderboard}
-              </Link>
+              {!isCalcutaTournament ? (
+                <Link
+                  scroll={false}
+                  href={tHref({
+                    categoryId: selectedCategoryId || null,
+                    roundId: selectedRound?.id ?? null,
+                    view: "official",
+                  })}
+                  className={publicTournamentViewPillClasses(
+                    view === "official"
+                  )}
+                >
+                  {pub.leaderboard}
+                </Link>
+              ) : null}
 
               <Link
                 scroll={false}
