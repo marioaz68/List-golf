@@ -22,7 +22,7 @@ import {
   type GroupScoreMeta,
 } from "@/lib/ritmo/scoreProgress";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
-import { isOpsRoundClosed, todayMexicoDate } from "@/lib/ritmo/opsDay";
+import { isOpsRoundClosed, todayMexicoDate, isGroupCaptureFinished } from "@/lib/ritmo/opsDay";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -377,13 +377,14 @@ export default async function RitmoPage({
       score?.startHole ??
       resolveGroupStartHole(g.starting_hole, g.notes);
     const scoreHolesPlayed = score?.holesPlayed ?? 0;
-    const scoreFinished = scoreHolesPlayed >= 18;
+    const scoreFinished = isGroupCaptureFinished(scoreHolesPlayed);
     const scoreHole = score
       ? currentHoleFromHolesPlayed(scoreHolesPlayed, startHole)
       : null;
 
-    // Ronda/torneo cerrado: no medir ritmo contra reloj (evita “lentos” eternos).
-    if (opsClosed) {
+    // Ronda/torneo cerrado por fecha, O salida con 18 hoyos capturados:
+    // congelar ritmo (no “lentos” eternos; reloj detenido para esa salida).
+    if (opsClosed || scoreFinished) {
       const coverage = coverageByGroup.get(g.id);
       const gpsState: GroupGpsState = gpsStateFromTimestamp(
         lastTs,
@@ -398,6 +399,9 @@ export default async function RitmoPage({
           caddieHasTelegram: caddie?.hasTelegram ?? false,
         };
       });
+      const detail = scoreFinished
+        ? "🏁 18 hoyos capturados — salida cerrada, ritmo detenido"
+        : `Ronda/torneo cerrado · ${scoreHolesPlayed}/18 capturados (ritmo no se actualiza)`;
       return {
         id: g.id,
         number: g.group_no ?? 0,
@@ -410,9 +414,7 @@ export default async function RitmoPage({
         status: "cerrado" as LiveStatus,
         hoyo: scoreHole,
         holeSource: scoreHolesPlayed > 0 ? "scores" : null,
-        detail: scoreFinished
-          ? "🏁 Terminó · ronda/torneo cerrado (sin retraso en vivo)"
-          : `Ronda/torneo cerrado · ${scoreHolesPlayed}/18 capturados (ritmo no se actualiza)`,
+        detail,
         deltaMinutes: null,
         lat: latest?.lat ?? null,
         lon: latest?.lon ?? null,
@@ -433,11 +435,7 @@ export default async function RitmoPage({
     // es respaldo (y da la posición en el mapa). Si hay captura, manda el score.
     let hoyoActual: number | null;
     let holeSource: "scores" | "gps" | null;
-    if (scoreFinished) {
-      // Ya terminó la tarjeta: no usar GPS para inventar ritmo “atrasado”.
-      hoyoActual = null;
-      holeSource = "scores";
-    } else if (scoreHole != null) {
+    if (scoreHole != null) {
       hoyoActual = scoreHole;
       holeSource = "scores";
     } else if (!stale && gpsHole != null) {
@@ -449,7 +447,7 @@ export default async function RitmoPage({
     }
 
     const pace = computePace({
-      hoyoActual: scoreFinished ? null : hoyoActual,
+      hoyoActual,
       teeTimeISO: g.tee_time,
       actualStartISO: g.actual_start_at,
       teeStartHole: startHole,
@@ -460,10 +458,7 @@ export default async function RitmoPage({
 
     let status: LiveStatus;
     let deltaMinutes: number | null = null;
-    if (scoreFinished) {
-      status = "en_ritmo";
-      deltaMinutes = null;
-    } else if (hoyoActual == null) {
+    if (hoyoActual == null) {
       status = "sin_datos";
     } else if (
       pace.kind === "en_ritmo" ||
@@ -500,9 +495,8 @@ export default async function RitmoPage({
     }
     const activeSources = recentDevices.size;
 
-    const detail = scoreFinished
-      ? "🏁 Terminó (18 hoyos capturados)"
-      : holeSource === "scores"
+    const detail =
+      holeSource === "scores"
         ? pace.msg
         : holeSource === "gps"
           ? pace.msg

@@ -15,7 +15,7 @@ import {
   loadPerHoleMinutes,
   smoothedHoleForGroup,
 } from "@/lib/telegram/ritmo/paceCalculator";
-import { isOpsRoundClosed } from "@/lib/ritmo/opsDay";
+import { isOpsRoundClosed, isGroupCaptureFinished } from "@/lib/ritmo/opsDay";
 
 /** Color del semáforo de ritmo según minutos de atraso (positivo = atrasado). */
 export type PaceColor = "red" | "yellow" | "green" | "blue" | "none";
@@ -138,6 +138,45 @@ export async function loadPaceForActor(
   }
 
   // Hoyo: escores del grupo > el que mandó el cliente > moda GPS del grupo.
+  // Si el grupo ya capturó 18, el ritmo queda congelado (misma ruta que
+  // resolvePaceHole leemos progreso).
+  let holesPlayedDone = 0;
+  if (ctx.roundId && ctx.groupId) {
+    const { data: mems } = await supabase
+      .from("pairing_group_members")
+      .select("entry_id")
+      .eq("group_id", ctx.groupId);
+    const entryIds = (mems ?? [])
+      .map((m) => m.entry_id)
+      .filter((id): id is string => Boolean(id));
+    if (entryIds.length > 0) {
+      const byGroup = new Map([[ctx.groupId, entryIds]]);
+      const meta = new Map([
+        [ctx.groupId, { starting_hole: ctx.groupStartHole }],
+      ]);
+      const progress = await loadGroupScoreProgress(
+        supabase,
+        ctx.roundId,
+        byGroup,
+        meta
+      );
+      holesPlayedDone = progress.get(ctx.groupId)?.holesPlayed ?? 0;
+    }
+  }
+
+  if (isGroupCaptureFinished(holesPlayedDone)) {
+    return {
+      ok: true,
+      status: "cerrado",
+      color: "none",
+      deltaMinutes: null,
+      hoyo: null,
+      message: "18 hoyos capturados — salida cerrada, ritmo detenido.",
+      windowStart: null,
+      windowEnd: null,
+    };
+  }
+
   const hoyo = await resolvePaceHole(supabase, ctx, input.hole ?? null);
 
   // Ronda/torneo de fecha pasada: no acumular semáforo de retraso.
