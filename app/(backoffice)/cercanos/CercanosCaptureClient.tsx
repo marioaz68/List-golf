@@ -16,6 +16,7 @@ import type {
   ClosestToPinHoleBoard,
 } from "@/lib/cercanos/types";
 import { CLOSEST_TO_PIN_MAX_PRIZES } from "@/lib/cercanos/types";
+import DrawnSignaturePad from "@/components/ui/DrawnSignaturePad";
 
 const initial: SaveClosestToPinState = { ok: false, message: "" };
 
@@ -68,10 +69,16 @@ export default function CercanosCaptureClient({
   );
 
   const [distances, setDistances] = useState(() => mapPlayerDistances(players));
+  const [signature, setSignature] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState("");
 
   useEffect(() => {
     setDistances(mapPlayerDistances(players));
   }, [players]);
+
+  useEffect(() => {
+    setSignature(null);
+  }, [initialGroupId, initialHole, initialRoundId]);
 
   const navigate = (next: {
     roundId?: string;
@@ -110,6 +117,10 @@ export default function CercanosCaptureClient({
         <p className="text-sm text-slate-300">
           {tournamentName} · pares 3 · hasta {CLOSEST_TO_PIN_MAX_PRIZES} premios
           por hoyo (1.º = más cercano)
+        </p>
+        <p className="text-[11px] text-slate-500">
+          Captura del capturista en su teléfono (esta pantalla). La firma la
+          pone el staff aquí — no el jugador ni Telegram.
         </p>
       </header>
 
@@ -175,6 +186,7 @@ export default function CercanosCaptureClient({
           <input type="hidden" name="round_id" value={initialRoundId} />
           <input type="hidden" name="group_id" value={initialGroupId} />
           <input type="hidden" name="hole_number" value={initialHole} />
+          <input type="hidden" name="signature_payload" value={signature ?? ""} />
 
           <div className="text-sm font-bold text-cyan-200">
             Captura · hoyo {initialHole} · G
@@ -202,6 +214,9 @@ export default function CercanosCaptureClient({
                     {p.distanceCm != null
                       ? ` · guardado: ${formatDistanceCm(p.distanceCm)}`
                       : ""}
+                    {p.signed
+                      ? ` · ✍️ capturista${p.signerName ? ` (${p.signerName})` : ""}`
+                      : ""}
                   </div>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-slate-300">
@@ -224,13 +239,39 @@ export default function CercanosCaptureClient({
             ))}
           </ul>
 
+          <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/20 p-3">
+            <div className="text-sm font-bold text-amber-100">
+              Firma del capturista (opcional)
+            </div>
+            <p className="text-[11px] text-amber-100/70">
+              Firma en tu teléfono al guardar. No se pide al jugador ni en
+              Telegram.
+            </p>
+            <label className="block text-xs font-semibold text-slate-300">
+              Nombre del capturista
+              <input
+                name="signer_name"
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="Ej. Mario · capturista H3"
+                maxLength={120}
+                className="mt-1 w-full rounded-md border border-white/20 bg-white px-2 py-2 text-sm text-slate-900"
+              />
+            </label>
+            <DrawnSignaturePad value={signature} onChange={setSignature} />
+          </div>
+
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={pending}
-              className="rounded-lg border border-cyan-400 bg-gradient-to-b from-cyan-400 to-cyan-600 px-4 py-2 text-sm font-bold text-[#08111f] disabled:opacity-50"
+              className="min-h-11 rounded-lg border border-cyan-400 bg-gradient-to-b from-cyan-400 to-cyan-600 px-4 py-2 text-sm font-bold text-[#08111f] disabled:opacity-50"
             >
-              {pending ? "Guardando…" : "Guardar distancias"}
+              {pending
+                ? "Guardando…"
+                : signature
+                  ? "Guardar distancias + firma"
+                  : "Guardar distancias"}
             </button>
             {state.message ? (
               <span
@@ -273,7 +314,21 @@ export default function CercanosCaptureClient({
                     <td className="px-3 py-2 font-bold text-cyan-200">
                       {s.tied ? `T${s.position}` : s.position}
                     </td>
-                    <td className="px-3 py-2">{s.playerName}</td>
+                    <td className="px-3 py-2">
+                      {s.playerName}
+                      {s.signed ? (
+                        <span
+                          className="ml-1 text-[10px] text-amber-300"
+                          title={
+                            s.signerName
+                              ? `Firmado por capturista: ${s.signerName}`
+                              : "Firmado por capturista"
+                          }
+                        >
+                          ✍️
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-2 text-slate-400">
                       {s.categoryCode ?? "—"}
                     </td>
@@ -284,13 +339,6 @@ export default function CercanosCaptureClient({
                 ))}
               </tbody>
             </table>
-            {boardForHole.totalEntries > boardForHole.standings.length ? (
-              <p className="border-t border-white/10 px-3 py-2 text-[11px] text-slate-500">
-                Mostrando {boardForHole.standings.length} de{" "}
-                {boardForHole.totalEntries} capturas (máx.{" "}
-                {CLOSEST_TO_PIN_MAX_PRIZES} premios).
-              </p>
-            ) : null}
           </div>
         ) : (
           <p className="text-sm text-slate-500">

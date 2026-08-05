@@ -170,6 +170,8 @@ export async function loadGroupPlayersForCapture(
       categoryCode: cat?.code ?? null,
       distanceCm: null,
       entryRowId: null,
+      signed: false,
+      signerName: null,
     });
   }
 
@@ -177,7 +179,7 @@ export async function loadGroupPlayersForCapture(
 
   const { data: existing } = await admin
     .from("closest_to_pin_entries")
-    .select("id, entry_id, distance_cm")
+    .select("id, entry_id, distance_cm, signature_payload, signer_name")
     .eq("tournament_id", params.tournamentId)
     .eq("round_id", params.roundId)
     .eq("hole_number", params.holeNumber)
@@ -189,6 +191,8 @@ export async function loadGroupPlayersForCapture(
         id: string;
         entry_id: string;
         distance_cm: number;
+        signature_payload: string | null;
+        signer_name: string | null;
       }>
     ).map((r) => [r.entry_id, r])
   );
@@ -199,6 +203,8 @@ export async function loadGroupPlayersForCapture(
       ...p,
       distanceCm: ex?.distance_cm ?? null,
       entryRowId: ex?.id ?? null,
+      signed: Boolean(ex?.signature_payload),
+      signerName: ex?.signer_name ?? null,
     };
   });
 }
@@ -221,7 +227,7 @@ export async function loadClosestToPinPublicBoard(
   const { data: rows } = await admin
     .from("closest_to_pin_entries")
     .select(
-      "entry_id, hole_number, distance_cm, group_id, tournament_entries(player_number, players(first_name, last_name), categories(code))"
+      "entry_id, hole_number, distance_cm, group_id, signature_payload, signer_name, tournament_entries(player_number, players(first_name, last_name), categories(code))"
     )
     .eq("tournament_id", params.tournamentId)
     .eq("round_id", params.roundId)
@@ -233,6 +239,8 @@ export async function loadClosestToPinPublicBoard(
     hole_number: number;
     distance_cm: number;
     group_id: string | null;
+    signature_payload: string | null;
+    signer_name: string | null;
     tournament_entries:
       | {
           player_number: number | null;
@@ -288,6 +296,8 @@ export async function loadClosestToPinPublicBoard(
       categoryCode: string | null;
       distanceCm: number;
       groupNo: number | null;
+      signed: boolean;
+      signerName: string | null;
     }>
   >();
 
@@ -305,6 +315,8 @@ export async function loadClosestToPinPublicBoard(
       categoryCode: cat?.code ?? null,
       distanceCm: r.distance_cm,
       groupNo: r.group_id ? groupNoById.get(r.group_id) ?? null : null,
+      signed: Boolean(r.signature_payload),
+      signerName: r.signer_name ?? null,
     });
     byHole.set(r.hole_number, list);
   }

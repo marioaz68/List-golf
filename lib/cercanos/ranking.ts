@@ -9,6 +9,8 @@ type RankInput = {
   categoryCode: string | null;
   distanceCm: number;
   groupNo: number | null;
+  signed?: boolean;
+  signerName?: string | null;
 };
 
 /** Orden: distancia ascendente. Empates comparten posición (T1, T2…). */
@@ -39,6 +41,8 @@ export function rankClosestToPin(
         categoryCode: r.categoryCode,
         distanceCm: r.distanceCm,
         groupNo: r.groupNo,
+        signed: Boolean(r.signed),
+        signerName: r.signerName ?? null,
       });
     }
     i = j;

@@ -13,6 +13,29 @@ export type SaveClosestToPinState = {
   message: string;
 };
 
+const MAX_SIGNATURE_CHARS = 600_000; // ~450 KB base64 PNG
+
+function parseSignaturePayload(raw: FormDataEntryValue | null): {
+  signature: string | null;
+  error: string | null;
+} {
+  const s = raw == null ? "" : String(raw).trim();
+  if (!s) return { signature: null, error: null };
+  if (!s.startsWith("data:image/png;base64,")) {
+    return {
+      signature: null,
+      error: "Firma inválida. Vuelve a firmar en el recuadro.",
+    };
+  }
+  if (s.length > MAX_SIGNATURE_CHARS) {
+    return {
+      signature: null,
+      error: "La firma es demasiado grande. Limpia y vuelve a firmar.",
+    };
+  }
+  return { signature: s, error: null };
+}
+
 export async function saveGroupClosestToPin(
   _prev: SaveClosestToPinState,
   formData: FormData
@@ -21,6 +44,11 @@ export async function saveGroupClosestToPin(
   const roundId = String(formData.get("round_id") ?? "").trim();
   const groupId = String(formData.get("group_id") ?? "").trim();
   const holeNumber = Number(formData.get("hole_number"));
+  const signerName = String(formData.get("signer_name") ?? "").trim().slice(0, 120);
+  const { signature, error: sigErr } = parseSignaturePayload(
+    formData.get("signature_payload")
+  );
+  if (sigErr) return { ok: false, message: sigErr };
 
   if (!tournamentId || !roundId || !groupId) {
     return { ok: false, message: "Faltan torneo, ronda o grupo." };
@@ -71,7 +99,8 @@ export async function saveGroupClosestToPin(
   }
 
   const now = new Date().toISOString();
-  const upserts: Array<{
+
+  type UpsertRow = {
     tournament_id: string;
     round_id: string;
     hole_number: number;
@@ -80,7 +109,12 @@ export async function saveGroupClosestToPin(
     group_id: string;
     captured_by_profile_id: string;
     updated_at: string;
-  }> = [];
+    signature_payload?: string | null;
+    signed_at?: string | null;
+    signer_name?: string | null;
+  };
+
+  const upserts: UpsertRow[] = [];
   const clearEntryIds: string[] = [];
 
   for (const entryId of allowedEntryIds) {
@@ -97,7 +131,7 @@ export async function saveGroupClosestToPin(
         message: `Distancia inválida para un jugador ("${text}"). Usa m (ej. 1.25), cm o pies'pulgadas.`,
       };
     }
-    upserts.push({
+    const row: UpsertRow = {
       tournament_id: tournamentId,
       round_id: roundId,
       hole_number: holeNumber,
@@ -106,7 +140,16 @@ export async function saveGroupClosestToPin(
       group_id: groupId,
       captured_by_profile_id: user.id,
       updated_at: now,
-    });
+    };
+    // Solo el capturista (sesión staff en /cercanos) firma aquí.
+    // Si no hay firma nueva, no se tocan columnas de firma (upsert parcial vía
+    // dos pasos cuando hay firma).
+    if (signature) {
+      row.signature_payload = signature;
+      row.signed_at = now;
+      row.signer_name = signerName || null;
+    }
+    upserts.push(row);
   }
 
   if (clearEntryIds.length > 0) {
@@ -123,12 +166,29 @@ export async function saveGroupClosestToPin(
   }
 
   if (upserts.length > 0) {
-    const { error: upErr } = await admin.from("closest_to_pin_entries").upsert(
-      upserts,
-      { onConflict: "round_id,hole_number,entry_id" }
-    );
-    if (upErr) {
-      return { ok: false, message: upErr.message };
+    if (signature) {
+      const { error: upErr } = await admin
+        .from("closest_to_pin_entries")
+        .upsert(upserts, { onConflict: "round_id,hole_number,entry_id" });
+      if (upErr) return { ok: false, message: upErr.message };
+    } else {
+      // Sin firma nueva: actualizar solo distancia sin borrar firmas previas.
+      for (const row of upserts) {
+        const { error: upErr } = await admin.from("closest_to_pin_entries").upsert(
+          {
+            tournament_id: row.tournament_id,
+            round_id: row.round_id,
+            hole_number: row.hole_number,
+            entry_id: row.entry_id,
+            distance_cm: row.distance_cm,
+            group_id: row.group_id,
+            captured_by_profile_id: row.captured_by_profile_id,
+            updated_at: row.updated_at,
+          },
+          { onConflict: "round_id,hole_number,entry_id" }
+        );
+        if (upErr) return { ok: false, message: upErr.message };
+      }
     }
   }
 
@@ -136,8 +196,9 @@ export async function saveGroupClosestToPin(
   revalidatePath(`/torneos/${tournamentId}/cercanos`);
   revalidatePath(`/torneos/${tournamentId}`);
 
+  const firmada = signature ? " · firmado por capturista" : "";
   return {
     ok: true,
-    message: `Guardado: ${upserts.length} distancia(s)${clearEntryIds.length ? `, ${clearEntryIds.length} borrada(s)` : ""}.`,
+    message: `Guardado: ${upserts.length} distancia(s)${clearEntryIds.length ? `, ${clearEntryIds.length} borrada(s)` : ""}${firmada}.`,
   };
 }

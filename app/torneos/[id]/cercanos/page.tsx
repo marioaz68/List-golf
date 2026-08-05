@@ -182,10 +182,19 @@ export default async function PublicCercanosPage(props: {
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-semibold text-white">
                               {s.playerName}
+                              {s.signed ? (
+                                <span
+                                  className="ml-1 text-[10px] text-amber-300/90"
+                                  title="Verificado por capturista"
+                                >
+                                  ✓
+                                </span>
+                              ) : null}
                             </div>
                             <div className="text-[11px] text-slate-400">
                               {s.categoryCode ?? "—"}
                               {s.groupNo != null ? ` · G${s.groupNo}` : ""}
+                              {s.signed ? " · verificado" : ""}
                             </div>
                           </div>
                           <div

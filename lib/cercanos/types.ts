@@ -21,6 +21,9 @@ export type ClosestToPinStanding = {
   categoryCode: string | null;
   distanceCm: number;
   groupNo: number | null;
+  /** Firma del capturista (staff), no del jugador. */
+  signed: boolean;
+  signerName: string | null;
 };
 
 export type ClosestToPinHoleBoard = {
@@ -39,6 +42,9 @@ export type CaptureGroupPlayer = {
   /** Distancia ya capturada (cm), si existe. */
   distanceCm: number | null;
   entryRowId: string | null;
+  /** Ya tiene firma del capturista. */
+  signed: boolean;
+  signerName: string | null;
 };
 
 export type CaptureGroupOption = {
