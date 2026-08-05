@@ -14,6 +14,7 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   scorecards: "scorecards",
   scorecardsMp: "scorecards",
   leaderboard: "leaderboard",
+  cercanos: "cercanos",
   caddies: "caddies",
   ritmo: "ritmo",
   // Mismo permiso que ritmo (staff de cancha / marshal).

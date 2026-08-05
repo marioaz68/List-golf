@@ -34,6 +34,7 @@ export type AppModule =
   | "comite-handicap"
   | "captura-telegram"
   | "banderas"       // posición de la bandera/pin en los 18 greens
+  | "cercanos"       // más cerca de la bandera (pares 3)
   | "fb"             // gate global — cualquier rol F&B pasa
   | "fb-manage"      // panel manager: admin, cuentas, reportes, disputas, mesas-qr
   | "fb-kitchen"     // vista cocina
@@ -188,6 +189,15 @@ export const MODULE_ACCESS: Record<AppModule, AppRole[]> = {
     "flag_keeper",
   ],
 
+  // Más cerca de la bandera (pares 3): captura de distancias por grupo.
+  cercanos: [
+    "super_admin",
+    "club_admin",
+    "tournament_director",
+    "score_capture",
+    "marshal",
+  ],
+
   // F&B (Food & Beverage): backoffice del menú + cocina + carrito bar.
   // Gate global — cualquier rol F&B autoriza entrar al backoffice; cada
   // pantalla se gatea con un sub-módulo más estricto (ver abajo).
@@ -253,6 +263,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/caddies",
   "/ritmo",
   "/seguimiento-captura",
+  "/cercanos",
   "/reports",
   "/tournaments",
   "/convocatoria",
@@ -333,6 +344,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/caddies")) return "caddies";
   if (pathname.startsWith("/ritmo")) return "ritmo";
   if (pathname.startsWith("/seguimiento-captura")) return "seguimiento-captura";
+  if (pathname.startsWith("/cercanos")) return "cercanos";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";

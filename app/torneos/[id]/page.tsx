@@ -1586,6 +1586,13 @@ export default async function PublicTournamentPage({
                 {pub.favorites}
               </Link>
 
+              <Link
+                href={`/torneos/${id}/cercanos`}
+                className={publicTournamentViewPillClasses(false)}
+              >
+                {pub.cercanosTab}
+              </Link>
+
               {publicConvocatoria.visible ? (
                 <Link
                   scroll={false}

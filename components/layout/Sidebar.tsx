@@ -36,6 +36,7 @@ import {
   Car,
   Gauge,
   Radio,
+  Target,
   Gavel,
   Scale,
   Send,
@@ -232,6 +233,12 @@ export default function Sidebar() {
         nameKey: "leaderboard",
         href: "/leaderboard",
         icon: ListOrdered,
+        requiresTournament: true,
+      },
+      {
+        nameKey: "cercanos",
+        href: "/cercanos",
+        icon: Target,
         requiresTournament: true,
       },
       {
