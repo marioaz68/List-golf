@@ -242,6 +242,12 @@ export default function Sidebar() {
         requiresTournament: true,
       },
       {
+        nameKey: "cercanosPremios",
+        href: "/cercanos/premios",
+        icon: Medal,
+        requiresTournament: true,
+      },
+      {
         nameKey: "caddies",
         href: "/caddies",
         icon: Car,

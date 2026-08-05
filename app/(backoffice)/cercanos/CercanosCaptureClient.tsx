@@ -121,7 +121,13 @@ export default function CercanosCaptureClient({
         </p>
         <p className="text-[11px] text-slate-500">
           Capturista: midela y opcionalmente firma aquí. Jugador: acepta en{" "}
-          <strong>su</strong> teléfono con QR/link (no Telegram).
+          <strong>su</strong> teléfono con QR/link (no Telegram).{" "}
+          <a
+            href={`/cercanos/premios?tournament_id=${tournamentId}`}
+            className="font-semibold text-cyan-300 underline"
+          >
+            Alta de premios
+          </a>
         </p>
       </header>
 

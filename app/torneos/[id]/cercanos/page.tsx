@@ -8,6 +8,11 @@ import {
   loadClosestToPinPublicBoard,
   loadTournamentRounds,
 } from "@/lib/cercanos/loadClosestToPin";
+import {
+  loadClosestToPinPrizes,
+  prizesByHolePosition,
+  prizeText,
+} from "@/lib/cercanos/loadPrizes";
 import { CLOSEST_TO_PIN_MAX_PRIZES } from "@/lib/cercanos/types";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +79,11 @@ export default async function PublicCercanosPage(props: {
       })
     : [];
 
+  const prizes = await loadClosestToPinPrizes(admin, tournamentId, {
+    activeOnly: true,
+  });
+  const prizeMap = prizesByHolePosition(prizes);
+
   const selectedRound = rounds.find((r) => r.id === roundId);
 
   return (
@@ -137,75 +147,109 @@ export default async function PublicCercanosPage(props: {
           </p>
         ) : (
           <div className="space-y-6">
-            {board.map((hole) => (
-              <section
-                key={hole.holeNumber}
-                className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
-              >
-                <div className="flex items-baseline justify-between gap-2 border-b border-white/10 bg-emerald-950/40 px-4 py-3">
-                  <h2 className="text-lg font-extrabold text-white">
-                    Hoyo {hole.holeNumber}
-                    <span className="ml-2 text-sm font-semibold text-emerald-300/80">
-                      Par {hole.par}
-                    </span>
-                  </h2>
-                  <span className="text-[11px] text-slate-400">
-                    {hole.totalEntries} captura
-                    {hole.totalEntries === 1 ? "" : "s"}
-                  </span>
-                </div>
+            {board.map((hole) => {
+              const holePrizes = prizeMap.get(hole.holeNumber);
+              const catalog = holePrizes
+                ? [...holePrizes.values()].sort(
+                    (a, b) => a.prizePosition - b.prizePosition
+                  )
+                : [];
 
-                {hole.standings.length === 0 ? (
-                  <p className="px-4 py-5 text-sm text-slate-500">
-                    Sin distancias capturadas aún.
-                  </p>
-                ) : (
-                  <ol className="divide-y divide-white/5">
-                    {hole.standings.map((s, idx) => {
-                      const isFirst = s.position === 1;
-                      return (
-                        <li
-                          key={s.entryId}
-                          className={`flex items-center gap-3 px-4 py-3 ${
-                            isFirst ? "bg-amber-500/10" : ""
-                          }`}
-                        >
-                          <div
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${
-                              isFirst
-                                ? "bg-amber-400 text-[#08111f]"
-                                : "bg-white/10 text-cyan-200"
+              return (
+                <section
+                  key={hole.holeNumber}
+                  className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
+                >
+                  <div className="flex items-baseline justify-between gap-2 border-b border-white/10 bg-emerald-950/40 px-4 py-3">
+                    <h2 className="text-lg font-extrabold text-white">
+                      Hoyo {hole.holeNumber}
+                      <span className="ml-2 text-sm font-semibold text-emerald-300/80">
+                        Par {hole.par}
+                      </span>
+                    </h2>
+                    <span className="text-[11px] text-slate-400">
+                      {hole.totalEntries} captura
+                      {hole.totalEntries === 1 ? "" : "s"}
+                    </span>
+                  </div>
+
+                  {catalog.length > 0 ? (
+                    <div className="border-b border-white/10 bg-amber-950/20 px-4 py-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-amber-200/80">
+                        Premios de este hoyo
+                      </div>
+                      <ul className="mt-1 space-y-0.5 text-[12px] text-amber-50/90">
+                        {catalog.map((p) => (
+                          <li key={p.id}>
+                            <span className="font-bold text-amber-300">
+                              {p.prizePosition}º
+                            </span>
+                            {": "}
+                            {prizeText(p)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {hole.standings.length === 0 ? (
+                    <p className="px-4 py-5 text-sm text-slate-500">
+                      Sin distancias capturadas aún.
+                    </p>
+                  ) : (
+                    <ol className="divide-y divide-white/5">
+                      {hole.standings.map((s, idx) => {
+                        const isFirst = s.position === 1;
+                        const prizeForPos = holePrizes?.get(s.position);
+                        return (
+                          <li
+                            key={s.entryId}
+                            className={`flex items-center gap-3 px-4 py-3 ${
+                              isFirst ? "bg-amber-500/10" : ""
                             }`}
                           >
-                            {s.tied ? `T${s.position}` : s.position}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-semibold text-white">
-                              {s.playerName}
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${
+                                isFirst
+                                  ? "bg-amber-400 text-[#08111f]"
+                                  : "bg-white/10 text-cyan-200"
+                              }`}
+                            >
+                              {s.tied ? `T${s.position}` : s.position}
                             </div>
-                            <div className="text-[11px] text-slate-400">
-                              {s.categoryCode ?? "—"}
-                              {s.groupNo != null ? ` · G${s.groupNo}` : ""}
-                              {s.capturistSigned ? " · ✍️ capturista" : ""}
-                              {s.playerAccepted ? " · ✓ jugador" : ""}
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-semibold text-white">
+                                {s.playerName}
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                {s.categoryCode ?? "—"}
+                                {s.groupNo != null ? ` · G${s.groupNo}` : ""}
+                                {s.capturistSigned ? " · ✍️ capturista" : ""}
+                                {s.playerAccepted ? " · ✓ jugador" : ""}
+                              </div>
+                              {prizeForPos ? (
+                                <div className="mt-0.5 text-[11px] font-semibold text-amber-200/90">
+                                  🏆 {prizeText(prizeForPos)}
+                                </div>
+                              ) : null}
                             </div>
-                          </div>
-                          <div
-                            className={`shrink-0 font-mono text-base font-bold ${
-                              idx === 0 && isFirst
-                                ? "text-amber-300"
-                                : "text-emerald-300"
-                            }`}
-                          >
-                            {formatDistanceCm(s.distanceCm)}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </section>
-            ))}
+                            <div
+                              className={`shrink-0 font-mono text-base font-bold ${
+                                idx === 0 && isFirst
+                                  ? "text-amber-300"
+                                  : "text-emerald-300"
+                              }`}
+                            >
+                              {formatDistanceCm(s.distanceCm)}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </section>
+              );
+            })}
           </div>
         )}
       </div>
