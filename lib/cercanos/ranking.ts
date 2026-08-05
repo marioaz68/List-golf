@@ -9,8 +9,10 @@ type RankInput = {
   categoryCode: string | null;
   distanceCm: number;
   groupNo: number | null;
-  signed?: boolean;
-  signerName?: string | null;
+  capturistSigned?: boolean;
+  capturistSignerName?: string | null;
+  playerAccepted?: boolean;
+  playerSignerName?: string | null;
 };
 
 /** Orden: distancia ascendente. Empates comparten posición (T1, T2…). */
@@ -41,15 +43,15 @@ export function rankClosestToPin(
         categoryCode: r.categoryCode,
         distanceCm: r.distanceCm,
         groupNo: r.groupNo,
-        signed: Boolean(r.signed),
-        signerName: r.signerName ?? null,
+        capturistSigned: Boolean(r.capturistSigned),
+        capturistSignerName: r.capturistSignerName ?? null,
+        playerAccepted: Boolean(r.playerAccepted),
+        playerSignerName: r.playerSignerName ?? null,
       });
     }
     i = j;
   }
 
-  // Premios: mostrar hasta maxPlaces *posiciones* distintas (no filas).
-  // Si T1 tiene 3 empatados y max=1, se muestran los 3 del 1.er lugar.
   const truncated: ClosestToPinStanding[] = [];
   for (const row of result) {
     if (row.position > maxPlaces) break;

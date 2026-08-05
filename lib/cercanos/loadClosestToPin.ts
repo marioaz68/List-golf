@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { formatDistanceCm } from "./distanceFormat";
+import { playerAcceptUrl } from "./acceptToken";
 import { rankClosestToPin } from "./ranking";
 import {
   CLOSEST_TO_PIN_MAX_PRIZES,
@@ -170,8 +171,11 @@ export async function loadGroupPlayersForCapture(
       categoryCode: cat?.code ?? null,
       distanceCm: null,
       entryRowId: null,
-      signed: false,
-      signerName: null,
+      capturistSigned: false,
+      capturistSignerName: null,
+      playerAccepted: false,
+      playerSignerName: null,
+      acceptUrl: null,
     });
   }
 
@@ -179,7 +183,9 @@ export async function loadGroupPlayersForCapture(
 
   const { data: existing } = await admin
     .from("closest_to_pin_entries")
-    .select("id, entry_id, distance_cm, signature_payload, signer_name")
+    .select(
+      "id, entry_id, distance_cm, signature_payload, signer_name, accept_token, player_accepted_at, player_signer_name"
+    )
     .eq("tournament_id", params.tournamentId)
     .eq("round_id", params.roundId)
     .eq("hole_number", params.holeNumber)
@@ -193,6 +199,9 @@ export async function loadGroupPlayersForCapture(
         distance_cm: number;
         signature_payload: string | null;
         signer_name: string | null;
+        accept_token: string | null;
+        player_accepted_at: string | null;
+        player_signer_name: string | null;
       }>
     ).map((r) => [r.entry_id, r])
   );
@@ -203,8 +212,11 @@ export async function loadGroupPlayersForCapture(
       ...p,
       distanceCm: ex?.distance_cm ?? null,
       entryRowId: ex?.id ?? null,
-      signed: Boolean(ex?.signature_payload),
-      signerName: ex?.signer_name ?? null,
+      capturistSigned: Boolean(ex?.signature_payload),
+      capturistSignerName: ex?.signer_name ?? null,
+      playerAccepted: Boolean(ex?.player_accepted_at),
+      playerSignerName: ex?.player_signer_name ?? null,
+      acceptUrl: ex?.accept_token ? playerAcceptUrl(ex.accept_token) : null,
     };
   });
 }
@@ -227,7 +239,7 @@ export async function loadClosestToPinPublicBoard(
   const { data: rows } = await admin
     .from("closest_to_pin_entries")
     .select(
-      "entry_id, hole_number, distance_cm, group_id, signature_payload, signer_name, tournament_entries(player_number, players(first_name, last_name), categories(code))"
+      "entry_id, hole_number, distance_cm, group_id, signature_payload, signer_name, player_accepted_at, player_signer_name, tournament_entries(player_number, players(first_name, last_name), categories(code))"
     )
     .eq("tournament_id", params.tournamentId)
     .eq("round_id", params.roundId)
@@ -241,6 +253,8 @@ export async function loadClosestToPinPublicBoard(
     group_id: string | null;
     signature_payload: string | null;
     signer_name: string | null;
+    player_accepted_at: string | null;
+    player_signer_name: string | null;
     tournament_entries:
       | {
           player_number: number | null;
@@ -296,8 +310,10 @@ export async function loadClosestToPinPublicBoard(
       categoryCode: string | null;
       distanceCm: number;
       groupNo: number | null;
-      signed: boolean;
-      signerName: string | null;
+      capturistSigned: boolean;
+      capturistSignerName: string | null;
+      playerAccepted: boolean;
+      playerSignerName: string | null;
     }>
   >();
 
@@ -315,8 +331,10 @@ export async function loadClosestToPinPublicBoard(
       categoryCode: cat?.code ?? null,
       distanceCm: r.distance_cm,
       groupNo: r.group_id ? groupNoById.get(r.group_id) ?? null : null,
-      signed: Boolean(r.signature_payload),
-      signerName: r.signer_name ?? null,
+      capturistSigned: Boolean(r.signature_payload),
+      capturistSignerName: r.signer_name ?? null,
+      playerAccepted: Boolean(r.player_accepted_at),
+      playerSignerName: r.player_signer_name ?? null,
     });
     byHole.set(r.hole_number, list);
   }

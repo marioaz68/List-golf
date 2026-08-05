@@ -7,6 +7,10 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessModule } from "@/lib/auth/permissions";
 import { parseDistanceToCm } from "@/lib/cercanos/distanceFormat";
 import { loadPar3Holes } from "@/lib/cercanos/loadClosestToPin";
+import {
+  mintPlayerAcceptToken,
+  playerAcceptTokenExpiresAt,
+} from "@/lib/cercanos/acceptToken";
 
 export type SaveClosestToPinState = {
   ok: boolean;
@@ -98,7 +102,35 @@ export async function saveGroupClosestToPin(
     return { ok: false, message: "El grupo no tiene jugadores." };
   }
 
+  // Estado previo (para tokens y no borrar aceptación si la distancia no cambió).
+  const { data: prevRows } = await admin
+    .from("closest_to_pin_entries")
+    .select(
+      "entry_id, distance_cm, accept_token, accept_token_expires_at, player_accepted_at, player_signature_payload, player_signer_name, signature_payload, signed_at, signer_name"
+    )
+    .eq("tournament_id", tournamentId)
+    .eq("round_id", roundId)
+    .eq("hole_number", holeNumber)
+    .in("entry_id", [...allowedEntryIds]);
+
+  type Prev = {
+    entry_id: string;
+    distance_cm: number;
+    accept_token: string | null;
+    accept_token_expires_at: string | null;
+    player_accepted_at: string | null;
+    player_signature_payload: string | null;
+    player_signer_name: string | null;
+    signature_payload: string | null;
+    signed_at: string | null;
+    signer_name: string | null;
+  };
+  const prevByEntry = new Map(
+    ((prevRows ?? []) as Prev[]).map((r) => [r.entry_id, r])
+  );
+
   const now = new Date().toISOString();
+  const tokenExpires = playerAcceptTokenExpiresAt();
 
   type UpsertRow = {
     tournament_id: string;
@@ -109,9 +141,14 @@ export async function saveGroupClosestToPin(
     group_id: string;
     captured_by_profile_id: string;
     updated_at: string;
-    signature_payload?: string | null;
-    signed_at?: string | null;
-    signer_name?: string | null;
+    signature_payload: string | null;
+    signed_at: string | null;
+    signer_name: string | null;
+    accept_token: string;
+    accept_token_expires_at: string;
+    player_accepted_at: string | null;
+    player_signature_payload: string | null;
+    player_signer_name: string | null;
   };
 
   const upserts: UpsertRow[] = [];
@@ -131,7 +168,28 @@ export async function saveGroupClosestToPin(
         message: `Distancia inválida para un jugador ("${text}"). Usa m (ej. 1.25), cm o pies'pulgadas.`,
       };
     }
-    const row: UpsertRow = {
+
+    const prev = prevByEntry.get(entryId);
+    const distanceChanged = !prev || prev.distance_cm !== cm;
+    const keepToken =
+      !distanceChanged &&
+      prev?.accept_token &&
+      (!prev.accept_token_expires_at ||
+        new Date(prev.accept_token_expires_at).getTime() > Date.now());
+
+    const capturistSig = signature
+      ? {
+          signature_payload: signature,
+          signed_at: now,
+          signer_name: signerName || null,
+        }
+      : {
+          signature_payload: prev?.signature_payload ?? null,
+          signed_at: prev?.signed_at ?? null,
+          signer_name: prev?.signer_name ?? null,
+        };
+
+    upserts.push({
       tournament_id: tournamentId,
       round_id: roundId,
       hole_number: holeNumber,
@@ -140,16 +198,21 @@ export async function saveGroupClosestToPin(
       group_id: groupId,
       captured_by_profile_id: user.id,
       updated_at: now,
-    };
-    // Solo el capturista (sesión staff en /cercanos) firma aquí.
-    // Si no hay firma nueva, no se tocan columnas de firma (upsert parcial vía
-    // dos pasos cuando hay firma).
-    if (signature) {
-      row.signature_payload = signature;
-      row.signed_at = now;
-      row.signer_name = signerName || null;
-    }
-    upserts.push(row);
+      ...capturistSig,
+      accept_token: keepToken ? prev!.accept_token! : mintPlayerAcceptToken(),
+      accept_token_expires_at: keepToken
+        ? prev!.accept_token_expires_at!
+        : tokenExpires,
+      player_accepted_at: distanceChanged
+        ? null
+        : prev?.player_accepted_at ?? null,
+      player_signature_payload: distanceChanged
+        ? null
+        : prev?.player_signature_payload ?? null,
+      player_signer_name: distanceChanged
+        ? null
+        : prev?.player_signer_name ?? null,
+    });
   }
 
   if (clearEntryIds.length > 0) {
@@ -166,30 +229,10 @@ export async function saveGroupClosestToPin(
   }
 
   if (upserts.length > 0) {
-    if (signature) {
-      const { error: upErr } = await admin
-        .from("closest_to_pin_entries")
-        .upsert(upserts, { onConflict: "round_id,hole_number,entry_id" });
-      if (upErr) return { ok: false, message: upErr.message };
-    } else {
-      // Sin firma nueva: actualizar solo distancia sin borrar firmas previas.
-      for (const row of upserts) {
-        const { error: upErr } = await admin.from("closest_to_pin_entries").upsert(
-          {
-            tournament_id: row.tournament_id,
-            round_id: row.round_id,
-            hole_number: row.hole_number,
-            entry_id: row.entry_id,
-            distance_cm: row.distance_cm,
-            group_id: row.group_id,
-            captured_by_profile_id: row.captured_by_profile_id,
-            updated_at: row.updated_at,
-          },
-          { onConflict: "round_id,hole_number,entry_id" }
-        );
-        if (upErr) return { ok: false, message: upErr.message };
-      }
-    }
+    const { error: upErr } = await admin
+      .from("closest_to_pin_entries")
+      .upsert(upserts, { onConflict: "round_id,hole_number,entry_id" });
+    if (upErr) return { ok: false, message: upErr.message };
   }
 
   revalidatePath("/cercanos");
@@ -199,6 +242,6 @@ export async function saveGroupClosestToPin(
   const firmada = signature ? " · firmado por capturista" : "";
   return {
     ok: true,
-    message: `Guardado: ${upserts.length} distancia(s)${clearEntryIds.length ? `, ${clearEntryIds.length} borrada(s)` : ""}${firmada}.`,
+    message: `Guardado: ${upserts.length} distancia(s)${clearEntryIds.length ? `, ${clearEntryIds.length} borrada(s)` : ""}${firmada}. Puedes mostrar QR al jugador.`,
   };
 }

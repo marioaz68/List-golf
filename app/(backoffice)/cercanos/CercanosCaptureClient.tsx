@@ -1,11 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import {
-  saveGroupClosestToPin,
-  type SaveClosestToPinState,
-} from "./actions";
+import DrawnSignaturePad from "@/components/ui/DrawnSignaturePad";
+import PlayerAcceptLinkButton from "./PlayerAcceptLinkButton";
 import {
   distanceCmToInputMeters,
   formatDistanceCm,
@@ -16,7 +12,12 @@ import type {
   ClosestToPinHoleBoard,
 } from "@/lib/cercanos/types";
 import { CLOSEST_TO_PIN_MAX_PRIZES } from "@/lib/cercanos/types";
-import DrawnSignaturePad from "@/components/ui/DrawnSignaturePad";
+import {
+  saveGroupClosestToPin,
+  type SaveClosestToPinState,
+} from "./actions";
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const initial: SaveClosestToPinState = { ok: false, message: "" };
 
@@ -119,8 +120,8 @@ export default function CercanosCaptureClient({
           por hoyo (1.º = más cercano)
         </p>
         <p className="text-[11px] text-slate-500">
-          Captura del capturista en su teléfono (esta pantalla). La firma la
-          pone el staff aquí — no el jugador ni Telegram.
+          Capturista: midela y opcionalmente firma aquí. Jugador: acepta en{" "}
+          <strong>su</strong> teléfono con QR/link (no Telegram).
         </p>
       </header>
 
@@ -214,10 +215,24 @@ export default function CercanosCaptureClient({
                     {p.distanceCm != null
                       ? ` · guardado: ${formatDistanceCm(p.distanceCm)}`
                       : ""}
-                    {p.signed
-                      ? ` · ✍️ capturista${p.signerName ? ` (${p.signerName})` : ""}`
+                    {p.capturistSigned
+                      ? ` · ✍️ capturista${p.capturistSignerName ? ` (${p.capturistSignerName})` : ""}`
                       : ""}
+                    {p.playerAccepted
+                      ? ` · ✓ jugador${p.playerSignerName ? ` (${p.playerSignerName})` : ""}`
+                      : p.distanceCm != null
+                        ? " · pendiente jugador"
+                        : ""}
                   </div>
+                  {p.acceptUrl && p.distanceCm != null ? (
+                    <div className="mt-1.5">
+                      <PlayerAcceptLinkButton
+                        url={p.acceptUrl}
+                        playerName={p.name}
+                        distanceLabel={formatDistanceCm(p.distanceCm)}
+                      />
+                    </div>
+                  ) : null}
                 </div>
                 <label className="flex items-center gap-2 text-xs text-slate-300">
                   m
@@ -244,8 +259,8 @@ export default function CercanosCaptureClient({
               Firma del capturista (opcional)
             </div>
             <p className="text-[11px] text-amber-100/70">
-              Firma en tu teléfono al guardar. No se pide al jugador ni en
-              Telegram.
+              Firma del capturista en este dispositivo. El jugador acepta aparte
+              con QR en su móvil.
             </p>
             <label className="block text-xs font-semibold text-slate-300">
               Nombre del capturista
@@ -316,18 +331,10 @@ export default function CercanosCaptureClient({
                     </td>
                     <td className="px-3 py-2">
                       {s.playerName}
-                      {s.signed ? (
-                        <span
-                          className="ml-1 text-[10px] text-amber-300"
-                          title={
-                            s.signerName
-                              ? `Firmado por capturista: ${s.signerName}`
-                              : "Firmado por capturista"
-                          }
-                        >
-                          ✍️
-                        </span>
-                      ) : null}
+                      <span className="ml-1 text-[10px] text-slate-500">
+                        {s.capturistSigned ? "✍️" : ""}
+                        {s.playerAccepted ? "✓" : ""}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-slate-400">
                       {s.categoryCode ?? "—"}
