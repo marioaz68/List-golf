@@ -206,6 +206,13 @@ export default function Sidebar() {
         requiresTournament: true,
       },
       {
+        // Debajo de captura de tarjetas: tablero ops de grupos sin anotar.
+        nameKey: "seguimientoCaptura",
+        href: "/seguimiento-captura",
+        icon: Radio,
+        requiresTournament: true,
+      },
+      {
         nameKey: "scorecards",
         href: "/scorecards",
         icon: FilePenLine,
@@ -233,12 +240,6 @@ export default function Sidebar() {
         nameKey: "ritmo",
         href: "/ritmo",
         icon: Gauge,
-        requiresTournament: true,
-      },
-      {
-        nameKey: "seguimientoCaptura",
-        href: "/seguimiento-captura",
-        icon: Radio,
         requiresTournament: true,
       },
       {

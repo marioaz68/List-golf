@@ -263,6 +263,30 @@ export default function RitmoLiveView({
           <span>{roundLabel}</span>
           {courseName ? <span>· {courseName}</span> : null}
         </div>
+        <Link
+          href={`/seguimiento-captura?tournament_id=${encodeURIComponent(
+            tournamentId
+          )}${
+            currentRoundId
+              ? `&round_id=${encodeURIComponent(currentRoundId)}`
+              : ""
+          }`}
+          style={{
+            display: "block",
+            marginTop: 8,
+            fontSize: 11,
+            fontWeight: 800,
+            textAlign: "center",
+            padding: "6px 8px",
+            borderRadius: 7,
+            textDecoration: "none",
+            background: "#7f1d1d",
+            color: "#fecaca",
+            border: "1px solid #ef4444",
+          }}
+        >
+          Capturas retrasadas →
+        </Link>
       </div>
 
       {/* Selector de ronda */}

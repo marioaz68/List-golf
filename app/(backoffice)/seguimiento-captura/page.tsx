@@ -101,7 +101,7 @@ export default async function SeguimientoCapturaPage({
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) redirect("/login");
   const roles = await getUserRoles(supabase, auth.user.id);
-  if (!canAccessModule(roles, "seguimiento-captura")) {
+  if (!canAccessModule(roles, "ritmo")) {
     redirect("/tournaments");
   }
 

@@ -16,7 +16,8 @@ export const NAV_ITEM_MODULE: Record<NavKey, AppModule> = {
   leaderboard: "leaderboard",
   caddies: "caddies",
   ritmo: "ritmo",
-  seguimientoCaptura: "seguimiento-captura",
+  // Mismo permiso que ritmo (staff de cancha / marshal).
+  seguimientoCaptura: "ritmo",
   reports: "reports",
   tournaments: "tournaments",
   editTournament: "tournaments-setup",
