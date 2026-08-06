@@ -9,6 +9,7 @@ import {
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
 import PartnerPicker, { type PartnerCandidate } from "./PartnerPicker";
+import { matchesPlayerNameSearch } from "@/lib/players/playerNameSearch";
 
 type Player = {
   id: string;
@@ -84,14 +85,9 @@ export default function SinglePlayerEntryPanel({
   const currentYear = new Date().getFullYear();
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-
-    return players.filter((p) => {
-      const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.toLowerCase();
-      const club = (p.club_label ?? "").toLowerCase();
-
-      return name.includes(q) || club.includes(q);
-    });
+    return players.filter((p) =>
+      matchesPlayerNameSearch(p, search, { matchClub: true })
+    );
   }, [players, search]);
 
   function getAge(p: Player) {

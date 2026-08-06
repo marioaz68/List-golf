@@ -10,6 +10,7 @@ import {
   backofficeTableStickyScroll,
   twStickyTheadGray50,
 } from "@/lib/ui/backofficeTableSticky";
+import { matchesPlayerNameSearch } from "@/lib/players/playerNameSearch";
 
 type Player = {
   id: string;
@@ -112,13 +113,10 @@ export default function BulkEntryPanel({
   }, [players, locale]);
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-
     return players.filter((p) => {
-      const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.toLowerCase();
-      const clubText = (p.club_label ?? "").toLowerCase();
-
-      const matchesSearch = !q || name.includes(q) || clubText.includes(q);
+      const matchesSearch = matchesPlayerNameSearch(p, search, {
+        matchClub: true,
+      });
       const matchesClub = !club || p.club_label === club;
 
       const cat = categoryFromHandicap(p.handicap_index);

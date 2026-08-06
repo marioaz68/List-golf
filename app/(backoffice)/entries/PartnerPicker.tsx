@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { matchesPlayerNameSearch } from "@/lib/players/playerNameSearch";
 
 export type PartnerCandidate = {
   id: string;
@@ -24,6 +25,9 @@ type Props = {
 function fullName(p: PartnerCandidate) {
   return `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim();
 }
+
+/** Mismo tope razonable de resultados que un desplegable usable. */
+const RESULT_LIMIT = 40;
 
 export default function PartnerPicker({
   candidates,
@@ -57,15 +61,12 @@ export default function PartnerPicker({
   }, []);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return candidates.slice(0, 12);
+    if (!query.trim()) return candidates.slice(0, RESULT_LIMIT);
+    // Mismo criterio que el buscador principal de inscripción (tokens + sin acentos).
+    // matchClub: true solo enriquece el haystack; no exige club ni filtra por él.
     return candidates
-      .filter((c) => {
-        const name = fullName(c).toLowerCase();
-        const club = (c.club_label ?? "").toLowerCase();
-        return name.includes(q) || club.includes(q);
-      })
-      .slice(0, 12);
+      .filter((c) => matchesPlayerNameSearch(c, query, { matchClub: true }))
+      .slice(0, RESULT_LIMIT);
   }, [candidates, query]);
 
   if (selected) {
