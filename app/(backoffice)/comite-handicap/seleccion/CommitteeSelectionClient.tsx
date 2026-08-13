@@ -7,6 +7,7 @@ import {
 } from "../adminActions";
 import {
   DEFAULT_SUGGEST_THRESHOLDS,
+  type ClubIndexHistory,
   type CommitteeSelectionRow,
   type SuggestThresholds,
 } from "@/lib/handicap-committee/loadSelectionRows";
@@ -15,12 +16,14 @@ type Props = {
   tournamentId: string;
   tournamentName: string;
   initialRows: CommitteeSelectionRow[];
+  clubIndexHistory: ClubIndexHistory | null;
 };
 
 export default function CommitteeSelectionClient({
   tournamentId,
   tournamentName,
   initialRows,
+  clubIndexHistory,
 }: Props) {
   const [rows, setRows] = useState(initialRows);
   const [selected, setSelected] = useState<Set<string>>(
@@ -165,6 +168,15 @@ export default function CommitteeSelectionClient({
           Marcados: {selectedCount} · Sugeridos (sin guardar): {suggestedCount}
         </p>
       </header>
+
+      {clubIndexHistory ? (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-snug text-amber-950"
+        >
+          {clubIndexHistory.message}
+        </div>
+      ) : null}
 
       {(msg || err) && (
         <div
@@ -374,7 +386,7 @@ export default function CommitteeSelectionClient({
                     {r.rounds12m ?? "—"}
                   </td>
                   <td className="px-2 py-1.5 tabular-nums">
-                    {r.minHi12m != null ? r.minHi12m.toFixed(1) : ""}
+                    {r.minHi12m != null ? r.minHi12m.toFixed(1) : "—"}
                   </td>
                   <td
                     className={`px-2 py-1.5 tabular-nums font-semibold ${
@@ -385,10 +397,10 @@ export default function CommitteeSelectionClient({
                   >
                     {r.deltaHi != null
                       ? (r.deltaHi > 0 ? "+" : "") + r.deltaHi.toFixed(1)
-                      : ""}
+                      : "—"}
                   </td>
                   <td className="px-2 py-1.5">
-                    {r.indexHistoryInsufficient && r.indexHistoryNote ? (
+                    {r.indexHistoryNote ? (
                       <div className="mb-1 rounded border border-amber-500 bg-amber-100 px-1.5 py-1 text-[10px] font-semibold leading-snug text-amber-950">
                         {r.indexHistoryNote}
                       </div>

@@ -44,6 +44,12 @@ export function isoDaysBefore(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function isoDaysAfter(iso: string, days: number): string {
+  const t = Date.parse(`${iso.slice(0, 10)}T12:00:00Z`);
+  const d = new Date(t + days * 86_400_000);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Fecha de hoy en America/Mexico_City (YYYY-MM-DD). */
 export function todayMexicoIso(): string {
   return new Intl.DateTimeFormat("en-CA", {

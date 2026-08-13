@@ -1,34 +1,44 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   daysBetweenIso,
-  isoDaysBefore,
+  isoDaysAfter,
   todayMexicoIso,
 } from "@/lib/ghin-report/whsCaps";
 import {
-  formatInsufficientIndexHistoryNote,
-  isIndexHistoryInsufficient,
+  formatClubIndexHistoryBanner,
+  formatNoIndexRevisionsNote,
+  formatShortIndexHistoryNote,
+  isIndexHistoryNotablyShort,
   WHS_INDEX_HISTORY_REQUIRED_DAYS,
 } from "@/lib/handicap-committee/indexHistoryNote";
 
 export type CommitteeSelectionRow = {
   entryId: string;
-  playerId: string | null;
+  playerId: string;
   playerName: string;
   ghin: string | null;
-  categoryCode: string | null;
   hi: number | null;
-  flagged: boolean;
-  flaggedReason: string | null;
+  categoryCode: string | null;
   rounds12m: number | null;
-  /** null si f_ghin_min_index no devolvió valor o historia < 365d. */
+  /** Mínimo de índice en la historia disponible (no exige 365d). */
   minHi12m: number | null;
-  /** null (celda vacía) si no hay histórico suficiente — no usar 0 ni "—". */
   deltaHi: number | null;
-  suggestReasons: string[];
-  /** Incluidos con normalidad; solo bandera/nota. */
+  /** true solo si este jugador está peor que el resto del club (0 revs o << días). */
   indexHistoryInsufficient: boolean;
   indexHistoryDaysAvailable: number;
   indexHistoryNote: string | null;
+  flagged: boolean;
+  flaggedReason: string | null;
+  suggestReasons: string[];
+};
+
+export type ClubIndexHistory = {
+  firstRevisionIso: string;
+  daysAvailable: number;
+  requiredDays: number;
+  availableFromIso: string;
+  message: string;
 };
 
 export type SuggestThresholds = {
@@ -48,7 +58,7 @@ export const DEFAULT_SUGGEST_THRESHOLDS: SuggestThresholds = {
 };
 
 function num(v: unknown): number | null {
-  if (v == null) return null;
+  if (v == null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -61,160 +71,276 @@ function playerName(p: {
   return `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() || "Jugador";
 }
 
-function variance(vals: number[]): number {
-  if (vals.length < 2) return 0;
-  const mean = vals.reduce((s, x) => s + x, 0) / vals.length;
-  const ss = vals.reduce((s, x) => s + (x - mean) ** 2, 0);
-  return ss / (vals.length - 1);
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 /**
- * Carga entradas del torneo + métricas GHIN para la pantalla de selección.
+ * Candidatos a revisión del comité.
+ * HI/Cat/rondas/mín/Δ se llenan con lo que hay hoy (historia < 365d no anula
+ * esas celdas). Soft/hard cap no se evalúan aquí: van en un banner de club.
  */
 export async function loadCommitteeSelectionRows(
   supabase: SupabaseClient,
   tournamentId: string
-): Promise<CommitteeSelectionRow[]> {
-  const { data: entries, error } = await supabase
+): Promise<{
+  rows: CommitteeSelectionRow[];
+  clubIndexHistory: ClubIndexHistory | null;
+}> {
+  const admin = tryCreateAdminClient();
+  const db = admin ?? supabase;
+
+  const { data: entries, error: entriesErr } = await db
     .from("tournament_entries")
     .select(
-      `
-      id,
-      player_id,
-      handicap_index,
-      flagged_for_committee,
-      flagged_committee_reason,
-      category:categories(code),
-      player:players(id, first_name, last_name, ghin_number)
-    `
+      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason"
     )
     .eq("tournament_id", tournamentId)
+    .neq("status", "cancelled")
     .order("handicap_index", { ascending: true });
 
-  if (error) throw new Error(error.message);
+  if (entriesErr) {
+    console.error("[comite-seleccion] tournament_entries", entriesErr.message);
+    return { rows: [], clubIndexHistory: null };
+  }
+  if (!entries?.length) return { rows: [], clubIndexHistory: null };
 
-  const rows = (entries ?? []).map((e: any) => {
-    const player = Array.isArray(e.player) ? e.player[0] : e.player;
-    const cat = Array.isArray(e.category) ? e.category[0] : e.category;
-    const ghin =
-      player?.ghin_number != null
-        ? String(player.ghin_number).trim() || null
-        : null;
-    return {
-      entryId: String(e.id),
-      playerId: player?.id ? String(player.id) : e.player_id,
-      playerName: playerName(player),
-      ghin,
-      categoryCode: cat?.code != null ? String(cat.code) : null,
-      hi: num(e.handicap_index),
-      flagged: Boolean(e.flagged_for_committee),
-      flaggedReason: (e.flagged_committee_reason as string | null) ?? null,
-      rounds12m: null as number | null,
-      minHi12m: null as number | null,
-      deltaHi: null as number | null,
-      suggestReasons: [] as string[],
-      indexHistoryInsufficient: false,
-      indexHistoryDaysAvailable: 0,
-      indexHistoryNote: null as string | null,
-    };
-  });
-
-  const ghins = [
-    ...new Set(rows.map((r) => r.ghin).filter((g): g is string => Boolean(g))),
+  const playerIds = [
+    ...new Set(
+      entries
+        .map((e) => (e.player_id ? String(e.player_id) : ""))
+        .filter(Boolean)
+    ),
   ];
-  if (ghins.length === 0) return rows;
+  const categoryIds = [
+    ...new Set(
+      entries
+        .map((e) => (e.category_id ? String(e.category_id) : ""))
+        .filter(Boolean)
+    ),
+  ];
+
+  const [{ data: playerRows, error: playerErr }, { data: categoryRows, error: catErr }] =
+    await Promise.all([
+      playerIds.length
+        ? db
+            .from("players")
+            .select("id, first_name, last_name, ghin_number, handicap_index")
+            .in("id", playerIds)
+        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+      categoryIds.length
+        ? db.from("categories").select("id, code, name").in("id", categoryIds)
+        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+    ]);
+
+  if (playerErr) {
+    console.error("[comite-seleccion] players", playerErr.message);
+  }
+  if (catErr) {
+    console.error("[comite-seleccion] categories", catErr.message);
+  }
+
+  const playerById = new Map(
+    (playerRows ?? []).map((p) => [String((p as { id: string }).id), p])
+  );
+  const categoryById = new Map(
+    (categoryRows ?? []).map((c) => [String((c as { id: string }).id), c])
+  );
 
   const until = todayMexicoIso();
-  const since12 = isoDaysBefore(until, WHS_INDEX_HISTORY_REQUIRED_DAYS);
 
-  // Actividad + min HI + primera revisión (para N días disponibles).
+  const { data: clubFirstRow, error: clubFirstErr } = await db
+    .from("ghin_index_revisions")
+    .select("revision_date")
+    .order("revision_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (clubFirstErr) {
+    console.error(
+      "[comite-seleccion] min(revision_date)",
+      clubFirstErr.message
+    );
+  }
+
+  const clubFirstIso =
+    clubFirstRow?.revision_date != null
+      ? String(clubFirstRow.revision_date).slice(0, 10)
+      : null;
+  const clubDays = clubFirstIso ? daysBetweenIso(clubFirstIso, until) : 0;
+  const clubIndexHistory: ClubIndexHistory | null =
+    clubFirstIso && clubDays < WHS_INDEX_HISTORY_REQUIRED_DAYS
+      ? (() => {
+          const availableFromIso = isoDaysAfter(
+            clubFirstIso,
+            WHS_INDEX_HISTORY_REQUIRED_DAYS
+          );
+          const payload = {
+            firstRevisionIso: clubFirstIso,
+            daysAvailable: clubDays,
+            requiredDays: WHS_INDEX_HISTORY_REQUIRED_DAYS,
+            availableFromIso,
+          };
+          return {
+            ...payload,
+            message: formatClubIndexHistoryBanner(payload),
+          };
+        })()
+      : null;
+
+  const ghins = [
+    ...new Set(
+      (playerRows ?? [])
+        .map((p) => {
+          const g = (p as { ghin_number?: string | null }).ghin_number;
+          return g != null && String(g).trim() ? String(g).trim() : "";
+        })
+        .filter(Boolean)
+    ),
+  ];
+
   const activityByGhin = new Map<string, number>();
-  const minHiByGhin = new Map<string, number | null>();
-  const firstRevByGhin = new Map<string, string | null>();
+  const firstByGhin = new Map<string, string | null>();
+  const revCountByGhin = new Map<string, number>();
+  const minByGhin = new Map<string, number | null>();
+  const latestHiByGhin = new Map<string, number | null>();
 
-  const chunk = 80;
+  const chunk = 60;
   for (let i = 0; i < ghins.length; i += chunk) {
     const batch = ghins.slice(i, i + chunk);
-    const [{ data: acts }, minResults, firstRevs] = await Promise.all([
-      supabase
-        .from("v_ghin_player_activity")
-        .select("ghin_number, rondas_12_meses")
-        .in("ghin_number", batch),
-      Promise.all(
-        batch.map(async (g) => {
-          const { data } = await supabase.rpc("f_ghin_min_index", {
-            p_ghin: g,
-            p_desde: since12,
-            p_hasta: until,
-          });
-          return { g, min: num(data) };
-        })
-      ),
-      Promise.all(
-        batch.map(async (g) => {
-          const { data } = await supabase
-            .from("ghin_index_revisions")
-            .select("revision_date")
-            .eq("ghin_number", g)
-            .order("revision_date", { ascending: true })
-            .limit(1)
-            .maybeSingle();
-          return {
-            g,
-            first:
-              data?.revision_date != null
-                ? String(data.revision_date).slice(0, 10)
-                : null,
-          };
-        })
-      ),
-    ]);
+    const [{ data: acts, error: actErr }, { data: revs, error: revErr }] =
+      await Promise.all([
+        db
+          .from("v_ghin_player_activity")
+          .select("ghin_number, rondas_12_meses")
+          .in("ghin_number", batch),
+        db
+          .from("ghin_index_revisions")
+          .select("ghin_number, revision_date, handicap_index")
+          .in("ghin_number", batch),
+      ]);
+    if (actErr) {
+      console.error("[comite-seleccion] v_ghin_player_activity", actErr.message);
+    }
+    if (revErr) {
+      console.error("[comite-seleccion] ghin_index_revisions", revErr.message);
+    }
     for (const a of acts ?? []) {
-      activityByGhin.set(
-        String((a as { ghin_number: string }).ghin_number),
-        Number((a as { rondas_12_meses?: number }).rondas_12_meses ?? 0)
-      );
+      const g = String((a as { ghin_number?: string }).ghin_number ?? "");
+      if (g) {
+        activityByGhin.set(
+          g,
+          num((a as { rondas_12_meses?: unknown }).rondas_12_meses) ?? 0
+        );
+      }
     }
-    for (const m of minResults) {
-      minHiByGhin.set(m.g, m.min);
+    type Agg = {
+      first: string | null;
+      last: string | null;
+      lastHi: number | null;
+      minHi: number | null;
+      count: number;
+    };
+    const agg = new Map<string, Agg>();
+    for (const row of revs ?? []) {
+      const g = String((row as { ghin_number?: string }).ghin_number ?? "");
+      if (!g) continue;
+      const d =
+        (row as { revision_date?: string | null }).revision_date != null
+          ? String((row as { revision_date: string }).revision_date).slice(0, 10)
+          : null;
+      const hi = num((row as { handicap_index?: unknown }).handicap_index);
+      const cur = agg.get(g) ?? {
+        first: null,
+        last: null,
+        lastHi: null,
+        minHi: null,
+        count: 0,
+      };
+      cur.count += 1;
+      if (d && (!cur.first || d < cur.first)) cur.first = d;
+      if (d && (!cur.last || d > cur.last)) {
+        cur.last = d;
+        cur.lastHi = hi;
+      }
+      if (hi != null && (cur.minHi == null || hi < cur.minHi)) cur.minHi = hi;
+      agg.set(g, cur);
     }
-    for (const f of firstRevs) {
-      firstRevByGhin.set(f.g, f.first);
+    for (const g of batch) {
+      const a = agg.get(g);
+      firstByGhin.set(g, a?.first ?? null);
+      revCountByGhin.set(g, a?.count ?? 0);
+      latestHiByGhin.set(g, a?.lastHi ?? null);
+      minByGhin.set(g, a?.minHi ?? null);
     }
   }
+
+  const rows: CommitteeSelectionRow[] = entries.map((e) => {
+    const pl = e.player_id
+      ? playerById.get(String(e.player_id))
+      : null;
+    const cat = e.category_id
+      ? categoryById.get(String(e.category_id))
+      : null;
+    const ghinRaw = (pl as { ghin_number?: string | null } | undefined)
+      ?.ghin_number;
+    const ghin =
+      ghinRaw != null && String(ghinRaw).trim() ? String(ghinRaw).trim() : null;
+    const entryHi = num(e.handicap_index);
+    const playerHi = num(
+      (pl as { handicap_index?: unknown } | undefined)?.handicap_index
+    );
+    const latestHi = ghin ? (latestHiByGhin.get(ghin) ?? null) : null;
+    const hi = entryHi ?? playerHi ?? latestHi;
+    const catRec = cat as { code?: string | null; name?: string | null } | undefined;
+
+    return {
+      entryId: e.id as string,
+      playerId: e.player_id ? String(e.player_id) : "",
+      playerName: playerName(
+        pl as { first_name?: string | null; last_name?: string | null } | null
+      ),
+      ghin,
+      hi,
+      categoryCode: catRec?.code ?? catRec?.name ?? null,
+      rounds12m: ghin ? (activityByGhin.get(ghin) ?? 0) : null,
+      minHi12m: null,
+      deltaHi: null,
+      indexHistoryInsufficient: false,
+      indexHistoryDaysAvailable: 0,
+      indexHistoryNote: null,
+      flagged: Boolean(e.flagged_for_committee),
+      flaggedReason: (e.flagged_committee_reason as string | null) ?? null,
+      suggestReasons: [],
+    };
+  });
 
   for (const r of rows) {
     if (!r.ghin) {
       r.indexHistoryInsufficient = true;
       r.indexHistoryDaysAvailable = 0;
-      r.indexHistoryNote = formatInsufficientIndexHistoryNote(0);
-      r.minHi12m = null;
-      r.deltaHi = null;
+      r.indexHistoryNote = formatNoIndexRevisionsNote();
       continue;
     }
-    r.rounds12m = activityByGhin.get(r.ghin) ?? 0;
-    const first = firstRevByGhin.get(r.ghin) ?? null;
+    const revCount = revCountByGhin.get(r.ghin) ?? 0;
+    const first = firstByGhin.get(r.ghin) ?? null;
     const days = first ? daysBetweenIso(first, until) : 0;
     r.indexHistoryDaysAvailable = days;
-    const minRaw = minHiByGhin.get(r.ghin) ?? null;
-    const insufficient =
-      minRaw == null || isIndexHistoryInsufficient(days);
-
-    r.indexHistoryInsufficient = insufficient;
-    if (insufficient) {
-      r.minHi12m = null;
-      r.deltaHi = null;
-      r.indexHistoryNote = formatInsufficientIndexHistoryNote(days);
-    } else {
-      r.minHi12m = minRaw;
-      r.indexHistoryNote = null;
-      if (r.hi != null && minRaw != null) {
-        r.deltaHi = Math.round((r.hi - minRaw) * 10) / 10;
-      }
+    r.minHi12m = minByGhin.get(r.ghin) ?? null;
+    if (r.hi != null && r.minHi12m != null) {
+      r.deltaHi = round1(r.hi - r.minHi12m);
+    }
+    if (revCount === 0 || !first) {
+      r.indexHistoryInsufficient = true;
+      r.indexHistoryNote = formatNoIndexRevisionsNote();
+      continue;
+    }
+    if (isIndexHistoryNotablyShort(days, clubDays)) {
+      r.indexHistoryInsufficient = true;
+      r.indexHistoryNote = formatShortIndexHistoryNote(days);
     }
   }
 
-  return rows;
+  return { rows, clubIndexHistory };
 }
 
 /**
@@ -225,13 +351,15 @@ export async function applySuggestCandidates(
   rows: CommitteeSelectionRow[],
   thresholds: SuggestThresholds = DEFAULT_SUGGEST_THRESHOLDS
 ): Promise<CommitteeSelectionRow[]> {
+  const admin = tryCreateAdminClient();
+  const db = admin ?? supabase;
   const out = rows.map((r) => ({ ...r, suggestReasons: [] as string[] }));
   const withGhin = out.filter((r) => r.ghin);
 
   for (const r of out) {
     if (r.deltaHi != null && r.deltaHi >= thresholds.deltaHiMin) {
       r.suggestReasons.push(
-        `Δ HI +${r.deltaHi} vs mínimo 12m (umbral ${thresholds.deltaHiMin})`
+        `Δ HI +${r.deltaHi} vs mínimo disponible (umbral ${thresholds.deltaHiMin})`
       );
     }
     if (r.rounds12m != null && r.rounds12m <= thresholds.fewRoundsMax) {
@@ -241,11 +369,10 @@ export async function applySuggestCandidates(
     }
   }
 
-  // Diff drop + variance: últimas N rondas vs histórico (muestra)
   const until = todayMexicoIso();
   for (const r of withGhin) {
     if (!r.ghin) continue;
-    const { data: rounds } = await supabase
+    const { data: rounds, error } = await db
       .from("ghin_rounds")
       .select("differential, date_played")
       .eq("ghin_number", r.ghin)
@@ -253,9 +380,13 @@ export async function applySuggestCandidates(
       .lte("date_played", until)
       .order("date_played", { ascending: false })
       .limit(60);
+    if (error) {
+      console.error("[comite-seleccion] ghin_rounds", r.ghin, error.message);
+      continue;
+    }
 
     const diffs = (rounds ?? [])
-      .map((x) => num((x as any).differential))
+      .map((x) => num((x as { differential?: unknown }).differential))
       .filter((x): x is number => x != null);
     if (diffs.length < thresholds.lastNRounds + 5) continue;
 
@@ -278,4 +409,10 @@ export async function applySuggestCandidates(
   }
 
   return out;
+}
+
+function variance(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = xs.reduce((s, x) => s + x, 0) / xs.length;
+  return xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1);
 }

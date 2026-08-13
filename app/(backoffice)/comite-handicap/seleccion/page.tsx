@@ -58,7 +58,10 @@ export default async function CommitteeSelectionPage({
     .eq("id", tournamentId)
     .maybeSingle();
 
-  const rows = await loadCommitteeSelectionRows(supabase, tournamentId);
+  const { rows, clubIndexHistory } = await loadCommitteeSelectionRows(
+    supabase,
+    tournamentId
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-3 p-4">
@@ -80,6 +83,7 @@ export default async function CommitteeSelectionPage({
         tournamentId={tournamentId}
         tournamentName={tournament?.name ?? "Torneo"}
         initialRows={rows}
+        clubIndexHistory={clubIndexHistory}
       />
     </div>
   );
