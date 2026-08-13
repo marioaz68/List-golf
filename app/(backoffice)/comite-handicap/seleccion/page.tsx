@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import { requireGhinCommitteeAccess } from "@/lib/handicap-committee/requireGhinAccess";
@@ -33,11 +32,6 @@ export default async function CommitteeSelectionPage({
     if (isCommitteeOnlyUser(roles)) {
       const db = tryCreateAdminClient() ?? supabase;
       const open = await loadOpenCommitteeTournamentsForUser(db, userId);
-      if (open.length === 1) {
-        redirect(
-          `/comite-handicap/seleccion?tournament_id=${encodeURIComponent(open[0]!.tournamentId)}`
-        );
-      }
       return (
         <div className="mx-auto max-w-2xl space-y-4 p-6">
           <h1 className="text-lg font-bold text-white">{t.pageTitle}</h1>

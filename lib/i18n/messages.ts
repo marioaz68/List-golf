@@ -1398,6 +1398,7 @@ const es = {
     pickTournament:
       "Elige un torneo para auditar handicaps o votar (voto anónimo entre miembros).",
     pickOpenVote: "Elige la votación de comité a la que entrar.",
+    changeTournament: "Cambiar torneo",
     noOpenVote: "No hay votación de comité abierta en este momento.",
     noTournaments:
       "No tienes torneos asignados. Pide a un administrador que te asigne el rol «Comité de Handicap» o «Director del Torneo» en algún torneo.",
@@ -3103,6 +3104,7 @@ const en: Messages = {
     pickTournament:
       "Pick a tournament to audit handicaps or vote (anonymous vote among members).",
     pickOpenVote: "Choose which committee vote to enter.",
+    changeTournament: "Change tournament",
     noOpenVote: "There is no open committee vote at this time.",
     noTournaments:
       "You don't have tournaments assigned. Ask an administrator to grant you the «Handicap Committee» or «Tournament Director» role in a tournament.",

@@ -92,11 +92,6 @@ export default async function ComiteHandicapPage(props: {
     if (isCommitteeOnlyUser(roles)) {
       const db = tryCreateAdminClient() ?? supabase;
       const open = await loadOpenCommitteeTournamentsForUser(db, user.id);
-      if (open.length === 1) {
-        redirect(
-          `/comite-handicap?tournament_id=${encodeURIComponent(open[0]!.tournamentId)}`
-        );
-      }
       return (
         <div className="space-y-6 p-4 md:p-6">
           <div>
@@ -119,7 +114,12 @@ export default async function ComiteHandicapPage(props: {
                   href={`/comite-handicap?tournament_id=${encodeURIComponent(row.tournamentId)}`}
                   className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
                 >
-                  {row.tournamentName}
+                  <span className="block">{row.tournamentName}</span>
+                  {row.startDate ? (
+                    <span className="mt-1 block text-xs font-medium text-slate-500">
+                      {row.startDate.slice(0, 10)}
+                    </span>
+                  ) : null}
                 </Link>
               ))}
             </div>
@@ -1119,10 +1119,21 @@ export default async function ComiteHandicapPage(props: {
   const isCommitteeAdmin = access.isAdmin === true;
   const showAdmin = isCommitteeAdmin && requestedTab === "admin";
   const showVote = !showAdmin;
+  const committeeOnly = isCommitteeOnlyUser(
+    await getUserRoles(supabase, user.id)
+  );
 
   return (
     <div className="space-y-6 p-4 md:p-6">
       <nav className="flex flex-wrap gap-2 text-xs">
+        {committeeOnly ? (
+          <Link
+            href="/comite-handicap"
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-semibold text-amber-950 hover:bg-amber-100"
+          >
+            {t.changeTournament}
+          </Link>
+        ) : null}
         <Link
           href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
           className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 font-semibold text-indigo-900 hover:bg-indigo-100"

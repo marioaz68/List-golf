@@ -591,6 +591,18 @@ export default function Sidebar() {
                 ? t.sidebar.loading
                 : tournament?.name || t.sidebar.noName}
             </div>
+            {committeeOnly ? (
+              <Link
+                href="/comite-handicap"
+                onClick={() => {
+                  setOpen(false);
+                  setTournamentId(null);
+                }}
+                className="mt-2 inline-block text-[11px] font-semibold text-cyan-300 underline hover:text-cyan-200"
+              >
+                {t.handicapCommittee.changeTournament}
+              </Link>
+            ) : null}
 
             {tournament?.status && (
               <div className="mt-2 inline-flex rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] uppercase text-white/60">

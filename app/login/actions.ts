@@ -5,10 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
-import {
-  committeeOnlyHomePath,
-  loadOpenCommitteeTournamentsForUser,
-} from "@/lib/handicap-committee/openCommitteesForUser";
+import { committeeOnlyHomePath } from "@/lib/handicap-committee/openCommitteesForUser";
 import { committeeLandingFromNext } from "@/lib/handicap-committee/committeeOnlyPublic";
 
 export type LoginState = {
@@ -163,8 +160,7 @@ async function resolveLandingForUser(
   if (isCommitteeOnlyUser([...roles])) {
     const fromPoster = committeeLandingFromNext(requestedNext);
     if (fromPoster) return fromPoster;
-    const open = await loadOpenCommitteeTournamentsForUser(admin, userId);
-    return committeeOnlyHomePath(open);
+    return committeeOnlyHomePath();
   }
   if (roles.has("marshal")) return "/tee-sheet";
   return "/dashboard";

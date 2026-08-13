@@ -4,20 +4,20 @@ export type OpenCommitteeTournament = {
   tournamentId: string;
   tournamentName: string;
   committeeId: string;
+  startDate: string | null;
 };
 
 export function committeeOnlyHomePath(
-  open: OpenCommitteeTournament[]
+  _open?: OpenCommitteeTournament[]
 ): string {
-  if (open.length === 1) {
-    return `/comite-handicap?tournament_id=${encodeURIComponent(open[0]!.tournamentId)}`;
-  }
   return "/comite-handicap";
 }
 
 /**
- * Torneos con comité status=open donde el usuario es miembro (rol
- * handicap_committee en torneo/club/global) Y está marcado presente.
+ * Torneos con comité status=open donde el usuario es miembro
+ * (handicap_committee en torneo/club/global).
+ * No exige presencia: eso solo habilita el voto.
+ * Omite archivados y no públicos (p. ej. pruebas).
  */
 export async function loadOpenCommitteeTournamentsForUser(
   db: SupabaseClient,
@@ -92,40 +92,48 @@ export async function loadOpenCommitteeTournamentsForUser(
   }
   if (!openRows?.length) return [];
 
-  const committeeIds = openRows.map((r) => String(r.id));
-  const { data: presenceRows } = await db
-    .from("handicap_committee_member_presence")
-    .select("committee_id, is_present")
-    .eq("user_id", userId)
-    .in("committee_id", committeeIds);
-
-  const present = new Set(
-    (presenceRows ?? [])
-      .filter((p) => p.is_present && p.committee_id)
-      .map((p) => String(p.committee_id))
-  );
-
-  const presentOpen = openRows.filter((r) => present.has(String(r.id)));
-  if (!presentOpen.length) return [];
-
-  const presentTourIds = [
-    ...new Set(presentOpen.map((r) => String(r.tournament_id))),
+  const tourIds = [
+    ...new Set(openRows.map((r) => String(r.tournament_id))),
   ];
   const { data: tours } = await db
     .from("tournaments")
-    .select("id, name")
-    .in("id", presentTourIds);
-  const nameById = new Map(
-    (tours ?? []).map((t) => [String(t.id), String(t.name ?? "")])
-  );
+    .select("id, name, start_date, is_archived, is_public")
+    .in("id", tourIds);
 
-  return presentOpen.map((r) => {
-    const tournamentId = String(r.tournament_id);
-    return {
-      tournamentId,
-      tournamentName:
-        nameById.get(tournamentId)?.trim() || tournamentId.slice(0, 8),
-      committeeId: String(r.id),
-    };
+  const visible = new Map<
+    string,
+    { name: string; startDate: string | null }
+  >();
+  for (const t of tours ?? []) {
+    if (!t.id) continue;
+    if (t.is_archived) continue;
+    if (t.is_public === false) continue;
+    visible.set(String(t.id), {
+      name: String(t.name ?? "").trim() || String(t.id).slice(0, 8),
+      startDate: t.start_date ? String(t.start_date) : null,
+    });
+  }
+
+  const rows = openRows
+    .map((r) => {
+      const tournamentId = String(r.tournament_id);
+      const meta = visible.get(tournamentId);
+      if (!meta) return null;
+      return {
+        tournamentId,
+        tournamentName: meta.name,
+        committeeId: String(r.id),
+        startDate: meta.startDate,
+      };
+    })
+    .filter((row): row is OpenCommitteeTournament => row !== null);
+
+  rows.sort((a, b) => {
+    const da = a.startDate ?? "";
+    const dbDate = b.startDate ?? "";
+    if (da === dbDate) return a.tournamentName.localeCompare(b.tournamentName, "es");
+    return dbDate.localeCompare(da);
   });
+
+  return rows;
 }
