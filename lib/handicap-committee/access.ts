@@ -3,7 +3,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export type HandicapCommitteeAccess = {
   userId: string;
   isAdmin: boolean;
+  /**
+   * Puede entrar a la pantalla (admin del torneo o miembro del comité).
+   * No implica permiso para votar.
+   */
   isMember: boolean;
+  /**
+   * Tiene rol handicap_committee (global, club o torneo). Solo estos
+   * usuarios pueden emitir votos que cuenten, si además están presentes.
+   */
+  isCommitteeMember: boolean;
   /**
    * Alcance con el que el usuario es miembro del comité (puede haber más
    * de uno; se devuelve el más amplio para mostrar en la UI).
@@ -84,8 +93,9 @@ export async function loadHandicapCommitteeAccess(
   const isTournamentMember = hasRoleCode(tourRows ?? [], "handicap_committee");
 
   const isAdmin = isSuperAdmin || isClubAdmin || isDirector;
-  const isMember =
-    isAdmin || isGlobalMember || isClubMember || isTournamentMember;
+  const isCommitteeMember =
+    isGlobalMember || isClubMember || isTournamentMember;
+  const isMember = isAdmin || isCommitteeMember;
 
   const memberScope: HandicapCommitteeAccess["memberScope"] = isGlobalMember
     ? "global"
@@ -101,6 +111,7 @@ export async function loadHandicapCommitteeAccess(
     userId,
     isAdmin,
     isMember,
+    isCommitteeMember,
     memberScope,
   };
 }

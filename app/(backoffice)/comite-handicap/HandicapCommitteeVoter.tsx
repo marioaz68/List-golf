@@ -84,9 +84,13 @@ type Props = {
   committeeOpen: boolean;
   isPresent: boolean;
   isAdmin: boolean;
+  /** Rol handicap_committee (no basta club_admin/marshal presentes). */
+  isCommitteeMember: boolean;
   /** Compuerta RLS/app: fn_user_can_read_ghin — oculta "Ver reporte GHIN" si false. */
   canReadGhin: boolean;
   voteSummaries?: HandicapVoteSummaryRow[];
+  /** Si true, las abstenciones diluyen el promedio; default false. */
+  abstentionsInAverage?: boolean;
   t: HandicapCommitteeT;
 };
 
@@ -97,8 +101,10 @@ export default function HandicapCommitteeVoter({
   committeeOpen,
   isPresent,
   isAdmin,
+  isCommitteeMember,
   canReadGhin,
   voteSummaries = [],
+  abstentionsInAverage = false,
   t,
 }: Props) {
   const vt = t.voter;
@@ -208,11 +214,16 @@ export default function HandicapCommitteeVoter({
     }
   }
 
-  const canVote = committeeOpen && isPresent;
+  const canVote = committeeOpen && isPresent && isCommitteeMember;
 
   return (
     <div className="space-y-3">
-      {!isPresent ? (
+      {isPresent && !isCommitteeMember ? (
+        <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="font-semibold">{vt.notCommitteeTitle}</div>
+          <p className="mt-1">{vt.notCommitteeBody}</p>
+        </div>
+      ) : !isPresent ? (
         <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="font-semibold">{vt.presenceTitle}</div>
           <p className="mt-1">
@@ -339,13 +350,14 @@ export default function HandicapCommitteeVoter({
           <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full table-fixed text-left text-[11px] sm:text-sm">
               <colgroup>
-                <col className="w-[36%] sm:w-auto" />
-                <col className="w-[10%] sm:w-auto" />
-                <col className="w-[12%] sm:w-auto" />
-                <col className="w-[10%] sm:w-auto" />
-                <col className="w-[12%] sm:w-auto" />
+                <col className="w-[32%] sm:w-auto" />
+                <col className="w-[9%] sm:w-auto" />
                 <col className="w-[10%] sm:w-auto" />
                 <col className="w-[10%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[10%] sm:w-auto" />
+                <col className="w-[9%] sm:w-auto" />
               </colgroup>
               <thead className="bg-slate-100 text-[9px] uppercase text-slate-600 sm:text-xs">
                 <tr>
@@ -364,9 +376,15 @@ export default function HandicapCommitteeVoter({
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
-                    title={vt.thLiveTitle}
+                    title={vt.thAdjTitle}
                   >
-                    {vt.thLive}
+                    {vt.thAdj}
+                  </th>
+                  <th
+                    className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
+                    title={vt.thAbstTitle}
+                  >
+                    {vt.thAbst}
                   </th>
                   <th
                     className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
@@ -393,7 +411,7 @@ export default function HandicapCommitteeVoter({
                   const s = summaryByEntry.get(e.entry_id);
                   const nAbst = s?.n_abstained ?? 0;
                   const totalVotes = (s?.n_votes ?? 0) + nAbst;
-                  const liveIncAbst = (s?.n_live ?? 0) + nAbst;
+                  const nAdjLive = s?.n_live ?? 0;
                   const isExpanded = expandedResultId === e.entry_id;
                   const chips = s?.chips ?? [];
                   return (
@@ -448,13 +466,29 @@ export default function HandicapCommitteeVoter({
                         </td>
                         <td
                           className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
-                          title={vt.thLiveTitle}
+                          title={vt.thAdjTitle}
                         >
-                          {totalVotes > 0 ||
-                          (s?.n_avg_denominator != null &&
-                            s.n_avg_denominator > 0) ? (
+                          {totalVotes > 0 ? (
                             <span className="inline-block rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-800 sm:px-1.5 sm:py-0.5 sm:text-[11px]">
-                              {liveIncAbst}
+                              {nAdjLive}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
+                          title={vt.thAbstTitle}
+                        >
+                          {nAbst > 0 ? (
+                            <span className="inline-block rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-700 sm:px-1.5 sm:py-0.5 sm:text-[11px]">
+                              {nAbst}
+                            </span>
+                          ) : totalVotes > 0 ? (
+                            <span className="text-[10px] tabular-nums text-slate-400">
+                              0
                             </span>
                           ) : (
                             <span className="text-[10px] text-slate-400">
@@ -493,7 +527,7 @@ export default function HandicapCommitteeVoter({
                       {isExpanded ? (
                         <tr className="border-t border-slate-100 bg-slate-50">
                           <td
-                            colSpan={7}
+                            colSpan={8}
                             className="px-2 py-2 sm:px-3 sm:py-3"
                           >
                             <div className="space-y-1.5">
@@ -516,7 +550,9 @@ export default function HandicapCommitteeVoter({
                                       key={`${e.entry_id}-c-${idx}`}
                                       title={
                                         c.abstained
-                                          ? vt.chipAbstainTitle
+                                          ? abstentionsInAverage
+                                            ? vt.chipAbstainInAvg
+                                            : vt.chipAbstainOut
                                           : c.trimmed
                                             ? c.reason === "low"
                                               ? vt.chipTrimmedLow
@@ -580,7 +616,11 @@ export default function HandicapCommitteeVoter({
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[10px] leading-tight text-slate-600 sm:text-[11px]">
             <span><b>{vt.thHi}</b> = {vt.legendHi}</span>
             <span><b>{vt.thVotes}</b> = {vt.legendVotes}</span>
-            <span><b>{vt.thLive}</b> = {vt.legendLive}</span>
+            <span><b>{vt.thAdj}</b> = {vt.legendAdj}</span>
+            <span>
+              <b>{vt.thAbst}</b> ={" "}
+              {abstentionsInAverage ? vt.legendAbstInAvg : vt.legendAbstOut}
+            </span>
             <span><b>{vt.thAvg}</b> = {vt.legendAvg}</span>
             <span><b>{vt.thHiSug}</b> = {vt.legendHiSug}</span>
             <span><b>⊘ {vt.thVetos}</b> = {vt.legendVetos}</span>
@@ -1160,10 +1200,8 @@ function PlayerVoteCard({
             <div className="text-[10px] text-slate-500">
               {summary.n_live} {c.summaryLiveLong} / {summary.n_votes}{" "}
               {c.summaryNumShort}
-              {summary.n_avg_denominator ??
-                summary.n_live + (summary.n_abstained ?? 0)}
               {(summary.n_abstained ?? 0) > 0
-                ? ` (${summary.n_abstained} ${c.summaryAbstSuffix})`
+                ? ` · ${summary.n_abstained} ${c.summaryAbstSuffix}`
                 : ""}
             </div>
           </div>

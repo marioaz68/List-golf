@@ -10,6 +10,7 @@ import {
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
+import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligibleVoters";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -124,8 +125,12 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
 
   const { supabase, user } = await requireUser();
   const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
-  if (!access.isMember) {
-    return { ok: false, error: "No eres miembro del comité de este torneo." };
+  if (!access.isCommitteeMember) {
+    return {
+      ok: false,
+      error:
+        "Solo los miembros con rol handicap_committee pueden votar. Un director o marshal presente no emite voto.",
+    };
   }
 
   const { data: committee, error: cErr } = await supabase
@@ -221,15 +226,23 @@ async function computeApplyForEntry(
     adjustmentToApply = override;
   } else {
     // Recalcular promedio recortado a partir de los votos vivos.
+    const { eligibleIds } = await loadEligibleCommitteeVoterIds(admin, {
+      tournamentId: tournament_id,
+      committeeId,
+    });
     const { data: voteRows } = await admin
       .from("handicap_committee_votes")
-      .select("adjustment, abstained")
+      .select("adjustment, abstained, member_user_id")
       .eq("committee_id", committeeId)
       .eq("entry_id", entry_id);
 
     let n_abstained = 0;
     const adjustments: number[] = [];
     for (const row of voteRows ?? []) {
+      const uid = (row as { member_user_id?: string }).member_user_id
+        ? String((row as { member_user_id?: string }).member_user_id)
+        : "";
+      if (!uid || !eligibleIds.has(uid)) continue;
       if ((row as { abstained?: boolean }).abstained) {
         n_abstained += 1;
         continue;
@@ -653,6 +666,11 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
   const trimHigh = Number(committee.trim_high ?? 0);
   const abstInAvg = Boolean(committee.abstentions_in_average);
 
+  const { eligibleIds } = await loadEligibleCommitteeVoterIds(admin, {
+    tournamentId,
+    committeeId: committee.id,
+  });
+
   const votesByEntry = new Map<
     string,
     { adj: number[]; n_abs: number; n_dq: number }
@@ -662,7 +680,9 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
     const row = v as any;
     const eid = row.entry_id ? String(row.entry_id) : null;
     if (!eid) continue;
-    if (row.member_user_id) voterIds.add(String(row.member_user_id));
+    const uid = row.member_user_id ? String(row.member_user_id) : "";
+    if (!uid || !eligibleIds.has(uid)) continue;
+    voterIds.add(uid);
     const slot = votesByEntry.get(eid) ?? {
       adj: [] as number[],
       n_abs: 0,
@@ -678,9 +698,7 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
     votesByEntry.set(eid, slot);
   }
 
-  const nPresent = (presenceRows ?? []).filter(
-    (p: any) => p.is_present
-  ).length;
+  const nPresent = eligibleIds.size;
 
   const { data: lastSession } = await admin
     .from("handicap_committee_vote_sessions")

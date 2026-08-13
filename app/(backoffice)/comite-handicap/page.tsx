@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
+import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligibleVoters";
 import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
@@ -529,11 +530,21 @@ export default async function ComiteHandicapPage(props: {
     { voted: number; abstained: number; entries: Set<string> }
   >();
   let memberCount = 0;
+  type InvalidVoteBucket = {
+    user_id: string;
+    n_votes: number;
+    reason: "no_role" | "not_present";
+  };
+  const invalidVotesByUser = new Map<string, InvalidVoteBucket>();
 
   // Cargamos los votos agregados (anónimos) SIEMPRE que haya admin client
   // y exista comité, no solo para admins, para poder mostrar el promedio
   // final al votante cuando la votación esté cerrada.
   if (admin && committee?.id) {
+    const { memberIds, eligibleIds } = await loadEligibleCommitteeVoterIds(
+      admin,
+      { tournamentId, committeeId: committee.id }
+    );
     const { data: voteRows } = await admin
       .from("handicap_committee_votes")
       .select("entry_id, adjustment, abstained, disqualify_vote, member_user_id")
@@ -561,6 +572,23 @@ export default async function ComiteHandicapPage(props: {
           if (isAbstained) slot.abstained += 1;
         }
         votesByMember.set(uid, slot);
+      }
+
+      const countsForAverage = Boolean(uid && eligibleIds.has(uid));
+      if (!countsForAverage) {
+        if (uid) {
+          const reason: "no_role" | "not_present" = memberIds.has(uid)
+            ? "not_present"
+            : "no_role";
+          const prev = invalidVotesByUser.get(uid) ?? {
+            user_id: uid,
+            n_votes: 0,
+            reason,
+          };
+          prev.n_votes += 1;
+          invalidVotesByUser.set(uid, prev);
+        }
+        continue;
       }
 
       if (isAbstained) {
@@ -628,16 +656,6 @@ export default async function ComiteHandicapPage(props: {
     );
     const handicapRoleId = roleIdByCode.get("handicap_committee") ?? null;
     const directorRoleId = roleIdByCode.get("tournament_director") ?? null;
-
-    if (handicapRoleId) {
-      const { count } = await admin
-        .from("user_tournament_roles")
-        .select("id", { count: "exact", head: true })
-        .eq("tournament_id", tournamentId)
-        .eq("role_id", handicapRoleId)
-        .eq("is_active", true);
-      memberCount = count ?? 0;
-    }
 
     // Club_id del torneo para resolver alcance "club".
     const { data: tournamentClubRow } = await admin
@@ -742,6 +760,10 @@ export default async function ComiteHandicapPage(props: {
       }
     }
 
+    memberCount = Array.from(codesByUser.entries()).filter(([, codes]) =>
+      codes.has("handicap_committee")
+    ).length;
+
     const userIds = Array.from(codesByUser.keys());
 
     const [{ data: profilesRows }, { data: presenceRows }] = await Promise.all([
@@ -784,7 +806,10 @@ export default async function ComiteHandicapPage(props: {
     });
 
     candidateRows.sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
-    presentCount = candidateRows.filter((c) => c.is_present).length;
+    presentCount = candidateRows.filter(
+      (c) =>
+        c.is_present && c.role_codes.includes("handicap_committee")
+    ).length;
   }
 
   let availableProfiles: Array<{
@@ -808,6 +833,43 @@ export default async function ComiteHandicapPage(props: {
           (p.email ?? "Usuario"),
         email: p.email ?? null,
       }));
+  }
+
+  type InvalidVoteDisplay = {
+    user_id: string;
+    full_name: string;
+    email: string | null;
+    n_votes: number;
+    reason: "no_role" | "not_present";
+  };
+  let invalidVoteDisplay: InvalidVoteDisplay[] = [];
+  if (access.isAdmin && admin && invalidVotesByUser.size > 0) {
+    const ids = Array.from(invalidVotesByUser.keys());
+    const { data: invProfiles } = await admin
+      .from("profiles")
+      .select("id, first_name, last_name, email")
+      .in("id", ids);
+    const byId = new Map(
+      (invProfiles ?? []).map((p: any) => [String(p.id), p])
+    );
+    invalidVoteDisplay = ids.map((uid) => {
+      const bucket = invalidVotesByUser.get(uid)!;
+      const p = byId.get(uid);
+      const fullName = p
+        ? `${p.last_name ?? ""} ${p.first_name ?? ""}`.trim() ||
+          (p.email ?? uid)
+        : uid;
+      return {
+        user_id: uid,
+        full_name: fullName,
+        email: p?.email ?? null,
+        n_votes: bucket.n_votes,
+        reason: bucket.reason,
+      };
+    });
+    invalidVoteDisplay.sort((a, b) =>
+      a.full_name.localeCompare(b.full_name, "es")
+    );
   }
 
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
@@ -1355,7 +1417,9 @@ export default async function ComiteHandicapPage(props: {
                       // todavía, para que el avance no se vea en 0 cuando los
                       // votos están entrando.
                       const activeMembers = candidateRows.filter(
-                        (c) => c.is_present || c.voted_count > 0
+                        (c) =>
+                          c.role_codes.includes("handicap_committee") &&
+                          (c.is_present || c.voted_count > 0)
                       );
                       const totalSlots = activeMembers.length * entries.length;
                       const filledSlots = activeMembers.reduce(
@@ -1681,6 +1745,34 @@ export default async function ComiteHandicapPage(props: {
                 </p>
               </form>
 
+              {invalidVoteDisplay.length > 0 ? (
+                <div className="rounded-lg border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">
+                  <div className="font-bold">{t.admin.invalidVotesTitle}</div>
+                  <p className="mt-1 text-[11px] text-amber-900">
+                    {t.admin.invalidVotesHint}
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {invalidVoteDisplay.map((row) => (
+                      <li key={row.user_id}>
+                        <strong>{row.full_name}</strong>
+                        {row.email ? (
+                          <span className="text-amber-800"> · {row.email}</span>
+                        ) : null}
+                        <span className="tabular-nums">
+                          {" "}
+                          · {row.n_votes} {t.admin.votesShort}
+                        </span>
+                        <span className="ml-1 rounded bg-amber-200 px-1 py-0.5 text-[10px] font-semibold uppercase">
+                          {row.reason === "no_role"
+                            ? t.admin.invalidNoRole
+                            : t.admin.invalidNotPresent}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <p className="text-xs text-slate-600">{t.admin.aggregateHelp}</p>
 
               {entries.length === 0 ? (
@@ -1841,8 +1933,10 @@ export default async function ComiteHandicapPage(props: {
               committeeOpen={committee.status === "open"}
               isPresent={myPresence}
               isAdmin={access.isAdmin}
+              isCommitteeMember={access.isCommitteeMember}
               canReadGhin={canReadGhin}
               voteSummaries={voteSummariesForVoter}
+              abstentionsInAverage={abstentionsInAverageGlobal}
               t={t}
             />
           </>
