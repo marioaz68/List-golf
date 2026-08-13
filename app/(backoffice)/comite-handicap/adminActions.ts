@@ -36,9 +36,10 @@ export async function saveCommitteeFlagsBulk(params: {
   const now = new Date().toISOString();
   let updated = 0;
 
-  // Tras validar fn_user_can_read_ghin: escritura con service role
-  // (mismo patrón que toggleEntryCommitteeFlag — RLS de entries no
-  // siempre permite update al rol comité).
+  // Solo actualiza las inscripciones del payload (merge). Quien marque
+  // un jugador lo deja en la lista compartida de votación; no se
+  // desmarcan los demás. Escritura con service role: RLS de entries
+  // no siempre permite update al rol comité.
   const admin = createAdminClient();
 
   for (const item of params.items) {

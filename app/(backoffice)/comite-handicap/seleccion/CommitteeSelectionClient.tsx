@@ -106,32 +106,92 @@ export default function CommitteeSelectionClient({
     });
   }, [tableRows, q]);
 
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  function persistItems(
+    items: Array<{ entryId: string; flagged: boolean; reason: string }>,
+    okMsg: string
+  ) {
+    if (items.length === 0) return;
+    setErr("");
+    setMsg("");
+    startTransition(async () => {
+      const res = await saveCommitteeFlagsBulk({ tournamentId, items });
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      setMsg(okMsg);
     });
   }
 
+  function reasonFor(id: string) {
+    return reasons[id]?.trim() || bulkReason.trim() || "";
+  }
+
+  function toggle(id: string) {
+    const nextFlagged = !selected.has(id);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (nextFlagged) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    persistItems(
+      [
+        {
+          entryId: id,
+          flagged: nextFlagged,
+          reason: nextFlagged ? reasonFor(id) : "",
+        },
+      ],
+      nextFlagged
+        ? "Jugador en la votación de todos los miembros."
+        : "Jugador quitado de la lista compartida."
+    );
+  }
+
   function markAllVisible() {
+    const toAdd = filtered.filter((r) => !selected.has(r.entryId));
     setSelected((prev) => {
       const next = new Set(prev);
       for (const r of filtered) next.add(r.entryId);
       return next;
     });
+    persistItems(
+      toAdd.map((r) => ({
+        entryId: r.entryId,
+        flagged: true,
+        reason: reasonFor(r.entryId),
+      })),
+      `${toAdd.length} jugador(es) en la votación de todos.`
+    );
   }
 
   function unmarkAllVisible() {
+    const toRemove = filtered.filter((r) => selected.has(r.entryId));
     setSelected((prev) => {
       const next = new Set(prev);
       for (const r of filtered) next.delete(r.entryId);
       return next;
     });
+    persistItems(
+      toRemove.map((r) => ({
+        entryId: r.entryId,
+        flagged: false,
+        reason: "",
+      })),
+      `${toRemove.length} jugador(es) quitados de la lista compartida.`
+    );
   }
 
   function invertVisible() {
+    const items = filtered.map((r) => {
+      const flagged = !selected.has(r.entryId);
+      return {
+        entryId: r.entryId,
+        flagged,
+        reason: flagged ? reasonFor(r.entryId) : "",
+      };
+    });
     setSelected((prev) => {
       const next = new Set(prev);
       for (const r of filtered) {
@@ -140,18 +200,23 @@ export default function CommitteeSelectionClient({
       }
       return next;
     });
+    persistItems(items, "Selección invertida y guardada para todos.");
   }
 
   function applySuggestToSelection() {
+    const candidates = tableRows.filter((r) => r.suggestReasons.length > 0);
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const r of tableRows) {
-        if (r.suggestReasons.length > 0) next.add(r.entryId);
-      }
+      for (const r of candidates) next.add(r.entryId);
       return next;
     });
-    setMsg(
-      `Sugerencia aplicada a la selección (${tableRows.filter((r) => r.suggestReasons.length).length} candidatos). Revisa y guarda.`
+    persistItems(
+      candidates.map((r) => ({
+        entryId: r.entryId,
+        flagged: true,
+        reason: reasonFor(r.entryId),
+      })),
+      `${candidates.length} sugeridos ya están en la votación de todos.`
     );
   }
 
@@ -173,30 +238,17 @@ export default function CommitteeSelectionClient({
       }
       setSuggestByEntry(next);
       setMsg(
-        `Sugerencia calculada: ${res.rows.filter((r) => r.suggestReasons.length).length} candidatos. Usa «Aplicar sugeridos a selección» — no se guarda solo.`
+        `Sugerencia calculada: ${res.rows.filter((r) => r.suggestReasons.length).length} candidatos. Usa «Subir sugeridos a todos» para ponerlos en la votación.`
       );
     });
   }
 
-  function handleSave() {
-    setErr("");
-    setMsg("");
-    startTransition(async () => {
-      const items = tableRows.map((r) => ({
-        entryId: r.entryId,
-        flagged: selected.has(r.entryId),
-        reason:
-          reasons[r.entryId]?.trim() ||
-          (selected.has(r.entryId) ? bulkReason.trim() : "") ||
-          "",
-      }));
-      const res = await saveCommitteeFlagsBulk({ tournamentId, items });
-      if (!res.ok) {
-        setErr(res.error);
-        return;
-      }
-      setMsg(`Guardado: ${res.updated} inscripciones actualizadas.`);
-    });
+  function saveReason(id: string) {
+    if (!selected.has(id)) return;
+    persistItems(
+      [{ entryId: id, flagged: true, reason: reasonFor(id) }],
+      "Motivo guardado en la lista compartida."
+    );
   }
 
   const selectedCount = selected.size;
@@ -210,8 +262,14 @@ export default function CommitteeSelectionClient({
           Selección para comité
         </h1>
         <p className="text-sm text-slate-600">{tournamentName}</p>
+        <p className="mt-1 text-sm text-slate-700">
+          Lista compartida: al marcar un jugador queda al instante en la
+          votación de <strong>todos</strong> los miembros del comité. No hay
+          lista por persona.
+        </p>
         <p className="mt-1 text-xs text-slate-500">
-          Marcados: {selectedCount} · Sugeridos (sin guardar): {suggestedCount}
+          En votación: {selectedCount} · Sugeridos (aún no aplicados):{" "}
+          {suggestedCount}
         </p>
       </header>
 
@@ -249,22 +307,25 @@ export default function CommitteeSelectionClient({
           </label>
           <button
             type="button"
+            disabled={pending}
             onClick={markAllVisible}
-            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold"
+            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             Marcar todos (filtro)
           </button>
           <button
             type="button"
+            disabled={pending}
             onClick={unmarkAllVisible}
-            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold"
+            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             Desmarcar todos (filtro)
           </button>
           <button
             type="button"
+            disabled={pending}
             onClick={invertVisible}
-            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold"
+            className="rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             Invertir (filtro)
           </button>
@@ -277,20 +338,17 @@ export default function CommitteeSelectionClient({
               className="mt-0.5 block w-56 rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
           </label>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={handleSave}
-            className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-          >
-            {pending ? "Guardando…" : "Guardar selección (lote)"}
-          </button>
+          {pending ? (
+            <span className="text-xs font-semibold text-indigo-700">
+              Guardando en la lista de todos…
+            </span>
+          ) : null}
         </div>
       </section>
 
       <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 shadow-sm">
         <h2 className="text-sm font-bold text-amber-950">
-          Sugerir candidatos (no guarda solo)
+          Sugerir candidatos
         </h2>
         <div className="mt-2 flex flex-wrap gap-3 text-xs">
           <label>
@@ -376,10 +434,11 @@ export default function CommitteeSelectionClient({
           </button>
           <button
             type="button"
+            disabled={pending}
             onClick={applySuggestToSelection}
-            className="rounded border border-amber-800 bg-white px-2.5 py-1 font-semibold text-amber-950"
+            className="rounded border border-amber-800 bg-white px-2.5 py-1 font-semibold text-amber-950 disabled:opacity-50"
           >
-            Aplicar sugeridos a selección
+            Subir sugeridos a todos
           </button>
         </div>
       </section>
@@ -432,6 +491,7 @@ export default function CommitteeSelectionClient({
                     <input
                       type="checkbox"
                       checked={on}
+                      disabled={pending}
                       onChange={() => toggle(r.entryId)}
                     />
                   </td>
@@ -489,6 +549,7 @@ export default function CommitteeSelectionClient({
                           [r.entryId]: e.target.value,
                         }))
                       }
+                      onBlur={() => saveReason(r.entryId)}
                       placeholder="Motivo (opcional)"
                       className="mb-0.5 w-full rounded border border-slate-200 px-1 py-0.5"
                     />

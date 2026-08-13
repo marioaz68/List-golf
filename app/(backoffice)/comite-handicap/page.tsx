@@ -1936,16 +1936,16 @@ export default async function ComiteHandicapPage(props: {
                 ) : (
                   <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
                     {t.emptyNoFlagged
-                      .split("{entriesLink}")
+                      .split("{selectionLink}")
                       .map((chunk, i, arr) => (
                         <span key={i}>
                           {chunk}
                           {i < arr.length - 1 ? (
                             <Link
-                              href={`/entries?tournament_id=${tournamentId}`}
+                              href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
                               className="font-semibold underline"
                             >
-                              {t.entriesLinkLabel}
+                              {t.selectionLinkLabel}
                             </Link>
                           ) : null}
                         </span>
@@ -2074,15 +2074,15 @@ export default async function ComiteHandicapPage(props: {
           <>
             {entries.length === 0 && allEntries.length > 0 ? (
               <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                {t.emptyNoFlaggedVoter.split("{entriesLink}").map((chunk, i, arr) => (
+                {t.emptyNoFlaggedVoter.split("{selectionLink}").map((chunk, i, arr) => (
                   <span key={i}>
                     {chunk}
                     {i < arr.length - 1 ? (
                       <Link
-                        href={`/entries?tournament_id=${tournamentId}`}
+                        href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
                         className="font-semibold underline"
                       >
-                        {t.entriesLinkLabel}
+                        {t.selectionLinkLabel}
                       </Link>
                     ) : null}
                   </span>

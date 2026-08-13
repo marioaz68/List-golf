@@ -1434,9 +1434,10 @@ const es = {
       "No hay inscripciones activas en este torneo todavía. Agrega jugadores en {entriesLink} para que el comité los pueda calificar.",
     entriesLinkLabel: "Inscripciones",
     emptyNoFlagged:
-      "Ningún jugador marcado para revisión todavía. Ve a {entriesLink} y usa el botón «→ Comité HI» en cada jugador que el comité deba revisar. Puedes mandar más durante el torneo y los votos ya guardados no se pierden.",
+      "Ningún jugador en la lista de votación todavía. En {selectionLink} marca a quien el comité deba revisar: al marcar uno, aparece al instante para todos los miembros.",
     emptyNoFlaggedVoter:
-      "Ningún jugador marcado para revisión del comité todavía. El director debe marcarlos desde {entriesLink} con el botón «→ Comité HI». Mientras tanto aquí no aparece ningún jugador. Puedes seguir marcando jugadores durante el torneo y los votos ya guardados no se pierden.",
+      "Ningún jugador en la lista de votación todavía. Cualquier miembro puede marcarlos en {selectionLink}; al marcar uno, aparece para todos. No hay lista por persona.",
+    selectionLinkLabel: "Selección de jugadores",
     voter: {
       presenceTitle: "No estás marcado como presente.",
       presenceAdmin:
@@ -3145,9 +3146,10 @@ const en: Messages = {
       "No active entries in this tournament yet. Add players in {entriesLink} so the committee can review them.",
     entriesLinkLabel: "Entries",
     emptyNoFlagged:
-      "No player has been flagged for review yet. Go to {entriesLink} and use the «→ Committee HI» button on each player the committee should review. You can add more during the tournament and saved votes are not lost.",
+      "No players on the ballot yet. In {selectionLink} mark who the committee should review: marking one adds them instantly for every member.",
     emptyNoFlaggedVoter:
-      "No player has been flagged for committee review yet. The director must flag them from {entriesLink} using the «→ Committee HI» button. Meanwhile no players appear here. You can keep flagging players during the tournament and saved votes are not lost.",
+      "No players on the ballot yet. Any member can mark them in {selectionLink}; marking one adds them for everyone. There is no per-person list.",
+    selectionLinkLabel: "Player selection",
     voter: {
       presenceTitle: "You are not marked as present.",
       presenceAdmin:
