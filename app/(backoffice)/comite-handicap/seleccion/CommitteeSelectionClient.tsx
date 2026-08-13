@@ -45,6 +45,12 @@ export default function CommitteeSelectionClient({
   );
   const [bulkReason, setBulkReason] = useState("");
 
+  const debugSample =
+    initialRows.find((r) => r.ghin === "10677068") ??
+    initialRows.find((r) => r.ghin === "584513") ??
+    initialRows[0] ??
+    null;
+
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
     if (!n) return rows;
@@ -174,6 +180,23 @@ export default function CommitteeSelectionClient({
           Marcados: {selectedCount} · Sugeridos (sin guardar): {suggestedCount}
         </p>
       </header>
+
+      {debugSample ? (
+        <pre className="overflow-x-auto rounded-xl border border-rose-400 bg-rose-50 px-3 py-2 text-[11px] leading-snug text-rose-950">
+          {JSON.stringify(
+            {
+              keys: Object.keys(debugSample),
+              currentHi: debugSample.currentHi,
+              categoryCode: debugSample.categoryCode,
+              rounds12m: debugSample.rounds12m,
+              minHi: debugSample.minHi,
+              sample: debugSample,
+            },
+            null,
+            2
+          )}
+        </pre>
+      ) : null}
 
       {clubIndexHistory ? (
         <div
