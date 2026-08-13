@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import { requireGhinCommitteeAccess } from "@/lib/handicap-committee/requireGhinAccess";
 import { loadCommitteeSelectionRows } from "@/lib/handicap-committee/loadSelectionRows";
 import {
+  committeeOnlySelectionPath,
   loadOpenCommitteeTournamentsForUser,
 } from "@/lib/handicap-committee/openCommitteesForUser";
 import { getLocale } from "@/lib/i18n/server";
@@ -32,6 +34,9 @@ export default async function CommitteeSelectionPage({
     if (isCommitteeOnlyUser(roles)) {
       const db = tryCreateAdminClient() ?? supabase;
       const open = await loadOpenCommitteeTournamentsForUser(db, userId);
+      if (open[0]) {
+        redirect(committeeOnlySelectionPath(open));
+      }
       return (
         <div className="mx-auto max-w-2xl space-y-4 p-6">
           <h1 className="text-lg font-bold text-white">{t.pageTitle}</h1>

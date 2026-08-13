@@ -5,7 +5,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
-import { committeeOnlyHomePath } from "@/lib/handicap-committee/openCommitteesForUser";
+import {
+  committeeOnlyHomePath,
+  loadOpenCommitteeTournamentsForUser,
+} from "@/lib/handicap-committee/openCommitteesForUser";
 import { committeeLandingFromNext } from "@/lib/handicap-committee/committeeOnlyPublic";
 
 export type LoginState = {
@@ -158,9 +161,15 @@ async function resolveLandingForUser(
   // Operador de carrito → mini app del carrito (sin venue param: pick automático)
   if (roles.has("operador_carrito")) return "/captura/carrito";
   if (isCommitteeOnlyUser([...roles])) {
+    const open = await loadOpenCommitteeTournamentsForUser(admin, userId);
     const fromPoster = committeeLandingFromNext(requestedNext);
-    if (fromPoster) return fromPoster;
-    return committeeOnlyHomePath();
+    if (
+      fromPoster &&
+      open.some((row) => fromPoster.includes(row.tournamentId))
+    ) {
+      return fromPoster;
+    }
+    return committeeOnlyHomePath(open);
   }
   if (roles.has("marshal")) return "/tee-sheet";
   return "/dashboard";

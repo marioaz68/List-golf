@@ -7,17 +7,48 @@ export type OpenCommitteeTournament = {
   startDate: string | null;
 };
 
+/** Día de hoy en el club (México), YYYY-MM-DD. */
+export function todayYmdInClubTz(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** El comité es antes del torneo: ya empezó o no tiene fecha → no aplica. */
+export function isUpcomingCommitteeTournament(
+  startDate: string | null | undefined
+): boolean {
+  const day = String(startDate ?? "").slice(0, 10);
+  return Boolean(day) && day >= todayYmdInClubTz();
+}
+
 export function committeeOnlyHomePath(
-  _open?: OpenCommitteeTournament[]
+  open: OpenCommitteeTournament[] = []
 ): string {
+  const next = open[0];
+  if (next) {
+    return `/comite-handicap?tournament_id=${encodeURIComponent(next.tournamentId)}`;
+  }
   return "/comite-handicap";
 }
 
+export function committeeOnlySelectionPath(
+  open: OpenCommitteeTournament[] = []
+): string {
+  const next = open[0];
+  if (next) {
+    return `/comite-handicap/seleccion?tournament_id=${encodeURIComponent(next.tournamentId)}`;
+  }
+  return "/comite-handicap/seleccion";
+}
+
 /**
- * Torneos con comité status=open donde el usuario es miembro
- * (handicap_committee en torneo/club/global).
- * No exige presencia: eso solo habilita el voto.
- * Omite archivados y no públicos (p. ej. pruebas).
+ * Comités abiertos de torneos que AÚN NO EMPIEZAN (el más cercano primero).
+ * Los que ya se jugaron no entran: el comité es antes del evento.
+ * No exige presencia (eso solo habilita el voto).
  */
 export async function loadOpenCommitteeTournamentsForUser(
   db: SupabaseClient,
@@ -108,9 +139,11 @@ export async function loadOpenCommitteeTournamentsForUser(
     if (!t.id) continue;
     if (t.is_archived) continue;
     if (t.is_public === false) continue;
+    const startDate = t.start_date ? String(t.start_date) : null;
+    if (!isUpcomingCommitteeTournament(startDate)) continue;
     visible.set(String(t.id), {
       name: String(t.name ?? "").trim() || String(t.id).slice(0, 8),
-      startDate: t.start_date ? String(t.start_date) : null,
+      startDate,
     });
   }
 
@@ -131,8 +164,10 @@ export async function loadOpenCommitteeTournamentsForUser(
   rows.sort((a, b) => {
     const da = a.startDate ?? "";
     const dbDate = b.startDate ?? "";
-    if (da === dbDate) return a.tournamentName.localeCompare(b.tournamentName, "es");
-    return dbDate.localeCompare(da);
+    if (da === dbDate) {
+      return a.tournamentName.localeCompare(b.tournamentName, "es");
+    }
+    return da.localeCompare(dbDate);
   });
 
   return rows;

@@ -6,6 +6,8 @@ import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligibleVoters";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import {
+  committeeOnlyHomePath,
+  isUpcomingCommitteeTournament,
   loadOpenCommitteeTournamentsForUser,
 } from "@/lib/handicap-committee/openCommitteesForUser";
 import { getLocale } from "@/lib/i18n/server";
@@ -92,6 +94,9 @@ export default async function ComiteHandicapPage(props: {
     if (isCommitteeOnlyUser(roles)) {
       const db = tryCreateAdminClient() ?? supabase;
       const open = await loadOpenCommitteeTournamentsForUser(db, user.id);
+      if (open[0]) {
+        redirect(committeeOnlyHomePath(open));
+      }
       return (
         <div className="space-y-6 p-4 md:p-6">
           <div>
@@ -241,9 +246,19 @@ export default async function ComiteHandicapPage(props: {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name")
+    .select("id, name, start_date")
     .eq("id", tournamentId)
     .single();
+
+  const rolesHere = await getUserRoles(supabase, user.id);
+  const committeeOnly = isCommitteeOnlyUser(rolesHere);
+  if (committeeOnly) {
+    const db = tryCreateAdminClient() ?? supabase;
+    const open = await loadOpenCommitteeTournamentsForUser(db, user.id);
+    if (!isUpcomingCommitteeTournament(tournament?.start_date ?? null)) {
+      redirect(committeeOnlyHomePath(open));
+    }
+  }
 
   const { data: committee } = await supabase
     .from("tournament_handicap_committees")
@@ -1119,9 +1134,6 @@ export default async function ComiteHandicapPage(props: {
   const isCommitteeAdmin = access.isAdmin === true;
   const showAdmin = isCommitteeAdmin && requestedTab === "admin";
   const showVote = !showAdmin;
-  const committeeOnly = isCommitteeOnlyUser(
-    await getUserRoles(supabase, user.id)
-  );
 
   return (
     <div className="space-y-6 p-4 md:p-6">
