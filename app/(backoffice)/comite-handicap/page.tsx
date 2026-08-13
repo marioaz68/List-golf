@@ -7,6 +7,7 @@ import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligible
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import {
   committeeOnlyHomePath,
+  isDailyPlayTournament,
   isUpcomingCommitteeTournament,
   loadOpenCommitteeTournamentsForUser,
 } from "@/lib/handicap-committee/openCommitteesForUser";
@@ -197,7 +198,9 @@ export default async function ComiteHandicapPage(props: {
 
     let tournamentsQuery = supabase
       .from("tournaments")
-      .select("id, name, start_date")
+      .select("id, name, start_date, kind, is_private")
+      .neq("kind", "daily_round")
+      .or("is_private.eq.false,is_private.is.null")
       .order("start_date", { ascending: false })
       .limit(80);
     if (allowedTournamentIds && allowedTournamentIds.length === 0) {
@@ -206,10 +209,13 @@ export default async function ComiteHandicapPage(props: {
       tournamentsQuery = tournamentsQuery.in("id", allowedTournamentIds);
     }
 
-    const { data: tournaments } = await tournamentsQuery;
+    const { data: tournamentsRaw } = await tournamentsQuery;
+    const tournaments = (tournamentsRaw ?? []).filter(
+      (row) => !isDailyPlayTournament(row)
+    );
 
-    if ((tournaments ?? []).length === 1) {
-      redirect(`/comite-handicap?tournament_id=${tournaments![0].id}`);
+    if (tournaments.length === 1) {
+      redirect(`/comite-handicap?tournament_id=${tournaments[0].id}`);
     }
 
     return (
@@ -218,13 +224,13 @@ export default async function ComiteHandicapPage(props: {
           <h1 className="text-2xl font-bold text-white">{t.pageTitle}</h1>
           <p className="mt-1 text-sm text-slate-300">{t.pickTournament}</p>
         </div>
-        {(tournaments ?? []).length === 0 ? (
+        {tournaments.length === 0 ? (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
             {t.noTournaments}
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {(tournaments ?? []).map((row) => (
+            {tournaments.map((row) => (
               <Link
                 key={row.id}
                 href={`/comite-handicap?tournament_id=${row.id}`}
@@ -246,9 +252,13 @@ export default async function ComiteHandicapPage(props: {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name, start_date")
+    .select("id, name, start_date, kind, is_private")
     .eq("id", tournamentId)
     .single();
+
+  if (tournament && isDailyPlayTournament(tournament)) {
+    return <div className="p-6 text-red-700">{t.noDailyRounds}</div>;
+  }
 
   const rolesHere = await getUserRoles(supabase, user.id);
   const committeeOnly = isCommitteeOnlyUser(rolesHere);

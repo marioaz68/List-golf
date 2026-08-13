@@ -475,9 +475,22 @@ export default function Sidebar() {
         if (item.requiresTournament && !tournamentId) return false;
         if (item.requiresMatchPlayAuction && !matchPlayAuctionActive)
           return false;
+        if (
+          item.nameKey === "dailyRounds" &&
+          (pathname.startsWith("/comite-handicap") ||
+            pathname.startsWith("/handicap-report"))
+        ) {
+          return false;
+        }
         return canAccessModule(roles, NAV_ITEM_MODULE[item.nameKey]);
       }),
-    [tournamentOperationNav, tournamentId, roles, matchPlayAuctionActive]
+    [
+      tournamentOperationNav,
+      tournamentId,
+      roles,
+      matchPlayAuctionActive,
+      pathname,
+    ]
   );
 
   /**

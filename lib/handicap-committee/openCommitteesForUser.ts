@@ -17,6 +17,14 @@ export function todayYmdInClubTz(): string {
   }).format(new Date());
 }
 
+/** Rondas diarias / jugadas del club: no son torneo de comité. */
+export function isDailyPlayTournament(row: {
+  kind?: string | null;
+  is_private?: boolean | null;
+}): boolean {
+  return row.kind === "daily_round" || row.is_private === true;
+}
+
 /** El comité es antes del torneo: ya empezó o no tiene fecha → no aplica. */
 export function isUpcomingCommitteeTournament(
   startDate: string | null | undefined
@@ -128,7 +136,7 @@ export async function loadOpenCommitteeTournamentsForUser(
   ];
   const { data: tours } = await db
     .from("tournaments")
-    .select("id, name, start_date, is_archived, is_public")
+    .select("id, name, start_date, is_archived, is_public, kind, is_private")
     .in("id", tourIds);
 
   const visible = new Map<
@@ -138,6 +146,7 @@ export async function loadOpenCommitteeTournamentsForUser(
   for (const t of tours ?? []) {
     if (!t.id) continue;
     if (t.is_archived) continue;
+    if (isDailyPlayTournament(t)) continue;
     if (t.is_public === false) continue;
     const startDate = t.start_date ? String(t.start_date) : null;
     if (!isUpcomingCommitteeTournament(startDate)) continue;

@@ -6,6 +6,7 @@ import { requireGhinCommitteeAccess } from "@/lib/handicap-committee/requireGhin
 import { loadCommitteeSelectionRows } from "@/lib/handicap-committee/loadSelectionRows";
 import {
   committeeOnlySelectionPath,
+  isDailyPlayTournament,
   loadOpenCommitteeTournamentsForUser,
 } from "@/lib/handicap-committee/openCommitteesForUser";
 import { getLocale } from "@/lib/i18n/server";
@@ -65,11 +66,14 @@ export default async function CommitteeSelectionPage({
       );
     }
 
-    const { data: tours } = await supabase
+    const { data: toursRaw } = await supabase
       .from("tournaments")
-      .select("id, name")
+      .select("id, name, kind, is_private")
+      .neq("kind", "daily_round")
+      .or("is_private.eq.false,is_private.is.null")
       .order("start_date", { ascending: false })
-      .limit(20);
+      .limit(40);
+    const tours = (toursRaw ?? []).filter((row) => !isDailyPlayTournament(row));
     return (
       <div className="mx-auto max-w-2xl p-6">
         <h1 className="text-lg font-bold">Selección para comité</h1>

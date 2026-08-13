@@ -1400,6 +1400,8 @@ const es = {
     pickOpenVote: "Elige la votación de comité a la que entrar.",
     changeTournament: "Cambiar torneo",
     noOpenVote: "No hay votación de comité abierta en este momento.",
+    noDailyRounds:
+      "El comité de handicap solo aplica a torneos, no a las jugadas del día.",
     noTournaments:
       "No tienes torneos asignados. Pide a un administrador que te asigne el rol «Comité de Handicap» o «Director del Torneo» en algún torneo.",
     noAccess: "No tienes acceso al comité de handicap de este torneo.",
@@ -3106,6 +3108,8 @@ const en: Messages = {
     pickOpenVote: "Choose which committee vote to enter.",
     changeTournament: "Change tournament",
     noOpenVote: "There is no open committee vote at this time.",
+    noDailyRounds:
+      "The handicap committee applies to tournaments only, not daily rounds.",
     noTournaments:
       "You don't have tournaments assigned. Ask an administrator to grant you the «Handicap Committee» or «Tournament Director» role in a tournament.",
     noAccess: "You don't have access to this tournament's handicap committee.",
