@@ -19,13 +19,51 @@ type Props = {
   clubIndexHistory: ClubIndexHistory | null;
 };
 
+/** Campos de la tabla: el tipo local obliga a leer las 4 claves del payload. */
+type TableRow = {
+  entryId: string;
+  playerId: string;
+  playerName: string;
+  ghin: string | null;
+  entryHi: number | null;
+  currentHi: number | null;
+  categoryCode: string | null;
+  rounds12m: number | null;
+  minHi: number | null;
+  deltaHi: number | null;
+  indexHistoryNote: string | null;
+  suggestReasons: string[];
+};
+
+function toTableRow(
+  r: CommitteeSelectionRow,
+  suggestOverlay?: string[]
+): TableRow {
+  return {
+    entryId: r.entryId,
+    playerId: r.playerId,
+    playerName: r.playerName,
+    ghin: r.ghin,
+    entryHi: r.entryHi,
+    currentHi: r.currentHi,
+    categoryCode: r.categoryCode,
+    rounds12m: r.rounds12m,
+    minHi: r.minHi,
+    deltaHi: r.deltaHi,
+    indexHistoryNote: r.indexHistoryNote,
+    suggestReasons: suggestOverlay ?? r.suggestReasons,
+  };
+}
+
 export default function CommitteeSelectionClient({
   tournamentId,
   tournamentName,
   initialRows,
   clubIndexHistory,
 }: Props) {
-  const [rows, setRows] = useState(initialRows);
+  const [suggestByEntry, setSuggestByEntry] = useState<Record<string, string[]>>(
+    {}
+  );
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(initialRows.filter((r) => r.flagged).map((r) => r.entryId))
   );
@@ -45,16 +83,16 @@ export default function CommitteeSelectionClient({
   );
   const [bulkReason, setBulkReason] = useState("");
 
-  const debugSample =
-    initialRows.find((r) => r.ghin === "10677068") ??
-    initialRows.find((r) => r.ghin === "584513") ??
-    initialRows[0] ??
-    null;
+  const tableRows = useMemo(
+    () =>
+      initialRows.map((r) => toTableRow(r, suggestByEntry[r.entryId])),
+    [initialRows, suggestByEntry]
+  );
 
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return rows;
-    return rows.filter((r) => {
+    if (!n) return tableRows;
+    return tableRows.filter((r) => {
       const hay = [
         r.playerName,
         r.ghin,
@@ -66,7 +104,7 @@ export default function CommitteeSelectionClient({
         .toLowerCase();
       return hay.includes(n);
     });
-  }, [rows, q]);
+  }, [tableRows, q]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -107,13 +145,13 @@ export default function CommitteeSelectionClient({
   function applySuggestToSelection() {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const r of rows) {
+      for (const r of tableRows) {
         if (r.suggestReasons.length > 0) next.add(r.entryId);
       }
       return next;
     });
     setMsg(
-      `Sugerencia aplicada a la selección (${rows.filter((r) => r.suggestReasons.length).length} candidatos). Revisa y guarda.`
+      `Sugerencia aplicada a la selección (${tableRows.filter((r) => r.suggestReasons.length).length} candidatos). Revisa y guarda.`
     );
   }
 
@@ -122,14 +160,18 @@ export default function CommitteeSelectionClient({
     setMsg("");
     startTransition(async () => {
       const res = await suggestCommitteeCandidatesAction({
-        rows,
+        rows: initialRows,
         thresholds,
       });
       if (!res.ok) {
         setErr(res.error);
         return;
       }
-      setRows(res.rows);
+      const next: Record<string, string[]> = {};
+      for (const r of res.rows) {
+        if (r.suggestReasons.length) next[r.entryId] = r.suggestReasons;
+      }
+      setSuggestByEntry(next);
       setMsg(
         `Sugerencia calculada: ${res.rows.filter((r) => r.suggestReasons.length).length} candidatos. Usa «Aplicar sugeridos a selección» — no se guarda solo.`
       );
@@ -140,7 +182,7 @@ export default function CommitteeSelectionClient({
     setErr("");
     setMsg("");
     startTransition(async () => {
-      const items = rows.map((r) => ({
+      const items = tableRows.map((r) => ({
         entryId: r.entryId,
         flagged: selected.has(r.entryId),
         reason:
@@ -154,20 +196,12 @@ export default function CommitteeSelectionClient({
         return;
       }
       setMsg(`Guardado: ${res.updated} inscripciones actualizadas.`);
-      setRows((prev) =>
-        prev.map((r) => ({
-          ...r,
-          flagged: selected.has(r.entryId),
-          flaggedReason: selected.has(r.entryId)
-            ? reasons[r.entryId]?.trim() || bulkReason.trim() || null
-            : null,
-        }))
-      );
     });
   }
 
   const selectedCount = selected.size;
-  const suggestedCount = rows.filter((r) => r.suggestReasons.length > 0).length;
+  const suggestedCount = tableRows.filter((r) => r.suggestReasons.length > 0)
+    .length;
 
   return (
     <div className="space-y-4">
@@ -180,23 +214,6 @@ export default function CommitteeSelectionClient({
           Marcados: {selectedCount} · Sugeridos (sin guardar): {suggestedCount}
         </p>
       </header>
-
-      {debugSample ? (
-        <pre className="overflow-x-auto rounded-xl border border-rose-400 bg-rose-50 px-3 py-2 text-[11px] leading-snug text-rose-950">
-          {JSON.stringify(
-            {
-              keys: Object.keys(debugSample),
-              currentHi: debugSample.currentHi,
-              categoryCode: debugSample.categoryCode,
-              rounds12m: debugSample.rounds12m,
-              minHi: debugSample.minHi,
-              sample: debugSample,
-            },
-            null,
-            2
-          )}
-        </pre>
-      ) : null}
 
       {clubIndexHistory ? (
         <div
@@ -400,6 +417,10 @@ export default function CommitteeSelectionClient({
           <tbody>
             {filtered.map((r) => {
               const on = selected.has(r.entryId);
+              const currentHi = r.currentHi;
+              const categoryCode = r.categoryCode;
+              const rounds12m = r.rounds12m;
+              const minHi = r.minHi;
               return (
                 <tr
                   key={r.entryId}
@@ -423,24 +444,28 @@ export default function CommitteeSelectionClient({
                     ) : null}
                   </td>
                   <td
-                    className={`px-2 py-1.5 tabular-nums ${
+                    className={`whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-900 ${
                       asNum(r.entryHi) != null &&
-                      asNum(r.currentHi) != null &&
-                      asNum(r.entryHi) !== asNum(r.currentHi)
+                      asNum(currentHi) != null &&
+                      asNum(r.entryHi) !== asNum(currentHi)
                         ? "text-slate-500"
                         : ""
                     }`}
                   >
                     {fmtHi(r.entryHi)}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums font-semibold">
-                    {fmtHi(r.currentHi)}
+                  <td className="whitespace-nowrap px-2 py-1.5 tabular-nums font-semibold text-slate-900">
+                    {fmtHi(currentHi)}
                   </td>
-                  <td className="px-2 py-1.5">{r.categoryCode || "—"}</td>
-                  <td className="px-2 py-1.5 tabular-nums">
-                    {fmtInt(r.rounds12m)}
+                  <td className="whitespace-nowrap px-2 py-1.5 font-semibold text-slate-900">
+                    {categoryCode ?? "—"}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">{fmtHi(r.minHi)}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-900">
+                    {fmtInt(rounds12m)}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-900">
+                    {fmtHi(minHi)}
+                  </td>
                   <td
                     className={`px-2 py-1.5 tabular-nums font-semibold ${
                       asNum(r.deltaHi) != null && asNum(r.deltaHi)! > 1

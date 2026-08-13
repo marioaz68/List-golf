@@ -63,15 +63,6 @@ export default async function CommitteeSelectionPage({
   const clubIndexHistory = loaded.clubIndexHistory
     ? (JSON.parse(JSON.stringify(loaded.clubIndexHistory)) as typeof loaded.clubIndexHistory)
     : null;
-  const sample =
-    rows.find((r) => r.ghin === "10677068") ??
-    rows.find((r) => r.ghin === "584513") ??
-    rows[0] ??
-    null;
-  console.log(
-    "[comite-seleccion] page→client sample",
-    JSON.stringify({ keys: sample ? Object.keys(sample) : [], sample })
-  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-3 p-4">
