@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import {
+  formatOfficialHcp80Detail,
+  resolveOfficialHcp80,
+  type OfficialHcp80,
+} from "@/lib/handicap/resolveTournamentEntryHandicap";
 import {
   daysBetweenIso,
   isoDaysAfter,
@@ -36,6 +42,9 @@ export type CommitteeSelectionRow = {
   flagged: boolean;
   flaggedReason: string | null;
   suggestReasons: string[];
+  /** H del torneo con el % de la regla (80, 100, …). */
+  tournamentHcp: OfficialHcp80 | null;
+  tournamentHcpDetail: string | null;
 };
 
 export type ClubIndexHistory = {
@@ -104,6 +113,45 @@ function wireRow(r: CommitteeSelectionRow): CommitteeSelectionRow {
     suggestReasons: Array.isArray(r.suggestReasons)
       ? r.suggestReasons.map(String)
       : [],
+    tournamentHcp: wireTournamentHcp(r.tournamentHcp),
+    tournamentHcpDetail: r.tournamentHcpDetail ?? null,
+  };
+}
+
+function wireTournamentHcp(d: OfficialHcp80 | null | undefined): OfficialHcp80 | null {
+  if (!d) return null;
+  const hp = num(d.hp);
+  const ch = num(d.ch);
+  const chExact = num(d.chExact);
+  const hi = num(d.hi);
+  const slope = num(d.slope);
+  const cr = num(d.course_rating);
+  const par = num(d.par);
+  const pct = num(d.allowancePct);
+  if (
+    hp == null ||
+    ch == null ||
+    chExact == null ||
+    hi == null ||
+    slope == null ||
+    cr == null ||
+    par == null
+  ) {
+    return null;
+  }
+  return {
+    hp,
+    ch,
+    chExact,
+    hi,
+    slope,
+    course_rating: cr,
+    par,
+    teeCode:
+      d.teeCode != null && String(d.teeCode).trim()
+        ? String(d.teeCode).trim()
+        : null,
+    allowancePct: pct != null && pct > 0 ? pct : 80,
   };
 }
 
@@ -181,7 +229,9 @@ export async function loadCommitteeSelectionRows(
       playerIds.length
         ? db
             .from("players")
-            .select("id, first_name, last_name, ghin_number, handicap_index")
+            .select(
+              "id, first_name, last_name, ghin_number, handicap_index, gender, birth_year, handicap_torneo"
+            )
             .in("id", playerIds)
         : Promise.resolve({
             data: [] as Array<Record<string, unknown>>,
@@ -383,8 +433,47 @@ export async function loadCommitteeSelectionRows(
       flagged: Boolean(e.flagged_for_committee),
       flaggedReason: (e.flagged_committee_reason as string | null) ?? null,
       suggestReasons: [],
+      tournamentHcp: null,
+      tournamentHcpDetail: null,
     };
   });
+
+  try {
+    const handicapCtx = await loadTournamentHandicapContext(db, tournamentId);
+    for (let i = 0; i < rows.length; i += 1) {
+      const e = entries[i];
+      if (!e) continue;
+      const pl = e.player_id ? playerById.get(String(e.player_id)) : null;
+      const hcp = resolveOfficialHcp80(
+        {
+          id: String(e.id),
+          player_id: e.player_id ? String(e.player_id) : "",
+          category_id: e.category_id ? String(e.category_id) : null,
+          handicap_index: num(e.handicap_index),
+          player: pl
+            ? {
+                gender: (pl as { gender?: string | null }).gender ?? null,
+                birth_year: num((pl as { birth_year?: unknown }).birth_year),
+                handicap_index: num(
+                  (pl as { handicap_index?: unknown }).handicap_index
+                ),
+                handicap_torneo: num(
+                  (pl as { handicap_torneo?: unknown }).handicap_torneo
+                ),
+              }
+            : null,
+        },
+        handicapCtx
+      );
+      rows[i].tournamentHcp = hcp;
+      rows[i].tournamentHcpDetail = hcp ? formatOfficialHcp80Detail(hcp) : null;
+    }
+  } catch (err) {
+    console.error(
+      "[comite-seleccion] H torneo",
+      err instanceof Error ? err.message : err
+    );
+  }
 
   for (const r of rows) {
     if (r.currentHi != null && r.minHi != null) {

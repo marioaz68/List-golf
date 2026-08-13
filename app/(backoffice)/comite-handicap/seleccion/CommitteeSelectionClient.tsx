@@ -11,6 +11,7 @@ import {
   type CommitteeSelectionRow,
   type SuggestThresholds,
 } from "@/lib/handicap-committee/loadSelectionRows";
+import type { OfficialHcp80 } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
 type Props = {
   tournamentId: string;
@@ -33,6 +34,8 @@ type TableRow = {
   deltaHi: number | null;
   indexHistoryNote: string | null;
   suggestReasons: string[];
+  tournamentHcp: OfficialHcp80 | null;
+  tournamentHcpDetail: string | null;
 };
 
 function toTableRow(
@@ -52,6 +55,8 @@ function toTableRow(
     deltaHi: r.deltaHi,
     indexHistoryNote: r.indexHistoryNote,
     suggestReasons: suggestOverlay ?? r.suggestReasons,
+    tournamentHcp: r.tournamentHcp ?? null,
+    tournamentHcpDetail: r.tournamentHcpDetail ?? null,
   };
 }
 
@@ -444,7 +449,7 @@ export default function CommitteeSelectionClient({
       </section>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[980px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="px-2 py-2">✓</th>
@@ -456,6 +461,12 @@ export default function CommitteeSelectionClient({
                 HI actual
               </th>
               <th className="px-2 py-2">Cat</th>
+              <th
+                className="px-2 py-2 text-right"
+                title="Handicap de torneo: CH exacto × % de la regla del torneo (80, 100, …). HI, salida y CH abajo."
+              >
+                H torneo
+              </th>
               <th className="px-2 py-2">Rondas 12m</th>
               <th
                 className="px-2 py-2"
@@ -519,6 +530,25 @@ export default function CommitteeSelectionClient({
                   </td>
                   <td className="whitespace-nowrap px-2 py-1.5 font-semibold text-slate-900">
                     {categoryCode ?? "—"}
+                  </td>
+                  <td
+                    className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums font-mono font-semibold text-indigo-800"
+                    title={r.tournamentHcpDetail ?? "Sin datos de campo/salida para calcular H torneo"}
+                  >
+                    {r.tournamentHcp ? (
+                      <span className="inline-flex flex-col items-end leading-tight">
+                        <span>{r.tournamentHcp.hp}</span>
+                        <span className="text-[8px] font-medium text-slate-500">
+                          {r.tournamentHcp.allowancePct ?? 80}% · CH{" "}
+                          {r.tournamentHcp.ch}
+                          {r.tournamentHcp.teeCode
+                            ? ` · ${r.tournamentHcp.teeCode}`
+                            : ""}
+                        </span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-900">
                     {fmtInt(rounds12m)}

@@ -93,6 +93,7 @@ type Entry = {
     course_rating: number;
     par: number;
     teeCode: string | null;
+    allowancePct?: number;
   } | null;
   status: string | null;
   flagged_for_committee?: boolean;
@@ -1080,7 +1081,8 @@ ${res.witness_url}`;
                       <span className="inline-flex flex-col items-end leading-tight">
                         <span>{e.official_hcp_80.hp}</span>
                         <span className="max-w-[11rem] truncate text-[8px] font-medium text-slate-500">
-                          HI {e.official_hcp_80.hi.toFixed(1)}
+                          {e.official_hcp_80.allowancePct ?? 80}% · HI{" "}
+                          {e.official_hcp_80.hi.toFixed(1)}
                           {e.official_hcp_80.teeCode
                             ? ` · ${e.official_hcp_80.teeCode}`
                             : ""}{" "}

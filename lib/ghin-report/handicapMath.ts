@@ -47,8 +47,26 @@ export function playingHandicap80(
   courseRating: number,
   par: number
 ): number {
-  const exact = courseHandicapExact(hi, slope, courseRating, par);
-  return roundHalfUp(exact * 0.8);
+  return hiToChHpAtPct(hi, slope, courseRating, par, 80).hp;
+}
+
+/** HP = roundHalfUp(CH_exact × pct/100). El % se aplica al CH decimal. */
+export function hiToChHpAtPct(
+  hi: number,
+  slope: number,
+  courseRating: number,
+  par: number,
+  allowancePct: number
+): { chExact: number; ch: number; hp: number; allowancePct: number } {
+  const chExact = courseHandicapExact(hi, slope, courseRating, par);
+  const pct =
+    Number.isFinite(allowancePct) && allowancePct > 0 ? allowancePct : 100;
+  return {
+    chExact,
+    ch: roundHalfUp(chExact),
+    hp: roundHalfUp(chExact * (pct / 100)),
+    allowancePct: pct,
+  };
 }
 
 export function hiToChHp(
@@ -57,12 +75,8 @@ export function hiToChHp(
   courseRating: number,
   par: number
 ): { chExact: number; ch: number; hp: number } {
-  const chExact = courseHandicapExact(hi, slope, courseRating, par);
-  return {
-    chExact,
-    ch: roundHalfUp(chExact),
-    hp: roundHalfUp(chExact * 0.8),
-  };
+  const r = hiToChHpAtPct(hi, slope, courseRating, par, 80);
+  return { chExact: r.chExact, ch: r.ch, hp: r.hp };
 }
 
 /**
