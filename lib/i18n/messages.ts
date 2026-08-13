@@ -145,6 +145,9 @@ const es = {
       thPlayer: "Jugador",
       thClub: "Club",
       thHcp: "Hcp",
+      thHcp80: "HCP 80%",
+      thHcp80Title:
+        "Handicap de torneo oficial al 80%: HI × (Slope/113) + (CR − Par), luego × 0.80. Muestra HI, salida, slope, CR, par y CH.",
       thCat: "Cat",
       thStatus: "Estatus",
       thSignatures: "Firmas",
@@ -1869,6 +1872,9 @@ const en: Messages = {
       thPlayer: "Player",
       thClub: "Club",
       thHcp: "Hcp",
+      thHcp80: "HCP 80%",
+      thHcp80Title:
+        "Official tournament handicap at 80%: HI × (Slope/113) + (CR − Par), then × 0.80. Shows HI, tee, slope, CR, par and CH.",
       thCat: "Cat",
       thStatus: "Status",
       thSignatures: "Signatures",

@@ -25,7 +25,11 @@ import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 import { queryInChunks } from "@/lib/supabase/queryInChunks";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
-import { resolveTournamentEntryHandicap } from "@/lib/handicap/resolveTournamentEntryHandicap";
+import {
+  resolveOfficialHcp80,
+  resolveTournamentEntryHandicap,
+  type OfficialHcp80,
+} from "@/lib/handicap/resolveTournamentEntryHandicap";
 import { assignTeeSetWithMeta } from "@/lib/tee-assignment";
 
 export const dynamic = "force-dynamic";
@@ -144,6 +148,7 @@ type EntryRowBase = {
   telegram_kit_sent_at?: string | null;
   telegram_kit_received_at?: string | null;
   allowance_pct_applied?: number | null;
+  official_hcp_80?: OfficialHcp80 | null;
   players: EntryPlayerRaw | EntryPlayerRaw[] | null;
   categories: EntryCategoryRaw | EntryCategoryRaw[] | null;
 };
@@ -159,6 +164,7 @@ type EntryRow = {
   playing_handicap_override_reason?: string | null;
   tee_set_id_override?: string | null;
   tee_set_id_assigned?: string | null;
+  official_hcp_80?: OfficialHcp80 | null;
   caddie_summary?: {
     hasCaddie: boolean;
     totalRounds: number;
@@ -1005,28 +1011,40 @@ export default async function EntriesPage({
           }
         }
 
+        const entryForHcp = {
+          id: e.id,
+          player_id: e.player_id,
+          category_id: categoryId,
+          handicap_index: e.handicap_index,
+          playing_handicap_override: e.playing_handicap_override ?? null,
+          player: e.players
+            ? {
+                gender: e.players.gender,
+                birth_year: e.players.birth_year,
+                handicap_index: e.players.handicap_index,
+                handicap_torneo: e.players.handicap_torneo,
+              }
+            : null,
+        };
+        const official_hcp_80 = resolveOfficialHcp80(entryForHcp, handicapCtx);
+
         if (e.course_handicap != null && e.playing_handicap != null) {
-          return { ...e, allowance_pct_applied, tee_set_id_assigned };
+          return {
+            ...e,
+            allowance_pct_applied,
+            tee_set_id_assigned,
+            official_hcp_80,
+          };
         }
-        const calc = resolveTournamentEntryHandicap(
-          {
-            id: e.id,
-            player_id: e.player_id,
-            category_id: categoryId,
-            handicap_index: e.handicap_index,
-            playing_handicap_override: e.playing_handicap_override ?? null,
-            player: e.players
-              ? {
-                  gender: e.players.gender,
-                  birth_year: e.players.birth_year,
-                  handicap_index: e.players.handicap_index,
-                  handicap_torneo: e.players.handicap_torneo,
-                }
-              : null,
-          },
-          handicapCtx
-        );
-        if (!calc) return { ...e, allowance_pct_applied, tee_set_id_assigned };
+        const calc = resolveTournamentEntryHandicap(entryForHcp, handicapCtx);
+        if (!calc) {
+          return {
+            ...e,
+            allowance_pct_applied,
+            tee_set_id_assigned,
+            official_hcp_80,
+          };
+        }
         return {
           ...e,
           course_handicap: e.course_handicap ?? calc.course_handicap,
@@ -1036,6 +1054,7 @@ export default async function EntriesPage({
               : e.playing_handicap ?? calc.playing_handicap,
           allowance_pct_applied,
           tee_set_id_assigned,
+          official_hcp_80,
         };
       });
     }

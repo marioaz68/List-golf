@@ -24,6 +24,7 @@ import MonthlyDbUpdateButton from "./MonthlyDbUpdateButton";
 import CommitteeReviewBadge from "./CommitteeReviewBadge";
 import EditableHiCell from "./EditableHiCell";
 import EditableTeeSetCell, { type TeeSetOption } from "./EditableTeeSetCell";
+import { formatOfficialHcp80Detail } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
 type RoundSignature = {
   round_no: number;
@@ -83,6 +84,16 @@ type Entry = {
   playing_handicap_override?: number | null;
   playing_handicap_override_reason?: string | null;
   allowance_pct_applied?: number | null;
+  official_hcp_80?: {
+    hp: number;
+    ch: number;
+    chExact: number;
+    hi: number;
+    slope: number;
+    course_rating: number;
+    par: number;
+    teeCode: string | null;
+  } | null;
   status: string | null;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
@@ -875,6 +886,18 @@ ${res.witness_url}`;
                         ) : null}
                       </>
                     ) : null}
+                    {e.official_hcp_80 ? (
+                      <>
+                        {" "}
+                        · 80%{" "}
+                        <span
+                          className="font-mono font-semibold text-indigo-800"
+                          title={formatOfficialHcp80Detail(e.official_hcp_80)}
+                        >
+                          {e.official_hcp_80.hp}
+                        </span>
+                      </>
+                    ) : null}
                     {" · "}
                     {categoryLabel}
                   </p>
@@ -944,6 +967,12 @@ ${res.witness_url}`;
                 title="Playing Handicap (PH) — HANDICAP DEL TORNEO. Es el handicap con el que el jugador compite todo el torneo (si es con handicap). PH = HC × % de la regla de competencia."
               >
                 PH
+              </th>
+              <th
+                className="px-1 py-1 text-right"
+                title={te.thHcp80Title}
+              >
+                {te.thHcp80}
               </th>
               <th className="px-1 py-1 text-left">{te.thCat}</th>
               <th
@@ -1037,6 +1066,30 @@ ${res.witness_url}`;
                         ovr
                       </span>
                     ) : null}
+                  </td>
+
+                  <td
+                    className="px-1 py-1 text-right tabular-nums font-mono font-semibold text-indigo-800"
+                    title={
+                      e.official_hcp_80
+                        ? formatOfficialHcp80Detail(e.official_hcp_80)
+                        : te.thHcp80Title
+                    }
+                  >
+                    {e.official_hcp_80 ? (
+                      <span className="inline-flex flex-col items-end leading-tight">
+                        <span>{e.official_hcp_80.hp}</span>
+                        <span className="max-w-[11rem] truncate text-[8px] font-medium text-slate-500">
+                          HI {e.official_hcp_80.hi.toFixed(1)}
+                          {e.official_hcp_80.teeCode
+                            ? ` · ${e.official_hcp_80.teeCode}`
+                            : ""}{" "}
+                          · CH {e.official_hcp_80.ch}
+                        </span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
 
                   <td className="px-1 py-1">

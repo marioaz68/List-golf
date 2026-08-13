@@ -10,6 +10,7 @@ import {
   type WhsComputeResult,
   type WhsTeeData,
 } from "@/lib/handicap/whs";
+import { hiToChHp } from "@/lib/ghin-report/handicapMath";
 
 export type CourseTeeForHandicap = {
   code: string | null;
@@ -243,6 +244,49 @@ function resolveWhsTeeForEntry(
     };
 
   return null;
+}
+
+export type OfficialHcp80 = {
+  hp: number;
+  ch: number;
+  chExact: number;
+  hi: number;
+  slope: number;
+  course_rating: number;
+  par: number;
+  teeCode: string | null;
+};
+
+/** Handicap de torneo oficial al 80 % (CH_exact × 0.80, half-up). */
+export function resolveOfficialHcp80(
+  entry: EntryForHandicap,
+  ctx: TournamentHandicapContext
+): OfficialHcp80 | null {
+  const resolved = resolveWhsTeeForEntry(entry, ctx);
+  if (!resolved) return null;
+  const hi = resolved.effective_hi;
+  if (!Number.isFinite(hi)) return null;
+  const { chExact, ch, hp } = hiToChHp(
+    hi,
+    resolved.tee.slope,
+    resolved.tee.course_rating,
+    resolved.tee.par
+  );
+  return {
+    hp,
+    ch,
+    chExact,
+    hi,
+    slope: resolved.tee.slope,
+    course_rating: resolved.tee.course_rating,
+    par: resolved.tee.par,
+    teeCode: resolved.tee_code,
+  };
+}
+
+export function formatOfficialHcp80Detail(d: OfficialHcp80): string {
+  const tee = d.teeCode ? ` · ${d.teeCode}` : "";
+  return `HI ${d.hi.toFixed(1)}${tee} · Slope ${d.slope} · CR ${d.course_rating} · Par ${d.par} · CH ${d.chExact.toFixed(2)} → ${d.ch} · 80% = ${d.hp}`;
 }
 
 /**
