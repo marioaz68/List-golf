@@ -48,7 +48,8 @@ export type ScenarioTableRow = ScenarioBar & {
 };
 
 export type MonthlyHiPoint = {
-  month: string; // YYYY-MM
+  /** ISO YYYY-MM-DD de la revisión (una fila = un punto). */
+  date: string;
   label: string;
   hi: number;
 };

@@ -17,7 +17,11 @@ import {
   type Plugin,
 } from "chart.js";
 import { CCQ_HOLE_PAR } from "@/lib/ghin-report/ccqCourse";
-import { formatDateEs } from "@/lib/ghin-report/formatDateEs";
+import {
+  formatDateEs,
+  formatDateRangeEs,
+  formatRevisionHistorySub,
+} from "@/lib/ghin-report/formatDateEs";
 import { colorVsPar } from "@/lib/ghin-report/handicapMath";
 import type { GhinLiveReportData } from "@/lib/ghin-report/types";
 
@@ -322,7 +326,7 @@ export default function GhinLiveReport({ data }: Props) {
     }
     });
 
-    // 2. Historial HI
+    // 2. Historial HI — una revisión = un punto (sin agrupar por mes)
     trySection("history", () => {
     if (historyRef.current && canHistory) {
       const his = data.monthlyHi;
@@ -331,6 +335,7 @@ export default function GhinLiveReport({ data }: Props) {
       if (!bounds) {
         failed.history = true;
       } else {
+        const n = vals.length;
         const cfg: ChartConfiguration<"line"> = {
           type: "line",
           data: {
@@ -341,8 +346,9 @@ export default function GhinLiveReport({ data }: Props) {
                 borderColor: "#4a9eff",
                 backgroundColor: "rgba(74,158,255,0.15)",
                 fill: true,
-                tension: 0.25,
-                pointRadius: 4,
+                tension: 0.2,
+                pointRadius: n > 40 ? 2.5 : 3.5,
+                pointHoverRadius: 6,
                 pointBackgroundColor: "#4a9eff",
               },
             ],
@@ -351,6 +357,16 @@ export default function GhinLiveReport({ data }: Props) {
             ...commonOpts,
             plugins: {
               legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: (items) => {
+                    const i = items[0]?.dataIndex ?? 0;
+                    const d = his[i]?.date;
+                    return d ? (formatDateEs(d) ?? d) : "";
+                  },
+                  label: (ctx) => `HI ${fmt(Number(ctx.raw))}`,
+                },
+              },
             },
             scales: {
               y: {
@@ -361,10 +377,49 @@ export default function GhinLiveReport({ data }: Props) {
               },
               x: {
                 grid: { display: false },
-                ticks: { color: MUTED },
+                ticks: {
+                  color: MUTED,
+                  font: { size: 10 },
+                  maxRotation: 50,
+                  minRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: 12,
+                },
               },
             },
           },
+          plugins: [
+            {
+              id: "historyExtremaLabels",
+              afterDatasetsDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                if (!vals.length || !meta.data.length) return;
+                let iMax = 0;
+                let iMin = 0;
+                for (let i = 1; i < vals.length; i++) {
+                  if (vals[i]! > vals[iMax]!) iMax = i;
+                  if (vals[i]! < vals[iMin]!) iMin = i;
+                }
+                const { ctx } = chart;
+                for (const i of new Set([iMax, iMin])) {
+                  const el = meta.data[i];
+                  const v = vals[i];
+                  if (!el || v == null || !Number.isFinite(v)) continue;
+                  const pos = el.tooltipPosition(true);
+                  const x = pos.x;
+                  const y = pos.y;
+                  if (x == null || y == null) continue;
+                  ctx.save();
+                  ctx.fillStyle = TEXT;
+                  ctx.font = "600 11px system-ui, sans-serif";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "bottom";
+                  ctx.fillText(v.toFixed(1), x, y - 4);
+                  ctx.restore();
+                }
+              },
+            },
+          ],
         };
         if (!mountChart(historyRef.current, cfg, charts.current)) {
           failed.history = true;
@@ -813,14 +868,18 @@ export default function GhinLiveReport({ data }: Props) {
       <Section
         title="2. Historial de HI"
         sub={
-          data.dataCutoffs.revisions
-            ? `Últimos 12 meses hasta ${formatDateEs(data.dataCutoffs.revisions)}`
-            : "Sin corte de revisiones"
+          data.monthlyHi.length
+            ? formatRevisionHistorySub(
+                data.monthlyHi[0]!.date,
+                data.monthlyHi[data.monthlyHi.length - 1]!.date,
+                data.monthlyHi.length
+              )
+            : "Sin revisiones de índice (tabla desde 2026-05-01)"
         }
       >
         <ChartSectionBoundary>
         {canHistory && !chartFail.history ? (
-          <div className="relative h-[260px] w-full">
+          <div className="relative h-[280px] w-full">
             <canvas ref={historyRef} />
           </div>
         ) : (
@@ -836,11 +895,15 @@ export default function GhinLiveReport({ data }: Props) {
       <Section
         title="3. Promedio bruto por hoyo"
         sub={
-          data.holesHistorico
-            ? `Histórico · ${data.holesPeriod ?? ""}`
-            : data.holes[0]
-              ? `${data.holes[0].n_rondas} rondas`
-              : undefined
+          data.holes[0]
+            ? [
+                data.holesHistorico ? "Histórico" : null,
+                formatDateRangeEs(data.holes[0].desde, data.holes[0].hasta),
+                `${data.holes[0].n_rondas} rondas`,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
         }
       >
         <ChartSectionBoundary>

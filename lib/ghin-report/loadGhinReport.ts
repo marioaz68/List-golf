@@ -21,10 +21,12 @@ import {
   WHS_LOW_HI_LOOKBACK_DAYS,
   type WhsCapAssessment,
 } from "./whsCaps";
+import { formatDateTickEs } from "./formatDateEs";
 import type {
   GhinEscenarioRow,
   GhinHoleAvgRow,
   GhinLiveReportData,
+  MonthlyHiPoint,
   ScenarioBar,
   ScenarioKey,
   ScenarioTableRow,
@@ -191,62 +193,69 @@ async function loadDataCutoffs(
   return { revisions, rounds };
 }
 
+/**
+ * Si hay demasiados puntos, conserva primero/último y mínimos/máximos
+ * locales. No promedia ni muestrea a intervalos fijos.
+ */
+function keepLocalExtrema(pts: MonthlyHiPoint[], maxKeep = 160): MonthlyHiPoint[] {
+  if (pts.length <= maxKeep) return pts;
+  const idx = new Set<number>([0, pts.length - 1]);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = pts[i - 1]!.hi;
+    const b = pts[i]!.hi;
+    const c = pts[i + 1]!.hi;
+    if ((b >= a && b > c) || (b > a && b >= c) || (b <= a && b < c) || (b < a && b <= c)) {
+      idx.add(i);
+    }
+  }
+  let kept = [...idx].sort((x, y) => x - y).map((i) => pts[i]!);
+  if (kept.length <= maxKeep) return kept;
+  const scored = kept.map((p, i) => {
+    if (i === 0 || i === kept.length - 1) return { p, score: Number.POSITIVE_INFINITY };
+    const prev = kept[i - 1]!.hi;
+    const next = kept[i + 1]!.hi;
+    return { p, score: Math.abs(p.hi - prev) + Math.abs(p.hi - next) };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  const top = new Set(scored.slice(0, maxKeep).map((s) => s.p));
+  return kept.filter((p) => top.has(p));
+}
+
 async function loadMonthlyHi(
   supabase: SupabaseClient,
   ghin: string,
-  /** Ancla del historial: corte real de revisiones, no "hoy". */
+  /** Tope del dataset; no recorta a 12 meses. */
   revisionsCutoff: string | null
-): Promise<{ month: string; label: string; hi: number }[]> {
-  const untilStr = revisionsCutoff ?? "1970-01-01";
-  const until = new Date(`${untilStr}T12:00:00`);
-  const since = new Date(until);
-  since.setMonth(since.getMonth() - 12);
-  const sinceStr = since.toISOString().slice(0, 10);
-
-  const { data, error } = await supabase
-    .from("ghin_index_revisions")
-    .select("revision_date, handicap_index")
-    .eq("ghin_number", ghin)
-    .gte("revision_date", sinceStr)
-    .lte("revision_date", untilStr)
-    .order("revision_date", { ascending: true });
-
-  if (error || !data?.length) return [];
-
-  // Última revisión de cada mes
-  const byMonth = new Map<string, number>();
-  for (const row of data) {
-    const d = String((row as { revision_date: string }).revision_date);
-    const hi = num((row as { handicap_index: unknown }).handicap_index);
-    if (hi == null) continue;
-    const month = d.slice(0, 7);
-    byMonth.set(month, hi);
+): Promise<MonthlyHiPoint[]> {
+  const page = 1000;
+  const raw: Array<{ revision_date: string; handicap_index: unknown }> = [];
+  for (let from = 0; ; from += page) {
+    let q = supabase
+      .from("ghin_index_revisions")
+      .select("revision_date, handicap_index")
+      .eq("ghin_number", ghin)
+      .order("revision_date", { ascending: true })
+      .range(from, from + page - 1);
+    if (revisionsCutoff) q = q.lte("revision_date", revisionsCutoff);
+    const { data, error } = await q;
+    if (error) {
+      console.error("[ghin-report] ghin_index_revisions history", error.message);
+      break;
+    }
+    const rows = data ?? [];
+    raw.push(...rows);
+    if (rows.length < page) break;
+    if (from > 20_000) break;
   }
 
-  const months = [...byMonth.keys()].sort();
-  const MONTH_SHORT = [
-    "Ene",
-    "Feb",
-    "Mar",
-    "Abr",
-    "May",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dic",
-  ];
-  return months.map((month) => {
-    const [, mm] = month.split("-");
-    const mi = Math.max(0, Number(mm) - 1);
-    return {
-      month,
-      label: MONTH_SHORT[mi] ?? month,
-      hi: byMonth.get(month)!,
-    };
-  });
+  const pts: MonthlyHiPoint[] = [];
+  for (const row of raw) {
+    const d = String(row.revision_date ?? "").slice(0, 10);
+    const hi = num(row.handicap_index);
+    if (!d || hi == null) continue;
+    pts.push({ date: d, label: formatDateTickEs(d), hi });
+  }
+  return keepLocalExtrema(pts);
 }
 
 function pickTeeCode(hi: number | null): CcqTeeCode {
