@@ -9,6 +9,7 @@ import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { useBackofficeNav } from "@/components/layout/BackofficeNavContext";
 import { canAccessModule } from "@/lib/auth/permissions";
 import { NAV_ITEM_MODULE, type NavKey } from "@/lib/auth/navModules";
+import { isCommitteeOnlyUser } from "@/lib/auth/isCommitteeOnlyUser";
 import { useBackofficeRoles } from "@/components/layout/BackofficeRolesContext";
 import {
   LayoutDashboard,
@@ -480,23 +481,40 @@ export default function Sidebar() {
   );
 
   /**
-   * Un usuario "solo comité": tiene únicamente el rol handicap_committee
-   * (sin super_admin, club_admin, tournament_director, ni cualquier otro
-   * rol del backoffice). Para él escondemos switch Operación/Configuración,
-   * el link a Lista de torneos y dejamos el logo apuntando al comité.
+   * Solo handicap_committee (cualquier otro code de la tabla roles
+   * lo saca de este modo). Menú recortado + logo al comité.
    */
-  const isCommitteeOnlyUser = useMemo(() => {
-    if (roles.length === 0) return false;
-    const allowed = new Set(["handicap_committee"]);
-    return roles.every((r) => allowed.has(r));
-  }, [roles]);
+  const committeeOnly = useMemo(() => isCommitteeOnlyUser(roles), [roles]);
+
+  const committeeOnlyNav: MenuItem[] = useMemo(
+    () => [
+      {
+        nameKey: "committeeVote",
+        href: "/comite-handicap",
+        icon: Scale,
+      },
+      {
+        nameKey: "committeeSelection",
+        href: "/comite-handicap/seleccion",
+        icon: ClipboardList,
+      },
+      {
+        nameKey: "committeeGhinData",
+        href: "/comite-handicap/ghin-datos",
+        icon: FileText,
+        ignoreTournament: true,
+      },
+    ],
+    []
+  );
 
   const canSeeTournamentsList = useMemo(
-    () => canAccessModule(roles, "tournaments"),
-    [roles]
+    () => !committeeOnly && canAccessModule(roles, "tournaments"),
+    [roles, committeeOnly]
   );
 
   const visibleMenu = useMemo(() => {
+    if (committeeOnly) return committeeOnlyNav;
     if (mode === "operation") return operationVisible;
     const setupOnlyVisible = setupExclusiveNav.filter((item) => {
       if (item.requiresTournament && !tournamentId) return false;
@@ -506,6 +524,8 @@ export default function Sidebar() {
     });
     return [...operationVisible, ...setupOnlyVisible];
   }, [
+    committeeOnly,
+    committeeOnlyNav,
     mode,
     operationVisible,
     setupExclusiveNav,
@@ -585,7 +605,7 @@ export default function Sidebar() {
         )}
       </div>
 
-      {isCommitteeOnlyUser ? null : (
+      {committeeOnly ? null : (
         <div className="border-b border-white/10 px-3 py-3">
           <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
             {t.sidebar.modePrefix} {modeLabel}
@@ -666,6 +686,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="space-y-2 border-t border-white/10 p-4">
+        {committeeOnly ? null : (
         <Link
           href={buildPublicTournamentHref()}
           onClick={() => setOpen(false)}
@@ -680,8 +701,9 @@ export default function Sidebar() {
           </span>
           <span className="min-w-0 flex-1 truncate">{t.sidebar.publicPage}</span>
         </Link>
+        )}
 
-        {isCommitteeOnlyUser ? null : (
+        {committeeOnly ? null : (
           <button
             type="button"
             onClick={() => setSidebarMode(nextMode)}

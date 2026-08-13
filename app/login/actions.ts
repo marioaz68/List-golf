@@ -4,6 +4,12 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
+import {
+  committeeOnlyHomePath,
+  loadOpenCommitteeTournamentsForUser,
+} from "@/lib/handicap-committee/openCommitteesForUser";
+import { committeeLandingFromNext } from "@/lib/handicap-committee/committeeOnlyPublic";
 
 export type LoginState = {
   ok: boolean;
@@ -102,20 +108,27 @@ export async function loginAction(
 
   // Determinar a dónde aterrizar según rol del usuario. Un mesero / personal
   // de restaurante no usa /dashboard (está vacío para ellos); va directo a
-  // su pantalla operativa.
-  const landing = await resolveLandingForUser(email);
+  // su pantalla operativa. Solo-comité puede llegar desde el poster
+  // (`next=/torneos/{id}` → votación de ese torneo).
+  const next = String(formData.get("next") ?? "").trim();
+  const landing = await resolveLandingForUser(email, next);
   redirect(landing);
 }
 
 /**
  * Landing post-login según rol. Prioridad:
  *   - admins (super/club/director) → /dashboard
- *   - handicap_committee solo → /comite-handicap
- *   - restaurante (sin admin) → /fb-mesero (caja del restaurante)
- *   - marshal solo → /tee-sheet
+ *   - handicap_committee Y ningún otro rol de la tabla roles → módulo comité
+ *   - restaurante (sin admin) → /fb-mesero
+ *   - marshal → /tee-sheet
  *   - fallback → /dashboard
+ * Quien tiene comité + otro rol operativo sigue el flujo normal (no se
+ * manda al módulo del comité).
  */
-async function resolveLandingForUser(email: string): Promise<string> {
+async function resolveLandingForUser(
+  email: string,
+  requestedNext = ""
+): Promise<string> {
   const admin = tryCreateAdminClient();
   if (!admin) return "/dashboard";
 
@@ -133,24 +146,7 @@ async function resolveLandingForUser(email: string): Promise<string> {
     "tournament_director",
   ]);
 
-  const roles = new Set<string>();
-  for (const table of [
-    "user_global_roles",
-    "user_club_roles",
-    "user_tournament_roles",
-  ] as const) {
-    const { data } = await admin
-      .from(table)
-      .select("roles:role_id ( code )")
-      .eq("user_id", userId)
-      .eq("is_active", true);
-    for (const row of (data ?? []) as Array<{
-      roles: { code: string | null } | { code: string | null }[] | null;
-    }>) {
-      const r = Array.isArray(row.roles) ? row.roles[0] : row.roles;
-      if (r?.code) roles.add(r.code);
-    }
-  }
+  const roles = new Set(await getUserRoles(admin, userId));
 
   // admin → /dashboard
   for (const r of ADMIN_ROLES) {
@@ -164,7 +160,12 @@ async function resolveLandingForUser(email: string): Promise<string> {
   if (roles.has("cocinero")) return "/fb-cocina";
   // Operador de carrito → mini app del carrito (sin venue param: pick automático)
   if (roles.has("operador_carrito")) return "/captura/carrito";
-  if (roles.has("handicap_committee")) return "/comite-handicap";
+  if (isCommitteeOnlyUser([...roles])) {
+    const fromPoster = committeeLandingFromNext(requestedNext);
+    if (fromPoster) return fromPoster;
+    const open = await loadOpenCommitteeTournamentsForUser(admin, userId);
+    return committeeOnlyHomePath(open);
+  }
   if (roles.has("marshal")) return "/tee-sheet";
   return "/dashboard";
 }

@@ -63,6 +63,9 @@ const es = {
       categoryTemplates: "Plantillas cat.",
       users: "Usuarios",
       handicapCommittee: "Comité de Handicap",
+      committeeVote: "Votación",
+      committeeSelection: "Selección de jugadores",
+      committeeGhinData: "Datos GHIN",
       capturaTelegram: "Modo Telegram",
       fbAdmin: "Restaurante",
       fbCocina: "Cocina · Pedidos",
@@ -1394,6 +1397,8 @@ const es = {
     noTournament: "Selecciona un torneo para usar el comité de handicap.",
     pickTournament:
       "Elige un torneo para auditar handicaps o votar (voto anónimo entre miembros).",
+    pickOpenVote: "Elige la votación de comité a la que entrar.",
+    noOpenVote: "No hay votación de comité abierta en este momento.",
     noTournaments:
       "No tienes torneos asignados. Pide a un administrador que te asigne el rol «Comité de Handicap» o «Director del Torneo» en algún torneo.",
     noAccess: "No tienes acceso al comité de handicap de este torneo.",
@@ -1779,6 +1784,9 @@ const en: Messages = {
       categoryTemplates: "Category templates",
       users: "Users",
       handicapCommittee: "Handicap committee",
+      committeeVote: "Voting",
+      committeeSelection: "Player selection",
+      committeeGhinData: "GHIN data",
       capturaTelegram: "Telegram mode",
       fbAdmin: "Restaurant",
       fbCocina: "Kitchen · Orders",
@@ -3094,6 +3102,8 @@ const en: Messages = {
     noTournament: "Select a tournament to use the handicap committee.",
     pickTournament:
       "Pick a tournament to audit handicaps or vote (anonymous vote among members).",
+    pickOpenVote: "Choose which committee vote to enter.",
+    noOpenVote: "There is no open committee vote at this time.",
     noTournaments:
       "You don't have tournaments assigned. Ask an administrator to grant you the «Handicap Committee» or «Tournament Director» role in a tournament.",
     noAccess: "You don't have access to this tournament's handicap committee.",

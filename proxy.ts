@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import {
   canAccessAnyBackofficeModule,
   canAccessModule,
@@ -29,7 +29,10 @@ export async function proxy(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!supabaseUrl || !supabaseAnonKey) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    loginUrl.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search}`
+    );
     return NextResponse.redirect(loginUrl);
   }
 
@@ -62,7 +65,10 @@ export async function proxy(request: NextRequest) {
 
   if (!user) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    loginUrl.searchParams.set(
+      "next",
+      `${pathname}${request.nextUrl.search}`
+    );
     return NextResponse.redirect(loginUrl);
   }
 
@@ -71,9 +77,18 @@ export async function proxy(request: NextRequest) {
   }
 
   const roles = await getUserRoles(supabase, user.id);
+  const committeeOnly = isCommitteeOnlyUser(roles);
+
+  if (committeeOnly && module !== "comite-handicap") {
+    const tid = request.nextUrl.searchParams.get("tournament_id")?.trim();
+    const dest = tid
+      ? `/comite-handicap?tournament_id=${encodeURIComponent(tid)}`
+      : "/comite-handicap";
+    return NextResponse.redirect(new URL(dest, request.url));
+  }
 
   if (!canAccessModule(roles, module)) {
-    const fallback = roles.includes("handicap_committee")
+    const fallback = committeeOnly
       ? "/comite-handicap"
       : canAccessAnyBackofficeModule(roles)
         ? "/tournaments"

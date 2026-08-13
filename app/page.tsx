@@ -9,6 +9,8 @@ import {
 } from "@/lib/supabaseEnv";
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
+import { committeeVotePath } from "@/lib/handicap-committee/committeeOnlyPublic";
 
 type SearchParams = Promise<{
   club?: string | string[];
@@ -275,6 +277,19 @@ export default async function HomePage({
     const detail =
       err instanceof Error ? err.message : "No se pudo conectar con Supabase.";
     return <PublicHomeLoadError h={h} detailMessage={detail} />;
+  }
+
+  let committeeOnly = false;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const roles = await getUserRoles(supabase, user.id);
+      committeeOnly = isCommitteeOnlyUser(roles);
+    }
+  } catch {
+    committeeOnly = false;
   }
 
   const { data: tournamentsData, error: tournamentsError } =
@@ -568,7 +583,11 @@ export default async function HomePage({
                 return (
                   <Link
                     key={t.id}
-                    href={`/torneos/${t.id}`}
+                    href={
+                      committeeOnly
+                        ? committeeVotePath(t.id)
+                        : `/torneos/${t.id}`
+                    }
                     className="group block overflow-hidden rounded-xl border border-white/10 bg-white/5 transition hover:border-cyan-400/40"
                   >
                     <div className="relative h-[220px] bg-black">

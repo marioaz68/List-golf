@@ -4,7 +4,10 @@ import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligibleVoters";
-import { getUserRoles } from "@/lib/auth/getUserRoles";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
+import {
+  loadOpenCommitteeTournamentsForUser,
+} from "@/lib/handicap-committee/openCommitteesForUser";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
 import {
@@ -86,6 +89,45 @@ export default async function ComiteHandicapPage(props: {
 
   if (!tournamentId) {
     const roles = await getUserRoles(supabase, user.id);
+    if (isCommitteeOnlyUser(roles)) {
+      const db = tryCreateAdminClient() ?? supabase;
+      const open = await loadOpenCommitteeTournamentsForUser(db, user.id);
+      if (open.length === 1) {
+        redirect(
+          `/comite-handicap?tournament_id=${encodeURIComponent(open[0]!.tournamentId)}`
+        );
+      }
+      return (
+        <div className="space-y-6 p-4 md:p-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">{t.pageTitle}</h1>
+            <p className="mt-1 text-sm text-slate-300">
+              {open.length
+                ? t.pickOpenVote
+                : t.noOpenVote}
+            </p>
+          </div>
+          {open.length === 0 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              {t.noOpenVote}
+            </div>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {open.map((row) => (
+                <Link
+                  key={row.committeeId}
+                  href={`/comite-handicap?tournament_id=${encodeURIComponent(row.tournamentId)}`}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
+                >
+                  {row.tournamentName}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     const isGlobalAdmin = roles.includes("super_admin") || roles.includes("club_admin");
 
     let allowedTournamentIds: string[] | null = null;

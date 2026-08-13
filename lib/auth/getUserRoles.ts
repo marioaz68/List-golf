@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeRole } from "./permissions";
+import { isCommitteeOnlyUser } from "./isCommitteeOnlyUser";
+
+export { isCommitteeOnlyUser };
 
 type RoleValue =
   | {
@@ -28,6 +31,13 @@ function extractRoleCode(roleValue: RoleValue | undefined): string | null {
   return roleValue.code ?? null;
 }
 
+function addAssignedRole(roles: Set<string>, code: string | null) {
+  const raw = code?.trim() ?? "";
+  if (!raw) return;
+  const normalized = normalizeRole(raw);
+  roles.add(normalized ?? raw);
+}
+
 export async function getUserRoles(
   supabase: SupabaseClient,
   userId: string
@@ -44,9 +54,7 @@ export async function getUserRoles(
     console.error("Error loading user_global_roles:", globalError.message);
   } else {
     for (const row of (globalRows ?? []) as GlobalRoleRow[]) {
-      const code = extractRoleCode(row.roles);
-      const normalized = normalizeRole(code);
-      if (normalized) roles.add(normalized);
+      addAssignedRole(roles, extractRoleCode(row.roles));
     }
   }
 
@@ -60,9 +68,7 @@ export async function getUserRoles(
     console.error("Error loading user_club_roles:", clubError.message);
   } else {
     for (const row of (clubRows ?? []) as ClubRoleRow[]) {
-      const code = extractRoleCode(row.roles);
-      const normalized = normalizeRole(code);
-      if (normalized) roles.add(normalized);
+      addAssignedRole(roles, extractRoleCode(row.roles));
     }
   }
 
@@ -76,9 +82,7 @@ export async function getUserRoles(
     console.error("Error loading user_tournament_roles:", tournamentError.message);
   } else {
     for (const row of (tournamentRows ?? []) as TournamentRoleRow[]) {
-      const code = extractRoleCode(row.roles);
-      const normalized = normalizeRole(code);
-      if (normalized) roles.add(normalized);
+      addAssignedRole(roles, extractRoleCode(row.roles));
     }
   }
 

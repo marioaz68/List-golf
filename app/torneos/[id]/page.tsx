@@ -2,6 +2,8 @@ import Link from "next/link";
 import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
+import { committeeVotePath } from "@/lib/handicap-committee/committeeOnlyPublic";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   buildLockedScorecardLookups,
@@ -180,6 +182,12 @@ export default async function PublicTournamentPage({
   } = await supabase.auth.getUser();
 
   const isLoggedIn = !!user;
+  if (user) {
+    const roles = await getUserRoles(supabase, user.id);
+    if (isCommitteeOnlyUser(roles)) {
+      redirect(committeeVotePath(id));
+    }
+  }
 
   const locale = await getLocale();
   const pub = messages[locale].publicTournament;

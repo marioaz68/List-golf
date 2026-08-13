@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
 import { UserNavIconLink } from "@/components/public/UserNavIconLink";
 import { resolveUserDisplayName } from "@/lib/auth/resolveUserDisplayName";
+import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import { messages } from "@/lib/i18n/messages";
 import { getLocale } from "@/lib/i18n/server";
 import { createClient } from "@/utils/supabase/server";
@@ -30,9 +32,13 @@ export async function PublicUserNavIcon() {
         supabase,
         user
       );
+      const roles = await getUserRoles(supabase, user.id);
+      const homeHref = isCommitteeOnlyUser(roles)
+        ? "/comite-handicap"
+        : "/tournaments";
       return (
         <UserNavIconLink
-          href="/tournaments"
+          href={homeHref}
           label={pub.adminList}
           title={email}
           className={userChipClass}
@@ -46,9 +52,14 @@ export async function PublicUserNavIcon() {
     // Si Supabase falla, mostramos «Entrar» igualmente para no perder el acceso.
   }
 
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const loginHref = pathname.startsWith("/torneos/")
+    ? `/login?next=${encodeURIComponent(pathname)}`
+    : "/login";
+
   return (
     <UserNavIconLink
-      href="/login"
+      href={loginHref}
       label={nav.enter}
       className={guestChipClass}
       iconClassName="h-5 w-5"

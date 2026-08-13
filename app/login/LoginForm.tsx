@@ -9,7 +9,7 @@ const initialState: LoginState = {
   message: "",
 };
 
-export default function LoginForm() {
+export default function LoginForm({ next = "" }: { next?: string }) {
   const [state, formAction, isPending] = useActionState(
     loginAction,
     initialState
@@ -20,6 +20,7 @@ export default function LoginForm() {
       action={formAction}
       className="mx-auto max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
     >
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       <h1 className="text-2xl font-bold text-gray-900">Iniciar sesión</h1>
 
       <p className="mt-1 text-sm text-gray-600">
