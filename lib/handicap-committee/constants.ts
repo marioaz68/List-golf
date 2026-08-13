@@ -2,7 +2,7 @@
 export const HANDICAP_ADJUSTMENT_MIN = -5.0;
 export const HANDICAP_ADJUSTMENT_MAX = -0.5;
 export const HANDICAP_ADJUSTMENT_STEP = 0.1;
-export const HANDICAP_COMMITTEE_DEFAULT_SIZE = 9;
+export const HANDICAP_COMMITTEE_DEFAULT_SIZE = 10;
 
 export function formatAdjustmentLabel(value: number | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return "—";

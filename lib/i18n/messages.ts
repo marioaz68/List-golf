@@ -1550,6 +1550,8 @@ const es = {
       statusOpen: "Abierta",
       statusClosed: "Cerrada",
       membersWithRole: "Miembros con rol:",
+      expectedMembersHint:
+        "Indicador de quórum esperado. No entra al recorte ni al umbral de descalificación.",
       presentToday: "Presentes hoy:",
       canCloseHint:
         "Puedes cerrar la votación aunque falten miembros por calificar a todos los jugadores.",
@@ -1675,6 +1677,11 @@ const es = {
       confirmLabel: "Escribe REINICIAR para confirmar",
       confirmPh: "REINICIAR",
       submit: "Archivar y borrar votos",
+      archiving: "Archivando…",
+      successArchived:
+        "Sesión «{name}» archivada. {n} jugadores con votos, {m} votos borrados.",
+      noVotes:
+        "No hay votos para archivar. La votación ya está vacía; no se creó una sesión nueva.",
       hint: "Guarda un resumen anónimo de la votación actual en el historial y pone en cero los votos de todos los miembros del comité. Cada miembro deberá volver a calificar a todos los jugadores.",
     },
     history: {
@@ -3243,6 +3250,8 @@ const en: Messages = {
       statusOpen: "Open",
       statusClosed: "Closed",
       membersWithRole: "Members with role:",
+      expectedMembersHint:
+        "Expected quorum indicator. It does not enter the trim or the disqualification threshold.",
       presentToday: "Present today:",
       canCloseHint:
         "You can close voting even if some members have not rated every player.",
@@ -3369,6 +3378,11 @@ const en: Messages = {
       confirmLabel: "Type RESET to confirm",
       confirmPh: "RESET",
       submit: "Archive and clear votes",
+      archiving: "Archiving…",
+      successArchived:
+        "Session «{name}» archived. {n} players with votes, {m} votes deleted.",
+      noVotes:
+        "There are no votes to archive. Voting is already empty; no new session was created.",
       hint: "Saves an anonymous summary of the current vote to history and clears every member's votes. Each member must rate all players again.",
     },
     history: {

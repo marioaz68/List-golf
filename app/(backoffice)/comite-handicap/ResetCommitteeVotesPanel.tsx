@@ -1,25 +1,47 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { HandicapCommitteeT } from "./HandicapCommitteeVoter";
-import { resetHandicapCommitteeVotesAction } from "./actions";
+import {
+  resetHandicapCommitteeVotesAction,
+  type ResetCommitteeVotesState,
+} from "./actions";
 
 type Props = {
   tournamentId: string;
   t: HandicapCommitteeT;
 };
 
-type ResetState = { error: string | null };
-
-const initialState: ResetState = { error: null };
+const initialState: ResetCommitteeVotesState = {
+  error: null,
+  archived: false,
+  sessionName: null,
+  nPlayers: 0,
+  nVotes: 0,
+};
 
 export default function ResetCommitteeVotesPanel({ tournamentId, t }: Props) {
+  const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [state, formAction, pending] = useActionState(
     resetHandicapCommitteeVotesAction,
     initialState
   );
   const r = t.reset;
+
+  useEffect(() => {
+    if (!state.archived) return;
+    router.refresh();
+  }, [state.archived, state.sessionName, state.nPlayers, state.nVotes, router]);
+
+  const successMsg =
+    state.archived && state.sessionName
+      ? r.successArchived
+          .replace("{name}", state.sessionName)
+          .replace("{n}", String(state.nPlayers))
+          .replace("{m}", String(state.nVotes))
+      : null;
 
   return (
     <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2">
@@ -42,7 +64,8 @@ export default function ResetCommitteeVotesPanel({ tournamentId, t }: Props) {
               name="session_name"
               placeholder={r.sessionNamePh}
               autoComplete="off"
-              className="rounded border border-rose-300 bg-white px-2 py-1 text-sm text-slate-900"
+              disabled={pending}
+              className="rounded border border-rose-300 bg-white px-2 py-1 text-sm text-slate-900 disabled:opacity-60"
             />
           </label>
 
@@ -53,7 +76,8 @@ export default function ResetCommitteeVotesPanel({ tournamentId, t }: Props) {
               name="session_notes"
               placeholder={r.notesPh}
               autoComplete="off"
-              className="rounded border border-rose-300 bg-white px-2 py-1 text-sm text-slate-900"
+              disabled={pending}
+              className="rounded border border-rose-300 bg-white px-2 py-1 text-sm text-slate-900 disabled:opacity-60"
             />
           </label>
 
@@ -66,16 +90,16 @@ export default function ResetCommitteeVotesPanel({ tournamentId, t }: Props) {
               placeholder={r.confirmPh}
               autoComplete="off"
               disabled={pending}
-              className="w-40 rounded border border-rose-400 bg-white px-2 py-1 text-sm text-slate-900"
+              className="w-40 rounded border border-rose-400 bg-white px-2 py-1 text-sm text-slate-900 disabled:opacity-60"
             />
           </label>
 
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-800 disabled:opacity-60"
+            className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {pending ? "…" : r.submit}
+            {pending ? r.archiving : r.submit}
           </button>
 
           <p className="basis-full text-[11px] text-rose-900/80">{r.hint}</p>
@@ -85,6 +109,14 @@ export default function ResetCommitteeVotesPanel({ tournamentId, t }: Props) {
               className="basis-full rounded border border-rose-600 bg-rose-100 px-2 py-1.5 text-xs font-semibold text-rose-950"
             >
               {state.error}
+            </p>
+          ) : null}
+          {successMsg ? (
+            <p
+              role="status"
+              className="basis-full rounded border border-emerald-600 bg-emerald-100 px-2 py-1.5 text-xs font-semibold text-emerald-950"
+            >
+              {successMsg}
             </p>
           ) : null}
         </form>

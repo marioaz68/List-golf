@@ -789,10 +789,6 @@ export default async function ComiteHandicapPage(props: {
       }
     }
 
-    memberCount = Array.from(codesByUser.entries()).filter(([, codes]) =>
-      codes.has("handicap_committee")
-    ).length;
-
     const userIds = Array.from(codesByUser.keys());
 
     const [{ data: profilesRows }, { data: presenceRows }] = await Promise.all([
@@ -835,10 +831,11 @@ export default async function ComiteHandicapPage(props: {
     });
 
     candidateRows.sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
-    presentCount = candidateRows.filter(
-      (c) =>
-        c.is_present && c.role_codes.includes("handicap_committee")
-    ).length;
+    const committeeMemberRows = candidateRows.filter((c) =>
+      c.role_codes.includes("handicap_committee")
+    );
+    memberCount = committeeMemberRows.length;
+    presentCount = committeeMemberRows.filter((c) => c.is_present).length;
   }
 
   let availableProfiles: Array<{
@@ -1271,7 +1268,7 @@ export default async function ComiteHandicapPage(props: {
                 </span>
                 <span>
                   {t.admin.presentToday} <strong>{presentCount}</strong> /{" "}
-                  {candidateRows.length}
+                  {memberCount}
                 </span>
                 {committee.status === "open" ? (
                   <span className="rounded-full border border-slate-400 bg-white px-2 py-0.5 text-xs text-slate-700">
@@ -1466,6 +1463,7 @@ export default async function ComiteHandicapPage(props: {
                           c.role_codes.includes("handicap_committee") &&
                           (c.is_present || c.voted_count > 0)
                       );
+                      // Mismo universo que "Miembros con rol": solo HC de este torneo.
                       const totalSlots = activeMembers.length * entries.length;
                       const filledSlots = activeMembers.reduce(
                         (acc, c) => acc + c.voted_count,
@@ -1503,6 +1501,8 @@ export default async function ComiteHandicapPage(props: {
                               <strong className="text-slate-900">
                                 {activeMembers.length}
                               </strong>
+                              {" / "}
+                              {memberCount}
                             </span>
                             <span>
                               {t.admin.playersLabel}{" "}
@@ -1713,6 +1713,25 @@ export default async function ComiteHandicapPage(props: {
                 <div className="basis-full text-xs font-semibold uppercase tracking-wide text-slate-700">
                   {t.admin.trimSectionTitle}
                 </div>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-medium text-slate-800">
+                    {t.admin.expectedMembers}
+                  </span>
+                  <input
+                    type="number"
+                    name="expected_members"
+                    min={1}
+                    max={50}
+                    defaultValue={Number(
+                      committee.expected_members ??
+                        HANDICAP_COMMITTEE_DEFAULT_SIZE
+                    )}
+                    className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                  />
+                  <span className="max-w-[14rem] text-[10px] font-normal normal-case tracking-normal text-slate-500">
+                    {t.admin.expectedMembersHint}
+                  </span>
+                </label>
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="font-medium text-slate-800">
                     {t.admin.removeHighVotes}

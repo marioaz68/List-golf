@@ -482,18 +482,35 @@ export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) 
   });
 }
 
-export async function resetHandicapCommitteeVotes(formData: FormData) {
+export type ResetCommitteeVotesState = {
+  error: string | null;
+  archived: boolean;
+  sessionName: string | null;
+  nPlayers: number;
+  nVotes: number;
+};
+
+const resetIdle: ResetCommitteeVotesState = {
+  error: null,
+  archived: false,
+  sessionName: null,
+  nPlayers: 0,
+  nVotes: 0,
+};
+
+export async function resetHandicapCommitteeVotes(
+  formData: FormData
+): Promise<ResetCommitteeVotesState> {
   const tournament_id = reqStr(formData, "tournament_id");
   const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
   const sessionName = String(formData.get("session_name") ?? "").trim();
   const sessionNotes = String(formData.get("session_notes") ?? "").trim();
 
   if (confirm !== "REINICIAR") {
-    redirectWith(tournament_id, {
-      err: "Escribe REINICIAR para confirmar el borrado de votos.",
-      tab: "admin",
-    });
-    return;
+    return {
+      ...resetIdle,
+      error: "Escribe REINICIAR para confirmar el borrado de votos.",
+    };
   }
 
   try {
@@ -504,17 +521,15 @@ export async function resetHandicapCommitteeVotes(formData: FormData) {
       tournament_id
     );
     if (!access.isAdmin) {
-      redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
-      return;
+      return { ...resetIdle, error: "No tienes permiso." };
     }
 
     const admin = tryCreateAdminClient();
     if (!admin) {
-      redirectWith(tournament_id, {
-        err: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
-        tab: "admin",
-      });
-      return;
+      return {
+        ...resetIdle,
+        error: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
+      };
     }
 
     const { data: committee } = await admin
@@ -526,14 +541,10 @@ export async function resetHandicapCommitteeVotes(formData: FormData) {
       .maybeSingle();
 
     if (!committee?.id) {
-      redirectWith(tournament_id, {
-        err: "Comité no encontrado.",
-        tab: "admin",
-      });
-      return;
+      return { ...resetIdle, error: "Comité no encontrado." };
     }
 
-    await archiveAndResetCommitteeVotesAtomic({
+    const result = await archiveAndResetCommitteeVotesAtomic({
       admin,
       tournamentId: tournament_id,
       committee: committee as CommitteeForArchive,
@@ -543,14 +554,29 @@ export async function resetHandicapCommitteeVotes(formData: FormData) {
     });
 
     revalidatePath("/comite-handicap");
-    redirectWith(tournament_id, { ok: "votes_reset", tab: "admin" });
+
+    if (!result.archived) {
+      return {
+        ...resetIdle,
+        error:
+          "No hay votos para archivar. La votación ya está vacía; no se creó una sesión nueva.",
+      };
+    }
+
+    return {
+      error: null,
+      archived: true,
+      sessionName: result.sessionName,
+      nPlayers: result.nPlayers,
+      nVotes: result.nVotes,
+    };
   } catch (e) {
     if (isNextRedirectError(e)) throw e;
     const msg =
       e instanceof Error
         ? e.message
         : "No se pudo archivar y reiniciar la votación.";
-    redirectWith(tournament_id, { err: msg, tab: "admin" });
+    return { ...resetIdle, error: msg };
   }
 }
 
@@ -565,21 +591,20 @@ function isNextRedirectError(error: unknown): boolean {
   return digest.startsWith("NEXT_REDIRECT");
 }
 
-/** Wrapper para useActionState: errores en panel; redirect de éxito/negocio sigue. */
+/** Wrapper para useActionState: éxito y error en el panel, sin redirect. */
 export async function resetHandicapCommitteeVotesAction(
-  _prev: { error: string | null },
+  _prev: ResetCommitteeVotesState,
   formData: FormData
-): Promise<{ error: string | null }> {
+): Promise<ResetCommitteeVotesState> {
   try {
-    await resetHandicapCommitteeVotes(formData);
-    return { error: null };
+    return await resetHandicapCommitteeVotes(formData);
   } catch (e) {
     if (isNextRedirectError(e)) throw e;
     const msg =
       e instanceof Error
         ? e.message
         : "No se pudo archivar y reiniciar la votación.";
-    return { error: msg };
+    return { ...resetIdle, error: msg };
   }
 }
 
@@ -602,7 +627,13 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
   userId: string;
   name: string | null;
   notes: string | null;
-}): Promise<{ archived: boolean; sessionId: string | null }> {
+}): Promise<{
+  archived: boolean;
+  sessionId: string | null;
+  sessionName: string | null;
+  nPlayers: number;
+  nVotes: number;
+}> {
   const { admin, tournamentId, committee, userId, name, notes } = params;
 
   const { data: voteRows } = await admin
@@ -611,7 +642,13 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
     .eq("committee_id", committee.id);
 
   if (!voteRows || voteRows.length === 0) {
-    return { archived: false, sessionId: null };
+    return {
+      archived: false,
+      sessionId: null,
+      sessionName: null,
+      nPlayers: 0,
+      nVotes: 0,
+    };
   }
 
   const { data: entriesRaw } = await admin
@@ -723,49 +760,61 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
     n_entries: (entriesRaw ?? []).length,
   };
 
-  const snapRows = (entriesRaw ?? []).map((e: any) => {
-    const eid = String(e.id);
-    const slot = votesByEntry.get(eid) ?? {
-      adj: [] as number[],
-      n_abs: 0,
-      n_dq: 0,
-    };
-    const trim = trimmedAverage(
-      slot.adj,
-      trimLow,
-      trimHigh,
-      slot.n_abs,
-      abstInAvg
-    );
-    const player = e.player_id ? playerById.get(String(e.player_id)) : null;
-    const cat = e.category_id ? categoryById.get(String(e.category_id)) : null;
-    const playerLabel = player
-      ? `${player.last_name ?? ""} ${player.first_name ?? ""}`.trim() ||
-        "Jugador"
-      : "Jugador";
-    const hiNow =
-      e.handicap_index != null && Number.isFinite(Number(e.handicap_index))
-        ? Number(e.handicap_index)
-        : null;
-    const suggested =
-      hiNow != null && trim.avg != null
-        ? Math.round((hiNow + trim.avg) * 10) / 10
-        : null;
+  const snapRows = (entriesRaw ?? [])
+    .map((e: any) => {
+      const eid = String(e.id);
+      const slot = votesByEntry.get(eid);
+      if (!slot) return null;
+      if (slot.adj.length === 0 && slot.n_abs === 0 && slot.n_dq === 0) {
+        return null;
+      }
+      const trim = trimmedAverage(
+        slot.adj,
+        trimLow,
+        trimHigh,
+        slot.n_abs,
+        abstInAvg
+      );
+      const player = e.player_id ? playerById.get(String(e.player_id)) : null;
+      const cat = e.category_id ? categoryById.get(String(e.category_id)) : null;
+      const playerLabel = player
+        ? `${player.last_name ?? ""} ${player.first_name ?? ""}`.trim() ||
+          "Jugador"
+        : "Jugador";
+      const hiNow =
+        e.handicap_index != null && Number.isFinite(Number(e.handicap_index))
+          ? Number(e.handicap_index)
+          : null;
+      const suggested =
+        hiNow != null && trim.avg != null
+          ? Math.round((hiNow + trim.avg) * 10) / 10
+          : null;
 
+      return {
+        entry_id: eid,
+        entry_player_name: playerLabel,
+        entry_handicap_index: hiNow,
+        entry_category_code: cat?.code ?? cat?.name ?? null,
+        n_votes: slot.adj.length,
+        n_abstained: slot.n_abs,
+        n_disqualify: slot.n_dq,
+        avg_adjustment: trim.avg,
+        suggested_hi: suggested,
+        votes_anon: trim.values,
+        trim_annulled: trim.trimAnnulled,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row != null);
+
+  if (snapRows.length === 0) {
     return {
-      entry_id: eid,
-      entry_player_name: playerLabel,
-      entry_handicap_index: hiNow,
-      entry_category_code: cat?.code ?? cat?.name ?? null,
-      n_votes: slot.adj.length,
-      n_abstained: slot.n_abs,
-      n_disqualify: slot.n_dq,
-      avg_adjustment: trim.avg,
-      suggested_hi: suggested,
-      votes_anon: trim.values,
-      trim_annulled: trim.trimAnnulled,
+      archived: false,
+      sessionId: null,
+      sessionName: null,
+      nPlayers: 0,
+      nVotes: voteRows.length,
     };
-  });
+  }
 
   const { data: sessionId, error: rpcErr } = await admin.rpc(
     "fn_archive_and_reset_handicap_committee_votes",
@@ -783,9 +832,13 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
     );
   }
 
+  const archived = sessionId != null;
   return {
-    archived: sessionId != null,
-    sessionId: sessionId != null ? String(sessionId) : null,
+    archived,
+    sessionId: archived ? String(sessionId) : null,
+    sessionName: archived ? String(sessionPayload.name) : null,
+    nPlayers: archived ? snapRows.length : 0,
+    nVotes: archived ? voteRows.length : 0,
   };
 }
 
@@ -796,6 +849,7 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
   const rawThreshold = Number(
     String(formData.get("disqualify_threshold") ?? "0")
   );
+  const rawExpected = Number(String(formData.get("expected_members") ?? ""));
   const abstentions_in_average =
     String(formData.get("abstentions_in_average") ?? "") === "true" ||
     String(formData.get("abstentions_in_average") ?? "") === "on";
@@ -809,6 +863,9 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
   const disqualify_threshold = Number.isFinite(rawThreshold)
     ? Math.min(50, Math.max(0, Math.trunc(rawThreshold)))
     : 0;
+  const expected_members = Number.isFinite(rawExpected)
+    ? Math.min(50, Math.max(1, Math.trunc(rawExpected)))
+    : HANDICAP_COMMITTEE_DEFAULT_SIZE;
 
   const { supabase, user } = await requireUser();
   const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
@@ -824,6 +881,7 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
       trim_low,
       disqualify_threshold,
       abstentions_in_average,
+      expected_members,
     })
     .eq("tournament_id", tournament_id);
 
