@@ -282,6 +282,7 @@ export const BACKOFFICE_PATH_PREFIXES = [
   "/course-hole-points",
   "/users",
   "/comite-handicap",
+  "/handicap-report",
   "/captura-telegram",
   "/banderas",
   "/fb-admin",
@@ -347,6 +348,7 @@ export function getModuleFromPath(pathname: string): AppModule | null {
   if (pathname.startsWith("/cercanos")) return "cercanos";
   if (pathname.startsWith("/reports")) return "reports";
   if (pathname.startsWith("/comite-handicap")) return "comite-handicap";
+  if (pathname.startsWith("/handicap-report")) return "comite-handicap";
   if (pathname.startsWith("/captura-telegram")) return "captura-telegram";
   if (pathname.startsWith("/banderas")) return "banderas";
   if (

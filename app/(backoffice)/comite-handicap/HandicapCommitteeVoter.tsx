@@ -41,6 +41,9 @@ export type HandicapEntryRow = {
   has_handicap_file?: boolean;
   flagged_for_committee?: boolean;
   flagged_committee_reason?: string | null;
+  /** Visible en voto: sin 365d de revisiones → soft/hard no evaluable. */
+  index_history_insufficient?: boolean;
+  index_history_note?: string | null;
 };
 
 export type HandicapVoteRow = {
@@ -61,13 +64,15 @@ export type HandicapVoteSummaryRow = {
   entry_id: string;
   n_votes: number;
   n_live: number;
-  /** Numerador efectivo del promedio (núm. vivos + abstenciones como 0). */
+  /** Denominador del promedio (vivos ± abstenciones según config). */
   n_avg_denominator?: number;
   n_abstained?: number;
   avg_adjustment: number | null;
   suggested_hi: number | null;
   n_disqualify?: number;
   disqualified?: boolean;
+  trim_annulled?: boolean;
+  trim_annulled_note?: string | null;
   /** Distribución anónima (mezclada) de los votos para mostrar al expandir. */
   chips?: HandicapVoteSummaryChip[];
 };
@@ -79,6 +84,8 @@ type Props = {
   committeeOpen: boolean;
   isPresent: boolean;
   isAdmin: boolean;
+  /** Compuerta RLS/app: fn_user_can_read_ghin — oculta "Ver reporte GHIN" si false. */
+  canReadGhin: boolean;
   voteSummaries?: HandicapVoteSummaryRow[];
   t: HandicapCommitteeT;
 };
@@ -90,6 +97,7 @@ export default function HandicapCommitteeVoter({
   committeeOpen,
   isPresent,
   isAdmin,
+  canReadGhin,
   voteSummaries = [],
   t,
 }: Props) {
@@ -394,6 +402,7 @@ export default function HandicapCommitteeVoter({
                         className={[
                           "cursor-pointer border-t border-slate-100 align-top transition hover:bg-slate-50",
                           s?.disqualified ? "bg-rose-50" : "",
+                          s?.trim_annulled ? "bg-amber-50/80" : "",
                           isExpanded ? "bg-slate-50" : "",
                         ].join(" ")}
                         onClick={() =>
@@ -414,6 +423,11 @@ export default function HandicapCommitteeVoter({
                               {e.player_name}
                             </span>
                           </div>
+                          {s?.trim_annulled && s.trim_annulled_note ? (
+                            <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-snug text-amber-950">
+                              {s.trim_annulled_note}
+                            </p>
+                          ) : null}
                         </td>
                         <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
                           {e.handicap_index ?? "—"}
@@ -483,6 +497,11 @@ export default function HandicapCommitteeVoter({
                             className="px-2 py-2 sm:px-3 sm:py-3"
                           >
                             <div className="space-y-1.5">
+                              {s?.trim_annulled && s.trim_annulled_note ? (
+                                <div className="rounded border-2 border-amber-500 bg-amber-100 px-2 py-1.5 text-[11px] font-bold leading-snug text-amber-950">
+                                  {s.trim_annulled_note}
+                                </div>
+                              ) : null}
                               <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
                                 {vt.expandedTitle}
                               </div>
@@ -633,6 +652,7 @@ export default function HandicapCommitteeVoter({
                   summary={summaryByEntry.get(entry.entry_id)}
                   disabled={!canVote || pending}
                   committeeOpen={committeeOpen}
+                  canReadGhin={canReadGhin}
                   collapsedByDefault={tab === "voted"}
                   onSaved={() => setMsg("")}
                   onError={(e) => setMsg(e)}
@@ -679,6 +699,7 @@ function PlayerVoteCard({
   summary,
   disabled,
   committeeOpen,
+  canReadGhin,
   collapsedByDefault = false,
   onSaved,
   onError,
@@ -691,6 +712,7 @@ function PlayerVoteCard({
   summary?: HandicapVoteSummaryRow;
   disabled: boolean;
   committeeOpen: boolean;
+  canReadGhin: boolean;
   collapsedByDefault?: boolean;
   onSaved: () => void;
   onError: (msg: string) => void;
@@ -825,6 +847,16 @@ function PlayerVoteCard({
               {entry.flagged_committee_reason}
             </p>
           ) : null}
+          {entry.index_history_insufficient && entry.index_history_note ? (
+            <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+              {entry.index_history_note}
+            </p>
+          ) : null}
+          {summary?.trim_annulled && summary.trim_annulled_note ? (
+            <p className="mt-1 rounded border border-amber-600 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+              {summary.trim_annulled_note}
+            </p>
+          ) : null}
           <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] leading-tight text-slate-600">
             {entry.club_label ? (
               <span className="truncate">{entry.club_label}</span>
@@ -906,12 +938,24 @@ function PlayerVoteCard({
       {!open ? null : (
         <div className="px-2.5 pb-2.5">
 
-      {entry.player_id && entry.has_handicap_file ? (
+      {entry.index_history_insufficient && entry.index_history_note ? (
+        <div className="mb-2 rounded-lg border-2 border-amber-500 bg-amber-100 px-2.5 py-2 text-[11px] font-bold leading-snug text-amber-950">
+          {entry.index_history_note}
+        </div>
+      ) : null}
+
+      {summary?.trim_annulled && summary.trim_annulled_note ? (
+        <div className="mb-2 rounded-lg border-2 border-amber-600 bg-amber-100 px-2.5 py-2 text-[11px] font-bold leading-snug text-amber-950">
+          {summary.trim_annulled_note}
+        </div>
+      ) : null}
+
+      {entry.player_id && canReadGhin ? (
         <div className="mb-2">
           <OpenHandicapFileButton
             playerId={entry.player_id}
             entryId={entry.entry_id}
-            hasFile={Boolean(entry.has_handicap_file)}
+            canReadGhin={canReadGhin}
             compact={false}
             label={c.voteOpenReport}
           />

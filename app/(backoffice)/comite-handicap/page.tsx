@@ -9,6 +9,7 @@ import { messages } from "@/lib/i18n/messages";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   distributionChips,
+  formatTrimAnnulledNote,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import {
@@ -74,6 +75,11 @@ export default async function ComiteHandicapPage(props: {
   if (!user) {
     return <div className="p-6 text-red-700">{t.notLoggedIn}</div>;
   }
+
+  const { data: canReadGhinRaw } = await supabase.rpc("fn_user_can_read_ghin", {
+    user_uuid: user.id,
+  });
+  const canReadGhin = Boolean(canReadGhinRaw);
 
   if (!tournamentId) {
     const roles = await getUserRoles(supabase, user.id);
@@ -197,7 +203,7 @@ export default async function ComiteHandicapPage(props: {
   const { data: committee } = await supabase
     .from("tournament_handicap_committees")
     .select(
-      "id, status, expected_members, opens_at, closes_at, trim_high, trim_low, disqualify_threshold"
+      "id, status, expected_members, opens_at, closes_at, trim_high, trim_low, disqualify_threshold, abstentions_in_average"
     )
     .eq("tournament_id", tournamentId)
     .maybeSingle();
@@ -405,6 +411,78 @@ export default async function ComiteHandicapPage(props: {
       };
     })
     .filter((e) => e.entry_id);
+
+  // Nota de histórico insuficiente (soft/hard cap): visible en voto.
+  // No excluye jugadores; solo marca. No toca tablas de voto.
+  {
+    const { daysBetweenIso, todayMexicoIso } = await import(
+      "@/lib/ghin-report/whsCaps"
+    );
+    const {
+      formatInsufficientIndexHistoryNote,
+      isIndexHistoryInsufficient,
+    } = await import("@/lib/handicap-committee/indexHistoryNote");
+    const until = todayMexicoIso();
+    const ghins = [
+      ...new Set(
+        allEntries
+          .map((e) => e.ghin_number)
+          .filter((g): g is string => Boolean(g))
+      ),
+    ];
+    const firstByGhin = new Map<string, string | null>();
+    const minOkByGhin = new Map<string, boolean>();
+    const chunk = 60;
+    for (let i = 0; i < ghins.length; i += chunk) {
+      const batch = ghins.slice(i, i + chunk);
+      await Promise.all(
+        batch.map(async (g) => {
+          const [{ data: first }, { data: minIdx }] = await Promise.all([
+            supabase
+              .from("ghin_index_revisions")
+              .select("revision_date")
+              .eq("ghin_number", g)
+              .order("revision_date", { ascending: true })
+              .limit(1)
+              .maybeSingle(),
+            supabase.rpc("f_ghin_min_index", {
+              p_ghin: g,
+              p_desde: (() => {
+                const t = Date.parse(`${until}T12:00:00Z`) - 364 * 86400000;
+                return new Date(t).toISOString().slice(0, 10);
+              })(),
+              p_hasta: until,
+            }),
+          ]);
+          firstByGhin.set(
+            g,
+            first?.revision_date != null
+              ? String(first.revision_date).slice(0, 10)
+              : null
+          );
+          minOkByGhin.set(
+            g,
+            minIdx != null && Number.isFinite(Number(minIdx))
+          );
+        })
+      );
+    }
+    for (const e of allEntries) {
+      if (!e.ghin_number) {
+        e.index_history_insufficient = true;
+        e.index_history_note = formatInsufficientIndexHistoryNote(0);
+        continue;
+      }
+      const first = firstByGhin.get(e.ghin_number) ?? null;
+      const days = first ? daysBetweenIso(first, until) : 0;
+      const insufficient =
+        !minOkByGhin.get(e.ghin_number) || isIndexHistoryInsufficient(days);
+      e.index_history_insufficient = insufficient;
+      e.index_history_note = insufficient
+        ? formatInsufficientIndexHistoryNote(days)
+        : null;
+    }
+  }
 
   let myVotes: HandicapVoteRow[] = [];
   if (committee?.id) {
@@ -749,6 +827,10 @@ export default async function ComiteHandicapPage(props: {
   // vean el resultado final aunque no sean admin).
   const trimLowGlobal = Number(committee?.trim_low ?? 0);
   const trimHighGlobal = Number(committee?.trim_high ?? 0);
+  const abstentionsInAverageGlobal = Boolean(
+    (committee as { abstentions_in_average?: boolean | null } | null)
+      ?.abstentions_in_average
+  );
   const disqualifyThresholdGlobal = Number(
     (committee as { disqualify_threshold?: number | null })?.disqualify_threshold ??
       0
@@ -760,14 +842,15 @@ export default async function ComiteHandicapPage(props: {
       adjustments,
       trimLowGlobal,
       trimHighGlobal,
-      nAbst
+      nAbst,
+      abstentionsInAverageGlobal
     );
     const suggested =
       e.handicap_index != null && trim.avg != null
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
-    const chips = distributionChips(trim.values, trim.liveAbstainedAsZero);
+    const chips = distributionChips(trim.values, nAbst);
     // Mezclamos para mantener anonimato (no se puede saber quién votó qué).
     for (let i = chips.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -784,6 +867,14 @@ export default async function ComiteHandicapPage(props: {
       n_disqualify: nDisq,
       disqualified:
         disqualifyThresholdGlobal > 0 && nDisq >= disqualifyThresholdGlobal,
+      trim_annulled: trim.trimAnnulled,
+      trim_annulled_note: trim.trimAnnulled
+        ? formatTrimAnnulledNote(
+            adjustments.length,
+            trimLowGlobal,
+            trimHighGlobal
+          )
+        : null,
       chips: chips.map((c) => ({
         value: c.value,
         trimmed: c.trimmed,
@@ -800,7 +891,7 @@ export default async function ComiteHandicapPage(props: {
     const { data: sessionsRaw } = await admin
       .from("handicap_committee_vote_sessions")
       .select(
-        "id, session_no, name, notes, archived_at, trim_high, trim_low, disqualify_threshold, n_members_present, n_voters, n_entries"
+        "id, session_no, name, notes, archived_at, trim_high, trim_low, disqualify_threshold, abstentions_in_average, n_members_present, n_voters, n_entries"
       )
       .eq("committee_id", committee.id)
       .order("archived_at", { ascending: false })
@@ -815,6 +906,7 @@ export default async function ComiteHandicapPage(props: {
       trim_high: Number(s.trim_high ?? 0),
       trim_low: Number(s.trim_low ?? 0),
       disqualify_threshold: Number(s.disqualify_threshold ?? 0),
+      abstentions_in_average: Boolean(s.abstentions_in_average),
       n_members_present: Number(s.n_members_present ?? 0),
       n_voters: Number(s.n_voters ?? 0),
       n_entries: Number(s.n_entries ?? 0),
@@ -825,13 +917,16 @@ export default async function ComiteHandicapPage(props: {
       const { data: snapsRaw } = await admin
         .from("handicap_committee_vote_snapshots")
         .select(
-          "id, session_id, entry_player_name, entry_handicap_index, entry_category_code, n_votes, n_abstained, n_disqualify, avg_adjustment, suggested_hi, votes_anon"
+          "id, session_id, entry_player_name, entry_handicap_index, entry_category_code, n_votes, n_abstained, n_disqualify, avg_adjustment, suggested_hi, votes_anon, trim_annulled"
         )
         .in("session_id", sessionIds);
 
       for (const row of snapsRaw ?? []) {
         const sid = String((row as any).session_id);
         if (!snapshotsBySession[sid]) snapshotsBySession[sid] = [];
+        const nVotes = Number((row as any).n_votes ?? 0);
+        const trimAnnulled = Boolean((row as any).trim_annulled);
+        const sessMeta = archivedSessions.find((x) => x.id === sid);
         snapshotsBySession[sid].push({
           id: String((row as any).id),
           session_id: sid,
@@ -841,7 +936,7 @@ export default async function ComiteHandicapPage(props: {
               ? Number((row as any).entry_handicap_index)
               : null,
           entry_category_code: (row as any).entry_category_code ?? null,
-          n_votes: Number((row as any).n_votes ?? 0),
+          n_votes: nVotes,
           n_abstained: Number((row as any).n_abstained ?? 0),
           n_disqualify: Number((row as any).n_disqualify ?? 0),
           avg_adjustment:
@@ -853,6 +948,15 @@ export default async function ComiteHandicapPage(props: {
               ? Number((row as any).suggested_hi)
               : null,
           votes_anon: (row as any).votes_anon ?? null,
+          trim_annulled: trimAnnulled,
+          trim_annulled_note:
+            trimAnnulled && sessMeta
+              ? formatTrimAnnulledNote(
+                  nVotes,
+                  sessMeta.trim_low,
+                  sessMeta.trim_high
+                )
+              : null,
         });
       }
       for (const sid of Object.keys(snapshotsBySession)) {
@@ -872,6 +976,20 @@ export default async function ComiteHandicapPage(props: {
 
   return (
     <div className="space-y-6 p-4 md:p-6">
+      <nav className="flex flex-wrap gap-2 text-xs">
+        <Link
+          href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
+          className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 font-semibold text-indigo-900 hover:bg-indigo-100"
+        >
+          Selección de jugadores
+        </Link>
+        <Link
+          href="/comite-handicap/ghin-datos"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-800 hover:bg-slate-50"
+        >
+          Datos GHIN
+        </Link>
+      </nav>
       <div>
         <h1 className="text-2xl font-bold text-white">{t.pageTitle}</h1>
         <p className="mt-1 text-sm text-slate-300">
@@ -1528,6 +1646,26 @@ export default async function ComiteHandicapPage(props: {
                     className="w-20 rounded border border-rose-300 bg-white px-2 py-1 text-sm"
                   />
                 </label>
+                <label className="flex max-w-xs items-start gap-2 text-xs text-slate-800">
+                  <input
+                    type="checkbox"
+                    name="abstentions_in_average"
+                    value="true"
+                    defaultChecked={Boolean(
+                      (committee as { abstentions_in_average?: boolean | null })
+                        .abstentions_in_average
+                    )}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      {t.admin.abstentionsInAverage}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-slate-600">
+                      {t.admin.abstentionsInAverageHint}
+                    </span>
+                  </span>
+                </label>
                 <button
                   type="submit"
                   className="rounded bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
@@ -1598,7 +1736,11 @@ export default async function ComiteHandicapPage(props: {
                     adjustmentList,
                     Number(committee.trim_low ?? 0),
                     Number(committee.trim_high ?? 0),
-                    abstained
+                    abstained,
+                    Boolean(
+                      (committee as { abstentions_in_average?: boolean | null })
+                        .abstentions_in_average
+                    )
                   );
                   const disqVotes =
                     disqualifyByEntry.get(e.entry_id) ?? 0;
@@ -1609,10 +1751,7 @@ export default async function ComiteHandicapPage(props: {
                       : null;
 
                   const chips = (() => {
-                    const arr = distributionChips(
-                      trim.values,
-                      trim.liveAbstainedAsZero
-                    );
+                    const arr = distributionChips(trim.values, abstained);
                     for (let i = arr.length - 1; i > 0; i -= 1) {
                       const j = Math.floor(Math.random() * (i + 1));
                       [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -1622,8 +1761,9 @@ export default async function ComiteHandicapPage(props: {
 
                   const totalVotesIncAbst =
                     adjustmentList.length + abstained;
-                  const liveIncAbst =
-                    trim.liveCount + trim.liveAbstainedAsZero;
+                  const liveIncAbst = abstentionsInAverageGlobal
+                    ? trim.liveCount + trim.liveAbstainedAsZero
+                    : trim.liveCount;
 
                   return {
                     entry_id: e.entry_id,
@@ -1641,6 +1781,14 @@ export default async function ComiteHandicapPage(props: {
                     averageDenominator: trim.averageDenominator,
                     liveAbstainedAsZero: trim.liveAbstainedAsZero,
                     disqualifyVotes: disqVotes,
+                    trim_annulled: trim.trimAnnulled,
+                    trim_annulled_note: trim.trimAnnulled
+                      ? formatTrimAnnulledNote(
+                          adjustmentList.length,
+                          Number(committee.trim_low ?? 0),
+                          Number(committee.trim_high ?? 0)
+                        )
+                      : null,
                     chips,
                   };
                 });
@@ -1693,6 +1841,7 @@ export default async function ComiteHandicapPage(props: {
               committeeOpen={committee.status === "open"}
               isPresent={myPresence}
               isAdmin={access.isAdmin}
+              canReadGhin={canReadGhin}
               voteSummaries={voteSummariesForVoter}
               t={t}
             />

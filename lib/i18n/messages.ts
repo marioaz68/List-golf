@@ -1598,10 +1598,13 @@ const es = {
       minDqVotes: "Mínimo de votos «No jugar»",
       btnSaveRules: "Guardar reglas",
       trimExplain:
-        "Recorte: por cada jugador se descartan los N votos más cercanos a 0 y los N votos más cercanos a −5; el promedio y el HI sugerido se recalculan con los votos vivos.",
+        "Recorte: por cada jugador se descartan los N votos más cercanos a 0 y los N votos más cercanos a −5; el promedio y el HI sugerido se recalculan con los votos vivos. El recorte no se reduce si hay pocos votos: si no sobrevive ninguno, el ajuste queda en 0.",
       thresholdExplain1:
         "Umbral «No jugar»: si un jugador acumula ese número (o más) de votos «No permitir jugar este torneo», queda marcado en rojo abajo.",
       thresholdExplain2: "= solo se muestra el conteo, sin marcar.",
+      abstentionsInAverage: "Contar abstenciones como 0 en el promedio",
+      abstentionsInAverageHint:
+        "Desactivado (recomendado): el promedio solo usa ajustes numéricos que sobreviven al recorte. Activado: las abstenciones diluyen el promedio hacia 0.",
       aggregateHelp:
         "Resumen agregado (anonimizado): se muestran los votos individuales sin nombre. Verde = activo, gris = descartado por recorte.",
       thPlayer: "Jugador",
@@ -1632,8 +1635,8 @@ const es = {
       ghinTitle: "GHIN del jugador",
       noVotes: "Sin votos",
       avgDivisor: "Prom.: ÷",
-      abstAsZero: "abst. = 0",
-      chipAbstain: "Abstención (cuenta como 0 en el promedio)",
+      abstAsZero: "abst. en promedio",
+      chipAbstain: "Abstención (metadato; no diluye el promedio salvo que esté activado)",
       chipTrimmedLow: "Descartado (más severo)",
       chipTrimmedHigh: "Descartado (más suave)",
       chipLive: "Voto vivo",
@@ -1676,7 +1679,7 @@ const es = {
       thAvg: "Prom.",
       thHiSug: "HI sug.",
       thNoPlay: "No jugar",
-      chipAbstention: "Abstención (cuenta como 0)",
+      chipAbstention: "Abstención",
       chipTrimmed: "Descartado por recorte",
       chipLive: "Voto vivo",
       chipAbst: "0·abst",
@@ -3270,10 +3273,13 @@ const en: Messages = {
       minDqVotes: "Minimum «Do not play» votes",
       btnSaveRules: "Save rules",
       trimExplain:
-        "Trim: for each player the N votes closest to 0 and the N votes closest to −5 are discarded; the average and suggested HI are recalculated using the live votes.",
+        "Trim: for each player the N votes closest to 0 and the N votes closest to −5 are discarded; the average and suggested HI are recalculated using the live votes. Trim is not reduced when there are few votes: if none survive, the adjustment stays at 0.",
       thresholdExplain1:
         "«Do not play» threshold: if a player accumulates that number (or more) of «Do not allow to play this tournament» votes, they are highlighted in red below.",
       thresholdExplain2: "= only the count is shown, without highlighting.",
+      abstentionsInAverage: "Count abstentions as 0 in the average",
+      abstentionsInAverageHint:
+        "Off (recommended): average uses only numeric adjustments that survive the trim. On: abstentions dilute the average toward 0.",
       aggregateHelp:
         "Aggregate summary (anonymized): individual votes are shown without names. Green = live, gray = discarded by trim.",
       thPlayer: "Player",
@@ -3304,8 +3310,8 @@ const en: Messages = {
       ghinTitle: "Player GHIN",
       noVotes: "No votes",
       avgDivisor: "Avg.: ÷",
-      abstAsZero: "abst. = 0",
-      chipAbstain: "Abstention (counts as 0 in the average)",
+      abstAsZero: "abst. in average",
+      chipAbstain: "Abstention (metadata; does not dilute average unless enabled)",
       chipTrimmedLow: "Discarded (most severe)",
       chipTrimmedHigh: "Discarded (most lenient)",
       chipLive: "Live vote",
@@ -3348,7 +3354,7 @@ const en: Messages = {
       thAvg: "Avg.",
       thHiSug: "Sug HI",
       thNoPlay: "Do not play",
-      chipAbstention: "Abstention (counts as 0)",
+      chipAbstention: "Abstention",
       chipTrimmed: "Trimmed out",
       chipLive: "Live vote",
       chipAbst: "0·abst",

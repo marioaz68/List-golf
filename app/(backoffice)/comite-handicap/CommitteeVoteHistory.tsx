@@ -16,6 +16,7 @@ export type ArchivedSession = {
   trim_high: number;
   trim_low: number;
   disqualify_threshold: number;
+  abstentions_in_average?: boolean;
   n_members_present: number;
   n_voters: number;
   n_entries: number;
@@ -37,6 +38,8 @@ export type ArchivedSnapshot = {
     trimmed: boolean;
     reason?: "low" | "high" | null;
   }> | null;
+  trim_annulled?: boolean;
+  trim_annulled_note?: string | null;
 };
 
 type Props = {
@@ -158,10 +161,18 @@ export default function CommitteeVoteHistory({
                           return (
                             <tr
                               key={row.id}
-                              className="border-t border-slate-100 align-top"
+                              className={[
+                                "border-t border-slate-100 align-top",
+                                row.trim_annulled ? "bg-amber-50/80" : "",
+                              ].join(" ")}
                             >
                               <td className="px-2 py-1.5 font-medium">
                                 {row.entry_player_name ?? "—"}
+                                {row.trim_annulled && row.trim_annulled_note ? (
+                                  <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+                                    {row.trim_annulled_note}
+                                  </p>
+                                ) : null}
                               </td>
                               <td className="px-2 py-1.5 tabular-nums">
                                 {row.entry_handicap_index ?? "—"}

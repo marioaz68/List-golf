@@ -21,6 +21,8 @@ export type AdminAggregateRow = {
   averageDenominator: number;
   liveAbstainedAsZero: number;
   disqualifyVotes: number;
+  trim_annulled?: boolean;
+  trim_annulled_note?: string | null;
   chips: Array<{
     value: number;
     trimmed: boolean;
@@ -255,7 +257,10 @@ export default function AdminAggregateTable({
             {rows.map((r) => {
               const adj = adjustments[r.entry_id] ?? 0;
               const finalHi = computeFinalHi(r.hi_current, adj);
-              const hasVotes = r.avg_adjustment != null && r.liveCount > 0;
+              const hasVotes =
+                r.totalVotesIncAbst > 0 ||
+                r.chips.length > 0 ||
+                Boolean(r.trim_annulled);
               const canEdit = r.hi_current != null;
               const isSel = !!selected[r.entry_id];
               const isBusy = busyEntry === r.entry_id;
@@ -270,6 +275,7 @@ export default function AdminAggregateTable({
                     "border-t border-slate-100 align-top",
                     isSel ? "bg-emerald-50/40" : "",
                     !hasVotes ? "bg-slate-50/60" : "",
+                    r.trim_annulled ? "bg-amber-50/70" : "",
                   ].join(" ")}
                 >
                   <td className="px-2 py-2 text-center">
@@ -294,6 +300,11 @@ export default function AdminAggregateTable({
                         </span>
                       ) : null}
                     </span>
+                    {r.trim_annulled && r.trim_annulled_note ? (
+                      <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
+                        {r.trim_annulled_note}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {r.hi_current != null ? r.hi_current.toFixed(1) : "—"}

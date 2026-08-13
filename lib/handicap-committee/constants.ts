@@ -17,9 +17,34 @@ export function clampAdjustment(raw: number) {
 }
 
 /**
+ * Mínimo de votos numéricos para que sobreviva al menos uno tras el recorte
+ * (trim_low + trim_high + 1). No se reduce el trim si hay menos.
+ */
+export function minNumericVotesForTrim(
+  trimLow: number,
+  trimHigh: number
+): number {
+  return (
+    Math.max(0, Math.trunc(trimLow)) + Math.max(0, Math.trunc(trimHigh)) + 1
+  );
+}
+
+/**
+ * Aviso cuando el recorte anula todos los ajustes numéricos.
+ * N y el mínimo se calculan; no están cableados.
+ */
+export function formatTrimAnnulledNote(
+  nNumericVotes: number,
+  trimLow: number,
+  trimHigh: number
+): string {
+  const min = minNumericVotesForTrim(trimLow, trimHigh);
+  return `Sin ajuste: ${nNumericVotes} votos numéricos, insuficientes para el recorte configurado (se requieren al menos ${min})`;
+}
+
+/**
  * Devuelve los índices (sobre el array ordenado de menor a mayor) que se
  * descartan: los `trimLow` más bajos y los `trimHigh` más altos.
- * Si la cantidad de votos vivos no es suficiente, se conservan al menos 1.
  */
 export type TrimmedAverageChip = {
   value: number;
@@ -33,36 +58,40 @@ export type TrimmedAverage = {
   /** Votos numéricos que sobreviven al recorte (sin contar abstenciones). */
   liveCount: number;
   /**
-   * Abstenciones que entran al promedio como 0 (suman al denominador).
+   * Abstenciones pasadas al cálculo. Solo entran al denominador si
+   * `includeAbstentionsInAverage` es true.
    */
   liveAbstainedAsZero: number;
-  /** Denominador del promedio: liveCount + liveAbstainedAsZero */
+  /** Denominador del promedio (solo vivos numéricos, ± abstenciones si aplica). */
   averageDenominator: number;
+  /**
+   * Había votos numéricos pero el recorte configurado los anuló todos.
+   * Distinto de «nadie propuso ajuste» (avg null, trimAnnulled false).
+   */
+  trimAnnulled: boolean;
 };
 
 /**
- * Chip de distribución de votos. Incluye abstenciones como votos vivos con
- * valor 0 ("estoy de acuerdo con el HI, no necesita ajuste"). Se usan en los
- * reportes (live, voter y archivo) para que las abstenciones se vean como
- * que sí cuentan.
+ * Chip de distribución de votos. Las abstenciones se muestran como chips
+ * con valor 0 para el reporte; si cuentan o no en el promedio lo decide
+ * `trimmedAverage` / la config del comité.
  */
 export type DistributionChip = TrimmedAverageChip & { abstained: boolean };
 
 /**
- * Convierte la salida de `trimmedAverage` (que separa abstenciones) en una
- * lista única de chips. Las abstenciones se agregan como entradas con
- * `value = 0`, `trimmed = false` y `abstained = true`. Nunca se descartan
- * porque cuentan como "vivas" en el denominador.
+ * Convierte la salida de `trimmedAverage` en una lista única de chips.
+ * Las abstenciones se agregan como entradas con `value = 0` para
+ * visualización; no implica que entren al denominador.
  */
 export function distributionChips(
   values: TrimmedAverageChip[] | null | undefined,
-  liveAbstainedAsZero: number = 0
+  abstentionCount: number = 0
 ): DistributionChip[] {
   const chips: DistributionChip[] = (values ?? []).map((v) => ({
     ...v,
     abstained: false,
   }));
-  const n = Math.max(0, Math.trunc(liveAbstainedAsZero));
+  const n = Math.max(0, Math.trunc(abstentionCount));
   for (let i = 0; i < n; i += 1) {
     chips.push({ value: 0, trimmed: false, reason: null, abstained: true });
   }
@@ -73,30 +102,37 @@ export function distributionChips(
  * Calcula promedio recortado.
  *
  * - `rawValues`: ajustes numéricos (votos con calificación).
- * - `trimLow` / `trimHigh`: cuántos valores extremos descartar.
- * - `liveAbstainedAsZero`: opcional. Si se proporciona, las abstenciones
- *   "vivas" se cuentan como votos con valor 0 en el cálculo del promedio
- *   (suman al denominador pero no al numerador). No se incluyen como chips
- *   en `values` porque no son ajustes numéricos.
+ * - `trimLow` / `trimHigh`: cuántos extremos descartar. NO se reduce el
+ *   recorte si hay pocos votos: si no sobrevive ninguno, avg = 0 y
+ *   `trimAnnulled = true`.
+ * - `abstentionCount`: metadato de abstenciones.
+ * - `includeAbstentionsInAverage`: si true, las abstenciones suman al
+ *   denominador como 0. Default false (solo ajustes numéricos vivos).
  */
 export function trimmedAverage(
   rawValues: number[],
   trimLow: number,
   trimHigh: number,
-  liveAbstainedAsZero: number = 0
+  abstentionCount: number = 0,
+  includeAbstentionsInAverage: boolean = false
 ): TrimmedAverage {
   const valid = rawValues
     .filter((v) => Number.isFinite(v))
     .map((v) => Number(v));
-  const abstZero = Math.max(0, Math.trunc(liveAbstainedAsZero));
+  const abstCount = Math.max(0, Math.trunc(abstentionCount));
+  const abstInAvg = includeAbstentionsInAverage
+    ? abstCount
+    : 0;
+
   if (valid.length === 0) {
-    if (abstZero > 0) {
+    if (abstInAvg > 0) {
       return {
         values: [],
         avg: 0,
         liveCount: 0,
-        liveAbstainedAsZero: abstZero,
-        averageDenominator: abstZero,
+        liveAbstainedAsZero: abstInAvg,
+        averageDenominator: abstInAvg,
+        trimAnnulled: false,
       };
     }
     return {
@@ -105,27 +141,27 @@ export function trimmedAverage(
       liveCount: 0,
       liveAbstainedAsZero: 0,
       averageDenominator: 0,
+      trimAnnulled: false,
     };
   }
 
   const sortedAsc = [...valid].sort((a, b) => a - b);
   const total = sortedAsc.length;
 
-  let cutLow = Math.max(0, Math.trunc(trimLow));
-  let cutHigh = Math.max(0, Math.trunc(trimHigh));
+  const cutLow = Math.max(0, Math.trunc(trimLow));
+  const cutHigh = Math.max(0, Math.trunc(trimHigh));
 
-  while (cutLow + cutHigh >= total && cutLow + cutHigh > 0) {
-    if (cutLow >= cutHigh && cutLow > 0) cutLow -= 1;
-    else if (cutHigh > 0) cutHigh -= 1;
-  }
-
+  // No se salta el trim: si cutLow+cutHigh >= total, todos quedan anulados.
   const lowSet = new Map<number, number>();
-  for (let i = 0; i < cutLow; i += 1) {
+  for (let i = 0; i < Math.min(cutLow, total); i += 1) {
     const v = sortedAsc[i];
     lowSet.set(v, (lowSet.get(v) ?? 0) + 1);
   }
   const highSet = new Map<number, number>();
-  for (let i = total - cutHigh; i < total; i += 1) {
+  const highStart = Math.max(0, total - cutHigh);
+  for (let i = highStart; i < total; i += 1) {
+    // Evitar doble conteo si el mismo índice cae en low y high.
+    if (i < Math.min(cutLow, total)) continue;
     const v = sortedAsc[i];
     highSet.set(v, (highSet.get(v) ?? 0) + 1);
   }
@@ -161,15 +197,25 @@ export function trimmedAverage(
   });
 
   const numericLiveCount = liveCount;
-  const averageDenominator = numericLiveCount + abstZero;
-  const avg =
-    averageDenominator > 0 ? liveSum / averageDenominator : null;
+  const trimAnnulled = numericLiveCount === 0;
+  const averageDenominator = numericLiveCount + abstInAvg;
+
+  let avg: number | null;
+  if (trimAnnulled) {
+    // Había votos numéricos pero el trim los anuló → ajuste 0 (HI sin cambio).
+    avg = 0;
+  } else if (averageDenominator > 0) {
+    avg = liveSum / averageDenominator;
+  } else {
+    avg = null;
+  }
 
   return {
     values: tagged,
     avg,
     liveCount: numericLiveCount,
-    liveAbstainedAsZero: abstZero,
+    liveAbstainedAsZero: abstInAvg,
     averageDenominator,
+    trimAnnulled,
   };
 }

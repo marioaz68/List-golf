@@ -203,7 +203,8 @@ async function computeApplyForEntry(
   entry_id: string,
   trim_low: number,
   trim_high: number,
-  override: number | null
+  override: number | null,
+  abstentionsInAverage: boolean = false
 ): Promise<
   | {
       ok: true;
@@ -247,10 +248,15 @@ async function computeApplyForEntry(
       adjustments,
       trim_low,
       trim_high,
-      n_abstained
+      n_abstained,
+      abstentionsInAverage
     );
     const avg = trim.avg;
-    if (avg == null || !Number.isFinite(avg) || trim.averageDenominator < 1) {
+    // trimAnnulled → avg 0 (HI sin cambio); no es error.
+    if (avg == null || !Number.isFinite(avg)) {
+      return { ok: false, error: "trim_empty" };
+    }
+    if (!trim.trimAnnulled && trim.averageDenominator < 1) {
       return { ok: false, error: "trim_empty" };
     }
     adjustmentToApply = avg;
@@ -301,7 +307,7 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
 
   const { data: committee } = await admin
     .from("tournament_handicap_committees")
-    .select("id, trim_high, trim_low")
+    .select("id, trim_high, trim_low, abstentions_in_average")
     .eq("tournament_id", tournament_id)
     .maybeSingle();
 
@@ -317,7 +323,10 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
     entry_id,
     Number(committee.trim_low ?? 0),
     Number(committee.trim_high ?? 0),
-    override
+    override,
+    Boolean(
+      (committee as { abstentions_in_average?: boolean }).abstentions_in_average
+    )
   );
 
   if (!res.ok) {
@@ -383,7 +392,7 @@ export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) 
 
   const { data: committee } = await admin
     .from("tournament_handicap_committees")
-    .select("id, trim_high, trim_low")
+    .select("id, trim_high, trim_low, abstentions_in_average")
     .eq("tournament_id", tournament_id)
     .maybeSingle();
 
@@ -407,6 +416,9 @@ export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) 
 
   let okCount = 0;
   const failures: string[] = [];
+  const abstInAvg = Boolean(
+    (committee as { abstentions_in_average?: boolean }).abstentions_in_average
+  );
 
   for (const entry_id of entryIds) {
     const overrideRaw = String(formData.get(`adj_${entry_id}`) ?? "").trim();
@@ -419,7 +431,8 @@ export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) 
       entry_id,
       Number(committee.trim_low ?? 0),
       Number(committee.trim_high ?? 0),
-      override
+      override,
+      abstInAvg
     );
     if (!res.ok) {
       failures.push(entry_id);
@@ -470,57 +483,91 @@ export async function resetHandicapCommitteeVotes(formData: FormData) {
     return;
   }
 
-  const { supabase, user } = await requireUser();
-  const access = await loadHandicapCommitteeAccess(supabase, user.id, tournament_id);
-  if (!access.isAdmin) {
-    redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
-    return;
-  }
+  try {
+    const { supabase, user } = await requireUser();
+    const access = await loadHandicapCommitteeAccess(
+      supabase,
+      user.id,
+      tournament_id
+    );
+    if (!access.isAdmin) {
+      redirectWith(tournament_id, { err: "No tienes permiso.", tab: "admin" });
+      return;
+    }
 
-  const admin = tryCreateAdminClient();
-  if (!admin) {
-    redirectWith(tournament_id, {
-      err: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
-      tab: "admin",
+    const admin = tryCreateAdminClient();
+    if (!admin) {
+      redirectWith(tournament_id, {
+        err: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
+        tab: "admin",
+      });
+      return;
+    }
+
+    const { data: committee } = await admin
+      .from("tournament_handicap_committees")
+      .select(
+        "id, trim_high, trim_low, disqualify_threshold, abstentions_in_average"
+      )
+      .eq("tournament_id", tournament_id)
+      .maybeSingle();
+
+    if (!committee?.id) {
+      redirectWith(tournament_id, {
+        err: "Comité no encontrado.",
+        tab: "admin",
+      });
+      return;
+    }
+
+    await archiveAndResetCommitteeVotesAtomic({
+      admin,
+      tournamentId: tournament_id,
+      committee: committee as CommitteeForArchive,
+      userId: user.id,
+      name: sessionName || null,
+      notes: sessionNotes || null,
     });
-    return;
+
+    revalidatePath("/comite-handicap");
+    redirectWith(tournament_id, { ok: "votes_reset", tab: "admin" });
+  } catch (e) {
+    if (isNextRedirectError(e)) throw e;
+    const msg =
+      e instanceof Error
+        ? e.message
+        : "No se pudo archivar y reiniciar la votación.";
+    redirectWith(tournament_id, { err: msg, tab: "admin" });
   }
+}
 
-  const { data: committee } = await admin
-    .from("tournament_handicap_committees")
-    .select("id, trim_high, trim_low, disqualify_threshold")
-    .eq("tournament_id", tournament_id)
-    .maybeSingle();
+function isNextRedirectError(error: unknown): boolean {
+  const digest =
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: string }).digest === "string"
+      ? (error as { digest: string }).digest
+      : "";
+  return digest.startsWith("NEXT_REDIRECT");
+}
 
-  if (!committee?.id) {
-    redirectWith(tournament_id, {
-      err: "Comité no encontrado.",
-      tab: "admin",
-    });
-    return;
+/** Wrapper para useActionState: errores en panel; redirect de éxito/negocio sigue. */
+export async function resetHandicapCommitteeVotesAction(
+  _prev: { error: string | null },
+  formData: FormData
+): Promise<{ error: string | null }> {
+  try {
+    await resetHandicapCommitteeVotes(formData);
+    return { error: null };
+  } catch (e) {
+    if (isNextRedirectError(e)) throw e;
+    const msg =
+      e instanceof Error
+        ? e.message
+        : "No se pudo archivar y reiniciar la votación.";
+    return { error: msg };
   }
-
-  await archiveCommitteeSession({
-    admin,
-    tournamentId: tournament_id,
-    committee,
-    userId: user.id,
-    name: sessionName || null,
-    notes: sessionNotes || null,
-  });
-
-  const { error } = await admin
-    .from("handicap_committee_votes")
-    .delete()
-    .eq("committee_id", committee.id);
-
-  if (error) {
-    redirectWith(tournament_id, { err: error.message, tab: "admin" });
-    return;
-  }
-
-  revalidatePath("/comite-handicap");
-  redirectWith(tournament_id, { ok: "votes_reset", tab: "admin" });
 }
 
 type CommitteeForArchive = {
@@ -528,9 +575,14 @@ type CommitteeForArchive = {
   trim_high?: number | null;
   trim_low?: number | null;
   disqualify_threshold?: number | null;
+  abstentions_in_average?: boolean | null;
 };
 
-async function archiveCommitteeSession(params: {
+/**
+ * Construye sesión + snapshots en TS y los persiste + borra votos vivos
+ * en una sola transacción Postgres (RPC).
+ */
+async function archiveAndResetCommitteeVotesAtomic(params: {
   admin: NonNullable<ReturnType<typeof tryCreateAdminClient>>;
   tournamentId: string;
   committee: CommitteeForArchive;
@@ -599,6 +651,7 @@ async function archiveCommitteeSession(params: {
 
   const trimLow = Number(committee.trim_low ?? 0);
   const trimHigh = Number(committee.trim_high ?? 0);
+  const abstInAvg = Boolean(committee.abstentions_in_average);
 
   const votesByEntry = new Map<
     string,
@@ -638,30 +691,19 @@ async function archiveCommitteeSession(params: {
     .maybeSingle();
   const nextSessionNo = Number((lastSession as any)?.session_no ?? 0) + 1;
 
-  const { data: sess, error: sessErr } = await admin
-    .from("handicap_committee_vote_sessions")
-    .insert({
-      committee_id: committee.id,
-      tournament_id: tournamentId,
-      session_no: nextSessionNo,
-      name: name || `Sesión ${nextSessionNo}`,
-      notes,
-      archived_by: userId,
-      trim_high: trimHigh,
-      trim_low: trimLow,
-      disqualify_threshold: Number(committee.disqualify_threshold ?? 0),
-      n_members_present: nPresent,
-      n_voters: voterIds.size,
-      n_entries: (entriesRaw ?? []).length,
-    })
-    .select("id")
-    .single();
-
-  if (sessErr || !sess?.id) {
-    throw new Error(
-      `No se pudo archivar la sesión previa: ${sessErr?.message ?? "sin id"}`
-    );
-  }
+  const sessionPayload = {
+    tournament_id: tournamentId,
+    session_no: nextSessionNo,
+    name: name || `Sesión ${nextSessionNo}`,
+    notes,
+    trim_high: trimHigh,
+    trim_low: trimLow,
+    disqualify_threshold: Number(committee.disqualify_threshold ?? 0),
+    abstentions_in_average: abstInAvg,
+    n_members_present: nPresent,
+    n_voters: voterIds.size,
+    n_entries: (entriesRaw ?? []).length,
+  };
 
   const snapRows = (entriesRaw ?? []).map((e: any) => {
     const eid = String(e.id);
@@ -674,7 +716,8 @@ async function archiveCommitteeSession(params: {
       slot.adj,
       trimLow,
       trimHigh,
-      slot.n_abs
+      slot.n_abs,
+      abstInAvg
     );
     const player = e.player_id ? playerById.get(String(e.player_id)) : null;
     const cat = e.category_id ? categoryById.get(String(e.category_id)) : null;
@@ -692,7 +735,6 @@ async function archiveCommitteeSession(params: {
         : null;
 
     return {
-      session_id: sess.id,
       entry_id: eid,
       entry_player_name: playerLabel,
       entry_handicap_index: hiNow,
@@ -703,19 +745,30 @@ async function archiveCommitteeSession(params: {
       avg_adjustment: trim.avg,
       suggested_hi: suggested,
       votes_anon: trim.values,
+      trim_annulled: trim.trimAnnulled,
     };
   });
 
-  if (snapRows.length > 0) {
-    const { error: snapErr } = await admin
-      .from("handicap_committee_vote_snapshots")
-      .insert(snapRows);
-    if (snapErr) {
-      throw new Error(`No se pudo archivar los votos: ${snapErr.message}`);
+  const { data: sessionId, error: rpcErr } = await admin.rpc(
+    "fn_archive_and_reset_handicap_committee_votes",
+    {
+      p_committee_id: committee.id,
+      p_actor_user_id: userId,
+      p_session: sessionPayload,
+      p_snapshots: snapRows,
     }
+  );
+
+  if (rpcErr) {
+    throw new Error(
+      `No se pudo archivar y reiniciar: ${rpcErr.message}`
+    );
   }
 
-  return { archived: true, sessionId: sess.id };
+  return {
+    archived: sessionId != null,
+    sessionId: sessionId != null ? String(sessionId) : null,
+  };
 }
 
 export async function setHandicapCommitteeTrim(formData: FormData) {
@@ -725,6 +778,9 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
   const rawThreshold = Number(
     String(formData.get("disqualify_threshold") ?? "0")
   );
+  const abstentions_in_average =
+    String(formData.get("abstentions_in_average") ?? "") === "true" ||
+    String(formData.get("abstentions_in_average") ?? "") === "on";
 
   const trim_high = Number.isFinite(rawHigh)
     ? Math.min(20, Math.max(0, Math.trunc(rawHigh)))
@@ -745,7 +801,12 @@ export async function setHandicapCommitteeTrim(formData: FormData) {
 
   const { error } = await supabase
     .from("tournament_handicap_committees")
-    .update({ trim_high, trim_low, disqualify_threshold })
+    .update({
+      trim_high,
+      trim_low,
+      disqualify_threshold,
+      abstentions_in_average,
+    })
     .eq("tournament_id", tournament_id);
 
   if (error) {
