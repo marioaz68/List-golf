@@ -498,38 +498,44 @@ const resetIdle: ResetCommitteeVotesState = {
   nVotes: 0,
 };
 
-export async function resetHandicapCommitteeVotes(
+/**
+ * Única action del reset. Siempre retorna estado serializable.
+ * No llama redirect() ni revalidatePath(): ambos abortan el vuelo de
+ * useActionState y dejan isPending en true para siempre.
+ */
+export async function resetHandicapCommitteeVotesAction(
+  _prev: ResetCommitteeVotesState,
   formData: FormData
 ): Promise<ResetCommitteeVotesState> {
-  const tournament_id = reqStr(formData, "tournament_id");
-  const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
-  const sessionName = String(formData.get("session_name") ?? "").trim();
-  const sessionNotes = String(formData.get("session_notes") ?? "").trim();
-
-  if (confirm !== "REINICIAR") {
-    return {
-      ...resetIdle,
-      error: "Escribe REINICIAR para confirmar el borrado de votos.",
-    };
-  }
+  const fail = (error: string): ResetCommitteeVotesState => ({
+    ...resetIdle,
+    error,
+  });
 
   try {
+    const tournament_id = String(formData.get("tournament_id") ?? "").trim();
+    const confirm = String(formData.get("confirm") ?? "").trim().toUpperCase();
+    const sessionName = String(formData.get("session_name") ?? "").trim();
+    const sessionNotes = String(formData.get("session_notes") ?? "").trim();
+
+    if (!tournament_id) return fail("Falta el torneo.");
+    if (confirm !== "REINICIAR") {
+      return fail("Escribe REINICIAR para confirmar el borrado de votos.");
+    }
+
     const { supabase, user } = await requireUser();
     const access = await loadHandicapCommitteeAccess(
       supabase,
       user.id,
       tournament_id
     );
-    if (!access.isAdmin) {
-      return { ...resetIdle, error: "No tienes permiso." };
-    }
+    if (!access.isAdmin) return fail("No tienes permiso.");
 
     const admin = tryCreateAdminClient();
     if (!admin) {
-      return {
-        ...resetIdle,
-        error: "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación.",
-      };
+      return fail(
+        "Falta SUPABASE_SERVICE_ROLE_KEY para reiniciar la votación."
+      );
     }
 
     const { data: committee } = await admin
@@ -540,9 +546,7 @@ export async function resetHandicapCommitteeVotes(
       .eq("tournament_id", tournament_id)
       .maybeSingle();
 
-    if (!committee?.id) {
-      return { ...resetIdle, error: "Comité no encontrado." };
-    }
+    if (!committee?.id) return fail("Comité no encontrado.");
 
     const result = await archiveAndResetCommitteeVotesAtomic({
       admin,
@@ -553,14 +557,10 @@ export async function resetHandicapCommitteeVotes(
       notes: sessionNotes || null,
     });
 
-    revalidatePath("/comite-handicap");
-
     if (!result.archived) {
-      return {
-        ...resetIdle,
-        error:
-          "No hay votos para archivar. La votación ya está vacía; no se creó una sesión nueva.",
-      };
+      return fail(
+        "No hay votos para archivar. La votación ya está vacía; no se creó una sesión nueva."
+      );
     }
 
     return {
@@ -571,40 +571,11 @@ export async function resetHandicapCommitteeVotes(
       nVotes: result.nVotes,
     };
   } catch (e) {
-    if (isNextRedirectError(e)) throw e;
     const msg =
       e instanceof Error
         ? e.message
         : "No se pudo archivar y reiniciar la votación.";
-    return { ...resetIdle, error: msg };
-  }
-}
-
-function isNextRedirectError(error: unknown): boolean {
-  const digest =
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    typeof (error as { digest?: string }).digest === "string"
-      ? (error as { digest: string }).digest
-      : "";
-  return digest.startsWith("NEXT_REDIRECT");
-}
-
-/** Wrapper para useActionState: éxito y error en el panel, sin redirect. */
-export async function resetHandicapCommitteeVotesAction(
-  _prev: ResetCommitteeVotesState,
-  formData: FormData
-): Promise<ResetCommitteeVotesState> {
-  try {
-    return await resetHandicapCommitteeVotes(formData);
-  } catch (e) {
-    if (isNextRedirectError(e)) throw e;
-    const msg =
-      e instanceof Error
-        ? e.message
-        : "No se pudo archivar y reiniciar la votación.";
-    return { ...resetIdle, error: msg };
+    return fail(msg);
   }
 }
 
