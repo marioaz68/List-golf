@@ -29,6 +29,22 @@ export function minNumericVotesForTrim(
   );
 }
 
+export function formatDiscardedVetoNote(
+  nEmitted: number,
+  nDiscarded: number,
+  nValid: number,
+  threshold: number
+): string {
+  return `${nEmitted} vetos emitidos, ${nDiscarded} descartados por votante no válido. Vetos válidos: ${nValid} de ${threshold} requeridos.`;
+}
+
+export function formatDiscardedAdjustmentNote(
+  nEmitted: number,
+  nDiscarded: number
+): string {
+  return `${nEmitted} ajustes emitidos, ${nDiscarded} descartados por votante no válido.`;
+}
+
 /**
  * Aviso cuando el recorte anula todos los ajustes numéricos.
  * N y el mínimo se calculan; no están cableados.

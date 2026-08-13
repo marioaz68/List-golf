@@ -17,10 +17,13 @@ export type AdminAggregateRow = {
   suggested_hi: number | null;
   liveCount: number;
   liveIncAbst: number;
+  n_abstained: number;
   totalVotesIncAbst: number;
   averageDenominator: number;
   liveAbstainedAsZero: number;
   disqualifyVotes: number;
+  discarded_veto_note?: string | null;
+  discarded_adj_note?: string | null;
   trim_annulled?: boolean;
   trim_annulled_note?: string | null;
   chips: Array<{
@@ -241,7 +244,9 @@ export default function AdminAggregateTable({
               <th className="px-3 py-2">{tA.thPlayer}</th>
               <th className="px-3 py-2">{tA.thHiCurrent}</th>
               <th className="px-3 py-2">{tA.thVotesAnon}</th>
-              <th className="px-3 py-2">{tA.thLiveAvg}</th>
+              <th className="px-3 py-2" title={tA.thLiveAvgTitle}>
+                {tA.thLiveAvg}
+              </th>
               <th className="px-3 py-2">{tA.thAvgTrim}</th>
               <th className="px-3 py-2" title={tA.thRoundedAdjTitle}>
                 {tA.thRoundedAdj}
@@ -260,7 +265,9 @@ export default function AdminAggregateTable({
               const hasVotes =
                 r.totalVotesIncAbst > 0 ||
                 r.chips.length > 0 ||
-                Boolean(r.trim_annulled);
+                Boolean(r.trim_annulled) ||
+                Boolean(r.discarded_veto_note) ||
+                Boolean(r.discarded_adj_note);
               const canEdit = r.hi_current != null;
               const isSel = !!selected[r.entry_id];
               const isBusy = busyEntry === r.entry_id;
@@ -300,6 +307,16 @@ export default function AdminAggregateTable({
                         </span>
                       ) : null}
                     </span>
+                    {r.discarded_veto_note ? (
+                      <p className="mt-1 rounded border border-rose-600 bg-rose-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-rose-950">
+                        {r.discarded_veto_note}
+                      </p>
+                    ) : null}
+                    {r.discarded_adj_note ? (
+                      <p className="mt-1 rounded border border-orange-500 bg-orange-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-orange-950">
+                        {r.discarded_adj_note}
+                      </p>
+                    ) : null}
                     {r.trim_annulled && r.trim_annulled_note ? (
                       <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
                         {r.trim_annulled_note}
@@ -346,8 +363,19 @@ export default function AdminAggregateTable({
                     </div>
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    <div>
-                      {r.liveIncAbst} / {r.totalVotesIncAbst}
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span title={tA.thAdjTitle}>
+                        <span className="text-[10px] font-semibold uppercase text-slate-500">
+                          {tA.thAdjShort}
+                        </span>{" "}
+                        {r.liveCount}
+                      </span>
+                      <span title={tA.thAbstTitle}>
+                        <span className="text-[10px] font-semibold uppercase text-slate-500">
+                          {tA.thAbstShort}
+                        </span>{" "}
+                        {r.n_abstained}
+                      </span>
                     </div>
                     <div className="text-[10px] font-normal text-slate-500">
                       {tA.avgDivisor}
@@ -405,7 +433,7 @@ export default function AdminAggregateTable({
                     )}
                   </td>
                   <td className="px-3 py-2">
-                    {r.disqualifyVotes === 0 ? (
+                    {r.disqualifyVotes === 0 && !r.discarded_veto_note ? (
                       <span className="text-xs text-slate-400">—</span>
                     ) : (
                       <span
@@ -413,7 +441,9 @@ export default function AdminAggregateTable({
                           "inline-flex flex-col items-start gap-0.5 rounded-md px-2 py-0.5 text-[11px] font-semibold",
                           over
                             ? "bg-rose-700 text-white"
-                            : "bg-rose-100 text-rose-800",
+                            : r.discarded_veto_note
+                              ? "bg-orange-200 text-orange-950"
+                              : "bg-rose-100 text-rose-800",
                         ].join(" ")}
                         title={
                           over

@@ -1619,11 +1619,17 @@ const es = {
       abstentionsInAverageHint:
         "Desactivado (recomendado): el promedio solo usa ajustes numéricos que sobreviven al recorte. Activado: las abstenciones diluyen el promedio hacia 0.",
       aggregateHelp:
-        "Resumen agregado (anonimizado): se muestran los votos individuales sin nombre. Verde = activo, gris = descartado por recorte.",
+        "Resumen agregado (anonimizado): se muestran los votos individuales sin nombre. Verde = ajuste que entra al promedio, gris = descartado por recorte. Ajustes = numéricos que sobreviven al recorte (entran al promedio). Abst. = abstenciones (entran al promedio solo si está activada la opción del comité). Un jugador solo con abstenciones muestra 0 ajustes.",
       thPlayer: "Jugador",
       thHiCurrent: "HI actual",
       thVotesAnon: "Votos (anónimos)",
-      thLiveAvg: "Vivos / prom.",
+      thLiveAvg: "Ajustes / Abst.",
+      thLiveAvgTitle:
+        "Ajustes = votos numéricos que entran al promedio (tras recorte). Abst. = abstenciones. El denominador del promedio respeta la opción del comité.",
+      thAdjShort: "Aj.",
+      thAbstShort: "Abst.",
+      thAdjTitle: "Ajustes numéricos que sobreviven al recorte (entran al promedio)",
+      thAbstTitle: "Abstenciones (no son ajustes; entran al promedio solo si está activado)",
       thAvgTrim: "Prom. recortado",
       thHiSug: "HI sugerido",
       thNoPlay: "No jugar",
@@ -3307,11 +3313,17 @@ const en: Messages = {
       abstentionsInAverageHint:
         "Off (recommended): average uses only numeric adjustments that survive the trim. On: abstentions dilute the average toward 0.",
       aggregateHelp:
-        "Aggregate summary (anonymized): individual votes are shown without names. Green = live, gray = discarded by trim.",
+        "Aggregate summary (anonymized): individual votes are shown without names. Green = adjustment that enters the average, gray = discarded by trim. Adjustments = numeric votes that survive the trim (enter the average). Abst. = abstentions (enter the average only if the committee option is on). A player with only abstentions shows 0 adjustments.",
       thPlayer: "Player",
       thHiCurrent: "Current HI",
       thVotesAnon: "Votes (anonymous)",
-      thLiveAvg: "Live / avg.",
+      thLiveAvg: "Adj. / Abst.",
+      thLiveAvgTitle:
+        "Adj. = numeric votes that enter the average (after trim). Abst. = abstentions. The average denominator follows the committee option.",
+      thAdjShort: "Adj.",
+      thAbstShort: "Abst.",
+      thAdjTitle: "Numeric adjustments that survive the trim (enter the average)",
+      thAbstTitle: "Abstentions (not adjustments; enter the average only if enabled)",
       thAvgTrim: "Trimmed avg.",
       thHiSug: "Suggested HI",
       thNoPlay: "Do not play",

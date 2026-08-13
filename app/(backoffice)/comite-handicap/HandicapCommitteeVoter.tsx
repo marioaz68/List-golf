@@ -60,6 +60,26 @@ export type HandicapVoteSummaryChip = {
   reason?: "low" | "high" | null;
 };
 
+function DiscardedVoteNotes({
+  summary,
+  className,
+}: {
+  summary?: HandicapVoteSummaryRow;
+  className: string;
+}) {
+  if (!summary?.discarded_veto_note && !summary?.discarded_adj_note) return null;
+  return (
+    <>
+      {summary.discarded_veto_note ? (
+        <p className={className}>{summary.discarded_veto_note}</p>
+      ) : null}
+      {summary.discarded_adj_note ? (
+        <p className={className}>{summary.discarded_adj_note}</p>
+      ) : null}
+    </>
+  );
+}
+
 export type HandicapVoteSummaryRow = {
   entry_id: string;
   n_votes: number;
@@ -71,6 +91,8 @@ export type HandicapVoteSummaryRow = {
   suggested_hi: number | null;
   n_disqualify?: number;
   disqualified?: boolean;
+  discarded_veto_note?: string | null;
+  discarded_adj_note?: string | null;
   trim_annulled?: boolean;
   trim_annulled_note?: string | null;
   /** Distribución anónima (mezclada) de los votos para mostrar al expandir. */
@@ -420,6 +442,9 @@ export default function HandicapCommitteeVoter({
                         className={[
                           "cursor-pointer border-t border-slate-100 align-top transition hover:bg-slate-50",
                           s?.disqualified ? "bg-rose-50" : "",
+                          s?.discarded_veto_note || s?.discarded_adj_note
+                            ? "bg-orange-50/80"
+                            : "",
                           s?.trim_annulled ? "bg-amber-50/80" : "",
                           isExpanded ? "bg-slate-50" : "",
                         ].join(" ")}
@@ -441,6 +466,10 @@ export default function HandicapCommitteeVoter({
                               {e.player_name}
                             </span>
                           </div>
+                          <DiscardedVoteNotes
+                            summary={s}
+                            className="mt-1 rounded border border-rose-600 bg-rose-100 px-1 py-0.5 text-[9px] font-bold leading-snug text-rose-950"
+                          />
                           {s?.trim_annulled && s.trim_annulled_note ? (
                             <p className="mt-1 rounded border border-amber-500 bg-amber-100 px-1 py-0.5 text-[9px] font-bold leading-snug text-amber-950">
                               {s.trim_annulled_note}
@@ -508,16 +537,18 @@ export default function HandicapCommitteeVoter({
                           className="px-1 py-1.5 text-center sm:px-3 sm:py-2 sm:text-left"
                           title={vt.thVetosTitle}
                         >
-                          {(s?.n_disqualify ?? 0) > 0 ? (
+                          {(s?.n_disqualify ?? 0) > 0 || s?.discarded_veto_note ? (
                             <span
                               className={[
                                 "inline-block rounded px-1 text-[10px] font-semibold sm:px-2 sm:py-0.5 sm:text-[11px]",
                                 s?.disqualified
                                   ? "bg-rose-700 text-white"
-                                  : "bg-rose-100 text-rose-800",
+                                  : s?.discarded_veto_note
+                                    ? "bg-orange-200 text-orange-950"
+                                    : "bg-rose-100 text-rose-800",
                               ].join(" ")}
                             >
-                              ⊘ {s?.n_disqualify}
+                              ⊘ {s?.n_disqualify ?? 0}
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
@@ -531,6 +562,10 @@ export default function HandicapCommitteeVoter({
                             className="px-2 py-2 sm:px-3 sm:py-3"
                           >
                             <div className="space-y-1.5">
+                              <DiscardedVoteNotes
+                                summary={s}
+                                className="rounded border-2 border-rose-600 bg-rose-100 px-2 py-1.5 text-[11px] font-bold leading-snug text-rose-950"
+                              />
                               {s?.trim_annulled && s.trim_annulled_note ? (
                                 <div className="rounded border-2 border-amber-500 bg-amber-100 px-2 py-1.5 text-[11px] font-bold leading-snug text-amber-950">
                                   {s.trim_annulled_note}
@@ -892,6 +927,10 @@ function PlayerVoteCard({
               {entry.index_history_note}
             </p>
           ) : null}
+          <DiscardedVoteNotes
+            summary={summary}
+            className="mt-1 rounded border border-rose-600 bg-rose-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-rose-950"
+          />
           {summary?.trim_annulled && summary.trim_annulled_note ? (
             <p className="mt-1 rounded border border-amber-600 bg-amber-100 px-1.5 py-1 text-[10px] font-bold leading-snug text-amber-950">
               {summary.trim_annulled_note}
@@ -984,6 +1023,10 @@ function PlayerVoteCard({
         </div>
       ) : null}
 
+      <DiscardedVoteNotes
+        summary={summary}
+        className="mb-2 rounded-lg border-2 border-rose-600 bg-rose-100 px-2.5 py-2 text-[11px] font-bold leading-snug text-rose-950"
+      />
       {summary?.trim_annulled && summary.trim_annulled_note ? (
         <div className="mb-2 rounded-lg border-2 border-amber-600 bg-amber-100 px-2.5 py-2 text-[11px] font-bold leading-snug text-amber-950">
           {summary.trim_annulled_note}

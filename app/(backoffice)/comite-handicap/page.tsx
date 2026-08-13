@@ -10,6 +10,8 @@ import { messages } from "@/lib/i18n/messages";
 import {
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
   distributionChips,
+  formatDiscardedAdjustmentNote,
+  formatDiscardedVetoNote,
   formatTrimAnnulledNote,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
@@ -525,6 +527,15 @@ export default async function ComiteHandicapPage(props: {
   const votesByEntry = new Map<string, number[]>();
   const abstainedByEntry = new Map<string, number>();
   const disqualifyByEntry = new Map<string, number>();
+  const discardedByEntry = new Map<
+    string,
+    {
+      n_dq_all: number;
+      n_dq_valid: number;
+      n_adj_all: number;
+      n_adj_valid: number;
+    }
+  >();
   const votesByMember = new Map<
     string,
     { voted: number; abstained: number; entries: Set<string> }
@@ -575,6 +586,27 @@ export default async function ComiteHandicapPage(props: {
       }
 
       const countsForAverage = Boolean(uid && eligibleIds.has(uid));
+      const isDq = Boolean((v as any).disqualify_vote);
+      const adjRaw = (v as any).adjustment;
+      const adjNum = adjRaw == null ? NaN : Number(adjRaw);
+      const isNumeric = !isAbstained && Number.isFinite(adjNum);
+
+      const disc = discardedByEntry.get(eid) ?? {
+        n_dq_all: 0,
+        n_dq_valid: 0,
+        n_adj_all: 0,
+        n_adj_valid: 0,
+      };
+      if (isDq) {
+        disc.n_dq_all += 1;
+        if (countsForAverage) disc.n_dq_valid += 1;
+      }
+      if (isNumeric) {
+        disc.n_adj_all += 1;
+        if (countsForAverage) disc.n_adj_valid += 1;
+      }
+      discardedByEntry.set(eid, disc);
+
       if (!countsForAverage) {
         if (uid) {
           const reason: "no_role" | "not_present" = memberIds.has(uid)
@@ -594,19 +626,16 @@ export default async function ComiteHandicapPage(props: {
       if (isAbstained) {
         abstainedByEntry.set(eid, (abstainedByEntry.get(eid) ?? 0) + 1);
       }
-      if ((v as any).disqualify_vote) {
+      if (isDq) {
         disqualifyByEntry.set(
           eid,
           (disqualifyByEntry.get(eid) ?? 0) + 1
         );
       }
       if (isAbstained) continue;
-      const adj = (v as any).adjustment;
-      if (adj == null) continue;
-      const n = Number(adj);
-      if (!Number.isFinite(n)) continue;
+      if (!isNumeric) continue;
       const list = votesByEntry.get(eid) ?? [];
-      list.push(n);
+      list.push(adjNum);
       votesByEntry.set(eid, list);
     }
   }
@@ -912,6 +941,9 @@ export default async function ComiteHandicapPage(props: {
         ? Math.round((e.handicap_index + trim.avg) * 10) / 10
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
+    const disc = discardedByEntry.get(e.entry_id);
+    const nDqDiscarded = disc ? disc.n_dq_all - disc.n_dq_valid : 0;
+    const nAdjDiscarded = disc ? disc.n_adj_all - disc.n_adj_valid : 0;
     const chips = distributionChips(trim.values, nAbst);
     // Mezclamos para mantener anonimato (no se puede saber quién votó qué).
     for (let i = chips.length - 1; i > 0; i -= 1) {
@@ -929,6 +961,19 @@ export default async function ComiteHandicapPage(props: {
       n_disqualify: nDisq,
       disqualified:
         disqualifyThresholdGlobal > 0 && nDisq >= disqualifyThresholdGlobal,
+      discarded_veto_note:
+        nDqDiscarded > 0 && disc
+          ? formatDiscardedVetoNote(
+              disc.n_dq_all,
+              nDqDiscarded,
+              disc.n_dq_valid,
+              disqualifyThresholdGlobal
+            )
+          : null,
+      discarded_adj_note:
+        nAdjDiscarded > 0 && disc
+          ? formatDiscardedAdjustmentNote(disc.n_adj_all, nAdjDiscarded)
+          : null,
       trim_annulled: trim.trimAnnulled,
       trim_annulled_note: trim.trimAnnulled
         ? formatTrimAnnulledNote(
@@ -1836,6 +1881,13 @@ export default async function ComiteHandicapPage(props: {
                   );
                   const disqVotes =
                     disqualifyByEntry.get(e.entry_id) ?? 0;
+                  const disc = discardedByEntry.get(e.entry_id);
+                  const nDqDiscarded = disc
+                    ? disc.n_dq_all - disc.n_dq_valid
+                    : 0;
+                  const nAdjDiscarded = disc
+                    ? disc.n_adj_all - disc.n_adj_valid
+                    : 0;
                   const avg = trim.avg;
                   const suggested =
                     e.handicap_index != null && avg != null
@@ -1869,10 +1921,27 @@ export default async function ComiteHandicapPage(props: {
                     suggested_hi: suggested,
                     liveCount: trim.liveCount,
                     liveIncAbst,
+                    n_abstained: abstained,
                     totalVotesIncAbst,
                     averageDenominator: trim.averageDenominator,
                     liveAbstainedAsZero: trim.liveAbstainedAsZero,
                     disqualifyVotes: disqVotes,
+                    discarded_veto_note:
+                      nDqDiscarded > 0 && disc
+                        ? formatDiscardedVetoNote(
+                            disc.n_dq_all,
+                            nDqDiscarded,
+                            disc.n_dq_valid,
+                            disqualifyThreshold
+                          )
+                        : null,
+                    discarded_adj_note:
+                      nAdjDiscarded > 0 && disc
+                        ? formatDiscardedAdjustmentNote(
+                            disc.n_adj_all,
+                            nAdjDiscarded
+                          )
+                        : null,
                     trim_annulled: trim.trimAnnulled,
                     trim_annulled_note: trim.trimAnnulled
                       ? formatTrimAnnulledNote(
