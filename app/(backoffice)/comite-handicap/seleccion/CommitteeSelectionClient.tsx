@@ -49,7 +49,13 @@ export default function CommitteeSelectionClient({
     const n = q.trim().toLowerCase();
     if (!n) return rows;
     return rows.filter((r) => {
-      const hay = [r.playerName, r.ghin, r.categoryCode, String(r.hi ?? "")]
+      const hay = [
+        r.playerName,
+        r.ghin,
+        r.categoryCode,
+        String(r.entryHi ?? ""),
+        String(r.currentHi ?? ""),
+      ]
         .join(" ")
         .toLowerCase();
       return hay.includes(n);
@@ -339,16 +345,31 @@ export default function CommitteeSelectionClient({
       </section>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+        <table className="w-full min-w-[980px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="px-2 py-2">✓</th>
               <th className="px-2 py-2">Jugador</th>
-              <th className="px-2 py-2">HI</th>
+              <th className="px-2 py-2" title="HI congelado al inscribirse">
+                HI inscripción
+              </th>
+              <th className="px-2 py-2" title="HI vigente en players">
+                HI actual
+              </th>
               <th className="px-2 py-2">Cat</th>
               <th className="px-2 py-2">Rondas 12m</th>
-              <th className="px-2 py-2">HI mín</th>
-              <th className="px-2 py-2">Δ</th>
+              <th
+                className="px-2 py-2"
+                title="Mínimo de hi_at_play en rondas de 12 meses"
+              >
+                HI mín
+              </th>
+              <th
+                className="px-2 py-2"
+                title="HI actual − HI mín"
+              >
+                Δ
+              </th>
               <th className="px-2 py-2">Motivo / sugerencia</th>
               <th className="px-2 py-2">Reporte</th>
             </tr>
@@ -378,26 +399,33 @@ export default function CommitteeSelectionClient({
                       </span>
                     ) : null}
                   </td>
-                  <td className="px-2 py-1.5 tabular-nums">
-                    {r.hi != null ? r.hi.toFixed(1) : "—"}
+                  <td
+                    className={`px-2 py-1.5 tabular-nums ${
+                      asNum(r.entryHi) != null &&
+                      asNum(r.currentHi) != null &&
+                      asNum(r.entryHi) !== asNum(r.currentHi)
+                        ? "text-slate-500"
+                        : ""
+                    }`}
+                  >
+                    {fmtHi(r.entryHi)}
                   </td>
-                  <td className="px-2 py-1.5">{r.categoryCode ?? "—"}</td>
-                  <td className="px-2 py-1.5 tabular-nums">
-                    {r.rounds12m ?? "—"}
+                  <td className="px-2 py-1.5 tabular-nums font-semibold">
+                    {fmtHi(r.currentHi)}
                   </td>
+                  <td className="px-2 py-1.5">{r.categoryCode || "—"}</td>
                   <td className="px-2 py-1.5 tabular-nums">
-                    {r.minHi12m != null ? r.minHi12m.toFixed(1) : "—"}
+                    {fmtInt(r.rounds12m)}
                   </td>
+                  <td className="px-2 py-1.5 tabular-nums">{fmtHi(r.minHi)}</td>
                   <td
                     className={`px-2 py-1.5 tabular-nums font-semibold ${
-                      r.deltaHi != null && r.deltaHi > 1
+                      asNum(r.deltaHi) != null && asNum(r.deltaHi)! > 1
                         ? "text-rose-700"
                         : "text-slate-700"
                     }`}
                   >
-                    {r.deltaHi != null
-                      ? (r.deltaHi > 0 ? "+" : "") + r.deltaHi.toFixed(1)
-                      : "—"}
+                    {fmtDelta(r.deltaHi)}
                   </td>
                   <td className="px-2 py-1.5">
                     {r.indexHistoryNote ? (
@@ -446,4 +474,27 @@ export default function CommitteeSelectionClient({
       </div>
     </div>
   );
+}
+
+function asNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtHi(v: unknown): string {
+  const n = asNum(v);
+  return n == null ? "—" : n.toFixed(1);
+}
+
+function fmtInt(v: unknown): string {
+  const n = asNum(v);
+  return n == null ? "—" : String(Math.round(n));
+}
+
+function fmtDelta(v: unknown): string {
+  const n = asNum(v);
+  if (n == null) return "—";
+  const body = n.toFixed(1);
+  return n > 0 ? `+${body}` : body;
 }

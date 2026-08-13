@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Chart,
   BarController,
@@ -56,26 +56,31 @@ const valueLabelsPlugin: Plugin = {
       if (!isHorizontal && (dataset.data?.length ?? 0) > 24) return;
 
       meta.data.forEach((element, index) => {
-        const raw = dataset.data[index];
-        const value = typeof raw === "number" ? raw : null;
-        if (value == null || !Number.isFinite(value)) return;
-        const pos = element.tooltipPosition(true);
-        const x = pos.x;
-        const y = pos.y;
-        if (x == null || y == null) return;
-        ctx.save();
-        ctx.fillStyle = TEXT;
-        ctx.font = "600 11px system-ui, sans-serif";
-        ctx.textAlign = isHorizontal ? "left" : "center";
-        ctx.textBaseline = isHorizontal ? "middle" : "bottom";
-        const text =
-          Number.isInteger(value) ? String(value) : value.toFixed(1);
-        if (isHorizontal) {
-          ctx.fillText(text, x + 6, y);
-        } else {
-          ctx.fillText(text, x, y - 4);
+        try {
+          const raw = dataset.data[index];
+          const value = typeof raw === "number" ? raw : Number(raw);
+          if (!Number.isFinite(value)) return;
+          const pos = element.tooltipPosition(true);
+          const x = pos.x;
+          const y = pos.y;
+          if (x == null || y == null) return;
+          ctx.save();
+          ctx.fillStyle = TEXT;
+          ctx.font = "600 11px system-ui, sans-serif";
+          ctx.textAlign = isHorizontal ? "left" : "center";
+          ctx.textBaseline = isHorizontal ? "middle" : "bottom";
+          const text = Number.isInteger(value)
+            ? String(value)
+            : value.toFixed(1);
+          if (isHorizontal) {
+            ctx.fillText(text, x + 6, y);
+          } else {
+            ctx.fillText(text, x, y - 4);
+          }
+          ctx.restore();
+        } catch {
+          /* una etiqueta no tumba la gráfica */
         }
-        ctx.restore();
       });
     });
   },
@@ -100,6 +105,78 @@ function deltaText(d: number | null): string {
   return d > 0 ? `+${d}` : String(d);
 }
 
+const EMPTY_CHART_MSG = "Sin datos suficientes para esta gráfica";
+
+function asFinite(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function finiteList(vals: unknown[]): number[] | null {
+  if (!vals.length) return null;
+  const out: number[] = [];
+  for (const v of vals) {
+    const n = asFinite(v);
+    if (n == null) return null;
+    out.push(n);
+  }
+  return out;
+}
+
+class ChartSectionBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(err: Error) {
+    console.error("[ghin-report] section", err);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return <p className="text-sm text-slate-400">{EMPTY_CHART_MSG}</p>;
+    }
+    return this.props.children;
+  }
+}
+
+function yBounds(
+  vals: number[],
+  padFloor: number
+): { min: number; max: number } | null {
+  const nums = finiteList(vals);
+  if (!nums) return null;
+  const lo0 = Math.min(...nums);
+  const hi0 = Math.max(...nums);
+  if (!Number.isFinite(lo0) || !Number.isFinite(hi0)) return null;
+  const pad = Math.max(padFloor, (hi0 - lo0) * 0.25);
+  const min = Math.floor((lo0 - pad) * 2) / 2;
+  const max = Math.ceil((hi0 + pad) * 2) / 2;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { min, max };
+}
+
+function mountChart(
+  canvas: HTMLCanvasElement | null,
+  cfg: ChartConfiguration | null,
+  bag: Chart[]
+): boolean {
+  if (!canvas || !cfg) return false;
+  try {
+    bag.push(new Chart(canvas, cfg));
+    return true;
+  } catch (err) {
+    console.error("[ghin-report] Chart.js", err);
+    return false;
+  }
+}
+
 type Props = { data: GhinLiveReportData };
 
 export default function GhinLiveReport({ data }: Props) {
@@ -109,11 +186,14 @@ export default function GhinLiveReport({ data }: Props) {
   const netRef = useRef<HTMLCanvasElement | null>(null);
 
   const charts = useRef<Chart[]>([]);
+  const [chartFail, setChartFail] = useState<Record<string, boolean>>({});
 
   const hiRef = data.hiTorneo;
 
   const scenarioChartData = useMemo(() => {
-    const rows = data.scenarios.filter((s) => s.index != null);
+    const rows = data.scenarios.filter(
+      (s) => s.index != null && Number.isFinite(s.index)
+    );
     return {
       labels: rows.map((s) => {
         const hp = s.hp != null ? ` / HP ${s.hp}` : "";
@@ -126,6 +206,18 @@ export default function GhinLiveReport({ data }: Props) {
     };
   }, [data.scenarios]);
 
+  const scenarioVals = finiteList(scenarioChartData.values);
+  const historyVals = finiteList(data.monthlyHi.map((p) => p.hi));
+  const grossAvgs = finiteList(data.holes.map((h) => h.promedio));
+  const grossBest = finiteList(data.holes.map((h) => h.promedio_mejores10));
+  const netAvgs = finiteList(data.netAvgs);
+  const netBest = finiteList(data.netBest10);
+
+  const canScenarios = Boolean(scenarioVals);
+  const canHistory = Boolean(historyVals && historyVals.length >= 1);
+  const canGross = Boolean(grossAvgs && grossBest);
+  const canNet = Boolean(canGross && netAvgs && netBest);
+
   useEffect(() => {
     charts.current.forEach((c) => c.destroy());
     charts.current = [];
@@ -137,194 +229,230 @@ export default function GhinLiveReport({ data }: Props) {
       font: { family: "system-ui, sans-serif" },
     };
 
+    const failed: Record<string, boolean> = {};
+
+    const trySection = (key: string, fn: () => void) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error(`[ghin-report] ${key}`, err);
+        failed[key] = true;
+      }
+    };
+
     // 1. Escenarios horizontales
-    if (scenariosRef.current && scenarioChartData.values.length) {
+    trySection("scenarios", () => {
+    if (scenariosRef.current && canScenarios) {
       const vals = scenarioChartData.values;
-      const min = Math.min(...vals, hiRef ?? vals[0]!);
-      const max = Math.max(...vals, hiRef ?? vals[0]!);
-      const pad = Math.max(0.8, (max - min) * 0.25);
-      const cfg: ChartConfiguration<"bar"> = {
-        type: "bar",
-        data: {
-          labels: scenarioChartData.labels,
-          datasets: [
+      const boundVals =
+        hiRef != null && Number.isFinite(hiRef) ? [...vals, hiRef] : vals;
+      const bounds = yBounds(boundVals, 0.8);
+      if (!bounds) {
+        failed.scenarios = true;
+      } else {
+        const cfg: ChartConfiguration<"bar"> = {
+          type: "bar",
+          data: {
+            labels: scenarioChartData.labels,
+            datasets: [
+              {
+                data: vals,
+                backgroundColor: scenarioChartData.colors.map((c, i) =>
+                  scenarioChartData.historico[i] ? `${c}99` : c
+                ),
+                borderColor: scenarioChartData.historico.map((h, i) =>
+                  h ? "#f5a623" : scenarioChartData.colors[i]!
+                ),
+                borderWidth: scenarioChartData.historico.map((h) => (h ? 2 : 0)),
+                borderSkipped: false,
+                barThickness: 22,
+              },
+            ],
+          },
+          options: {
+            ...commonOpts,
+            indexAxis: "y",
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => `Índice ${fmt(Number(ctx.raw))}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                min: bounds.min,
+                max: bounds.max,
+                grid: { color: "#243041" },
+                ticks: { color: MUTED },
+              },
+              y: {
+                grid: { display: false },
+                ticks: { color: TEXT, font: { size: 11 } },
+              },
+            },
+          },
+          plugins: [
             {
-              data: vals,
-              backgroundColor: scenarioChartData.colors.map((c, i) =>
-                scenarioChartData.historico[i] ? `${c}99` : c
-              ),
-              borderColor: scenarioChartData.historico.map((h, i) =>
-                h ? "#f5a623" : scenarioChartData.colors[i]!
-              ),
-              borderWidth: scenarioChartData.historico.map((h) => (h ? 2 : 0)),
-              borderSkipped: false,
-              barThickness: 22,
+              id: "hiTorneoLine",
+              afterDraw(chart) {
+                if (hiRef == null || !Number.isFinite(hiRef)) return;
+                const x = chart.scales.x.getPixelForValue(hiRef);
+                if (!Number.isFinite(x)) return;
+                const { top, bottom } = chart.chartArea;
+                const ctx = chart.ctx;
+                ctx.save();
+                ctx.beginPath();
+                ctx.setLineDash([5, 4]);
+                ctx.strokeStyle = "#f0932b";
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, bottom);
+                ctx.stroke();
+                ctx.restore();
+              },
             },
           ],
-        },
-        options: {
-          ...commonOpts,
-          indexAxis: "y",
-                          plugins: {
-                            legend: { display: false },
-                            tooltip: {
-                              callbacks: {
-                                label: (ctx) => `Índice ${fmt(Number(ctx.raw))}`,
-                              },
-                            },
-                          },
-          scales: {
-            x: {
-              min: Math.floor((min - pad) * 2) / 2,
-              max: Math.ceil((max + pad) * 2) / 2,
-              grid: { color: "#243041" },
-              ticks: { color: MUTED },
-            },
-            y: {
-              grid: { display: false },
-              ticks: { color: TEXT, font: { size: 11 } },
-            },
-          },
-        },
-        plugins: [
-          {
-            id: "hiTorneoLine",
-            afterDraw(chart) {
-              if (hiRef == null) return;
-              const x = chart.scales.x.getPixelForValue(hiRef);
-              const { top, bottom } = chart.chartArea;
-              const ctx = chart.ctx;
-              ctx.save();
-              ctx.beginPath();
-              ctx.setLineDash([5, 4]);
-              ctx.strokeStyle = "#f0932b";
-              ctx.lineWidth = 1.5;
-              ctx.moveTo(x, top);
-              ctx.lineTo(x, bottom);
-              ctx.stroke();
-              ctx.restore();
-            },
-          },
-        ],
-      };
-      charts.current.push(new Chart(scenariosRef.current, cfg));
+        };
+        if (!mountChart(scenariosRef.current, cfg, charts.current)) {
+          failed.scenarios = true;
+        }
+      }
     }
+    });
 
     // 2. Historial HI
-    if (historyRef.current && data.monthlyHi.length) {
+    trySection("history", () => {
+    if (historyRef.current && canHistory) {
       const his = data.monthlyHi;
       const vals = his.map((p) => p.hi);
-      const min = Math.min(...vals);
-      const max = Math.max(...vals);
-      const pad = Math.max(0.5, (max - min) * 0.3);
-      const cfg: ChartConfiguration<"line"> = {
-        type: "line",
-        data: {
-          labels: his.map((p) => p.label),
-          datasets: [
-            {
-              data: vals,
-              borderColor: "#4a9eff",
-              backgroundColor: "rgba(74,158,255,0.15)",
-              fill: true,
-              tension: 0.25,
-              pointRadius: 4,
-              pointBackgroundColor: "#4a9eff",
-            },
-          ],
-        },
-        options: {
-          ...commonOpts,
-          plugins: {
-            legend: { display: false },
+      const bounds = yBounds(vals, 0.5);
+      if (!bounds) {
+        failed.history = true;
+      } else {
+        const cfg: ChartConfiguration<"line"> = {
+          type: "line",
+          data: {
+            labels: his.map((p) => p.label),
+            datasets: [
+              {
+                data: vals,
+                borderColor: "#4a9eff",
+                backgroundColor: "rgba(74,158,255,0.15)",
+                fill: true,
+                tension: 0.25,
+                pointRadius: 4,
+                pointBackgroundColor: "#4a9eff",
+              },
+            ],
           },
-          scales: {
-            y: {
-              min: Math.floor((min - pad) * 2) / 2,
-              max: Math.ceil((max + pad) * 2) / 2,
-              grid: { color: "#243041" },
-              ticks: { color: MUTED },
+          options: {
+            ...commonOpts,
+            plugins: {
+              legend: { display: false },
             },
-            x: {
-              grid: { display: false },
-              ticks: { color: MUTED },
+            scales: {
+              y: {
+                min: bounds.min,
+                max: bounds.max,
+                grid: { color: "#243041" },
+                ticks: { color: MUTED },
+              },
+              x: {
+                grid: { display: false },
+                ticks: { color: MUTED },
+              },
             },
           },
-        },
-      };
-      charts.current.push(new Chart(historyRef.current, cfg));
+        };
+        if (!mountChart(historyRef.current, cfg, charts.current)) {
+          failed.history = true;
+        }
+      }
     }
+    });
 
     // 3. Bruto por hoyo
-    if (grossRef.current && data.holes.length) {
+    trySection("gross", () => {
+    if (grossRef.current && canGross) {
       const holes = data.holes;
       const pars = holes.map((h) => CCQ_HOLE_PAR[h.hoyo - 1] ?? 4);
-      const avgs = holes.map((h) => h.promedio);
-      const best10 = holes.map((h) => h.promedio_mejores10);
-      const colors = holes.map((h, i) => colorVsPar(h.promedio, pars[i]!));
+      const avgs = holes.map((h) => h.promedio) as number[];
+      const best10 = holes.map((h) => h.promedio_mejores10) as number[];
       const yMax = Math.ceil(Math.max(...avgs, ...pars) + 0.5);
-      const cfg: ChartConfiguration = {
-        type: "bar",
-        data: {
-          labels: holes.map((h) => `H${h.hoyo}`),
-          datasets: [
-            {
-              label: "Promedio",
-              data: avgs,
-              backgroundColor: colors,
-              barPercentage: 0.9,
-              order: 2,
-            },
-            {
-              label: "mejores 10",
-              data: best10,
-              backgroundColor: "#ffffff",
-              barPercentage: 0.42,
-              order: 1,
-            },
-            {
-              type: "line",
-              label: "Par",
-              data: pars,
-              borderColor: "#000000",
-              backgroundColor: "#000000",
-              pointRadius: 5,
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
-              showLine: true,
-              order: 0,
-            },
-          ],
-        },
-        options: {
-          ...commonOpts,
-          datasets: {
-            bar: { grouped: false },
+      if (!Number.isFinite(yMax) || yMax <= 2) {
+        failed.gross = true;
+      } else {
+        const cfg: ChartConfiguration = {
+          type: "bar",
+          data: {
+            labels: holes.map((h) => `H${h.hoyo}`),
+            datasets: [
+              {
+                label: "Promedio",
+                data: avgs,
+                backgroundColor: holes.map((h, i) =>
+                  colorVsPar(h.promedio as number, pars[i]!)
+                ),
+                barPercentage: 0.9,
+                order: 2,
+              },
+              {
+                label: "mejores 10",
+                data: best10,
+                backgroundColor: "#ffffff",
+                barPercentage: 0.42,
+                order: 1,
+              },
+              {
+                type: "line",
+                label: "Par",
+                data: pars,
+                borderColor: "#000000",
+                backgroundColor: "#000000",
+                pointRadius: 5,
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+                showLine: true,
+                order: 0,
+              },
+            ],
           },
-          plugins: {
-            legend: {
-              labels: { color: MUTED, boxWidth: 12 },
+          options: {
+            ...commonOpts,
+            datasets: {
+              bar: { grouped: false },
+            },
+            plugins: {
+              legend: {
+                labels: { color: MUTED, boxWidth: 12 },
+              },
+            },
+            scales: {
+              y: {
+                min: 2,
+                max: yMax,
+                grid: { color: "#243041" },
+                ticks: { color: MUTED },
+              },
+              x: {
+                grid: { display: false },
+                ticks: { color: MUTED, font: { size: 10 } },
+              },
             },
           },
-          scales: {
-            y: {
-              min: 2,
-              max: yMax,
-              grid: { color: "#243041" },
-              ticks: { color: MUTED },
-            },
-            x: {
-              grid: { display: false },
-              ticks: { color: MUTED, font: { size: 10 } },
-            },
-          },
-        },
-      };
-      charts.current.push(new Chart(grossRef.current, cfg));
+        };
+        if (!mountChart(grossRef.current, cfg, charts.current)) {
+          failed.gross = true;
+        }
+      }
     }
+    });
 
     // 4. Neto por hoyo
-    if (netRef.current && data.holes.length) {
+    trySection("net", () => {
+    if (netRef.current && canNet) {
       const holes = data.holes;
       const pars = holes.map((h) => CCQ_HOLE_PAR[h.hoyo - 1] ?? 4);
       const labels = holes.map((h, i) => {
@@ -336,78 +464,86 @@ export default function GhinLiveReport({ data }: Props) {
       });
       const avgs = data.netAvgs;
       const best10 = data.netBest10;
-      const colors = avgs.map((a, i) => colorVsPar(a, pars[i]!));
       const yMax = Math.ceil(Math.max(...avgs, ...pars) + 0.5);
-      const cfg: ChartConfiguration = {
-        type: "bar",
-        data: {
-          labels,
-          datasets: [
-            {
-              label: "Neto",
-              data: avgs,
-              backgroundColor: colors,
-              barPercentage: 0.9,
-              order: 2,
-            },
-            {
-              label: "mejores 10",
-              data: best10,
-              backgroundColor: "#ffffff",
-              barPercentage: 0.42,
-              order: 1,
-            },
-            {
-              type: "line",
-              label: "Par",
-              data: pars,
-              borderColor: "#000000",
-              backgroundColor: "#000000",
-              pointRadius: 5,
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
-              showLine: true,
-              order: 0,
-            },
-          ],
-        },
-        options: {
-          ...commonOpts,
-          datasets: {
-            bar: { grouped: false },
+      if (!Number.isFinite(yMax) || yMax <= 2) {
+        failed.net = true;
+      } else {
+        const cfg: ChartConfiguration = {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Neto",
+                data: avgs,
+                backgroundColor: avgs.map((a, i) => colorVsPar(a, pars[i]!)),
+                barPercentage: 0.9,
+                order: 2,
+              },
+              {
+                label: "mejores 10",
+                data: best10,
+                backgroundColor: "#ffffff",
+                barPercentage: 0.42,
+                order: 1,
+              },
+              {
+                type: "line",
+                label: "Par",
+                data: pars,
+                borderColor: "#000000",
+                backgroundColor: "#000000",
+                pointRadius: 5,
+                pointBorderColor: "#fff",
+                pointBorderWidth: 2,
+                showLine: true,
+                order: 0,
+              },
+            ],
           },
-          plugins: {
-            legend: {
-              labels: { color: MUTED, boxWidth: 12 },
+          options: {
+            ...commonOpts,
+            datasets: {
+              bar: { grouped: false },
             },
-          },
-          scales: {
-            y: {
-              min: 2,
-              max: yMax,
-              grid: { color: "#243041" },
-              ticks: { color: MUTED },
+            plugins: {
+              legend: {
+                labels: { color: MUTED, boxWidth: 12 },
+              },
             },
-            x: {
-              grid: { display: false },
-              ticks: {
-                color: MUTED,
-                font: { size: 9 },
-                maxRotation: 60,
-                minRotation: 40,
+            scales: {
+              y: {
+                min: 2,
+                max: yMax,
+                grid: { color: "#243041" },
+                ticks: { color: MUTED },
+              },
+              x: {
+                grid: { display: false },
+                ticks: {
+                  color: MUTED,
+                  font: { size: 9 },
+                  maxRotation: 60,
+                  minRotation: 40,
+                },
               },
             },
           },
-        },
-      };
-      charts.current.push(new Chart(netRef.current, cfg));
+        };
+        if (!mountChart(netRef.current, cfg, charts.current)) {
+          failed.net = true;
+        }
+      }
     }
+    });
+
+    setChartFail(failed);
 
     return () => {
       charts.current.forEach((c) => c.destroy());
       charts.current = [];
     };
-  }, [data, scenarioChartData, hiRef]);
+  }, [data, scenarioChartData, hiRef, canScenarios, canHistory, canGross, canNet]);
 
   const verdictStyles: Record<string, string> = {
     normal: "border-[#2ecc71] bg-[#2ecc71]/15 text-[#2ecc71]",
@@ -423,8 +559,12 @@ export default function GhinLiveReport({ data }: Props) {
 
   return (
     <div
-      className="min-h-full overflow-y-auto px-3 py-3 sm:px-4"
-      style={{ background: BG, color: TEXT }}
+      className="h-full min-h-0 overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-4"
+      style={{
+        background: BG,
+        color: TEXT,
+        WebkitOverflowScrolling: "touch",
+      }}
     >
       {(data.anyHistorico ||
         data.provisional ||
@@ -603,9 +743,15 @@ export default function GhinLiveReport({ data }: Props) {
       )}
 
       <Section title="1. Escenarios de índice">
-        <div className="relative h-[320px] w-full">
-          <canvas ref={scenariosRef} />
-        </div>
+        <ChartSectionBoundary>
+        {canScenarios && !chartFail.scenarios ? (
+          <div className="relative h-[320px] w-full">
+            <canvas ref={scenariosRef} />
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">{EMPTY_CHART_MSG}</p>
+        )}
+        </ChartSectionBoundary>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-left text-xs">
             <thead>
@@ -672,15 +818,19 @@ export default function GhinLiveReport({ data }: Props) {
             : "Sin corte de revisiones"
         }
       >
-        {data.monthlyHi.length ? (
+        <ChartSectionBoundary>
+        {canHistory && !chartFail.history ? (
           <div className="relative h-[260px] w-full">
             <canvas ref={historyRef} />
           </div>
         ) : (
           <p className="text-sm text-slate-400">
-            Sin revisiones de índice en el periodo (tabla desde 2026-05-01).
+            {data.monthlyHi.length
+              ? EMPTY_CHART_MSG
+              : "Sin revisiones de índice en el periodo (tabla desde 2026-05-01)."}
           </p>
         )}
+        </ChartSectionBoundary>
       </Section>
 
       <Section
@@ -693,15 +843,19 @@ export default function GhinLiveReport({ data }: Props) {
               : undefined
         }
       >
-        {data.holes.length ? (
+        <ChartSectionBoundary>
+        {canGross && !chartFail.gross ? (
           <div className="relative h-[280px] w-full overflow-x-auto">
             <div className="relative h-full min-w-[700px]">
               <canvas ref={grossRef} />
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-400">Sin rondas para promedios.</p>
+          <p className="text-sm text-slate-400">
+            {data.holes.length ? EMPTY_CHART_MSG : "Sin rondas para promedios."}
+          </p>
         )}
+        </ChartSectionBoundary>
       </Section>
 
       <Section
@@ -712,15 +866,19 @@ export default function GhinLiveReport({ data }: Props) {
             : undefined
         }
       >
-        {data.holes.length ? (
+        <ChartSectionBoundary>
+        {canNet && !chartFail.net ? (
           <div className="relative h-[300px] w-full overflow-x-auto">
             <div className="relative h-full min-w-[900px]">
               <canvas ref={netRef} />
             </div>
           </div>
         ) : (
-          <p className="text-sm text-slate-400">Sin rondas para promedios.</p>
+          <p className="text-sm text-slate-400">
+            {data.holes.length ? EMPTY_CHART_MSG : "Sin rondas para promedios."}
+          </p>
         )}
+        </ChartSectionBoundary>
       </Section>
     </div>
   );

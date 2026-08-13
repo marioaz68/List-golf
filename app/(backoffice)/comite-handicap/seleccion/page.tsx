@@ -58,10 +58,11 @@ export default async function CommitteeSelectionPage({
     .eq("id", tournamentId)
     .maybeSingle();
 
-  const { rows, clubIndexHistory } = await loadCommitteeSelectionRows(
-    supabase,
-    tournamentId
-  );
+  const loaded = await loadCommitteeSelectionRows(supabase, tournamentId);
+  const rows = JSON.parse(JSON.stringify(loaded.rows)) as typeof loaded.rows;
+  const clubIndexHistory = loaded.clubIndexHistory
+    ? (JSON.parse(JSON.stringify(loaded.clubIndexHistory)) as typeof loaded.clubIndexHistory)
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-3 p-4">

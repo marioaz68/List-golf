@@ -3,6 +3,7 @@ import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   daysBetweenIso,
   isoDaysAfter,
+  isoDaysBefore,
   todayMexicoIso,
 } from "@/lib/ghin-report/whsCaps";
 import {
@@ -18,11 +19,15 @@ export type CommitteeSelectionRow = {
   playerId: string;
   playerName: string;
   ghin: string | null;
-  hi: number | null;
+  /** HI congelado en la inscripción. */
+  entryHi: number | null;
+  /** HI vigente en players. */
+  currentHi: number | null;
   categoryCode: string | null;
   rounds12m: number | null;
-  /** Mínimo de índice en la historia disponible (no exige 365d). */
-  minHi12m: number | null;
+  /** min(hi_at_play) en ghin_rounds de los últimos 365 días. */
+  minHi: number | null;
+  /** currentHi − minHi. */
   deltaHi: number | null;
   /** true solo si este jugador está peor que el resto del club (0 revs o << días). */
   indexHistoryInsufficient: boolean;
@@ -59,7 +64,7 @@ export const DEFAULT_SUGGEST_THRESHOLDS: SuggestThresholds = {
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
-  const n = Number(v);
+  const n = typeof v === "number" ? v : Number(String(v).trim());
   return Number.isFinite(n) ? n : null;
 }
 
@@ -75,10 +80,35 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+/** Fuerza números JSON-safe (evita numeric-as-string que rompe toFixed en el cliente). */
+function plainRows(rows: CommitteeSelectionRow[]): CommitteeSelectionRow[] {
+  return JSON.parse(JSON.stringify(rows)) as CommitteeSelectionRow[];
+}
+
+/** PostgREST recorta a 1000 filas; sin paginar, 62 jugadores × rondas se truncan. */
+async function fetchAllRows<T>(
+  make: () => any,
+  label: string
+): Promise<T[]> {
+  const page = 1000;
+  const out: T[] = [];
+  for (let from = 0; ; from += page) {
+    const { data, error } = await make().range(from, from + page - 1);
+    if (error) {
+      console.error(`[comite-seleccion] ${label}`, error.message);
+      break;
+    }
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < page) break;
+    if (from > 50_000) break;
+  }
+  return out;
+}
+
 /**
  * Candidatos a revisión del comité.
- * HI/Cat/rondas/mín/Δ se llenan con lo que hay hoy (historia < 365d no anula
- * esas celdas). Soft/hard cap no se evalúan aquí: van en un banner de club.
+ * HI inscripción ≠ HI actual. Δ = HI vigente − min(hi_at_play) 365d.
  */
 export async function loadCommitteeSelectionRows(
   supabase: SupabaseClient,
@@ -127,10 +157,16 @@ export async function loadCommitteeSelectionRows(
             .from("players")
             .select("id, first_name, last_name, ghin_number, handicap_index")
             .in("id", playerIds)
-        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+        : Promise.resolve({
+            data: [] as Array<Record<string, unknown>>,
+            error: null,
+          }),
       categoryIds.length
         ? db.from("categories").select("id, code, name").in("id", categoryIds)
-        : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+        : Promise.resolve({
+            data: [] as Array<Record<string, unknown>>,
+            error: null,
+          }),
     ]);
 
   if (playerErr) {
@@ -148,6 +184,7 @@ export async function loadCommitteeSelectionRows(
   );
 
   const until = todayMexicoIso();
+  const since12 = isoDaysBefore(until, WHS_INDEX_HISTORY_REQUIRED_DAYS);
 
   const { data: clubFirstRow, error: clubFirstErr } = await db
     .from("ghin_index_revisions")
@@ -198,49 +235,41 @@ export async function loadCommitteeSelectionRows(
     ),
   ];
 
-  const activityByGhin = new Map<string, number>();
   const firstByGhin = new Map<string, string | null>();
   const revCountByGhin = new Map<string, number>();
-  const minByGhin = new Map<string, number | null>();
-  const latestHiByGhin = new Map<string, number | null>();
+  const rounds12ByGhin = new Map<string, number>();
+  const minHiByGhin = new Map<string, number | null>();
 
   const chunk = 60;
   for (let i = 0; i < ghins.length; i += chunk) {
     const batch = ghins.slice(i, i + chunk);
-    const [{ data: acts, error: actErr }, { data: revs, error: revErr }] =
-      await Promise.all([
-        db
-          .from("v_ghin_player_activity")
-          .select("ghin_number, rondas_12_meses")
-          .in("ghin_number", batch),
-        db
-          .from("ghin_index_revisions")
-          .select("ghin_number, revision_date, handicap_index")
-          .in("ghin_number", batch),
-      ]);
-    if (actErr) {
-      console.error("[comite-seleccion] v_ghin_player_activity", actErr.message);
-    }
-    if (revErr) {
-      console.error("[comite-seleccion] ghin_index_revisions", revErr.message);
-    }
-    for (const a of acts ?? []) {
-      const g = String((a as { ghin_number?: string }).ghin_number ?? "");
-      if (g) {
-        activityByGhin.set(
-          g,
-          num((a as { rondas_12_meses?: unknown }).rondas_12_meses) ?? 0
-        );
-      }
-    }
-    type Agg = {
-      first: string | null;
-      last: string | null;
-      lastHi: number | null;
-      minHi: number | null;
-      count: number;
-    };
-    const agg = new Map<string, Agg>();
+    const [revs, roundRows] = await Promise.all([
+      fetchAllRows<{ ghin_number: string; revision_date: string | null }>(
+        () =>
+          db
+            .from("ghin_index_revisions")
+            .select("ghin_number, revision_date")
+            .in("ghin_number", batch),
+        "ghin_index_revisions"
+      ),
+      fetchAllRows<{
+        ghin_number: string;
+        hi_at_play: unknown;
+        date_played: string;
+      }>(
+        () =>
+          db
+            .from("ghin_rounds")
+            .select("ghin_number, hi_at_play, date_played")
+            .in("ghin_number", batch)
+            .gte("date_played", since12)
+            .lte("date_played", until),
+        "ghin_rounds"
+      ),
+    ]);
+
+    type RevAgg = { first: string | null; count: number };
+    const revAgg = new Map<string, RevAgg>();
     for (const row of revs ?? []) {
       const g = String((row as { ghin_number?: string }).ghin_number ?? "");
       if (!g) continue;
@@ -248,36 +277,39 @@ export async function loadCommitteeSelectionRows(
         (row as { revision_date?: string | null }).revision_date != null
           ? String((row as { revision_date: string }).revision_date).slice(0, 10)
           : null;
-      const hi = num((row as { handicap_index?: unknown }).handicap_index);
-      const cur = agg.get(g) ?? {
-        first: null,
-        last: null,
-        lastHi: null,
-        minHi: null,
-        count: 0,
-      };
+      const cur = revAgg.get(g) ?? { first: null, count: 0 };
       cur.count += 1;
       if (d && (!cur.first || d < cur.first)) cur.first = d;
-      if (d && (!cur.last || d > cur.last)) {
-        cur.last = d;
-        cur.lastHi = hi;
-      }
-      if (hi != null && (cur.minHi == null || hi < cur.minHi)) cur.minHi = hi;
-      agg.set(g, cur);
+      revAgg.set(g, cur);
     }
     for (const g of batch) {
-      const a = agg.get(g);
+      const a = revAgg.get(g);
       firstByGhin.set(g, a?.first ?? null);
       revCountByGhin.set(g, a?.count ?? 0);
-      latestHiByGhin.set(g, a?.lastHi ?? null);
-      minByGhin.set(g, a?.minHi ?? null);
+    }
+
+    type RoundAgg = { n: number; minHi: number | null };
+    const roundAgg = new Map<string, RoundAgg>();
+    for (const row of roundRows ?? []) {
+      const g = String((row as { ghin_number?: string }).ghin_number ?? "");
+      if (!g) continue;
+      const cur = roundAgg.get(g) ?? { n: 0, minHi: null };
+      cur.n += 1;
+      const hiPlay = num((row as { hi_at_play?: unknown }).hi_at_play);
+      if (hiPlay != null && (cur.minHi == null || hiPlay < cur.minHi)) {
+        cur.minHi = hiPlay;
+      }
+      roundAgg.set(g, cur);
+    }
+    for (const g of batch) {
+      const a = roundAgg.get(g);
+      rounds12ByGhin.set(g, a?.n ?? 0);
+      minHiByGhin.set(g, a?.minHi ?? null);
     }
   }
 
   const rows: CommitteeSelectionRow[] = entries.map((e) => {
-    const pl = e.player_id
-      ? playerById.get(String(e.player_id))
-      : null;
+    const pl = e.player_id ? playerById.get(String(e.player_id)) : null;
     const cat = e.category_id
       ? categoryById.get(String(e.category_id))
       : null;
@@ -286,24 +318,25 @@ export async function loadCommitteeSelectionRows(
     const ghin =
       ghinRaw != null && String(ghinRaw).trim() ? String(ghinRaw).trim() : null;
     const entryHi = num(e.handicap_index);
-    const playerHi = num(
+    const currentHi = num(
       (pl as { handicap_index?: unknown } | undefined)?.handicap_index
     );
-    const latestHi = ghin ? (latestHiByGhin.get(ghin) ?? null) : null;
-    const hi = entryHi ?? playerHi ?? latestHi;
-    const catRec = cat as { code?: string | null; name?: string | null } | undefined;
+    const catRec = cat as
+      | { code?: string | null; name?: string | null }
+      | undefined;
 
     return {
-      entryId: e.id as string,
+      entryId: String(e.id),
       playerId: e.player_id ? String(e.player_id) : "",
       playerName: playerName(
         pl as { first_name?: string | null; last_name?: string | null } | null
       ),
       ghin,
-      hi,
+      entryHi,
+      currentHi,
       categoryCode: catRec?.code ?? catRec?.name ?? null,
-      rounds12m: ghin ? (activityByGhin.get(ghin) ?? 0) : null,
-      minHi12m: null,
+      rounds12m: ghin ? (rounds12ByGhin.get(ghin) ?? 0) : null,
+      minHi: ghin ? (minHiByGhin.get(ghin) ?? null) : null,
       deltaHi: null,
       indexHistoryInsufficient: false,
       indexHistoryDaysAvailable: 0,
@@ -315,6 +348,9 @@ export async function loadCommitteeSelectionRows(
   });
 
   for (const r of rows) {
+    if (r.currentHi != null && r.minHi != null) {
+      r.deltaHi = round1(r.currentHi - r.minHi);
+    }
     if (!r.ghin) {
       r.indexHistoryInsufficient = true;
       r.indexHistoryDaysAvailable = 0;
@@ -325,10 +361,6 @@ export async function loadCommitteeSelectionRows(
     const first = firstByGhin.get(r.ghin) ?? null;
     const days = first ? daysBetweenIso(first, until) : 0;
     r.indexHistoryDaysAvailable = days;
-    r.minHi12m = minByGhin.get(r.ghin) ?? null;
-    if (r.hi != null && r.minHi12m != null) {
-      r.deltaHi = round1(r.hi - r.minHi12m);
-    }
     if (revCount === 0 || !first) {
       r.indexHistoryInsufficient = true;
       r.indexHistoryNote = formatNoIndexRevisionsNote();
@@ -340,7 +372,7 @@ export async function loadCommitteeSelectionRows(
     }
   }
 
-  return { rows, clubIndexHistory };
+  return { rows: plainRows(rows), clubIndexHistory };
 }
 
 /**
@@ -359,7 +391,7 @@ export async function applySuggestCandidates(
   for (const r of out) {
     if (r.deltaHi != null && r.deltaHi >= thresholds.deltaHiMin) {
       r.suggestReasons.push(
-        `Δ HI +${r.deltaHi} vs mínimo disponible (umbral ${thresholds.deltaHiMin})`
+        `Δ HI +${r.deltaHi} vs mínimo de rondas (umbral ${thresholds.deltaHiMin})`
       );
     }
     if (r.rounds12m != null && r.rounds12m <= thresholds.fewRoundsMax) {
@@ -408,7 +440,7 @@ export async function applySuggestCandidates(
     }
   }
 
-  return out;
+  return plainRows(out);
 }
 
 function variance(xs: number[]): number {

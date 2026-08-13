@@ -12,8 +12,8 @@ export type GhinEscenarioRow = {
 
 export type GhinHoleAvgRow = {
   hoyo: number;
-  promedio: number;
-  promedio_mejores10: number;
+  promedio: number | null;
+  promedio_mejores10: number | null;
   n_rondas: number;
   desde: string | null;
   hasta: string | null;

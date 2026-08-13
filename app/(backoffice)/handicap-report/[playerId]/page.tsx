@@ -98,7 +98,7 @@ export default async function HandicapReportViewerPage({
         </a>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-hidden">
+      <main className="relative min-h-0 flex-1 overflow-hidden">
         <GhinLiveReport data={report} />
       </main>
 

@@ -538,13 +538,14 @@ export async function loadGhinLiveReport(
   const holes: GhinHoleAvgRow[] = holesRaw
     .map((r: Record<string, unknown>) => ({
       hoyo: Number(r.hoyo),
-      promedio: Number(r.promedio),
-      promedio_mejores10: Number(r.promedio_mejores10),
+      promedio: num(r.promedio),
+      promedio_mejores10: num(r.promedio_mejores10),
       n_rondas: Number(r.n_rondas ?? 0),
       desde: r.desde != null ? String(r.desde) : null,
       hasta: r.hasta != null ? String(r.hasta) : null,
       es_historico: Boolean(r.es_historico),
     }))
+    .filter((h) => Number.isFinite(h.hoyo))
     .sort((a, b) => a.hoyo - b.hoyo);
 
   const holesHistorico = holes.some((h) => h.es_historico);
@@ -652,14 +653,14 @@ export async function loadGhinLiveReport(
   }));
 
   const strokes = strokesReceivedByHole(hp80 ?? 0, CCQ_STROKE_INDEX);
-  const netAvgs = holes.map((h, i) =>
-    Number.isFinite(h.promedio) ? h.promedio - (strokes[i] ?? 0) : 0
-  );
-  const netBest10 = holes.map((h, i) =>
-    Number.isFinite(h.promedio_mejores10)
-      ? h.promedio_mejores10 - (strokes[i] ?? 0)
-      : 0
-  );
+  const netAvgs = holes.map((h, i) => {
+    const avg = h.promedio;
+    return avg != null && Number.isFinite(avg) ? avg - (strokes[i] ?? 0) : 0;
+  });
+  const netBest10 = holes.map((h, i) => {
+    const avg = h.promedio_mejores10;
+    return avg != null && Number.isFinite(avg) ? avg - (strokes[i] ?? 0) : 0;
+  });
 
   const anyHistorico =
     holesHistorico ||
