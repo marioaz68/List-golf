@@ -49,6 +49,13 @@ type PlayerRowActionsProps = {
   entryPlayingHandicapOverride?: number | null;
   /** % de la regla de competencia aplicada al PH (ej. 80, 100). */
   entryAllowancePct?: number | null;
+  /** Resumen de caddie del inscrito (mostrar en el modal de editar). */
+  caddieSummary?: {
+    hasCaddie: boolean;
+    label: string | null;
+    totalRounds?: number;
+    roundsWithCaddie?: number;
+  } | null;
 };
 
 export default function PlayerRowActions({
@@ -64,6 +71,7 @@ export default function PlayerRowActions({
   entryPlayingHandicap = null,
   entryPlayingHandicapOverride = null,
   entryAllowancePct = null,
+  caddieSummary = null,
 }: PlayerRowActionsProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -146,6 +154,7 @@ export default function PlayerRowActions({
         entryPlayingHandicap={entryPlayingHandicap}
         entryPlayingHandicapOverride={entryPlayingHandicapOverride}
         entryAllowancePct={entryAllowancePct}
+        caddieSummary={caddieSummary}
       />
     </>
   );

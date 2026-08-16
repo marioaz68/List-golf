@@ -115,16 +115,10 @@ export default function HandicapsByCategoryClient({
 
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <p className="flex-1 text-[11px] leading-relaxed text-slate-400">
-          <span className="font-semibold text-blue-300">HI</span>: define la
-          categoría.{" "}
-          <span className="font-semibold text-slate-200">HC</span>: handicap
-          del campo (referencia).{" "}
           <span className="font-semibold text-emerald-300">PH</span>: handicap
-          del torneo. Si el HI rebasa el rango de la regla, se aplica el{" "}
-          <span className="font-semibold text-amber-300">
-            máximo a jugar del torneo
-          </span>
-          .
+          del torneo (con el que juega).{" "}
+          <span className="font-semibold text-slate-200">Salida</span>: tee
+          asignado.
           {isPairsReport ? (
             <>
               {" "}
@@ -132,7 +126,7 @@ export default function HandicapsByCategoryClient({
               <span className="font-semibold text-emerald-200">
                 por pareja
               </span>{" "}
-              de menor a mayor suma de PH (handicap de torneo) de J1+J2.
+              de menor a mayor suma de PH (J1+J2).
             </>
           ) : null}
         </p>
@@ -150,7 +144,7 @@ export default function HandicapsByCategoryClient({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Nombre, GHIN, salida, color, HI/CH/PH…"
+          placeholder="Nombre, GHIN, PH, salida…"
           className="h-7 min-w-[200px] flex-1 rounded border border-white/10 bg-[#0b1422] px-2 text-[12px] text-white placeholder:text-slate-500 focus:border-emerald-400 focus:outline-none"
         />
         {search ? (
@@ -212,11 +206,12 @@ export default function HandicapsByCategoryClient({
                         GHIN
                       </th>
                       <th className="px-2 py-1.5">Nombre</th>
-                      <th className="px-2 py-1.5 text-center w-[36px]">Sexo</th>
-                      <th className="px-2 py-1.5 text-right w-[56px]">HI</th>
-                      <th className="px-2 py-1.5 text-right w-[48px]">CH</th>
-                      <th className="px-2 py-1.5 text-right w-[48px]">PH</th>
-                      <th className="px-2 py-1.5 text-right w-[44px]">%</th>
+                      <th
+                        className="px-2 py-1.5 text-right w-[72px]"
+                        title="Playing Handicap — handicap del torneo"
+                      >
+                        PH
+                      </th>
                       <th className="px-2 py-1.5">Salida</th>
                     </tr>
                   </thead>
@@ -276,52 +271,22 @@ export default function HandicapsByCategoryClient({
                           )}
                         </td>
                         <td className="px-2 py-1.5 font-medium">{r.name}</td>
-                        <td className="px-2 py-1.5 text-center text-slate-300">
-                          {r.gender}
-                        </td>
                         <td
-                          className={`px-2 py-1.5 text-right tabular-nums ${
-                            r.hi_cap_source != null
-                              ? "text-amber-200"
-                              : "text-slate-100"
-                          }`}
-                          title={
-                            r.hi_cap_source != null && r.hi_effective != null
-                              ? `HI real ${hiFmt(r.hi)} — capado a ${hiFmt(
-                                  r.hi_effective
-                                )} (máximo del torneo en su categoría/salida).`
-                              : undefined
-                          }
-                        >
-                          {hiFmt(r.hi)}
-                          {r.hi_cap_source != null && r.hi_effective != null ? (
-                            <span className="ml-1 text-[8px] uppercase text-amber-300">
-                              → {hiFmt(r.hi_effective)}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-100">
-                          {r.is_override ? "—" : numFmt(r.ch)}
-                        </td>
-                        <td
-                          className={`px-2 py-1.5 text-right tabular-nums font-semibold ${
+                          className={`px-2 py-1.5 text-right tabular-nums text-[13px] font-bold ${
                             r.is_override ? "text-amber-300" : "text-emerald-300"
                           }`}
                           title={
                             r.is_override
                               ? "Override manual desde panel de match play"
-                              : undefined
+                              : "Handicap del torneo (PH)"
                           }
                         >
                           {numFmt(r.ph)}
                           {r.is_override ? (
-                            <span className="ml-1 text-[8px] uppercase">ovr</span>
+                            <span className="ml-1 text-[8px] uppercase font-semibold">
+                              ovr
+                            </span>
                           ) : null}
-                        </td>
-                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-400">
-                          {r.allowance_pct != null
-                            ? `${r.allowance_pct}%`
-                            : "—"}
                         </td>
                         <td className="px-2 py-1.5">
                           {r.tee ? (

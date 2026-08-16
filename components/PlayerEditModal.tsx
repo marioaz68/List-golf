@@ -140,6 +140,7 @@ export default function PlayerEditModal({
   entryPlayingHandicap = null,
   entryPlayingHandicapOverride = null,
   entryAllowancePct = null,
+  caddieSummary = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -152,6 +153,13 @@ export default function PlayerEditModal({
   entryPlayingHandicap?: number | null;
   entryPlayingHandicapOverride?: number | null;
   entryAllowancePct?: number | null;
+  /** Resumen de caddie del inscrito (solo en contexto de torneo). */
+  caddieSummary?: {
+    hasCaddie: boolean;
+    label: string | null;
+    totalRounds?: number;
+    roundsWithCaddie?: number;
+  } | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -620,6 +628,85 @@ export default function PlayerEditModal({
         >
           Editar jugador
         </h3>
+
+        {entryId && tournamentId ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: caddieSummary?.hasCaddie
+                ? "1px solid #059669"
+                : "1px solid #dc2626",
+              background: caddieSummary?.hasCaddie ? "#ecfdf5" : "#fef2f2",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: caddieSummary?.hasCaddie ? "#047857" : "#b91c1c",
+                }}
+              >
+                {caddieSummary?.hasCaddie
+                  ? `✓ Caddie asignado${
+                      caddieSummary.label ? `: ${caddieSummary.label}` : ""
+                    }`
+                  : "✕ Sin caddie asignado"}
+              </span>
+              <a
+                href={`/caddies/asignar?entry_id=${encodeURIComponent(
+                  entryId
+                )}&tournament_id=${encodeURIComponent(
+                  tournamentId
+                )}&back=${encodeURIComponent(
+                  `/entries?tournament_id=${tournamentId}`
+                )}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  minHeight: 28,
+                  padding: "0 10px",
+                  borderRadius: 8,
+                  border: caddieSummary?.hasCaddie
+                    ? "1px solid #047857"
+                    : "1px solid #b91c1c",
+                  background: caddieSummary?.hasCaddie ? "#059669" : "#dc2626",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                }}
+              >
+                {caddieSummary?.hasCaddie ? "Ver / cambiar caddie" : "Asignar caddie"}
+              </a>
+            </div>
+            {caddieSummary?.hasCaddie &&
+            caddieSummary.totalRounds != null &&
+            caddieSummary.totalRounds > 0 ? (
+              <span style={{ fontSize: 10, color: "#065f46" }}>
+                Rondas con caddie: {caddieSummary.roundsWithCaddie ?? 0} /{" "}
+                {caddieSummary.totalRounds}
+              </span>
+            ) : null}
+            {!caddieSummary?.hasCaddie ? (
+              <span style={{ fontSize: 10, color: "#991b1b" }}>
+                Este jugador aún no tiene caddie en este torneo.
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         <form onSubmit={onSave} autoComplete="off" style={{ display: "grid", gap: 12 }}>
           <div

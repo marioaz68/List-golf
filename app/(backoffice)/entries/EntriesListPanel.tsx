@@ -655,6 +655,7 @@ function EntryRowActions({
           target.playing_handicap_override ?? null
         }
         entryAllowancePct={target.allowance_pct_applied ?? null}
+        caddieSummary={target.caddie_summary ?? null}
         buttonLabel={label}
         buttonTitle={`Editar ${playerName}`}
         player={
