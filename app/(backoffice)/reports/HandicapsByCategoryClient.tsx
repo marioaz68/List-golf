@@ -16,6 +16,16 @@ export type HandicapReportRow = {
   is_override: boolean;
   allowance_pct: number | null;
   tee: { code: string | null; name: string | null; color: string | null } | null;
+  /** Match play parejas: id del equipo (para agrupar). */
+  pair_id?: string | null;
+  /** 1 = jugador A, 2 = jugador B. */
+  pair_slot?: 1 | 2 | null;
+  /** Etiqueta corta de la pareja (nombres o team_name). */
+  pair_label?: string | null;
+  /** HI combinado del equipo (referencia). */
+  pair_combined_hi?: number | null;
+  /** Suma de PH (handicap de torneo) de J1+J2 — orden de parejas. */
+  pair_ph_sum?: number | null;
 };
 
 export type HandicapReportCategory = {
@@ -52,6 +62,11 @@ export default function HandicapsByCategoryClient({
     [categories]
   );
 
+  const isPairsReport = useMemo(
+    () => categories.some((c) => c.rows.some((r) => Boolean(r.pair_id))),
+    [categories]
+  );
+
   const filtered = useMemo(() => {
     const q = normalize(search);
     if (!q) {
@@ -70,6 +85,8 @@ export default function HandicapsByCategoryClient({
               r.tee?.code ?? "",
               r.tee?.name ?? "",
               r.tee?.color ?? "",
+              r.pair_label ?? "",
+              r.pair_slot != null ? `j${r.pair_slot}` : "",
               hiFmt(r.hi),
               numFmt(r.ch),
               numFmt(r.ph),
@@ -108,6 +125,16 @@ export default function HandicapsByCategoryClient({
             máximo a jugar del torneo
           </span>
           .
+          {isPairsReport ? (
+            <>
+              {" "}
+              Orden:{" "}
+              <span className="font-semibold text-emerald-200">
+                por pareja
+              </span>{" "}
+              de menor a mayor suma de PH (handicap de torneo) de J1+J2.
+            </>
+          ) : null}
         </p>
         <ReportToolbar
           tournamentName={tournamentName}
@@ -145,6 +172,13 @@ export default function HandicapsByCategoryClient({
           const label = cat.code
             ? `${cat.code} · ${cat.name ?? ""}`
             : cat.name ?? "—";
+          const pairStripe = new Map<string, number>();
+          let stripe = 0;
+          for (const r of cat.rows) {
+            if (!r.pair_id || pairStripe.has(r.pair_id)) continue;
+            pairStripe.set(r.pair_id, stripe % 2);
+            stripe += 1;
+          }
           return (
             <section
               key={cat.id}
@@ -154,6 +188,9 @@ export default function HandicapsByCategoryClient({
                 <h2 className="text-[13px] font-bold text-white">{label}</h2>
                 <span className="text-[10px] text-slate-400">
                   {cat.rows.length} inscrit{cat.rows.length === 1 ? "o" : "os"}
+                  {isPairsReport
+                    ? ` · ${pairStripe.size} pareja${pairStripe.size === 1 ? "" : "s"}`
+                    : ""}
                 </span>
               </header>
 
@@ -162,6 +199,12 @@ export default function HandicapsByCategoryClient({
                   <thead className="bg-[#162032] text-[10px] uppercase tracking-wide text-slate-300">
                     <tr>
                       <th className="px-2 py-1.5 text-right w-[36px]">#</th>
+                      {isPairsReport ? (
+                        <>
+                          <th className="px-2 py-1.5 w-[44px]">Jug</th>
+                          <th className="px-2 py-1.5">Pareja</th>
+                        </>
+                      ) : null}
                       <th
                         className="px-2 py-1.5 text-left w-[88px]"
                         title="GHIN Number del jugador"
@@ -178,14 +221,55 @@ export default function HandicapsByCategoryClient({
                     </tr>
                   </thead>
                   <tbody>
-                    {cat.rows.map((r, idx) => (
+                    {cat.rows.map((r, idx) => {
+                      const stripeIdx =
+                        r.pair_id != null ? pairStripe.get(r.pair_id) : null;
+                      const pairBg =
+                        stripeIdx === 0
+                          ? "bg-emerald-500/[0.06]"
+                          : stripeIdx === 1
+                            ? "bg-sky-500/[0.06]"
+                            : "";
+                      return (
                       <tr
                         key={r.entry_id}
-                        className="border-t border-white/5 align-middle hover:bg-white/[0.02]"
+                        className={`border-t border-white/5 align-middle hover:bg-white/[0.02] ${pairBg}`}
                       >
                         <td className="px-2 py-1.5 text-right tabular-nums text-slate-400">
                           {idx + 1}
                         </td>
+                        {isPairsReport ? (
+                          <>
+                            <td className="px-2 py-1.5 text-center font-semibold tabular-nums text-emerald-200">
+                              {r.pair_slot != null ? `J${r.pair_slot}` : "—"}
+                            </td>
+                            <td
+                              className="max-w-[200px] px-2 py-1.5 text-[11px] text-slate-300"
+                              title={
+                                r.pair_label
+                                  ? r.pair_ph_sum != null
+                                    ? `${r.pair_label} · Σ PH ${r.pair_ph_sum}`
+                                    : r.pair_label
+                                  : undefined
+                              }
+                            >
+                              {r.pair_label ? (
+                                <span className="inline-flex max-w-full flex-col leading-tight">
+                                  <span className="truncate">{r.pair_label}</span>
+                                  {r.pair_ph_sum != null ? (
+                                    <span className="tabular-nums text-[9px] text-emerald-300/90">
+                                      Σ PH {r.pair_ph_sum}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ) : (
+                                <span className="italic text-slate-500">
+                                  sin pareja
+                                </span>
+                              )}
+                            </td>
+                          </>
+                        ) : null}
                         <td className="px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-300">
                           {r.ghin ?? (
                             <span className="text-slate-500 italic">—</span>
@@ -266,7 +350,8 @@ export default function HandicapsByCategoryClient({
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

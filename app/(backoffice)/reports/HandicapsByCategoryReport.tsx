@@ -69,6 +69,7 @@ export default async function HandicapsByCategoryReport({
     categoriesRes,
     teeSetsRes,
     ctx,
+    mpRulesRes,
   ] = await Promise.all([
     supabase
       .from("tournament_entries")
@@ -87,7 +88,68 @@ export default async function HandicapsByCategoryReport({
       .select("id, code, name, color")
       .eq("tournament_id", tournamentId),
     loadTournamentHandicapContext(supabase, tournamentId),
+    supabase
+      .from("tournament_matchplay_rules")
+      .select("match_type")
+      .eq("tournament_id", tournamentId)
+      .maybeSingle(),
   ]);
+
+  const pairsMode =
+    Boolean(mpRulesRes.data) &&
+    (mpRulesRes.data as { match_type?: string | null }).match_type !==
+      "individual";
+
+  type PairMeta = {
+    pairId: string;
+    slot: 1 | 2;
+    label: string;
+    combinedHi: number | null;
+  };
+  const pairByEntryId = new Map<string, PairMeta>();
+
+  if (pairsMode) {
+    const { data: teamsRaw, error: teamsErr } = await supabase
+      .from("matchplay_pair_teams")
+      .select(
+        "id, team_name, combined_hi, player_a_entry_id, player_b_entry_id"
+      )
+      .eq("tournament_id", tournamentId)
+      .eq("is_active", true);
+    if (teamsErr) {
+      console.error("[reports/handicaps] pair teams", teamsErr.message);
+    }
+
+    for (const raw of teamsRaw ?? []) {
+      const row = raw as {
+        id: string;
+        team_name?: string | null;
+        combined_hi?: number | null;
+        player_a_entry_id?: string | null;
+        player_b_entry_id?: string | null;
+      };
+      const idA = row.player_a_entry_id ? String(row.player_a_entry_id) : "";
+      const idB = row.player_b_entry_id ? String(row.player_b_entry_id) : "";
+      if (!idA || !idB) continue;
+      const combined =
+        row.combined_hi != null && Number.isFinite(Number(row.combined_hi))
+          ? Number(row.combined_hi)
+          : null;
+      const labelBase = (row.team_name ?? "").trim() || null;
+      pairByEntryId.set(idA, {
+        pairId: String(row.id),
+        slot: 1,
+        label: labelBase ?? "",
+        combinedHi: combined,
+      });
+      pairByEntryId.set(idB, {
+        pairId: String(row.id),
+        slot: 2,
+        label: labelBase ?? "",
+        combinedHi: combined,
+      });
+    }
+  }
 
   const categories: RawCategory[] = (categoriesRes.data ?? []) as RawCategory[];
   const entries: RawEntry[] = ((entriesRes.data ?? []) as unknown[]).map((e) => {
@@ -196,6 +258,7 @@ export default async function HandicapsByCategoryReport({
         : null;
     const capSource = calc?.meta?.hi_cap_source ?? null;
 
+    const pair = pairByEntryId.get(e.id);
     const row: Row = {
       entry_id: e.id,
       name: formatPlayerName(e.player),
@@ -214,6 +277,10 @@ export default async function HandicapsByCategoryReport({
             null
           : ctx.matchplayFallback?.allowance_pct ?? null,
       tee,
+      pair_id: pair?.pairId ?? null,
+      pair_slot: pair?.slot ?? null,
+      pair_label: pair?.label ?? null,
+      pair_combined_hi: pair?.combinedHi ?? null,
     };
 
     const key = e.category_id ?? null;
@@ -222,7 +289,79 @@ export default async function HandicapsByCategoryReport({
     rowsByCategory.set(key, bucket);
   }
 
+  // Completar etiqueta de pareja y suma de PH (orden).
+  {
+    const namesByEntry = new Map<string, string>();
+    const phByEntry = new Map<string, number | null>();
+    for (const rows of rowsByCategory.values()) {
+      for (const r of rows) {
+        namesByEntry.set(r.entry_id, r.name);
+        phByEntry.set(
+          r.entry_id,
+          r.ph != null && Number.isFinite(Number(r.ph)) ? Number(r.ph) : null
+        );
+      }
+    }
+    const pairMembers = new Map<string, { j1?: string; j2?: string }>();
+    for (const [entryId, meta] of pairByEntryId) {
+      const bag = pairMembers.get(meta.pairId) ?? {};
+      if (meta.slot === 1) bag.j1 = entryId;
+      else bag.j2 = entryId;
+      pairMembers.set(meta.pairId, bag);
+    }
+    const phSumByPair = new Map<string, number | null>();
+    for (const [pairId, members] of pairMembers) {
+      const ph1 = members.j1 ? phByEntry.get(members.j1) : null;
+      const ph2 = members.j2 ? phByEntry.get(members.j2) : null;
+      if (ph1 != null && ph2 != null) phSumByPair.set(pairId, ph1 + ph2);
+      else if (ph1 != null) phSumByPair.set(pairId, ph1);
+      else if (ph2 != null) phSumByPair.set(pairId, ph2);
+      else phSumByPair.set(pairId, null);
+    }
+    for (const rows of rowsByCategory.values()) {
+      for (const r of rows) {
+        if (!r.pair_id) continue;
+        r.pair_ph_sum = phSumByPair.get(r.pair_id) ?? null;
+        if (r.pair_label) continue;
+        const members = pairMembers.get(r.pair_id);
+        const n1 = members?.j1 ? namesByEntry.get(members.j1) ?? "—" : "—";
+        const n2 = members?.j2 ? namesByEntry.get(members.j2) ?? "—" : "—";
+        r.pair_label = `${n1} / ${n2}`;
+      }
+    }
+  }
+
   function sortRows(a: Row, b: Row): number {
+    // Torneo de parejas: J1+J2 juntos, de menor a mayor suma de PH.
+    if (pairsMode && pairByEntryId.size > 0) {
+      const aPaired = Boolean(a.pair_id);
+      const bPaired = Boolean(b.pair_id);
+      if (aPaired !== bPaired) return aPaired ? -1 : 1;
+      if (a.pair_id && b.pair_id && a.pair_id !== b.pair_id) {
+        const aSum = a.pair_ph_sum;
+        const bSum = b.pair_ph_sum;
+        if (aSum != null && bSum != null && aSum !== bSum) {
+          return aSum - bSum;
+        }
+        if (aSum != null && bSum == null) return -1;
+        if (aSum == null && bSum != null) return 1;
+        // Empate de PH: fallback HI combinado, luego etiqueta.
+        const aComb = a.pair_combined_hi;
+        const bComb = b.pair_combined_hi;
+        if (aComb != null && bComb != null && aComb !== bComb) {
+          return aComb - bComb;
+        }
+        const labelCmp = (a.pair_label ?? "").localeCompare(
+          b.pair_label ?? "",
+          "es"
+        );
+        if (labelCmp !== 0) return labelCmp;
+        return a.pair_id.localeCompare(b.pair_id);
+      }
+      if (a.pair_id && a.pair_id === b.pair_id) {
+        return (a.pair_slot ?? 9) - (b.pair_slot ?? 9);
+      }
+    }
     const aHi = Number.isFinite(a.hi) ? a.hi : 999;
     const bHi = Number.isFinite(b.hi) ? b.hi : 999;
     if (aHi !== bHi) return aHi - bHi;

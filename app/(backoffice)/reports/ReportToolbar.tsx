@@ -70,18 +70,35 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
           "Categoria"
         );
         const ws = wb.addWorksheet(sheetName);
-        ws.columns = [
-          { header: "#", key: "n", width: 4 },
-          { header: "GHIN", key: "ghin", width: 12 },
-          { header: "Nombre", key: "name", width: 32 },
-          { header: "Sexo", key: "gender", width: 6 },
-          { header: "HI", key: "hi", width: 7 },
-          { header: "HC", key: "hc", width: 6 },
-          { header: "PH", key: "ph", width: 6 },
-          { header: "%", key: "pct", width: 6 },
-          { header: "Salida", key: "tee", width: 14 },
-          { header: "Override", key: "ovr", width: 9 },
-        ];
+        const hasPairs = cat.rows.some((r) => Boolean(r.pair_id));
+        ws.columns = hasPairs
+          ? [
+              { header: "#", key: "n", width: 4 },
+              { header: "Jug", key: "jug", width: 5 },
+              { header: "Pareja", key: "pareja", width: 36 },
+              { header: "Σ PH", key: "phSum", width: 7 },
+              { header: "GHIN", key: "ghin", width: 12 },
+              { header: "Nombre", key: "name", width: 32 },
+              { header: "Sexo", key: "gender", width: 6 },
+              { header: "HI", key: "hi", width: 7 },
+              { header: "HC", key: "hc", width: 6 },
+              { header: "PH", key: "ph", width: 6 },
+              { header: "%", key: "pct", width: 6 },
+              { header: "Salida", key: "tee", width: 14 },
+              { header: "Override", key: "ovr", width: 9 },
+            ]
+          : [
+              { header: "#", key: "n", width: 4 },
+              { header: "GHIN", key: "ghin", width: 12 },
+              { header: "Nombre", key: "name", width: 32 },
+              { header: "Sexo", key: "gender", width: 6 },
+              { header: "HI", key: "hi", width: 7 },
+              { header: "HC", key: "hc", width: 6 },
+              { header: "PH", key: "ph", width: 6 },
+              { header: "%", key: "pct", width: 6 },
+              { header: "Salida", key: "tee", width: 14 },
+              { header: "Override", key: "ovr", width: 9 },
+            ];
         ws.getRow(1).font = { bold: true };
         ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
         ws.views = [{ state: "frozen", ySplit: 1 }];
@@ -89,6 +106,9 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
         cat.rows.forEach((r, idx) => {
           ws.addRow({
             n: idx + 1,
+            jug: r.pair_slot != null ? `J${r.pair_slot}` : "",
+            pareja: r.pair_label ?? "",
+            phSum: r.pair_ph_sum ?? "",
             ghin: r.ghin ?? "",
             name: r.name,
             gender: r.gender,

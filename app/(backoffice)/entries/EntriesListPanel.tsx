@@ -226,8 +226,9 @@ const SLOT_SM = "shrink-0 md:w-[72px]";
 const SLOT_MD = "shrink-0 md:w-[84px]";
 const SLOT_CAD_PAIR = "shrink-0 md:w-[168px]";
 const SLOT_EDIT = "shrink-0 md:w-[110px]";
+const SLOT_EDIT_PAIR = "shrink-0 md:w-[168px]";
 const ACTIONS_COL = "min-w-0 md:min-w-[820px] md:w-[820px]";
-const ACTIONS_COL_PAIRS = "min-w-0 md:min-w-[900px] md:w-[900px]";
+const ACTIONS_COL_PAIRS = "min-w-0 md:min-w-[980px] md:w-[980px]";
 
 const MOBILE_ACTION_BTN =
   "inline-flex h-8 shrink-0 items-center justify-center rounded border px-2 text-[10px] font-bold leading-none text-white whitespace-nowrap disabled:opacity-50";
@@ -625,41 +626,93 @@ function EntryRowActions({
     </form>
   );
 
-  const editControl = (
-    <PlayerRowActions
-      tournamentId={tournamentId}
-      entryId={entry.id}
-      currentCategoryId={entry.categories?.id ?? null}
-      categories={categories}
-      entryCourseHandicap={entry.course_handicap ?? null}
-      entryPlayingHandicap={entry.playing_handicap ?? null}
-      entryPlayingHandicapOverride={entry.playing_handicap_override ?? null}
-      entryAllowancePct={entry.allowance_pct_applied ?? null}
-      player={
-        entry.players
-          ? {
-              id: entry.players.id,
-              first_name: entry.players.first_name,
-              last_name: entry.players.last_name,
-              initials: entry.players.initials ?? null,
-              gender: entry.players.gender ?? null,
-              handicap_index: entry.players.handicap_index ?? null,
-              handicap_torneo:
-                entry.handicap_index ?? entry.players.handicap_torneo ?? null,
-              phone: entry.players.phone ?? null,
-              email: entry.players.email ?? null,
-              club: entry.players.club ?? null,
-              club_id: entry.players.club_id ?? null,
-              ghin_number: entry.players.ghin_number ?? null,
-              shirt_size: entry.players.shirt_size ?? null,
-              shoe_size: entry.players.shoe_size ?? null,
-              birth_year: entry.players.birth_year ?? null,
-              telegram_user_id: entry.players.telegram_user_id ?? null,
-              telegram_chat_id: entry.players.telegram_chat_id ?? null,
-            }
-          : null
+  const editControlFor = (
+    target: Entry | null | undefined,
+    label: string,
+    playerName: string
+  ) => {
+    if (!target) {
+      return (
+        <button
+          type="button"
+          disabled
+          title={`${playerName} no disponible`}
+          className="inline-flex h-6 items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium leading-none text-gray-400"
+        >
+          {label}
+        </button>
+      );
+    }
+    return (
+      <PlayerRowActions
+        tournamentId={tournamentId}
+        entryId={target.id}
+        currentCategoryId={target.categories?.id ?? null}
+        categories={categories}
+        entryCourseHandicap={target.course_handicap ?? null}
+        entryPlayingHandicap={target.playing_handicap ?? null}
+        entryPlayingHandicapOverride={
+          target.playing_handicap_override ?? null
+        }
+        entryAllowancePct={target.allowance_pct_applied ?? null}
+        buttonLabel={label}
+        buttonTitle={`Editar ${playerName}`}
+        player={
+          target.players
+            ? {
+                id: target.players.id,
+                first_name: target.players.first_name,
+                last_name: target.players.last_name,
+                initials: target.players.initials ?? null,
+                gender: target.players.gender ?? null,
+                handicap_index: target.players.handicap_index ?? null,
+                handicap_torneo:
+                  target.handicap_index ??
+                  target.players.handicap_torneo ??
+                  null,
+                phone: target.players.phone ?? null,
+                email: target.players.email ?? null,
+                club: target.players.club ?? null,
+                club_id: target.players.club_id ?? null,
+                ghin_number: target.players.ghin_number ?? null,
+                shirt_size: target.players.shirt_size ?? null,
+                shoe_size: target.players.shoe_size ?? null,
+                birth_year: target.players.birth_year ?? null,
+                telegram_user_id: target.players.telegram_user_id ?? null,
+                telegram_chat_id: target.players.telegram_chat_id ?? null,
+              }
+            : null
+        }
+      />
+    );
+  };
+
+  const jug1Entry =
+    jug1EntryId === entry.id
+      ? entry
+      : partnerEntry?.id === jug1EntryId
+        ? partnerEntry
+        : null;
+  const jug2Entry =
+    jug2EntryId === entry.id
+      ? entry
+      : partnerEntry?.id === jug2EntryId
+        ? partnerEntry
+        : null;
+
+  const editControl = pairHasBoth ? (
+    <div
+      className={
+        compact
+          ? "flex shrink-0 items-center gap-1"
+          : "flex w-full items-center gap-1"
       }
-    />
+    >
+      {editControlFor(jug1Entry, "Editar J1", jug1Name)}
+      {editControlFor(jug2Entry, "Editar J2", jug2Name)}
+    </div>
+  ) : (
+    editControlFor(entry, "Editar", selfName)
   );
 
   return (
@@ -687,7 +740,7 @@ function EntryRowActions({
         ) : (
           editControl
         ),
-        SLOT_EDIT
+        pairHasBoth ? SLOT_EDIT_PAIR : SLOT_EDIT
       )}
     </div>
   );

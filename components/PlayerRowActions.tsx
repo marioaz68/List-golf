@@ -39,6 +39,10 @@ type PlayerRowActionsProps = {
   currentCategoryId?: string | null;
   entryId?: string;
   canDelete?: boolean;
+  /** Texto del botón (ej. "Editar J1" en parejas). */
+  buttonLabel?: string;
+  /** Tooltip del botón. */
+  buttonTitle?: string;
   /** CH/PH ya calculados para el torneo (informativos en el modal). */
   entryCourseHandicap?: number | null;
   entryPlayingHandicap?: number | null;
@@ -54,6 +58,8 @@ export default function PlayerRowActions({
   currentCategoryId,
   entryId,
   canDelete = false,
+  buttonLabel = "Editar",
+  buttonTitle,
   entryCourseHandicap = null,
   entryPlayingHandicap = null,
   entryPlayingHandicapOverride = null,
@@ -71,7 +77,7 @@ export default function PlayerRowActions({
         title="Jugador no disponible"
         className="inline-flex h-6 w-full items-center justify-center rounded border border-gray-300 bg-gray-100 px-2 text-[10px] font-medium leading-none text-gray-400"
       >
-        Editar
+        {buttonLabel}
       </button>
     );
   }
@@ -109,9 +115,10 @@ export default function PlayerRowActions({
         <button
           type="button"
           onClick={() => setOpen(true)}
+          title={buttonTitle}
           className="inline-flex h-6 items-center justify-center rounded border border-gray-700 bg-gray-700 px-2 text-[10px] font-medium leading-none text-white hover:bg-gray-800"
         >
-          Editar
+          {buttonLabel}
         </button>
 
         {canDelete ? (
