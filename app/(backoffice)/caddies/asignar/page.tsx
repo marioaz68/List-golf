@@ -135,6 +135,7 @@ export default async function AsignarCaddiePage({
   const entry_id = getParam(sp, "entry_id");
   const queryTournamentId = getParam(sp, "tournament_id");
   const queryRoundId = getParam(sp, "round_id");
+  const jugSlot = getParam(sp, "jug");
   const backParam = getParam(sp, "back");
 
   if (!entry_id) {
@@ -307,7 +308,9 @@ export default async function AsignarCaddiePage({
                 color: "#0f172a",
               }}
             >
-              {displayPlayer(entry)}
+              {jugSlot === "1" || jugSlot === "2"
+                ? `Jugador ${jugSlot} · ${displayPlayer(entry)}`
+                : displayPlayer(entry)}
             </h1>
             <div
               style={{

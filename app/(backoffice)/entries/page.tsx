@@ -565,7 +565,17 @@ export default async function EntriesPage({
   const playersOnTeams = new Set<string>();
   const partnerByEntryId = new Map<
     string,
-    { entry_id: string; player_id: string | null; full_name: string }
+    {
+      entry_id: string;
+      player_id: string | null;
+      full_name: string;
+      /** Este inscrito es el jugador 1 o 2 del equipo. */
+      my_slot: 1 | 2;
+      jug1_entry_id: string;
+      jug2_entry_id: string;
+      jug1_name: string;
+      jug2_name: string;
+    }
   >();
 
   if (tournamentIsMatchPlay && selectedTournamentId) {
@@ -615,18 +625,50 @@ export default async function EntriesPage({
           : (row.entry_b as EntryShape);
         if (a?.player_id) playersOnTeams.add(a.player_id);
         if (b?.player_id) playersOnTeams.add(b.player_id);
-        if (a?.id && b) {
+        if (a?.id && b?.id) {
+          const nameA = entryName(a);
+          const nameB = entryName(b);
+          partnerByEntryId.set(a.id, {
+            entry_id: b.id,
+            player_id: b.player_id ?? null,
+            full_name: nameB,
+            my_slot: 1,
+            jug1_entry_id: a.id,
+            jug2_entry_id: b.id,
+            jug1_name: nameA,
+            jug2_name: nameB,
+          });
+          partnerByEntryId.set(b.id, {
+            entry_id: a.id,
+            player_id: a.player_id ?? null,
+            full_name: nameA,
+            my_slot: 2,
+            jug1_entry_id: a.id,
+            jug2_entry_id: b.id,
+            jug1_name: nameA,
+            jug2_name: nameB,
+          });
+        } else if (a?.id && b) {
           partnerByEntryId.set(a.id, {
             entry_id: b?.id ?? "",
             player_id: b?.player_id ?? null,
             full_name: entryName(b),
+            my_slot: 1,
+            jug1_entry_id: a.id,
+            jug2_entry_id: b?.id ?? "",
+            jug1_name: entryName(a),
+            jug2_name: entryName(b),
           });
-        }
-        if (b?.id && a) {
+        } else if (b?.id && a) {
           partnerByEntryId.set(b.id, {
             entry_id: a?.id ?? "",
             player_id: a?.player_id ?? null,
             full_name: entryName(a),
+            my_slot: 2,
+            jug1_entry_id: a?.id ?? "",
+            jug2_entry_id: b.id,
+            jug1_name: entryName(a),
+            jug2_name: entryName(b),
           });
         }
       }

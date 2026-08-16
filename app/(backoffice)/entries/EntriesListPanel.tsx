@@ -224,11 +224,24 @@ const BTN_BASE =
 
 const SLOT_SM = "shrink-0 md:w-[72px]";
 const SLOT_MD = "shrink-0 md:w-[84px]";
+const SLOT_CAD_PAIR = "shrink-0 md:w-[168px]";
 const SLOT_EDIT = "shrink-0 md:w-[110px]";
-const ACTIONS_COL = "min-w-0 md:min-w-[740px] md:w-[740px]";
+const ACTIONS_COL = "min-w-0 md:min-w-[820px] md:w-[820px]";
+const ACTIONS_COL_PAIRS = "min-w-0 md:min-w-[900px] md:w-[900px]";
 
 const MOBILE_ACTION_BTN =
   "inline-flex h-8 shrink-0 items-center justify-center rounded border px-2 text-[10px] font-bold leading-none text-white whitespace-nowrap disabled:opacity-50";
+
+type PartnerInfo = {
+  entry_id: string;
+  player_id: string | null;
+  full_name: string;
+  my_slot?: 1 | 2;
+  jug1_entry_id?: string;
+  jug2_entry_id?: string;
+  jug1_name?: string;
+  jug2_name?: string;
+};
 
 type EntryRowActionsProps = {
   entry: Entry;
@@ -237,6 +250,9 @@ type EntryRowActionsProps = {
   te: ReturnType<typeof useAppLocale>["t"]["entries"]["list"];
   compact?: boolean;
   onGenerateLinks: (entryId: string) => void;
+  /** Pareja match play: dos botones Caddie J1 / J2. */
+  partner?: PartnerInfo | null;
+  partnerEntry?: Entry | null;
 };
 
 function EntryRoundBalls({
@@ -290,6 +306,8 @@ function EntryRowActions({
   te,
   compact = false,
   onGenerateLinks,
+  partner = null,
+  partnerEntry = null,
 }: EntryRowActionsProps) {
   const status = (entry.status ?? "").toLowerCase();
   const isDQ = status === "dq";
@@ -363,53 +381,88 @@ function EntryRowActions({
   );
 
   /**
-   * Enlace directo al módulo /caddies con el torneo pre-seleccionado y
-   * un anchor a la fila del jugador. La página /caddies sigue siendo el
-   * lugar donde se asigna realmente el caddie (requiere también ronda
-   * para listar los grupos), pero este shortcut evita tener que buscar
-   * al jugador entre torneos.
+   * Enlace directo a /caddies/asignar. En parejas match play: dos botones
+   * (Caddie J1 / Caddie J2) para no confundir a cuál jugador se asigna.
    */
-  const caddieSummary = entry.caddie_summary ?? null;
-  const hasCaddie = Boolean(caddieSummary?.hasCaddie);
-  const caddieState: "none" | "assigned" = hasCaddie ? "assigned" : "none";
-  const caddieColors = {
-    none: "border-red-800 bg-red-600 hover:bg-red-700",
-    assigned: "border-emerald-800 bg-emerald-600 hover:bg-emerald-700",
-  };
-  const caddieIcon = hasCaddie ? "✓" : "✕";
-  const caddieTitle = (() => {
-    if (!hasCaddie) {
-      return caddieSummary && caddieSummary.totalRounds > 0
-        ? `Sin caddie asignado (0/${caddieSummary.totalRounds} rondas). Click para asignar.`
-        : "Sin caddie asignado. Click para asignar uno.";
-    }
-    const who = caddieSummary?.label ? ` — ${caddieSummary.label}` : "";
-    if (
-      caddieSummary &&
-      caddieSummary.totalRounds > 0 &&
-      caddieSummary.roundsWithCaddie < caddieSummary.totalRounds
-    ) {
-      return `Caddie asignado${who} · ${caddieSummary.roundsWithCaddie}/${caddieSummary.totalRounds} rondas. Click para revisar o completar.`;
-    }
-    return `Caddie asignado${who}. Click para revisar.`;
-  })();
-  const caddieBtn = (
-    <Link
-      href={`/caddies/asignar?entry_id=${encodeURIComponent(
-        entry.id
-      )}&tournament_id=${encodeURIComponent(tournamentId)}&back=${encodeURIComponent(
-        `/entries?tournament_id=${tournamentId}`
-      )}`}
-      title={caddieTitle}
+  function caddieLinkFor(
+    targetEntryId: string,
+    summary: CaddieAssignmentSummary | null | undefined,
+    label: string,
+    playerName: string,
+    jug?: 1 | 2 | null
+  ) {
+    const has = Boolean(summary?.hasCaddie);
+    const state: "none" | "assigned" = has ? "assigned" : "none";
+    const colors = {
+      none: "border-red-800 bg-red-600 hover:bg-red-700",
+      assigned: "border-emerald-800 bg-emerald-600 hover:bg-emerald-700",
+    };
+    const icon = has ? "✓" : "✕";
+    const who = summary?.label ? ` — ${summary.label}` : "";
+    const title = has
+      ? `Caddie de ${playerName}${who}. Click para revisar.`
+      : `Sin caddie para ${playerName}. Click para asignar.`;
+    const jugQs = jug === 1 || jug === 2 ? `&jug=${jug}` : "";
+    return (
+      <Link
+        href={`/caddies/asignar?entry_id=${encodeURIComponent(
+          targetEntryId
+        )}&tournament_id=${encodeURIComponent(
+          tournamentId
+        )}${jugQs}&back=${encodeURIComponent(
+          `/entries?tournament_id=${tournamentId}`
+        )}`}
+        title={title}
+        className={
+          compact
+            ? `${MOBILE_ACTION_BTN} ${colors[state]}`
+            : `inline-flex h-7 w-full items-center justify-center rounded border text-[11px] font-bold text-white ${colors[state]}`
+        }
+      >
+        <span className="mr-0.5">{icon}</span>
+        {label}
+      </Link>
+    );
+  }
+
+  const selfName =
+    `${entry.players?.last_name ?? ""} ${entry.players?.first_name ?? ""}`.trim() ||
+    "Jugador";
+
+  const pairHasBoth =
+    Boolean(partner?.jug1_entry_id) && Boolean(partner?.jug2_entry_id);
+
+  const jug1EntryId = partner?.jug1_entry_id ?? "";
+  const jug2EntryId = partner?.jug2_entry_id ?? "";
+  const jug1Name = partner?.jug1_name ?? "Jugador 1";
+  const jug2Name = partner?.jug2_name ?? "Jugador 2";
+
+  const jug1Summary =
+    jug1EntryId === entry.id
+      ? entry.caddie_summary
+      : partnerEntry?.id === jug1EntryId
+        ? partnerEntry.caddie_summary
+        : null;
+  const jug2Summary =
+    jug2EntryId === entry.id
+      ? entry.caddie_summary
+      : partnerEntry?.id === jug2EntryId
+        ? partnerEntry.caddie_summary
+        : null;
+
+  const caddieBtn = pairHasBoth ? (
+    <div
       className={
         compact
-          ? `${MOBILE_ACTION_BTN} ${caddieColors[caddieState]}`
-          : `inline-flex h-7 w-full items-center justify-center rounded border text-[11px] font-bold text-white ${caddieColors[caddieState]}`
+          ? "flex shrink-0 items-center gap-1"
+          : "flex w-full items-center gap-1"
       }
     >
-      <span className="mr-0.5">{caddieIcon}</span>
-      Caddie
-    </Link>
+      {caddieLinkFor(jug1EntryId, jug1Summary, "Caddie J1", jug1Name, 1)}
+      {caddieLinkFor(jug2EntryId, jug2Summary, "Caddie J2", jug2Name, 2)}
+    </div>
+  ) : (
+    caddieLinkFor(entry.id, entry.caddie_summary, "Caddie", selfName, null)
   );
 
   const signaturesBtn = (
@@ -614,11 +667,13 @@ function EntryRowActions({
       className={
         compact
           ? "flex max-w-[min(52vw,16.5rem)] shrink-0 flex-nowrap items-center gap-1 overflow-x-auto overscroll-x-contain"
-          : `flex flex-nowrap items-center gap-2 ${ACTIONS_COL}`
+          : `flex flex-nowrap items-center gap-2 ${
+              pairHasBoth ? ACTIONS_COL_PAIRS : ACTIONS_COL
+            }`
       }
     >
       {wrap(telegramBtn, SLOT_MD)}
-      {wrap(caddieBtn, SLOT_MD)}
+      {wrap(caddieBtn, pairHasBoth ? SLOT_CAD_PAIR : SLOT_MD)}
       {wrap(committeeFlagForm, SLOT_MD)}
       {wrap(signaturesBtn, SLOT_MD)}
       {wrap(deleteForm, SLOT_MD)}
@@ -637,12 +692,6 @@ function EntryRowActions({
     </div>
   );
 }
-
-type PartnerInfo = {
-  entry_id: string;
-  player_id: string | null;
-  full_name: string;
-};
 
 export default function EntriesListPanel({
   entries,
@@ -722,6 +771,12 @@ export default function EntriesListPanel({
       );
     });
   }, [entries, search, club, category, te.roundSigTitle]);
+
+  const entryById = useMemo(() => {
+    const m = new Map<string, Entry>();
+    for (const e of entries) m.set(e.id, e);
+    return m;
+  }, [entries]);
 
   async function handleGenerateLinks(entryId: string) {
     try {
@@ -904,10 +959,26 @@ ${res.witness_url}`;
                   </p>
                   {matchPlayPairs ? (
                     <p className="mt-0.5 truncate text-[10px] text-emerald-700">
-                      Pareja:{" "}
-                      <span className="font-semibold">
-                        {partnerByEntryId[e.id]?.full_name ?? "sin pareja"}
-                      </span>
+                      {partnerByEntryId[e.id]?.jug1_name &&
+                      partnerByEntryId[e.id]?.jug2_name ? (
+                        <>
+                          Pareja · J1{" "}
+                          <span className="font-semibold">
+                            {partnerByEntryId[e.id].jug1_name}
+                          </span>
+                          {" · J2 "}
+                          <span className="font-semibold">
+                            {partnerByEntryId[e.id].jug2_name}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          Pareja:{" "}
+                          <span className="font-semibold">
+                            {partnerByEntryId[e.id]?.full_name ?? "sin pareja"}
+                          </span>
+                        </>
+                      )}
                     </p>
                   ) : null}
                 </div>
@@ -918,6 +989,12 @@ ${res.witness_url}`;
                   te={te}
                   compact
                   onGenerateLinks={handleGenerateLinks}
+                  partner={partnerByEntryId[e.id] ?? null}
+                  partnerEntry={
+                    partnerByEntryId[e.id]?.entry_id
+                      ? entryById.get(partnerByEntryId[e.id].entry_id) ?? null
+                      : null
+                  }
                 />
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -1116,9 +1193,12 @@ ${res.witness_url}`;
                   {matchPlayPairs ? (
                     <td className="px-1 py-1">
                       {partnerByEntryId[e.id] ? (
-                        <span className="inline-flex h-6 max-w-[200px] items-center rounded border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-medium text-emerald-900">
+                        <span className="inline-flex max-w-[220px] flex-col rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium leading-tight text-emerald-900">
                           <span className="truncate">
-                            {partnerByEntryId[e.id].full_name}
+                            J1 · {partnerByEntryId[e.id].jug1_name ?? "—"}
+                          </span>
+                          <span className="truncate">
+                            J2 · {partnerByEntryId[e.id].jug2_name ?? partnerByEntryId[e.id].full_name}
                           </span>
                         </span>
                       ) : (
@@ -1143,13 +1223,26 @@ ${res.witness_url}`;
                     <EntryRoundBalls entry={e} te={te} />
                   </td>
 
-                  <td className={`${ACTIONS_COL} px-1 py-1`}>
+                  <td
+                    className={`${
+                      matchPlayPairs && partnerByEntryId[e.id]?.jug1_entry_id
+                        ? ACTIONS_COL_PAIRS
+                        : ACTIONS_COL
+                    } px-1 py-1`}
+                  >
                     <EntryRowActions
                       entry={e}
                       tournamentId={tournamentId}
                       categories={categories}
                       te={te}
                       onGenerateLinks={handleGenerateLinks}
+                      partner={partnerByEntryId[e.id] ?? null}
+                      partnerEntry={
+                        partnerByEntryId[e.id]?.entry_id
+                          ? entryById.get(partnerByEntryId[e.id].entry_id) ??
+                            null
+                          : null
+                      }
                     />
                   </td>
                 </tr>
