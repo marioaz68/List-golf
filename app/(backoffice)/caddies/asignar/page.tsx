@@ -221,7 +221,9 @@ export default async function AsignarCaddiePage({
     ? assignments.find(
         (a) => a.entry_id === entry_id && a.round_id === round.id
       ) ?? null
-    : null;
+    : assignments.find(
+        (a) => a.entry_id === entry_id && a.round_id == null
+      ) ?? null;
   const currentCaddieId = currentAssignmentForRound?.caddie_id ?? null;
 
   const busyCaddieIds = new Set<string>();
@@ -232,6 +234,13 @@ export default async function AsignarCaddiePage({
         a.entry_id !== entry_id &&
         a.caddie_id
       ) {
+        busyCaddieIds.add(a.caddie_id);
+      }
+    }
+  } else {
+    // Sin rondas: un caddie ocupado = ya asignado a otro inscrito a nivel torneo.
+    for (const a of assignments) {
+      if (a.round_id == null && a.entry_id !== entry_id && a.caddie_id) {
         busyCaddieIds.add(a.caddie_id);
       }
     }
@@ -316,7 +325,7 @@ export default async function AsignarCaddiePage({
                 ? " · Todas las rondas"
                 : round
                   ? ` · R${round.round_no ?? "?"}`
-                  : ""}
+                  : " · Sin rondas (nivel torneo)"}
               {pairingGroup
                 ? ` · Grupo ${pairingGroup.group_no ?? "?"} (${formatTime(
                     pairingGroup.tee_time
@@ -412,30 +421,21 @@ export default async function AsignarCaddiePage({
             <div
               style={{
                 padding: "10px 12px",
-                border: "1px dashed #f59e0b",
-                background: "#fffbeb",
+                marginBottom: 10,
+                border: "1px solid #93c5fd",
+                background: "#eff6ff",
                 borderRadius: 8,
                 fontSize: 12,
-                color: "#92400e",
+                color: "#1e3a8a",
               }}
             >
-              El torneo no tiene rondas creadas todavía. Configura al menos
-              una ronda en{" "}
-              <Link
-                href={`/rounds?tournament_id=${encodeURIComponent(
-                  tournamentId
-                )}`}
-                style={{
-                  color: "#92400e",
-                  textDecoration: "underline",
-                  fontWeight: 700,
-                }}
-              >
-                Rondas
-              </Link>{" "}
-              antes de asignar caddies.
+              Este torneo aún no tiene rondas (cuadro/salidas). El caddie se
+              guarda a nivel torneo para este jugador; la pareja puede tener
+              un caddie distinto cada uno. Cuando existan rondas, vuelve a
+              asignar o propaga desde aquí.
             </div>
-          ) : caddies.length === 0 ? (
+          ) : null}
+          {caddies.length === 0 ? (
             <div
               style={{
                 padding: "10px 12px",

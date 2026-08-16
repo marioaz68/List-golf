@@ -51,8 +51,25 @@ export async function assignCaddieAction(formData: FormData) {
     throw new Error("Datos incompletos");
   }
 
+  // Sin rondas del torneo (p. ej. Calcuta parejas antes del cuadro):
+  // asignación a nivel torneo con round_id null — cada jugador de la
+  // pareja puede tener su propio caddie.
   if (!round_id) {
-    throw new Error("Falta round_id");
+    const result = await assignCaddieToEntry(supabase, {
+      tournamentId: tournament_id,
+      entryId: entry_id,
+      caddieId: caddie_id,
+      roundId: null,
+      pairingGroupId: pairing_group_id || null,
+    });
+    if (!result.ok) throw new Error(result.error);
+    revalidatePath("/caddies");
+    revalidatePath("/entries");
+    if (redirect_to) {
+      revalidatePath(redirect_to);
+      redirect(redirect_to);
+    }
+    redirectBack(tournament_id, "");
   }
 
   const { data: conflicts, error: conflictError } = await supabase
@@ -300,12 +317,6 @@ export async function assignCaddieByEntryAction(formData: FormData) {
     tournament_id,
     entry_id
   );
-
-  if (!roundId) {
-    throw new Error(
-      "El torneo no tiene rondas configuradas. Crea las rondas primero."
-    );
-  }
 
   const result = await assignCaddieToEntry(supabase, {
     tournamentId: tournament_id,

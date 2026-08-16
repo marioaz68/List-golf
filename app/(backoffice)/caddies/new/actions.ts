@@ -277,13 +277,6 @@ export async function assignCaddieFromCatalogAction(
     entry_id
   );
 
-  if (!roundId) {
-    return {
-      ok: false,
-      error: "El torneo no tiene rondas configuradas. Crea las rondas primero.",
-    };
-  }
-
   const result = await assignCaddieToEntry(supabase, {
     tournamentId: tournament_id,
     entryId: entry_id,

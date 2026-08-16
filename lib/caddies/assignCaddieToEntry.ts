@@ -4,50 +4,64 @@ export type AssignCaddieToEntryParams = {
   tournamentId: string;
   entryId: string;
   caddieId: string;
-  roundId: string;
+  /** Si es null/vacío: asignación a nivel torneo (sin ronda aún). */
+  roundId: string | null;
   pairingGroupId?: string | null;
 };
 
 export type AssignCaddieToEntryResult =
-  | { ok: true; roundId: string }
+  | { ok: true; roundId: string | null }
   | { ok: false; error: string };
 
-/** Asigna un caddie a un inscrito en una ronda y propaga a las demás rondas
- *  elegibles del torneo (misma regla que /caddies). */
+/** Asigna un caddie a un inscrito. Con ronda: propaga a otras rondas
+ *  elegibles. Sin ronda: guarda a nivel torneo (útil en match play
+ *  parejas antes de crear el cuadro/salidas). */
 export async function assignCaddieToEntry(
   supabase: SupabaseClient,
   params: AssignCaddieToEntryParams
 ): Promise<AssignCaddieToEntryResult> {
-  const { tournamentId, entryId, caddieId, roundId } = params;
+  const { tournamentId, entryId, caddieId } = params;
+  const roundId = params.roundId?.trim() || null;
   const pairingGroupId = params.pairingGroupId?.trim() || null;
 
-  if (!tournamentId || !entryId || !caddieId || !roundId) {
+  if (!tournamentId || !entryId || !caddieId) {
     return { ok: false, error: "Datos incompletos" };
   }
 
-  const { data: conflicts, error: conflictError } = await supabase
+  let conflictQuery = supabase
     .from("caddie_assignments")
     .select("id, entry_id")
     .eq("tournament_id", tournamentId)
     .eq("caddie_id", caddieId)
-    .eq("round_id", roundId)
     .eq("is_active", true);
+  conflictQuery = roundId
+    ? conflictQuery.eq("round_id", roundId)
+    : conflictQuery.is("round_id", null);
 
+  const { data: conflicts, error: conflictError } = await conflictQuery;
   if (conflictError) return { ok: false, error: conflictError.message };
 
   const conflict = (conflicts ?? []).find((a) => a.entry_id !== entryId);
   if (conflict) {
-    return { ok: false, error: "Este caddie ya está asignado a otro jugador en esta ronda" };
+    return {
+      ok: false,
+      error: roundId
+        ? "Este caddie ya está asignado a otro jugador en esta ronda"
+        : "Este caddie ya está asignado a otro jugador en este torneo",
+    };
   }
 
-  const { error: deactivateError } = await supabase
+  let deactivateQuery = supabase
     .from("caddie_assignments")
     .update({ is_active: false })
     .eq("tournament_id", tournamentId)
     .eq("entry_id", entryId)
-    .eq("round_id", roundId)
     .eq("is_active", true);
+  deactivateQuery = roundId
+    ? deactivateQuery.eq("round_id", roundId)
+    : deactivateQuery.is("round_id", null);
 
+  const { error: deactivateError } = await deactivateQuery;
   if (deactivateError) return { ok: false, error: deactivateError.message };
 
   const { error } = await supabase.from("caddie_assignments").insert({
@@ -61,6 +75,9 @@ export async function assignCaddieToEntry(
   });
 
   if (error) return { ok: false, error: error.message };
+
+  // Sin ronda no hay a qué propagar.
+  if (!roundId) return { ok: true, roundId: null };
 
   try {
     const { data: entryRow } = await supabase
