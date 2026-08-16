@@ -17,7 +17,10 @@ import {
   uniqueExcelSheetName,
   type ExcelNameMode,
 } from "@/lib/reports/excelFileName";
-import type { HandicapReportCategory } from "./HandicapsByCategoryClient";
+import type {
+  HandicapReportCategory,
+} from "./HandicapsByCategoryClient";
+import { groupRowsIntoPairs } from "./HandicapsByCategoryClient";
 
 type Props = {
   tournamentName: string;
@@ -74,14 +77,13 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
         ws.columns = hasPairs
           ? [
               { header: "#", key: "n", width: 4 },
-              { header: "Jug", key: "jug", width: 5 },
-              { header: "Pareja", key: "pareja", width: 36 },
-              { header: "Σ PH", key: "phSum", width: 7 },
-              { header: "GHIN", key: "ghin", width: 12 },
-              { header: "Nombre", key: "name", width: 32 },
-              { header: "PH", key: "ph", width: 6 },
-              { header: "Salida", key: "tee", width: 14 },
-              { header: "Override", key: "ovr", width: 9 },
+              { header: "Jugador 1", key: "j1", width: 28 },
+              { header: "PH J1", key: "ph1", width: 7 },
+              { header: "Salida J1", key: "tee1", width: 12 },
+              { header: "Jugador 2", key: "j2", width: 28 },
+              { header: "PH J2", key: "ph2", width: 7 },
+              { header: "Salida J2", key: "tee2", width: 12 },
+              { header: "Suma PH", key: "phSum", width: 9 },
             ]
           : [
               { header: "#", key: "n", width: 4 },
@@ -95,19 +97,50 @@ export default function ReportToolbar({ tournamentName, categories }: Props) {
         ws.getRow(1).alignment = { vertical: "middle", horizontal: "center" };
         ws.views = [{ state: "frozen", ySplit: 1 }];
 
-        cat.rows.forEach((r, idx) => {
-          ws.addRow({
-            n: idx + 1,
-            jug: r.pair_slot != null ? `J${r.pair_slot}` : "",
-            pareja: r.pair_label ?? "",
-            phSum: r.pair_ph_sum ?? "",
-            ghin: r.ghin ?? "",
-            name: r.name,
-            ph: r.ph,
-            tee: r.tee?.code ?? r.tee?.name ?? "",
-            ovr: r.is_override ? "Sí" : "",
+        if (hasPairs) {
+          const { pairs, singles } = groupRowsIntoPairs(cat.rows);
+          pairs.forEach((p, idx) => {
+            const sumPh =
+              p.pair_ph_sum != null
+                ? p.pair_ph_sum
+                : p.j1?.ph != null && p.j2?.ph != null
+                  ? Number(p.j1.ph) + Number(p.j2.ph)
+                  : p.j1?.ph ?? p.j2?.ph ?? null;
+            ws.addRow({
+              n: idx + 1,
+              j1: p.j1?.name ?? "",
+              ph1: p.j1?.ph ?? "",
+              tee1: p.j1?.tee?.code ?? p.j1?.tee?.name ?? "",
+              j2: p.j2?.name ?? "",
+              ph2: p.j2?.ph ?? "",
+              tee2: p.j2?.tee?.code ?? p.j2?.tee?.name ?? "",
+              phSum: sumPh ?? "",
+            });
           });
-        });
+          singles.forEach((r) => {
+            ws.addRow({
+              n: "",
+              j1: r.name,
+              ph1: r.ph ?? "",
+              tee1: r.tee?.code ?? r.tee?.name ?? "",
+              j2: "(sin pareja)",
+              ph2: "",
+              tee2: "",
+              phSum: r.ph ?? "",
+            });
+          });
+        } else {
+          cat.rows.forEach((r, idx) => {
+            ws.addRow({
+              n: idx + 1,
+              ghin: r.ghin ?? "",
+              name: r.name,
+              ph: r.ph,
+              tee: r.tee?.code ?? r.tee?.name ?? "",
+              ovr: r.is_override ? "Sí" : "",
+            });
+          });
+        }
       }
 
       const buffer = await wb.xlsx.writeBuffer();

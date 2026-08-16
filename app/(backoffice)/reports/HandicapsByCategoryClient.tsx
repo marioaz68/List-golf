@@ -35,6 +35,14 @@ export type HandicapReportCategory = {
   rows: HandicapReportRow[];
 };
 
+export type HandicapPairRow = {
+  pair_id: string;
+  pair_label: string | null;
+  pair_ph_sum: number | null;
+  j1: HandicapReportRow | null;
+  j2: HandicapReportRow | null;
+};
+
 const numFmt = (n: number | null | undefined): string =>
   n == null || !Number.isFinite(Number(n)) ? "—" : String(Math.round(Number(n)));
 const hiFmt = (n: number | null | undefined): string =>
@@ -48,6 +56,120 @@ function normalize(s: string): string {
     .trim();
 }
 
+/** Agrupa filas individuales en una fila por pareja (J1 + J2). */
+export function groupRowsIntoPairs(rows: HandicapReportRow[]): {
+  pairs: HandicapPairRow[];
+  singles: HandicapReportRow[];
+} {
+  const byPair = new Map<string, HandicapReportRow[]>();
+  const singles: HandicapReportRow[] = [];
+  for (const r of rows) {
+    if (!r.pair_id) {
+      singles.push(r);
+      continue;
+    }
+    const bag = byPair.get(r.pair_id) ?? [];
+    bag.push(r);
+    byPair.set(r.pair_id, bag);
+  }
+  const pairs: HandicapPairRow[] = [];
+  for (const [pairId, members] of byPair) {
+    const j1 =
+      members.find((m) => m.pair_slot === 1) ??
+      members[0] ??
+      null;
+    const j2 =
+      members.find((m) => m.pair_slot === 2) ??
+      members.find((m) => m.entry_id !== j1?.entry_id) ??
+      null;
+    pairs.push({
+      pair_id: pairId,
+      pair_label: j1?.pair_label ?? j2?.pair_label ?? null,
+      pair_ph_sum: j1?.pair_ph_sum ?? j2?.pair_ph_sum ?? null,
+      j1,
+      j2,
+    });
+  }
+  // Mantener orden de aparición (ya viene ordenado por Σ PH).
+  const order = new Map<string, number>();
+  rows.forEach((r, i) => {
+    if (r.pair_id && !order.has(r.pair_id)) order.set(r.pair_id, i);
+  });
+  pairs.sort(
+    (a, b) => (order.get(a.pair_id) ?? 0) - (order.get(b.pair_id) ?? 0)
+  );
+  return { pairs, singles };
+}
+
+function TeeBadge({
+  tee,
+}: {
+  tee: HandicapReportRow["tee"];
+}) {
+  if (!tee) {
+    return <span className="text-[10px] text-slate-500">sin regla</span>;
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold"
+      title={`${tee.name ?? ""} (${tee.code ?? ""})`}
+    >
+      <span
+        aria-hidden
+        className="inline-block h-3 w-3 rounded-full border border-white/30"
+        style={{
+          backgroundColor:
+            tee.color && tee.color.trim().length > 0 ? tee.color : "#888888",
+        }}
+      />
+      <span className="text-white">{tee.code ?? tee.name ?? "—"}</span>
+    </span>
+  );
+}
+
+function PhCell({ row }: { row: HandicapReportRow | null }) {
+  if (!row) {
+    return <span className="text-slate-500">—</span>;
+  }
+  return (
+    <span
+      className={`tabular-nums text-[13px] font-bold ${
+        row.is_override ? "text-amber-300" : "text-emerald-300"
+      }`}
+      title={
+        row.is_override
+          ? "Override manual desde panel de match play"
+          : "Handicap del torneo (PH)"
+      }
+    >
+      {numFmt(row.ph)}
+      {row.is_override ? (
+        <span className="ml-1 text-[8px] uppercase font-semibold">ovr</span>
+      ) : null}
+    </span>
+  );
+}
+
+function PlayerCell({ row, slot }: { row: HandicapReportRow | null; slot: 1 | 2 }) {
+  if (!row) {
+    return (
+      <span className="italic text-slate-500">
+        sin J{slot}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex min-w-0 flex-col leading-tight">
+      <span className="font-medium text-white">{row.name}</span>
+      {row.ghin ? (
+        <span className="font-mono text-[10px] tabular-nums text-slate-400">
+          GHIN {row.ghin}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export default function HandicapsByCategoryClient({
   categories,
   tournamentName = "Torneo",
@@ -57,7 +179,7 @@ export default function HandicapsByCategoryClient({
 }) {
   const [search, setSearch] = useState("");
 
-  const totalRows = useMemo(
+  const totalPlayers = useMemo(
     () => categories.reduce((acc, c) => acc + c.rows.length, 0),
     [categories]
   );
@@ -70,10 +192,10 @@ export default function HandicapsByCategoryClient({
   const filtered = useMemo(() => {
     const q = normalize(search);
     if (!q) {
-      return { cats: categories, shown: totalRows };
+      return { cats: categories, shownPlayers: totalPlayers };
     }
     const tokens = q.split(/\s+/).filter(Boolean);
-    let shown = 0;
+    let shownPlayers = 0;
     const cats = categories
       .map((cat) => {
         const rows = cat.rows.filter((r) => {
@@ -94,12 +216,25 @@ export default function HandicapsByCategoryClient({
           );
           return tokens.every((t) => haystack.includes(t));
         });
-        shown += rows.length;
+        // Si un miembro de la pareja coincide, incluir a ambos de esa pareja.
+        if (isPairsReport) {
+          const keepPairIds = new Set(
+            rows.filter((r) => r.pair_id).map((r) => r.pair_id as string)
+          );
+          const withPartners = cat.rows.filter(
+            (r) =>
+              rows.some((x) => x.entry_id === r.entry_id) ||
+              (r.pair_id != null && keepPairIds.has(r.pair_id))
+          );
+          shownPlayers += withPartners.length;
+          return { ...cat, rows: withPartners };
+        }
+        shownPlayers += rows.length;
         return { ...cat, rows };
       })
       .filter((c) => c.rows.length > 0);
-    return { cats, shown };
-  }, [categories, search, totalRows]);
+    return { cats, shownPlayers };
+  }, [categories, search, totalPlayers, isPairsReport]);
 
   return (
     <div className="report-printable space-y-3">
@@ -108,8 +243,8 @@ export default function HandicapsByCategoryClient({
           Reporte de Handicaps — {tournamentName}
         </h1>
         <p className="text-[10px] text-black">
-          Generado: {new Date().toLocaleString("es-MX")} · {filtered.shown} de{" "}
-          {totalRows} inscritos
+          Generado: {new Date().toLocaleString("es-MX")} ·{" "}
+          {filtered.shownPlayers} de {totalPlayers} inscritos
         </p>
       </div>
 
@@ -122,11 +257,11 @@ export default function HandicapsByCategoryClient({
           {isPairsReport ? (
             <>
               {" "}
-              Orden:{" "}
+              Una fila por pareja con{" "}
               <span className="font-semibold text-emerald-200">
-                por pareja
+                J1 y J2
               </span>{" "}
-              de menor a mayor suma de PH (J1+J2).
+              (PH y salida de cada uno). Orden: menor a mayor Σ PH.
             </>
           ) : null}
         </p>
@@ -157,7 +292,7 @@ export default function HandicapsByCategoryClient({
           </button>
         ) : null}
         <span className="ml-auto text-[10px] tabular-nums text-slate-400">
-          {filtered.shown}/{totalRows}
+          {filtered.shownPlayers}/{totalPlayers}
         </span>
       </div>
 
@@ -166,13 +301,10 @@ export default function HandicapsByCategoryClient({
           const label = cat.code
             ? `${cat.code} · ${cat.name ?? ""}`
             : cat.name ?? "—";
-          const pairStripe = new Map<string, number>();
-          let stripe = 0;
-          for (const r of cat.rows) {
-            if (!r.pair_id || pairStripe.has(r.pair_id)) continue;
-            pairStripe.set(r.pair_id, stripe % 2);
-            stripe += 1;
-          }
+          const { pairs, singles } = isPairsReport
+            ? groupRowsIntoPairs(cat.rows)
+            : { pairs: [] as HandicapPairRow[], singles: cat.rows };
+
           return (
             <section
               key={cat.id}
@@ -183,142 +315,169 @@ export default function HandicapsByCategoryClient({
                 <span className="text-[10px] text-slate-400">
                   {cat.rows.length} inscrit{cat.rows.length === 1 ? "o" : "os"}
                   {isPairsReport
-                    ? ` · ${pairStripe.size} pareja${pairStripe.size === 1 ? "" : "s"}`
+                    ? ` · ${pairs.length} pareja${pairs.length === 1 ? "" : "s"}`
                     : ""}
                 </span>
               </header>
 
               <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-[12px] text-white">
-                  <thead className="bg-[#162032] text-[10px] uppercase tracking-wide text-slate-300">
-                    <tr>
-                      <th className="px-2 py-1.5 text-right w-[36px]">#</th>
-                      {isPairsReport ? (
-                        <>
-                          <th className="px-2 py-1.5 w-[44px]">Jug</th>
-                          <th className="px-2 py-1.5">Pareja</th>
-                        </>
-                      ) : null}
-                      <th
-                        className="px-2 py-1.5 text-left w-[88px]"
-                        title="GHIN Number del jugador"
-                      >
-                        GHIN
-                      </th>
-                      <th className="px-2 py-1.5">Nombre</th>
-                      <th
-                        className="px-2 py-1.5 text-right w-[72px]"
-                        title="Playing Handicap — handicap del torneo"
-                      >
-                        PH
-                      </th>
-                      <th className="px-2 py-1.5">Salida</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cat.rows.map((r, idx) => {
-                      const stripeIdx =
-                        r.pair_id != null ? pairStripe.get(r.pair_id) : null;
-                      const pairBg =
-                        stripeIdx === 0
-                          ? "bg-emerald-500/[0.06]"
-                          : stripeIdx === 1
-                            ? "bg-sky-500/[0.06]"
-                            : "";
-                      return (
-                      <tr
-                        key={r.entry_id}
-                        className={`border-t border-white/5 align-middle hover:bg-white/[0.02] ${pairBg}`}
-                      >
-                        <td className="px-2 py-1.5 text-right tabular-nums text-slate-400">
-                          {idx + 1}
-                        </td>
-                        {isPairsReport ? (
-                          <>
-                            <td className="px-2 py-1.5 text-center font-semibold tabular-nums text-emerald-200">
-                              {r.pair_slot != null ? `J${r.pair_slot}` : "—"}
-                            </td>
-                            <td
-                              className="max-w-[200px] px-2 py-1.5 text-[11px] text-slate-300"
-                              title={
-                                r.pair_label
-                                  ? r.pair_ph_sum != null
-                                    ? `${r.pair_label} · Σ PH ${r.pair_ph_sum}`
-                                    : r.pair_label
-                                  : undefined
-                              }
-                            >
-                              {r.pair_label ? (
-                                <span className="inline-flex max-w-full flex-col leading-tight">
-                                  <span className="truncate">{r.pair_label}</span>
-                                  {r.pair_ph_sum != null ? (
-                                    <span className="tabular-nums text-[9px] text-emerald-300/90">
-                                      Σ PH {r.pair_ph_sum}
-                                    </span>
-                                  ) : null}
-                                </span>
-                              ) : (
-                                <span className="italic text-slate-500">
-                                  sin pareja
-                                </span>
-                              )}
-                            </td>
-                          </>
-                        ) : null}
-                        <td className="px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-300">
-                          {r.ghin ?? (
-                            <span className="text-slate-500 italic">—</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-1.5 font-medium">{r.name}</td>
-                        <td
-                          className={`px-2 py-1.5 text-right tabular-nums text-[13px] font-bold ${
-                            r.is_override ? "text-amber-300" : "text-emerald-300"
-                          }`}
-                          title={
-                            r.is_override
-                              ? "Override manual desde panel de match play"
-                              : "Handicap del torneo (PH)"
-                          }
+                {isPairsReport ? (
+                  <table className="min-w-full text-left text-[12px] text-white">
+                    <thead className="bg-[#162032] text-[10px] uppercase tracking-wide text-slate-300">
+                      <tr>
+                        <th className="px-2 py-1.5 text-right w-[36px]">#</th>
+                        <th className="px-2 py-1.5">Jugador 1</th>
+                        <th
+                          className="px-2 py-1.5 text-right w-[56px]"
+                          title="Handicap del torneo J1"
                         >
-                          {numFmt(r.ph)}
-                          {r.is_override ? (
-                            <span className="ml-1 text-[8px] uppercase font-semibold">
-                              ovr
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {r.tee ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-semibold"
-                              title={`${r.tee.name ?? ""} (${r.tee.code ?? ""})`}
-                            >
-                              <span
-                                aria-hidden
-                                className="inline-block h-3 w-3 rounded-full border border-white/30"
-                                style={{
-                                  backgroundColor:
-                                    r.tee.color && r.tee.color.trim().length > 0
-                                      ? r.tee.color
-                                      : "#888888",
-                                }}
-                              />
-                              <span className="text-white">
-                                {r.tee.code ?? r.tee.name ?? "—"}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-500">
-                              sin regla
-                            </span>
-                          )}
-                        </td>
+                          PH
+                        </th>
+                        <th className="px-2 py-1.5">Salida</th>
+                        <th className="px-2 py-1.5">Jugador 2</th>
+                        <th
+                          className="px-2 py-1.5 text-right w-[56px]"
+                          title="Handicap del torneo J2"
+                        >
+                          PH
+                        </th>
+                        <th className="px-2 py-1.5">Salida</th>
+                          <th
+                          className="px-2 py-1.5 text-right w-[64px]"
+                          title="Suma de handicaps de torneo (PH J1 + PH J2)"
+                        >
+                          Suma PH
+                        </th>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {pairs.map((p, idx) => {
+                        const sumPh =
+                          p.pair_ph_sum != null
+                            ? p.pair_ph_sum
+                            : p.j1?.ph != null && p.j2?.ph != null
+                              ? Number(p.j1.ph) + Number(p.j2.ph)
+                              : p.j1?.ph ?? p.j2?.ph ?? null;
+                        return (
+                        <tr
+                          key={p.pair_id}
+                          className={`border-t border-white/5 align-middle hover:bg-white/[0.02] ${
+                            idx % 2 === 0
+                              ? "bg-emerald-500/[0.06]"
+                              : "bg-sky-500/[0.06]"
+                          }`}
+                        >
+                          <td className="px-2 py-2 text-right tabular-nums text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="px-2 py-2">
+                            <PlayerCell row={p.j1} slot={1} />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <PhCell row={p.j1} />
+                          </td>
+                          <td className="px-2 py-2">
+                            <TeeBadge tee={p.j1?.tee ?? null} />
+                          </td>
+                          <td className="px-2 py-2">
+                            <PlayerCell row={p.j2} slot={2} />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <PhCell row={p.j2} />
+                          </td>
+                          <td className="px-2 py-2">
+                            <TeeBadge tee={p.j2?.tee ?? null} />
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <span
+                              className="tabular-nums text-[14px] font-bold text-emerald-200"
+                              title="PH J1 + PH J2"
+                            >
+                              {numFmt(sumPh)}
+                            </span>
+                          </td>
+                        </tr>
+                        );
+                      })}
+                      {singles.map((r) => (
+                        <tr
+                          key={r.entry_id}
+                          className="border-t border-white/5 align-middle bg-amber-500/[0.06]"
+                        >
+                          <td className="px-2 py-2 text-right text-slate-500">
+                            —
+                          </td>
+                          <td className="px-2 py-2">
+                            <PlayerCell row={r} slot={1} />
+                            <span className="mt-0.5 block text-[10px] text-amber-300">
+                              sin pareja
+                            </span>
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <PhCell row={r} />
+                          </td>
+                          <td className="px-2 py-2">
+                            <TeeBadge tee={r.tee} />
+                          </td>
+                          <td className="px-2 py-2 text-slate-500">—</td>
+                          <td className="px-2 py-2 text-right text-slate-500">
+                            —
+                          </td>
+                          <td className="px-2 py-2 text-slate-500">—</td>
+                          <td className="px-2 py-2 text-right tabular-nums font-bold text-emerald-200">
+                            {numFmt(r.ph)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="min-w-full text-left text-[12px] text-white">
+                    <thead className="bg-[#162032] text-[10px] uppercase tracking-wide text-slate-300">
+                      <tr>
+                        <th className="px-2 py-1.5 text-right w-[36px]">#</th>
+                        <th
+                          className="px-2 py-1.5 text-left w-[88px]"
+                          title="GHIN Number del jugador"
+                        >
+                          GHIN
+                        </th>
+                        <th className="px-2 py-1.5">Nombre</th>
+                        <th
+                          className="px-2 py-1.5 text-right w-[72px]"
+                          title="Playing Handicap — handicap del torneo"
+                        >
+                          PH
+                        </th>
+                        <th className="px-2 py-1.5">Salida</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {singles.map((r, idx) => (
+                        <tr
+                          key={r.entry_id}
+                          className="border-t border-white/5 align-middle hover:bg-white/[0.02]"
+                        >
+                          <td className="px-2 py-1.5 text-right tabular-nums text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="px-2 py-1.5 font-mono text-[11px] tabular-nums text-slate-300">
+                            {r.ghin ?? (
+                              <span className="text-slate-500 italic">—</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-1.5 font-medium">{r.name}</td>
+                          <td className="px-2 py-1.5 text-right">
+                            <PhCell row={r} />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <TeeBadge tee={r.tee} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </section>
           );
