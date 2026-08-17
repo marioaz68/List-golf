@@ -211,6 +211,19 @@ export default async function MatchPlayPage(props: {
         {isMatchPlay ? (
           <>
             <Link
+              href={`/matchplay/auction/proyeccion?tournament_id=${effectiveId}`}
+              style={{
+                ...buttonStyle,
+                background: "linear-gradient(#fbbf24, #d97706)",
+                border: "1px solid #92400e",
+                color: "#0b1224",
+                fontWeight: 800,
+              }}
+              title="Pantalla completa para proyectar el sorteo en la sala"
+            >
+              📺 Sorteo TV
+            </Link>
+            <Link
               href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
               style={{
                 ...buttonStyle,

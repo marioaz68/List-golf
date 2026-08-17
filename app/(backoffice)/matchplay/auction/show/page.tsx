@@ -143,6 +143,16 @@ export default async function AuctionShowPage(props: {
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Link
+            href={`/matchplay/auction/proyeccion?tournament_id=${effectiveId}`}
+            style={{
+              ...buttonStyle,
+              background: "linear-gradient(#f59e0b, #b45309)",
+              border: "1px solid #78350f",
+            }}
+          >
+            📺 Sorteo TV
+          </Link>
+          <Link
             href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
             style={{
               ...buttonStyle,

@@ -15,6 +15,8 @@ type RawTeamRow = {
   seed: number | null;
   auction_bid: number | null;
   auction_order: number | null;
+  auction_order_at?: string | null;
+  auction_order_by?: string | null;
   is_active: boolean;
 };
 
@@ -81,6 +83,8 @@ export function useMatchPlayTeamsRealtime(
                   seed: row.seed,
                   auction_bid: row.auction_bid,
                   auction_order: row.auction_order,
+                  auction_order_at: row.auction_order_at ?? null,
+                  auction_order_by: row.auction_order_by ?? null,
                   is_active: row.is_active,
                   player_a: null,
                   player_b: null,
@@ -95,6 +99,8 @@ export function useMatchPlayTeamsRealtime(
               seed: row.seed,
               auction_bid: row.auction_bid,
               auction_order: row.auction_order,
+              auction_order_at: row.auction_order_at ?? copy[idx].auction_order_at,
+              auction_order_by: row.auction_order_by ?? copy[idx].auction_order_by,
               is_active: row.is_active,
               category_id: row.category_id,
             };

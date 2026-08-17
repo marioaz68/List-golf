@@ -5,7 +5,12 @@ import Link from "next/link";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
-import { awardAuctionBid, resetAuctionData } from "../../actions";
+import {
+  awardAuctionBid,
+  drawNextAuctionPairAction,
+  resetAuctionData,
+} from "../../actions";
+import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
 
 type PrizeShare = { position: number; label: string; percent: number };
 
@@ -129,7 +134,7 @@ export default function RaffleStage({
     [teams, rollDisplayId]
   );
 
-  const startRoll = useCallback(() => {
+  const startRoll = useCallback(async () => {
     if (pending.length === 0) return;
     if (rolling) return;
 
@@ -137,31 +142,44 @@ export default function RaffleStage({
     setCelebrate(false);
     setCurrentTeamId(null);
 
-    const candidates = pending.filter((t) => t.id !== currentTeamId);
-    const pool = candidates.length > 0 ? candidates : pending;
+    const pool = pending;
+    const result = await drawNextAuctionPairAction(tournamentId);
+    if (!result.ok) {
+      setRolling(false);
+      return;
+    }
+    const winnerId = result.teamId;
+
+    const landOnWinner = () => {
+      setRollDisplayId(winnerId);
+      setCurrentTeamId(winnerId);
+      setShake(true);
+      setCelebrate(true);
+      setRolling(false);
+      setBidInput(minBid != null ? String(minBid) : "");
+      window.setTimeout(() => setShake(false), 700);
+      window.setTimeout(() => setCelebrate(false), 4500);
+      window.setTimeout(() => bidInputRef.current?.focus(), 800);
+    };
+
+    if (prefersReducedMotion() || pool.length <= 1) {
+      landOnWinner();
+      return;
+    }
 
     let elapsed = 0;
-    const total = pool.length >= 6 ? 4200 : 3000;
+    const total = 4200;
     let interval = 55;
+    let cursor = 0;
 
     const step = () => {
-      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const pick = pool[cursor % pool.length];
+      cursor += 1;
       if (pick) setRollDisplayId(pick.id);
       elapsed += interval;
       interval = Math.min(360, Math.round(interval * 1.16));
       if (elapsed >= total) {
-        const final = pool[Math.floor(Math.random() * pool.length)];
-        if (final) {
-          setRollDisplayId(final.id);
-          setCurrentTeamId(final.id);
-          setShake(true);
-          setCelebrate(true);
-          window.setTimeout(() => setShake(false), 700);
-          window.setTimeout(() => setCelebrate(false), 4500);
-          window.setTimeout(() => bidInputRef.current?.focus(), 800);
-        }
-        setRolling(false);
-        setBidInput(minBid != null ? String(minBid) : "");
+        landOnWinner();
         if (rollTimerRef.current) {
           window.clearTimeout(rollTimerRef.current);
           rollTimerRef.current = null;
@@ -172,7 +190,7 @@ export default function RaffleStage({
     };
 
     step();
-  }, [pending, rolling, currentTeamId, minBid]);
+  }, [pending, rolling, tournamentId, minBid]);
 
   useEffect(() => {
     return () => {
@@ -182,13 +200,37 @@ export default function RaffleStage({
     };
   }, []);
 
+  // Si el equipo actual ya tiene postura, soltarlo para el siguiente.
   useEffect(() => {
     if (!currentTeam) return;
-    if (currentTeam.auction_order != null) {
+    if (currentTeam.auction_bid != null) {
       setCurrentTeamId(null);
       setRollDisplayId(null);
     }
   }, [currentTeam]);
+
+  useEffect(() => {
+    if (rolling) return;
+    const waiting = teams
+      .filter(
+        (t) =>
+          t.is_active &&
+          t.auction_order != null &&
+          t.auction_bid == null
+      )
+      .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
+    const latest = waiting[0];
+    if (!latest) return;
+    if (currentTeamId === latest.id) return;
+    const currentStillOpen =
+      currentTeamId != null &&
+      teams.some(
+        (t) => t.id === currentTeamId && t.auction_bid == null
+      );
+    if (currentStillOpen) return;
+    setCurrentTeamId(latest.id);
+    setRollDisplayId(latest.id);
+  }, [teams, rolling, currentTeamId]);
 
   const skipCurrent = () => {
     setCurrentTeamId(null);
@@ -603,6 +645,12 @@ export default function RaffleStage({
       {/* ATAJOS al pie */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-black/30 px-4 py-2 text-[12px] sm:px-6">
         <div className="flex flex-wrap gap-2">
+          <Link
+            href={`/matchplay/auction/proyeccion?tournament_id=${tournamentId}`}
+            className="rounded border border-amber-400/50 bg-amber-950/50 px-3 py-1.5 font-bold text-amber-100 hover:bg-amber-900/60"
+          >
+            📺 Sorteo TV
+          </Link>
           <Link
             href={`/torneos/${tournamentId}/cuadro-vivo`}
             target="_blank"
