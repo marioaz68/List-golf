@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   saveCommitteeFlagsBulk,
   suggestCommitteeCandidatesAction,
+  type BulkFlagItem,
 } from "../adminActions";
 import {
   DEFAULT_SUGGEST_THRESHOLDS,
@@ -60,6 +61,8 @@ function toTableRow(
   };
 }
 
+const SAVE_DEBOUNCE_MS = 450;
+
 export default function CommitteeSelectionClient({
   tournamentId,
   tournamentName,
@@ -82,11 +85,19 @@ export default function CommitteeSelectionClient({
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [savingFlags, setSavingFlags] = useState(false);
   const [pending, startTransition] = useTransition();
   const [thresholds, setThresholds] = useState<SuggestThresholds>(
     DEFAULT_SUGGEST_THRESHOLDS
   );
   const [bulkReason, setBulkReason] = useState("");
+
+  const pendingFlagsRef = useRef<Map<string, BulkFlagItem>>(new Map());
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushBusyRef = useRef(false);
+  const lastOkMsgRef = useRef("");
+  const tournamentIdRef = useRef(tournamentId);
+  tournamentIdRef.current = tournamentId;
 
   const tableRows = useMemo(
     () =>
@@ -111,6 +122,47 @@ export default function CommitteeSelectionClient({
     });
   }, [tableRows, q]);
 
+  async function flushPendingFlags() {
+    if (flushBusyRef.current) return;
+    const items = Array.from(pendingFlagsRef.current.values());
+    if (items.length === 0) return;
+    pendingFlagsRef.current.clear();
+    flushBusyRef.current = true;
+    setSavingFlags(true);
+    setErr("");
+    try {
+      const res = await saveCommitteeFlagsBulk({
+        tournamentId: tournamentIdRef.current,
+        items,
+        quiet: true,
+      });
+      if (!res.ok) {
+        // Re-encolar para reintentar sin perder la intención del usuario.
+        for (const item of items) {
+          pendingFlagsRef.current.set(item.entryId, item);
+        }
+        setErr(res.error);
+        return;
+      }
+      if (lastOkMsgRef.current) setMsg(lastOkMsgRef.current);
+    } finally {
+      flushBusyRef.current = false;
+      setSavingFlags(false);
+      if (pendingFlagsRef.current.size > 0) {
+        scheduleFlush(lastOkMsgRef.current || "Selección guardada.");
+      }
+    }
+  }
+
+  function scheduleFlush(okMsg: string) {
+    lastOkMsgRef.current = okMsg;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void flushPendingFlags();
+    }, SAVE_DEBOUNCE_MS);
+  }
+
   function persistItems(
     items: Array<{ entryId: string; flagged: boolean; reason: string }>,
     okMsg: string
@@ -118,15 +170,26 @@ export default function CommitteeSelectionClient({
     if (items.length === 0) return;
     setErr("");
     setMsg("");
-    startTransition(async () => {
-      const res = await saveCommitteeFlagsBulk({ tournamentId, items });
-      if (!res.ok) {
-        setErr(res.error);
-        return;
-      }
-      setMsg(okMsg);
-    });
+    for (const item of items) {
+      pendingFlagsRef.current.set(item.entryId, item);
+    }
+    scheduleFlush(okMsg);
   }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      // Intento final al desmontar (navegación).
+      const leftover = Array.from(pendingFlagsRef.current.values());
+      if (leftover.length > 0) {
+        void saveCommitteeFlagsBulk({
+          tournamentId: tournamentIdRef.current,
+          items: leftover,
+          quiet: true,
+        });
+      }
+    };
+  }, []);
 
   function reasonFor(id: string) {
     return reasons[id]?.trim() || bulkReason.trim() || "";
@@ -275,6 +338,11 @@ export default function CommitteeSelectionClient({
         <p className="mt-1 text-xs text-slate-500">
           En votación: {selectedCount} · Sugeridos (aún no aplicados):{" "}
           {suggestedCount}
+          {savingFlags ? (
+            <span className="ml-2 font-semibold text-indigo-600">
+              Guardando…
+            </span>
+          ) : null}
         </p>
       </header>
 
@@ -502,7 +570,6 @@ export default function CommitteeSelectionClient({
                     <input
                       type="checkbox"
                       checked={on}
-                      disabled={pending}
                       onChange={() => toggle(r.entryId)}
                     />
                   </td>

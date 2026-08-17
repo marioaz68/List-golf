@@ -25,6 +25,8 @@ export type BulkFlagItem = {
 export async function saveCommitteeFlagsBulk(params: {
   tournamentId: string;
   items: BulkFlagItem[];
+  /** Si true, no revalida la página de selección (evita remount al marcar rápido). */
+  quiet?: boolean;
 }): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
   const { userId } = await requireGhinCommitteeAccess();
   const tournamentId = params.tournamentId?.trim();
@@ -64,9 +66,13 @@ export async function saveCommitteeFlagsBulk(params: {
     if (data?.length) updated += data.length;
   }
 
+  // No revalidar /seleccion en cada click: remonta el cliente y “salta”
+  // la UI / pierde checks al marcar varios rápido.
   revalidatePath("/comite-handicap");
-  revalidatePath("/comite-handicap/seleccion");
   revalidatePath("/entries");
+  if (!params.quiet) {
+    revalidatePath("/comite-handicap/seleccion");
+  }
   return { ok: true, updated };
 }
 
