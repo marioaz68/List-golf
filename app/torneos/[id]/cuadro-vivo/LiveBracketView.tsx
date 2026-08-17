@@ -420,8 +420,8 @@ export default function LiveBracketView({
   }, [focusMatchId]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [cam, setCam] = useState<CameraPose>(identityPose);
-  const camRef = useRef<CameraPose>(identityPose);
+  const [cam, setCam] = useState<CameraPose>(() => identityPose());
+  const camRef = useRef<CameraPose>(identityPose());
   const [focusTeamId, setFocusTeamId] = useState<string | null>(null);
   const [focusHalf, setFocusHalf] = useState<"top" | "bottom" | null>(null);
   const [focusCaption, setFocusCaption] = useState<string | null>(null);
