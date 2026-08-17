@@ -1133,10 +1133,6 @@ function MobileScoreEntryContent() {
               scores,
               pending: { ...(p.pending ?? {}) },
               pickedUp,
-              strokesByHole: { ...(p.strokesByHole ?? {}) },
-              playingHandicap: p.playingHandicap ?? null,
-              ballRole: p.ballRole ?? null,
-              matchSide: p.matchSide ?? null,
             };
           })
         );
