@@ -8,9 +8,11 @@ import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsReal
 import {
   awardAuctionBid,
   drawNextAuctionPairAction,
+  releaseAuctionPairForRedrawAction,
   resetAuctionData,
 } from "../../actions";
 import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
+import CasinoAuctionDrum from "@/components/matchplay/CasinoAuctionDrum";
 
 type PrizeShare = { position: number; label: string; percent: number };
 
@@ -169,14 +171,17 @@ export default function AuctionShowClient({
     [teams, rollDisplayId]
   );
 
-  const startRoll = useCallback(async () => {
-    if (pending.length === 0) return;
+  const startRoll = useCallback(async (reuseOrder?: number | null) => {
+    if (pending.length === 0 && reuseOrder == null) return;
     if (rolling) return;
     setAsideFromQueue(false);
     setRolling(true);
 
-    const pool = pending;
-    const result = await drawNextAuctionPairAction(tournamentId);
+    const pool = teams.filter((t) => t.is_active);
+    const result = await drawNextAuctionPairAction(
+      tournamentId,
+      reuseOrder ?? null
+    );
     if (!result.ok) {
       setRolling(false);
       return;
@@ -218,7 +223,21 @@ export default function AuctionShowClient({
     };
 
     step();
-  }, [pending, rolling, tournamentId, minBid]);
+  }, [pending, rolling, tournamentId, minBid, teams]);
+
+  const redrawThisTurn = useCallback(async () => {
+    if (!currentTeam?.auction_order || rolling) return;
+    const order = currentTeam.auction_order;
+    const released = await releaseAuctionPairForRedrawAction(
+      tournamentId,
+      currentTeam.id
+    );
+    if (!released.ok) return;
+    setCurrentTeamId(null);
+    setRollDisplayId(null);
+    setAsideFromQueue(true);
+    window.setTimeout(() => void startRoll(order), 80);
+  }, [currentTeam, rolling, tournamentId, startRoll]);
 
   useEffect(() => {
     return () => {
@@ -434,6 +453,20 @@ export default function AuctionShowClient({
                   <button type="button" style={btn} onClick={skipCurrent}>
                     Cerrar · volver a rifar
                   </button>
+                  {currentTeam.auction_order != null ? (
+                    <button
+                      type="button"
+                      style={{
+                        ...warn,
+                        background: "linear-gradient(#e11d48, #9f1239)",
+                        border: "1px solid #881337",
+                      }}
+                      onClick={() => void redrawThisTurn()}
+                      disabled={rolling}
+                    >
+                      Volver a rifar turno #{currentTeam.auction_order}
+                    </button>
+                  ) : null}
                 </>
               ) : null}
             </div>

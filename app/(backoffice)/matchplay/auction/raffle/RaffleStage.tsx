@@ -8,9 +8,11 @@ import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsReal
 import {
   awardAuctionBid,
   drawNextAuctionPairAction,
+  releaseAuctionPairForRedrawAction,
   resetAuctionData,
 } from "../../actions";
 import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
+import CasinoAuctionDrum from "@/components/matchplay/CasinoAuctionDrum";
 
 type PrizeShare = { position: number; label: string; percent: number };
 
@@ -122,6 +124,9 @@ export default function RaffleStage({
   const [celebrate, setCelebrate] = useState(false);
   const [shake, setShake] = useState(false);
   const [asideFromQueue, setAsideFromQueue] = useState(false);
+  const [preferredOrder, setPreferredOrder] = useState<number | null>(null);
+  const [redrawBusy, setRedrawBusy] = useState(false);
+  const [drumTick, setDrumTick] = useState(0);
   const rollTimerRef = useRef<number | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const bidInputRef = useRef<HTMLInputElement | null>(null);
@@ -135,17 +140,27 @@ export default function RaffleStage({
     [teams, rollDisplayId]
   );
 
-  const startRoll = useCallback(async () => {
-    if (pending.length === 0) return;
-    if (rolling) return;
+  const startRoll = useCallback(async (reuseOrder?: number | null) => {
+    const orderHint = reuseOrder ?? preferredOrder;
+    if (pending.length === 0 && orderHint == null) return;
+    if (rolling || redrawBusy) return;
 
     setAsideFromQueue(false);
     setRolling(true);
     setCelebrate(false);
     setCurrentTeamId(null);
+    setDrumTick(0);
 
-    const pool = pending;
-    const result = await drawNextAuctionPairAction(tournamentId);
+    const pool = teams.filter((t) => t.is_active);
+    if (pool.length === 0) {
+      setRolling(false);
+      return;
+    }
+    const result = await drawNextAuctionPairAction(
+      tournamentId,
+      orderHint
+    );
+    setPreferredOrder(null);
     if (!result.ok) {
       setRolling(false);
       return;
@@ -177,7 +192,10 @@ export default function RaffleStage({
     const step = () => {
       const pick = pool[cursor % pool.length];
       cursor += 1;
-      if (pick) setRollDisplayId(pick.id);
+      if (pick) {
+        setRollDisplayId(pick.id);
+        setDrumTick(cursor);
+      }
       elapsed += interval;
       interval = Math.min(360, Math.round(interval * 1.16));
       if (elapsed >= total) {
@@ -192,7 +210,28 @@ export default function RaffleStage({
     };
 
     step();
-  }, [pending, rolling, tournamentId, minBid]);
+  }, [pending, rolling, redrawBusy, tournamentId, minBid, preferredOrder, teams]);
+
+  const redrawThisTurn = useCallback(async () => {
+    if (!currentTeam || rolling || redrawBusy) return;
+    if (currentTeam.auction_order == null) return;
+    const order = currentTeam.auction_order;
+    setRedrawBusy(true);
+    const released = await releaseAuctionPairForRedrawAction(
+      tournamentId,
+      currentTeam.id
+    );
+    setRedrawBusy(false);
+    if (!released.ok) return;
+    setPreferredOrder(released.freedOrder);
+    setCurrentTeamId(null);
+    setRollDisplayId(null);
+    setAsideFromQueue(true);
+    // Liberar y girar de inmediato reutilizando el mismo # de turno
+    window.setTimeout(() => {
+      void startRoll(released.freedOrder);
+    }, 80);
+  }, [currentTeam, rolling, redrawBusy, tournamentId, startRoll]);
 
   useEffect(() => {
     return () => {
@@ -353,75 +392,72 @@ export default function RaffleStage({
 
         {/* Card central */}
         <section
-          className={`raffle-card relative w-full max-w-5xl rounded-3xl border border-cyan-500/30 bg-gradient-to-br from-[#0a1220] to-[#0b1426] p-6 shadow-[0_0_60px_-10px_rgba(34,211,238,0.4)] sm:p-10 ${
+          className={`raffle-card relative w-full max-w-5xl rounded-3xl border border-amber-500/25 bg-gradient-to-br from-[#0a0c10] to-[#12161f] p-6 shadow-[0_0_60px_-10px_rgba(251,191,36,0.35)] sm:p-10 ${
             shake ? "raffle-shake" : ""
           }`}
         >
-          {/* Halo */}
-          <div className="pointer-events-none absolute -inset-2 rounded-[28px] bg-gradient-to-br from-cyan-500/10 via-transparent to-amber-400/10 blur-2xl" />
-          {/* Estado */}
+          <div className="pointer-events-none absolute -inset-2 rounded-[28px] bg-gradient-to-br from-rose-500/10 via-transparent to-amber-400/10 blur-2xl" />
           <div className="relative flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-[12px] font-bold uppercase tracking-[0.3em] text-cyan-300">
+            <h2 className="text-[12px] font-bold uppercase tracking-[0.3em] text-amber-300">
               {rolling
-                ? "🎰 Rifando…"
+                ? "Ruleta girando…"
                 : currentTeam
-                  ? "🎯 Equipo seleccionado"
+                  ? "Pareja en subasta"
                   : pending.length === 0
-                    ? "🏁 Subasta completa"
+                    ? "Subasta completa"
                     : "Listo para rifar"}
             </h2>
             {currentTeam && !rolling ? (
               <span className="rounded-full border border-amber-400/40 bg-amber-950/40 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-200">
-                Subastando turno #{nextTurnNumber}
+                Turno #{nextTurnNumber}
+              </span>
+            ) : preferredOrder != null ? (
+              <span className="rounded-full border border-rose-400/40 bg-rose-950/40 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-rose-200">
+                Re-rifando turno #{preferredOrder}
               </span>
             ) : null}
           </div>
 
-          {/* Pareja en pantalla */}
-          {displayTeam ? (
-            <div
-              key={displayTeam.id}
-              className={`relative mt-5 ${
-                rolling
-                  ? "raffle-flicker opacity-90"
-                  : "raffle-reveal opacity-100"
-              }`}
-            >
-              <div className="text-center text-[44px] font-extrabold leading-tight tracking-tight text-white drop-shadow-[0_0_16px_rgba(34,211,238,0.45)] sm:text-[68px] md:text-[84px]">
-                {teamLabel(displayTeam)}
-              </div>
-              <div className="mt-2 text-center text-[16px] text-slate-300 sm:text-[20px]">
-                {teamPlayers(displayTeam)}
-              </div>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <Chip label="HI combinado" value={displayTeam.combined_hi ?? "—"} />
-                {!rolling && currentTeam ? (
-                  <>
+          {/* Tambor casino */}
+          {(rolling || displayTeam) && teams.filter((t) => t.is_active).length > 0 ? (
+            <div className="relative mt-5">
+              <CasinoAuctionDrum
+                teams={teams.filter((t) => t.is_active)}
+                activeIndex={
+                  rolling
+                    ? drumTick
+                    : Math.max(
+                        0,
+                        teams
+                          .filter((t) => t.is_active)
+                          .findIndex((t) => t.id === displayTeam?.id)
+                      )
+                }
+                itemHeight={104}
+              />
+              {!rolling && currentTeam ? (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <Chip label="HI combinado" value={currentTeam.combined_hi ?? "—"} />
+                  <Chip label="Turno" value={`#${nextTurnNumber}`} tone="amber" />
+                  {projectedSeed != null ? (
                     <Chip
-                      label="Turno"
-                      value={`#${nextTurnNumber}`}
+                      label="Seed proyectado"
+                      value={`#${projectedSeed}`}
                       tone="amber"
                     />
-                    {projectedSeed != null ? (
-                      <Chip
-                        label="Seed proyectado"
-                        value={`#${projectedSeed}`}
-                        tone="amber"
-                      />
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="mt-8 text-center text-[18px] text-slate-300 sm:text-[22px]">
               Presiona{" "}
               <span className="font-bold text-amber-300">
-                «🎲 Rifar turno»
+                «Girar ruleta»
               </span>{" "}
-              para que el sistema elija al azar uno de los{" "}
+              para elegir al azar una de las{" "}
               <strong className="text-cyan-200">{pending.length}</strong>{" "}
-              equipos pendientes.
+              parejas pendientes.
             </div>
           )}
 
@@ -430,17 +466,17 @@ export default function RaffleStage({
             {!currentTeam || rolling ? (
               <button
                 type="button"
-                onClick={startRoll}
-                disabled={rolling || pending.length === 0}
+                onClick={() => void startRoll()}
+                disabled={rolling || redrawBusy || pending.length === 0}
                 className={`raffle-mega-btn ${
-                  rolling || pending.length === 0 ? "is-disabled" : ""
+                  rolling || redrawBusy || pending.length === 0 ? "is-disabled" : ""
                 }`}
               >
                 {rolling
-                  ? "🎰 Girando…"
+                  ? "Girando…"
                   : pending.length === 0
-                    ? "🏁 Sin pendientes"
-                    : `🎲 Rifar turno #${nextTurnNumber}`}
+                    ? "Sin pendientes"
+                    : `Girar ruleta · turno #${nextTurnNumber}`}
               </button>
             ) : (
               <>
@@ -478,27 +514,36 @@ export default function RaffleStage({
                     ✓ Adjudicar y rifar siguiente
                   </button>
                 </form>
+                {currentTeam.auction_order != null ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border-2 border-rose-400/60 bg-rose-950/50 px-4 py-3 text-sm font-black uppercase tracking-wide text-rose-100 hover:bg-rose-900/70 disabled:opacity-50"
+                    onClick={() => void redrawThisTurn()}
+                    disabled={rolling || redrawBusy}
+                    title="La pareja vuelve al pool y se rifa de nuevo este mismo número de turno"
+                  >
+                    {redrawBusy
+                      ? "Liberando…"
+                      : `Volver a rifar turno #${currentTeam.auction_order}`}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="rounded-lg border border-slate-500 bg-slate-700/40 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700/70"
                   onClick={skipCurrent}
                 >
-                  Cerrar · volver a rifar
+                  Cerrar pantalla
                 </button>
-                {currentTeam.auction_order == null ? (
-                  <button
-                    type="button"
-                    className="rounded-lg border border-cyan-500/40 bg-cyan-900/30 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-900/60"
-                    onClick={() => void startRoll()}
-                    disabled={rolling || pending.length === 0}
-                    title="Sortear al azar en el servidor"
-                  >
-                    🔄 Rifar turno
-                  </button>
-                ) : null}
               </>
             )}
           </div>
+
+          {currentTeam && !rolling && currentTeam.auction_order != null ? (
+            <p className="relative mt-3 text-center text-[12px] text-slate-400">
+              «Volver a rifar turno» no borra la pareja: la regresa al sorteo y
+              vuelve a girar el mismo número de turno (por si no está en sala).
+            </p>
+          ) : null}
 
           {/* Ayudas mínimas / máximas */}
           {(minBid != null || maxBid != null) && currentTeam && !rolling ? (
