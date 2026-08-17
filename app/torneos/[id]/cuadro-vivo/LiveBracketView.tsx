@@ -890,11 +890,11 @@ export default function LiveBracketView({
             style={{
               gridTemplateColumns: isTv
                 ? roundCount <= 1
-                  ? "minmax(680px, 820px)"
-                  : `minmax(680px, 820px) repeat(${Math.max(0, roundCount - 1)}, minmax(220px, 280px))`
+                  ? "minmax(360px, 400px)"
+                  : `minmax(360px, 400px) repeat(${Math.max(0, roundCount - 1)}, minmax(260px, 300px))`
                 : `repeat(${roundCount}, minmax(220px, 260px))`,
               gridTemplateRows: `auto repeat(${targetSize}, minmax(${
-                isTv ? "52px" : "28px"
+                isTv ? "42px" : "28px"
               }, auto))`,
               transform: isTv ? undefined : `scale(${zoom})`,
               transformOrigin: "top left",
