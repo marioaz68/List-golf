@@ -1276,6 +1276,7 @@ export async function updateEntryHandicapIndexInline(formData: FormData) {
       player_id,
       category_id,
       playing_handicap_override,
+      tee_set_id_override,
       players:players ( gender, birth_year )
     `
     )
@@ -1297,6 +1298,7 @@ export async function updateEntryHandicapIndexInline(formData: FormData) {
           handicap_index: hi,
           playing_handicap_override:
             entryRow.playing_handicap_override ?? null,
+          tee_set_id_override: entryRow.tee_set_id_override ?? null,
           player: {
             gender:
               (entryRow.players as { gender?: string | null } | null)

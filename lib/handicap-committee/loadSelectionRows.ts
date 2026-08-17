@@ -197,7 +197,7 @@ export async function loadCommitteeSelectionRows(
   const { data: entries, error: entriesErr } = await db
     .from("tournament_entries")
     .select(
-      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason"
+      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason, tee_set_id_override"
     )
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled")
@@ -450,6 +450,9 @@ export async function loadCommitteeSelectionRows(
           player_id: e.player_id ? String(e.player_id) : "",
           category_id: e.category_id ? String(e.category_id) : null,
           handicap_index: num(e.handicap_index),
+          tee_set_id_override: e.tee_set_id_override
+            ? String(e.tee_set_id_override)
+            : null,
           player: pl
             ? {
                 gender: (pl as { gender?: string | null }).gender ?? null,

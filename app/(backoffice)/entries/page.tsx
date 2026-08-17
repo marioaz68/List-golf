@@ -1059,6 +1059,7 @@ export default async function EntriesPage({
           category_id: categoryId,
           handicap_index: e.handicap_index,
           playing_handicap_override: e.playing_handicap_override ?? null,
+          tee_set_id_override: e.tee_set_id_override ?? null,
           player: e.players
             ? {
                 gender: e.players.gender,

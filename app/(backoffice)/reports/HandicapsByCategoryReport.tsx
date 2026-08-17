@@ -183,6 +183,7 @@ export default async function HandicapsByCategoryReport({
         category_id: e.category_id,
         handicap_index: e.handicap_index,
         playing_handicap_override: e.playing_handicap_override,
+        tee_set_id_override: e.tee_set_id_override ?? null,
         player: {
           gender: e.player.gender,
           birth_year: e.player.birth_year,
@@ -197,7 +198,7 @@ export default async function HandicapsByCategoryReport({
 
     let tee: Row["tee"] = null;
 
-    // Si hay override manual de salida, úsala (no afecta HC/PH del reporte).
+    // Override de salida: misma prioridad que en inscritos / H torneo.
     if (e.tee_set_id_override) {
       const ts = teeSetById.get(e.tee_set_id_override);
       if (ts) {

@@ -55,6 +55,8 @@ export type EntryForHandicap = {
   category_id: string | null;
   handicap_index?: number | null;
   playing_handicap_override?: number | null;
+  /** Salida forzada por el comité (prioridad sobre category_tee_rules). */
+  tee_set_id_override?: string | null;
   player?: {
     gender?: string | null;
     birth_year?: number | null;
@@ -157,6 +159,32 @@ function resolveWhsTeeForEntry(
     ctx.matchplayFallback?.allowance_pct ??
     100;
 
+  const teeSetById = new Map(ctx.tournamentTeeSets.map((t) => [t.id, t]));
+
+  // Override manual de salida: el comité eligió Blancas/Azules/etc.
+  // Debe mandar sobre category_tee_rules (igual que la columna Salida en inscritos).
+  const overrideId = entry.tee_set_id_override?.trim() || null;
+  if (overrideId) {
+    const tournamentTee = teeSetById.get(overrideId);
+    if (tournamentTee) {
+      const courseTee = findCourseTee(ctx, tournamentTee);
+      if (courseTee) {
+        const tee = whsFromCourseTee(courseTee, gender);
+        if (tee) {
+          return {
+            tee,
+            allowance_pct,
+            tee_code:
+              normalizeTeeCode(tournamentTee.code) ||
+              (tournamentTee.name ?? null),
+            effective_hi: hi,
+            hi_cap_source: null,
+          };
+        }
+      }
+    }
+  }
+
   if (!categoryId) {
     const tee = pickTeeForGender({
       gender,
@@ -182,7 +210,6 @@ function resolveWhsTeeForEntry(
     category_id: categoryId,
   };
 
-  const teeSetById = new Map(ctx.tournamentTeeSets.map((t) => [t.id, t]));
   const teeSetsForAssign = ctx.tournamentTeeSets.map((t) => ({
     id: t.id,
     code: t.code ?? "",

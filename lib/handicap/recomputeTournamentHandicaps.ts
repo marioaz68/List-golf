@@ -22,7 +22,7 @@ export async function recomputeTournamentHandicaps(
   const { data: entries } = await admin
     .from("tournament_entries")
     .select(
-      "id, player_id, category_id, handicap_index, playing_handicap_override, players:players(gender, birth_year, handicap_index, handicap_torneo)"
+      "id, player_id, category_id, handicap_index, playing_handicap_override, tee_set_id_override, players:players(gender, birth_year, handicap_index, handicap_torneo)"
     )
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled");
@@ -39,6 +39,7 @@ export async function recomputeTournamentHandicaps(
       category_id: string | null;
       handicap_index: number | null;
       playing_handicap_override: number | null;
+      tee_set_id_override: string | null;
       players:
         | {
             gender: string | null;
@@ -62,6 +63,7 @@ export async function recomputeTournamentHandicaps(
       category_id: e.category_id,
       handicap_index: e.handicap_index,
       playing_handicap_override: e.playing_handicap_override,
+      tee_set_id_override: e.tee_set_id_override,
       player,
     };
 

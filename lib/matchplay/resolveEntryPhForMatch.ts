@@ -12,6 +12,7 @@ export type MatchEntryPhRow = {
   handicap_index?: number | null;
   playing_handicap?: number | null;
   playing_handicap_override?: number | null;
+  tee_set_id_override?: string | null;
   player?: {
     gender?: string | null;
     birth_year?: number | null;
@@ -42,6 +43,7 @@ export function effectivePhForMatchEntry(
     category_id: entry.category_id ?? null,
     handicap_index: entry.handicap_index,
     playing_handicap_override: null,
+    tee_set_id_override: entry.tee_set_id_override ?? null,
     player: entry.player ?? null,
   };
   const calc = resolveTournamentEntryHandicap(payload, handicapCtx);
