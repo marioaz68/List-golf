@@ -138,9 +138,11 @@ export type GroupMatchPlayCapture = {
   ballRoleByEntry?: Record<string, "baja" | "alta">;
   /** top/bottom pair por entry. */
   sideByEntry?: Record<string, "top" | "bottom">;
-  /** entry_ids de cada pareja (orden: a, b). */
+  /** entry_ids de cada pareja (orden: a, b). En individual, un id por lado. */
   topEntryIds?: string[];
   bottomEntryIds?: string[];
+  /** Individual (1 vs 1) o parejas. */
+  matchType?: "individual" | "pairs";
   /** `matchplay_matches.id` (cuadro oficial) si las parejas del grupo
    *  coinciden con un match real publicado. null si no hay cuadro. */
   matchplayMatchId?: string | null;

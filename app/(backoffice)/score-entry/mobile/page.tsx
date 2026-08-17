@@ -63,6 +63,7 @@ type HoleScores = Record<HoleNumber, number | null>;
 type PlayerRow = {
   id: string;
   name: string;
+  initials?: string;
   scores: HoleScores;
   /** Celdas con cambio pendiente de aprobación del testigo. */
   pending?: Partial<Record<HoleNumber, boolean>>;
@@ -88,12 +89,121 @@ function matchLeadTint(
   return "text-slate-800 font-semibold";
 }
 
+function formatLeadPts(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
+}
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 3) {
+    return (parts[0]![0]! + parts[1]![0]! + parts[2]![0]!).toUpperCase();
+  }
+  if (parts.length === 2) {
+    return ((parts[0]![0] ?? "") + (parts[1]!.slice(0, 2) ?? "")).toUpperCase();
+  }
+  return (parts[0] ?? "—").slice(0, 3).toUpperCase();
+}
+
+function uniqueEntryIds(ids: string[] | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of ids ?? []) {
+    const id = String(raw ?? "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function isSinglesMatch(matchPlay: GroupMatchPlayCapture): boolean {
+  if (matchPlay.matchType === "individual") return true;
+  const top = uniqueEntryIds(matchPlay.topEntryIds);
+  const bot = uniqueEntryIds(matchPlay.bottomEntryIds);
+  return top.length <= 1 && bot.length <= 1;
+}
+
+function pairInitialsFromPlayers(
+  entryIds: string[] | undefined,
+  players: PlayerRow[],
+  fallback: string | null | undefined,
+  singles: boolean
+): string {
+  const byId = new Map(players.map((p) => [p.id, p]));
+  let ids = uniqueEntryIds(entryIds);
+  if (singles) ids = ids.slice(0, 1);
+  const parts: string[] = [];
+  for (const id of ids) {
+    const p = byId.get(id);
+    if (!p) continue;
+    const name = p.name.trim();
+    if (!name || name === "—") continue;
+    const ini = (p.initials?.trim() || initialsFromName(name)).toUpperCase();
+    if (ini && ini !== "—") parts.push(ini);
+  }
+  if (parts.length > 0) return parts.join("/");
+  return (fallback ?? "").trim();
+}
+
+/** Texto grande: parejas "H16 JV/AM  5 arriba y 4 por jugar";
+ *  individual "H6 MAZ  2 arriba y 12 por jugar". */
+function matchBarHeadline(
+  matchPlay: GroupMatchPlayCapture,
+  players: PlayerRow[]
+): {
+  text: string;
+  lead: "top" | "bottom" | "as" | null;
+} {
+  if (
+    matchPlay.needsPlayoff ||
+    matchPlay.viaPlayoff ||
+    matchPlay.playoffPendingHole != null
+  ) {
+    return { text: matchPlay.resultText, lead: null };
+  }
+
+  const progression = matchPlay.progression ?? [];
+  if (progression.length === 0) {
+    return { text: matchPlay.resultText, lead: null };
+  }
+
+  const singles = isSinglesMatch(matchPlay);
+  const last = progression[progression.length - 1]!;
+  const hole = matchPlay.decidedAtHole ?? last.hole_no;
+  const holeLabel = hole > 18 ? `P${hole - 18}` : `H${hole}`;
+  const ptsPerHole = singles ? 1 : 2;
+  const remaining = hole > 18 ? 0 : Math.max(0, 18 - hole) * ptsPerHole;
+  const remainingTxt =
+    remaining > 0 ? ` y ${formatLeadPts(remaining)} por jugar` : "";
+
+  if (last.lead === "as") {
+    return {
+      text: `${holeLabel} AS empatados${remainingTxt}`,
+      lead: "as",
+    };
+  }
+
+  const ids =
+    last.lead === "top" ? matchPlay.topEntryIds : matchPlay.bottomEntryIds;
+  const fallback =
+    last.lead === "top" ? matchPlay.topShort : matchPlay.bottomShort;
+  const who = pairInitialsFromPlayers(ids, players, fallback, singles);
+  const leadPts = formatLeadPts(Math.abs(last.top_cum - last.bottom_cum));
+  const whoBit = who ? ` ${who}` : "";
+  return {
+    text: `${holeLabel}${whoBit}  ${leadPts} arriba${remainingTxt}`,
+    lead: last.lead,
+  };
+}
+
 /** Barra fija: estado del match + timeline hoyo a hoyo. */
 function MatchStatusBar({
   matchPlay,
+  players,
   compact = false,
 }: {
   matchPlay: GroupMatchPlayCapture;
+  players: PlayerRow[];
   compact?: boolean;
 }) {
   const progression = matchPlay.progression ?? [];
@@ -103,22 +213,26 @@ function MatchStatusBar({
   const allPhZero = Object.values(matchPlay.phByEntry ?? {}).every(
     (ph) => ph == null || Number(ph) === 0
   );
+  const headline = matchBarHeadline(matchPlay, players);
+  const headlineColor =
+    headline.lead === "top"
+      ? "text-cyan-800"
+      : headline.lead === "bottom"
+        ? "text-fuchsia-800"
+        : "text-emerald-950";
 
   return (
     <div
       className={[
-        "border border-emerald-300 bg-emerald-50 px-2 py-1.5 shadow-sm",
+        "border border-emerald-300 bg-emerald-50 px-2.5 py-2 shadow-sm",
         compact ? "rounded-t-lg" : "rounded-lg",
       ].join(" ")}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-1">
-        <div className="text-[11px] font-bold text-emerald-950">Match</div>
-        <div className="text-[11px] font-semibold text-emerald-900">
-          {matchPlay.resultText}
-        </div>
+      <div className={`text-center text-[17px] font-black leading-tight ${headlineColor}`}>
+        {headline.text}
       </div>
       {matchPlay.topLabel || matchPlay.bottomLabel ? (
-        <div className="mt-0.5 text-[9px] leading-snug text-emerald-900/85">
+        <div className="mt-1 text-center text-[11px] leading-snug text-emerald-900/85">
           <span className="font-bold text-cyan-800">
             {matchPlay.topShort ?? "A"}
           </span>{" "}
@@ -130,35 +244,37 @@ function MatchStatusBar({
           {matchPlay.bottomLabel ?? "—"}
         </div>
       ) : null}
-      {!anyStrokeGiven ? (
-        <div className="mt-0.5 text-[9px] font-semibold text-slate-600">
-          {allPhZero
-            ? "Sin golpes de ventaja (scratch / PH 0). Nadie recibe en ningún hoyo."
-            : "Sin golpes de ventaja en este match (misma malla de hándicap)."}
-        </div>
-      ) : (
-        <div className="mt-0.5 text-[9px] text-amber-800">
-          ● = golpe de ventaja en ese hoyo (aparece en la tarjeta del jugador
-          que recibe).
-        </div>
-      )}
+      {!compact ? (
+        !anyStrokeGiven ? (
+          <div className="mt-0.5 text-center text-[10px] font-semibold text-slate-600">
+            {allPhZero
+              ? "Sin golpes de ventaja (scratch / PH 0). Nadie recibe en ningún hoyo."
+              : "Sin golpes de ventaja en este match (misma malla de hándicap)."}
+          </div>
+        ) : (
+          <div className="mt-0.5 text-center text-[10px] text-amber-800">
+            ● = golpe de ventaja en ese hoyo (aparece en la tarjeta del jugador
+            que recibe).
+          </div>
+        )
+      ) : null}
       {progression.length > 0 ? (
-        <div className="mt-1 flex gap-0.5 overflow-x-auto pb-0.5">
+        <div className="mt-1.5 flex gap-0.5 overflow-x-auto pb-0.5">
           {progression.map((row: GroupMatchPlayProgressionRow) => {
             const holeLabel =
               row.hole_no > 18 ? `P${row.hole_no - 18}` : String(row.hole_no);
             return (
               <div
                 key={`mp-tl-${row.hole_no}`}
-                className="flex min-w-[28px] flex-col items-center rounded bg-white/80 px-0.5 py-0.5"
+                className="flex min-w-[30px] flex-col items-center rounded bg-white/80 px-0.5 py-0.5"
                 title={`${row.top_cum}–${row.bottom_cum} pts`}
               >
-                <span className="text-[8px] font-semibold text-slate-500">
+                <span className="text-[9px] font-semibold text-slate-500">
                   {holeLabel}
                 </span>
                 <span
                   className={[
-                    "text-[9px] leading-none",
+                    "text-[10px] leading-none",
                     matchLeadTint(row.lead, row.label),
                   ].join(" ")}
                 >
@@ -169,7 +285,7 @@ function MatchStatusBar({
           })}
         </div>
       ) : (
-        <div className="mt-1 text-[9px] text-emerald-800/70">
+        <div className="mt-1 text-center text-[10px] text-emerald-800/70">
           Cuando los 4 anoten el hoyo, aquí va el estado del match.
         </div>
       )}
@@ -1106,6 +1222,7 @@ function MobileScoreEntryContent() {
             players: Array<{
               entryId: string;
               name: string;
+              initials?: string;
               scores: PlayerRow["scores"];
               pending?: Partial<Record<HoleNumber, boolean>>;
               pickedUp?: Partial<Record<HoleNumber, boolean>>;
@@ -1248,6 +1365,7 @@ function MobileScoreEntryContent() {
             return {
               id: p.entryId,
               name: p.name,
+              initials: p.initials,
               scores,
               pending: { ...(p.pending ?? {}) },
               pickedUp,
@@ -1840,10 +1958,10 @@ function MobileScoreEntryContent() {
                 "flex-1 space-y-2 px-3 py-2",
                 activePlayerId
                   ? matchPlayInfo
-                    ? "pb-72"
+                    ? "pb-80"
                     : "pb-44"
                   : matchPlayInfo
-                    ? "pb-36"
+                    ? "pb-44"
                     : "pb-4",
               ].join(" ")}
             >
@@ -2162,7 +2280,7 @@ function MobileScoreEntryContent() {
             {matchPlayInfo && !activePlayerId ? (
               <div className="fixed bottom-0 left-0 right-0 z-20">
                 <div className="mx-auto w-full max-w-md px-2 pb-2 pt-1">
-                  <MatchStatusBar matchPlay={matchPlayInfo} />
+                  <MatchStatusBar matchPlay={matchPlayInfo} players={players} />
                 </div>
               </div>
             ) : null}
@@ -2171,7 +2289,11 @@ function MobileScoreEntryContent() {
               <div className="fixed bottom-0 left-0 right-0 z-30">
                 {matchPlayInfo ? (
                   <div className="mx-auto w-full max-w-md px-2">
-                    <MatchStatusBar matchPlay={matchPlayInfo} compact />
+                    <MatchStatusBar
+                      matchPlay={matchPlayInfo}
+                      players={players}
+                      compact
+                    />
                   </div>
                 ) : null}
                 <div className="mx-auto w-full max-w-md border-t border-slate-200 bg-white p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">

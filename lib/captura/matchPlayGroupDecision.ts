@@ -37,6 +37,7 @@ export type GroupMatchPlayStatus = {
   sideByEntry?: Record<string, "top" | "bottom">;
   topEntryIds?: string[];
   bottomEntryIds?: string[];
+  matchType?: "individual" | "pairs";
   matchplayMatchId?: string | null;
   matchplayCompleted?: boolean;
 };
@@ -279,11 +280,13 @@ export async function loadGroupMatchPlayStatus(
 
   const { data: rules } = await admin
     .from("tournament_matchplay_rules")
-    .select("pair_format")
+    .select("pair_format, match_type")
     .eq("tournament_id", tournamentId)
     .maybeSingle();
 
   if (rules?.pair_format !== "low_high") return null;
+  const matchType: "individual" | "pairs" =
+    rules?.match_type === "individual" ? "individual" : "pairs";
 
   const derived = await derivePairingGroupMatches(admin, tournamentId);
   const matchId = `derived-${roundId}-g${groupNo}`;
@@ -422,8 +425,14 @@ export async function loadGroupMatchPlayStatus(
   const botNames = bottomEntryIds.map(
     (id) => strokePack.names[id] ?? "—"
   );
-  const topLabel = topNames.map(shortName).join(" / ");
-  const bottomLabel = botNames.map(shortName).join(" / ");
+  const topLabel =
+    matchType === "individual"
+      ? shortName(topNames[0] ?? "—")
+      : topNames.map(shortName).join(" / ");
+  const bottomLabel =
+    matchType === "individual"
+      ? shortName(botNames[0] ?? "—")
+      : botNames.map(shortName).join(" / ");
   const topShort = initialsOf(topNames[0] ?? "A");
   const bottomShort = initialsOf(botNames[0] ?? "B");
 
@@ -436,8 +445,11 @@ export async function loadGroupMatchPlayStatus(
     phByEntry: strokePack.phByEntry,
     ballRoleByEntry: strokePack.ballRoleByEntry,
     sideByEntry: strokePack.sideByEntry,
-    topEntryIds,
-    bottomEntryIds,
+    topEntryIds:
+      matchType === "individual" ? [topEntryIds[0]!] : topEntryIds,
+    bottomEntryIds:
+      matchType === "individual" ? [bottomEntryIds[0]!] : bottomEntryIds,
+    matchType,
     matchplayMatchId,
     matchplayCompleted,
   };
