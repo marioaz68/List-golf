@@ -49,6 +49,10 @@ export type MatchPlayRulesSnapshot = {
   male_individual_hi_max: number | null;
   female_individual_hi_max: number | null;
   max_teams: number | null;
+  /** Parejas o jugadores del campo (no el tope de convocatoria). */
+  field_unit_count: number;
+  /** 8 / 16 / 32 / 64 según el campo. */
+  bracket_size: number;
 };
 
 export type MatchPlayTeamsPageData = {

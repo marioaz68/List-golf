@@ -54,8 +54,7 @@ export default async function AuctionBracketTvPage(props: {
     rulesRow?.auction_pot_percent != null
       ? Number(rulesRow.auction_pot_percent)
       : null;
-  const bracketMainPairs =
-    rulesRow?.bracket_main_pairs ?? rulesRow?.max_pairs_per_category ?? null;
+  const fieldUnitCount = teamsData.rules?.field_unit_count ?? teamsData.teams.length;
 
   const { data: bracket } = await admin
     .from("matchplay_brackets")
@@ -93,7 +92,7 @@ export default async function AuctionBracketTvPage(props: {
       tournamentName={String(tournament.name ?? "Subasta")}
       teams={teamsData.teams}
       existingMatches={existingMatches}
-      bracketMainPairs={bracketMainPairs}
+      fieldUnitCount={fieldUnitCount}
       currency={currency}
       potPercent={potPercent}
     />

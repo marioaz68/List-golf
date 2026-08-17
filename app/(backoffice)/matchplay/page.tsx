@@ -340,13 +340,21 @@ export default async function MatchPlayPage(props: {
           ) : null}
           <p>
             <strong>Cuadro:</strong>{" "}
-            {rulesRow.bracket_main_pairs ??
+            {teamsData?.rules?.bracket_size ??
+              rulesRow.bracket_main_pairs ??
               rulesRow.max_pairs_per_category ??
               "?"}{" "}
             {rulesRow.match_type === "individual" ? "jugadores" : "parejas"}
-            <span className="ml-1 text-slate-500">
-              (8 / 16 / 32 / 64 según el campo al cerrar inscripciones)
-            </span>
+            {teamsData?.rules?.field_unit_count ? (
+              <span className="ml-1 text-slate-500">
+                ({teamsData.rules.field_unit_count} en el campo →{" "}
+                {teamsData.rules.bracket_size})
+              </span>
+            ) : (
+              <span className="ml-1 text-slate-500">
+                (8 / 16 / 32 / 64 según el campo al cerrar inscripciones)
+              </span>
+            )}
           </p>
         </div>
       ) : isMatchPlay ? (

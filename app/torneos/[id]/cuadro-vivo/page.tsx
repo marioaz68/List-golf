@@ -246,6 +246,9 @@ export default async function PublicLiveBracketPage(props: {
     birthYearByPlayerId[p.id] = p.birth_year ?? null;
   }
 
+  const fieldUnitCount =
+    teamsData.rules?.field_unit_count ?? teamsData.teams.length;
+
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
       <AutoRefresh intervalMs={10000} />
@@ -255,6 +258,7 @@ export default async function PublicLiveBracketPage(props: {
         teams={teamsData.teams}
         existingMatches={existingMatches}
         bracketMainPairs={bracketMainPairs}
+        fieldUnitCount={fieldUnitCount}
         currency={currency}
         potPercent={potPercent}
         prizeShares={prizeShares}

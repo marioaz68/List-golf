@@ -5,6 +5,7 @@ import {
   countMatchPlayFieldUnits,
   fieldBracketSize,
   isCountableMatchPlayEntryStatus,
+  roundCountForBracketSize,
 } from "./bracketUtils";
 import type {
   MatchPlayEntryRow,
@@ -148,6 +149,8 @@ export async function loadMatchPlayTeamsData(
             ? Number(rulesRaw.female_individual_hi_max)
             : null,
         max_teams: 64,
+        field_unit_count: 0,
+        bracket_size: 8,
       }
     : null;
 
@@ -218,7 +221,32 @@ export async function loadMatchPlayTeamsData(
       activeTeamCount: teams.length,
       activeEntryCount,
     });
-    rules.max_teams = fieldBracketSize(unitCount, 64);
+    const bracketSize = fieldBracketSize(unitCount, 64);
+    rules.field_unit_count = unitCount;
+    rules.bracket_size = bracketSize;
+    rules.max_teams = bracketSize;
+
+    const stored = rulesRaw?.bracket_main_pairs ?? null;
+    if (stored !== bracketSize) {
+      const { data: tournament } = await supabase
+        .from("tournaments")
+        .select("registration_status")
+        .eq("id", tournamentId)
+        .maybeSingle();
+      const closed =
+        String(tournament?.registration_status ?? "").toLowerCase() ===
+        "closed";
+      if (closed) {
+        await supabase
+          .from("tournament_matchplay_rules")
+          .update({
+            bracket_main_pairs: bracketSize,
+            bracket_round_count: roundCountForBracketSize(bracketSize),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("tournament_id", tournamentId);
+      }
+    }
   }
 
   return {

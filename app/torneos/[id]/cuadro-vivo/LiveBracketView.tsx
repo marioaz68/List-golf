@@ -24,14 +24,21 @@ import {
   AUCTION_BRACKET_CLUSTER_HOLD_MS,
   AUCTION_BRACKET_OPEN_CLUSTER_MS,
   AUCTION_BRACKET_OPEN_HALF_MS,
+  AUCTION_BRACKET_PAN_END_HOLD_MS,
+  AUCTION_BRACKET_PAN_PX_PER_SEC,
+  AUCTION_BRACKET_PAN_RESET_MS,
+  AUCTION_BRACKET_PAN_TOP_HOLD_MS,
   AUCTION_BRACKET_SLOT_HOLD_MS,
   AUCTION_BRACKET_ZOOM_IN_MS,
   cssTransform,
   identityPose,
   lerpPose,
+  mixPose,
   poseToFitScreenRects,
   poseToFitScreenTarget,
   r1AdvanceCluster,
+  screenRectToLocal,
+  widthFitPanRange,
   type CameraPose,
 } from "@/lib/matchplay/auctionBracketCamera";
 
@@ -78,7 +85,8 @@ type Props = {
   tournamentName: string;
   teams: MatchPlayTeamRow[];
   existingMatches: ExistingMatch[];
-  bracketMainPairs: number | null;
+  bracketMainPairs?: number | null;
+  fieldUnitCount?: number;
   currency: string;
   potPercent: number | null;
   prizeShares: PrizeShareRow[];
@@ -215,7 +223,7 @@ export default function LiveBracketView({
   tournamentName,
   teams: initialTeams,
   existingMatches: initialMatches,
-  bracketMainPairs,
+  fieldUnitCount = 0,
   currency,
   potPercent,
   prizeShares,
@@ -430,6 +438,7 @@ export default function LiveBracketView({
   const [focusCaption, setFocusCaption] = useState<string | null>(null);
   const seenAwardedRef = useRef<Set<string> | null>(null);
   const animRef = useRef<number | null>(null);
+  const animDoneRef = useRef<(() => void) | null>(null);
   const seqRef = useRef(0);
 
   const applyCam = useCallback((pose: CameraPose) => {
@@ -437,26 +446,40 @@ export default function LiveBracketView({
     setCam(pose);
   }, []);
 
+  const stopCamAnim = useCallback(() => {
+    if (animRef.current != null) {
+      cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+    }
+    if (animDoneRef.current) {
+      const done = animDoneRef.current;
+      animDoneRef.current = null;
+      done();
+    }
+  }, []);
+
   const animateCam = useCallback(
-    (to: CameraPose, ms: number) => {
+    (to: CameraPose, ms: number, linear = false) => {
       return new Promise<void>((resolve) => {
-        if (animRef.current != null) cancelAnimationFrame(animRef.current);
+        stopCamAnim();
         const from = camRef.current;
         const t0 = performance.now();
+        animDoneRef.current = resolve;
         const tick = (now: number) => {
           const t = Math.min(1, (now - t0) / Math.max(1, ms));
-          applyCam(lerpPose(from, to, t));
+          applyCam(linear ? mixPose(from, to, t) : lerpPose(from, to, t));
           if (t < 1) {
             animRef.current = requestAnimationFrame(tick);
             return;
           }
           animRef.current = null;
+          animDoneRef.current = null;
           resolve();
         };
         animRef.current = requestAnimationFrame(tick);
       });
     },
-    [applyCam]
+    [applyCam, stopCamAnim]
   );
 
   const waitForSlot = useCallback((teamId: string) => {
@@ -484,6 +507,67 @@ export default function LiveBracketView({
       }, 80);
     });
   }, []);
+
+  const startIdlePan = useCallback(
+    async (seq: number) => {
+      const viewport = viewportRef.current;
+      const stage = bracketRef.current;
+      if (!viewport || !stage) return;
+      if (seq !== seqRef.current) return;
+      for (let i = 0; i < 20; i++) {
+        if (
+          viewport.getBoundingClientRect().width > 40 &&
+          stage.scrollHeight > 80
+        ) {
+          break;
+        }
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
+      if (seq !== seqRef.current) return;
+
+      const vr = viewport.getBoundingClientRect();
+      if (vr.width < 40 || vr.height < 40) return;
+      const local = screenRectToLocal(
+        stage.getBoundingClientRect(),
+        vr,
+        camRef.current
+      );
+      const range = widthFitPanRange(
+        { width: vr.width, height: vr.height },
+        local,
+        1.03
+      );
+
+      if (range.overflow < 24) {
+        applyCam({
+          ...range.top,
+          ty: (range.top.ty + range.bottom.ty) / 2,
+        });
+        return;
+      }
+
+      const duration = Math.max(
+        28000,
+        (range.overflow / AUCTION_BRACKET_PAN_PX_PER_SEC) * 1000
+      );
+
+      while (seq === seqRef.current) {
+        applyCam(range.top);
+        await new Promise((r) =>
+          window.setTimeout(r, AUCTION_BRACKET_PAN_TOP_HOLD_MS)
+        );
+        if (seq !== seqRef.current) return;
+        await animateCam(range.bottom, duration, true);
+        if (seq !== seqRef.current) return;
+        await new Promise((r) =>
+          window.setTimeout(r, AUCTION_BRACKET_PAN_END_HOLD_MS)
+        );
+        if (seq !== seqRef.current) return;
+        await animateCam(range.top, AUCTION_BRACKET_PAN_RESET_MS);
+      }
+    },
+    [animateCam, applyCam]
+  );
 
   const runTvReveal = useCallback(
     async (teamId: string, animate: boolean) => {
@@ -526,9 +610,7 @@ export default function LiveBracketView({
         else applyCam(pose);
       };
 
-      setFocusCaption(
-        `${seed ? `Seed #${seed} · ` : ""}slot`
-      );
+      setFocusCaption(seed ? `Seed #${seed}` : "Slot");
       const slotPose = poseToFitScreenTarget(
         viewport,
         slot,
@@ -552,9 +634,7 @@ export default function LiveBracketView({
             )
           )
         : [];
-      setFocusCaption(
-        `${seed ? `Seed #${seed} · ` : ""}llave de 4 a la siguiente ronda`
-      );
+      setFocusCaption(seed ? `Seed #${seed} · llave` : "Llave de 4");
       await go(fit(clusterEls, 1.1), AUCTION_BRACKET_OPEN_CLUSTER_MS);
       if (seq !== seqRef.current) return;
 
@@ -570,14 +650,12 @@ export default function LiveBracketView({
           `[data-half="${half}"]`
         )
       );
-      setFocusCaption(
-        `${seed ? `Seed #${seed} · ` : ""}${
-          half === "bottom" ? "Cuadro inferior" : "Cuadro superior"
-        }`
-      );
+      setFocusCaption(seed ? `Seed #${seed}` : "Nuevo en cuadro");
       await go(fit(halfEls, 1.04), AUCTION_BRACKET_OPEN_HALF_MS);
+      if (seq !== seqRef.current) return;
+      await startIdlePan(seq);
     },
-    [animateCam, applyCam, waitForSlot]
+    [animateCam, applyCam, startIdlePan, waitForSlot]
   );
 
   useEffect(() => {
@@ -587,30 +665,10 @@ export default function LiveBracketView({
     );
     if (seenAwardedRef.current === null) {
       seenAwardedRef.current = new Set(awarded.map((t) => t.id));
-      if (awarded.length > 0) {
-        const latest = awarded.reduce((a, b) =>
-          (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
-        );
-        setFocusTeamId(latest.id);
-        window.requestAnimationFrame(() => {
-          void runTvReveal(latest.id, false);
-        });
-      } else {
-        window.requestAnimationFrame(() => {
-          const viewport = viewportRef.current;
-          if (!viewport) return;
-          const cells = Array.from(
-            viewport.querySelectorAll<HTMLElement>("[data-r1-cell]")
-          );
-          const pose = poseToFitScreenRects(
-            viewport,
-            cells.map((el) => el.getBoundingClientRect()),
-            identityPose(),
-            1.04
-          );
-          if (pose) applyCam(pose);
-        });
-      }
+      window.requestAnimationFrame(() => {
+        const seq = seqRef.current;
+        void startIdlePan(seq);
+      });
       return;
     }
     const fresh = awarded.filter((t) => !seenAwardedRef.current!.has(t.id));
@@ -621,13 +679,14 @@ export default function LiveBracketView({
     );
     setFocusTeamId(newest.id);
     void runTvReveal(newest.id, true);
-  }, [teams, isTv, runTvReveal]);
+  }, [teams, isTv, runTvReveal, startIdlePan]);
 
   useEffect(() => {
     return () => {
-      if (animRef.current != null) cancelAnimationFrame(animRef.current);
+      seqRef.current += 1;
+      stopCamAnim();
     };
-  }, []);
+  }, [stopCamAnim]);
 
   // Equipos vivos ordenados por subasta (postura desc, orden asc)
   const seededTeams = useMemo(() => {
@@ -644,24 +703,21 @@ export default function LiveBracketView({
   );
 
   // Tamaño del cuadro = potencia de 2 del campo (8/16/32/64).
-  // 36 parejas → 64; 32 o menos → 32; etc. Si al cerrar inscripciones
-  // ya quedó persistido un tamaño mayor (p. ej. 64 con 32 equipos aún
-  // por completar), se respeta ese tamaño.
+  // 38 parejas → 64; no se usa el 32 de convocatoria como tope.
   const targetSize = useMemo(() => {
     return fieldBracketSize(
-      Math.max(seededTeams.length, bracketMainPairs ?? 0, 2),
+      Math.max(seededTeams.length, fieldUnitCount, 2),
       64
     );
-  }, [seededTeams.length, bracketMainPairs]);
+  }, [seededTeams.length, fieldUnitCount]);
 
   const roundCount = roundCountForBracketSize(targetSize);
   const seedOrder = useMemo(() => bracketSeedOrder(targetSize), [targetSize]);
 
-  // Total inscritos (define cuántos slots del cuadro NUNCA se llenarán = BYE).
-  // Esto es independiente de cuántos ya se hayan adjudicado en subasta.
+  // Total del campo: equipos o parejas/jugadores inscritos (el mayor).
   const totalInscribed = useMemo(
-    () => seededTeams.length,
-    [seededTeams.length]
+    () => Math.max(seededTeams.length, fieldUnitCount),
+    [seededTeams.length, fieldUnitCount]
   );
 
   // Slots por seed → team id.
@@ -932,7 +988,7 @@ export default function LiveBracketView({
     return (
       <div className="relative flex h-full min-h-0 flex-1 flex-col">
         {focusCaption ? (
-          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-full border border-amber-400/50 bg-black/70 px-5 py-1.5 text-lg font-black uppercase tracking-wide text-amber-200">
+          <div className="pointer-events-none absolute right-3 top-3 z-30 max-w-[42%] truncate rounded border border-amber-400/35 bg-black/65 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
             {focusCaption}
           </div>
         ) : null}

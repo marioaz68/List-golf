@@ -19,7 +19,7 @@ type Props = {
   tournamentName: string;
   teams: MatchPlayTeamRow[];
   existingMatches: ExistingMatch[];
-  bracketMainPairs: number | null;
+  fieldUnitCount?: number;
   currency: string;
   potPercent: number | null;
 };
@@ -29,7 +29,7 @@ export default function AuctionBracketTvClient({
   tournamentName,
   teams,
   existingMatches,
-  bracketMainPairs,
+  fieldUnitCount = 0,
   currency,
   potPercent,
 }: Props) {
@@ -60,7 +60,7 @@ export default function AuctionBracketTvClient({
           tournamentName={tournamentName}
           teams={teams}
           existingMatches={existingMatches}
-          bracketMainPairs={bracketMainPairs}
+          fieldUnitCount={fieldUnitCount}
           currency={currency}
           potPercent={potPercent}
           prizeShares={[]}
