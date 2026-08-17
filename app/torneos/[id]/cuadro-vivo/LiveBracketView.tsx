@@ -888,11 +888,13 @@ export default function LiveBracketView({
               isTv ? "text-base" : "mx-auto"
             }`}
             style={{
-              gridTemplateColumns: `repeat(${roundCount}, minmax(${
-                isTv ? "280px" : "220px"
-              }, ${isTv ? "340px" : "260px"}))`,
+              gridTemplateColumns: isTv
+                ? roundCount <= 1
+                  ? "minmax(680px, 820px)"
+                  : `minmax(680px, 820px) repeat(${Math.max(0, roundCount - 1)}, minmax(220px, 280px))`
+                : `repeat(${roundCount}, minmax(220px, 260px))`,
               gridTemplateRows: `auto repeat(${targetSize}, minmax(${
-                isTv ? "36px" : "28px"
+                isTv ? "52px" : "28px"
               }, auto))`,
               transform: isTv ? undefined : `scale(${zoom})`,
               transformOrigin: "top left",
@@ -1581,8 +1583,10 @@ function SidePill({
             {players.map((p, i) => (
               <li
                 key={`${p.label}-${i}`}
-                className={`flex items-center gap-1 overflow-hidden leading-tight ${
-                  tvMode ? "text-[17px] font-semibold" : "text-[12px]"
+                className={`flex items-center gap-1 leading-tight ${
+                  tvMode
+                    ? "overflow-visible text-[17px] font-semibold"
+                    : "overflow-hidden text-[12px]"
                 }`}
               >
                 <span
@@ -1604,7 +1608,9 @@ function SidePill({
                     title={`Sale de: ${p.tee.name}`}
                   />
                 ) : null}
-                <span className="truncate">{p.label}</span>
+                <span className={tvMode ? "break-words" : "truncate"}>
+                  {p.label}
+                </span>
               </li>
             ))}
             {players.length === 0 ? (
