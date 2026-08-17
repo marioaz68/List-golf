@@ -51,6 +51,20 @@ export default function BackofficeLayoutClient({
 }) {
   const pathname = usePathname() ?? "";
   const isMobileCapture = pathname.startsWith("/score-entry/mobile");
+  const isAuctionProjection = pathname.startsWith(
+    "/matchplay/auction/proyeccion"
+  );
+
+  if (isAuctionProjection) {
+    return (
+      <>
+        <BrowserBehaviorFix />
+        <AppLocaleProvider locale={locale}>
+          <div className="min-h-dvh bg-black text-white">{children}</div>
+        </AppLocaleProvider>
+      </>
+    );
+  }
 
   if (isMobileCapture) {
     return (

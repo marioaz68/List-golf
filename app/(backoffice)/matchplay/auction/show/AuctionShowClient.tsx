@@ -5,7 +5,12 @@ import Link from "next/link";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
-import { awardAuctionBid, resetAuctionData } from "../../actions";
+import {
+  awardAuctionBid,
+  drawNextAuctionPairAction,
+  resetAuctionData,
+} from "../../actions";
+import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
 
 type PrizeShare = { position: number; label: string; percent: number };
 
@@ -163,31 +168,44 @@ export default function AuctionShowClient({
     [teams, rollDisplayId]
   );
 
-  const startRoll = useCallback(() => {
+  const startRoll = useCallback(async () => {
     if (pending.length === 0) return;
     if (rolling) return;
     setRolling(true);
 
-    const candidates = pending.filter((t) => t.id !== currentTeamId);
-    const pool = candidates.length > 0 ? candidates : pending;
+    const pool = pending;
+    const result = await drawNextAuctionPairAction(tournamentId);
+    if (!result.ok) {
+      setRolling(false);
+      return;
+    }
+    const winnerId = result.teamId;
+
+    const landOnWinner = () => {
+      setRollDisplayId(winnerId);
+      setCurrentTeamId(winnerId);
+      setRolling(false);
+      setBidInput(minBid != null ? String(minBid) : "");
+    };
+
+    if (prefersReducedMotion() || pool.length <= 1) {
+      landOnWinner();
+      return;
+    }
 
     let elapsed = 0;
-    const total = 2400; // ms
+    const total = 2400;
     let interval = 60;
+    let cursor = 0;
 
     const step = () => {
-      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const pick = pool[cursor % pool.length];
+      cursor += 1;
       if (pick) setRollDisplayId(pick.id);
       elapsed += interval;
       interval = Math.min(280, Math.round(interval * 1.18));
       if (elapsed >= total) {
-        const final = pool[Math.floor(Math.random() * pool.length)];
-        if (final) {
-          setRollDisplayId(final.id);
-          setCurrentTeamId(final.id);
-        }
-        setRolling(false);
-        setBidInput(minBid != null ? String(minBid) : "");
+        landOnWinner();
         if (rollTimerRef.current) {
           window.clearTimeout(rollTimerRef.current);
           rollTimerRef.current = null;
@@ -198,7 +216,7 @@ export default function AuctionShowClient({
     };
 
     step();
-  }, [pending, rolling, currentTeamId, minBid]);
+  }, [pending, rolling, tournamentId, minBid]);
 
   useEffect(() => {
     return () => {
@@ -208,14 +226,35 @@ export default function AuctionShowClient({
     };
   }, []);
 
-  // Si el equipo actual ya quedó adjudicado por otra sesión, lo soltamos.
+  // Si el equipo actual ya tiene postura, soltarlo para el siguiente.
   useEffect(() => {
     if (!currentTeam) return;
-    if (currentTeam.auction_order != null) {
+    if (currentTeam.auction_bid != null) {
       setCurrentTeamId(null);
       setRollDisplayId(null);
     }
   }, [currentTeam]);
+
+  useEffect(() => {
+    if (rolling) return;
+    const waiting = teams
+      .filter(
+        (t) =>
+          t.is_active &&
+          t.auction_order != null &&
+          t.auction_bid == null
+      )
+      .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
+    const latest = waiting[0];
+    if (!latest) return;
+    if (currentTeamId === latest.id) return;
+    const currentStillOpen =
+      currentTeamId != null &&
+      teams.some((t) => t.id === currentTeamId && t.auction_bid == null);
+    if (currentStillOpen) return;
+    setCurrentTeamId(latest.id);
+    setRollDisplayId(latest.id);
+  }, [teams, rolling, currentTeamId]);
 
   const skipCurrent = () => {
     setCurrentTeamId(null);

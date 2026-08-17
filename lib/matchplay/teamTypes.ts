@@ -34,6 +34,8 @@ export type MatchPlayTeamRow = {
   seed: number | null;
   auction_bid: number | null;
   auction_order: number | null;
+  auction_order_at?: string | null;
+  auction_order_by?: string | null;
   is_active: boolean;
   player_a: MatchPlayEntryRow | null;
   player_b: MatchPlayEntryRow | null;

@@ -43,6 +43,8 @@ type RawTeam = {
   seed: number | null;
   auction_bid: number | null;
   auction_order: number | null;
+  auction_order_at?: string | null;
+  auction_order_by?: string | null;
   is_active: boolean;
 };
 
@@ -164,7 +166,7 @@ export async function loadMatchPlayTeamsData(
   const { data: teamsRaw, error: teamsError } = await supabase
     .from("matchplay_pair_teams")
     .select(
-      "id, tournament_id, category_id, player_a_entry_id, player_b_entry_id, team_name, combined_hi, seed, auction_bid, auction_order, is_active"
+      "id, tournament_id, category_id, player_a_entry_id, player_b_entry_id, team_name, combined_hi, seed, auction_bid, auction_order, auction_order_at, auction_order_by, is_active"
     )
     .eq("tournament_id", tournamentId)
     .eq("is_active", true)

@@ -14,6 +14,8 @@ import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
+import { drawNextAuctionPair } from "@/lib/matchplay/drawNextAuctionPair";
+import { createClient } from "@/utils/supabase/server";
 import type {
   MatchPlayHandicapAllowance,
   MatchPlaySeedingMethod,
@@ -708,8 +710,8 @@ export async function saveAuctionSheet(formData: FormData) {
 
 /**
  * Adjudica la postura de un equipo en la subasta en vivo.
- * Si no recibe `auction_order`, asigna el siguiente disponible
- * (max(auction_order) + 1 dentro del torneo).
+ * Si el equipo ya tiene auction_order (sorteado en el servidor), lo conserva.
+ * Si no, asigna el siguiente disponible (max + 1).
  */
 export async function awardAuctionBid(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
@@ -721,7 +723,17 @@ export async function awardAuctionBid(formData: FormData) {
 
   const admin = createAdminClient();
 
-  let auction_order = explicit_order;
+  const { data: existing } = await admin
+    .from("matchplay_pair_teams")
+    .select("auction_order")
+    .eq("id", team_id)
+    .eq("tournament_id", tournament_id)
+    .maybeSingle();
+
+  let auction_order =
+    typeof existing?.auction_order === "number"
+      ? existing.auction_order
+      : explicit_order;
   if (auction_order == null) {
     const { data: maxRow } = await admin
       .from("matchplay_pair_teams")
@@ -752,6 +764,7 @@ export async function awardAuctionBid(formData: FormData) {
   revalidatePath("/matchplay/auction");
   revalidatePath("/matchplay/auction/show");
   revalidatePath("/matchplay/auction/raffle");
+  revalidatePath("/matchplay/auction/proyeccion");
   if (autoPub.status === "published") {
     revalidatePath(`/torneos/${tournament_id}`);
     revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
@@ -804,6 +817,8 @@ export async function resetAuctionData(formData: FormData) {
     .update({
       auction_bid: null,
       auction_order: null,
+      auction_order_at: null,
+      auction_order_by: null,
       updated_at: new Date().toISOString(),
     })
     .eq("tournament_id", tournament_id);
@@ -814,6 +829,7 @@ export async function resetAuctionData(formData: FormData) {
   revalidatePath("/matchplay/auction");
   revalidatePath("/matchplay/auction/show");
   revalidatePath("/matchplay/auction/raffle");
+  revalidatePath("/matchplay/auction/proyeccion");
 
   const resetMsg = "Subasta reiniciada.";
   const target =
@@ -825,6 +841,36 @@ export async function resetAuctionData(formData: FormData) {
           ? `/matchplay/auction?tournament_id=${tournament_id}&status=ok&message=${encodeURIComponent(resetMsg)}`
           : `/matchplay?tournament_id=${tournament_id}&bracket_status=ok&bracket_message=${encodeURIComponent(resetMsg)}`;
   redirect(target);
+}
+
+/**
+ * Sortea la siguiente pareja en el servidor (crypto.randomInt) y deja
+ * auction_order + marca de tiempo + usuario. La animación de TV solo representa
+ * este resultado; no vuelve a sortear en el cliente.
+ */
+export async function drawNextAuctionPairAction(tournamentId: string) {
+  const tournament_id = String(tournamentId ?? "").trim();
+  await ensureAccess(tournament_id);
+
+  const userClient = await createClient();
+  const {
+    data: { user },
+  } = await userClient.auth.getUser();
+
+  const admin = createAdminClient();
+  const result = await drawNextAuctionPair(admin, {
+    tournamentId: tournament_id,
+    userId: user?.id ?? null,
+  });
+
+  if (result.ok) {
+    revalidatePath("/matchplay");
+    revalidatePath("/matchplay/auction");
+    revalidatePath("/matchplay/auction/show");
+    revalidatePath("/matchplay/auction/raffle");
+    revalidatePath("/matchplay/auction/proyeccion");
+  }
+  return result;
 }
 
 /**
