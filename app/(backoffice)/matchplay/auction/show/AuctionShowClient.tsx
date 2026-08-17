@@ -9,6 +9,11 @@ import {
   teamPlayerNameWithPh,
   teamTournamentPhSum,
 } from "@/lib/matchplay/auctionTeamPh";
+import {
+  awardedAuctionTeams,
+  currentOpenAuctionTeam,
+  nextAuctionTurnNumber,
+} from "@/lib/matchplay/auctionOpenTurn";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
   awardAuctionBid,
@@ -120,13 +125,8 @@ export default function AuctionShowClient({
     [teams]
   );
 
-  const awarded = useMemo(
-    () =>
-      teams
-        .filter((t) => t.is_active && t.auction_order !== null && t.auction_order !== undefined)
-        .sort((a, b) => (a.auction_order ?? 0) - (b.auction_order ?? 0)),
-    [teams]
-  );
+  const awarded = useMemo(() => awardedAuctionTeams(teams), [teams]);
+  const openTeam = useMemo(() => currentOpenAuctionTeam(teams), [teams]);
 
   const seedingPreview = useMemo(() => {
     return [...teams]
@@ -166,7 +166,6 @@ export default function AuctionShowClient({
   const [asideFromQueue, setAsideFromQueue] = useState(false);
   const [drawError, setDrawError] = useState<string | null>(null);
   const rollTimerRef = useRef<number | null>(null);
-  const lastSyncedOpenOrderRef = useRef<number | null>(null);
 
   const currentTeam = useMemo(
     () => teams.find((t) => t.id === currentTeamId) ?? null,
@@ -180,6 +179,15 @@ export default function AuctionShowClient({
   const startRoll = useCallback(async (reuseOrder?: number | null) => {
     if (pending.length === 0 && reuseOrder == null) return;
     if (rolling) return;
+    if (reuseOrder == null && openTeam) {
+      setDrawError(
+        `La pareja del turno #${openTeam.auction_order} sigue en subasta. Adjudícala antes de rifar la siguiente.`
+      );
+      setCurrentTeamId(openTeam.id);
+      setRollDisplayId(openTeam.id);
+      setAsideFromQueue(false);
+      return;
+    }
     setAsideFromQueue(false);
     setRolling(true);
     setDrawError(null);
@@ -231,7 +239,7 @@ export default function AuctionShowClient({
     };
 
     step();
-  }, [pending, rolling, tournamentId, minBid, teams]);
+  }, [pending, rolling, tournamentId, minBid, teams, openTeam]);
 
   const redrawThisTurn = useCallback(async () => {
     if (!currentTeam?.auction_order || rolling) return;
@@ -267,39 +275,14 @@ export default function AuctionShowClient({
 
   useEffect(() => {
     if (rolling) return;
-    const waiting = teams
-      .filter(
-        (t) =>
-          t.is_active &&
-          t.auction_order != null &&
-          t.auction_bid == null
-      )
-      .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
-    const latest = waiting[0];
+    const latest = openTeam;
     if (!latest) return;
-
-    const latestOrder = latest.auction_order ?? 0;
-    if (
-      lastSyncedOpenOrderRef.current != null &&
-      latestOrder > lastSyncedOpenOrderRef.current
-    ) {
-      setAsideFromQueue(false);
-    }
-    lastSyncedOpenOrderRef.current = latestOrder;
-
     if (asideFromQueue) return;
     if (currentTeamId === latest.id) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
     setBidInput(minBid != null ? String(minBid) : "");
-  }, [teams, rolling, currentTeamId, asideFromQueue, minBid]);
-
-  const skipCurrent = () => {
-    setAsideFromQueue(true);
-    setCurrentTeamId(null);
-    setRollDisplayId(null);
-    setBidInput(minBid != null ? String(minBid) : "");
-  };
+  }, [openTeam, rolling, currentTeamId, asideFromQueue, minBid]);
 
   const displayTeam = rolling ? rollDisplayTeam : currentTeam;
   const projectedBid = bidInput ? Number(bidInput) : null;
@@ -390,7 +373,7 @@ export default function AuctionShowClient({
                         value={String(
                           currentTeam.auction_order != null
                             ? currentTeam.auction_order
-                            : (awarded.length || 0) + 1
+                            : nextAuctionTurnNumber(teams)
                         )}
                       />
                       {projectedSeed != null ? (
@@ -414,30 +397,29 @@ export default function AuctionShowClient({
 
             {/* Acciones del motor */}
             <div className="mt-5 flex flex-wrap items-center gap-3">
+              {!currentTeam || rolling ? (
               <button
                 type="button"
-                onClick={() => {
-                  if (currentTeam?.auction_order != null) {
-                    skipCurrent();
-                    return;
-                  }
-                  void startRoll();
-                }}
-                disabled={rolling || pending.length === 0}
+                onClick={() => void startRoll()}
+                disabled={rolling || pending.length === 0 || !!openTeam}
                 style={{
                   ...warn,
-                  opacity: rolling || pending.length === 0 ? 0.5 : 1,
+                  opacity:
+                    rolling || pending.length === 0 || !!openTeam ? 0.5 : 1,
                   cursor:
-                    rolling || pending.length === 0 ? "not-allowed" : "pointer",
+                    rolling || pending.length === 0 || !!openTeam
+                      ? "not-allowed"
+                      : "pointer",
                 }}
               >
                 🎲{" "}
-                {currentTeam?.auction_order != null
-                  ? "Cerrar y rifar después"
-                  : currentTeam
-                    ? "Rifar turno"
+                {rolling
+                  ? "Rifando…"
+                  : openTeam
+                    ? `En subasta #${openTeam.auction_order}`
                     : "Rifar próximo"}
               </button>
+              ) : null}
               {currentTeam && !rolling ? (
                 <>
                   <form
@@ -472,9 +454,6 @@ export default function AuctionShowClient({
                       ✓ Adjudicar
                     </button>
                   </form>
-                  <button type="button" style={btn} onClick={skipCurrent}>
-                    Cerrar · volver a rifar
-                  </button>
                   {currentTeam.auction_order != null ? (
                     <button
                       type="button"

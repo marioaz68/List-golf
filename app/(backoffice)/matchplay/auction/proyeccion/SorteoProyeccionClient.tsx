@@ -9,6 +9,7 @@ import {
 } from "@/lib/matchplay/auctionTeamPh";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
+import { currentOpenAuctionTeam } from "@/lib/matchplay/auctionOpenTurn";
 import CasinoAuctionDrum from "@/components/matchplay/CasinoAuctionDrum";
 
 type Props = {
@@ -71,17 +72,8 @@ export default function SorteoProyeccionClient({
     [active]
   );
   const lastDrawn = useMemo(() => {
-    const open = active.filter(
-      (t) =>
-        t.auction_order != null &&
-        t.auction_order !== undefined &&
-        t.auction_bid == null
-    );
-    if (open.length > 0) {
-      return open.reduce((a, b) =>
-        (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
-      );
-    }
+    const open = currentOpenAuctionTeam(active);
+    if (open) return open;
     const drawn = active.filter(
       (t) => t.auction_order !== null && t.auction_order !== undefined
     );
@@ -184,42 +176,41 @@ export default function SorteoProyeccionClient({
     []
   );
 
-  // Solo sigue al operador: cuando otra pantalla rifa, la TV anima sola.
+  // Sigue al operador: gira solo cuando cambia la pareja EN SUBASTA
+  // (la de turno más bajo sin postura). No salta al 5 si el 4 sigue abierto.
   useEffect(() => {
-    const drawn = active.filter(
-      (t) => t.auction_order !== null && t.auction_order !== undefined
-    );
+    const open = currentOpenAuctionTeam(active);
     if (seenDrawnIdsRef.current === null) {
-      seenDrawnIdsRef.current = new Set(drawn.map((t) => t.id));
+      seenDrawnIdsRef.current = new Set(
+        active.filter((t) => t.auction_order != null).map((t) => t.id)
+      );
+      if (open) {
+        setWinner(open);
+        setWinnerOrder(open.auction_order ?? null);
+        setPhase("revealed");
+      }
       return;
     }
-    const fresh = drawn.filter((t) => !seenDrawnIdsRef.current!.has(t.id));
-    for (const t of drawn) seenDrawnIdsRef.current.add(t.id);
-    if (busyRef.current || fresh.length === 0) return;
-
-    const winnerTeam = fresh.reduce((a, b) =>
-      (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
-    );
+    if (busyRef.current) return;
+    if (!open) return;
+    if (winner?.id === open.id) return;
     const pool = active.filter(
-      (t) => t.auction_order == null || t.id === winnerTeam.id
+      (t) => t.auction_order == null || t.id === open.id
     );
     if (pool.length === 0) return;
-    runCasinoSpin(pool, winnerTeam, winnerTeam.auction_order ?? 0);
-  }, [active, runCasinoSpin]);
+    runCasinoSpin(pool, open, open.auction_order ?? 0);
+  }, [active, runCasinoSpin, winner?.id]);
 
-  // Si llega un turno abierto más nuevo mientras mostramos resultado, alineamos.
+  // Si el turno abierto más viejo cambia mientras no giramos, alinear.
   useEffect(() => {
     if (phase === "spinning" || busyRef.current) return;
-    if (!lastDrawn || lastDrawn.auction_bid != null) return;
+    if (!lastDrawn) return;
     if (winner?.id === lastDrawn.id) return;
-    const wOrd = winnerOrder ?? winner?.auction_order ?? 0;
-    const lOrd = lastDrawn.auction_order ?? 0;
-    if (lOrd > wOrd) {
-      setWinner(lastDrawn);
-      setWinnerOrder(lOrd);
-      setPhase("revealed");
-    }
-  }, [lastDrawn, phase, winner, winnerOrder]);
+    if (lastDrawn.auction_bid != null) return;
+    setWinner(lastDrawn);
+    setWinnerOrder(lastDrawn.auction_order ?? null);
+    setPhase("revealed");
+  }, [lastDrawn, phase, winner]);
 
   const drumTeams =
     spinPool.length > 0
@@ -244,7 +235,7 @@ export default function SorteoProyeccionClient({
             {tournamentName}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           {displayOrder != null && !spinning ? (
             <div className="text-right text-xl font-semibold text-white md:text-2xl">
               Pareja {displayOrder} de {active.length}
@@ -255,10 +246,10 @@ export default function SorteoProyeccionClient({
             </div>
           )}
           <a
-            href={`/matchplay/auction/raffle?tournament_id=${tournamentId}`}
-            className="text-xs font-medium text-white/40 hover:text-white/70"
+            href={`/matchplay/auction/show?tournament_id=${tournamentId}`}
+            className="rounded-xl border-2 border-white/40 bg-white/10 px-5 py-2.5 text-lg font-black text-white hover:bg-white/20"
           >
-            Operador
+            ← Volver a subasta
           </a>
         </div>
       </header>

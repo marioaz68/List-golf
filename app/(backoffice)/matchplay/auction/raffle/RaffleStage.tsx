@@ -9,6 +9,12 @@ import {
   teamPlayerNameWithPh,
   teamTournamentPhSum,
 } from "@/lib/matchplay/auctionTeamPh";
+import {
+  awardedAuctionTeams,
+  currentOpenAuctionTeam,
+  nextAuctionTurnNumber,
+  openUnbidAuctionTeams,
+} from "@/lib/matchplay/auctionOpenTurn";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
   awardAuctionBid,
@@ -86,18 +92,9 @@ export default function RaffleStage({
       ),
     [teams]
   );
-  const awarded = useMemo(
-    () =>
-      teams
-        .filter(
-          (t) =>
-            t.is_active &&
-            t.auction_order !== null &&
-            t.auction_order !== undefined
-        )
-        .sort((a, b) => (a.auction_order ?? 0) - (b.auction_order ?? 0)),
-    [teams]
-  );
+  const awarded = useMemo(() => awardedAuctionTeams(teams), [teams]);
+  const openUnbid = useMemo(() => openUnbidAuctionTeams(teams), [teams]);
+  const openTeam = useMemo(() => currentOpenAuctionTeam(teams), [teams]);
   const activeTotal = teams.filter((t) => t.is_active).length;
 
   const seedingPreview = useMemo(() => {
@@ -134,7 +131,6 @@ export default function RaffleStage({
   const [drumTick, setDrumTick] = useState(0);
   const [drawError, setDrawError] = useState<string | null>(null);
   const rollTimerRef = useRef<number | null>(null);
-  const lastSyncedOpenOrderRef = useRef<number | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const bidInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -151,6 +147,15 @@ export default function RaffleStage({
     const orderHint = reuseOrder ?? preferredOrder;
     if (pending.length === 0 && orderHint == null) return;
     if (rolling || redrawBusy) return;
+    if (orderHint == null && openTeam) {
+      setDrawError(
+        `La pareja del turno #${openTeam.auction_order} sigue en subasta. Adjudícala antes de rifar la siguiente.`
+      );
+      setCurrentTeamId(openTeam.id);
+      setRollDisplayId(openTeam.id);
+      setAsideFromQueue(false);
+      return;
+    }
 
     setAsideFromQueue(false);
     setRolling(true);
@@ -224,7 +229,7 @@ export default function RaffleStage({
     };
 
     step();
-  }, [pending, rolling, redrawBusy, tournamentId, minBid, preferredOrder, teams]);
+  }, [pending, rolling, redrawBusy, tournamentId, minBid, preferredOrder, teams, openTeam]);
 
   const redrawThisTurn = useCallback(async () => {
     if (!currentTeam || rolling || redrawBusy) return;
@@ -267,40 +272,14 @@ export default function RaffleStage({
 
   useEffect(() => {
     if (rolling) return;
-    const waiting = teams
-      .filter(
-        (t) =>
-          t.is_active &&
-          t.auction_order != null &&
-          t.auction_bid == null
-      )
-      .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
-    const latest = waiting[0];
+    const latest = openTeam;
     if (!latest) return;
-
-    // Si otra pantalla rifó un turno más nuevo, todas se alinean a ese.
-    const latestOrder = latest.auction_order ?? 0;
-    if (
-      lastSyncedOpenOrderRef.current != null &&
-      latestOrder > lastSyncedOpenOrderRef.current
-    ) {
-      setAsideFromQueue(false);
-    }
-    lastSyncedOpenOrderRef.current = latestOrder;
-
     if (asideFromQueue) return;
     if (currentTeamId === latest.id) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
     setBidInput(minBid != null ? String(minBid) : "");
-  }, [teams, rolling, currentTeamId, asideFromQueue, minBid]);
-
-  const skipCurrent = () => {
-    setAsideFromQueue(true);
-    setCurrentTeamId(null);
-    setRollDisplayId(null);
-    setBidInput(minBid != null ? String(minBid) : "");
-  };
+  }, [openTeam, rolling, currentTeamId, asideFromQueue, minBid]);
 
   const displayTeam = rolling ? rollDisplayTeam : currentTeam;
   const projectedBid = bidInput ? Number(bidInput) : null;
@@ -333,7 +312,8 @@ export default function RaffleStage({
   const nextTurnNumber =
     currentTeam?.auction_order != null
       ? currentTeam.auction_order
-      : (awarded.length ?? 0) + 1;
+      : nextAuctionTurnNumber(teams);
+  const canSpinNext = pending.length > 0 && !openTeam && !rolling && !redrawBusy;
   const progressPct =
     activeTotal > 0 ? Math.round((awarded.length / activeTotal) * 100) : 0;
 
@@ -496,13 +476,13 @@ export default function RaffleStage({
 
           {/* Acciones */}
           <div className="relative mt-7 flex flex-wrap items-center justify-center gap-3">
-            {!currentTeam || rolling ? (
+            {rolling || (!currentTeam && canSpinNext) ? (
               <button
                 type="button"
                 onClick={() => void startRoll()}
-                disabled={rolling || redrawBusy || pending.length === 0}
+                disabled={!canSpinNext && !rolling}
                 className={`raffle-mega-btn ${
-                  rolling || redrawBusy || pending.length === 0 ? "is-disabled" : ""
+                  !canSpinNext && !rolling ? "is-disabled" : ""
                 }`}
               >
                 {rolling
@@ -511,7 +491,7 @@ export default function RaffleStage({
                     ? "Sin pendientes"
                     : `Girar ruleta · turno #${nextTurnNumber}`}
               </button>
-            ) : (
+            ) : currentTeam ? (
               <>
                 <form
                   ref={formRef}
@@ -544,7 +524,7 @@ export default function RaffleStage({
                     />
                   </div>
                   <button type="submit" className="raffle-success-btn">
-                    ✓ Adjudicar y rifar siguiente
+                    ✓ Adjudicar
                   </button>
                 </form>
                 {currentTeam.auction_order != null ? (
@@ -560,17 +540,48 @@ export default function RaffleStage({
                       : `Volver a rifar turno #${currentTeam.auction_order}`}
                   </button>
                 ) : null}
-                <button
-                  type="button"
+                <Link
+                  href={`/matchplay/auction/show?tournament_id=${tournamentId}`}
                   className="rounded-lg border border-slate-500 bg-slate-700/40 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700/70"
-                  onClick={skipCurrent}
                 >
-                  Cerrar pantalla
-                </button>
+                  ← Ir a subasta
+                </Link>
+                {openUnbid
+                  .filter((t) => t.id !== openTeam?.id)
+                  .map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className="rounded-lg border border-amber-400/50 bg-amber-950/40 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-900/60 disabled:opacity-50"
+                      disabled={rolling || redrawBusy}
+                      onClick={async () => {
+                        setRedrawBusy(true);
+                        await releaseAuctionPairForRedrawAction(
+                          tournamentId,
+                          t.id
+                        );
+                        setRedrawBusy(false);
+                      }}
+                    >
+                      Liberar turno #{t.auction_order} (aún no toca)
+                    </button>
+                  ))}
               </>
+            ) : (
+              <p className="text-center text-sm text-slate-400">
+                Hay un turno abierto. Espera a que se sincronice.
+              </p>
             )}
           </div>
 
+          {openUnbid.length > 1 ? (
+            <p className="relative mt-3 text-center text-sm font-semibold text-amber-200">
+              Hay más de un turno sin adjudicar (
+              {openUnbid.map((t) => `#${t.auction_order}`).join(", ")}). Se
+              mantiene el #{openTeam?.auction_order}. Libera los demás con
+              «Volver a rifar» en esa pareja, o adjudica primero el turno actual.
+            </p>
+          ) : null}
           {currentTeam && !rolling && currentTeam.auction_order != null ? (
             <p className="relative mt-3 text-center text-[12px] text-slate-400">
               «Volver a rifar turno» no borra la pareja: la regresa al sorteo y

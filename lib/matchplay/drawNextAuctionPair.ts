@@ -121,7 +121,7 @@ export async function drawNextAuctionPair(
 
     if (openUnbid.length > 0 && preferred == null) {
       const open = openUnbid.reduce((a, b) =>
-        (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
+        (a.auction_order ?? 0) <= (b.auction_order ?? 0) ? a : b
       );
       return {
         ok: false,
