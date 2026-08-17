@@ -94,7 +94,7 @@ export async function drawNextAuctionPair(
   for (let attempt = 0; attempt < 4; attempt++) {
     const { data: teams, error } = await admin
       .from("matchplay_pair_teams")
-      .select("id, auction_order, is_active")
+      .select("id, auction_order, auction_bid, is_active")
       .eq("tournament_id", tournamentId)
       .eq("is_active", true);
 
@@ -104,6 +104,32 @@ export async function drawNextAuctionPair(
 
     const list = teams ?? [];
     const totalActive = list.length;
+
+    // Una sola pareja "en subasta" a la vez: evita que dos pantallas
+    // rifen turnos 3 y 4 en paralelo y queden desfasadas.
+    const openUnbid = list.filter(
+      (t) =>
+        t.auction_order != null &&
+        (t.auction_bid === null || t.auction_bid === undefined)
+    );
+    const preferred =
+      typeof params.preferredOrder === "number" &&
+      Number.isFinite(params.preferredOrder) &&
+      params.preferredOrder >= 1
+        ? Math.floor(params.preferredOrder)
+        : null;
+
+    if (openUnbid.length > 0 && preferred == null) {
+      const open = openUnbid.reduce((a, b) =>
+        (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
+      );
+      return {
+        ok: false,
+        error: `Ya hay una pareja en subasta (turno #${open.auction_order}). Adjudica o libera ese turno antes de rifar otra.`,
+        code: "busy",
+      };
+    }
+
     const pending = list.filter(
       (t) => t.auction_order === null || t.auction_order === undefined
     );
@@ -124,13 +150,6 @@ export async function drawNextAuctionPair(
       const n = typeof t.auction_order === "number" ? t.auction_order : 0;
       return n > m ? n : m;
     }, 0);
-
-    const preferred =
-      typeof params.preferredOrder === "number" &&
-      Number.isFinite(params.preferredOrder) &&
-      params.preferredOrder >= 1
-        ? Math.floor(params.preferredOrder)
-        : null;
 
     const nextOrder =
       preferred != null && !used.has(preferred) ? preferred : maxOrder + 1;

@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import {
+  formatPhSum,
+  teamPlayerNameWithPh,
+  teamTournamentPhSum,
+} from "@/lib/matchplay/auctionTeamPh";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
   awardAuctionBid,
@@ -12,7 +17,6 @@ import {
   resetAuctionData,
 } from "../../actions";
 import { prefersReducedMotion } from "@/lib/matchplay/auctionWheel";
-import CasinoAuctionDrum from "@/components/matchplay/CasinoAuctionDrum";
 
 type PrizeShare = { position: number; label: string; percent: number };
 
@@ -88,8 +92,8 @@ function teamLabel(t: MatchPlayTeamRow) {
 }
 
 function teamPlayers(t: MatchPlayTeamRow) {
-  const a = t.player_a ? formatPlayerName(t.player_a.player) : "—";
-  const b = t.player_b ? formatPlayerName(t.player_b.player) : null;
+  const a = teamPlayerNameWithPh(t, "a") || "—";
+  const b = teamPlayerNameWithPh(t, "b");
   return b ? `${a} · ${b}` : a;
 }
 
@@ -160,7 +164,9 @@ export default function AuctionShowClient({
   const [rolling, setRolling] = useState(false);
   const [rollDisplayId, setRollDisplayId] = useState<string | null>(null);
   const [asideFromQueue, setAsideFromQueue] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const rollTimerRef = useRef<number | null>(null);
+  const lastSyncedOpenOrderRef = useRef<number | null>(null);
 
   const currentTeam = useMemo(
     () => teams.find((t) => t.id === currentTeamId) ?? null,
@@ -176,6 +182,7 @@ export default function AuctionShowClient({
     if (rolling) return;
     setAsideFromQueue(false);
     setRolling(true);
+    setDrawError(null);
 
     const pool = teams.filter((t) => t.is_active);
     const result = await drawNextAuctionPairAction(
@@ -184,6 +191,7 @@ export default function AuctionShowClient({
     );
     if (!result.ok) {
       setRolling(false);
+      setDrawError(result.error);
       return;
     }
     const winnerId = result.teamId;
@@ -258,7 +266,7 @@ export default function AuctionShowClient({
   }, [currentTeam]);
 
   useEffect(() => {
-    if (rolling || asideFromQueue) return;
+    if (rolling) return;
     const waiting = teams
       .filter(
         (t) =>
@@ -269,14 +277,22 @@ export default function AuctionShowClient({
       .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
     const latest = waiting[0];
     if (!latest) return;
+
+    const latestOrder = latest.auction_order ?? 0;
+    if (
+      lastSyncedOpenOrderRef.current != null &&
+      latestOrder > lastSyncedOpenOrderRef.current
+    ) {
+      setAsideFromQueue(false);
+    }
+    lastSyncedOpenOrderRef.current = latestOrder;
+
+    if (asideFromQueue) return;
     if (currentTeamId === latest.id) return;
-    const currentStillOpen =
-      currentTeamId != null &&
-      teams.some((t) => t.id === currentTeamId && t.auction_bid == null);
-    if (currentStillOpen) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
-  }, [teams, rolling, currentTeamId, asideFromQueue]);
+    setBidInput(minBid != null ? String(minBid) : "");
+  }, [teams, rolling, currentTeamId, asideFromQueue, minBid]);
 
   const skipCurrent = () => {
     setAsideFromQueue(true);
@@ -310,6 +326,12 @@ export default function AuctionShowClient({
           }`}
         >
           {flashMessage}
+        </div>
+      ) : null}
+
+      {drawError ? (
+        <div className="rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+          {drawError}
         </div>
       ) : null}
 
@@ -358,8 +380,8 @@ export default function AuctionShowClient({
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-[13px] text-slate-300">
                   <Chip
-                    label="HI combinado"
-                    value={displayTeam.combined_hi ?? "—"}
+                    label="Hándicap torneo Σ"
+                    value={formatPhSum(teamTournamentPhSum(displayTeam))}
                   />
                   {rolling ? null : currentTeam ? (
                     <>
@@ -612,7 +634,7 @@ export default function AuctionShowClient({
                       {teamLabel(t)}
                     </button>
                     <span className="text-[10px] text-slate-500">
-                      HI {t.combined_hi ?? "—"}
+                      Σ PH {formatPhSum(teamTournamentPhSum(t))}
                     </span>
                   </li>
                 ))

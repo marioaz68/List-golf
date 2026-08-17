@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import {
+  formatPhSum,
+  teamPlayerNameWithPh,
+  teamTournamentPhSum,
+} from "@/lib/matchplay/auctionTeamPh";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
   awardAuctionBid,
@@ -42,8 +47,8 @@ function teamLabel(t: MatchPlayTeamRow) {
 }
 
 function teamPlayers(t: MatchPlayTeamRow) {
-  const a = t.player_a ? formatPlayerName(t.player_a.player) : "—";
-  const b = t.player_b ? formatPlayerName(t.player_b.player) : null;
+  const a = teamPlayerNameWithPh(t, "a") || "—";
+  const b = teamPlayerNameWithPh(t, "b");
   return b ? `${a}  ·  ${b}` : a;
 }
 
@@ -127,7 +132,9 @@ export default function RaffleStage({
   const [preferredOrder, setPreferredOrder] = useState<number | null>(null);
   const [redrawBusy, setRedrawBusy] = useState(false);
   const [drumTick, setDrumTick] = useState(0);
+  const [drawError, setDrawError] = useState<string | null>(null);
   const rollTimerRef = useRef<number | null>(null);
+  const lastSyncedOpenOrderRef = useRef<number | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const bidInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -148,6 +155,7 @@ export default function RaffleStage({
     setAsideFromQueue(false);
     setRolling(true);
     setCelebrate(false);
+    setDrawError(null);
     setCurrentTeamId(null);
     setDrumTick(0);
 
@@ -163,6 +171,7 @@ export default function RaffleStage({
     setPreferredOrder(null);
     if (!result.ok) {
       setRolling(false);
+      setDrawError(result.error);
       return;
     }
     const winnerId = result.teamId;
@@ -185,7 +194,7 @@ export default function RaffleStage({
     }
 
     let elapsed = 0;
-    const total = 4200;
+    const total = 6200;
     let interval = 55;
     let cursor = 0;
 
@@ -197,7 +206,12 @@ export default function RaffleStage({
         setDrumTick(cursor);
       }
       elapsed += interval;
-      interval = Math.min(360, Math.round(interval * 1.16));
+      // Últimos ~6 equipos: frena de verdad
+      if (total - elapsed < 2800) {
+        interval = Math.min(480, Math.round(interval * 1.2));
+      } else {
+        interval = Math.min(320, Math.round(interval * 1.14));
+      }
       if (elapsed >= total) {
         landOnWinner();
         if (rollTimerRef.current) {
@@ -252,7 +266,7 @@ export default function RaffleStage({
   }, [currentTeam]);
 
   useEffect(() => {
-    if (rolling || asideFromQueue) return;
+    if (rolling) return;
     const waiting = teams
       .filter(
         (t) =>
@@ -263,16 +277,23 @@ export default function RaffleStage({
       .sort((a, b) => (b.auction_order ?? 0) - (a.auction_order ?? 0));
     const latest = waiting[0];
     if (!latest) return;
+
+    // Si otra pantalla rifó un turno más nuevo, todas se alinean a ese.
+    const latestOrder = latest.auction_order ?? 0;
+    if (
+      lastSyncedOpenOrderRef.current != null &&
+      latestOrder > lastSyncedOpenOrderRef.current
+    ) {
+      setAsideFromQueue(false);
+    }
+    lastSyncedOpenOrderRef.current = latestOrder;
+
+    if (asideFromQueue) return;
     if (currentTeamId === latest.id) return;
-    const currentStillOpen =
-      currentTeamId != null &&
-      teams.some(
-        (t) => t.id === currentTeamId && t.auction_bid == null
-      );
-    if (currentStillOpen) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
-  }, [teams, rolling, currentTeamId, asideFromQueue]);
+    setBidInput(minBid != null ? String(minBid) : "");
+  }, [teams, rolling, currentTeamId, asideFromQueue, minBid]);
 
   const skipCurrent = () => {
     setAsideFromQueue(true);
@@ -328,6 +349,11 @@ export default function RaffleStage({
           }`}
         >
           {flashMessage}
+        </div>
+      ) : null}
+      {drawError ? (
+        <div className="mx-4 mt-3 rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+          {drawError}
         </div>
       ) : null}
 
@@ -437,7 +463,14 @@ export default function RaffleStage({
               />
               {!rolling && currentTeam ? (
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <Chip label="HI combinado" value={currentTeam.combined_hi ?? "—"} />
+                  <Chip
+                    label="Hándicap torneo Σ"
+                    value={
+                      currentTeam
+                        ? formatPhSum(teamTournamentPhSum(currentTeam))
+                        : "—"
+                    }
+                  />
                   <Chip label="Turno" value={`#${nextTurnNumber}`} tone="amber" />
                   {projectedSeed != null ? (
                     <Chip
@@ -623,7 +656,7 @@ export default function RaffleStage({
                     {teamLabel(t)}
                   </button>
                   <span className="text-[10px] text-slate-500">
-                    HI {t.combined_hi ?? "—"}
+                    Σ PH {formatPhSum(teamTournamentPhSum(t))}
                   </span>
                 </li>
               ))}
