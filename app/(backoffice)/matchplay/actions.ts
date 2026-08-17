@@ -14,7 +14,7 @@ import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
-import { drawNextAuctionPair } from "@/lib/matchplay/drawNextAuctionPair";
+import { drawNextAuctionPair, releaseAuctionPairForRedraw } from "@/lib/matchplay/drawNextAuctionPair";
 import { createClient } from "@/utils/supabase/server";
 import type {
   MatchPlayHandicapAllowance,
@@ -848,7 +848,10 @@ export async function resetAuctionData(formData: FormData) {
  * auction_order + marca de tiempo + usuario. La animación de TV solo representa
  * este resultado; no vuelve a sortear en el cliente.
  */
-export async function drawNextAuctionPairAction(tournamentId: string) {
+export async function drawNextAuctionPairAction(
+  tournamentId: string,
+  preferredOrder?: number | null
+) {
   const tournament_id = String(tournamentId ?? "").trim();
   await ensureAccess(tournament_id);
 
@@ -861,6 +864,35 @@ export async function drawNextAuctionPairAction(tournamentId: string) {
   const result = await drawNextAuctionPair(admin, {
     tournamentId: tournament_id,
     userId: user?.id ?? null,
+    preferredOrder: preferredOrder ?? null,
+  });
+
+  if (result.ok) {
+    revalidatePath("/matchplay");
+    revalidatePath("/matchplay/auction");
+    revalidatePath("/matchplay/auction/show");
+    revalidatePath("/matchplay/auction/raffle");
+    revalidatePath("/matchplay/auction/proyeccion");
+  }
+  return result;
+}
+
+/**
+ * Libera el turno de una pareja (vuelve al pool) para rifar de nuevo
+ * el mismo número de turno. No borra la pareja.
+ */
+export async function releaseAuctionPairForRedrawAction(
+  tournamentId: string,
+  teamId: string
+) {
+  const tournament_id = String(tournamentId ?? "").trim();
+  const team_id = String(teamId ?? "").trim();
+  await ensureAccess(tournament_id);
+
+  const admin = createAdminClient();
+  const result = await releaseAuctionPairForRedraw(admin, {
+    tournamentId: tournament_id,
+    teamId: team_id,
   });
 
   if (result.ok) {

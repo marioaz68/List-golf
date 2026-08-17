@@ -11,7 +11,7 @@ import {
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
-import { drawNextAuctionPairAction } from "../../actions";
+import { drawNextAuctionPairAction, releaseAuctionPairForRedrawAction } from "../../actions";
 import {
   AUCTION_WHEEL_PAUSE_MS,
   AUCTION_WHEEL_SPIN_MS,
@@ -136,9 +136,9 @@ export default function SorteoProyeccionClient({
   const [winnerOrder, setWinnerOrder] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [itemH, setItemH] = useState(168);
-  const [orderOverlay, setOrderOverlay] = useState<Record<string, number>>(
-    {}
-  );
+  const [orderOverlay, setOrderOverlay] = useState<
+    Record<string, number | null>
+  >({});
 
   const busyRef = useRef(false);
   const rafRef = useRef<number | null>(null);
@@ -158,9 +158,10 @@ export default function SorteoProyeccionClient({
       teams
         .filter((t) => t.is_active)
         .map((t) => {
-          const over = orderOverlay[t.id];
-          if (over == null || t.auction_order != null) return t;
-          return { ...t, auction_order: over };
+          if (!Object.prototype.hasOwnProperty.call(orderOverlay, t.id)) {
+            return t;
+          }
+          return { ...t, auction_order: orderOverlay[t.id] ?? null };
         }),
     [teams, orderOverlay]
   );
@@ -309,16 +310,16 @@ export default function SorteoProyeccionClient({
     runWheel(pool, winnerTeam, winnerTeam.auction_order ?? 0, h);
   }, [active, runWheel]);
 
-  const handleGirar = useCallback(async () => {
+  const handleGirar = useCallback(async (preferredOrder?: number | null) => {
     if (busyRef.current) return;
-    if (pending.length === 0) {
+    if (pending.length === 0 && preferredOrder == null) {
       setPhase("done");
       return;
     }
     busyRef.current = true;
     setError(null);
     setPhase("arming");
-    const pool = pending;
+    const pool = pending.length > 0 ? pending : active;
     const h = Math.max(110, Math.round(window.innerHeight / VISIBLE_SLOTS * 0.72));
     setItemH(h);
     const preview = buildStrip(pool, pool[0]!.id);
@@ -326,7 +327,10 @@ export default function SorteoProyeccionClient({
     setLandIndex(preview.landIndex);
     applyY(stripElRef.current, offsetForIndex(CENTER_SLOT, h));
 
-    const result = await drawNextAuctionPairAction(tournamentId);
+    const result = await drawNextAuctionPairAction(
+      tournamentId,
+      preferredOrder ?? null
+    );
     if (!result.ok) {
       busyRef.current = false;
       setError(result.error);
@@ -343,8 +347,32 @@ export default function SorteoProyeccionClient({
       setError("La pareja sorteada no está en la lista precargada.");
       return;
     }
-    runWheel(pool, winnerTeam, result.auctionOrder, h);
+    // Si la pareja no estaba en el pool (liberada hace un momento), armamos pool visual con active
+    const spinPool =
+      pool.some((t) => t.id === winnerTeam.id) ? pool : [...pool, winnerTeam];
+    runWheel(spinPool, winnerTeam, result.auctionOrder, h);
   }, [pending, tournamentId, active, runWheel, lastDrawn]);
+
+  const redrawThisTurn = useCallback(async () => {
+    const team = winner ?? lastDrawn;
+    if (!team || team.auction_order == null || busyRef.current) return;
+    busyRef.current = true;
+    setError(null);
+    const released = await releaseAuctionPairForRedrawAction(
+      tournamentId,
+      team.id
+    );
+    if (!released.ok) {
+      busyRef.current = false;
+      setError(released.error);
+      return;
+    }
+    setOrderOverlay((prev) => ({ ...prev, [team.id]: null }));
+    setWinner(null);
+    setWinnerOrder(null);
+    busyRef.current = false;
+    await handleGirar(released.freedOrder);
+  }, [winner, lastDrawn, tournamentId, handleGirar]);
 
   const spinning =
     phase === "arming" || phase === "spinning" || phase === "paused";
@@ -568,6 +596,17 @@ export default function SorteoProyeccionClient({
                   ? "Girar siguiente pareja"
                   : "Girar"}
           </button>
+          {(phase === "revealed" || (phase === "idle" && displayWinner)) &&
+          displayWinner?.auction_order != null ? (
+            <button
+              type="button"
+              onClick={() => void redrawThisTurn()}
+              disabled={spinning}
+              className="min-h-[84px] min-w-[min(40vw,300px)] rounded-2xl border-2 border-rose-400/70 bg-rose-950/60 px-6 text-xl font-black text-rose-100 hover:bg-rose-900/70 disabled:opacity-50 md:text-2xl"
+            >
+              Volver a rifar turno #{displayWinner.auction_order}
+            </button>
+          ) : null}
           {(phase === "revealed" || (phase === "idle" && displayWinner)) &&
           pending.length > 0 ? (
             <button
