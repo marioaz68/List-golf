@@ -674,21 +674,57 @@ function PrivateCardSection({
 function HoleDots({
   currentHole,
   onSelectHole,
+  onPrevHole,
+  onNextHole,
+  canPrev,
+  canNext,
   isHoleComplete,
   showPlayoff,
   decidedAtPlayoffHole,
 }: {
   currentHole: HoleNumber;
   onSelectHole: (hole: HoleNumber) => void;
+  onPrevHole: () => void;
+  onNextHole: () => void;
+  canPrev: boolean;
+  canNext: boolean;
   isHoleComplete: (hole: HoleNumber) => boolean;
   /** Si true, también renderiza los hoyos 19-27 (etiquetados P1-P9). */
   showPlayoff?: boolean;
   /** Hoyo de desempate donde se decidió (1..9); desactiva los siguientes. */
   decidedAtPlayoffHole?: number | null;
 }) {
+  const stripRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const active = strip.querySelector<HTMLElement>(
+      `[data-hole="${currentHole}"]`
+    );
+    active?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [currentHole]);
+
+  const arrowBtn =
+    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-lg font-black leading-none disabled:opacity-30";
+
   return (
     <div className="border-b bg-white px-2 py-1">
-      <div className="flex items-center gap-1 overflow-x-auto">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label="Hoyo anterior"
+          disabled={!canPrev}
+          onClick={onPrevHole}
+          className={`${arrowBtn} border-slate-300 bg-slate-100 text-slate-800`}
+        >
+          ‹
+        </button>
+        <div ref={stripRef} className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {ALL_HOLES.map((hole) => {
           const isActive = hole === currentHole;
           const isDone = isHoleComplete(hole);
@@ -696,6 +732,7 @@ function HoleDots({
             <button
               key={`hole-dot-${hole}`}
               type="button"
+              data-hole={hole}
               onClick={() => onSelectHole(hole)}
               className={[
                 "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold sm:h-8 sm:w-8 md:h-6 md:w-6 md:text-[10px]",
@@ -730,6 +767,7 @@ function HoleDots({
                 <button
                   key={`hole-dot-${hole}`}
                   type="button"
+                  data-hole={hole}
                   disabled={disabled}
                   onClick={() => {
                     if (disabled) return;
@@ -759,6 +797,16 @@ function HoleDots({
             })}
           </>
         ) : null}
+        </div>
+        <button
+          type="button"
+          aria-label="Hoyo siguiente"
+          disabled={!canNext}
+          onClick={onNextHole}
+          className={`${arrowBtn} border-slate-300 bg-slate-100 text-slate-800`}
+        >
+          ›
+        </button>
       </div>
     </div>
   );
@@ -877,7 +925,39 @@ function MobileScoreEntryContent() {
   const playerRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const activePlayerIdRef = useRef<string | null>(null);
   const currentHoleRef = useRef<HoleNumber>(1);
-  const savingRef = useRef(false);
+  /** Guardados en vuelo: un booleano se apagaba al terminar el 1er POST y el poll pisaba el resto. */
+  const inFlightCountRef = useRef(0);
+  type OptimisticCell = {
+    strokes: number | null;
+    pickedUp: boolean;
+    at: number;
+  };
+  const optimisticRef = useRef<Map<string, OptimisticCell>>(new Map());
+
+  function optimisticKey(playerId: string, hole: HoleNumber) {
+    return `${playerId}:${hole}`;
+  }
+
+  function rememberOptimistic(
+    playerId: string,
+    hole: HoleNumber,
+    strokes: number | null,
+    pickedUp: boolean
+  ) {
+    optimisticRef.current.set(optimisticKey(playerId, hole), {
+      strokes,
+      pickedUp,
+      at: Date.now(),
+    });
+  }
+
+  function beginSave() {
+    inFlightCountRef.current += 1;
+  }
+
+  function endSave() {
+    inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+  }
 
   /** Jugador identificado: API o parámetro ?me= en la URL. */
   const viewerEntryId = myEntryId ?? meFromUrl;
@@ -898,7 +978,7 @@ function MobileScoreEntryContent() {
     const caddieTrim = caddieParam?.trim() ?? "";
 
     async function pull() {
-      if (savingRef.current) return;
+      if (inFlightCountRef.current > 0) return;
       try {
         const qs = new URLSearchParams({ group_id: groupIdCapture });
         if (meTrim) qs.set("me", meTrim);
@@ -991,37 +1071,72 @@ function MobileScoreEntryContent() {
           const mePlayer = data.players.find((p) => p.entryId === myId);
           if (mePlayer?.privateScores) {
             const incoming = mePlayer.privateScores;
-            const editingMe = activePlayerIdRef.current === ME_ID;
-            const editingHole = currentHoleRef.current;
             setMyPrivateScores((prev) => {
               const next: HoleScores = { ...incoming };
-              if (editingMe && prev[editingHole] != null) {
-                next[editingHole] = prev[editingHole];
+              const opt = optimisticRef.current.get(
+                optimisticKey(ME_ID, currentHoleRef.current)
+              );
+              for (const [key, cell] of optimisticRef.current) {
+                if (!key.startsWith(`${ME_ID}:`)) continue;
+                const hole = Number(key.slice(ME_ID.length + 1)) as HoleNumber;
+                const serverVal = incoming[hole];
+                if (serverVal === cell.strokes) {
+                  optimisticRef.current.delete(key);
+                  continue;
+                }
+                if (Date.now() - cell.at < 12_000) {
+                  next[hole] = cell.strokes;
+                } else {
+                  optimisticRef.current.delete(key);
+                }
+              }
+              if (opt && Date.now() - opt.at < 12_000 && prev[currentHoleRef.current] != null) {
+                next[currentHoleRef.current] = prev[currentHoleRef.current];
               }
               return next;
             });
           }
         }
 
-        const editingId = activePlayerIdRef.current;
-        const editingHole = currentHoleRef.current;
         setPlayers((prevPlayers) =>
           data.players.map((p) => {
             const prev = prevPlayers.find((x) => x.id === p.entryId);
             const scores = { ...p.scores };
+            const pickedUp = { ...(p.pickedUp ?? {}) };
+            for (const [key, cell] of optimisticRef.current) {
+              if (!key.startsWith(`${p.entryId}:`)) continue;
+              const hole = Number(key.slice(p.entryId.length + 1)) as HoleNumber;
+              const serverVal = p.scores[hole];
+              const serverPicked = Boolean(p.pickedUp?.[hole]);
+              if (serverVal === cell.strokes && serverPicked === cell.pickedUp) {
+                optimisticRef.current.delete(key);
+                continue;
+              }
+              if (Date.now() - cell.at < 12_000) {
+                scores[hole] = cell.strokes;
+                if (cell.pickedUp) pickedUp[hole] = true;
+                else delete pickedUp[hole];
+              } else {
+                optimisticRef.current.delete(key);
+              }
+            }
             if (
               prev &&
-              editingId === p.entryId &&
-              prev.scores[editingHole] != null
+              activePlayerIdRef.current === p.entryId &&
+              prev.scores[currentHoleRef.current] != null
             ) {
-              scores[editingHole] = prev.scores[editingHole];
+              scores[currentHoleRef.current] = prev.scores[currentHoleRef.current];
             }
             return {
               id: p.entryId,
               name: p.name,
               scores,
               pending: { ...(p.pending ?? {}) },
-              pickedUp: { ...(p.pickedUp ?? {}) },
+              pickedUp,
+              strokesByHole: { ...(p.strokesByHole ?? {}) },
+              playingHandicap: p.playingHandicap ?? null,
+              ballRole: p.ballRole ?? null,
+              matchSide: p.matchSide ?? null,
             };
           })
         );
@@ -1047,6 +1162,36 @@ function MobileScoreEntryContent() {
       ),
     [matchPlayInfo, players]
   );
+
+  const holeSequence = useMemo<HoleNumber[]>(() => {
+    const decidedPlayoff =
+      matchPlayInfo?.viaPlayoff ? matchPlayInfo.playoffHole ?? null : null;
+    const playoffHoles = playoffCapture.showPlayoffSection
+      ? HOLES_PLAYOFF.filter((h) => {
+          if (decidedPlayoff == null) return true;
+          return h - 18 <= decidedPlayoff;
+        })
+      : [];
+    return [...ALL_HOLES, ...playoffHoles];
+  }, [playoffCapture.showPlayoffSection, matchPlayInfo?.viaPlayoff, matchPlayInfo?.playoffHole]);
+
+  const holeSeqIndex = holeSequence.indexOf(currentHole);
+  const canPrevHole = holeSeqIndex > 0;
+  const canNextHole =
+    holeSeqIndex >= 0 && holeSeqIndex < holeSequence.length - 1;
+
+  function goToHole(hole: HoleNumber) {
+    setCurrentHole(hole);
+    setActivePlayerId(null);
+    setDraftScore("");
+    setDraftFresh(false);
+  }
+
+  function goAdjacentHole(delta: -1 | 1) {
+    const next = holeSequence[holeSeqIndex + delta];
+    if (next == null) return;
+    goToHole(next);
+  }
 
   const activePlayer = useMemo<PlayerRow | null>(() => {
     if (activePlayerId === ME_ID) {
@@ -1184,9 +1329,10 @@ function MobileScoreEntryContent() {
     // Score privado del jugador identificado (tabla amber "Mi Score").
     if (playerId === ME_ID) {
       setMyPrivateScores((cur) => ({ ...cur, [hole]: strokes }));
+      rememberOptimistic(ME_ID, hole, strokes, false);
       const entryForPrivate = viewerEntryId;
       if (!groupId || !entryForPrivate) return;
-      savingRef.current = true;
+      beginSave();
       void fetch("/api/captura/private-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1199,7 +1345,7 @@ function MobileScoreEntryContent() {
           caddie: caddieFromUrl ?? "",
         }),
       }).finally(() => {
-        savingRef.current = false;
+        endSave();
       });
       return;
     }
@@ -1220,6 +1366,8 @@ function MobileScoreEntryContent() {
         };
       })
     );
+
+    rememberOptimistic(playerId, hole, strokes, pickedUp);
 
     if (!groupId) return;
 
@@ -1277,7 +1425,7 @@ function MobileScoreEntryContent() {
       );
     }
 
-    savingRef.current = true;
+    beginSave();
     void fetch("/api/captura/score", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1308,7 +1456,7 @@ function MobileScoreEntryContent() {
         );
       })
       .finally(() => {
-        savingRef.current = false;
+        endSave();
       });
   }
 
@@ -1466,12 +1614,11 @@ function MobileScoreEntryContent() {
         {tab === "anotar" ? (
           <HoleDots
             currentHole={currentHole}
-            onSelectHole={(hole) => {
-              setCurrentHole(hole);
-              setActivePlayerId(null);
-              setDraftScore("");
-              setDraftFresh(false);
-            }}
+            onSelectHole={goToHole}
+            onPrevHole={() => goAdjacentHole(-1)}
+            onNextHole={() => goAdjacentHole(1)}
+            canPrev={canPrevHole}
+            canNext={canNextHole}
             isHoleComplete={isHoleComplete}
             showPlayoff={playoffCapture.showPlayoffSection}
             decidedAtPlayoffHole={
@@ -1589,13 +1736,35 @@ function MobileScoreEntryContent() {
               ) : null}
 
               <section className="rounded-xl bg-white px-3 py-3 text-center shadow-sm">
-                <div className="text-base font-bold">
-                  {currentHole > 18
-                    ? `Desempate · Hoyo ${currentHole - 18}`
-                    : `Hoyo ${currentHole}`}
-                </div>
-                <div className="text-xs text-slate-600">
-                  Par {PAR_BY_HOLE[currentHole]}
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    aria-label="Hoyo anterior"
+                    disabled={!canPrevHole}
+                    onClick={() => goAdjacentHole(-1)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-2xl font-black leading-none text-slate-800 disabled:opacity-30"
+                  >
+                    ‹
+                  </button>
+                  <div>
+                    <div className="text-base font-bold">
+                      {currentHole > 18
+                        ? `Desempate · Hoyo ${currentHole - 18}`
+                        : `Hoyo ${currentHole}`}
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      Par {PAR_BY_HOLE[currentHole]}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Hoyo siguiente"
+                    disabled={!canNextHole}
+                    onClick={() => goAdjacentHole(1)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-2xl font-black leading-none text-slate-800 disabled:opacity-30"
+                  >
+                    ›
+                  </button>
                 </div>
                 <div className="text-[11px] text-slate-500">
                   {groupId
