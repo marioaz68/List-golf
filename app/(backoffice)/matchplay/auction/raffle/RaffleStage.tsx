@@ -270,7 +270,10 @@ export default function RaffleStage({
     []
   );
 
-  const nextTurnNumber = (awarded.length ?? 0) + 1;
+  const nextTurnNumber =
+    currentTeam?.auction_order != null
+      ? currentTeam.auction_order
+      : (awarded.length ?? 0) + 1;
   const progressPct =
     activeTotal > 0 ? Math.round((awarded.length / activeTotal) * 100) : 0;
 
