@@ -157,6 +157,7 @@ export default function AuctionShowClient({
   );
   const [rolling, setRolling] = useState(false);
   const [rollDisplayId, setRollDisplayId] = useState<string | null>(null);
+  const [asideFromQueue, setAsideFromQueue] = useState(false);
   const rollTimerRef = useRef<number | null>(null);
 
   const currentTeam = useMemo(
@@ -171,6 +172,7 @@ export default function AuctionShowClient({
   const startRoll = useCallback(async () => {
     if (pending.length === 0) return;
     if (rolling) return;
+    setAsideFromQueue(false);
     setRolling(true);
 
     const pool = pending;
@@ -232,11 +234,12 @@ export default function AuctionShowClient({
     if (currentTeam.auction_bid != null) {
       setCurrentTeamId(null);
       setRollDisplayId(null);
+      setAsideFromQueue(false);
     }
   }, [currentTeam]);
 
   useEffect(() => {
-    if (rolling) return;
+    if (rolling || asideFromQueue) return;
     const waiting = teams
       .filter(
         (t) =>
@@ -254,9 +257,10 @@ export default function AuctionShowClient({
     if (currentStillOpen) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
-  }, [teams, rolling, currentTeamId]);
+  }, [teams, rolling, currentTeamId, asideFromQueue]);
 
   const skipCurrent = () => {
+    setAsideFromQueue(true);
     setCurrentTeamId(null);
     setRollDisplayId(null);
     setBidInput(minBid != null ? String(minBid) : "");
@@ -369,7 +373,13 @@ export default function AuctionShowClient({
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={startRoll}
+                onClick={() => {
+                  if (currentTeam?.auction_order != null) {
+                    skipCurrent();
+                    return;
+                  }
+                  void startRoll();
+                }}
                 disabled={rolling || pending.length === 0}
                 style={{
                   ...warn,
@@ -378,7 +388,12 @@ export default function AuctionShowClient({
                     rolling || pending.length === 0 ? "not-allowed" : "pointer",
                 }}
               >
-                🎲 {currentTeam ? "Rifar otro" : "Rifar próximo"}
+                🎲{" "}
+                {currentTeam?.auction_order != null
+                  ? "Cerrar y rifar después"
+                  : currentTeam
+                    ? "Rifar turno"
+                    : "Rifar próximo"}
               </button>
               {currentTeam && !rolling ? (
                 <>
@@ -415,7 +430,7 @@ export default function AuctionShowClient({
                     </button>
                   </form>
                   <button type="button" style={btn} onClick={skipCurrent}>
-                    Saltar
+                    Cerrar · volver a rifar
                   </button>
                 </>
               ) : null}

@@ -25,7 +25,14 @@ type Props = {
   teams: MatchPlayTeamRow[];
 };
 
-type Phase = "idle" | "arming" | "spinning" | "paused" | "revealed" | "done";
+type Phase =
+  | "idle"
+  | "ready"
+  | "arming"
+  | "spinning"
+  | "paused"
+  | "revealed"
+  | "done";
 
 const NAME_SIZE = "clamp(4.5rem, 8vw, 9.5rem)";
 
@@ -138,12 +145,17 @@ export default function SorteoProyeccionClient({
     );
   }, [active]);
 
-  const displayWinner = winner ?? (phase === "spinning" ? null : lastDrawn);
-  const displayOrder =
-    winnerOrder ??
-    (displayWinner && phase !== "spinning"
-      ? displayWinner.auction_order
-      : null);
+  const hideWinner =
+    phase === "spinning" ||
+    phase === "arming" ||
+    phase === "ready" ||
+    phase === "paused";
+  const displayWinner = hideWinner ? null : winner ?? lastDrawn;
+  const displayOrder = hideWinner
+    ? phase === "ready" && lastDrawn
+      ? lastDrawn.auction_order
+      : null
+    : winnerOrder ?? displayWinner?.auction_order ?? null;
 
   useEffect(() => {
     const el = stageRef.current;
@@ -305,14 +317,22 @@ export default function SorteoProyeccionClient({
     phase === "arming" ||
     phase === "spinning" ||
     phase === "paused" ||
+    phase === "ready" ||
     (phase === "idle" && !displayWinner);
+
+  const goReadyForNext = () => {
+    if (spinning) return;
+    setWinner(null);
+    setStrip([]);
+    setPhase(pending.length === 0 ? "done" : "ready");
+  };
 
   return (
     <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden bg-black text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(245,158,11,0.14),_transparent_55%)]" />
 
-      <header className="relative z-10 flex shrink-0 items-end justify-between px-8 pt-5 pb-1">
-        <div>
+      <header className="relative z-10 flex shrink-0 items-end justify-between gap-4 px-8 pt-5 pb-1">
+        <div className="min-w-0">
           <div className="text-[13px] font-semibold uppercase tracking-[0.35em] text-amber-300">
             Sorteo de subasta
           </div>
@@ -320,15 +340,23 @@ export default function SorteoProyeccionClient({
             {tournamentName}
           </div>
         </div>
-        {displayOrder != null && phase !== "spinning" ? (
-          <div className="text-right text-xl font-semibold text-white md:text-2xl">
-            Pareja {displayOrder} de {active.length}
-          </div>
-        ) : (
-          <div className="text-right text-lg font-semibold text-white md:text-xl">
-            {pending.length} por salir · {active.length} parejas
-          </div>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {displayOrder != null && phase !== "spinning" && phase !== "arming" ? (
+            <div className="text-right text-xl font-semibold text-white md:text-2xl">
+              Pareja {displayOrder} de {active.length}
+            </div>
+          ) : (
+            <div className="text-right text-lg font-semibold text-white md:text-xl">
+              {pending.length} por salir · {active.length} parejas
+            </div>
+          )}
+          <a
+            href={`/matchplay/auction/raffle?tournament_id=${tournamentId}`}
+            className="rounded-lg border border-white/25 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white/90 hover:bg-white/10"
+          >
+            ← Salir a subasta
+          </a>
+        </div>
       </header>
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-6">
@@ -337,6 +365,21 @@ export default function SorteoProyeccionClient({
             ref={stageRef}
             className="relative h-[min(78vh,880px)] w-full max-w-[1700px] overflow-hidden"
           >
+            {phase === "ready" && strip.length === 0 ? (
+              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center px-8 text-center">
+                <div className="text-2xl font-bold uppercase tracking-[0.2em] text-amber-300">
+                  Listo para la siguiente
+                </div>
+                <div className="mt-4 max-w-4xl text-4xl font-black text-white md:text-5xl">
+                  {lastDrawn
+                    ? `Última: pareja ${lastDrawn.auction_order} · quedan ${pending.length}`
+                    : `${pending.length} parejas por salir`}
+                </div>
+                <p className="mt-6 text-xl text-white/70">
+                  Presiona Girar cuando toque sacar la siguiente pareja.
+                </p>
+              </div>
+            ) : null}
             <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[28%] bg-gradient-to-b from-black to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[28%] bg-gradient-to-t from-black to-transparent" />
             <div
@@ -345,13 +388,17 @@ export default function SorteoProyeccionClient({
                 height: itemH,
                 top: "50%",
                 marginTop: -itemH / 2,
+                opacity: phase === "ready" && strip.length === 0 ? 0.35 : 1,
               }}
             />
 
             <div
               ref={stripElRef}
               className="w-full will-change-transform"
-              style={{ transform: "translate3d(0, 0, 0)" }}
+              style={{
+                transform: "translate3d(0, 0, 0)",
+                opacity: phase === "ready" && strip.length === 0 ? 0 : 1,
+              }}
             >
               {(strip.length > 0 ? strip : pending.slice(0, 8)).map((t, i) => {
                 const isLand = strip.length > 0 && i === landIndex;
@@ -407,19 +454,39 @@ export default function SorteoProyeccionClient({
         ) : null}
       </main>
 
-      <footer className="relative z-10 flex shrink-0 items-center justify-center px-6 pb-7 pt-3">
-        <button
-          type="button"
-          onClick={() => void handleGirar()}
-          disabled={!canSpin}
-          className="min-h-[84px] min-w-[min(90vw,680px)] rounded-2xl bg-amber-400 px-12 text-4xl font-black tracking-wide text-black shadow-[0_12px_40px_rgba(251,191,36,0.35)] disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500 disabled:shadow-none"
-        >
-          {spinning
-            ? "Girando…"
-            : pending.length === 0
-              ? "Sorteo completo"
-              : "Girar"}
-        </button>
+      <footer className="relative z-10 flex shrink-0 flex-col items-center justify-center gap-3 px-6 pb-7 pt-3">
+        <div className="flex w-full max-w-[920px] flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleGirar()}
+            disabled={!canSpin}
+            className="min-h-[84px] min-w-[min(70vw,560px)] flex-1 rounded-2xl bg-amber-400 px-10 text-3xl font-black tracking-wide text-black shadow-[0_12px_40px_rgba(251,191,36,0.35)] disabled:cursor-not-allowed disabled:bg-neutral-800 disabled:text-neutral-500 disabled:shadow-none md:text-4xl"
+          >
+            {spinning
+              ? "Girando…"
+              : pending.length === 0
+                ? "Sorteo completo"
+                : phase === "revealed" || phase === "idle"
+                  ? "Girar siguiente pareja"
+                  : "Girar"}
+          </button>
+          {(phase === "revealed" || (phase === "idle" && displayWinner)) &&
+          pending.length > 0 ? (
+            <button
+              type="button"
+              onClick={goReadyForNext}
+              className="min-h-[84px] min-w-[min(40vw,280px)] rounded-2xl border-2 border-white/40 bg-white/10 px-6 text-2xl font-bold text-white hover:bg-white/15"
+            >
+              Listo · a subastar
+            </button>
+          ) : null}
+        </div>
+        {phase === "revealed" || (phase === "idle" && displayWinner) ? (
+          <p className="text-center text-base text-white/60">
+            «Listo · a subastar» oculta el resultado y deja la ruleta lista para
+            el siguiente giro.
+          </p>
+        ) : null}
       </footer>
     </div>
   );

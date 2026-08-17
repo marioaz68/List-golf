@@ -121,6 +121,7 @@ export default function RaffleStage({
   const [rollDisplayId, setRollDisplayId] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const [shake, setShake] = useState(false);
+  const [asideFromQueue, setAsideFromQueue] = useState(false);
   const rollTimerRef = useRef<number | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const bidInputRef = useRef<HTMLInputElement | null>(null);
@@ -138,6 +139,7 @@ export default function RaffleStage({
     if (pending.length === 0) return;
     if (rolling) return;
 
+    setAsideFromQueue(false);
     setRolling(true);
     setCelebrate(false);
     setCurrentTeamId(null);
@@ -206,11 +208,12 @@ export default function RaffleStage({
     if (currentTeam.auction_bid != null) {
       setCurrentTeamId(null);
       setRollDisplayId(null);
+      setAsideFromQueue(false);
     }
   }, [currentTeam]);
 
   useEffect(() => {
-    if (rolling) return;
+    if (rolling || asideFromQueue) return;
     const waiting = teams
       .filter(
         (t) =>
@@ -230,9 +233,10 @@ export default function RaffleStage({
     if (currentStillOpen) return;
     setCurrentTeamId(latest.id);
     setRollDisplayId(latest.id);
-  }, [teams, rolling, currentTeamId]);
+  }, [teams, rolling, currentTeamId, asideFromQueue]);
 
   const skipCurrent = () => {
+    setAsideFromQueue(true);
     setCurrentTeamId(null);
     setRollDisplayId(null);
     setBidInput(minBid != null ? String(minBid) : "");
@@ -476,17 +480,19 @@ export default function RaffleStage({
                   className="rounded-lg border border-slate-500 bg-slate-700/40 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700/70"
                   onClick={skipCurrent}
                 >
-                  Saltar
+                  Cerrar · volver a rifar
                 </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-cyan-500/40 bg-cyan-900/30 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-900/60"
-                  onClick={startRoll}
-                  disabled={rolling || pending.length === 0}
-                  title="Volver a rifar otro equipo en lugar de éste"
-                >
-                  🔄 Rifar otro
-                </button>
+                {currentTeam.auction_order == null ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-cyan-500/40 bg-cyan-900/30 px-4 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-900/60"
+                    onClick={() => void startRoll()}
+                    disabled={rolling || pending.length === 0}
+                    title="Sortear al azar en el servidor"
+                  >
+                    🔄 Rifar turno
+                  </button>
+                ) : null}
               </>
             )}
           </div>
