@@ -347,7 +347,9 @@ export default function AuctionShowClient({
                       <Chip
                         label="Salida #"
                         value={String(
-                          (awarded.length || 0) + 1
+                          currentTeam.auction_order != null
+                            ? currentTeam.auction_order
+                            : (awarded.length || 0) + 1
                         )}
                       />
                       {projectedSeed != null ? (

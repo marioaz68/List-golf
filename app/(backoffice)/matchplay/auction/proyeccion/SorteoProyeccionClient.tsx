@@ -34,7 +34,25 @@ type Phase =
   | "revealed"
   | "done";
 
-const NAME_SIZE = "clamp(4.5rem, 8vw, 9.5rem)";
+const NAME_SIZE = "clamp(2.4rem, 5.2vw, 5.8rem)";
+const REVEAL_SIZE = "clamp(4rem, 8vw, 9.5rem)";
+/** Segmentos visibles en el tambor; el ganador cae en el del centro. */
+const VISIBLE_SLOTS = 5;
+const CENTER_SLOT = 2;
+
+/** Colores tipo ruleta de premios (segmentos alternados). */
+const SEGMENT_COLORS = [
+  "#e11d48",
+  "#0284c7",
+  "#ca8a04",
+  "#059669",
+  "#7c3aed",
+  "#db2777",
+  "#ea580c",
+  "#0d9488",
+  "#4f46e5",
+  "#c026d3",
+] as const;
 
 function playerLine(t: MatchPlayTeamRow, which: "a" | "b"): string {
   const row = which === "a" ? t.player_a : t.player_b;
@@ -42,6 +60,14 @@ function playerLine(t: MatchPlayTeamRow, which: "a" | "b"): string {
   if (which === "a") return t.team_name?.split("/")[0]?.trim() || "—";
   const parts = (t.team_name ?? "").split("/");
   return parts[1]?.trim() || "";
+}
+
+function initials(t: MatchPlayTeamRow): string {
+  const a = playerLine(t, "a");
+  const b = playerLine(t, "b");
+  const ia = a.trim().charAt(0) || "?";
+  const ib = b.trim().charAt(0) || "";
+  return (ia + ib).toUpperCase();
 }
 
 function categoryLabel(t: MatchPlayTeamRow): string {
@@ -60,6 +86,12 @@ function hiLabel(t: MatchPlayTeamRow): string {
   }
   const n = Number(t.combined_hi);
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function segmentColor(index: number, teamId: string): string {
+  let h = 0;
+  for (let i = 0; i < teamId.length; i++) h = (h + teamId.charCodeAt(i) * (i + 1)) % 997;
+  return SEGMENT_COLORS[(index + h) % SEGMENT_COLORS.length]!;
 }
 
 function buildStrip(
@@ -87,6 +119,10 @@ function applyY(el: HTMLDivElement | null, y: number) {
   el.style.transform = `translate3d(0, ${y}px, 0)`;
 }
 
+function offsetForIndex(k: number, rowH: number) {
+  return (CENTER_SLOT - k) * rowH;
+}
+
 export default function SorteoProyeccionClient({
   tournamentId,
   tournamentName,
@@ -99,7 +135,7 @@ export default function SorteoProyeccionClient({
   const [winner, setWinner] = useState<MatchPlayTeamRow | null>(null);
   const [winnerOrder, setWinnerOrder] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [itemH, setItemH] = useState(320);
+  const [itemH, setItemH] = useState(168);
   const [orderOverlay, setOrderOverlay] = useState<Record<string, number>>(
     {}
   );
@@ -162,8 +198,8 @@ export default function SorteoProyeccionClient({
     if (!el) return;
     const apply = () => {
       if (busyRef.current) return;
-      const h = Math.round(el.clientHeight * 0.42);
-      if (h > 120) setItemH(h);
+      const h = Math.round(el.clientHeight / VISIBLE_SLOTS);
+      if (h > 96) setItemH(h);
     };
     apply();
     const ro = new ResizeObserver(apply);
@@ -226,17 +262,17 @@ export default function SorteoProyeccionClient({
       pauseTimerRef.current = null;
     }
     const { startK, endK, rowH } = cfg;
-    applyY(stripElRef.current, (1 - startK) * rowH);
+    applyY(stripElRef.current, offsetForIndex(startK, rowH));
     const t0 = performance.now();
     const tick = (now: number) => {
       const t = Math.min(1, (now - t0) / AUCTION_WHEEL_SPIN_MS);
       const k = wheelIndexProgress(t, startK, endK);
-      applyY(stripElRef.current, (1 - k) * rowH);
+      applyY(stripElRef.current, offsetForIndex(k, rowH));
       if (t < 1) {
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
-      applyY(stripElRef.current, (1 - endK) * rowH);
+      applyY(stripElRef.current, offsetForIndex(endK, rowH));
       setPhase("paused");
       pauseTimerRef.current = window.setTimeout(() => {
         setPhase("revealed");
@@ -266,7 +302,7 @@ export default function SorteoProyeccionClient({
     const pool = active.filter(
       (t) => t.auction_order == null || t.id === winnerTeam.id
     );
-    const h = Math.max(220, Math.round(window.innerHeight * 0.32));
+    const h = Math.max(110, Math.round(window.innerHeight / VISIBLE_SLOTS * 0.72));
     setItemH(h);
     busyRef.current = true;
     setError(null);
@@ -283,12 +319,12 @@ export default function SorteoProyeccionClient({
     setError(null);
     setPhase("arming");
     const pool = pending;
-    const h = Math.max(220, Math.round(window.innerHeight * 0.32));
+    const h = Math.max(110, Math.round(window.innerHeight / VISIBLE_SLOTS * 0.72));
     setItemH(h);
     const preview = buildStrip(pool, pool[0]!.id);
     setStrip(preview.strip);
     setLandIndex(preview.landIndex);
-    applyY(stripElRef.current, 0);
+    applyY(stripElRef.current, offsetForIndex(CENTER_SLOT, h));
 
     const result = await drawNextAuctionPairAction(tournamentId);
     if (!result.ok) {
@@ -327,9 +363,12 @@ export default function SorteoProyeccionClient({
     setPhase(pending.length === 0 ? "done" : "ready");
   };
 
+  const visibleStrip =
+    strip.length > 0 ? strip : pending.slice(0, 10);
+
   return (
-    <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden bg-black text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(245,158,11,0.14),_transparent_55%)]" />
+    <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden bg-[#07090d] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(251,191,36,0.1),_transparent_58%)]" />
 
       <header className="relative z-10 flex shrink-0 items-end justify-between gap-4 px-8 pt-5 pb-1">
         <div className="min-w-0">
@@ -359,14 +398,14 @@ export default function SorteoProyeccionClient({
         </div>
       </header>
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-6">
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center px-4">
         {showWheel ? (
           <div
             ref={stageRef}
-            className="relative h-[min(78vh,880px)] w-full max-w-[1700px] overflow-hidden"
+            className="relative flex h-[min(76vh,860px)] w-full max-w-[1500px] items-center justify-center"
           >
             {phase === "ready" && strip.length === 0 ? (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center px-8 text-center">
+              <div className="absolute inset-0 z-40 flex flex-col items-center justify-center px-8 text-center">
                 <div className="text-2xl font-bold uppercase tracking-[0.2em] text-amber-300">
                   Listo para la siguiente
                 </div>
@@ -380,58 +419,117 @@ export default function SorteoProyeccionClient({
                 </p>
               </div>
             ) : null}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[28%] bg-gradient-to-b from-black to-transparent" />
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[28%] bg-gradient-to-t from-black to-transparent" />
-            <div
-              className="pointer-events-none absolute left-1/2 z-20 box-border w-[min(96%,1500px)] -translate-x-1/2 rounded-2xl border-4 border-amber-400 shadow-[0_0_48px_rgba(251,191,36,0.5)]"
-              style={{
-                height: itemH,
-                top: "50%",
-                marginTop: -itemH / 2,
-                opacity: phase === "ready" && strip.length === 0 ? 0.35 : 1,
-              }}
-            />
 
+            {/* Flecha indicadora (izquierda) */}
             <div
-              ref={stripElRef}
-              className="w-full will-change-transform"
+              className="pointer-events-none absolute left-[max(0px,calc(50%-min(46vw,700px)-36px))] z-30"
+              style={{ top: "50%", transform: "translateY(-50%)" }}
+              aria-hidden
+            >
+              <div
+                className="h-0 w-0"
+                style={{
+                  borderTop: "28px solid transparent",
+                  borderBottom: "28px solid transparent",
+                  borderLeft: "52px solid #ef4444",
+                  filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.55))",
+                }}
+              />
+            </div>
+
+            {/* Tambor cilíndrico */}
+            <div
+              className="relative h-full w-[min(92vw,1280px)] overflow-hidden rounded-[42px] border-[10px] border-[#1a1d24] shadow-[0_30px_80px_rgba(0,0,0,0.65)]"
               style={{
-                transform: "translate3d(0, 0, 0)",
-                opacity: phase === "ready" && strip.length === 0 ? 0 : 1,
+                background:
+                  "linear-gradient(90deg, #0b0d12 0%, #151922 8%, #0f1218 50%, #151922 92%, #0b0d12 100%)",
+                opacity: phase === "ready" && strip.length === 0 ? 0.28 : 1,
               }}
             >
-              {(strip.length > 0 ? strip : pending.slice(0, 8)).map((t, i) => {
-                const isLand = strip.length > 0 && i === landIndex;
-                const highlight = isLand && phase === "paused";
-                return (
-                  <div
-                    key={`${t.id}-${i}`}
-                    className="flex flex-col items-center justify-center px-8 text-center"
-                    style={{ height: itemH }}
-                  >
+              {/* Rims / clavijas laterales */}
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-5 bg-gradient-to-r from-black/70 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-5 bg-gradient-to-l from-black/70 to-transparent" />
+              <div className="pointer-events-none absolute inset-y-3 left-1.5 z-20 flex flex-col justify-between py-2">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <span
+                    key={`lp-${i}`}
+                    className="h-2.5 w-2.5 rounded-full bg-[#2a2f3a] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25)]"
+                  />
+                ))}
+              </div>
+              <div className="pointer-events-none absolute inset-y-3 right-1.5 z-20 flex flex-col justify-between py-2">
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <span
+                    key={`rp-${i}`}
+                    className="h-2.5 w-2.5 rounded-full bg-[#2a2f3a] shadow-[inset_0_1px_2px_rgba(255,255,255,0.25)]"
+                  />
+                ))}
+              </div>
+
+              {/* Curvatura del cilindro */}
+              <div className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(90deg,rgba(0,0,0,0.45)_0%,transparent_18%,transparent_82%,rgba(0,0,0,0.45)_100%)]" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[22%] bg-gradient-to-b from-black/75 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[22%] bg-gradient-to-t from-black/75 to-transparent" />
+
+              {/* Marco ganador (centro) */}
+              <div
+                className="pointer-events-none absolute inset-x-3 z-20 rounded-xl border-[3px] border-white/90 shadow-[0_0_0_2px_rgba(239,68,68,0.55),0_0_36px_rgba(251,191,36,0.35)]"
+                style={{
+                  height: itemH,
+                  top: "50%",
+                  marginTop: -itemH / 2,
+                }}
+              />
+
+              <div
+                ref={stripElRef}
+                className="relative z-[1] will-change-transform"
+                style={{ transform: "translate3d(0, 0, 0)" }}
+              >
+                {visibleStrip.map((t, i) => {
+                  const isLand = strip.length > 0 && i === landIndex;
+                  const highlight = isLand && phase === "paused";
+                  const color = segmentColor(i, t.id);
+                  const a = playerLine(t, "a");
+                  const b = playerLine(t, "b");
+                  return (
                     <div
-                      className={[
-                        "max-w-full font-black leading-[0.92] tracking-tight",
-                        highlight ? "text-amber-300" : "text-white",
-                      ].join(" ")}
-                      style={{ fontSize: NAME_SIZE }}
+                      key={`${t.id}-${i}`}
+                      className="relative flex items-center gap-4 border-b border-black/25 px-6 pr-8"
+                      style={{
+                        height: itemH,
+                        background: `linear-gradient(90deg, ${color} 0%, ${color} 72%, rgba(0,0,0,0.18) 100%)`,
+                        boxShadow: highlight
+                          ? "inset 0 0 0 9999px rgba(255,255,255,0.12)"
+                          : undefined,
+                      }}
                     >
-                      {playerLine(t, "a")}
-                    </div>
-                    {playerLine(t, "b") ? (
-                      <div
-                        className={[
-                          "mt-2 max-w-full font-black leading-[0.92] tracking-tight",
-                          highlight ? "text-amber-200" : "text-white",
-                        ].join(" ")}
-                        style={{ fontSize: NAME_SIZE }}
-                      >
-                        {playerLine(t, "b")}
+                      <div className="min-w-0 flex-1 text-left">
+                        <div
+                          className="truncate font-black uppercase leading-[0.95] tracking-tight text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)]"
+                          style={{ fontSize: NAME_SIZE }}
+                        >
+                          {a}
+                        </div>
+                        {b ? (
+                          <div
+                            className="mt-1 truncate font-black uppercase leading-[0.95] tracking-tight text-white/95 drop-shadow-[0_2px_2px_rgba(0,0,0,0.45)]"
+                            style={{ fontSize: NAME_SIZE }}
+                          >
+                            {b}
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                      <div
+                        className="flex h-[72%] aspect-square shrink-0 items-center justify-center rounded-full border-4 border-white/35 bg-black/25 text-2xl font-black text-white shadow-[inset_0_2px_8px_rgba(0,0,0,0.35)] md:text-4xl"
+                        aria-hidden
+                      >
+                        {initials(t)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         ) : displayWinner ? (
@@ -512,14 +610,14 @@ function RevealedPair({
       ) : null}
       <div
         className="max-w-full font-black leading-[0.92] text-white"
-        style={{ fontSize: NAME_SIZE }}
+        style={{ fontSize: REVEAL_SIZE }}
       >
         {playerLine(team, "a")}
       </div>
       {playerLine(team, "b") ? (
         <div
           className="mt-3 max-w-full font-black leading-[0.92] text-amber-300"
-          style={{ fontSize: NAME_SIZE }}
+          style={{ fontSize: REVEAL_SIZE }}
         >
           {playerLine(team, "b")}
         </div>
