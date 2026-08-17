@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { bracketCapacity, roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
+import { fieldBracketSize, roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
+import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
 
 export type AutoPublishFromPairingsResult =
   | {
@@ -153,8 +154,12 @@ export async function autoPublishBracketFromPairings(
     .filter((p) => !pairsUsedInGroups.has(p.id))
     .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999));
 
-  // 6. Cuadro estándar según equipos (24 → 32, 16 partidos R1).
-  const bracketSize = bracketCapacity(allPairs.length, 64);
+  // 6. Cuadro 8/16/32/64 según el campo (36 parejas → 64).
+  const synced = await syncMatchPlayBracketSizeFromField(admin, tournamentId);
+  const bracketSize =
+    synced.ok && !synced.skipped
+      ? synced.bracketSize
+      : fieldBracketSize(allPairs.length, 64);
   const r1Matches = bracketSize / 2;
   const maxByeSlots = r1Matches - groupedMatches.length;
 

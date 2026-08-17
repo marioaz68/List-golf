@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
+import { fieldBracketSize } from "@/lib/matchplay/bracketUtils";
+import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
 import type { MatchPlaySeedingMethod } from "@/lib/matchplay/types";
 
 export type AutoPublishBracketResult =
@@ -47,17 +49,20 @@ export async function autoPublishBracket(
 
   const seeding_method = (rulesRow?.seeding_method ??
     "hi_combined") as MatchPlaySeedingMethod;
-  const maxSize =
-    (rulesRow as { bracket_main_pairs?: number | null; max_pairs_per_category?: number | null } | null)?.bracket_main_pairs ??
-    (rulesRow as { max_pairs_per_category?: number | null } | null)?.max_pairs_per_category ??
-    64;
+  const activeTeams = data.teams.filter((t) => t.is_active);
+  const synced = await syncMatchPlayBracketSizeFromField(admin, tournamentId);
+  const computedSize =
+    synced.ok && !synced.skipped
+      ? synced.bracketSize
+      : fieldBracketSize(activeTeams.length, 64);
 
   let generated;
   try {
     generated = generateSingleElimBracket({
-      teams: data.teams,
+      teams: activeTeams,
       seeding_method,
-      max_bracket_size: maxSize,
+      max_bracket_size: 64,
+      bracket_size: computedSize,
     });
   } catch (err) {
     return {

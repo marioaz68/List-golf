@@ -180,7 +180,7 @@ export type MatchPlayConvocatoriaConfig = {
   female_individual_hi_max?: number | null;
   /** Si se requiere una ronda clasificatoria para reducir a `bracket_main_pairs`. */
   play_in_enabled?: boolean;
-  /** Parejas que entran al cuadro principal (ej. 16). */
+  /** Parejas o jugadores del cuadro principal (8/16/32/64; se ajusta al cerrar inscripciones). */
   bracket_main_pairs?: number | null;
   /** Subasta / calcuta para definir siembra. */
   auction?: MatchPlayAuctionConfig;

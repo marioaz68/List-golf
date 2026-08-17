@@ -153,6 +153,16 @@ export default async function AuctionShowPage(props: {
             📺 Sorteo TV
           </Link>
           <Link
+            href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${effectiveId}`}
+            style={{
+              ...buttonStyle,
+              background: "linear-gradient(#0891b2, #0e7490)",
+              border: "1px solid #155e75",
+            }}
+          >
+            📺 Cuadro TV
+          </Link>
+          <Link
             href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
             style={{
               ...buttonStyle,

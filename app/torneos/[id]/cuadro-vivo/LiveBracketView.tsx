@@ -14,12 +14,23 @@ import type { MatchPlayEntryRow, MatchPlayTeamRow } from "@/lib/matchplay/teamTy
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import {
-  bracketCapacity,
   bracketSeedOrder,
+  fieldBracketSize,
   roundCountForBracketSize,
   roundLabel,
 } from "@/lib/matchplay/bracketUtils";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
+import {
+  AUCTION_BRACKET_HOLD_MS,
+  AUCTION_BRACKET_OPEN_HALF_MS,
+  AUCTION_BRACKET_ZOOM_IN_MS,
+  cssTransform,
+  identityPose,
+  lerpPose,
+  poseToFitScreenRects,
+  poseToFitScreenTarget,
+  type CameraPose,
+} from "@/lib/matchplay/auctionBracketCamera";
 
 type ExistingMatch = {
   id: string;
@@ -73,6 +84,8 @@ type Props = {
   birthYearByPlayerId?: Record<string, number | null>;
   /** Si se regresó del detalle con ?focus=<matchId>, hace scroll y resalta. */
   focusMatchId?: string | null;
+  /** TV de subasta: cámara zoom al slot y luego a la mitad del cuadro. */
+  variant?: "public" | "auction-tv";
 };
 
 function money(v: number | null | undefined, currency: string) {
@@ -207,7 +220,9 @@ export default function LiveBracketView({
   teeRules = [],
   birthYearByPlayerId = {},
   focusMatchId = null,
+  variant = "public",
 }: Props) {
+  const isTv = variant === "auction-tv";
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
 
   // Detección reactiva de móvil para usar nombres compactos.
@@ -306,7 +321,7 @@ export default function LiveBracketView({
     new Map()
   );
   useEffect(() => {
-    if (!tournamentId) return;
+    if (!tournamentId || isTv) return;
     let cancelled = false;
     const load = () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -369,7 +384,7 @@ export default function LiveBracketView({
       cancelled = true;
       clearInterval(poll);
     };
-  }, [tournamentId]);
+  }, [tournamentId, isTv]);
 
   // Al regresar del detalle con ?focus=<matchId>, hace scroll a esa celda y la
   // resalta unos segundos para que el usuario reconozca el match marcado.
@@ -404,6 +419,178 @@ export default function LiveBracketView({
     };
   }, [focusMatchId]);
 
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [cam, setCam] = useState<CameraPose>(identityPose);
+  const camRef = useRef<CameraPose>(identityPose);
+  const [focusTeamId, setFocusTeamId] = useState<string | null>(null);
+  const [focusHalf, setFocusHalf] = useState<"top" | "bottom" | null>(null);
+  const [focusCaption, setFocusCaption] = useState<string | null>(null);
+  const seenAwardedRef = useRef<Set<string> | null>(null);
+  const animRef = useRef<number | null>(null);
+  const seqRef = useRef(0);
+
+  const applyCam = useCallback((pose: CameraPose) => {
+    camRef.current = pose;
+    setCam(pose);
+  }, []);
+
+  const animateCam = useCallback(
+    (to: CameraPose, ms: number) => {
+      return new Promise<void>((resolve) => {
+        if (animRef.current != null) cancelAnimationFrame(animRef.current);
+        const from = camRef.current;
+        const t0 = performance.now();
+        const tick = (now: number) => {
+          const t = Math.min(1, (now - t0) / Math.max(1, ms));
+          applyCam(lerpPose(from, to, t));
+          if (t < 1) {
+            animRef.current = requestAnimationFrame(tick);
+            return;
+          }
+          animRef.current = null;
+          resolve();
+        };
+        animRef.current = requestAnimationFrame(tick);
+      });
+    },
+    [applyCam]
+  );
+
+  const waitForSlot = useCallback((teamId: string) => {
+    return new Promise<HTMLElement | null>((resolve) => {
+      let tries = 0;
+      const find = () => {
+        const root = viewportRef.current;
+        if (!root) return null;
+        return root.querySelector<HTMLElement>(
+          `[data-r1-cell][data-top-team="${teamId}"], [data-r1-cell][data-bottom-team="${teamId}"]`
+        );
+      };
+      const hit = find();
+      if (hit) {
+        resolve(hit);
+        return;
+      }
+      const id = window.setInterval(() => {
+        tries += 1;
+        const el = find();
+        if (el || tries > 25) {
+          window.clearInterval(id);
+          resolve(el);
+        }
+      }, 80);
+    });
+  }, []);
+
+  const runTvReveal = useCallback(
+    async (teamId: string, animate: boolean) => {
+      const seq = ++seqRef.current;
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+      const slot = await waitForSlot(teamId);
+      if (seq !== seqRef.current) return;
+      if (!slot) return;
+      const half = (slot.dataset.half === "bottom" ? "bottom" : "top") as
+        | "top"
+        | "bottom";
+      setFocusHalf(half);
+      const seed =
+        slot.dataset.topTeam === teamId
+          ? slot.dataset.topSeed
+          : slot.dataset.bottomSeed;
+      setFocusCaption(
+        `${seed ? `Seed #${seed} · ` : ""}${
+          half === "bottom" ? "Cuadro inferior" : "Cuadro superior"
+        }`
+      );
+
+      const slotPose = poseToFitScreenTarget(
+        viewport,
+        slot,
+        camRef.current,
+        1.12
+      );
+      if (slotPose && animate) {
+        await animateCam(slotPose, AUCTION_BRACKET_ZOOM_IN_MS);
+      } else if (slotPose) {
+        applyCam(slotPose);
+      }
+      if (seq !== seqRef.current) return;
+
+      if (animate) {
+        await new Promise((r) => window.setTimeout(r, AUCTION_BRACKET_HOLD_MS));
+      }
+      if (seq !== seqRef.current) return;
+
+      const halfEls = Array.from(
+        viewport.querySelectorAll<HTMLElement>(
+          `[data-r1-cell][data-half="${half}"]`
+        )
+      );
+      const halfPose = poseToFitScreenRects(
+        viewport,
+        halfEls.map((el) => el.getBoundingClientRect()),
+        camRef.current,
+        1.06
+      );
+      if (halfPose && animate) {
+        await animateCam(halfPose, AUCTION_BRACKET_OPEN_HALF_MS);
+      } else if (halfPose) {
+        applyCam(halfPose);
+      }
+    },
+    [animateCam, applyCam, waitForSlot]
+  );
+
+  useEffect(() => {
+    if (!isTv) return;
+    const awarded = teams.filter(
+      (t) => t.is_active && t.auction_bid != null
+    );
+    if (seenAwardedRef.current === null) {
+      seenAwardedRef.current = new Set(awarded.map((t) => t.id));
+      if (awarded.length > 0) {
+        const latest = awarded.reduce((a, b) =>
+          (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
+        );
+        setFocusTeamId(latest.id);
+        window.requestAnimationFrame(() => {
+          void runTvReveal(latest.id, false);
+        });
+      } else {
+        window.requestAnimationFrame(() => {
+          const viewport = viewportRef.current;
+          if (!viewport) return;
+          const cells = Array.from(
+            viewport.querySelectorAll<HTMLElement>("[data-r1-cell]")
+          );
+          const pose = poseToFitScreenRects(
+            viewport,
+            cells.map((el) => el.getBoundingClientRect()),
+            identityPose(),
+            1.04
+          );
+          if (pose) applyCam(pose);
+        });
+      }
+      return;
+    }
+    const fresh = awarded.filter((t) => !seenAwardedRef.current!.has(t.id));
+    for (const t of awarded) seenAwardedRef.current.add(t.id);
+    if (fresh.length === 0) return;
+    const newest = fresh.reduce((a, b) =>
+      (a.auction_order ?? 0) >= (b.auction_order ?? 0) ? a : b
+    );
+    setFocusTeamId(newest.id);
+    void runTvReveal(newest.id, true);
+  }, [teams, isTv, runTvReveal]);
+
+  useEffect(() => {
+    return () => {
+      if (animRef.current != null) cancelAnimationFrame(animRef.current);
+    };
+  }, []);
+
   // Equipos vivos ordenados por subasta (postura desc, orden asc)
   const seededTeams = useMemo(() => {
     const active = teams.filter((t) => t.is_active);
@@ -418,16 +605,16 @@ export default function LiveBracketView({
     [teams]
   );
 
-  // Tamaño objetivo del cuadro: usar bracket_main_pairs si está, si no, capacidad mínima >= equipos activos
+  // Tamaño del cuadro = potencia de 2 del campo (8/16/32/64).
+  // 36 parejas → 64; 32 o menos → 32; etc. Si al cerrar inscripciones
+  // ya quedó persistido un tamaño mayor (p. ej. 64 con 32 equipos aún
+  // por completar), se respeta ese tamaño.
   const targetSize = useMemo(() => {
-    if (bracketMainPairs && bracketMainPairs >= 2) {
-      // Asegurar potencia de 2
-      let p = 2;
-      while (p < bracketMainPairs) p *= 2;
-      return p;
-    }
-    return bracketCapacity(Math.max(seededTeams.length, 2), 64);
-  }, [bracketMainPairs, seededTeams.length]);
+    return fieldBracketSize(
+      Math.max(seededTeams.length, bracketMainPairs ?? 0, 2),
+      64
+    );
+  }, [seededTeams.length, bracketMainPairs]);
 
   const roundCount = roundCountForBracketSize(targetSize);
   const seedOrder = useMemo(() => bracketSeedOrder(targetSize), [targetSize]);
@@ -446,12 +633,14 @@ export default function LiveBracketView({
   // (BYE para su oponente).
   const teamBySeed = useMemo(() => {
     const map = new Map<number, MatchPlayTeamRow>();
-    const auctioned = seededTeams.filter((t) => t.auction_order != null);
+    const auctioned = seededTeams.filter((t) =>
+      isTv ? t.auction_bid != null : t.auction_order != null
+    );
     auctioned.forEach((t, i) => {
       map.set(i + 1, t.team);
     });
     return map;
-  }, [seededTeams]);
+  }, [seededTeams, isTv]);
 
   // Existencia de matches reales por (round, position) cuando bracket publicado
   const matchByPos = useMemo(() => {
@@ -598,118 +787,20 @@ export default function LiveBracketView({
   );
 
   // Render: cada ronda como columna; cada match con grid-row span 2^k
-  return (
-    <div className="space-y-3">
-      {/* HEADER */}
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-[#0c1728] px-4 py-3">
-        <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
-            Bracket en vivo · armado por subasta
-          </div>
-          <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
-            {tournamentName}
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <Stat
-            label={`Cuadro ${targetSize}`}
-            value={`${totalActive} parejas`}
-            tone="ok"
-          />
-          <Stat
-            label="R1 matches"
-            value={String(realMatchesR1)}
-            tone="ok"
-          />
-          <Stat label="R1 BYEs" value={String(byesR1)} tone="warn" />
-          <Stat
-            label="Adjudicados"
-            value={`${awardedCount} / ${totalActive}`}
-          />
-          <Stat label="Subastado" value={money(totalRaised, currency)} tone="ok" />
-          <Stat
-            label={`Bolsa (${potPercent ?? 100}%)`}
-            value={money(pot, currency)}
-            tone="amber"
-          />
-        </div>
-      </header>
-
-      {/* CONTROL DE ZOOM + GUÍA PELLIZCO */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-[#0c1728] px-3 py-2">
-        <div className="flex items-center gap-2 text-[12px] text-slate-300">
-          <span className="text-xl leading-none" aria-hidden>
-            🤏
-          </span>
-          <span>
-            <span className="hidden sm:inline">
-              Pellizca para hacer zoom o usa los botones.
-            </span>
-            <span className="sm:hidden">Pellizca o usa botones →</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-1 text-[12px]">
-          <button
-            type="button"
-            onClick={() => stepZoom(-0.1)}
-            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
-            aria-label="Alejar"
-          >
-            −
-          </button>
-          <span className="w-14 text-center text-[11px] font-bold text-cyan-200">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            type="button"
-            onClick={() => stepZoom(0.1)}
-            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
-            aria-label="Acercar"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom(1)}
-            className="ml-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20"
-          >
-            100%
-          </button>
-        </div>
-      </div>
-
-      {/* LEYENDA DE COLORES (2 colores: arriba / abajo) */}
-      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-300">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
-          Cuadro superior
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-sm bg-violet-400" />
-          Cuadro inferior
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-sm bg-amber-400" />
-          Final
-        </span>
-      </div>
-
-      {/* BRACKET (con transform scale: encoge VISUALMENTE sin reflowear texto) */}
-      <div className="overflow-auto pb-3">
-        <div
-          className="mx-auto"
-          style={{
-            width: bracketSize.w ? bracketSize.w * zoom : undefined,
-            height: bracketSize.h ? bracketSize.h * zoom : undefined,
-          }}
-        >
+  const bracketInner = (
           <div
             ref={bracketRef}
-            className="relative mx-auto grid min-w-max gap-x-6"
+            className={`relative mx-auto grid min-w-max gap-x-6 ${
+              isTv ? "text-base" : ""
+            }`}
             style={{
-              gridTemplateColumns: `repeat(${roundCount}, minmax(220px, 260px))`,
-              gridTemplateRows: `auto repeat(${targetSize}, minmax(28px, auto))`,
-              transform: `scale(${zoom})`,
+              gridTemplateColumns: `repeat(${roundCount}, minmax(${
+                isTv ? "280px" : "220px"
+              }, ${isTv ? "340px" : "260px"}))`,
+              gridTemplateRows: `auto repeat(${targetSize}, minmax(${
+                isTv ? "36px" : "28px"
+              }, auto))`,
+              transform: isTv ? undefined : `scale(${zoom})`,
               transformOrigin: "top left",
             }}
           >
@@ -778,9 +869,16 @@ export default function LiveBracketView({
                     computedWinnerId={slot?.winner?.id ?? null}
                     realMatch={real}
                     liveInfo={real ? liveByMatch.get(real.id) ?? null : null}
-                    highlighted={!!real && real.id === highlightMatchId}
+                    highlighted={
+                      (!!real && real.id === highlightMatchId) ||
+                      (!!focusTeamId &&
+                        (slot?.top?.id === focusTeamId ||
+                          slot?.bottom?.id === focusTeamId))
+                    }
                     currency={currency}
-                    compactNames={isMobile}
+                    compactNames={isTv ? false : isMobile}
+                    tvMode={isTv}
+                    hideMatchLink={isTv}
                     teeRules={teeRules}
                     teeSets={teeSets}
                     birthYearByPlayerId={birthYearByPlayerId}
@@ -790,6 +888,153 @@ export default function LiveBracketView({
               return items;
             })}
           </div>
+  );
+
+  if (isTv) {
+    return (
+      <div className="relative flex h-full min-h-0 flex-1 flex-col">
+        {focusCaption ? (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-30 -translate-x-1/2 rounded-full border border-amber-400/50 bg-black/70 px-5 py-1.5 text-lg font-black uppercase tracking-wide text-amber-200">
+            {focusCaption}
+          </div>
+        ) : null}
+        <div
+          ref={viewportRef}
+          className="relative min-h-0 flex-1 overflow-hidden"
+        >
+          <div
+            className="absolute left-0 top-0 will-change-transform"
+            style={{
+              transform: cssTransform(cam),
+              transformOrigin: "0 0",
+            }}
+          >
+            {bracketInner}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-center gap-6 py-2 text-sm text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
+            Superior
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-sm bg-violet-400" />
+            Inferior
+          </span>
+          {focusHalf ? (
+            <span className="font-bold text-white">
+              {awardedCount}/{totalActive} adjudicados
+            </span>
+          ) : (
+            <span>{awardedCount}/{totalActive} adjudicados</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-cyan-500/30 bg-[#0c1728] px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300/80">
+            Bracket en vivo · armado por subasta
+          </div>
+          <h1 className="mt-1 truncate text-xl font-extrabold text-white sm:text-2xl">
+            {tournamentName}
+          </h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-[12px]">
+          <Stat
+            label={`Cuadro ${targetSize}`}
+            value={`${totalActive} parejas`}
+            tone="ok"
+          />
+          <Stat
+            label="R1 matches"
+            value={String(realMatchesR1)}
+            tone="ok"
+          />
+          <Stat label="R1 BYEs" value={String(byesR1)} tone="warn" />
+          <Stat
+            label="Adjudicados"
+            value={`${awardedCount} / ${totalActive}`}
+          />
+          <Stat label="Subastado" value={money(totalRaised, currency)} tone="ok" />
+          <Stat
+            label={`Bolsa (${potPercent ?? 100}%)`}
+            value={money(pot, currency)}
+            tone="amber"
+          />
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-[#0c1728] px-3 py-2">
+        <div className="flex items-center gap-2 text-[12px] text-slate-300">
+          <span className="text-xl leading-none" aria-hidden>
+            🤏
+          </span>
+          <span>
+            <span className="hidden sm:inline">
+              Pellizca para hacer zoom o usa los botones.
+            </span>
+            <span className="sm:hidden">Pellizca o usa botones →</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-[12px]">
+          <button
+            type="button"
+            onClick={() => stepZoom(-0.1)}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
+            aria-label="Alejar"
+          >
+            −
+          </button>
+          <span className="w-14 text-center text-[11px] font-bold text-cyan-200">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => stepZoom(0.1)}
+            className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 font-bold text-white hover:bg-white/10 active:bg-white/15"
+            aria-label="Acercar"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            className="ml-1 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold text-cyan-200 hover:bg-cyan-500/20"
+          >
+            100%
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-300">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
+          Cuadro superior
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-violet-400" />
+          Cuadro inferior
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm bg-amber-400" />
+          Final
+        </span>
+      </div>
+
+      <div className="overflow-auto pb-3">
+        <div
+          className="mx-auto"
+          style={{
+            width: bracketSize.w ? bracketSize.w * zoom : undefined,
+            height: bracketSize.h ? bracketSize.h * zoom : undefined,
+          }}
+        >
+          {bracketInner}
         </div>
       </div>
 
@@ -904,6 +1149,8 @@ function BracketMatchCell({
   highlighted,
   currency,
   compactNames,
+  tvMode = false,
+  hideMatchLink = false,
   teeRules,
   teeSets,
   birthYearByPlayerId,
@@ -935,6 +1182,8 @@ function BracketMatchCell({
   highlighted: boolean;
   currency: string;
   compactNames: boolean;
+  tvMode?: boolean;
+  hideMatchLink?: boolean;
   teeRules: TeeRuleLite[];
   teeSets: TeeSetLite[];
   birthYearByPlayerId: Record<string, number | null>;
@@ -945,7 +1194,7 @@ function BracketMatchCell({
   // El match es navegable si ya existe (publicado) y no es un BYE: lleva al
   // detalle hoyo por hoyo en la pantalla de matches en vivo.
   const matchHref =
-    realMatch && realMatch.status !== "bye"
+    !hideMatchLink && realMatch && realMatch.status !== "bye"
       ? `/torneos/${tournamentId}/matches-vivo?match=${encodeURIComponent(
           realMatch.id
         )}&from=bracket`
@@ -1014,6 +1263,12 @@ function BracketMatchCell({
   return (
     <div
       id={realMatch ? `bk-match-${realMatch.id}` : undefined}
+      data-r1-cell={round === 1 ? "1" : undefined}
+      data-half={round === 1 && half !== "final" ? half : undefined}
+      data-top-team={topTeam?.id ?? undefined}
+      data-bottom-team={bottomTeam?.id ?? undefined}
+      data-top-seed={topSeed != null ? String(topSeed) : undefined}
+      data-bottom-seed={bottomSeed != null ? String(bottomSeed) : undefined}
       className={`relative flex flex-col justify-center px-2 ${
         highlighted ? "scroll-mt-24" : ""
       }`}
@@ -1071,6 +1326,7 @@ function BracketMatchCell({
           showBid={round === 1 && !showLive}
           currency={currency}
           compactNames={compactNames}
+          tvMode={tvMode}
           teeRules={teeRules}
           teeSets={teeSets}
           birthYearByPlayerId={birthYearByPlayerId}
@@ -1090,6 +1346,7 @@ function BracketMatchCell({
           showBid={round === 1 && !showLive}
           currency={currency}
           compactNames={compactNames}
+          tvMode={tvMode}
           teeRules={teeRules}
           teeSets={teeSets}
           birthYearByPlayerId={birthYearByPlayerId}
@@ -1166,6 +1423,7 @@ function SidePill({
   showBid,
   currency,
   compactNames,
+  tvMode = false,
   teeRules,
   teeSets,
   birthYearByPlayerId,
@@ -1181,6 +1439,7 @@ function SidePill({
   showBid: boolean;
   currency: string;
   compactNames: boolean;
+  tvMode?: boolean;
   teeRules: TeeRuleLite[];
   teeSets: TeeSetLite[];
   birthYearByPlayerId: Record<string, number | null>;
@@ -1203,12 +1462,16 @@ function SidePill({
           : "text-slate-500 italic";
 
   return (
-    <div className="flex items-center gap-2 py-1" data-side={side}>
+    <div
+      className="flex items-center gap-2 py-1"
+      data-side={side}
+      data-team-id={team?.id ?? undefined}
+    >
       {seed != null ? (
         <span
-          className={`hidden w-7 shrink-0 text-right text-[10px] font-bold tabular-nums sm:inline ${
-            isVacant ? "text-slate-600" : "text-cyan-300/70"
-          }`}
+          className={`w-7 shrink-0 text-right font-bold tabular-nums ${
+            tvMode ? "inline text-sm" : "hidden text-[10px] sm:inline"
+          } ${isVacant ? "text-slate-600" : "text-cyan-300/70"}`}
         >
           #{seed}
         </span>
@@ -1221,7 +1484,9 @@ function SidePill({
             {players.map((p, i) => (
               <li
                 key={`${p.label}-${i}`}
-                className="flex items-center gap-1 overflow-hidden text-[12px] leading-tight"
+                className={`flex items-center gap-1 overflow-hidden leading-tight ${
+                  tvMode ? "text-[17px] font-semibold" : "text-[12px]"
+                }`}
               >
                 <span
                   className={`shrink-0 text-[9px] ${
@@ -1275,7 +1540,11 @@ function SidePill({
           {liveLabel}
         </span>
       ) : showBid && team && team.auction_bid != null ? (
-        <span className="hidden shrink-0 text-[10px] font-semibold text-amber-300/80 sm:inline">
+        <span
+          className={`shrink-0 font-semibold text-amber-300/80 ${
+            tvMode ? "inline text-sm" : "hidden text-[10px] sm:inline"
+          }`}
+        >
           {money(team.auction_bid, currency)}
         </span>
       ) : null}

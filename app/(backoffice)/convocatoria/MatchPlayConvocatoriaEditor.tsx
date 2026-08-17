@@ -571,6 +571,13 @@ export default function MatchPlayConvocatoriaEditor({
                 setMatchplay({ bracket_main_pairs: Number(e.target.value) })
               }
             />
+            <span className="mt-1 block text-[10px] text-slate-400">
+              Al cerrar inscripciones se ajusta solo: 8, 16, 32 o 64 según{" "}
+              {mp.match_type === "individual"
+                ? "cuántos jugadores"
+                : "cuántas parejas"}{" "}
+              haya (p. ej. 36 parejas → cuadro de 64).
+            </span>
           </label>
           <label className="col-span-full text-[11px] text-slate-300">
             Notas / texto convocatoria

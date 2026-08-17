@@ -1,6 +1,11 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { ENTRY_SELECT_WITHOUT_KIT } from "@/lib/entries/telegramKitColumns";
 import { effectiveEntryHi, formatPlayerName } from "./entryHi";
+import {
+  countMatchPlayFieldUnits,
+  fieldBracketSize,
+  isCountableMatchPlayEntryStatus,
+} from "./bracketUtils";
 import type {
   MatchPlayEntryRow,
   MatchPlayRulesSnapshot,
@@ -142,8 +147,7 @@ export async function loadMatchPlayTeamsData(
           rulesRaw.female_individual_hi_max != null
             ? Number(rulesRaw.female_individual_hi_max)
             : null,
-        max_teams:
-          rulesRaw.bracket_main_pairs ?? rulesRaw.max_pairs_per_category ?? null,
+        max_teams: 64,
       }
     : null;
 
@@ -204,6 +208,18 @@ export async function loadMatchPlayTeamsData(
       player_b,
     };
   });
+
+  if (rules) {
+    const activeEntryCount = entries.filter((e) =>
+      isCountableMatchPlayEntryStatus(e.status)
+    ).length;
+    const unitCount = countMatchPlayFieldUnits({
+      matchType: rules.match_type,
+      activeTeamCount: teams.length,
+      activeEntryCount,
+    });
+    rules.max_teams = fieldBracketSize(unitCount, 64);
+  }
 
   return {
     rules,

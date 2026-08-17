@@ -23,6 +23,39 @@ export function bracketCapacity(teamCount: number, maxCap = 64): number {
   return size;
 }
 
+/**
+ * Tamaño de cuadro al cerrar el campo: 8, 16, 32 o 64.
+ * 36 parejas → 64; 32 o menos → 32; 16 o menos → 16; menos de 8 → 8.
+ */
+export function fieldBracketSize(unitCount: number, maxCap = 64): number {
+  const n = Math.max(1, Math.floor(unitCount));
+  const size = bracketCapacity(n, maxCap);
+  return Math.max(8, size);
+}
+
+export function isCountableMatchPlayEntryStatus(
+  status: string | null | undefined
+): boolean {
+  const s = String(status ?? "").toLowerCase();
+  return s !== "withdrawn" && s !== "cancelled" && s !== "wd";
+}
+
+/**
+ * Unidades del campo: individual = inscritos; parejas = equipos o floor(inscritos/2).
+ * Se toma el mayor para no subestimar si aún faltan equipos por armar.
+ */
+export function countMatchPlayFieldUnits(input: {
+  matchType?: string | null;
+  activeTeamCount: number;
+  activeEntryCount: number;
+}): number {
+  const fromEntries =
+    input.matchType === "individual"
+      ? input.activeEntryCount
+      : Math.floor(input.activeEntryCount / 2);
+  return Math.max(input.activeTeamCount, fromEntries);
+}
+
 export function roundCountForBracketSize(bracketSize: number): number {
   return Math.log2(bracketSize);
 }

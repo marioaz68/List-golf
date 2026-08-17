@@ -224,6 +224,19 @@ export default async function MatchPlayPage(props: {
               📺 Sorteo TV
             </Link>
             <Link
+              href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${effectiveId}`}
+              style={{
+                ...buttonStyle,
+                background: "linear-gradient(#22d3ee, #0891b2)",
+                border: "1px solid #155e75",
+                color: "#0b1224",
+                fontWeight: 800,
+              }}
+              title="Pantalla TV: zoom al cuadro cuando se adjudica una pareja"
+            >
+              📺 Cuadro TV
+            </Link>
+            <Link
               href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
               style={{
                 ...buttonStyle,
@@ -331,6 +344,9 @@ export default async function MatchPlayPage(props: {
               rulesRow.max_pairs_per_category ??
               "?"}{" "}
             {rulesRow.match_type === "individual" ? "jugadores" : "parejas"}
+            <span className="ml-1 text-slate-500">
+              (8 / 16 / 32 / 64 según el campo al cerrar inscripciones)
+            </span>
           </p>
         </div>
       ) : isMatchPlay ? (

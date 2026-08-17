@@ -750,6 +750,12 @@ export default function RaffleStage({
             📺 Sorteo TV
           </Link>
           <Link
+            href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${tournamentId}`}
+            className="rounded border border-cyan-400/50 bg-cyan-950/50 px-3 py-1.5 font-bold text-cyan-100 hover:bg-cyan-900/60"
+          >
+            📺 Cuadro TV
+          </Link>
+          <Link
             href={`/torneos/${tournamentId}/cuadro-vivo`}
             target="_blank"
             className="rounded border border-emerald-400/40 bg-emerald-950/40 px-3 py-1.5 font-bold text-emerald-200 hover:bg-emerald-900/60"

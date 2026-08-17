@@ -158,7 +158,7 @@ export default function MatchPlayTeamsPanel({
         <Stat label={`Equipos (${unitLabel})`} value={teams.length} />
         <Stat label="Sin asignar" value={unassigned.length} />
         <Stat
-          label="Límite cuadro"
+          label="Tamaño cuadro"
           value={maxTeams != null ? String(maxTeams) : "Variable"}
         />
       </div>

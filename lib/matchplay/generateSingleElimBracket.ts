@@ -1,5 +1,5 @@
 import {
-  bracketCapacity,
+  fieldBracketSize,
   firstRoundSeedPairs,
   roundCountForBracketSize,
 } from "./bracketUtils";
@@ -85,6 +85,8 @@ export function generateSingleElimBracket(params: {
   teams: MatchPlayTeamRow[];
   seeding_method: MatchPlaySeedingMethod;
   max_bracket_size?: number | null;
+  /** Si viene, no se reduce por debajo del campo (p. ej. 36 parejas → 64). */
+  bracket_size?: number | null;
 }): GenerateBracketResult {
   const { teams, seeding_method } = params;
   const maxCap = params.max_bracket_size ?? 64;
@@ -96,12 +98,19 @@ export function generateSingleElimBracket(params: {
   const ordered = assignSeedNumbers(
     sortTeamsForSeeding(teams, seeding_method)
   );
-  const bracketSize = bracketCapacity(ordered.length, maxCap);
+  const wanted = params.bracket_size;
+  const bracketSize = fieldBracketSize(
+    Math.max(
+      ordered.length,
+      wanted != null && Number.isFinite(wanted) ? wanted : 0
+    ),
+    maxCap
+  );
   const roundCount = roundCountForBracketSize(bracketSize);
   const pairs = firstRoundSeedPairs(bracketSize);
 
   const slots: Array<string | null> = new Array(bracketSize).fill(null);
-  for (let i = 0; i < ordered.length; i++) {
+  for (let i = 0; i < ordered.length && i < bracketSize; i++) {
     slots[i] = ordered[i].id;
   }
 

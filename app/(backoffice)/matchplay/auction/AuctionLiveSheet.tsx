@@ -264,6 +264,16 @@ export default function AuctionLiveSheet({
           📺 Sorteo TV
         </a>
         <a
+          href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${tournamentId}`}
+          style={{
+            ...primaryStyle,
+            background: "linear-gradient(#0891b2, #0e7490)",
+            border: "1px solid #155e75",
+          }}
+        >
+          📺 Cuadro TV
+        </a>
+        <a
           href={`/matchplay/auction/raffle?tournament_id=${tournamentId}`}
           style={{
             ...primaryStyle,

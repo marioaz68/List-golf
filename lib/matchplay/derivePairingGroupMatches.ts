@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { bracketCapacity } from "@/lib/matchplay/bracketUtils";
+import { fieldBracketSize } from "@/lib/matchplay/bracketUtils";
 
 /**
  * Match "derivado" a partir de pairing_groups + matchplay_pair_teams.
@@ -205,7 +205,7 @@ export async function derivePairingGroupMatches(
   // con BYEs la 1ª ronda tiene menos matches y se subestimaba el cuadro (p. ej.
   // 32 parejas con byes mostraban "Octavos" en la R1 en vez de "Dieciseisavos").
   const teamCount = teamEntries.size;
-  let bracketSize = bracketCapacity(Math.max(2, teamCount));
+  let bracketSize = fieldBracketSize(Math.max(2, teamCount));
 
   // Piso de seguridad: nunca menor que lo que exigen los matches de la ronda
   // más grande (por si el conteo de parejas viniera incompleto).

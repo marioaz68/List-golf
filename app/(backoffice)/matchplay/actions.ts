@@ -13,8 +13,13 @@ import {
 import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
+import {
+  fieldBracketSize,
+  roundCountForBracketSize,
+} from "@/lib/matchplay/bracketUtils";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
 import { drawNextAuctionPair, releaseAuctionPairForRedraw } from "@/lib/matchplay/drawNextAuctionPair";
+import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
 import { createClient } from "@/utils/supabase/server";
 import type {
   MatchPlayHandicapAllowance,
@@ -970,17 +975,29 @@ export async function generateMatchPlayBracket(formData: FormData) {
 
   const seeding_method = (rulesRow?.seeding_method ??
     "hi_combined") as MatchPlaySeedingMethod;
+  const activeTeams = data.teams.filter((t) => t.is_active);
+  const synced = await syncMatchPlayBracketSizeFromField(admin, tournament_id);
   const maxSize =
-    rulesRow?.bracket_main_pairs ??
-    rulesRow?.max_pairs_per_category ??
-    64;
+    synced.ok && !synced.skipped
+      ? synced.bracketSize
+      : fieldBracketSize(activeTeams.length, 64);
+
+  await admin
+    .from("tournament_matchplay_rules")
+    .update({
+      bracket_main_pairs: maxSize,
+      bracket_round_count: roundCountForBracketSize(maxSize),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("tournament_id", tournament_id);
 
   let generated: ReturnType<typeof generateSingleElimBracket>;
   try {
     generated = generateSingleElimBracket({
-      teams: data.teams,
+      teams: activeTeams,
       seeding_method,
-      max_bracket_size: maxSize,
+      max_bracket_size: 64,
+      bracket_size: maxSize,
     });
   } catch (err) {
     redirectMatchPlay(tournament_id, {

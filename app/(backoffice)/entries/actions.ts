@@ -7,6 +7,7 @@ import {
   capMatchPlayPairHandicaps,
   syncPairEntriesCategory,
 } from "@/lib/matchplay/capPairToCategory";
+import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
 import { requireTournamentAccess } from "@/lib/auth/requireTournamentAccess";
 import { isMissingTelegramKitColumnsError } from "@/lib/entries/telegramKitColumns";
 import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
@@ -1615,7 +1616,18 @@ export async function closeTournamentRegistration(formData: FormData) {
     throw new Error("Error cerrando inscripciones: " + error.message);
   }
 
+  const sync = await syncMatchPlayBracketSizeFromField(admin, tournament_id);
+  if (!sync.ok) {
+    throw new Error(
+      "Inscripciones cerradas, pero no se pudo ajustar el tamaño del cuadro: " +
+        sync.error
+    );
+  }
+
   revalidatePath("/entries");
+  revalidatePath("/matchplay");
+  revalidatePath("/matchplay/auction");
+  revalidatePath("/convocatoria");
   redirect(`/entries?tournament_id=${tournament_id}&tab=${tab}`);
 }
 
