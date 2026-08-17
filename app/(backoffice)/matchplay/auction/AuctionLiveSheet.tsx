@@ -274,6 +274,21 @@ export default function AuctionLiveSheet({
           📺 Cuadro TV
         </a>
         <a
+          href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${tournamentId}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            ...primaryStyle,
+            background: "linear-gradient(#22d3ee, #0e7490)",
+            border: "1px solid #155e75",
+            color: "#082f49",
+            fontWeight: 800,
+          }}
+          title="Pantalla interna de sala: zoom al slot, llave de 4 y mitad del cuadro"
+        >
+          📺 Zoom llave TV
+        </a>
+        <a
           href={`/matchplay/auction/raffle?tournament_id=${tournamentId}`}
           style={{
             ...primaryStyle,

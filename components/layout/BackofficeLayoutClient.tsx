@@ -51,9 +51,9 @@ export default function BackofficeLayoutClient({
 }) {
   const pathname = usePathname() ?? "";
   const isMobileCapture = pathname.startsWith("/score-entry/mobile");
-  const isAuctionProjection = pathname.startsWith(
-    "/matchplay/auction/proyeccion"
-  );
+  const isAuctionProjection =
+    pathname.startsWith("/matchplay/auction/proyeccion") ||
+    pathname.includes("/proyeccion-cuadro");
 
   if (isAuctionProjection) {
     return (

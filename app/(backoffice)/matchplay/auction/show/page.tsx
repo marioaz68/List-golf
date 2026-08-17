@@ -163,6 +163,21 @@ export default async function AuctionShowPage(props: {
             📺 Cuadro TV
           </Link>
           <Link
+            href={`/matchplay/auction/proyeccion-cuadro?tournament_id=${effectiveId}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              ...buttonStyle,
+              background: "linear-gradient(#22d3ee, #0e7490)",
+              border: "1px solid #155e75",
+              color: "#082f49",
+              fontWeight: 800,
+            }}
+            title="Pantalla interna de sala: zoom al slot, llave de 4 y mitad del cuadro"
+          >
+            📺 Zoom llave TV
+          </Link>
+          <Link
             href={`/matchplay/auction/raffle?tournament_id=${effectiveId}`}
             style={{
               ...buttonStyle,

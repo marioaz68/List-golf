@@ -5,7 +5,9 @@ export type CameraPose = {
 };
 
 export const AUCTION_BRACKET_ZOOM_IN_MS = 1600;
-export const AUCTION_BRACKET_HOLD_MS = 1500;
+export const AUCTION_BRACKET_SLOT_HOLD_MS = 800;
+export const AUCTION_BRACKET_OPEN_CLUSTER_MS = 1400;
+export const AUCTION_BRACKET_CLUSTER_HOLD_MS = 5000;
 export const AUCTION_BRACKET_OPEN_HALF_MS = 1600;
 
 export function easeOutCubic(t: number): number {
@@ -67,7 +69,7 @@ export function poseToFitLocal(
   viewport: { width: number; height: number },
   local: { x: number; y: number; w: number; h: number },
   padding = 1.18,
-  minScale = 0.45,
+  minScale = 0.18,
   maxScale = 3.4
 ): CameraPose {
   const w = Math.max(40, local.w * padding);
@@ -106,7 +108,8 @@ export function poseToFitScreenRects(
   viewportEl: HTMLElement,
   rects: DOMRect[],
   currentCam: CameraPose,
-  padding?: number
+  padding?: number,
+  minScale = 0.18
 ): CameraPose | null {
   const union = unionScreenRects(rects);
   if (!union) return null;
@@ -115,10 +118,21 @@ export function poseToFitScreenRects(
   return poseToFitLocal(
     { width: vr.width, height: vr.height },
     local,
-    padding ?? 1.08
+    padding ?? 1.08,
+    minScale
   );
 }
 
 export function cssTransform(pose: CameraPose): string {
   return `translate(${pose.tx}px, ${pose.ty}px) scale(${pose.scale})`;
+}
+
+/** 4 partidos de R1 (8 seeds) cuya llave manda 4 ganadores a la siguiente ronda. */
+export function r1AdvanceCluster(
+  round: number,
+  positionIdx: number
+): number | null {
+  if (round < 1 || round > 3) return null;
+  const r1Start = positionIdx * Math.pow(2, round - 1);
+  return Math.floor(r1Start / 4);
 }

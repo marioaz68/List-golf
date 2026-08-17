@@ -34,10 +34,10 @@ export default function AuctionBracketTvClient({
   potPercent,
 }: Props) {
   return (
-    <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden bg-[#07090d] text-white">
+    <div className="fixed inset-0 z-[80] flex flex-col overflow-hidden bg-[#07090d] text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(34,211,238,0.08),_transparent_58%)]" />
 
-      <header className="relative z-10 flex shrink-0 items-end justify-between gap-4 px-6 pt-4 pb-2">
+      <header className="relative z-10 flex shrink-0 items-end justify-between gap-4 px-5 py-3">
         <div className="min-w-0">
           <div className="text-[13px] font-semibold uppercase tracking-[0.35em] text-cyan-300">
             Cuadro TV · subasta
@@ -54,7 +54,7 @@ export default function AuctionBracketTvClient({
         </a>
       </header>
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col px-2 pb-3">
+      <main className="relative z-10 min-h-0 flex-1">
         <LiveBracketView
           tournamentId={tournamentId}
           tournamentName={tournamentName}

@@ -21,14 +21,17 @@ import {
 } from "@/lib/matchplay/bracketUtils";
 import { sortTeamsForSeeding } from "@/lib/matchplay/sortTeamsForSeeding";
 import {
-  AUCTION_BRACKET_HOLD_MS,
+  AUCTION_BRACKET_CLUSTER_HOLD_MS,
+  AUCTION_BRACKET_OPEN_CLUSTER_MS,
   AUCTION_BRACKET_OPEN_HALF_MS,
+  AUCTION_BRACKET_SLOT_HOLD_MS,
   AUCTION_BRACKET_ZOOM_IN_MS,
   cssTransform,
   identityPose,
   lerpPose,
   poseToFitScreenRects,
   poseToFitScreenTarget,
+  r1AdvanceCluster,
   type CameraPose,
 } from "@/lib/matchplay/auctionBracketCamera";
 
@@ -487,57 +490,92 @@ export default function LiveBracketView({
       const seq = ++seqRef.current;
       const viewport = viewportRef.current;
       if (!viewport) return;
+      for (let i = 0; i < 20; i++) {
+        if (viewport.getBoundingClientRect().width > 40) break;
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+      }
       const slot = await waitForSlot(teamId);
       if (seq !== seqRef.current) return;
       if (!slot) return;
       const half = (slot.dataset.half === "bottom" ? "bottom" : "top") as
         | "top"
         | "bottom";
+      const cluster = slot.dataset.cluster ?? "";
       setFocusHalf(half);
       const seed =
         slot.dataset.topTeam === teamId
           ? slot.dataset.topSeed
           : slot.dataset.bottomSeed;
-      setFocusCaption(
-        `${seed ? `Seed #${seed} · ` : ""}${
-          half === "bottom" ? "Cuadro inferior" : "Cuadro superior"
-        }`
-      );
 
+      const fit = (
+        els: HTMLElement[],
+        padding: number
+      ): CameraPose | null => {
+        if (els.length === 0) return null;
+        return poseToFitScreenRects(
+          viewport,
+          els.map((el) => el.getBoundingClientRect()),
+          camRef.current,
+          padding
+        );
+      };
+
+      const go = async (pose: CameraPose | null, ms: number) => {
+        if (!pose) return;
+        if (animate) await animateCam(pose, ms);
+        else applyCam(pose);
+      };
+
+      setFocusCaption(
+        `${seed ? `Seed #${seed} · ` : ""}slot`
+      );
       const slotPose = poseToFitScreenTarget(
         viewport,
         slot,
         camRef.current,
         1.12
       );
-      if (slotPose && animate) {
-        await animateCam(slotPose, AUCTION_BRACKET_ZOOM_IN_MS);
-      } else if (slotPose) {
-        applyCam(slotPose);
-      }
+      await go(slotPose, AUCTION_BRACKET_ZOOM_IN_MS);
       if (seq !== seqRef.current) return;
 
       if (animate) {
-        await new Promise((r) => window.setTimeout(r, AUCTION_BRACKET_HOLD_MS));
+        await new Promise((r) =>
+          window.setTimeout(r, AUCTION_BRACKET_SLOT_HOLD_MS)
+        );
+      }
+      if (seq !== seqRef.current) return;
+
+      const clusterEls = cluster
+        ? Array.from(
+            viewport.querySelectorAll<HTMLElement>(
+              `[data-cluster="${cluster}"]`
+            )
+          )
+        : [];
+      setFocusCaption(
+        `${seed ? `Seed #${seed} · ` : ""}llave de 4 a la siguiente ronda`
+      );
+      await go(fit(clusterEls, 1.1), AUCTION_BRACKET_OPEN_CLUSTER_MS);
+      if (seq !== seqRef.current) return;
+
+      if (animate) {
+        await new Promise((r) =>
+          window.setTimeout(r, AUCTION_BRACKET_CLUSTER_HOLD_MS)
+        );
       }
       if (seq !== seqRef.current) return;
 
       const halfEls = Array.from(
         viewport.querySelectorAll<HTMLElement>(
-          `[data-r1-cell][data-half="${half}"]`
+          `[data-half="${half}"]`
         )
       );
-      const halfPose = poseToFitScreenRects(
-        viewport,
-        halfEls.map((el) => el.getBoundingClientRect()),
-        camRef.current,
-        1.06
+      setFocusCaption(
+        `${seed ? `Seed #${seed} · ` : ""}${
+          half === "bottom" ? "Cuadro inferior" : "Cuadro superior"
+        }`
       );
-      if (halfPose && animate) {
-        await animateCam(halfPose, AUCTION_BRACKET_OPEN_HALF_MS);
-      } else if (halfPose) {
-        applyCam(halfPose);
-      }
+      await go(fit(halfEls, 1.04), AUCTION_BRACKET_OPEN_HALF_MS);
     },
     [animateCam, applyCam, waitForSlot]
   );
@@ -790,8 +828,8 @@ export default function LiveBracketView({
   const bracketInner = (
           <div
             ref={bracketRef}
-            className={`relative mx-auto grid min-w-max gap-x-6 ${
-              isTv ? "text-base" : ""
+            className={`relative grid min-w-max gap-x-6 ${
+              isTv ? "text-base" : "mx-auto"
             }`}
             style={{
               gridTemplateColumns: `repeat(${roundCount}, minmax(${
@@ -900,7 +938,7 @@ export default function LiveBracketView({
         ) : null}
         <div
           ref={viewportRef}
-          className="relative min-h-0 flex-1 overflow-hidden"
+          className="absolute inset-0 overflow-hidden"
         >
           <div
             className="absolute left-0 top-0 will-change-transform"
@@ -912,7 +950,7 @@ export default function LiveBracketView({
             {bracketInner}
           </div>
         </div>
-        <div className="flex shrink-0 items-center justify-center gap-6 py-2 text-sm text-slate-300">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-6 bg-gradient-to-t from-black/80 to-transparent py-3 text-sm text-slate-300">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-sm bg-cyan-400" />
             Superior
@@ -1260,11 +1298,14 @@ function BracketMatchCell({
   const isTopOfPair = positionIdx % 2 === 0;
   const lineColor = "bg-slate-300/70";
 
+  const cluster = r1AdvanceCluster(round, positionIdx);
+
   return (
     <div
       id={realMatch ? `bk-match-${realMatch.id}` : undefined}
       data-r1-cell={round === 1 ? "1" : undefined}
-      data-half={round === 1 && half !== "final" ? half : undefined}
+      data-half={half !== "final" ? half : undefined}
+      data-cluster={cluster != null ? String(cluster) : undefined}
       data-top-team={topTeam?.id ?? undefined}
       data-bottom-team={bottomTeam?.id ?? undefined}
       data-top-seed={topSeed != null ? String(topSeed) : undefined}
