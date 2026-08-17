@@ -1749,9 +1749,10 @@ function MobileScoreEntryContent() {
 
   function handleClear() {
     if (!activePlayerId) return;
+    setHoleScore(activePlayerId, currentHole, null);
+    setActivePlayerId(null);
     setDraftScore("");
     setDraftFresh(false);
-    setHoleScore(activePlayerId, currentHole, null);
   }
 
   function handleBackspace() {
@@ -1958,7 +1959,7 @@ function MobileScoreEntryContent() {
                 "flex-1 space-y-2 px-3 py-2",
                 activePlayerId
                   ? matchPlayInfo
-                    ? "pb-80"
+                    ? "pb-96"
                     : "pb-44"
                   : matchPlayInfo
                     ? "pb-44"
@@ -2341,9 +2342,9 @@ function MobileScoreEntryContent() {
                     <button
                       type="button"
                       onClick={handleClear}
-                      className="h-12 rounded-lg bg-red-100 text-sm font-semibold"
+                      className="h-12 rounded-lg bg-red-100 px-1 text-[11px] font-extrabold uppercase tracking-wide text-red-800"
                     >
-                      C
+                      Borrar
                     </button>
 
                     <button
@@ -2381,16 +2382,32 @@ function MobileScoreEntryContent() {
                       >
                         Enter
                       </button>
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="col-span-2 h-11 rounded-lg border border-red-300 bg-red-50 text-sm font-extrabold text-red-800"
+                      >
+                        Borrar casilla
+                      </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleEnter}
-                      disabled={!draftScore || Number(draftScore) <= 0}
-                      className="mt-2 h-12 w-full rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
-                    >
-                      Enter
-                    </button>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="h-12 rounded-lg border border-red-300 bg-red-50 text-sm font-extrabold text-red-800"
+                      >
+                        Borrar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleEnter}
+                        disabled={!draftScore || Number(draftScore) <= 0}
+                        className="h-12 rounded-lg bg-emerald-600 text-base font-bold text-white disabled:opacity-50"
+                      >
+                        Enter
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
