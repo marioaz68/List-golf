@@ -265,7 +265,7 @@ async function computeApplyForEntry(
       abstentionsInAverage
     );
     const avg = trim.avg;
-    // trimAnnulled → avg 0 (HI sin cambio); no es error.
+    // trimAnnulled → avg 0 (HP sin cambio); no es error.
     if (avg == null || !Number.isFinite(avg)) {
       return { ok: false, error: "trim_empty" };
     }
@@ -687,7 +687,7 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
 
   const { data: entriesRaw } = await admin
     .from("tournament_entries")
-    .select("id, player_id, category_id, handicap_index")
+    .select("id, player_id, category_id, playing_handicap, playing_handicap_override")
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled");
 
@@ -815,19 +815,23 @@ async function archiveAndResetCommitteeVotesAtomic(params: {
         ? `${player.last_name ?? ""} ${player.first_name ?? ""}`.trim() ||
           "Jugador"
         : "Jugador";
-      const hiNow =
-        e.handicap_index != null && Number.isFinite(Number(e.handicap_index))
-          ? Number(e.handicap_index)
-          : null;
+      const hpNow =
+        e.playing_handicap_override != null &&
+        Number.isFinite(Number(e.playing_handicap_override))
+          ? Math.round(Number(e.playing_handicap_override))
+          : e.playing_handicap != null &&
+              Number.isFinite(Number(e.playing_handicap))
+            ? Math.round(Number(e.playing_handicap))
+            : null;
       const suggested =
-        hiNow != null && trim.avg != null
-          ? Math.round((hiNow + trim.avg) * 10) / 10
+        hpNow != null && trim.avg != null
+          ? Math.max(0, hpNow + Math.round(trim.avg))
           : null;
 
       return {
         entry_id: eid,
         entry_player_name: playerLabel,
-        entry_handicap_index: hiNow,
+        entry_handicap_index: hpNow,
         entry_category_code: cat?.code ?? cat?.name ?? null,
         n_votes: slot.adj.length,
         n_abstained: slot.n_abs,

@@ -86,7 +86,7 @@ export default function ExportCommitteePromptButton({
         } = await exportCommitteePromptMarkdown(tournamentId);
         if (count === 0) {
           alert(
-            "No hay jugadores marcados para revisión en este torneo.\n\nUsa «→ Comité HI» en cada inscrito primero."
+            "No hay jugadores marcados para revisión en este torneo.\n\nUsa «→ Comité» en cada inscrito primero."
           );
           return;
         }

@@ -360,7 +360,7 @@ function EntryRowActions({
             : "h-7 w-full cursor-wait rounded border opacity-70 text-[11px] font-bold text-white"
         }
       >
-        {isFlagged ? "Quitar comité" : "→ Comité HI"}
+        {isFlagged ? "Quitar comité" : "→ Comité"}
       </SubmitButton>
     </form>
   );

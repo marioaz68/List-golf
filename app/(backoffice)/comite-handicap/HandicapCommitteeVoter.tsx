@@ -12,6 +12,7 @@ import {
   HANDICAP_ADJUSTMENT_MAX,
   HANDICAP_ADJUSTMENT_MIN,
   HANDICAP_ADJUSTMENT_STEP,
+  clampAdjustment,
   formatAdjustmentLabel,
 } from "@/lib/handicap-committee/constants";
 import type { AppMessages } from "@/lib/i18n/messages";
@@ -161,7 +162,6 @@ export default function HandicapCommitteeVoter({
         e.ghin_number,
         e.club_label,
         e.category_code,
-        String(e.handicap_index ?? ""),
         String(e.playing_handicap ?? ""),
       ]
         .filter(Boolean)
@@ -799,8 +799,8 @@ function PlayerVoteCard({
   const saved = Boolean(initial);
   const defaultAdjustment =
     initial?.abstained || initial?.adjustment == null
-      ? -1.0
-      : Number(initial.adjustment);
+      ? HANDICAP_ADJUSTMENT_MAX
+      : clampAdjustment(Number(initial.adjustment));
 
   const [abstained, setAbstained] = useState(initial?.abstained ?? false);
   const [adjustment, setAdjustment] = useState(defaultAdjustment);
@@ -875,8 +875,8 @@ function PlayerVoteCard({
   }
 
   const showControls = editing && !lockedByClosing;
-  const hiDisplay =
-    entry.handicap_index != null ? entry.handicap_index.toFixed(1) : "—";
+  const hpDisplay =
+    entry.playing_handicap != null ? String(entry.playing_handicap) : "—";
 
   const flagged = entry.flagged_for_committee === true;
 
@@ -961,39 +961,13 @@ function PlayerVoteCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <div className="flex items-baseline gap-0.5 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white">
+          <div
+            className="flex items-baseline gap-0.5 rounded bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-white"
+            title={t.voter.thHiTitle}
+          >
             <span className="opacity-70">{c.hiLabel}</span>
-            <span className="tabular-nums">{hiDisplay}</span>
+            <span className="tabular-nums">{hpDisplay}</span>
           </div>
-          {entry.course_handicap != null ? (
-            <div
-              className="flex items-baseline gap-0.5 rounded bg-slate-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
-              title={
-                entry.tee_slope != null
-                  ? `${c.chTitlePrefix} ${entry.tee_slope} · CR ${entry.tee_course_rating} · Par ${entry.tee_par}`
-                  : c.chTitleFallback
-              }
-            >
-              <span className="opacity-70">{c.chLabel}</span>
-              <span className="tabular-nums">{entry.course_handicap}</span>
-            </div>
-          ) : null}
-          {entry.playing_handicap != null ? (
-            <div
-              className="flex items-baseline gap-0.5 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
-              title={
-                entry.allowance_pct != null
-                  ? `${c.phTitlePrefix} ${entry.allowance_pct}%)`
-                  : c.phTitleFallback
-              }
-            >
-              <span className="opacity-70">{c.phLabel}</span>
-              <span className="tabular-nums">{entry.playing_handicap}</span>
-              {entry.allowance_pct != null ? (
-                <span className="opacity-70">·{entry.allowance_pct}%</span>
-              ) : null}
-            </div>
-          ) : null}
           {saved ? (
             <span
               className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white"

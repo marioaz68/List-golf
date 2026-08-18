@@ -420,7 +420,7 @@ export default async function ComiteHandicapPage(props: {
 
   // Conjunto de entry_ids que el comité ya tocó (votos, abstenciones,
   // descalificaciones o resúmenes). Lo usamos para que aunque el director
-  // les quite la marca "→ Comité HI" más tarde, no desaparezcan de la lista
+  // les quite la marca "→ Comité" más tarde, no desaparezcan de la lista
   // y no se pierda el voto guardado.
   const entriesWithAnyVote = new Set<string>();
 
@@ -979,7 +979,7 @@ export default async function ComiteHandicapPage(props: {
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
 
   // El comité solo trabaja con jugadores marcados desde Inscritos
-  // (botón "→ Comité HI"). Pero si una inscripción ya tiene voto guardado
+  // (botón "→ Comité"). Pero si una inscripción ya tiene voto guardado
   // del comité (mío, de cualquier miembro o resumen anónimo) la dejamos
   // visible para que no se pierda lo ya revisado, aunque el director le
   // haya quitado la marca después.

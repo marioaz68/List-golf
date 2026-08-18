@@ -1,19 +1,24 @@
-/** Ajuste solo a la baja: valores negativos sumados al HI del inscrito. */
-export const HANDICAP_ADJUSTMENT_MIN = -5.0;
-export const HANDICAP_ADJUSTMENT_MAX = -0.5;
-export const HANDICAP_ADJUSTMENT_STEP = 0.1;
+/** Ajuste solo a la baja: golpes enteros al handicap de torneo. */
+export const HANDICAP_ADJUSTMENT_MIN = -5;
+export const HANDICAP_ADJUSTMENT_MAX = -1;
+export const HANDICAP_ADJUSTMENT_STEP = 1;
 export const HANDICAP_COMMITTEE_DEFAULT_SIZE = 10;
 
 export function formatAdjustmentLabel(value: number | null | undefined) {
   if (value == null || !Number.isFinite(Number(value))) return "—";
   const n = Number(value);
   if (n === 0) return "0";
-  return n > 0 ? `+${n.toFixed(1)}` : n.toFixed(1);
+  const shown = Number.isInteger(n) ? String(n) : n.toFixed(1);
+  return n > 0 ? `+${shown}` : shown;
 }
 
 export function clampAdjustment(raw: number) {
-  const n = Math.round(raw * 10) / 10;
-  return Math.min(HANDICAP_ADJUSTMENT_MAX, Math.max(HANDICAP_ADJUSTMENT_MIN, n));
+  if (!Number.isFinite(raw)) return HANDICAP_ADJUSTMENT_MAX;
+  const n = Math.round(raw);
+  if (n > HANDICAP_ADJUSTMENT_MAX) return HANDICAP_ADJUSTMENT_MAX;
+  if (n < HANDICAP_ADJUSTMENT_MIN) return HANDICAP_ADJUSTMENT_MIN;
+  if (n === 0) return HANDICAP_ADJUSTMENT_MAX;
+  return n;
 }
 
 /**
@@ -218,7 +223,7 @@ export function trimmedAverage(
 
   let avg: number | null;
   if (trimAnnulled) {
-    // Había votos numéricos pero el trim los anuló → ajuste 0 (HI sin cambio).
+    // Había votos numéricos pero el trim los anuló → ajuste 0 (HP sin cambio).
     avg = 0;
   } else if (averageDenominator > 0) {
     avg = liveSum / averageDenominator;
