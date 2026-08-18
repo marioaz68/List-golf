@@ -4,6 +4,12 @@ import type {
   MatchPlayConvocatoriaConfig,
 } from "@/lib/matchplay/types";
 import type { MaybeCreateNextRoundGroupResult } from "@/lib/matchplay/maybeCreateNextRoundGroup";
+import {
+  findLastMainRound,
+  findLatestAfternoonRound,
+  syncPairingGroupTeeTimes,
+} from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 
 export const CONSOLATION_BRACKET_NAME = "Consolación Match Play";
 export const CONSOLATION_NOTES_PREFIX = "CONSOLACIÓN MP · ";
@@ -88,9 +94,8 @@ export async function countConsolationMatchesInRound(
 }
 
 /**
- * Reordena salidas de una ronda: consolación MP primero (G1..n), cuadro
- * principal después (G{n+1}..). Corrige datos creados con la numeración
- * antigua (main antes que consolación).
+ * Reordena salidas de una ronda: consolación MP, luego 3er/4to, luego el
+ * resto del cuadro (la final). Reajusta tee times al horario de la ronda.
  */
 export async function reconcileRoundGroupOrder(
   admin: SupabaseClient,
@@ -99,20 +104,13 @@ export async function reconcileRoundGroupOrder(
 ): Promise<void> {
   const { data: roundRow } = await admin
     .from("rounds")
-    .select("id")
+    .select("id, start_time, interval_minutes, start_type")
     .eq("tournament_id", tournamentId)
     .eq("round_no", roundNo)
     .maybeSingle();
   if (!roundRow?.id) return;
 
   const roundId = String(roundRow.id);
-  const consolCount = await countConsolationMatchesInRound(
-    admin,
-    tournamentId,
-    roundNo
-  );
-  if (consolCount <= 0) return;
-
   const { data: groups } = await admin
     .from("pairing_groups")
     .select("id, group_no, notes")
@@ -122,37 +120,42 @@ export async function reconcileRoundGroupOrder(
   const consol = (groups ?? []).filter((g) =>
     String(g.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
   );
-  const main = (groups ?? []).filter(
-    (g) => !String(g.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
+  const third = (groups ?? []).filter((g) =>
+    String(g.notes ?? "").startsWith("3ER LUGAR MP")
   );
-  if (consol.length === 0) return;
+  const rest = (groups ?? []).filter((g) => {
+    const n = String(g.notes ?? "");
+    return (
+      !n.startsWith(CONSOLATION_NOTES_PREFIX) && !n.startsWith("3ER LUGAR MP")
+    );
+  });
+  if (consol.length === 0 && third.length === 0) return;
 
-  // Fase 1: valores temporales negativos.
+  const ordered = [...consol, ...third, ...rest];
   let tmp = -1000;
-  for (const g of [...consol, ...main]) {
+  for (const g of ordered) {
     await admin
       .from("pairing_groups")
       .update({ group_no: tmp-- })
       .eq("id", g.id);
   }
 
-  // Consolación: G1, G2, … en orden actual de group_no.
   let order = 1;
-  for (const g of consol.sort(
-    (a, b) => Number(a.group_no) - Number(b.group_no)
-  )) {
+  for (const g of ordered) {
     await admin
       .from("pairing_groups")
       .update({ group_no: order++ })
       .eq("id", g.id);
   }
-  // Principal: después de la consolación.
-  for (const g of main.sort((a, b) => Number(a.group_no) - Number(b.group_no))) {
-    await admin
-      .from("pairing_groups")
-      .update({ group_no: order++ })
-      .eq("id", g.id);
-  }
+
+  const start = roundRow.start_time ? String(roundRow.start_time) : "10:00";
+  const interval =
+    typeof roundRow.interval_minutes === "number" && roundRow.interval_minutes > 0
+      ? Math.trunc(roundRow.interval_minutes)
+      : 10;
+  const startType =
+    roundRow.start_type === "shotgun" ? "shotgun" : "tee_time";
+  await syncPairingGroupTeeTimes(admin, roundId, start, interval, startType);
 }
 
 export async function getConsolationBracketId(
@@ -280,13 +283,38 @@ export async function maybeCreateConsolationRoundGroup(
   const nextRoundNo = Number(nextMatch.round_no);
   const positionNo = Number(nextMatch.position_no ?? 1);
   const groupNo = positionNo;
+  const mainRoundCount = roundCountForBracketSize(
+    Math.max(2, params.mainBracketSize)
+  );
+  const isFinal = nextRoundNo >= mainRoundCount;
 
-  const { data: roundRow } = await admin
-    .from("rounds")
-    .select("id, start_time, interval_minutes")
-    .eq("tournament_id", params.tournamentId)
-    .eq("round_no", nextRoundNo)
-    .maybeSingle();
+  const dedicated = isFinal
+    ? await findLastMainRound(admin, params.tournamentId)
+    : await findLatestAfternoonRound(admin, params.tournamentId);
+
+  let roundRow: {
+    id: string;
+    start_time: string | null;
+    interval_minutes: number | null;
+    start_type?: string | null;
+  } | null = dedicated
+    ? {
+        id: dedicated.id,
+        start_time: dedicated.start_time,
+        interval_minutes: dedicated.interval_minutes,
+        start_type: dedicated.start_type,
+      }
+    : null;
+
+  if (!roundRow?.id) {
+    const { data } = await admin
+      .from("rounds")
+      .select("id, start_time, interval_minutes, start_type")
+      .eq("tournament_id", params.tournamentId)
+      .eq("round_no", nextRoundNo)
+      .maybeSingle();
+    roundRow = data;
+  }
 
   if (!roundRow?.id) {
     return {
@@ -315,6 +343,7 @@ export async function maybeCreateConsolationRoundGroup(
     return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
   };
 
+  const isShotgun = roundRow.start_type === "shotgun";
   const baseMinutes = roundRow.start_time
     ? parseHHMM(String(roundRow.start_time))
     : null;
@@ -325,8 +354,13 @@ export async function maybeCreateConsolationRoundGroup(
       : 10;
   const teeTime =
     baseMinutes != null
-      ? formatHHMM(baseMinutes + (groupNo - 1) * interval)
+      ? isShotgun
+        ? formatHHMM(baseMinutes)
+        : formatHHMM(baseMinutes + (groupNo - 1) * interval)
       : null;
+  const startingHole = isShotgun
+    ? Math.min(18, Math.max(1, groupNo))
+    : null;
 
   const { data: pairs } = await admin
     .from("matchplay_pair_teams")
@@ -405,7 +439,12 @@ export async function maybeCreateConsolationRoundGroup(
     groupRecordId = String(existing.id);
     await admin
       .from("pairing_groups")
-      .update({ group_no: groupNo, tee_time: teeTime, notes })
+      .update({
+        group_no: groupNo,
+        tee_time: teeTime,
+        starting_hole: startingHole,
+        notes,
+      })
       .eq("id", groupRecordId);
     await admin
       .from("pairing_group_members")
@@ -419,7 +458,7 @@ export async function maybeCreateConsolationRoundGroup(
         round_id: nextRoundId,
         group_no: groupNo,
         tee_time: teeTime,
-        starting_hole: null,
+        starting_hole: startingHole,
         notes,
       })
       .select("id")
@@ -545,6 +584,7 @@ export async function routeLoserToConsolationMp(
 
   let groupCreated = false;
   let groupNo: number | null = null;
+  let createdRoundId: string | null = null;
   if (nextRow?.top_pair_id && nextRow.bottom_pair_id) {
     const grp = await maybeCreateConsolationRoundGroup(admin, {
       tournamentId: params.tournamentId,
@@ -553,10 +593,22 @@ export async function routeLoserToConsolationMp(
     });
     groupCreated = grp.created;
     groupNo = grp.groupNo;
+    createdRoundId = grp.roundId;
   }
 
-  if (groupCreated) {
-    await reconcileRoundGroupOrder(admin, params.tournamentId, nextRoundNo);
+  if (groupCreated && createdRoundId) {
+    const { data: cal } = await admin
+      .from("rounds")
+      .select("round_no")
+      .eq("id", createdRoundId)
+      .maybeSingle();
+    if (cal?.round_no != null) {
+      await reconcileRoundGroupOrder(
+        admin,
+        params.tournamentId,
+        Number(cal.round_no)
+      );
+    }
   }
   return {
     routed: true,

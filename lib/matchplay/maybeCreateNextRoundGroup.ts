@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { countConsolationMatchesInRound } from "@/lib/matchplay/consolationMatchPlay";
-import { ensureMatchPlayCalendarRounds } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import {
+  ensureMatchPlayCalendarRounds,
+  findLastMainRound,
+} from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
 
 /**
  * Si el match siguiente del cuadro ya tiene AMBAS parejas asignadas,
@@ -148,12 +150,22 @@ export async function maybeCreateNextRoundGroup(
       : 10;
 
   const positionNo = Number(nextMatch.position_no ?? 1);
-  const consolCount = await countConsolationMatchesInRound(
-    admin,
-    params.tournamentId,
-    nextRoundNo
-  );
-  const groupNo = consolCount + positionNo;
+  const lastMain = await findLastMainRound(admin, params.tournamentId);
+  const lastRoundNo = Number(lastMain?.round_no ?? 0);
+  const { data: consolOnRound } = await admin
+    .from("pairing_groups")
+    .select("id, notes")
+    .eq("round_id", nextRoundId);
+  const consolCount = (consolOnRound ?? []).filter((g) =>
+    String(g.notes ?? "").startsWith("CONSOLACIÓN MP · ")
+  ).length;
+
+  // Domingo R6: consolación (si ya está) · 3er/4to · final.
+  let groupNo = consolCount + positionNo;
+  if (lastRoundNo > 0 && nextRoundNo === lastRoundNo) {
+    if (positionNo === 2) groupNo = consolCount + 1;
+    else if (positionNo === 1) groupNo = consolCount + 2;
+  }
   const teeTime =
     baseMinutes != null
       ? formatHHMM(baseMinutes + (groupNo - 1) * interval)
