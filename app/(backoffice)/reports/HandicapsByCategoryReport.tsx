@@ -160,7 +160,16 @@ export default async function HandicapsByCategoryReport({
     return { ...r, player: p };
   });
   const teeSets: RawTeeSet[] = (teeSetsRes.data ?? []) as RawTeeSet[];
-  const teeSetById = new Map(teeSets.map((t) => [t.id, t]));
+  const teeSetById = new Map<string, RawTeeSet>();
+  for (const t of ctx.tournamentTeeSets) {
+    teeSetById.set(t.id, {
+      id: t.id,
+      code: t.code,
+      name: t.name,
+      color: t.color,
+    });
+  }
+  for (const t of teeSets) teeSetById.set(t.id, t);
 
   type Row = HandicapReportRow;
 

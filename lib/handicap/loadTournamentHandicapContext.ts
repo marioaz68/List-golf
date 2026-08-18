@@ -129,13 +129,50 @@ export async function loadTournamentHandicapContext(
     }
   }
 
+  const tournamentTeeSets = (teeSetsRes.data ?? []).map((t) => ({
+    id: (t as { id: string }).id,
+    code: (t as { code: string | null }).code,
+    name: (t as { name?: string | null }).name ?? null,
+    color: (t as { color?: string | null }).color ?? null,
+  }));
+
+  const knownTeeIds = new Set(tournamentTeeSets.map((t) => t.id));
+  const missingTeeIds = new Set<string>();
+  for (const r of rulesRes.data ?? []) {
+    const id = String((r as { tee_set_id?: string | null }).tee_set_id ?? "").trim();
+    if (id && !knownTeeIds.has(id)) missingTeeIds.add(id);
+  }
+  const { data: overrideRows } = await admin
+    .from("tournament_entries")
+    .select("tee_set_id_override")
+    .eq("tournament_id", tournamentId)
+    .not("tee_set_id_override", "is", null);
+  for (const row of overrideRows ?? []) {
+    const id = String(
+      (row as { tee_set_id_override?: string | null }).tee_set_id_override ?? ""
+    ).trim();
+    if (id && !knownTeeIds.has(id)) missingTeeIds.add(id);
+  }
+  if (missingTeeIds.size > 0) {
+    const { data: extraTees } = await admin
+      .from("tee_sets")
+      .select("id, code, name, color")
+      .in("id", [...missingTeeIds]);
+    for (const t of extraTees ?? []) {
+      const id = (t as { id: string }).id;
+      if (knownTeeIds.has(id)) continue;
+      knownTeeIds.add(id);
+      tournamentTeeSets.push({
+        id,
+        code: (t as { code: string | null }).code,
+        name: (t as { name?: string | null }).name ?? null,
+        color: (t as { color?: string | null }).color ?? null,
+      });
+    }
+  }
+
   return {
-    tournamentTeeSets: (teeSetsRes.data ?? []).map((t) => ({
-      id: (t as { id: string }).id,
-      code: (t as { code: string | null }).code,
-      name: (t as { name?: string | null }).name ?? null,
-      color: (t as { color?: string | null }).color ?? null,
-    })),
+    tournamentTeeSets,
     categoryTeeRules,
     allowancePctByCategory,
     courseTeesByCode,

@@ -83,6 +83,7 @@ export default function CommitteeSelectionClient({
     return m;
   });
   const [q, setQ] = useState("");
+  const [teeFilter, setTeeFilter] = useState<"all" | string>("all");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [savingFlags, setSavingFlags] = useState(false);
@@ -105,22 +106,37 @@ export default function CommitteeSelectionClient({
     [initialRows, suggestByEntry]
   );
 
+  const teeOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of tableRows) {
+      const key = teeBucket(r.tournamentHcp);
+      const label = r.tournamentHcp?.teeName || r.tournamentHcp?.teeCode;
+      if (key !== "sin" && label && !seen.has(key)) seen.set(key, label);
+    }
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], "es"));
+  }, [tableRows]);
+
   const filtered = useMemo(() => {
     const n = q.trim().toLowerCase();
-    if (!n) return tableRows;
     return tableRows.filter((r) => {
+      if (teeFilter !== "all" && teeBucket(r.tournamentHcp) !== teeFilter) {
+        return false;
+      }
+      if (!n) return true;
       const hay = [
         r.playerName,
         r.ghin,
         r.categoryCode,
         String(r.entryHi ?? ""),
         String(r.currentHi ?? ""),
+        r.tournamentHcp?.teeName,
+        r.tournamentHcp?.teeCode,
       ]
         .join(" ")
         .toLowerCase();
       return hay.includes(n);
     });
-  }, [tableRows, q]);
+  }, [tableRows, q, teeFilter]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -386,9 +402,24 @@ export default function CommitteeSelectionClient({
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre, GHIN, categoría…"
+              placeholder="Nombre, GHIN, categoría, salida…"
               className="mt-0.5 block w-64 rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
+          </label>
+          <label className="text-xs font-semibold text-slate-700">
+            Salida
+            <select
+              value={teeFilter}
+              onChange={(e) => setTeeFilter(e.target.value)}
+              className="mt-0.5 block rounded border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="all">Todas</option>
+              {teeOptions.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
           </label>
           <button
             type="button"
@@ -731,6 +762,18 @@ function fmtDelta(v: unknown): string {
   if (n == null) return "—";
   const body = n.toFixed(1);
   return n > 0 ? `+${body}` : body;
+}
+
+function teeBucket(hcp: OfficialHcp80 | null): string {
+  const raw = `${hcp?.teeName ?? ""} ${hcp?.teeCode ?? ""}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (raw.includes("blanc") || raw.includes("wht")) return "blancas";
+  if (raw.includes("dorad") || raw.includes("gld")) return "doradas";
+  if (raw.includes("negr") || raw.includes("blk")) return "negras";
+  if (raw.includes("azul") || raw.includes("blu")) return "azules";
+  return hcp ? "otro" : "sin";
 }
 
 function SalidaDot({ hcp }: { hcp: OfficialHcp80 | null }) {

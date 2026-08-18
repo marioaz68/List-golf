@@ -12,7 +12,7 @@ export type AdminAggregateRow = {
   entry_id: string;
   player_name: string;
   ghin_number: string | null;
-  hi_current: number | null;
+  hp_current: number | null;
   avg_adjustment: number | null;
   suggested_hi: number | null;
   liveCount: number;
@@ -41,14 +41,14 @@ type Props = {
   t: HandicapCommitteeT;
 };
 
-function roundToTenth(value: number): number {
-  return Math.round(value * 10) / 10;
+function roundToStroke(value: number): number {
+  return Math.round(value);
 }
 
-/** Limita un ajuste a [-5, 0] redondeado a paso 0.1. */
-function clampAdjustment(value: number): number {
+/** Ajuste en golpes al HP de torneo: enteros de -5 a 0. */
+function clampHpAdjustment(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  const rounded = roundToTenth(value);
+  const rounded = roundToStroke(value);
   if (rounded > 0) return 0;
   if (rounded < -5) return -5;
   return rounded;
@@ -56,15 +56,20 @@ function clampAdjustment(value: number): number {
 
 function defaultAdjustment(avg: number | null): number {
   if (avg == null || !Number.isFinite(avg)) return 0;
-  return clampAdjustment(avg);
+  return clampHpAdjustment(avg);
 }
 
-function computeFinalHi(
+function computeFinalHp(
   current: number | null,
   adjustment: number
 ): number | null {
   if (current == null || !Number.isFinite(current)) return null;
-  return Math.round((current + adjustment) * 10) / 10;
+  return Math.max(0, current + adjustment);
+}
+
+function formatHpAdj(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  return n > 0 ? `+${n}` : String(n);
 }
 
 export default function AdminAggregateTable({
@@ -91,7 +96,7 @@ export default function AdminAggregateTable({
       // Por defecto solo preseleccionamos filas con votos y ajuste distinto de cero.
       const adj = defaultAdjustment(r.avg_adjustment);
       init[r.entry_id] =
-        r.hi_current != null &&
+        r.hp_current != null &&
         r.avg_adjustment != null &&
         r.liveCount > 0 &&
         adj !== 0;
@@ -112,7 +117,7 @@ export default function AdminAggregateTable({
   );
 
   function updateAdjustment(entryId: string, raw: number) {
-    setAdjustments((prev) => ({ ...prev, [entryId]: clampAdjustment(raw) }));
+    setAdjustments((prev) => ({ ...prev, [entryId]: clampHpAdjustment(raw) }));
   }
 
   function toggleSelected(entryId: string) {
@@ -122,7 +127,7 @@ export default function AdminAggregateTable({
   function selectAllEligible() {
     const next: Record<string, boolean> = {};
     for (const r of rows) {
-      next[r.entry_id] = r.hi_current != null;
+      next[r.entry_id] = r.hp_current != null;
     }
     setSelected(next);
   }
@@ -157,7 +162,7 @@ export default function AdminAggregateTable({
           selected[r.entry_id] &&
           adjustments[r.entry_id] != null &&
           adjustments[r.entry_id] !== 0 &&
-          r.hi_current != null
+          r.hp_current != null
       )
       .map((r) => r.entry_id);
     if (ids.length === 0) return;
@@ -230,7 +235,7 @@ export default function AdminAggregateTable({
                     rows.length > 0 &&
                     rows.every(
                       (r) =>
-                        selected[r.entry_id] || r.hi_current == null
+                        selected[r.entry_id] || r.hp_current == null
                     )
                   }
                   onChange={(e) => {
@@ -261,14 +266,14 @@ export default function AdminAggregateTable({
           <tbody>
             {rows.map((r) => {
               const adj = adjustments[r.entry_id] ?? 0;
-              const finalHi = computeFinalHi(r.hi_current, adj);
+              const finalHp = computeFinalHp(r.hp_current, adj);
               const hasVotes =
                 r.totalVotesIncAbst > 0 ||
                 r.chips.length > 0 ||
                 Boolean(r.trim_annulled) ||
                 Boolean(r.discarded_veto_note) ||
                 Boolean(r.discarded_adj_note);
-              const canEdit = r.hi_current != null;
+              const canEdit = r.hp_current != null;
               const isSel = !!selected[r.entry_id];
               const isBusy = busyEntry === r.entry_id;
               const disableApply = anyDisabled || !canEdit || adj === 0;
@@ -324,7 +329,7 @@ export default function AdminAggregateTable({
                     ) : null}
                   </td>
                   <td className="px-3 py-2 tabular-nums">
-                    {r.hi_current != null ? r.hi_current.toFixed(1) : "—"}
+                    {r.hp_current != null ? r.hp_current : "—"}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
@@ -387,7 +392,7 @@ export default function AdminAggregateTable({
                   </td>
                   <td className="px-3 py-2 tabular-nums">
                     {r.avg_adjustment != null
-                      ? formatAdjustmentLabel(r.avg_adjustment)
+                      ? formatHpAdj(clampHpAdjustment(r.avg_adjustment))
                       : "—"}
                   </td>
                   <td className="px-3 py-2">
@@ -396,8 +401,8 @@ export default function AdminAggregateTable({
                         type="number"
                         min={-5}
                         max={0}
-                        step={0.1}
-                        value={Number(adj.toFixed(1))}
+                        step={1}
+                        value={adj}
                         disabled={anyDisabled}
                         onChange={(ev) =>
                           updateAdjustment(r.entry_id, Number(ev.target.value))
@@ -417,7 +422,7 @@ export default function AdminAggregateTable({
                     )}
                   </td>
                   <td className="px-3 py-2 tabular-nums font-semibold">
-                    {canEdit && finalHi != null ? (
+                    {canEdit && finalHp != null ? (
                       <span
                         className={[
                           "rounded px-2 py-1 tabular-nums",
@@ -426,7 +431,7 @@ export default function AdminAggregateTable({
                             : "bg-emerald-100 text-emerald-900",
                         ].join(" ")}
                       >
-                        {finalHi.toFixed(1)}
+                        {finalHp}
                       </span>
                     ) : (
                       <span className="text-slate-400">—</span>

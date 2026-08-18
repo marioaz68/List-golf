@@ -284,9 +284,9 @@ export default async function ComiteHandicapPage(props: {
   let entriesRaw: Array<Record<string, unknown>> = [];
   {
     const fullSelect =
-      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason";
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, tee_set_id_override, status, flagged_for_committee, flagged_committee_reason";
     const baseSelect =
-      "id, player_id, category_id, handicap_index, status";
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, status";
 
     const fullRes = await entriesClient
       .from("tournament_entries")
@@ -455,6 +455,17 @@ export default async function ComiteHandicapPage(props: {
         });
         course_handicap = calc.course_handicap;
         playing_handicap = calc.playing_handicap;
+      }
+      if (
+        row.playing_handicap_override != null &&
+        Number.isFinite(Number(row.playing_handicap_override))
+      ) {
+        playing_handicap = Math.round(Number(row.playing_handicap_override));
+      } else if (
+        row.playing_handicap != null &&
+        Number.isFinite(Number(row.playing_handicap))
+      ) {
+        playing_handicap = Math.round(Number(row.playing_handicap));
       }
 
       const pid = row.player_id ? String(row.player_id) : "";
@@ -1001,8 +1012,8 @@ export default async function ComiteHandicapPage(props: {
       abstentionsInAverageGlobal
     );
     const suggested =
-      e.handicap_index != null && trim.avg != null
-        ? Math.round((e.handicap_index + trim.avg) * 10) / 10
+      e.playing_handicap != null && trim.avg != null
+        ? Math.max(0, e.playing_handicap + Math.round(trim.avg))
         : null;
     const nDisq = disqualifyByEntry.get(e.entry_id) ?? 0;
     const disc = discardedByEntry.get(e.entry_id);
@@ -1984,8 +1995,8 @@ export default async function ComiteHandicapPage(props: {
                     : 0;
                   const avg = trim.avg;
                   const suggested =
-                    e.handicap_index != null && avg != null
-                      ? Math.round((e.handicap_index + avg) * 10) / 10
+                    e.playing_handicap != null && avg != null
+                      ? Math.max(0, e.playing_handicap + Math.round(avg))
                       : null;
 
                   const chips = (() => {
@@ -2007,9 +2018,9 @@ export default async function ComiteHandicapPage(props: {
                     entry_id: e.entry_id,
                     player_name: e.player_name,
                     ghin_number: e.ghin_number ?? null,
-                    hi_current:
-                      e.handicap_index != null
-                        ? Number(e.handicap_index)
+                    hp_current:
+                      e.playing_handicap != null
+                        ? Number(e.playing_handicap)
                         : null,
                     avg_adjustment: avg ?? null,
                     suggested_hi: suggested,

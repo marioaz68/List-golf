@@ -4,6 +4,7 @@ import {
   CCQ_STROKE_INDEX,
   CCQ_TEES_MEN,
   TEE_HI_CUTOFF,
+  ccqTeeFromLabel,
   type CcqTeeCode,
 } from "./ccqCourse";
 import {
@@ -382,12 +383,24 @@ export async function loadGhinLiveReport(
         entry.tee_set_override_reason != null
           ? String(entry.tee_set_override_reason)
           : null;
-      // Inferir tee desde reason o dejar Blancas/Azules por HI
-      const reason = (teeOverrideReason ?? "").toLowerCase();
-      if (reason.includes("azul")) teeCode = "Azules";
-      else if (reason.includes("dorad")) teeCode = "Doradas";
-      else if (reason.includes("blanc")) teeCode = "Blancas";
-      else teeCode = pickTeeCode(entryHi ?? playerHi);
+      const overrideId = entry.tee_set_id_override
+        ? String(entry.tee_set_id_override).trim()
+        : "";
+      let fromOverride: CcqTeeCode | null = null;
+      if (overrideId) {
+        const { data: ts } = await supabase
+          .from("tee_sets")
+          .select("code, name")
+          .eq("id", overrideId)
+          .maybeSingle();
+        const row = ts as { code?: string | null; name?: string | null } | null;
+        fromOverride =
+          ccqTeeFromLabel(row?.name) ?? ccqTeeFromLabel(row?.code);
+      }
+      teeCode =
+        fromOverride ??
+        ccqTeeFromLabel(teeOverrideReason) ??
+        pickTeeCode(entryHi ?? playerHi);
     }
   }
 
@@ -426,8 +439,8 @@ export async function loadGhinLiveReport(
 
   const tee = CCQ_TEES_MEN[teeCode];
   const computed = hiTorneo != null ? hiToChHp(hiTorneo, tee.slope, tee.cr, tee.par) : null;
-  const ch100 = enrolled && entryCh != null ? entryCh : computed?.ch ?? null;
-  const hp80 = enrolled && entryHp != null ? entryHp : computed?.hp ?? null;
+  const ch100 = computed?.ch ?? (enrolled ? entryCh : null);
+  const hp80 = computed?.hp ?? (enrolled ? entryHp : null);
 
   if (!ghin) {
     return {

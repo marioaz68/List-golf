@@ -40,3 +40,18 @@ export const CALCUTA_2026_HI_WINDOW = {
 
 /** Corte de índice → tee (si no manda la regla de 80 % de tarjetas). */
 export const TEE_HI_CUTOFF = 6.9;
+
+/** Mapea código/nombre/motivo de salida a tee CCQ. Blancas antes que Azules
+ *  para que un ajuste «de azules a blancas» no se quede en Azules. */
+export function ccqTeeFromLabel(raw: string | null | undefined): CcqTeeCode | null {
+  const n = String(raw ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!n.trim()) return null;
+  if (n.includes("blanc") || n.includes("wht")) return "Blancas";
+  if (n.includes("dorad") || n.includes("gld") || n.includes("oro")) return "Doradas";
+  if (n.includes("negr") || n.includes("blk")) return "Negras";
+  if (n.includes("azul") || n.includes("blu")) return "Azules";
+  return null;
+}

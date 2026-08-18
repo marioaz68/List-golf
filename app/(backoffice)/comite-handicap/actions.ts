@@ -11,6 +11,8 @@ import {
 } from "@/lib/handicap-committee/constants";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
 import { loadEligibleCommitteeVoterIds } from "@/lib/handicap-committee/eligibleVoters";
+import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import { resolveOfficialHcp80 } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -192,12 +194,10 @@ export async function saveHandicapCommitteeVote(formData: FormData) {
 }
 
 /**
- * Resuelve el ajuste que se aplicará al HI del torneo para una sola
- * inscripción. Permite override (cuando el admin redondea el promedio del
- * comité en la tabla agregada) o, si no se pasa, recalcula el promedio
- * recortado actual y lo usa.
+ * Resuelve el ajuste en golpes al handicap de torneo (HP) para una
+ * inscripción. El índice no se modifica.
  *
- * Devuelve `{ ok: true, current, adjustment, nextHi }` o `{ ok: false, error }`.
+ * Devuelve `{ ok: true, current, adjustment, nextHp }` o `{ ok: false, error }`.
  */
 async function computeApplyForEntry(
   admin: ReturnType<typeof tryCreateAdminClient> extends infer T
@@ -215,7 +215,7 @@ async function computeApplyForEntry(
       ok: true;
       adjustment: number;
       current: number;
-      nextHi: number;
+      nextHp: number;
     }
   | { ok: false; error: string }
 > {
@@ -277,7 +277,9 @@ async function computeApplyForEntry(
 
   const { data: entry, error: eErr } = await admin
     .from("tournament_entries")
-    .select("id, handicap_index")
+    .select(
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, tee_set_id_override"
+    )
     .eq("id", entry_id)
     .eq("tournament_id", tournament_id)
     .single();
@@ -286,14 +288,63 @@ async function computeApplyForEntry(
     return { ok: false, error: "entry_not_found" };
   }
 
-  const current =
-    entry.handicap_index != null ? Number(entry.handicap_index) : null;
-  if (current == null || !Number.isFinite(current)) {
-    return { ok: false, error: "no_hi" };
+  let currentHp =
+    entry.playing_handicap_override != null &&
+    Number.isFinite(Number(entry.playing_handicap_override))
+      ? Math.round(Number(entry.playing_handicap_override))
+      : entry.playing_handicap != null &&
+          Number.isFinite(Number(entry.playing_handicap))
+        ? Math.round(Number(entry.playing_handicap))
+        : null;
+  if (currentHp == null) {
+    const ctx = await loadTournamentHandicapContext(admin, tournament_id);
+    const { data: player } = entry.player_id
+      ? await admin
+          .from("players")
+          .select("gender, birth_year, handicap_index, handicap_torneo")
+          .eq("id", entry.player_id)
+          .maybeSingle()
+      : { data: null };
+    const hcp = resolveOfficialHcp80(
+      {
+        id: String(entry.id),
+        player_id: entry.player_id ? String(entry.player_id) : "",
+        category_id: entry.category_id ? String(entry.category_id) : null,
+        handicap_index:
+          entry.handicap_index != null ? Number(entry.handicap_index) : null,
+        tee_set_id_override: entry.tee_set_id_override
+          ? String(entry.tee_set_id_override)
+          : null,
+        player: player
+          ? {
+              gender: (player as { gender?: string | null }).gender ?? null,
+              birth_year:
+                (player as { birth_year?: number | null }).birth_year ?? null,
+              handicap_index:
+                (player as { handicap_index?: number | null }).handicap_index ??
+                null,
+              handicap_torneo:
+                (player as { handicap_torneo?: number | null })
+                  .handicap_torneo ?? null,
+            }
+          : null,
+      },
+      ctx
+    );
+    currentHp = hcp?.hp ?? null;
+  }
+  if (currentHp == null) {
+    return { ok: false, error: "no_hp" };
   }
 
-  const nextHi = Math.round((current + adjustmentToApply) * 10) / 10;
-  return { ok: true, adjustment: adjustmentToApply, current, nextHi };
+  const strokes = Math.round(adjustmentToApply);
+  const nextHp = Math.max(0, currentHp + strokes);
+  return {
+    ok: true,
+    adjustment: strokes,
+    current: currentHp,
+    nextHp,
+  };
 }
 
 export async function applyHandicapCommitteeSuggestion(formData: FormData) {
@@ -348,7 +399,7 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
       trim_empty:
         "El recorte deja menos de un voto vivo; ajusta los parámetros.",
       entry_not_found: "Inscripción no encontrada.",
-      no_hi: "El jugador no tiene HI en el torneo.",
+      no_hp: "El jugador no tiene handicap de torneo para ajustar.",
     };
     redirectWith(tournament_id, {
       err: map[res.error] ?? res.error,
@@ -359,7 +410,13 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
 
   const { error: updErr } = await admin
     .from("tournament_entries")
-    .update({ handicap_index: res.nextHi })
+    .update({
+      playing_handicap: res.nextHp,
+      playing_handicap_override: res.nextHp,
+      playing_handicap_override_reason: `Comité: ${res.adjustment} al handicap de torneo`,
+      playing_handicap_override_at: new Date().toISOString(),
+      playing_handicap_override_by: user.id,
+    })
     .eq("id", entry_id);
 
   if (updErr) {
@@ -373,12 +430,12 @@ export async function applyHandicapCommitteeSuggestion(formData: FormData) {
 }
 
 /**
- * Aplica el HI ajustado para varias inscripciones a la vez. Por cada
+ * Aplica el HP de torneo ajustado para varias inscripciones. Por cada
  * inscripción incluida, el formulario debe traer:
  *   - entry_ids = "id1,id2,id3,..."
- *   - adj_<id> = "-0.5" (ajuste redondeado por el admin)
+ *   - adj_<id> = "-1" (ajuste en golpes al handicap de torneo)
  *
- * Las inscripciones que no traigan adjuste se ignoran (no se modifica su HI).
+ * Las inscripciones que no traigan ajuste se ignoran (no se modifica su HP).
  */
 export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) {
   const tournament_id = reqStr(formData, "tournament_id");
@@ -453,7 +510,13 @@ export async function applyHandicapCommitteeSuggestionsBulk(formData: FormData) 
     }
     const { error: updErr } = await admin
       .from("tournament_entries")
-      .update({ handicap_index: res.nextHi })
+      .update({
+        playing_handicap: res.nextHp,
+        playing_handicap_override: res.nextHp,
+        playing_handicap_override_reason: `Comité: ${res.adjustment} al handicap de torneo`,
+        playing_handicap_override_at: new Date().toISOString(),
+        playing_handicap_override_by: user.id,
+      })
       .eq("id", entry_id);
     if (updErr) {
       failures.push(entry_id);

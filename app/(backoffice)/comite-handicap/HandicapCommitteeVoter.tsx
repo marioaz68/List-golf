@@ -162,6 +162,7 @@ export default function HandicapCommitteeVoter({
         e.club_label,
         e.category_code,
         String(e.handicap_index ?? ""),
+        String(e.playing_handicap ?? ""),
       ]
         .filter(Boolean)
         .join(" ")
@@ -477,7 +478,7 @@ export default function HandicapCommitteeVoter({
                           ) : null}
                         </td>
                         <td className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left">
-                          {e.handicap_index ?? "—"}
+                          {e.playing_handicap ?? "—"}
                         </td>
                         <td
                           className="px-1 py-1.5 text-center tabular-nums sm:px-3 sm:py-2 sm:text-left"
@@ -616,7 +617,7 @@ export default function HandicapCommitteeVoter({
                                     {vt.expandedHi}
                                   </div>
                                   <div className="font-bold tabular-nums">
-                                    {e.handicap_index ?? "—"}
+                                    {e.playing_handicap ?? "—"}
                                   </div>
                                 </div>
                                 <div className="rounded bg-white px-1.5 py-1 text-center">
@@ -1228,7 +1229,7 @@ function PlayerVoteCard({
               {c.summaryHiCurrent}
             </div>
             <div className="mt-0.5 text-sm font-bold tabular-nums text-slate-950">
-              {entry.handicap_index ?? "—"}
+              {entry.playing_handicap ?? "—"}
             </div>
           </div>
           <div>
