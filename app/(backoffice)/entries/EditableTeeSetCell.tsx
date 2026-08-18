@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { updateEntryTeeSetOverrideAction } from "./actions";
 
 export type TeeSetOption = {
@@ -59,6 +60,7 @@ export default function EditableTeeSetCell({
   assignedTeeSetId: string | null;
   overrideTeeSetId: string | null;
 }) {
+  const router = useRouter();
   const [override, setOverride] = useState<string | null>(overrideTeeSetId);
   const [pending, startTx] = useTransition();
   const [feedback, setFeedback] = useState<
@@ -88,7 +90,8 @@ export default function EditableTeeSetCell({
         fd.set("tournament_id", tournamentId);
         if (next) fd.set("tee_set_id", next);
         await updateEntryTeeSetOverrideAction(fd);
-        setFeedback({ kind: "ok", text: next ? "Salida actualizada" : "Override quitado" });
+        setFeedback({ kind: "ok", text: next ? "Salida y handicap actualizados" : "Override quitado" });
+        router.refresh();
         setTimeout(() => setFeedback(null), 1500);
       } catch (err) {
         setOverride(overrideTeeSetId); // rollback
@@ -130,7 +133,7 @@ export default function EditableTeeSetCell({
           className={`h-6 max-w-[110px] rounded border bg-white px-1 text-[10px] ${
             pending ? "opacity-50" : ""
           }`}
-          title="Cambiar la salida (color) que se muestra al jugador. No afecta HC ni PH."
+          title="Cambiar la salida. Recalcula CH y PH y se refleja en reportes, tarjetas, grupos y comité."
         >
           <option value="">— Auto —</option>
           {teeSets.map((tee) => (

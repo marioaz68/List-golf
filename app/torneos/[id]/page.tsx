@@ -1207,6 +1207,7 @@ export default async function PublicTournamentPage({
               id,
               handicap_index,
               category_id,
+              tee_set_id_override,
               player:players (
                 id,
                 first_name,
@@ -1279,7 +1280,12 @@ export default async function PublicTournamentPage({
     handicap_index: number | null;
     category_id: string | null;
     birth_year: number | null;
+    tee_set_id_override?: string | null;
   }): { color: string | null; name: string | null } {
+    if (p.tee_set_id_override) {
+      const tee = publicTeeSetById.get(p.tee_set_id_override);
+      if (tee) return { color: tee.color ?? null, name: tee.name ?? null };
+    }
     if (!p.category_id) return { color: null, name: null };
     const age =
       p.birth_year && p.birth_year > 0
@@ -1348,6 +1354,7 @@ export default async function PublicTournamentPage({
       handicap_index: te?.handicap_index ?? null,
       category_id: memberCategoryId,
       birth_year: player?.birth_year ?? null,
+      tee_set_id_override: te?.tee_set_id_override ?? null,
     });
 
     const member: PairingMember = {

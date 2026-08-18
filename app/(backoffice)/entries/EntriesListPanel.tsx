@@ -1109,7 +1109,7 @@ ${res.witness_url}`;
               <th className="px-1 py-1 text-left">{te.thCat}</th>
               <th
                 className="px-1 py-1 text-left"
-                title="Salida (color de tee). Por defecto la calcula la regla de categoría. El comité puede cambiarla manualmente; el cambio NO afecta HC ni PH."
+                title="Salida (color de tee). Por defecto la calcula la regla de categoría. Si el comité la cambia, se recalculan CH/PH y se actualizan reportes, tarjetas, grupos y comité."
               >
                 Salida
               </th>

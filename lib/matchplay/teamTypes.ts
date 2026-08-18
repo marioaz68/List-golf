@@ -21,6 +21,8 @@ export type MatchPlayEntryRow = {
   category_id: string | null;
   category_code: string | null;
   category_name: string | null;
+  /** Salida forzada en inscritos; manda sobre category_tee_rules. */
+  tee_set_id_override?: string | null;
 };
 
 export type MatchPlayTeamRow = {

@@ -164,6 +164,7 @@ function playersOrderedMaleFirst(
         gender: entry.player.gender,
         handicap_index: entry.handicap_index ?? entry.effective_hi ?? null,
         category_id: entry.category_id ?? null,
+        tee_set_id_override: entry.tee_set_id_override ?? null,
       },
       teeRules,
       teeSets,
@@ -192,11 +193,17 @@ function resolveTeeForPlayer(
     gender: "M" | "F" | "X" | null;
     handicap_index: number | null;
     category_id: string | null;
+    tee_set_id_override?: string | null;
   },
   rules: TeeRuleLite[],
   teeSets: TeeSetLite[],
   birthYear: number | null
 ): TeeSetLite | null {
+  const overrideId = player.tee_set_id_override?.trim() || null;
+  if (overrideId) {
+    const tee = teeSets.find((t) => t.id === overrideId);
+    if (tee) return tee;
+  }
   if (!player.category_id) return null;
   const age =
     birthYear != null && birthYear > 0

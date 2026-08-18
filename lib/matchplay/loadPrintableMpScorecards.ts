@@ -408,6 +408,11 @@ function buildResolveTee(
     teeColor: string | null;
   } => {
     if (!entry) return { teeName: null, teeColor: null };
+    const overrideId = entry.tee_set_id_override?.trim() || null;
+    if (overrideId) {
+      const tee = teeSetById.get(overrideId);
+      if (tee) return { teeName: tee.name, teeColor: tee.color };
+    }
     const categoryId = entry.category_id;
     if (!categoryId) return { teeName: null, teeColor: null };
     const birthYear = birthYearByPlayerId.get(entry.player_id) ?? null;

@@ -22,10 +22,13 @@ function scoreName(golferName: string, first: string, last: string): number {
   const firstToks = tokens(first);
   const lastToks = tokens(last);
   if (firstToks.length === 0 || lastToks.length === 0) return 0;
-  const firstHit = firstToks.some((t) => got.has(t));
+  const query = new Set([...firstToks, ...lastToks]);
+  const firstHits = firstToks.filter((t) => got.has(t)).length;
   const lastHits = lastToks.filter((t) => got.has(t)).length;
-  if (!firstHit || lastHits === 0) return 0;
-  return lastHits * 10 + firstToks.filter((t) => got.has(t)).length;
+  if (firstHits === 0 || lastHits === 0) return 0;
+  // Penaliza tokens extra en GHIN (Concepcion Vega vs Concepcion Valverde).
+  const extra = [...got].filter((t) => !query.has(t)).length;
+  return lastHits * 10 + firstHits - extra * 5;
 }
 
 /**
@@ -43,15 +46,31 @@ export async function lookupGhinByPlayerName(
 
   const lastToks = tokens(last);
   const firstToks = tokens(first);
-  const needle = lastToks[0] ?? firstToks[0];
-  if (!needle || needle.length < 3) return null;
+  const needles = [...new Set([...lastToks, ...firstToks])].filter(
+    (t) => t.length >= 3
+  );
+  if (needles.length === 0) return null;
 
-  const { data, error } = await admin
+  const orFilter = needles
+    .slice(0, 4)
+    .map((n) => `golfer_name.ilike.%${n}%`)
+    .join(",");
+
+  let { data, error } = await admin
     .from("ghin_index_revisions")
     .select("ghin_number, golfer_name")
-    .ilike("golfer_name", `%${needle}%`)
-    .limit(400);
-  if (error || !data?.length) return null;
+    .or(orFilter)
+    .limit(800);
+
+  if (error || !data?.length) {
+    const rounds = await admin
+      .from("ghin_rounds")
+      .select("ghin_number, golfer_name")
+      .or(orFilter)
+      .limit(400);
+    if (rounds.error || !rounds.data?.length) return null;
+    data = rounds.data;
+  }
 
   const best = new Map<string, { score: number; name: string }>();
   for (const row of data) {

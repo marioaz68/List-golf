@@ -17,6 +17,7 @@ import {
   buildPromptDownloadFilename,
   type FlaggedPlayerForPrompt,
 } from "@/lib/handicap-committee/claudePromptTemplate";
+import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -2144,11 +2145,8 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
 
 /**
  * Cambia manualmente la salida (tee set) asignada a un jugador inscrito.
- *
- * Esta operación NO recalcula HC ni PH: la salida override solo se usa
- * para mostrar al jugador y a su grupo (pairing/tee-sheet/kit). Si se
- * pasa `tee_set_id` vacío/null, se limpia el override y vuelve a usar la
- * salida calculada por las reglas de categoría.
+ * Recalcula CH/PH de ese inscrito con la salida nueva (o con las reglas
+ * de categoría si se limpia el override).
  */
 export async function updateEntryTeeSetOverrideAction(formData: FormData) {
   const entryId = reqStr(formData, "entry_id");
@@ -2199,9 +2197,19 @@ export async function updateEntryTeeSetOverrideAction(formData: FormData) {
     .eq("id", entryId);
   if (upErr) throw new Error(upErr.message);
 
+  await recomputeTournamentHandicaps(admin, tournamentId, {
+    entryIds: [entryId],
+  });
+
   revalidatePath(`/entries`);
   revalidatePath(`/tournaments/${tournamentId}`);
   revalidatePath(`/tee-sheet`);
+  revalidatePath(`/reports`);
+  revalidatePath(`/matchplay`);
+  revalidatePath(`/scorecards-mp`);
+  revalidatePath(`/comite-handicap`);
+  revalidatePath(`/torneos/${tournamentId}`);
+  revalidatePath(`/torneos/${tournamentId}/cuadro-vivo`);
 
   return { ok: true, entryId, teeSetId };
 }

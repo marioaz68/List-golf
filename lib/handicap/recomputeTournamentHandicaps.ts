@@ -10,22 +10,30 @@ export type RecomputeTournamentHandicapsResult = {
 };
 
 /**
- * Recalcula CH/PH de todos los inscritos del torneo según:
- * categoría → salida (category_tee_rules) → WHS (slope/rating) → % competencia.
+ * Recalcula CH/PH de los inscritos del torneo según:
+ * override de salida (si hay) → categoría → category_tee_rules → WHS → % competencia.
  */
 export async function recomputeTournamentHandicaps(
   admin: SupabaseClient,
-  tournamentId: string
+  tournamentId: string,
+  options?: { entryIds?: string[] }
 ): Promise<RecomputeTournamentHandicapsResult> {
   const ctx = await loadTournamentHandicapContext(admin, tournamentId);
 
-  const { data: entries } = await admin
+  let query = admin
     .from("tournament_entries")
     .select(
       "id, player_id, category_id, handicap_index, playing_handicap_override, tee_set_id_override, players:players(gender, birth_year, handicap_index, handicap_torneo)"
     )
     .eq("tournament_id", tournamentId)
     .neq("status", "cancelled");
+
+  const entryIds = (options?.entryIds ?? []).filter(Boolean);
+  if (entryIds.length > 0) {
+    query = query.in("id", entryIds);
+  }
+
+  const { data: entries } = await query;
 
   let updated = 0;
   let skipped_no_tee = 0;

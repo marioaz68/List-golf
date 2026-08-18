@@ -23,6 +23,7 @@ type RawEntry = {
   playing_handicap: number | null;
   playing_handicap_override: number | null;
   playing_handicap_override_reason: string | null;
+  tee_set_id_override?: string | null;
   status: string | null;
   players: {
     id: string;
@@ -92,6 +93,9 @@ function mapEntry(raw: RawEntry): MatchPlayEntryRow {
     category_id: cat?.id ?? null,
     category_code: cat?.code ?? null,
     category_name: cat?.name ?? null,
+    tee_set_id_override: raw.tee_set_id_override
+      ? String(raw.tee_set_id_override)
+      : null,
   };
   row.effective_hi = effectiveEntryHi(row);
   return row;

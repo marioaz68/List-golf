@@ -1070,31 +1070,16 @@ export default async function EntriesPage({
             : null,
         };
         const official_hcp_80 = resolveOfficialHcp80(entryForHcp, handicapCtx);
-
-        if (e.course_handicap != null && e.playing_handicap != null) {
-          return {
-            ...e,
-            allowance_pct_applied,
-            tee_set_id_assigned,
-            official_hcp_80,
-          };
-        }
         const calc = resolveTournamentEntryHandicap(entryForHcp, handicapCtx);
-        if (!calc) {
-          return {
-            ...e,
-            allowance_pct_applied,
-            tee_set_id_assigned,
-            official_hcp_80,
-          };
-        }
+
         return {
           ...e,
-          course_handicap: e.course_handicap ?? calc.course_handicap,
+          course_handicap:
+            calc?.course_handicap ?? e.course_handicap ?? null,
           playing_handicap:
             e.playing_handicap_override != null
-              ? e.playing_handicap
-              : e.playing_handicap ?? calc.playing_handicap,
+              ? Math.round(Number(e.playing_handicap_override))
+              : calc?.playing_handicap ?? e.playing_handicap ?? null,
           allowance_pct_applied,
           tee_set_id_assigned,
           official_hcp_80,
