@@ -164,9 +164,9 @@ export default async function HandicapsByCategoryReport({
   for (const t of ctx.tournamentTeeSets) {
     teeSetById.set(t.id, {
       id: t.id,
-      code: t.code,
-      name: t.name,
-      color: t.color,
+      code: t.code ?? null,
+      name: t.name ?? null,
+      color: t.color ?? null,
     });
   }
   for (const t of teeSets) teeSetById.set(t.id, t);
