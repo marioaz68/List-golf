@@ -36,14 +36,15 @@ function addCalendarDays(iso: string, days: number): string {
  *  R6 dom 10:00 final consolación, 10:10 3er/4to, 10:20 final.
  */
 export function calcutaPairsRoundPlan(roundCount: number): RoundPlan[] {
-  return [
+  const plan: RoundPlan[] = [
     { round_no: 1, offsetDays: 0, start_time: "07:00", wave: "AM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
     { round_no: 2, offsetDays: 0, start_time: "12:30", wave: "PM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
     { round_no: 3, offsetDays: 1, start_time: "08:00", wave: "AM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
     { round_no: 4, offsetDays: 2, start_time: "07:00", wave: "AM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
     { round_no: 5, offsetDays: 2, start_time: "12:30", wave: "PM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
     { round_no: 6, offsetDays: 3, start_time: "10:00", wave: "AM", start_type: "tee_time", interval_minutes: 10, group_size: 4 },
-  ].filter((p) => p.round_no <= roundCount);
+  ];
+  return plan.filter((p) => p.round_no <= roundCount);
 }
 
 function sequentialRoundPlan(roundCount: number): RoundPlan[] {
