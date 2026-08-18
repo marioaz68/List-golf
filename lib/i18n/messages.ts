@@ -12,6 +12,8 @@ const es = {
   },
   nav: {
     enter: "Entrar",
+    signOut: "Salir",
+    signOutTitle: "Cerrar sesión para entrar con otro usuario",
   },
   sidebar: {
     activeTournament: "Torneo activo",
@@ -1741,6 +1743,8 @@ const en: Messages = {
   },
   nav: {
     enter: "Sign in",
+    signOut: "Sign out",
+    signOutTitle: "Sign out so another user can sign in",
   },
   sidebar: {
     activeTournament: "Active tournament",

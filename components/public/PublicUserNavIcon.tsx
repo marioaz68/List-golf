@@ -37,15 +37,26 @@ export async function PublicUserNavIcon() {
         ? "/comite-handicap"
         : "/tournaments";
       return (
-        <UserNavIconLink
-          href={homeHref}
-          label={pub.adminList}
-          title={email}
-          className={userChipClass}
-          iconClassName="h-5 w-5 text-cyan-300"
-          showLabel
-          labelText={displayName}
-        />
+        <div className="flex items-center gap-1">
+          <UserNavIconLink
+            href={homeHref}
+            label={pub.adminList}
+            title={email}
+            className={userChipClass}
+            iconClassName="h-5 w-5 text-cyan-300"
+            showLabel
+            labelText={displayName}
+          />
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 px-2.5 text-xs font-semibold text-white transition hover:bg-white/20 sm:px-3 sm:text-sm"
+              title={nav.signOutTitle}
+            >
+              {nav.signOut}
+            </button>
+          </form>
+        </div>
       );
     }
   } catch {

@@ -8,7 +8,6 @@ import {
   missingPublicSupabaseEnvMessage,
 } from "@/lib/supabaseEnv";
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
-import { PublicTopBarCorner } from "@/components/public/PublicTopBarCorner";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import { committeeVotePath } from "@/lib/handicap-committee/committeeOnlyPublic";
 
@@ -453,9 +452,6 @@ export default async function HomePage({
         <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5 sm:px-5">
           <div className="flex shrink-0 justify-start">
             <PublicInstallShortcut locale={locale} />
-          </div>
-          <div className="flex shrink-0 justify-end">
-            <PublicTopBarCorner locale={locale} />
           </div>
         </div>
 
