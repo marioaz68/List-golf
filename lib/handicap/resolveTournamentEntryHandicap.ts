@@ -11,6 +11,7 @@ import {
   type WhsTeeData,
 } from "@/lib/handicap/whs";
 import { hiToChHpAtPct } from "@/lib/ghin-report/handicapMath";
+import { TEE_HI_CUTOFF } from "@/lib/ghin-report/ccqCourse";
 
 export type CourseTeeForHandicap = {
   code: string | null;
@@ -83,13 +84,36 @@ export function normalizeTeeName(s: string | null | undefined): string {
     .toLowerCase();
 }
 
+const TEE_CODE_ALIASES: Record<string, string[]> = {
+  AZUL: ["AZUL", "BLU"],
+  BLU: ["BLU", "AZUL"],
+  BLANC: ["BLANC", "WHT"],
+  WHT: ["WHT", "BLANC"],
+  DORAD: ["DORAD", "GLD"],
+  GLD: ["GLD", "DORAD"],
+  NEGRA: ["NEGRA", "NEGRAS", "BLK"],
+  BLK: ["BLK", "NEGRA", "NEGRAS"],
+};
+
+function colorFromTeeLabel(label: string | null | undefined): string | null {
+  const n = normalizeTeeName(label);
+  if (!n) return null;
+  if (n.includes("azul")) return "#2563eb";
+  if (n.includes("blanc") || n === "wht") return "#f8fafc";
+  if (n.includes("dorad") || n.includes("oro") || n === "gld") return "#d4af37";
+  if (n.includes("negr") || n === "blk") return "#111827";
+  if (n.includes("roj")) return "#dc2626";
+  return null;
+}
+
 function findCourseTee(
   ctx: TournamentHandicapContext,
   tee: TournamentTeeSetLite
 ): CourseTeeForHandicap | null {
   const code = normalizeTeeCode(tee.code);
-  if (code) {
-    const hit = ctx.courseTeesByCode.get(code);
+  const aliases = code ? TEE_CODE_ALIASES[code] ?? [code] : [];
+  for (const alias of aliases) {
+    const hit = ctx.courseTeesByCode.get(alias);
     if (hit) return hit;
   }
   const nameNorm = normalizeTeeName(tee.name ?? tee.code ?? null);
@@ -101,6 +125,59 @@ function findCourseTee(
   if (colorNorm && ctx.courseTeesByColor) {
     const hit = ctx.courseTeesByColor.get(colorNorm);
     if (hit) return hit;
+  }
+  return null;
+}
+
+function teeVisual(
+  tournamentTee?: TournamentTeeSetLite | null,
+  courseTee?: CourseTeeForHandicap | null
+): { tee_code: string | null; tee_name: string | null; tee_color: string | null } {
+  const name =
+    tournamentTee?.name ??
+    courseTee?.name ??
+    tournamentTee?.code ??
+    courseTee?.code ??
+    null;
+  const code =
+    normalizeTeeCode(tournamentTee?.code) ||
+    normalizeTeeCode(courseTee?.code) ||
+    name;
+  const color =
+    (tournamentTee?.color && tournamentTee.color.trim()) ||
+    (courseTee?.color && courseTee.color.trim()) ||
+    colorFromTeeLabel(name) ||
+    colorFromTeeLabel(code);
+  return {
+    tee_code: code || null,
+    tee_name: name,
+    tee_color: color,
+  };
+}
+
+function pickCourseTeeByHi(
+  ctx: TournamentHandicapContext,
+  hi: number,
+  gender: "M" | "F" | "X"
+): {
+  tee: WhsTeeData;
+  tee_code: string | null;
+  tee_name: string | null;
+  tee_color: string | null;
+} | null {
+  const prefer =
+    Number.isFinite(hi) && hi <= TEE_HI_CUTOFF
+      ? ["azules", "azul"]
+      : ["blancas", "blanc"];
+  const names = ctx.courseTeesByNameNorm;
+  if (!names) return null;
+  for (const key of prefer) {
+    const row = names.get(key);
+    if (!row) continue;
+    const tee = whsFromCourseTee(row, gender);
+    if (!tee) continue;
+    const visual = teeVisual(null, row);
+    return { tee, ...visual };
   }
   return null;
 }
@@ -132,6 +209,8 @@ type ResolvedTee = {
   tee: WhsTeeData;
   allowance_pct: number;
   tee_code: string | null;
+  tee_name: string | null;
+  tee_color: string | null;
   /** HI efectivo a usar para WHS. Si la regla del torneo tiene un tope
    *  (handicap_max) y el HI del jugador lo rebasa, aquí viene capado al
    *  máximo a jugar. */
@@ -171,12 +250,11 @@ function resolveWhsTeeForEntry(
       if (courseTee) {
         const tee = whsFromCourseTee(courseTee, gender);
         if (tee) {
+          const visual = teeVisual(tournamentTee, courseTee);
           return {
             tee,
             allowance_pct,
-            tee_code:
-              normalizeTeeCode(tournamentTee.code) ||
-              (tournamentTee.name ?? null),
+            ...visual,
             effective_hi: hi,
             hi_cap_source: null,
           };
@@ -196,9 +274,23 @@ function resolveWhsTeeForEntry(
         tee,
         allowance_pct,
         tee_code: null,
+        tee_name: null,
+        tee_color: null,
         effective_hi: hi,
         hi_cap_source: null,
       };
+    const byHi = pickCourseTeeByHi(ctx, hi, gender);
+    if (byHi) {
+      return {
+        tee: byHi.tee,
+        allowance_pct,
+        tee_code: byHi.tee_code,
+        tee_name: byHi.tee_name,
+        tee_color: byHi.tee_color,
+        effective_hi: hi,
+        hi_cap_source: null,
+      };
+    }
     return null;
   }
 
@@ -244,12 +336,11 @@ function resolveWhsTeeForEntry(
               hi_cap_source = "rule_min";
             }
           }
+          const visual = teeVisual(tournamentTee, courseTee);
           return {
             tee,
             allowance_pct,
-            tee_code:
-              normalizeTeeCode(tournamentTee.code) ||
-              (tournamentTee.name ?? null),
+            ...visual,
             effective_hi,
             hi_cap_source,
           };
@@ -266,9 +357,24 @@ function resolveWhsTeeForEntry(
       tee,
       allowance_pct,
       tee_code: null,
+      tee_name: null,
+      tee_color: null,
       effective_hi: hi,
       hi_cap_source: null,
     };
+
+  const byHi = pickCourseTeeByHi(ctx, hi, gender);
+  if (byHi) {
+    return {
+      tee: byHi.tee,
+      allowance_pct,
+      tee_code: byHi.tee_code,
+      tee_name: byHi.tee_name,
+      tee_color: byHi.tee_color,
+      effective_hi: hi,
+      hi_cap_source: null,
+    };
+  }
 
   return null;
 }
@@ -282,11 +388,13 @@ export type OfficialHcp80 = {
   course_rating: number;
   par: number;
   teeCode: string | null;
+  teeName?: string | null;
+  teeColor?: string | null;
   /** % de reglas del torneo (80, 100, …). */
   allowancePct?: number;
 };
 
-/** H del torneo: CH_exact × % de la regla del torneo (half-up). */
+/** HP oficial del torneo: siempre CH_exact × 80% (half-up). */
 export function resolveOfficialHcp80(
   entry: EntryForHandicap,
   ctx: TournamentHandicapContext
@@ -295,12 +403,12 @@ export function resolveOfficialHcp80(
   if (!resolved) return null;
   const hi = resolved.effective_hi;
   if (!Number.isFinite(hi)) return null;
-  const { chExact, ch, hp, allowancePct } = hiToChHpAtPct(
+  const { chExact, ch, hp } = hiToChHpAtPct(
     hi,
     resolved.tee.slope,
     resolved.tee.course_rating,
     resolved.tee.par,
-    resolved.allowance_pct
+    80
   );
   return {
     hp,
@@ -311,14 +419,15 @@ export function resolveOfficialHcp80(
     course_rating: resolved.tee.course_rating,
     par: resolved.tee.par,
     teeCode: resolved.tee_code,
-    allowancePct,
+    teeName: resolved.tee_name,
+    teeColor: resolved.tee_color,
+    allowancePct: 80,
   };
 }
 
 export function formatOfficialHcp80Detail(d: OfficialHcp80): string {
   const tee = d.teeCode ? ` · ${d.teeCode}` : "";
-  const pct = d.allowancePct != null && d.allowancePct > 0 ? d.allowancePct : 80;
-  return `HI ${d.hi.toFixed(1)}${tee} · Slope ${d.slope} · CR ${d.course_rating} · Par ${d.par} · CH ${d.chExact.toFixed(2)} → ${d.ch} · ${pct}% = ${d.hp}`;
+  return `HP al 80% · HI ${d.hi.toFixed(1)}${tee} · Slope ${d.slope} · CR ${d.course_rating} · Par ${d.par} · CH ${d.chExact.toFixed(2)} → ${d.ch} · 80% = ${d.hp}`;
 }
 
 /**

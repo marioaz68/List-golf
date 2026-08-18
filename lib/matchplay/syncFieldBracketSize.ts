@@ -25,7 +25,7 @@ export async function syncMatchPlayBracketSizeFromField(
 ): Promise<SyncFieldBracketSizeResult | { ok: false; error: string }> {
   const { data: tournament } = await admin
     .from("tournaments")
-    .select("id")
+    .select("id, settings")
     .eq("id", tournamentId)
     .maybeSingle();
   if (!tournament) {
@@ -34,7 +34,7 @@ export async function syncMatchPlayBracketSizeFromField(
 
   const { data: rules } = await admin
     .from("tournament_matchplay_rules")
-    .select("id, match_type")
+    .select("id, match_type, config_json")
     .eq("tournament_id", tournamentId)
     .maybeSingle();
   if (!rules) {
@@ -70,16 +70,58 @@ export async function syncMatchPlayBracketSizeFromField(
   const bracketSize = fieldBracketSize(unitCount, 64);
   const roundCount = roundCountForBracketSize(bracketSize);
 
+  const prevCfg =
+    rules.config_json && typeof rules.config_json === "object"
+      ? (rules.config_json as Record<string, unknown>)
+      : {};
+
   const { error } = await admin
     .from("tournament_matchplay_rules")
     .update({
       bracket_main_pairs: bracketSize,
       bracket_round_count: roundCount,
+      max_pairs_per_category: bracketSize,
+      config_json: {
+        ...prevCfg,
+        bracket_main_pairs: bracketSize,
+        bracket_round_count: roundCount,
+        max_pairs_per_category: bracketSize,
+      },
       updated_at: new Date().toISOString(),
     })
     .eq("tournament_id", tournamentId);
 
   if (error) return { ok: false, error: error.message };
+
+  const prevSettings =
+    tournament.settings && typeof tournament.settings === "object"
+      ? (tournament.settings as Record<string, unknown>)
+      : {};
+  const prevFormat =
+    prevSettings.format && typeof prevSettings.format === "object"
+      ? (prevSettings.format as Record<string, unknown>)
+      : {};
+  const prevMatchplay =
+    prevSettings.matchplay && typeof prevSettings.matchplay === "object"
+      ? (prevSettings.matchplay as Record<string, unknown>)
+      : {};
+
+  await admin
+    .from("tournaments")
+    .update({
+      settings: {
+        ...prevSettings,
+        format: {
+          ...prevFormat,
+          round_count: roundCount,
+        },
+        matchplay: {
+          ...prevMatchplay,
+          bracket_main_pairs: bracketSize,
+        },
+      },
+    })
+    .eq("id", tournamentId);
 
   return {
     ok: true,

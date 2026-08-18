@@ -6,8 +6,19 @@ import { notFound, redirect } from "next/navigation";
 
 type Props = {
   params: Promise<{ playerId: string }>;
-  searchParams: Promise<{ return?: string; tournament_id?: string }>;
+  searchParams: Promise<{
+    return?: string;
+    tournament_id?: string;
+    n?: string;
+    of?: string;
+  }>;
 };
+
+function parsePosInt(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 function safeReturnUrl(raw: string | undefined): string {
   const fallback = "/comite-handicap";
@@ -25,6 +36,8 @@ export default async function HandicapReportViewerPage({
   const { playerId } = await params;
   const sp = await searchParams;
   const back = safeReturnUrl(sp.return);
+  const rowN = parsePosInt(sp.n);
+  const rowOf = parsePosInt(sp.of);
   const tournamentId =
     typeof sp.tournament_id === "string" && sp.tournament_id.trim()
       ? sp.tournament_id.trim()
@@ -69,6 +82,11 @@ export default async function HandicapReportViewerPage({
       <header className="flex items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-3 py-2 text-white">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold leading-tight">
+            {rowN != null ? (
+              <span className="mr-2 inline-flex items-center rounded bg-indigo-500 px-1.5 py-0.5 align-middle text-[11px] font-bold tabular-nums">
+                {rowOf != null ? `${rowN} / ${rowOf}` : `#${rowN}`}
+              </span>
+            ) : null}
             {report.fullName}
           </p>
           <p className="text-[10px] leading-tight text-slate-300">

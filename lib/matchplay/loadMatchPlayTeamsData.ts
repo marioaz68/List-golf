@@ -5,8 +5,8 @@ import {
   countMatchPlayFieldUnits,
   fieldBracketSize,
   isCountableMatchPlayEntryStatus,
-  roundCountForBracketSize,
 } from "./bracketUtils";
+import { syncMatchPlayBracketSizeFromField } from "./syncFieldBracketSize";
 import type {
   MatchPlayEntryRow,
   MatchPlayRulesSnapshot,
@@ -228,24 +228,7 @@ export async function loadMatchPlayTeamsData(
 
     const stored = rulesRaw?.bracket_main_pairs ?? null;
     if (stored !== bracketSize) {
-      const { data: tournament } = await supabase
-        .from("tournaments")
-        .select("registration_status")
-        .eq("id", tournamentId)
-        .maybeSingle();
-      const closed =
-        String(tournament?.registration_status ?? "").toLowerCase() ===
-        "closed";
-      if (closed) {
-        await supabase
-          .from("tournament_matchplay_rules")
-          .update({
-            bracket_main_pairs: bracketSize,
-            bracket_round_count: roundCountForBracketSize(bracketSize),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("tournament_id", tournamentId);
-      }
+      await syncMatchPlayBracketSizeFromField(supabase, tournamentId);
     }
   }
 

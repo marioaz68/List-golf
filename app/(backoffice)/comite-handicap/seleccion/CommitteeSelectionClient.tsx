@@ -122,6 +122,18 @@ export default function CommitteeSelectionClient({
     });
   }, [tableRows, q]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#entry-")) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash.slice(1))?.scrollIntoView({
+        block: "center",
+      });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, []);
+
   async function flushPendingFlags() {
     if (flushBusyRef.current) return;
     const items = Array.from(pendingFlagsRef.current.values());
@@ -520,6 +532,9 @@ export default function CommitteeSelectionClient({
         <table className="w-full min-w-[1100px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
+              <th className="sticky left-0 z-10 bg-slate-50 px-2 py-2 text-right tabular-nums">
+                #
+              </th>
               <th className="px-2 py-2">✓</th>
               <th className="px-2 py-2">Jugador</th>
               <th className="px-2 py-2" title="HI congelado al inscribirse">
@@ -531,9 +546,15 @@ export default function CommitteeSelectionClient({
               <th className="px-2 py-2">Cat</th>
               <th
                 className="px-2 py-2 text-right"
-                title="Handicap de torneo: CH exacto × % de la regla del torneo (80, 100, …). HI, salida y CH abajo."
+                title="Handicap de torneo al 80% (CH exacto × 0.80)"
               >
-                H torneo
+                HP
+              </th>
+              <th
+                className="px-2 py-2"
+                title="Tee asignado por la regla del torneo (HI y categoría)"
+              >
+                Salida
               </th>
               <th className="px-2 py-2">Rondas 12m</th>
               <th
@@ -553,19 +574,29 @@ export default function CommitteeSelectionClient({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => {
+            {filtered.map((r, i) => {
+              const n = i + 1;
               const on = selected.has(r.entryId);
               const currentHi = r.currentHi;
               const categoryCode = r.categoryCode;
               const rounds12m = r.rounds12m;
               const minHi = r.minHi;
+              const returnUrl = `/comite-handicap/seleccion?tournament_id=${encodeURIComponent(tournamentId)}#entry-${r.entryId}`;
               return (
                 <tr
                   key={r.entryId}
+                  id={`entry-${r.entryId}`}
                   className={`border-t border-slate-100 ${
-                    on ? "bg-indigo-50/50" : ""
+                    on ? "bg-indigo-50/50" : "bg-white"
                   } ${r.suggestReasons.length ? "outline outline-1 outline-amber-200" : ""}`}
                 >
+                  <td
+                    className={`sticky left-0 z-10 whitespace-nowrap px-2 py-1.5 text-right font-mono text-[11px] font-bold tabular-nums text-slate-500 ${
+                      on ? "bg-indigo-50" : "bg-white"
+                    }`}
+                  >
+                    {n}
+                  </td>
                   <td className="px-2 py-1.5">
                     <input
                       type="checkbox"
@@ -606,16 +637,15 @@ export default function CommitteeSelectionClient({
                       <span className="inline-flex flex-col items-end leading-tight">
                         <span>{r.tournamentHcp.hp}</span>
                         <span className="text-[8px] font-medium text-slate-500">
-                          {r.tournamentHcp.allowancePct ?? 80}% · CH{" "}
-                          {r.tournamentHcp.ch}
-                          {r.tournamentHcp.teeCode
-                            ? ` · ${r.tournamentHcp.teeCode}`
-                            : ""}
+                          80% · CH {r.tournamentHcp.ch}
                         </span>
                       </span>
                     ) : (
                       "—"
                     )}
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5">
+                    <SalidaDot hcp={r.tournamentHcp} />
                   </td>
                   <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-slate-900">
                     {fmtInt(rounds12m)}
@@ -661,12 +691,10 @@ export default function CommitteeSelectionClient({
                   <td className="px-2 py-1.5">
                     {r.playerId ? (
                       <a
-                        href={`/handicap-report/${r.playerId}?tournament_id=${encodeURIComponent(tournamentId)}&return=${encodeURIComponent(`/comite-handicap/seleccion?tournament_id=${tournamentId}`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-indigo-700 underline"
+                        href={`/handicap-report/${r.playerId}?tournament_id=${encodeURIComponent(tournamentId)}&n=${n}&of=${filtered.length}&return=${encodeURIComponent(returnUrl)}`}
+                        className="whitespace-nowrap text-indigo-700 underline"
                       >
-                        Abrir
+                        Abrir #{n}
                       </a>
                     ) : (
                       "—"
@@ -703,4 +731,33 @@ function fmtDelta(v: unknown): string {
   if (n == null) return "—";
   const body = n.toFixed(1);
   return n > 0 ? `+${body}` : body;
+}
+
+function SalidaDot({ hcp }: { hcp: OfficialHcp80 | null }) {
+  const label = hcp?.teeName || hcp?.teeCode;
+  if (!hcp || !label) {
+    return <span className="text-slate-400">—</span>;
+  }
+  const color = (hcp.teeColor && hcp.teeColor.trim()) || "#94a3b8";
+  const light =
+    color.toLowerCase() === "#f8fafc" ||
+    color.toLowerCase() === "#e5e7eb" ||
+    color.toLowerCase() === "#ffffff" ||
+    color.toLowerCase() === "#fff";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 font-semibold text-slate-800"
+      title={label}
+    >
+      <span
+        aria-hidden
+        className="inline-block h-3 w-3 rounded-full border"
+        style={{
+          backgroundColor: color,
+          borderColor: light ? "#64748b" : "rgba(15,23,42,0.35)",
+        }}
+      />
+      <span>{label}</span>
+    </span>
+  );
 }

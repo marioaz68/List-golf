@@ -19,6 +19,10 @@ import {
   isIndexHistoryNotablyShort,
   WHS_INDEX_HISTORY_REQUIRED_DAYS,
 } from "@/lib/handicap-committee/indexHistoryNote";
+import {
+  attachGhinToPlayerIfMissing,
+  lookupGhinByPlayerName,
+} from "@/lib/ghin-report/lookupGhinByPlayerName";
 
 export type CommitteeSelectionRow = {
   entryId: string;
@@ -151,6 +155,14 @@ function wireTournamentHcp(d: OfficialHcp80 | null | undefined): OfficialHcp80 |
       d.teeCode != null && String(d.teeCode).trim()
         ? String(d.teeCode).trim()
         : null,
+    teeName:
+      d.teeName != null && String(d.teeName).trim()
+        ? String(d.teeName).trim()
+        : null,
+    teeColor:
+      d.teeColor != null && String(d.teeColor).trim()
+        ? String(d.teeColor).trim()
+        : null,
     allowancePct: pct != null && pct > 0 ? pct : 80,
   };
 }
@@ -258,6 +270,21 @@ export async function loadCommitteeSelectionRows(
   const categoryById = new Map(
     (categoryRows ?? []).map((c) => [String((c as { id: string }).id), c])
   );
+
+  for (const p of playerRows ?? []) {
+    const raw = (p as { ghin_number?: string | null }).ghin_number;
+    if (raw != null && String(raw).trim()) continue;
+    const found = await lookupGhinByPlayerName(
+      db,
+      (p as { first_name?: string | null }).first_name,
+      (p as { last_name?: string | null }).last_name
+    );
+    if (!found) continue;
+    (p as { ghin_number?: string | null }).ghin_number = found;
+    const pid = String((p as { id: string }).id);
+    playerById.set(pid, p);
+    await attachGhinToPlayerIfMissing(db, pid, found);
+  }
 
   const until = todayMexicoIso();
   const since12 = isoDaysBefore(until, WHS_INDEX_HISTORY_REQUIRED_DAYS);

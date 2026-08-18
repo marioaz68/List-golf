@@ -80,6 +80,30 @@ export function hiToChHp(
 }
 
 /**
+ * Convención de golf: el plus se muestra con + (nunca con −).
+ * HI −2.1 → "+2.1"; HI 18.4 → "18.4".
+ */
+export function formatGolfHi(
+  n: number | null | undefined,
+  digits = 1
+): string {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  const v = Number(n);
+  if (v === 0) return (0).toFixed(digits);
+  if (v < 0) return `+${Math.abs(v).toFixed(digits)}`;
+  return v.toFixed(digits);
+}
+
+/** HP entero: plus como +N, el resto sin signo. */
+export function formatGolfHp(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  const v = Math.round(Number(n));
+  if (v === 0) return "0";
+  if (v < 0) return `+${Math.abs(v)}`;
+  return String(v);
+}
+
+/**
  * Golpes recibidos por hoyo según HP y stroke index (índice 0 = hoyo 1).
  * HP < 18: 1 golpe en los hoyos con SI ≤ HP.
  * HP ≥ 18: base = floor(HP/18) en todos + 1 extra en los (HP % 18) de SI más bajo.

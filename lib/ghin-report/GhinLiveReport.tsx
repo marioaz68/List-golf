@@ -186,7 +186,6 @@ type Props = { data: GhinLiveReportData };
 export default function GhinLiveReport({ data }: Props) {
   const scenariosRef = useRef<HTMLCanvasElement | null>(null);
   const historyRef = useRef<HTMLCanvasElement | null>(null);
-  const grossRef = useRef<HTMLCanvasElement | null>(null);
   const netRef = useRef<HTMLCanvasElement | null>(null);
 
   const charts = useRef<Chart[]>([]);
@@ -428,84 +427,7 @@ export default function GhinLiveReport({ data }: Props) {
     }
     });
 
-    // 3. Bruto por hoyo
-    trySection("gross", () => {
-    if (grossRef.current && canGross) {
-      const holes = data.holes;
-      const pars = holes.map((h) => CCQ_HOLE_PAR[h.hoyo - 1] ?? 4);
-      const avgs = holes.map((h) => h.promedio) as number[];
-      const best10 = holes.map((h) => h.promedio_mejores10) as number[];
-      const yMax = Math.ceil(Math.max(...avgs, ...pars) + 0.5);
-      if (!Number.isFinite(yMax) || yMax <= 2) {
-        failed.gross = true;
-      } else {
-        const cfg: ChartConfiguration = {
-          type: "bar",
-          data: {
-            labels: holes.map((h) => `H${h.hoyo}`),
-            datasets: [
-              {
-                label: "Promedio",
-                data: avgs,
-                backgroundColor: holes.map((h, i) =>
-                  colorVsPar(h.promedio as number, pars[i]!)
-                ),
-                barPercentage: 0.9,
-                order: 2,
-              },
-              {
-                label: "mejores 10",
-                data: best10,
-                backgroundColor: "#ffffff",
-                barPercentage: 0.42,
-                order: 1,
-              },
-              {
-                type: "line",
-                label: "Par",
-                data: pars,
-                borderColor: "#000000",
-                backgroundColor: "#000000",
-                pointRadius: 5,
-                pointBorderColor: "#fff",
-                pointBorderWidth: 2,
-                showLine: true,
-                order: 0,
-              },
-            ],
-          },
-          options: {
-            ...commonOpts,
-            datasets: {
-              bar: { grouped: false },
-            },
-            plugins: {
-              legend: {
-                labels: { color: MUTED, boxWidth: 12 },
-              },
-            },
-            scales: {
-              y: {
-                min: 2,
-                max: yMax,
-                grid: { color: "#243041" },
-                ticks: { color: MUTED },
-              },
-              x: {
-                grid: { display: false },
-                ticks: { color: MUTED, font: { size: 10 } },
-              },
-            },
-          },
-        };
-        if (!mountChart(grossRef.current, cfg, charts.current)) {
-          failed.gross = true;
-        }
-      }
-    }
-    });
-
-    // 4. Neto por hoyo
+    // 3. Neto por hoyo
     trySection("net", () => {
     if (netRef.current && canNet) {
       const holes = data.holes;
@@ -598,7 +520,7 @@ export default function GhinLiveReport({ data }: Props) {
       charts.current.forEach((c) => c.destroy());
       charts.current = [];
     };
-  }, [data, scenarioChartData, hiRef, canScenarios, canHistory, canGross, canNet]);
+  }, [data, scenarioChartData, hiRef, canScenarios, canHistory, canNet]);
 
   const verdictStyles: Record<string, string> = {
     normal: "border-[#2ecc71] bg-[#2ecc71]/15 text-[#2ecc71]",
@@ -893,40 +815,24 @@ export default function GhinLiveReport({ data }: Props) {
       </Section>
 
       <Section
-        title="3. Promedio bruto por hoyo"
+        title="3. Promedio neto por hoyo"
         sub={
-          data.holes[0]
-            ? [
-                data.holesHistorico ? "Histórico" : null,
-                formatDateRangeEs(data.holes[0].desde, data.holes[0].hasta),
-                `${data.holes[0].n_rondas} rondas`,
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            : undefined
-        }
-      >
-        <ChartSectionBoundary>
-        {canGross && !chartFail.gross ? (
-          <div className="relative h-[280px] w-full overflow-x-auto">
-            <div className="relative h-full min-w-[700px]">
-              <canvas ref={grossRef} />
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-slate-400">
-            {data.holes.length ? EMPTY_CHART_MSG : "Sin rondas para promedios."}
-          </p>
-        )}
-        </ChartSectionBoundary>
-      </Section>
-
-      <Section
-        title="4. Promedio neto por hoyo"
-        sub={
-          data.hp80 != null
-            ? `Descontando HP ${data.hp80} · tee ${data.teeCode}`
-            : undefined
+          [
+            data.holes[0]
+              ? [
+                  data.holesHistorico ? "Histórico" : null,
+                  formatDateRangeEs(data.holes[0].desde, data.holes[0].hasta),
+                  `${data.holes[0].n_rondas} rondas`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : null,
+            data.hp80 != null
+              ? `Descontando HP ${data.hp80} · tee ${data.teeCode}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined
         }
       >
         <ChartSectionBoundary>

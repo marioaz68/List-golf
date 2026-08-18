@@ -21,6 +21,10 @@ import {
   WHS_LOW_HI_LOOKBACK_DAYS,
   type WhsCapAssessment,
 } from "./whsCaps";
+import {
+  attachGhinToPlayerIfMissing,
+  lookupGhinByPlayerName,
+} from "@/lib/ghin-report/lookupGhinByPlayerName";
 import { formatDateTickEs } from "./formatDateEs";
 import type {
   GhinEscenarioRow,
@@ -326,7 +330,18 @@ export async function loadGhinLiveReport(
     "Jugador";
   const ghinRaw =
     player.ghin_number != null ? String(player.ghin_number).trim() : "";
-  const ghin = ghinRaw || null;
+  let ghin = ghinRaw || null;
+  if (!ghin) {
+    const found = await lookupGhinByPlayerName(
+      supabase,
+      player.first_name,
+      player.last_name
+    );
+    if (found) {
+      ghin = found;
+      await attachGhinToPlayerIfMissing(supabase, playerId, found);
+    }
+  }
   const gender = (player.gender ?? "X").toString().toUpperCase() as
     | "M"
     | "F"
