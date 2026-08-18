@@ -162,12 +162,13 @@ export default async function HandicapsByCategoryReport({
   const teeSets: RawTeeSet[] = (teeSetsRes.data ?? []) as RawTeeSet[];
   const teeSetById = new Map<string, RawTeeSet>();
   for (const t of ctx.tournamentTeeSets) {
-    teeSetById.set(t.id, {
+    const row: RawTeeSet = {
       id: t.id,
-      code: t.code ?? null,
-      name: t.name ?? null,
-      color: t.color ?? null,
-    });
+      code: t.code,
+      name: t.name,
+      color: t.color,
+    };
+    teeSetById.set(t.id, row);
   }
   for (const t of teeSets) teeSetById.set(t.id, t);
 

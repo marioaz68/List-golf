@@ -131,7 +131,7 @@ export async function loadTournamentHandicapContext(
 
   const tournamentTeeSets = (teeSetsRes.data ?? []).map((t) => ({
     id: (t as { id: string }).id,
-    code: (t as { code: string | null }).code,
+    code: (t as { code?: string | null }).code ?? null,
     name: (t as { name?: string | null }).name ?? null,
     color: (t as { color?: string | null }).color ?? null,
   }));
@@ -164,7 +164,7 @@ export async function loadTournamentHandicapContext(
       knownTeeIds.add(id);
       tournamentTeeSets.push({
         id,
-        code: (t as { code: string | null }).code,
+        code: (t as { code?: string | null }).code ?? null,
         name: (t as { name?: string | null }).name ?? null,
         color: (t as { color?: string | null }).color ?? null,
       });

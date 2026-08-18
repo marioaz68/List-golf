@@ -27,8 +27,8 @@ export type CourseTeeForHandicap = {
 export type TournamentTeeSetLite = {
   id: string;
   code: string | null;
-  name?: string | null;
-  color?: string | null;
+  name: string | null;
+  color: string | null;
 };
 
 export type TournamentHandicapContext = {
