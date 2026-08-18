@@ -624,6 +624,12 @@ export async function updateTeamAuctionBid(formData: FormData) {
     revalidatePath(`/torneos/${tournament_id}`);
     revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
     revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+    revalidatePath("/tee-sheet");
+  } else if (
+    autoPub.status === "bracket_exists" &&
+    (autoPub.roundsCreated > 0 || autoPub.groupsCreated > 0)
+  ) {
+    revalidatePath("/tee-sheet");
   }
   redirectMatchPlay(tournament_id, {
     bracket_status: "ok",
@@ -700,6 +706,12 @@ export async function saveAuctionSheet(formData: FormData) {
     revalidatePath(`/torneos/${tournament_id}`);
     revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
     revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+    revalidatePath("/tee-sheet");
+  } else if (
+    autoPub.status === "bracket_exists" &&
+    (autoPub.roundsCreated > 0 || autoPub.groupsCreated > 0)
+  ) {
+    revalidatePath("/tee-sheet");
   }
   const baseMsg = `Hoja guardada (${saved} equipos).`;
   const finalMsg =
@@ -774,6 +786,12 @@ export async function awardAuctionBid(formData: FormData) {
     revalidatePath(`/torneos/${tournament_id}`);
     revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
     revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+    revalidatePath("/tee-sheet");
+  } else if (
+    autoPub.status === "bracket_exists" &&
+    (autoPub.roundsCreated > 0 || autoPub.groupsCreated > 0)
+  ) {
+    revalidatePath("/tee-sheet");
   }
 
   const awardMsg = `Adjudicado #${auction_order} en ${
@@ -1084,10 +1102,27 @@ export async function generateMatchPlayBracket(formData: FormData) {
     }
   }
 
+  const autoPub = await autoPublishOnAuctionComplete(admin, tournament_id);
+  if (autoPub.status === "published" || autoPub.status === "bracket_exists") {
+    revalidatePath("/tee-sheet");
+    revalidatePath(`/torneos/${tournament_id}`);
+    revalidatePath(`/torneos/${tournament_id}/cuadro-vivo`);
+    revalidatePath(`/torneos/${tournament_id}/matches-vivo`);
+  }
+
+  const extras: string[] = [];
+  if (autoPub.status === "published" || autoPub.status === "bracket_exists") {
+    if (autoPub.groupsCreated > 0) {
+      extras.push(`${autoPub.groupsCreated} salida(s) armadas`);
+    }
+  }
+
   revalidatePath("/matchplay");
   redirectMatchPlay(tournament_id, {
     bracket_status: "ok",
-    bracket_message: `Cuadro generado: ${generated.teamCount} equipos, ${generated.bracketSize} plazas, ${generated.byeCount} BYE(s). Draw 1-16 / 8-9 / 4-13…`,
+    bracket_message: `Cuadro generado: ${generated.teamCount} equipos, ${generated.bracketSize} plazas, ${generated.byeCount} BYE(s).${
+      extras.length ? ` ${extras.join(" · ")}.` : ""
+    } Draw 1-16 / 8-9 / 4-13…`,
   });
 }
 
@@ -1107,10 +1142,20 @@ export async function publishMatchPlayBracket(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  const autoPub = await autoPublishOnAuctionComplete(admin, tournament_id);
+  if (autoPub.status === "published" || autoPub.status === "bracket_exists") {
+    revalidatePath("/tee-sheet");
+  }
+
   revalidatePath("/matchplay");
   redirectMatchPlay(tournament_id, {
     bracket_status: "ok",
-    bracket_message: "Cuadro publicado.",
+    bracket_message:
+      autoPub.status === "published" || autoPub.status === "bracket_exists"
+        ? autoPub.groupsCreated > 0
+          ? `Cuadro publicado. ${autoPub.groupsCreated} salida(s) armadas desde el cuadro.`
+          : "Cuadro publicado."
+        : "Cuadro publicado.",
   });
 }
 

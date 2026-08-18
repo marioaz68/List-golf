@@ -1,37 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { autoPublishBracket } from "@/lib/matchplay/autoPublishBracket";
+import { ensureMatchPlayCalendarRounds } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { seedDefinedMatchPlayGroups } from "@/lib/matchplay/seedDefinedMatchPlayGroups";
+
+export type AutoPublishOnAuctionCompleteResult =
+  | {
+      status: "published";
+      bracketId: string;
+      message: string;
+      roundsCreated: number;
+      groupsCreated: number;
+    }
+  | {
+      status: "bracket_exists";
+      roundsCreated: number;
+      groupsCreated: number;
+    }
+  | { status: "incomplete"; pending: number }
+  | { status: "no_teams" }
+  | { status: "skipped"; reason: string };
 
 /**
- * Si la subasta está completa (todos los equipos activos tienen
- * `auction_order` asignado) y aún NO existe un cuadro publicado para el
- * torneo, genera y publica el bracket automáticamente. De esta forma los
- * matches de la primera ronda quedan disponibles en `/torneos/[id]/matches-vivo`
- * y `/torneos/[id]/cuadro-vivo` sin que el comité tenga que entrar al
- * backoffice.
+ * Tras el último lote de la subasta:
+ *  1. Publica el cuadro si aún no existe.
+ *  2. Crea las rondas del calendario (R1…RN) si faltan.
+ *  3. Genera foursomes de los matches ya definidos (R1 reales + R2 por BYE).
  *
- * Nunca borra ni regenera un bracket existente: si ya hay uno, devuelve
- * `{ status: 'bracket_exists' }`. Tampoco hace nada si quedan equipos sin
- * adjudicar.
+ * No regenera un bracket existente ni borra salidas que el comité ya haya armado.
  */
 export async function autoPublishOnAuctionComplete(
   admin: SupabaseClient,
   tournamentId: string
-): Promise<
-  | { status: "published"; bracketId: string; message: string }
-  | { status: "bracket_exists" }
-  | { status: "incomplete"; pending: number }
-  | { status: "no_teams" }
-  | { status: "skipped"; reason: string }
-> {
-  const { data: existing } = await admin
-    .from("matchplay_brackets")
-    .select("id")
-    .eq("tournament_id", tournamentId)
-    .limit(1);
-  if (existing && existing.length > 0) {
-    return { status: "bracket_exists" };
-  }
-
+): Promise<AutoPublishOnAuctionCompleteResult> {
   const { data: teams } = await admin
     .from("matchplay_pair_teams")
     .select("id, auction_order")
@@ -47,14 +47,54 @@ export async function autoPublishOnAuctionComplete(
     return { status: "incomplete", pending };
   }
 
-  const result = await autoPublishBracket(admin, tournamentId);
-  if (!result.ok) {
-    return { status: "skipped", reason: result.error };
+  const { data: existing } = await admin
+    .from("matchplay_brackets")
+    .select("id")
+    .eq("tournament_id", tournamentId)
+    .neq("name", "Consolación Match Play")
+    .limit(1);
+
+  let published:
+    | { status: "published"; bracketId: string; message: string }
+    | { status: "bracket_exists" };
+
+  if (existing && existing.length > 0) {
+    published = { status: "bracket_exists" };
+  } else {
+    const result = await autoPublishBracket(admin, tournamentId);
+    if (!result.ok) {
+      return { status: "skipped", reason: result.error };
+    }
+    published = {
+      status: "published",
+      bracketId: result.bracketId,
+      message: result.message,
+    };
+  }
+
+  const rounds = await ensureMatchPlayCalendarRounds(admin, tournamentId);
+  const groups = await seedDefinedMatchPlayGroups(admin, tournamentId);
+
+  if (published.status === "published") {
+    const extras: string[] = [];
+    if (rounds.created > 0) extras.push(`${rounds.created} ronda(s)`);
+    if (groups.groupsCreated > 0) {
+      extras.push(`${groups.groupsCreated} salida(s) desde el cuadro`);
+    }
+    return {
+      ...published,
+      message:
+        extras.length > 0
+          ? `${published.message} ${extras.join(" · ")}.`
+          : published.message,
+      roundsCreated: rounds.created,
+      groupsCreated: groups.groupsCreated,
+    };
   }
 
   return {
-    status: "published",
-    bracketId: result.bracketId,
-    message: result.message,
+    status: "bracket_exists",
+    roundsCreated: rounds.created,
+    groupsCreated: groups.groupsCreated,
   };
 }

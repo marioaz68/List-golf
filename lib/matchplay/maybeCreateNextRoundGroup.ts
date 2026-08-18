@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { countConsolationMatchesInRound } from "@/lib/matchplay/consolationMatchPlay";
+import { ensureMatchPlayCalendarRounds } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
 
 /**
  * Si el match siguiente del cuadro ya tiene AMBAS parejas asignadas,
@@ -102,12 +103,29 @@ export async function maybeCreateNextRoundGroup(
   }
 
   const nextRoundNo = Number(nextMatch.round_no);
-  const { data: roundRow } = await admin
+  let { data: roundRow } = await admin
     .from("rounds")
     .select("id, start_time, interval_minutes")
     .eq("tournament_id", params.tournamentId)
     .eq("round_no", nextRoundNo)
     .maybeSingle();
+  if (!roundRow?.id) {
+    try {
+      await ensureMatchPlayCalendarRounds(admin, params.tournamentId);
+      const retry = await admin
+        .from("rounds")
+        .select("id, start_time, interval_minutes")
+        .eq("tournament_id", params.tournamentId)
+        .eq("round_no", nextRoundNo)
+        .maybeSingle();
+      roundRow = retry.data;
+    } catch (err) {
+      console.error(
+        "[maybeCreateNextRoundGroup] ensureMatchPlayCalendarRounds:",
+        err
+      );
+    }
+  }
   if (!roundRow?.id) {
     return {
       ok: true,
