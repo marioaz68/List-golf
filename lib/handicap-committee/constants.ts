@@ -21,6 +21,26 @@ export function clampAdjustment(raw: number) {
   return n;
 }
 
+/** Golpes aplicados por el comité, parseados del motivo de override. */
+export function parseCommitteeAppliedHpAdjustment(
+  reason: string | null | undefined
+): number | null {
+  if (!reason) return null;
+  const m = String(reason).match(/^Comité:\s*(-?\d+)\s+al handicap de torneo/i);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** HP base antes del ajuste del comité (para reaplicar sin acumular). */
+export function committeeHpBase(
+  currentHp: number,
+  appliedCommitteeAdj: number | null
+): number {
+  if (appliedCommitteeAdj == null) return currentHp;
+  return currentHp - appliedCommitteeAdj;
+}
+
 /**
  * Mínimo de votos numéricos para que sobreviva al menos uno tras el recorte
  * (trim_low + trim_high + 1). No se reduce el trim si hay menos.

@@ -26,6 +26,7 @@ type TableRow = {
   entryId: string;
   playerId: string;
   playerName: string;
+  playerNumber: number | null;
   ghin: string | null;
   entryHi: number | null;
   currentHi: number | null;
@@ -47,6 +48,7 @@ function toTableRow(
     entryId: r.entryId,
     playerId: r.playerId,
     playerName: r.playerName,
+    playerNumber: r.playerNumber,
     ghin: r.ghin,
     entryHi: r.entryHi,
     currentHi: r.currentHi,
@@ -605,8 +607,8 @@ export default function CommitteeSelectionClient({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r, i) => {
-              const n = i + 1;
+            {filtered.map((r) => {
+              const n = r.playerNumber;
               const on = selected.has(r.entryId);
               const currentHi = r.currentHi;
               const categoryCode = r.categoryCode;
@@ -626,7 +628,7 @@ export default function CommitteeSelectionClient({
                       on ? "bg-indigo-50" : "bg-white"
                     }`}
                   >
-                    {n}
+                    {n ?? "—"}
                   </td>
                   <td className="px-2 py-1.5">
                     <input
@@ -722,10 +724,10 @@ export default function CommitteeSelectionClient({
                   <td className="px-2 py-1.5">
                     {r.playerId ? (
                       <a
-                        href={`/handicap-report/${r.playerId}?tournament_id=${encodeURIComponent(tournamentId)}&n=${n}&of=${filtered.length}&return=${encodeURIComponent(returnUrl)}`}
+                        href={`/handicap-report/${r.playerId}?tournament_id=${encodeURIComponent(tournamentId)}&n=${n ?? ""}&of=${filtered.length}&return=${encodeURIComponent(returnUrl)}`}
                         className="whitespace-nowrap text-indigo-700 underline"
                       >
-                        Abrir #{n}
+                        {n != null ? `Abrir #${n}` : "Abrir"}
                       </a>
                     ) : (
                       "—"

@@ -141,3 +141,95 @@ function compareSingles(a: EntrySortable, b: EntrySortable): number {
   if (hiCmp !== 0) return hiCmp;
   return (a.player_number ?? 9999) - (b.player_number ?? 9999);
 }
+
+function isActiveEntryStatus(status: string | null | undefined): boolean {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (!s || s === "cancelled" || s === "withdrawn") return false;
+  return true;
+}
+
+function parseHi(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Renumera player_number 1..N según el orden canónico (HI + parejas J1/J2),
+ * igual que inscripciones y comité. Bajas/cancelados quedan sin número.
+ */
+export async function syncEntryDisplayPlayerNumbers(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<void> {
+  const tid = String(tournamentId ?? "").trim();
+  if (!tid) return;
+
+  const { data: rows, error } = await admin
+    .from("tournament_entries")
+    .select("id, handicap_index, player_number, status")
+    .eq("tournament_id", tid);
+
+  if (error) {
+    console.error("[entry-player-numbers]", error.message);
+    return;
+  }
+  if (!rows?.length) return;
+
+  type Row = {
+    id: string;
+    handicap_index: number | null;
+    player_number: number | null;
+    status: string | null;
+  };
+  const all = rows as Row[];
+  const active = all.filter((r) => isActiveEntryStatus(r.status));
+  if (active.length === 0) return;
+
+  const pairIndex = await loadEntryPairIndex(admin, tid);
+  const sortedActive = sortEntriesKeepingPairsTogether(active, pairIndex, (e) => ({
+    id: String(e.id),
+    handicap_index: parseHi(e.handicap_index),
+    player_number: e.player_number,
+  }));
+
+  const targetById = new Map<string, number | null>();
+  sortedActive.forEach((r, i) => targetById.set(String(r.id), i + 1));
+  for (const r of all) {
+    if (!isActiveEntryStatus(r.status)) {
+      targetById.set(String(r.id), null);
+    }
+  }
+
+  let changed = false;
+  for (const r of all) {
+    const want = targetById.get(String(r.id)) ?? null;
+    const cur = r.player_number ?? null;
+    if (want !== cur) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) return;
+
+  const shift = all.length + 1000;
+  await Promise.all(
+    all
+      .filter((r) => r.player_number != null)
+      .map((r) =>
+        admin
+          .from("tournament_entries")
+          .update({ player_number: Number(r.player_number) + shift })
+          .eq("id", r.id)
+      )
+  );
+
+  await Promise.all(
+    all.map((r) =>
+      admin
+        .from("tournament_entries")
+        .update({ player_number: targetById.get(String(r.id)) ?? null })
+        .eq("id", r.id)
+    )
+  );
+}

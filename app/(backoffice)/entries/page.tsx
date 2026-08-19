@@ -28,6 +28,7 @@ import {
   loadEntryPairIndex,
   sortEntriesKeepingPairsTogether,
 } from "@/lib/tournament/entryDisplayOrder";
+import { syncTournamentCommitteeRoster } from "@/lib/handicap-committee/syncEntryCommitteeRoster";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
 import {
@@ -716,6 +717,9 @@ export default async function EntriesPage({
 
   if (selectedTournamentId && !pageLoadError) {
     try {
+    const adminForCommittee = await createAdminClient();
+    await syncTournamentCommitteeRoster(adminForCommittee, selectedTournamentId);
+
     async function fetchEntries(select: string) {
       return applyEntryDisplayOrder(
         supabase

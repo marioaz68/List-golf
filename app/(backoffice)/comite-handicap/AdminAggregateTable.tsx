@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { formatAdjustmentLabel } from "@/lib/handicap-committee/constants";
+import {
+  committeeHpBase,
+  formatAdjustmentLabel,
+} from "@/lib/handicap-committee/constants";
 import {
   applyHandicapCommitteeSuggestion,
   applyHandicapCommitteeSuggestionsBulk,
@@ -13,6 +16,8 @@ export type AdminAggregateRow = {
   player_name: string;
   ghin_number: string | null;
   hp_current: number | null;
+  /** Golpes ya aplicados por el comité (null = pendiente). */
+  committee_applied_adjustment: number | null;
   avg_adjustment: number | null;
   suggested_hi: number | null;
   liveCount: number;
@@ -59,12 +64,39 @@ function defaultAdjustment(avg: number | null): number {
   return clampHpAdjustment(avg);
 }
 
+function defaultAdjustmentForRow(r: AdminAggregateRow): number {
+  if (r.committee_applied_adjustment != null) return 0;
+  return defaultAdjustment(r.avg_adjustment);
+}
+
 function computeFinalHp(
   current: number | null,
-  adjustment: number
+  adjustment: number,
+  appliedCommitteeAdj: number | null
 ): number | null {
   if (current == null || !Number.isFinite(current)) return null;
-  return Math.max(0, current + adjustment);
+  if (appliedCommitteeAdj != null && adjustment === 0) {
+    return current;
+  }
+  const base = committeeHpBase(current, appliedCommitteeAdj);
+  return Math.max(0, base + adjustment);
+}
+
+function isApplyDisabled(
+  adj: number,
+  appliedCommitteeAdj: number | null,
+  canEdit: boolean,
+  anyDisabled: boolean
+): boolean {
+  if (anyDisabled || !canEdit) return true;
+  if (adj === 0) return true;
+  if (
+    appliedCommitteeAdj != null &&
+    adj === appliedCommitteeAdj
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function formatHpAdj(n: number): string {
@@ -84,7 +116,7 @@ export default function AdminAggregateTable({
     () => {
       const init: Record<string, number> = {};
       for (const r of rows) {
-        init[r.entry_id] = defaultAdjustment(r.avg_adjustment);
+        init[r.entry_id] = defaultAdjustmentForRow(r);
       }
       return init;
     }
@@ -93,9 +125,9 @@ export default function AdminAggregateTable({
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const r of rows) {
-      // Por defecto solo preseleccionamos filas con votos y ajuste distinto de cero.
-      const adj = defaultAdjustment(r.avg_adjustment);
+      const adj = defaultAdjustmentForRow(r);
       init[r.entry_id] =
+        r.committee_applied_adjustment == null &&
         r.hp_current != null &&
         r.avg_adjustment != null &&
         r.liveCount > 0 &&
@@ -110,10 +142,20 @@ export default function AdminAggregateTable({
 
   const selectedCount = useMemo(
     () =>
-      Object.entries(selected).filter(
-        ([id, on]) => on && adjustments[id] != null && adjustments[id] !== 0
-      ).length,
-    [selected, adjustments]
+      Object.entries(selected).filter(([id, on]) => {
+        if (!on) return false;
+        const row = rows.find((r) => r.entry_id === id);
+        const adj = adjustments[id];
+        if (adj == null || adj === 0) return false;
+        if (
+          row?.committee_applied_adjustment != null &&
+          adj === row.committee_applied_adjustment
+        ) {
+          return false;
+        }
+        return true;
+      }).length,
+    [selected, adjustments, rows]
   );
 
   function updateAdjustment(entryId: string, raw: number) {
@@ -139,8 +181,19 @@ export default function AdminAggregateTable({
   }
 
   function handleApplyOne(entryId: string) {
+    const row = rows.find((r) => r.entry_id === entryId);
     const adj = adjustments[entryId];
-    if (adj == null || adj === 0) return;
+    if (
+      adj == null ||
+      isApplyDisabled(
+        adj,
+        row?.committee_applied_adjustment ?? null,
+        row?.hp_current != null,
+        false
+      )
+    ) {
+      return;
+    }
     setBusyEntry(entryId);
     startTransition(async () => {
       try {
@@ -157,13 +210,18 @@ export default function AdminAggregateTable({
 
   function handleApplyBulk() {
     const ids = rows
-      .filter(
-        (r) =>
-          selected[r.entry_id] &&
-          adjustments[r.entry_id] != null &&
-          adjustments[r.entry_id] !== 0 &&
-          r.hp_current != null
-      )
+      .filter((r) => {
+        const adj = adjustments[r.entry_id];
+        if (!selected[r.entry_id] || r.hp_current == null) return false;
+        if (adj == null || adj === 0) return false;
+        if (
+          r.committee_applied_adjustment != null &&
+          adj === r.committee_applied_adjustment
+        ) {
+          return false;
+        }
+        return true;
+      })
       .map((r) => r.entry_id);
     if (ids.length === 0) return;
     setBulkBusy(true);
@@ -266,7 +324,9 @@ export default function AdminAggregateTable({
           <tbody>
             {rows.map((r) => {
               const adj = adjustments[r.entry_id] ?? 0;
-              const finalHp = computeFinalHp(r.hp_current, adj);
+              const appliedAdj = r.committee_applied_adjustment;
+              const alreadyApplied = appliedAdj != null;
+              const finalHp = computeFinalHp(r.hp_current, adj, appliedAdj);
               const hasVotes =
                 r.totalVotesIncAbst > 0 ||
                 r.chips.length > 0 ||
@@ -276,7 +336,12 @@ export default function AdminAggregateTable({
               const canEdit = r.hp_current != null;
               const isSel = !!selected[r.entry_id];
               const isBusy = busyEntry === r.entry_id;
-              const disableApply = anyDisabled || !canEdit || adj === 0;
+              const disableApply = isApplyDisabled(
+                adj,
+                appliedAdj,
+                canEdit,
+                anyDisabled
+              );
               const over =
                 disqualifyThreshold > 0 &&
                 r.disqualifyVotes >= disqualifyThreshold;
@@ -397,26 +462,42 @@ export default function AdminAggregateTable({
                   </td>
                   <td className="px-3 py-2">
                     {canEdit ? (
-                      <input
-                        type="number"
-                        min={-5}
-                        max={0}
-                        step={1}
-                        value={adj}
-                        disabled={anyDisabled}
-                        onChange={(ev) =>
-                          updateAdjustment(r.entry_id, Number(ev.target.value))
-                        }
-                        className={[
-                          "w-20 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums",
-                          adj === 0
-                            ? "text-slate-400"
-                            : "text-emerald-800",
-                        ].join(" ")}
-                        title={
-                          !hasVotes ? tA.manualAdjNoVotesHint : undefined
-                        }
-                      />
+                      <div className="space-y-1">
+                        <input
+                          type="number"
+                          min={-5}
+                          max={0}
+                          step={1}
+                          value={adj}
+                          disabled={anyDisabled}
+                          onChange={(ev) =>
+                            updateAdjustment(r.entry_id, Number(ev.target.value))
+                          }
+                          className={[
+                            "w-20 rounded border border-slate-300 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums",
+                            adj === 0
+                              ? alreadyApplied
+                                ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                                : "text-slate-400"
+                              : "text-emerald-800",
+                          ].join(" ")}
+                          title={
+                            !hasVotes
+                              ? tA.manualAdjNoVotesHint
+                              : alreadyApplied
+                                ? tA.committeeAppliedHint
+                                : undefined
+                          }
+                        />
+                        {alreadyApplied ? (
+                          <p className="max-w-[11rem] text-[10px] font-semibold leading-snug text-emerald-800">
+                            {tA.committeeAppliedNote.replace(
+                              "{adj}",
+                              formatHpAdj(appliedAdj!)
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
                     )}
@@ -478,9 +559,18 @@ export default function AdminAggregateTable({
                       type="button"
                       onClick={() => handleApplyOne(r.entry_id)}
                       disabled={disableApply}
-                      className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-40"
+                      className={[
+                        "rounded px-2 py-1 text-xs font-semibold text-white disabled:opacity-40",
+                        alreadyApplied && adj === 0
+                          ? "bg-emerald-700"
+                          : "bg-slate-900",
+                      ].join(" ")}
                     >
-                      {isBusy ? tA.bulkBarApplying : tA.applyHi}
+                      {isBusy
+                        ? tA.bulkBarApplying
+                        : alreadyApplied && adj === 0
+                          ? tA.applyHiDone
+                          : tA.applyHi}
                     </button>
                   </td>
                 </tr>

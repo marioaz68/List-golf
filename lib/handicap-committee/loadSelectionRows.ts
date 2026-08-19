@@ -20,6 +20,10 @@ import {
   WHS_INDEX_HISTORY_REQUIRED_DAYS,
 } from "@/lib/handicap-committee/indexHistoryNote";
 import {
+  isEntryOnCommitteeRoster,
+  syncTournamentCommitteeRoster,
+} from "@/lib/handicap-committee/syncEntryCommitteeRoster";
+import {
   applyEntryDisplayOrder,
   loadEntryPairIndex,
   sortEntriesKeepingPairsTogether,
@@ -33,6 +37,8 @@ export type CommitteeSelectionRow = {
   entryId: string;
   playerId: string;
   playerName: string;
+  /** # oficial del torneo (mismo que inscripciones). */
+  playerNumber: number | null;
   ghin: string | null;
   /** HI congelado en la inscripción. */
   entryHi: number | null;
@@ -104,6 +110,7 @@ function wireRow(r: CommitteeSelectionRow): CommitteeSelectionRow {
     entryId: String(r.entryId ?? ""),
     playerId: String(r.playerId ?? ""),
     playerName: String(r.playerName ?? ""),
+    playerNumber: num(r.playerNumber),
     ghin: r.ghin != null && String(r.ghin).trim() ? String(r.ghin).trim() : null,
     entryHi: num(r.entryHi),
     currentHi: num(r.currentHi),
@@ -211,6 +218,10 @@ export async function loadCommitteeSelectionRows(
   const admin = tryCreateAdminClient();
   const db = admin ?? supabase;
 
+  if (admin) {
+    await syncTournamentCommitteeRoster(admin, tournamentId);
+  }
+
   const { data: entriesRaw, error: entriesErr } = await applyEntryDisplayOrder(
     db
       .from("tournament_entries")
@@ -227,9 +238,14 @@ export async function loadCommitteeSelectionRows(
   }
   if (!entriesRaw?.length) return { rows: [], clubIndexHistory: null };
 
+  const activeEntries = (entriesRaw as Array<{ status?: string | null }>).filter(
+    (e) => isEntryOnCommitteeRoster(e.status)
+  );
+  if (!activeEntries.length) return { rows: [], clubIndexHistory: null };
+
   const pairIndex = await loadEntryPairIndex(db, tournamentId);
   const entries = sortEntriesKeepingPairsTogether(
-    entriesRaw as Array<{
+    activeEntries as Array<{
       id: string;
       player_id: string | null;
       category_id: string | null;
@@ -475,6 +491,7 @@ export async function loadCommitteeSelectionRows(
       playerName: playerName(
         pl as { first_name?: string | null; last_name?: string | null } | null
       ),
+      playerNumber: num(e.player_number),
       ghin,
       entryHi,
       currentHi,

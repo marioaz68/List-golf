@@ -19,6 +19,7 @@ import {
   formatDiscardedAdjustmentNote,
   formatDiscardedVetoNote,
   formatTrimAnnulledNote,
+  parseCommitteeAppliedHpAdjustment,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import {
@@ -31,6 +32,10 @@ import {
   loadEntryPairIndex,
   sortEntriesKeepingPairsTogether,
 } from "@/lib/tournament/entryDisplayOrder";
+import {
+  isEntryOnCommitteeRoster,
+  syncTournamentCommitteeRoster,
+} from "@/lib/handicap-committee/syncEntryCommitteeRoster";
 import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
@@ -286,12 +291,16 @@ export default async function ComiteHandicapPage(props: {
   const adminEarly = tryCreateAdminClient();
   const entriesClient = adminEarly ?? supabase;
 
+  if (adminEarly) {
+    await syncTournamentCommitteeRoster(adminEarly, tournamentId, user.id);
+  }
+
   let entriesRaw: Array<Record<string, unknown>> = [];
   {
     const fullSelect =
-      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, tee_set_id_override, status, flagged_for_committee, flagged_committee_reason";
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, playing_handicap_override_reason, tee_set_id_override, status, player_number, flagged_for_committee, flagged_committee_reason";
     const baseSelect =
-      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, status";
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, playing_handicap_override_reason, status, player_number";
 
     const fullRes = await applyEntryDisplayOrder(
       entriesClient
@@ -319,6 +328,10 @@ export default async function ComiteHandicapPage(props: {
       entriesRaw = (baseRes.data ?? []) as Array<Record<string, unknown>>;
     }
   }
+
+  entriesRaw = entriesRaw.filter((row) =>
+    isEntryOnCommitteeRoster((row as { status?: string | null }).status)
+  );
 
   const playerIds = Array.from(
     new Set(
@@ -481,6 +494,10 @@ export default async function ComiteHandicapPage(props: {
         entry_id: row.id as string,
         player_id: pid,
         player_name: playerName(player),
+        player_number:
+          row.player_number != null && Number.isFinite(Number(row.player_number))
+            ? Number(row.player_number)
+            : null,
         ghin_number: ghinRaw ? ghinRaw : null,
         handicap_index: hi,
         category_code: cat?.code ?? cat?.name ?? null,
@@ -489,6 +506,8 @@ export default async function ComiteHandicapPage(props: {
         course_handicap,
         playing_handicap,
         allowance_pct: allowancePct,
+        playing_handicap_override_reason:
+          (row.playing_handicap_override_reason as string | null) ?? null,
         tee_slope: tee?.slope ?? null,
         tee_course_rating: tee?.course_rating ?? null,
         tee_par: tee?.par ?? null,
@@ -507,6 +526,7 @@ export default async function ComiteHandicapPage(props: {
     (e) => ({
       id: e.entry_id,
       handicap_index: e.handicap_index,
+      player_number: e.player_number,
     })
   );
 
@@ -995,15 +1015,8 @@ export default async function ComiteHandicapPage(props: {
 
   const summaryByEntry = new Map(summaryRows.map((s) => [s.entry_id, s]));
 
-  // El comité solo trabaja con jugadores marcados desde Inscritos
-  // (botón "→ Comité"). Pero si una inscripción ya tiene voto guardado
-  // del comité (mío, de cualquier miembro o resumen anónimo) la dejamos
-  // visible para que no se pierda lo ya revisado, aunque el director le
-  // haya quitado la marca después.
-  const entries: HandicapEntryRow[] = allEntries.filter(
-    (e) =>
-      Boolean(e.flagged_for_committee) || entriesWithAnyVote.has(e.entry_id)
-  );
+  // Roster activo del torneo (mismos jugadores que Inscripciones, sin bajas).
+  const entries: HandicapEntryRow[] = allEntries;
 
   // Resumen anónimo para mostrar al votante (solo cuando la votación está
   // cerrada, lo deja visible en la pestaña Votar para que todos los miembros
@@ -1943,43 +1956,23 @@ export default async function ComiteHandicapPage(props: {
               <p className="text-xs text-slate-600">{t.admin.aggregateHelp}</p>
 
               {entries.length === 0 ? (
-                allEntries.length === 0 ? (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                    {t.emptyNoEntries
-                      .split("{entriesLink}")
-                      .map((chunk, i, arr) => (
-                        <span key={i}>
-                          {chunk}
-                          {i < arr.length - 1 ? (
-                            <Link
-                              href={`/entries?tournament_id=${tournamentId}`}
-                              className="font-semibold underline"
-                            >
-                              {t.entriesLinkLabel}
-                            </Link>
-                          ) : null}
-                        </span>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                    {t.emptyNoFlagged
-                      .split("{selectionLink}")
-                      .map((chunk, i, arr) => (
-                        <span key={i}>
-                          {chunk}
-                          {i < arr.length - 1 ? (
-                            <Link
-                              href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
-                              className="font-semibold underline"
-                            >
-                              {t.selectionLinkLabel}
-                            </Link>
-                          ) : null}
-                        </span>
-                      ))}
-                  </div>
-                )
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                  {t.emptyNoEntries
+                    .split("{entriesLink}")
+                    .map((chunk, i, arr) => (
+                      <span key={i}>
+                        {chunk}
+                        {i < arr.length - 1 ? (
+                          <Link
+                            href={`/entries?tournament_id=${tournamentId}`}
+                            className="font-semibold underline"
+                          >
+                            {t.entriesLinkLabel}
+                          </Link>
+                        ) : null}
+                      </span>
+                    ))}
+                </div>
               ) : null}
 
               {(() => {
@@ -2039,6 +2032,9 @@ export default async function ComiteHandicapPage(props: {
                       e.playing_handicap != null
                         ? Number(e.playing_handicap)
                         : null,
+                    committee_applied_adjustment: parseCommitteeAppliedHpAdjustment(
+                      e.playing_handicap_override_reason
+                    ),
                     avg_adjustment: avg ?? null,
                     suggested_hi: suggested,
                     liveCount: trim.liveCount,
@@ -2100,23 +2096,6 @@ export default async function ComiteHandicapPage(props: {
       {showVote ? (
         committee ? (
           <>
-            {entries.length === 0 && allEntries.length > 0 ? (
-              <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                {t.emptyNoFlaggedVoter.split("{selectionLink}").map((chunk, i, arr) => (
-                  <span key={i}>
-                    {chunk}
-                    {i < arr.length - 1 ? (
-                      <Link
-                        href={`/comite-handicap/seleccion?tournament_id=${tournamentId}`}
-                        className="font-semibold underline"
-                      >
-                        {t.selectionLinkLabel}
-                      </Link>
-                    ) : null}
-                  </span>
-                ))}
-              </div>
-            ) : null}
             <HandicapCommitteeVoter
               tournamentId={tournamentId}
               entries={entries}

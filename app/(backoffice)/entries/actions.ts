@@ -22,7 +22,13 @@ import {
   applyEntryDisplayOrder,
   loadEntryPairIndex,
   sortEntriesKeepingPairsTogether,
+  syncEntryDisplayPlayerNumbers,
 } from "@/lib/tournament/entryDisplayOrder";
+import {
+  committeeEnrollFlagFields,
+  committeeRemoveFlagFields,
+  syncTournamentCommitteeRoster,
+} from "@/lib/handicap-committee/syncEntryCommitteeRoster";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -448,6 +454,9 @@ async function getHoleScoresCountForRoundScoreIds(
 export async function addEntry(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -526,6 +535,7 @@ export async function addEntry(formData: FormData) {
       handicap_index: handicap,
       category_id,
       status: "confirmed",
+      ...committeeEnrollFlagFields(user?.id),
     })
     .select("id, category_id, handicap_index")
     .single();
@@ -561,6 +571,7 @@ export async function addEntry(formData: FormData) {
         primaryHi: Number(insertedEntry.handicap_index ?? handicap),
         primaryCategoryId: insertedEntry.category_id ?? category_id,
         partnerPlayerId: partner_player_id,
+        flaggedBy: user?.id,
       });
       pairFeedback = result.message;
     } catch (err) {
@@ -578,6 +589,7 @@ export async function addEntry(formData: FormData) {
   }
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/players");
   revalidatePath("/matchplay");
   if (partner_player_id) {
@@ -604,6 +616,7 @@ async function pairWithPartnerOnEnroll(params: {
   primaryHi: number;
   primaryCategoryId: string | null;
   partnerPlayerId: string;
+  flaggedBy?: string | null;
 }): Promise<{ message: string }> {
   const {
     admin,
@@ -616,6 +629,7 @@ async function pairWithPartnerOnEnroll(params: {
     primaryHi,
     primaryCategoryId,
     partnerPlayerId,
+    flaggedBy,
   } = params;
 
   if (partnerPlayerId === primaryPlayerId) {
@@ -684,6 +698,7 @@ async function pairWithPartnerOnEnroll(params: {
         handicap_index: partnerHi,
         category_id: partnerCategoryId,
         status: "confirmed",
+        ...committeeEnrollFlagFields(flaggedBy),
       })
       .select("id")
       .single();
@@ -755,6 +770,9 @@ async function pairWithPartnerOnEnroll(params: {
 export async function createPlayerAndAddEntry(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -844,11 +862,13 @@ export async function createPlayerAndAddEntry(formData: FormData) {
     handicap_index: handicap,
     category_id,
     status: "confirmed",
+    ...committeeEnrollFlagFields(user?.id),
   });
 
   if (eErr) throw new Error("Error inscribiendo jugador nuevo: " + eErr.message);
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/players");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
@@ -856,6 +876,10 @@ export async function createPlayerAndAddEntry(formData: FormData) {
 export async function addSelectedEntries(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const enrollFields = committeeEnrollFlagFields(user?.id);
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -941,6 +965,7 @@ export async function addSelectedEntries(formData: FormData) {
           handicap_index: handicap,
           category_id,
           status: "confirmed",
+          ...enrollFields,
         };
       }) || [];
 
@@ -998,6 +1023,7 @@ export async function addSelectedEntries(formData: FormData) {
   }
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/players");
 
   redirect(
@@ -1086,6 +1112,7 @@ export async function deleteEntry(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/leaderboard");
   revalidatePath("/score-entry");
   redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
@@ -1103,12 +1130,16 @@ export async function withdrawEntry(formData: FormData) {
 
   const { error } = await admin
     .from("tournament_entries")
-    .update({ status: "withdrawn" })
+    .update({
+      status: "withdrawn",
+      ...committeeRemoveFlagFields(),
+    })
     .eq("id", id);
 
   if (error) throw new Error("Error dando de baja entry: " + error.message);
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
 }
 
@@ -1183,7 +1214,11 @@ export async function disqualifyEntry(formData: FormData) {
 }
 
 export async function restoreEntry(formData: FormData) {
+  const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const id = reqStr(formData, "id");
   const tournament_id = reqStr(formData, "tournament_id");
@@ -1192,7 +1227,10 @@ export async function restoreEntry(formData: FormData) {
 
   const { error } = await admin
     .from("tournament_entries")
-    .update({ status: "confirmed" })
+    .update({
+      status: "confirmed",
+      ...committeeEnrollFlagFields(user?.id),
+    })
     .eq("id", id);
 
   if (error) {
@@ -1200,6 +1238,7 @@ export async function restoreEntry(formData: FormData) {
   }
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   redirect(`/entries?tournament_id=${tournament_id}&tab=entries`);
 }
 
@@ -1244,7 +1283,10 @@ export async function updateEntryHandicap(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  await syncEntryDisplayPlayerNumbers(admin, tournament_id);
+
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/players");
 
   return { ok: true };
@@ -1335,7 +1377,10 @@ export async function updateEntryHandicapIndexInline(formData: FormData) {
     .eq("tournament_id", tournament_id);
   if (updErr) throw new Error(updErr.message);
 
+  await syncEntryDisplayPlayerNumbers(admin, tournament_id);
+
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   revalidatePath("/players");
 
   return {
@@ -1408,6 +1453,10 @@ export async function autoCategorizeEntries(formData: FormData) {
 export async function enrollExcelPlayersToTournament(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const enrollFields = committeeEnrollFlagFields(user?.id);
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -1464,6 +1513,7 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
           handicap_index: handicap,
           category_id,
           status: "confirmed",
+          ...enrollFields,
         };
       }) || [];
 
@@ -1481,12 +1531,17 @@ export async function enrollExcelPlayersToTournament(formData: FormData) {
   }
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
 
 export async function enrollAllPlayersToTournament(formData: FormData) {
   const supabase = await createClient();
   const admin = await createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const enrollFields = committeeEnrollFlagFields(user?.id);
 
   const tournament_id = reqStr(formData, "tournament_id");
   await ensureEntriesAccess(tournament_id);
@@ -1539,6 +1594,7 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
           handicap_index: handicap,
           category_id,
           status: "confirmed",
+          ...enrollFields,
         };
       }) || [];
 
@@ -1556,6 +1612,7 @@ export async function enrollAllPlayersToTournament(formData: FormData) {
   }
 
   revalidatePath("/entries");
+  revalidatePath("/comite-handicap");
   redirect(`/entries?tournament_id=${tournament_id}`);
 }
 
@@ -2052,6 +2109,8 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
   const supabase = await createClient();
   const admin = await createAdminClient();
 
+  await syncTournamentCommitteeRoster(admin, tournamentId);
+
   const { data: tournament, error: tErr } = await supabase
     .from("tournaments")
     .select("name")
@@ -2080,8 +2139,8 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     `
       )
       .eq("tournament_id", tournamentId)
-      .eq("flagged_for_committee", true)
       .neq("status", "cancelled")
+      .neq("status", "withdrawn")
   );
 
   if (eErr) {

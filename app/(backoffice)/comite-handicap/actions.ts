@@ -6,7 +6,9 @@ import { createClient } from "@/utils/supabase/server";
 import { tryCreateAdminClient } from "@/utils/supabase/admin";
 import {
   clampAdjustment,
+  committeeHpBase,
   HANDICAP_COMMITTEE_DEFAULT_SIZE,
+  parseCommitteeAppliedHpAdjustment,
   trimmedAverage,
 } from "@/lib/handicap-committee/constants";
 import { loadHandicapCommitteeAccess } from "@/lib/handicap-committee/access";
@@ -278,7 +280,7 @@ async function computeApplyForEntry(
   const { data: entry, error: eErr } = await admin
     .from("tournament_entries")
     .select(
-      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, tee_set_id_override"
+      "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, playing_handicap_override_reason, tee_set_id_override"
     )
     .eq("id", entry_id)
     .eq("tournament_id", tournament_id)
@@ -337,8 +339,14 @@ async function computeApplyForEntry(
     return { ok: false, error: "no_hp" };
   }
 
+  const priorCommitteeAdj = parseCommitteeAppliedHpAdjustment(
+    (entry as { playing_handicap_override_reason?: string | null })
+      .playing_handicap_override_reason
+  );
+  const baseHp = committeeHpBase(currentHp, priorCommitteeAdj);
+
   const strokes = Math.round(adjustmentToApply);
-  const nextHp = Math.max(0, currentHp + strokes);
+  const nextHp = Math.max(0, baseHp + strokes);
   return {
     ok: true,
     adjustment: strokes,

@@ -25,6 +25,7 @@ export type HandicapEntryRow = {
   entry_id: string;
   player_id?: string;
   player_name: string;
+  player_number?: number | null;
   ghin_number?: string | null;
   club_label: string | null;
   handicap_index: number | null;
@@ -34,6 +35,7 @@ export type HandicapEntryRow = {
   course_handicap?: number | null;
   /** Playing Handicap = CH × allowance% (entero). */
   playing_handicap?: number | null;
+  playing_handicap_override_reason?: string | null;
   /** % de allowance vigente para el torneo (ej. 80 en match play). */
   allowance_pct?: number | null;
   tee_slope?: number | null;
@@ -464,6 +466,7 @@ export default function HandicapCommitteeVoter({
                               {isExpanded ? "▾" : "▸"}
                             </span>
                             <span className="text-blue-700 underline decoration-blue-500 decoration-dotted underline-offset-2 leading-tight">
+                              {e.player_number != null ? `#${e.player_number} · ` : ""}
                               {e.player_name}
                             </span>
                           </div>
@@ -901,6 +904,11 @@ function PlayerVoteCard({
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1">
+            {entry.player_number != null ? (
+              <span className="shrink-0 rounded bg-slate-900 px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums text-white">
+                #{entry.player_number}
+              </span>
+            ) : null}
             <span className="truncate text-sm font-semibold leading-tight text-slate-950">
               {entry.player_name}
             </span>
