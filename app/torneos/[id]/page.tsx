@@ -1688,7 +1688,10 @@ export default async function PublicTournamentPage({
                     alt={pub.posterAlt}
                     className="h-full w-full object-cover"
                   />
-                  {tournamentShowsCancelledStamp(typedTournament.id) ? (
+                  {tournamentShowsCancelledStamp(typedTournament.id, {
+                    shortName: typedTournament.name,
+                    name: typedTournament.name,
+                  }) ? (
                     <CancelledPosterStamp />
                   ) : null}
                 </div>

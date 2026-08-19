@@ -600,7 +600,10 @@ export default async function HomePage({
                           {h.noPoster}
                         </div>
                       )}
-                      {tournamentShowsCancelledStamp(t.id) ? (
+                      {tournamentShowsCancelledStamp(t.id, {
+                        shortName: t.name,
+                        name: t.name,
+                      }) ? (
                         <CancelledPosterStamp />
                       ) : null}
 

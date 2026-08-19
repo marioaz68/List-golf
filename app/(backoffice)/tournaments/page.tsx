@@ -977,8 +977,11 @@ export default async function TournamentsPage({
                                   display: "block",
                                 }}
                               />
-                              {tournamentShowsCancelledStamp(t.id) ? (
-                                <CancelledPosterStamp />
+                              {tournamentShowsCancelledStamp(t.id, {
+                                shortName: t.short_name,
+                                name: t.name,
+                              }) ? (
+                                <CancelledPosterStamp compact />
                               ) : null}
                             </div>
                           ) : (
