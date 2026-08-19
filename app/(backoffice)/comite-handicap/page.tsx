@@ -26,7 +26,11 @@ import {
   pickTeeForGender,
   type WhsTeeData,
 } from "@/lib/handicap/whs";
-import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
+import {
+  applyEntryDisplayOrder,
+  loadEntryPairIndex,
+  sortEntriesKeepingPairsTogether,
+} from "@/lib/tournament/entryDisplayOrder";
 import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
@@ -427,7 +431,7 @@ export default async function ComiteHandicapPage(props: {
   // y no se pierda el voto guardado.
   const entriesWithAnyVote = new Set<string>();
 
-  const allEntries: HandicapEntryRow[] = (entriesRaw ?? [])
+  let allEntries: HandicapEntryRow[] = (entriesRaw ?? [])
     .map((row: any) => {
       const player = row.player_id ? playerById.get(String(row.player_id)) : null;
       const cat = row.category_id ? categoryById.get(String(row.category_id)) : null;
@@ -495,6 +499,16 @@ export default async function ComiteHandicapPage(props: {
       };
     })
     .filter((e) => e.entry_id);
+
+  const pairIndex = await loadEntryPairIndex(entriesClient, tournamentId);
+  allEntries = sortEntriesKeepingPairsTogether(
+    allEntries,
+    pairIndex,
+    (e) => ({
+      id: e.entry_id,
+      handicap_index: e.handicap_index,
+    })
+  );
 
   // Nota de histórico insuficiente (soft/hard cap): visible en voto.
   // No excluye jugadores; solo marca. No toca tablas de voto.

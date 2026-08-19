@@ -19,7 +19,11 @@ import {
   isIndexHistoryNotablyShort,
   WHS_INDEX_HISTORY_REQUIRED_DAYS,
 } from "@/lib/handicap-committee/indexHistoryNote";
-import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
+import {
+  applyEntryDisplayOrder,
+  loadEntryPairIndex,
+  sortEntriesKeepingPairsTogether,
+} from "@/lib/tournament/entryDisplayOrder";
 import {
   attachGhinToPlayerIfMissing,
   lookupGhinByPlayerName,
@@ -207,11 +211,11 @@ export async function loadCommitteeSelectionRows(
   const admin = tryCreateAdminClient();
   const db = admin ?? supabase;
 
-  const { data: entries, error: entriesErr } = await applyEntryDisplayOrder(
+  const { data: entriesRaw, error: entriesErr } = await applyEntryDisplayOrder(
     db
       .from("tournament_entries")
       .select(
-        "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason, tee_set_id_override"
+        "id, player_id, category_id, handicap_index, player_number, status, flagged_for_committee, flagged_committee_reason, tee_set_id_override"
       )
       .eq("tournament_id", tournamentId)
       .neq("status", "cancelled")
@@ -221,7 +225,31 @@ export async function loadCommitteeSelectionRows(
     console.error("[comite-seleccion] tournament_entries", entriesErr.message);
     return { rows: [], clubIndexHistory: null };
   }
-  if (!entries?.length) return { rows: [], clubIndexHistory: null };
+  if (!entriesRaw?.length) return { rows: [], clubIndexHistory: null };
+
+  const pairIndex = await loadEntryPairIndex(db, tournamentId);
+  const entries = sortEntriesKeepingPairsTogether(
+    entriesRaw as Array<{
+      id: string;
+      player_id: string | null;
+      category_id: string | null;
+      handicap_index: number | null;
+      player_number: number | null;
+      status: string | null;
+      flagged_for_committee: boolean | null;
+      flagged_committee_reason: string | null;
+      tee_set_id_override: string | null;
+    }>,
+    pairIndex,
+    (e) => ({
+      id: String(e.id),
+      handicap_index:
+        e.handicap_index != null && Number.isFinite(Number(e.handicap_index))
+          ? Number(e.handicap_index)
+          : null,
+      player_number: e.player_number,
+    })
+  );
 
   const playerIds = [
     ...new Set(

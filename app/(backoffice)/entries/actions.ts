@@ -18,7 +18,11 @@ import {
   type FlaggedPlayerForPrompt,
 } from "@/lib/handicap-committee/claudePromptTemplate";
 import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
-import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
+import {
+  applyEntryDisplayOrder,
+  loadEntryPairIndex,
+  sortEntriesKeepingPairsTogether,
+} from "@/lib/tournament/entryDisplayOrder";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -2063,6 +2067,8 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
       .from("tournament_entries")
       .select(
         `
+      id,
+      player_number,
       flagged_committee_reason,
       handicap_index,
       players:players (
@@ -2095,8 +2101,27 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     return Number.isFinite(n) ? Number(n.toFixed(1)) : null;
   }
 
-  const players: FlaggedPlayerForPrompt[] = (rows ?? []).map((row) => {
-    const raw = (row as { players?: RawPlayer | RawPlayer[] | null }).players;
+  type ExportRow = {
+    id: string;
+    player_number: number | null;
+    flagged_committee_reason: string | null;
+    handicap_index: number | string | null;
+    players?: RawPlayer | RawPlayer[] | null;
+  };
+
+  const pairIndex = await loadEntryPairIndex(admin, tournamentId);
+  const sortedRows = sortEntriesKeepingPairsTogether(
+    (rows ?? []) as ExportRow[],
+    pairIndex,
+    (e) => ({
+      id: String(e.id),
+      handicap_index: parseHi(e.handicap_index),
+      player_number: e.player_number,
+    })
+  );
+
+  const players: FlaggedPlayerForPrompt[] = sortedRows.map((row) => {
+    const raw = row.players;
     const p: RawPlayer | null = Array.isArray(raw) ? (raw[0] ?? null) : (raw ?? null);
     const fullName = [p?.first_name, p?.last_name]
       .filter(Boolean)
@@ -2107,16 +2132,14 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     // HI del torneo: priorizamos handicap_index de la inscripción (es el
     // valor "asignado al torneo" que ve el comité). Si está vacío caemos a
     // players.handicap_torneo y por último a null.
-    const hiEntry = parseHi(
-      (row as { handicap_index?: number | string | null }).handicap_index
-    );
+    const hiEntry = parseHi(row.handicap_index);
     const hiPlayer = parseHi(p?.handicap_torneo);
     const hiTorneo = hiEntry ?? hiPlayer ?? null;
 
     return {
       ghin: ghinRaw ? ghinRaw : null,
       fullName,
-      reason: (row.flagged_committee_reason as string | null) ?? null,
+      reason: row.flagged_committee_reason ?? null,
       hiTorneo,
     };
   });

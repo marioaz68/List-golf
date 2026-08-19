@@ -23,7 +23,11 @@ import {
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 import { queryInChunks } from "@/lib/supabase/queryInChunks";
-import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
+import {
+  applyEntryDisplayOrder,
+  loadEntryPairIndex,
+  sortEntriesKeepingPairsTogether,
+} from "@/lib/tournament/entryDisplayOrder";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
 import {
@@ -1087,6 +1091,22 @@ export default async function EntriesPage({
           official_hcp_80,
         };
       });
+
+      if (selectedTournamentId) {
+        const pairIndex = await loadEntryPairIndex(
+          createAdminClient(),
+          selectedTournamentId
+        );
+        entries = sortEntriesKeepingPairsTogether(
+          entries,
+          pairIndex,
+          (e) => ({
+            id: e.id,
+            handicap_index: e.handicap_index,
+            player_number: e.player_number,
+          })
+        );
+      }
     }
     } catch (err) {
       pageLoadError =
