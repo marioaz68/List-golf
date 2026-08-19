@@ -18,6 +18,7 @@ import {
   type FlaggedPlayerForPrompt,
 } from "@/lib/handicap-committee/claudePromptTemplate";
 import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
+import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
 
 function reqStr(fd: FormData, key: string) {
   const v = String(fd.get(key) ?? "").trim();
@@ -2057,10 +2058,11 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
     throw new Error(tErr.message);
   }
 
-  const { data: rows, error: eErr } = await admin
-    .from("tournament_entries")
-    .select(
-      `
+  const { data: rows, error: eErr } = await applyEntryDisplayOrder(
+    admin
+      .from("tournament_entries")
+      .select(
+        `
       flagged_committee_reason,
       handicap_index,
       players:players (
@@ -2070,11 +2072,11 @@ export async function exportCommitteePromptMarkdown(tournamentId: string) {
         handicap_torneo
       )
     `
-    )
-    .eq("tournament_id", tournamentId)
-    .eq("flagged_for_committee", true)
-    .neq("status", "cancelled")
-    .order("player_number", { ascending: true, nullsFirst: false });
+      )
+      .eq("tournament_id", tournamentId)
+      .eq("flagged_for_committee", true)
+      .neq("status", "cancelled")
+  );
 
   if (eErr) {
     throw new Error(eErr.message);

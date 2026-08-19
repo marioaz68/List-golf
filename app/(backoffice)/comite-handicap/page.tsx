@@ -26,6 +26,7 @@ import {
   pickTeeForGender,
   type WhsTeeData,
 } from "@/lib/handicap/whs";
+import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
 import {
   enableHandicapCommittee,
   setHandicapCommitteeStatus,
@@ -288,12 +289,13 @@ export default async function ComiteHandicapPage(props: {
     const baseSelect =
       "id, player_id, category_id, handicap_index, playing_handicap, playing_handicap_override, status";
 
-    const fullRes = await entriesClient
-      .from("tournament_entries")
-      .select(fullSelect)
-      .eq("tournament_id", tournamentId)
-      .neq("status", "cancelled")
-      .order("handicap_index", { ascending: true });
+    const fullRes = await applyEntryDisplayOrder(
+      entriesClient
+        .from("tournament_entries")
+        .select(fullSelect)
+        .eq("tournament_id", tournamentId)
+        .neq("status", "cancelled")
+    );
 
     if (!fullRes.error) {
       entriesRaw = (fullRes.data ?? []) as Array<Record<string, unknown>>;
@@ -303,12 +305,13 @@ export default async function ComiteHandicapPage(props: {
         .toLowerCase()
         .includes("flagged_")
     ) {
-      const baseRes = await entriesClient
-        .from("tournament_entries")
-        .select(baseSelect)
-        .eq("tournament_id", tournamentId)
-        .neq("status", "cancelled")
-        .order("handicap_index", { ascending: true });
+      const baseRes = await applyEntryDisplayOrder(
+        entriesClient
+          .from("tournament_entries")
+          .select(baseSelect)
+          .eq("tournament_id", tournamentId)
+          .neq("status", "cancelled")
+      );
       entriesRaw = (baseRes.data ?? []) as Array<Record<string, unknown>>;
     }
   }

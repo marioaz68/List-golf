@@ -19,6 +19,7 @@ import {
   isIndexHistoryNotablyShort,
   WHS_INDEX_HISTORY_REQUIRED_DAYS,
 } from "@/lib/handicap-committee/indexHistoryNote";
+import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
 import {
   attachGhinToPlayerIfMissing,
   lookupGhinByPlayerName,
@@ -206,14 +207,15 @@ export async function loadCommitteeSelectionRows(
   const admin = tryCreateAdminClient();
   const db = admin ?? supabase;
 
-  const { data: entries, error: entriesErr } = await db
-    .from("tournament_entries")
-    .select(
-      "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason, tee_set_id_override"
-    )
-    .eq("tournament_id", tournamentId)
-    .neq("status", "cancelled")
-    .order("handicap_index", { ascending: true });
+  const { data: entries, error: entriesErr } = await applyEntryDisplayOrder(
+    db
+      .from("tournament_entries")
+      .select(
+        "id, player_id, category_id, handicap_index, status, flagged_for_committee, flagged_committee_reason, tee_set_id_override"
+      )
+      .eq("tournament_id", tournamentId)
+      .neq("status", "cancelled")
+  );
 
   if (entriesErr) {
     console.error("[comite-seleccion] tournament_entries", entriesErr.message);

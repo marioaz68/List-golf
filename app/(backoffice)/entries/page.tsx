@@ -23,6 +23,7 @@ import {
 } from "@/lib/entries/telegramKitColumns";
 import { getRoundForCategory } from "@/lib/rounds/categoryRoundGate";
 import { queryInChunks } from "@/lib/supabase/queryInChunks";
+import { applyEntryDisplayOrder } from "@/lib/tournament/entryDisplayOrder";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
 import {
@@ -712,11 +713,12 @@ export default async function EntriesPage({
   if (selectedTournamentId && !pageLoadError) {
     try {
     async function fetchEntries(select: string) {
-      return supabase
-        .from("tournament_entries")
-        .select(select)
-        .eq("tournament_id", selectedTournamentId)
-        .order("player_number", { ascending: true, nullsFirst: false });
+      return applyEntryDisplayOrder(
+        supabase
+          .from("tournament_entries")
+          .select(select)
+          .eq("tournament_id", selectedTournamentId)
+      );
     }
 
     let entryRows: EntryRowBase[] = [];
