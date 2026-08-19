@@ -12,6 +12,8 @@ import {
 import { fetchLockedScorecardsForTournament } from "@/lib/leaderboard/fetchLockedScorecards";
 import FavoritesView from "@/components/public/FavoritesView";
 import ConsolationIntegratedPanel from "@/components/public/ConsolationIntegratedPanel";
+import CancelledPosterStamp from "@/components/tournaments/CancelledPosterStamp";
+import { tournamentShowsCancelledStamp } from "@/lib/tournaments/cancelledStamp";
 import { buildLiveLeaderboard } from "@/lib/leaderboard/buildLiveLeaderboard";
 import { applyStandings } from "@/lib/leaderboard/applyStandings";
 import { applyCompetitionRules } from "@/lib/leaderboard/applyCompetitionRules";
@@ -1686,6 +1688,9 @@ export default async function PublicTournamentPage({
                     alt={pub.posterAlt}
                     className="h-full w-full object-cover"
                   />
+                  {tournamentShowsCancelledStamp(typedTournament.id) ? (
+                    <CancelledPosterStamp />
+                  ) : null}
                 </div>
               </div>
             ) : null}

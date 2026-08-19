@@ -10,6 +10,8 @@ import {
 import { PublicInstallShortcut } from "@/components/public/PublicInstallShortcut";
 import { getUserRoles, isCommitteeOnlyUser } from "@/lib/auth/getUserRoles";
 import { committeeVotePath } from "@/lib/handicap-committee/committeeOnlyPublic";
+import CancelledPosterStamp from "@/components/tournaments/CancelledPosterStamp";
+import { tournamentShowsCancelledStamp } from "@/lib/tournaments/cancelledStamp";
 
 type SearchParams = Promise<{
   club?: string | string[];
@@ -598,6 +600,9 @@ export default async function HomePage({
                           {h.noPoster}
                         </div>
                       )}
+                      {tournamentShowsCancelledStamp(t.id) ? (
+                        <CancelledPosterStamp />
+                      ) : null}
 
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent p-2.5">
                         <div className="flex items-end justify-between gap-2">

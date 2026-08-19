@@ -13,6 +13,8 @@ import {
   cardStyleAllowTableSticky,
   thStyleWithSticky,
 } from "@/lib/ui/backofficeTableSticky";
+import CancelledPosterStamp from "@/components/tournaments/CancelledPosterStamp";
+import { tournamentShowsCancelledStamp } from "@/lib/tournaments/cancelledStamp";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -953,6 +955,7 @@ export default async function TournamentsPage({
                           {posterUrl ? (
                             <div
                               style={{
+                                position: "relative",
                                 width: 112,
                                 height: 160,
                                 flexShrink: 0,
@@ -974,6 +977,9 @@ export default async function TournamentsPage({
                                   display: "block",
                                 }}
                               />
+                              {tournamentShowsCancelledStamp(t.id) ? (
+                                <CancelledPosterStamp />
+                              ) : null}
                             </div>
                           ) : (
                             <div
