@@ -1138,6 +1138,12 @@ function MobileScoreEntryContent() {
   /** Estado de match play del grupo (ventajas + progresión + cierre). */
   const [matchPlayInfo, setMatchPlayInfo] =
     useState<GroupMatchPlayCapture | null>(null);
+  const hideFingerSignaturePad =
+    Boolean(
+      matchPlayInfo?.matchType &&
+        (matchPlayInfo.matchType === "individual" ||
+          matchPlayInfo.matchType === "pairs")
+    ) && matchplayVariant !== "ryder";
   /**
    * Visibilidad de "Mi Score" + banner de testigo en la pestaña Tarjeta.
    * Se oculta al volver desde Anotar; el botón toggle siempre queda visible.
@@ -1189,6 +1195,12 @@ function MobileScoreEntryContent() {
   useEffect(() => {
     activePlayerIdRef.current = activePlayerId;
   }, [activePlayerId]);
+
+  // En Calcuta (individual/parejas) ya es suficiente firmar con los botones
+  // "Firmar" / "Testigo" de la tarjeta: ocultamos la firma con el dedo.
+  useEffect(() => {
+    if (hideFingerSignaturePad && tab === "firmar") setTab("tarjeta");
+  }, [hideFingerSignaturePad, tab]);
 
   useEffect(() => {
     currentHoleRef.current = currentHole;
@@ -1931,25 +1943,27 @@ function MobileScoreEntryContent() {
             Tarjeta
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (signPlayerId) {
-                setTab("firmar");
-              } else if (players[0]) {
-                setSignPlayerId(players[0].id);
-                setTab("firmar");
-              }
-            }}
-            className={[
-              "flex-1 py-2 text-sm font-semibold",
-              tab === "firmar"
-                ? "border-b-2 border-black text-black"
-                : "text-slate-500",
-            ].join(" ")}
-          >
-            Firmar
-          </button>
+          {!hideFingerSignaturePad ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (signPlayerId) {
+                  setTab("firmar");
+                } else if (players[0]) {
+                  setSignPlayerId(players[0].id);
+                  setTab("firmar");
+                }
+              }}
+              className={[
+                "flex-1 py-2 text-sm font-semibold",
+                tab === "firmar"
+                  ? "border-b-2 border-black text-black"
+                  : "text-slate-500",
+              ].join(" ")}
+            >
+              Firmar
+            </button>
+          ) : null}
         </div>
 
         {tab === "anotar" && (
@@ -2634,48 +2648,50 @@ function MobileScoreEntryContent() {
               </section>
             ) : null}
 
-            <section className="space-y-2 rounded-xl bg-white p-3 shadow-sm">
-              <div className="text-sm font-bold text-slate-900">
-                Firma individual por jugador
-              </div>
+            {!hideFingerSignaturePad ? (
+              <section className="space-y-2 rounded-xl bg-white p-3 shadow-sm">
+                <div className="text-sm font-bold text-slate-900">
+                  Firma individual por jugador
+                </div>
 
-              {players.map((player) => {
-                const isSigned = Boolean(signatures[player.id]);
+                {players.map((player) => {
+                  const isSigned = Boolean(signatures[player.id]);
 
-                return (
-                  <button
-                    key={`sign-${player.id}`}
-                    type="button"
-                    onClick={() => handleOpenSign(player.id)}
-                    className={[
-                      "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left",
-                      isSigned
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-slate-300 bg-white",
-                    ].join(" ")}
-                  >
-                    <span className="text-sm font-semibold text-slate-900">
-                      {player.name}
-                    </span>
-
-                    <span
+                  return (
+                    <button
+                      key={`sign-${player.id}`}
+                      type="button"
+                      onClick={() => handleOpenSign(player.id)}
                       className={[
-                        "rounded-full px-2 py-1 text-[11px] font-bold",
+                        "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left",
                         isSigned
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-200 text-slate-700",
+                          ? "border-emerald-300 bg-emerald-50"
+                          : "border-slate-300 bg-white",
                       ].join(" ")}
                     >
-                      {isSigned ? "Firmado" : "Firmar"}
-                    </span>
-                  </button>
-                );
-              })}
-            </section>
+                      <span className="text-sm font-semibold text-slate-900">
+                        {player.name}
+                      </span>
+
+                      <span
+                        className={[
+                          "rounded-full px-2 py-1 text-[11px] font-bold",
+                          isSigned
+                            ? "bg-emerald-600 text-white"
+                            : "bg-slate-200 text-slate-700",
+                        ].join(" ")}
+                      >
+                        {isSigned ? "Firmado" : "Firmar"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </section>
+            ) : null}
           </main>
         )}
 
-        {tab === "firmar" && (
+        {tab === "firmar" && !hideFingerSignaturePad && (
           <main className="flex-1 space-y-3 p-3">
             <section className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="text-center">

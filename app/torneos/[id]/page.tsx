@@ -142,6 +142,7 @@ export default async function PublicTournamentPage({
     embed?: string;
     from?: string;
     basis?: string;
+    return_captura?: string;
   }>;
 }) {
   const { id } = await params;
@@ -149,6 +150,7 @@ export default async function PublicTournamentPage({
 
   const isEmbed = String(sp.embed ?? "").trim() === "1";
   const fromAdmin = String(sp.from ?? "").trim() === "admin";
+  const fromCapturaMiniApp = String(sp.return_captura ?? "").trim().length > 0;
 
   const requestedCategoryId =
     typeof sp.category_id === "string" ? sp.category_id.trim() : "";
@@ -231,6 +233,19 @@ export default async function PublicTournamentPage({
       ?.format?.matchplay_variant === "ryder";
   /** Match play Calcuta (no Ryder): no hay clasificación stroke pública que mostrar. */
   const isCalcutaTournament = isMatchPlayTournament && !isRyderTournament;
+  const calcutaLiveMiniAppSimplifyNav =
+    isCalcutaTournament &&
+    view === "live" &&
+    !isEmbed &&
+    fromCapturaMiniApp &&
+    (() => {
+      // En la mini-app, sólo simplificamos para Calcuta individual o por parejas.
+      const mt = (typedTournament.settings as
+        | { matchplay?: { match_type?: string } }
+        | null
+        | undefined)?.matchplay?.match_type;
+      return mt === "individual" || mt === "pairs";
+    })();
 
   if (isRyderTournament && !isEmbed) {
     redirect(`/torneos/${id}/ryder`);
@@ -1525,22 +1540,19 @@ export default async function PublicTournamentPage({
               </div>
             )}
 
-            {!isEmbed ? (
-            <div className={publicTournamentSecondaryNavGridClass}>
-              <Link
-                href="/"
-                className={publicTournamentOutboundNavClasses()}
-              >
-                {pub.home}
-              </Link>
+            {!isEmbed && !calcutaLiveMiniAppSimplifyNav ? (
+              <div className={publicTournamentSecondaryNavGridClass}>
+                <Link href="/" className={publicTournamentOutboundNavClasses()}>
+                  {pub.home}
+                </Link>
 
-              <Link
-                href="/#torneos"
-                className={publicTournamentOutboundNavClasses()}
-              >
-                {pub.seeTournaments}
-              </Link>
-            </div>
+                <Link
+                  href="/#torneos"
+                  className={publicTournamentOutboundNavClasses()}
+                >
+                  {pub.seeTournaments}
+                </Link>
+              </div>
             ) : null}
 
             <div className={publicTournamentPrimaryNavGridClass}>
@@ -1589,24 +1601,28 @@ export default async function PublicTournamentPage({
                 {pub.teeSheet}
               </Link>
 
-              <Link
-                scroll={false}
-                href={tHref({
-                  view: "favorites",
-                })}
-                className={publicTournamentViewPillClasses(
-                  view === "favorites"
-                )}
-              >
-                {pub.favorites}
-              </Link>
+              {!calcutaLiveMiniAppSimplifyNav ? (
+                <Link
+                  scroll={false}
+                  href={tHref({
+                    view: "favorites",
+                  })}
+                  className={publicTournamentViewPillClasses(
+                    view === "favorites"
+                  )}
+                >
+                  {pub.favorites}
+                </Link>
+              ) : null}
 
-              <Link
-                href={`/torneos/${id}/cercanos`}
-                className={publicTournamentViewPillClasses(false)}
-              >
-                {pub.cercanosTab}
-              </Link>
+              {!calcutaLiveMiniAppSimplifyNav ? (
+                <Link
+                  href={`/torneos/${id}/cercanos`}
+                  className={publicTournamentViewPillClasses(false)}
+                >
+                  {pub.cercanosTab}
+                </Link>
+              ) : null}
 
               {publicConvocatoria.visible ? (
                 <Link
