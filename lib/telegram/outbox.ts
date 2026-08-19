@@ -66,6 +66,19 @@ export async function sendAndTrackTelegramMessage(
 
   // 1) Buscar y borrar mensajes previos del mismo kind para este chat.
   try {
+    let currentRoundNo: number | null = null;
+    if (kind === "next_round_group" && params.roundId) {
+      const { data: currentRound } = await admin
+        .from("rounds")
+        .select("round_no")
+        .eq("id", params.roundId)
+        .maybeSingle();
+      currentRoundNo =
+        typeof currentRound?.round_no === "number"
+          ? currentRound.round_no
+          : null;
+    }
+
     // Limpieza global por chat: mensajes de rondas viejas (día anterior o más)
     // se consideran cerrados y se intentan borrar para no acumular historial.
     if (kind === "next_round_group") {
@@ -114,16 +127,50 @@ export async function sendAndTrackTelegramMessage(
 
     const { data: prevRows } = await admin
       .from("telegram_outbox")
-      .select("id, message_id")
+      .select("id, message_id, round_id")
       .eq("tournament_id", tournamentId)
       .eq("chat_id", chatId)
       .eq("kind", kind);
+
+    const prevRoundIds = Array.from(
+      new Set(
+        (prevRows ?? [])
+          .map((r) => String((r as { round_id?: string | null }).round_id ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+    const prevRoundNoById = new Map<string, number | null>();
+    if (prevRoundIds.length > 0) {
+      const { data: prevRounds } = await admin
+        .from("rounds")
+        .select("id, round_no")
+        .in("id", prevRoundIds);
+      for (const rr of (prevRounds ?? []) as Array<{ id: string; round_no: number | null }>) {
+        prevRoundNoById.set(String(rr.id), rr.round_no ?? null);
+      }
+    }
 
     const idsToDelete: string[] = [];
     for (const row of (prevRows ?? []) as Array<{
       id: string;
       message_id: number | string | null;
+      round_id?: string | null;
     }>) {
+      const prevRoundId = String(row.round_id ?? "").trim();
+      const prevRoundNo = prevRoundId
+        ? prevRoundNoById.get(prevRoundId) ?? null
+        : null;
+      const deleteByRoundNo =
+        kind === "next_round_group" &&
+        currentRoundNo != null &&
+        prevRoundNo != null &&
+        prevRoundNo < currentRoundNo;
+      const deleteBySameKindFallback =
+        kind !== "next_round_group" || currentRoundNo == null;
+      if (!deleteByRoundNo && !deleteBySameKindFallback) {
+        continue;
+      }
+
       const mid = Number(row.message_id);
       if (Number.isFinite(mid) && mid > 0) {
         const del = await deleteTelegramMessage(chatId, mid);
