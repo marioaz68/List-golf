@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { runRitmoReminders } from "@/lib/telegram/ritmo/reminders";
 import { runPaceAlertsForCommittee } from "@/lib/telegram/ritmo/paceAlerts";
+import { runMarshalDayStartReminders } from "@/lib/marshal/runMarshalDayStartReminders";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -52,7 +53,13 @@ export async function GET(req: Request) {
     } catch (e: any) {
       paceAlerts = { ok: false, error: e?.message ?? "alert error" };
     }
-    return NextResponse.json({ ...result, paceAlerts });
+    let marshalDayStart;
+    try {
+      marshalDayStart = await runMarshalDayStartReminders(supabase);
+    } catch (e: any) {
+      marshalDayStart = { ok: false, error: e?.message ?? "marshal error" };
+    }
+    return NextResponse.json({ ...result, paceAlerts, marshalDayStart });
   } catch (err: any) {
     console.error("RITMO REMINDERS ERROR:", err);
     return NextResponse.json(

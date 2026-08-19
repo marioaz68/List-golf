@@ -730,6 +730,12 @@ export default async function UsersPage({
                       ? tournamentRoles.filter((r) => r.tournament_id === tournamentId)
                       : tournamentRoles;
 
+                    const isMarshalUser = [...clubRoles, ...tournamentRoles].some(
+                      (r) =>
+                        r.is_active !== false &&
+                        extractRoleCode(r.roles) === "marshal"
+                    );
+
                     return (
                       <tr key={u.id}>
                         <td style={tdStyle}>
@@ -800,8 +806,21 @@ export default async function UsersPage({
                             >
                               {u.telegram_chat_id
                                 ? `chat_id: ${u.telegram_chat_id}`
-                                : "chat_id: no vinculado (hará /start en el bot)"}
+                                : "chat_id: no vinculado (hará /soy_marshal en el bot)"}
                             </div>
+                            {isMarshalUser ? (
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#0369a1",
+                                  lineHeight: 1.35,
+                                  marginTop: 4,
+                                }}
+                              >
+                                Mini app marshal: /soy_marshal + /MARSHAL en Telegram
+                                (capturas retrasadas y resultados en vivo).
+                              </div>
+                            ) : null}
 
                             <select
                               name="is_active"

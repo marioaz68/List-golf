@@ -58,6 +58,10 @@ import {
 } from "@/lib/telegram/banderas/commands";
 import { handleFlagLocationUpdate } from "@/lib/telegram/banderas/handleFlagLocationUpdate";
 import { profileHasFlagKeeperRole } from "@/lib/flags/flagStore";
+import {
+  buildMarshalReply,
+  isMarshalCommand,
+} from "@/lib/marshal/buildMarshalReply";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -329,6 +333,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, distances: "link_sent" });
     }
 
+    // === MARSHAL: panel capturas retrasadas + resultados en vivo ===
+    if (isMarshalCommand(command) && userId && supabase) {
+      const reply = await buildMarshalReply(supabase, chatId || userId);
+      await sendTelegramMessage({
+        chatId: chatId || userId,
+        text: reply.text,
+        buttons: reply.buttons,
+      });
+      return NextResponse.json({ ok: true, marshal: "panel_sent" });
+    }
+
     // === BANDERAS: comando /BANDERA(S) — menú o abrir sesión en un hoyo ===
     if (isBanderaCommand(command) && userId && supabase) {
       const reply = await buildBanderaReply(supabase, userId, text, username);
@@ -435,7 +450,8 @@ export async function POST(req: Request) {
               replyText = [
                 `✅ Listo ${name}, estás vinculado como Marshal.`,
                 "",
-                "Recibirás aquí avisos de tarjetas pendientes y enlaces de captura.",
+                "Cada mañana de torneo recibirás un aviso para abrir la ronda del día.",
+                "En cualquier momento escribe /MARSHAL para ver capturas retrasadas y resultados en vivo.",
                 "",
                 "Para entrar a la web usa tu email y la contraseña que te dio el comité.",
               ].join("\n");

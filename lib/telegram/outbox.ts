@@ -12,6 +12,7 @@ export type OutboxKind =
   | "ritmo_share_invite"
   | "ritmo_share_late"
   | "ritmo_committee_late"
+  | "marshal_day_start"
   | "generic";
 
 export type SendAndTrackOptions = {

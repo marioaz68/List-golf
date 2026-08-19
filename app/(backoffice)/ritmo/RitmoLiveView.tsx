@@ -7,6 +7,7 @@ import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import { getHoleCenter, offsetHolePosition } from "@/lib/ritmo/holeCenters";
 
 export type LiveStatus =
   | "en_ritmo"
@@ -185,11 +186,21 @@ export default function RitmoLiveView({
     });
   }, [listGroups]);
 
-  const mapGroups: GroupDot[] = useMemo(
-    () =>
-      groups
-        .filter((g) => g.lat != null && g.lon != null)
-        .map((g) => ({
+  const mapGroups: GroupDot[] = useMemo(() => {
+    const byHole = new Map<number, LiveGroup[]>();
+    for (const g of listGroups) {
+      const h = g.hoyo;
+      if (h != null && h >= 1 && h <= 18) {
+        const arr = byHole.get(h) ?? [];
+        arr.push(g);
+        byHole.set(h, arr);
+      }
+    }
+
+    const out: GroupDot[] = [];
+    for (const g of listGroups) {
+      if (g.lat != null && g.lon != null) {
+        out.push({
           id: g.id,
           number: g.number,
           lat: g.lat as number,
@@ -198,9 +209,31 @@ export default function RitmoLiveView({
           status: g.status,
           label: g.label,
           detail: g.detail,
-        })),
-    [groups]
-  );
+          positionSource: "gps",
+        });
+        continue;
+      }
+      const h = g.hoyo;
+      if (h == null || h < 1 || h > 18) continue;
+      const center = getHoleCenter(h);
+      if (!center) continue;
+      const peers = byHole.get(h) ?? [g];
+      const idx = peers.findIndex((p) => p.id === g.id);
+      const pos = offsetHolePosition(center, idx, peers.length);
+      out.push({
+        id: g.id,
+        number: g.number,
+        lat: pos.lat,
+        lon: pos.lon,
+        hoyo: h,
+        status: g.status,
+        label: g.label,
+        detail: g.detail,
+        positionSource: "capture",
+      });
+    }
+    return out;
+  }, [listGroups]);
 
   const withPosition = mapGroups.length;
   const counts = useMemo(() => {
@@ -663,11 +696,37 @@ export default function RitmoLiveView({
       <RitmoMap
         groups={mapGroups}
         selectedId={selectedId}
+        showHoleLabels={false}
         rotate={vp.shouldRotateMap}
         onSelectGroup={(id) =>
           setSelectedId((prev) => (prev === id ? null : id))
         }
       />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 10,
+          left: 10,
+          zIndex: 1000,
+          background: "rgba(0,0,0,0.78)",
+          color: "#e2e8f0",
+          padding: "8px 10px",
+          borderRadius: 8,
+          fontSize: 10,
+          lineHeight: 1.45,
+          maxWidth: 300,
+        }}
+      >
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>
+          Mapa: {mapGroups.length} grupo{mapGroups.length === 1 ? "" : "s"} ·{" "}
+          {listGroups.length} en lista
+        </div>
+        <div>
+          <b>G1, G3…</b> = salidas reales. Borde punteado = posición por captura
+          (sin GPS). Los números pequeños del campo ya no se muestran para evitar
+          confundirlos con grupos.
+        </div>
+      </div>
       {mapUnsupported ? (
         <div
           style={{

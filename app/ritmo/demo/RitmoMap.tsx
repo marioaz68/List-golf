@@ -3,16 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CCQ_HOLES } from "@/lib/telegram/ritmo/holes";
 
-interface RitmoMapProps {
-  groups: GroupDot[];
-  selectedId?: string | null;
-  /** Si true, rota el mapa 90° (mejor para landscape). Default true. */
-  rotate?: boolean;
-  /** Al tocar la bola de un grupo en el mapa. El padre decide alternar
-   *  (mismo id → null para volver a vista completa). */
-  onSelectGroup?: (id: string) => void;
-}
-
 export interface GroupDot {
   id: string;
   number: number;
@@ -24,6 +14,20 @@ export interface GroupDot {
   detail?: string;
   role?: "normal" | "blocker" | "blocked";
   blockedBy?: number;
+  /** gps = Live Location; capture = posición por hoyo capturado. */
+  positionSource?: "gps" | "capture";
+}
+
+interface RitmoMapProps {
+  groups: GroupDot[];
+  selectedId?: string | null;
+  /** Etiquetas fijas H1–H18 del campo (no son grupos). Default false en vivo. */
+  showHoleLabels?: boolean;
+  /** Si true, rota el mapa 90° (mejor para landscape). Default true. */
+  rotate?: boolean;
+  /** Al tocar la bola de un grupo en el mapa. El padre decide alternar
+   *  (mismo id → null para volver a vista completa). */
+  onSelectGroup?: (id: string) => void;
 }
 
 const STATUS_COLOR: Record<GroupDot["status"], string> = {
@@ -49,6 +53,7 @@ const HOYO_COLORS = [
 export function RitmoMap({
   groups,
   selectedId,
+  showHoleLabels = true,
   rotate = true,
   onSelectGroup,
 }: RitmoMapProps) {
@@ -130,25 +135,29 @@ export function RitmoMap({
       mapRef.current = map;
       // (No la agregamos al mapa — solo la usamos para fitBounds más abajo)
 
-      // Etiquetas de hoyos, contra-rotadas para que el texto se lea horizontal
-      CCQ_HOLES.features.forEach((f: any) => {
-        const center = L.geoJSON(f).getBounds().getCenter();
-        L.marker(center, {
-          icon: L.divIcon({
-            className: "",
-            html: `<div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center;">
-              <div style="background:rgba(0,0,0,0.75);color:#fff;border:1px solid ${HOYO_COLORS[(f.properties.hoyo-1)%HOYO_COLORS.length]};padding:1px 6px;border-radius:10px;font-weight:700;font-size:11px;font-family:Arial,sans-serif;display:inline-block;">H${f.properties.hoyo}</div>
+      // Etiquetas de hoyos del campo (referencia, NO son grupos).
+      if (showHoleLabels) {
+        CCQ_HOLES.features.forEach((f: any) => {
+          const center = L.geoJSON(f).getBounds().getCenter();
+          L.marker(center, {
+            icon: L.divIcon({
+              className: "",
+              html: `<div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center;">
+              <div style="background:rgba(0,0,0,0.45);color:#cbd5e1;border:1px solid ${HOYO_COLORS[(f.properties.hoyo - 1) % HOYO_COLORS.length]};padding:0 5px;border-radius:8px;font-weight:600;font-size:9px;font-family:Arial,sans-serif;display:inline-block;opacity:0.85;">${f.properties.hoyo}</div>
             </div>`,
-            iconSize: [30, 22], iconAnchor: [15, 11],
-          }),
-          interactive: false,
-        }).addTo(map);
-      });
+              iconSize: [22, 16],
+              iconAnchor: [11, 8],
+            }),
+            interactive: false,
+          }).addTo(map);
+        });
+      }
 
-      // Puntos de grupos
+      // Bolas numeradas = grupos (GPS o captura).
       groups.forEach((g) => {
         const isBlocker = g.role === "blocker";
         const isBlocked = g.role === "blocked";
+        const fromCapture = g.positionSource === "capture";
         const color = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
         const ring = isBlocker
           ? `<div style="
@@ -162,22 +171,25 @@ export function RitmoMap({
         const blockerIcon = isBlocker
           ? `<div style="position:absolute; left:30px; top:-26px; font-size:22px;">🚦</div>`
           : "";
+        const captureRing = fromCapture
+          ? `box-shadow:0 0 0 3px rgba(255,255,255,0.95), 0 0 0 6px rgba(59,130,246,0.85);`
+          : "box-shadow:0 2px 10px rgba(0,0,0,0.7);";
 
         const marker = L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: "",
             html: `
-              <div style="transform: ${rotate ? 'rotate(90deg)' : 'none'}; transform-origin: center; position: relative; cursor: pointer;">
+              <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative; cursor: pointer;">
                 ${ring}
                 <div style="
                   width:36px; height:36px; border-radius:50%;
                   background:${color};
-                  border:3px solid #fff;
-                  box-shadow:0 2px 10px rgba(0,0,0,0.7);
+                  border:3px ${fromCapture ? "dashed" : "solid"} #fff;
+                  ${captureRing}
                   display:flex; align-items:center; justify-content:center;
                   color:#fff; font-weight:800; font-size:16px;
                   font-family:Arial,sans-serif;
-                ">${g.number}</div>
+                ">G${g.number}</div>
                 ${blockerIcon}
               </div>
             `,
@@ -225,7 +237,7 @@ export function RitmoMap({
     })();
 
     return () => cleanup();
-  }, [size.w, size.h, groups]);
+  }, [size.w, size.h, groups, showHoleLabels, rotate]);
 
   // Reaccionar a selectedId: flyTo al grupo + zoom o volver a vista completa
   useEffect(() => {

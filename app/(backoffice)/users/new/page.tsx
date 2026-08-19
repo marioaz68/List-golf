@@ -268,14 +268,15 @@ export default async function NewUserPage() {
                     <option key={role.id} value={role.id}>
                       {role.name}
                       {role.code === "marshal"
-                        ? " · solo captura/scorecards"
+                        ? " · captura + mini app Telegram"
                         : ""}
                     </option>
                   ))}
               </select>
               <div style={helpTextStyle}>
-                El rol por club es opcional. El rol &quot;Marshal&quot; solo da
-                acceso a captura de tarjetas y revisión de scorecards.
+                El rol Marshal da acceso a captura, scorecards y ritmo en web.
+                En Telegram debe vincularse con /soy_marshal y usar /MARSHAL
+                para capturas retrasadas y resultados en vivo.
               </div>
             </div>
 
