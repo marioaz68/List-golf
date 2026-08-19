@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import {
+  formatPhSum,
+  teamTournamentPhSum,
+} from "@/lib/matchplay/auctionTeamPh";
 import { useMatchPlayTeamsRealtime } from "@/lib/matchplay/useMatchPlayTeamsRealtime";
 import { saveAuctionSheet, applyAuctionSeeding } from "../actions";
 
@@ -11,7 +15,7 @@ type Row = {
   team_name: string | null;
   player_a_name: string;
   player_b_name: string | null;
-  combined_hi: number | null;
+  team_ph: number | null;
   order: string;
   bid: string;
 };
@@ -99,7 +103,7 @@ export default function AuctionLiveSheet({
         player_b_name: t.player_b
           ? formatPlayerName(t.player_b.player)
           : null,
-        combined_hi: t.combined_hi,
+        team_ph: teamTournamentPhSum(t),
         order: t.auction_order != null ? String(t.auction_order) : "",
         bid: t.auction_bid != null ? String(t.auction_bid) : "",
       }))
@@ -135,7 +139,7 @@ export default function AuctionLiveSheet({
           player_b_name: t.player_b
             ? formatPlayerName(t.player_b.player)
             : prev?.player_b_name ?? null,
-          combined_hi: t.combined_hi,
+          team_ph: teamTournamentPhSum(t),
           order: t.auction_order != null ? String(t.auction_order) : "",
           bid: t.auction_bid != null ? String(t.auction_bid) : "",
         });
@@ -347,7 +351,12 @@ export default function AuctionLiveSheet({
               <tr>
                 <th className="w-16 p-2 text-center">#</th>
                 <th className="p-2">Equipo / Jugadores</th>
-                <th className="w-24 p-2">HI</th>
+                <th
+                  className="w-24 p-2"
+                  title="Handicap de torneo (suma de la pareja al 80%)"
+                >
+                  H
+                </th>
                 <th className="w-40 p-2">Postura ({currency})</th>
                 <th className="w-32 p-2 print:hidden">Cubre {playerCoverPercent ?? "—"}%</th>
               </tr>
@@ -386,7 +395,7 @@ export default function AuctionLiveSheet({
                       </div>
                     </td>
                     <td className="p-2 text-cyan-300">
-                      {r.combined_hi ?? "—"}
+                      {formatPhSum(r.team_ph)}
                     </td>
                     <td className="p-2">
                       <input
