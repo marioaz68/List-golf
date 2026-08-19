@@ -151,17 +151,30 @@ export function capturerRoleLabel(role: ActiveCapturer["role"]): string {
 }
 
 /** Orden para ruta de marshal: ritmo del campo de atrás hacia adelante. */
-export function compareGroupsForMarshalRoute(a: {
-  kind: string;
-  expectedHole: number | null;
-  holesPlayed: number;
-  holesBehind: number;
-  priority: number;
-  minutesSinceLastCapture: number | null;
-  teeTime: string | null;
-  number: number;
-  tournamentName: string;
-}): number {
+export function compareGroupsForMarshalRoute(
+  a: {
+    kind: string;
+    expectedHole: number | null;
+    holesPlayed: number;
+    holesBehind: number;
+    priority: number;
+    minutesSinceLastCapture: number | null;
+    teeTime: string | null;
+    number: number;
+    tournamentName: string;
+  },
+  b: {
+    kind: string;
+    expectedHole: number | null;
+    holesPlayed: number;
+    holesBehind: number;
+    priority: number;
+    minutesSinceLastCapture: number | null;
+    teeTime: string | null;
+    number: number;
+    tournamentName: string;
+  }
+): number {
   const paceA = marshalPaceSortKey(a);
   const paceB = marshalPaceSortKey(b);
   if (paceB !== paceA) return paceB - paceA;
