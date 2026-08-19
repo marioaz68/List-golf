@@ -27,6 +27,8 @@ export type MarshalTournamentOption = {
 
 export type MarshalOpsPayload = {
   marshalName: string;
+  marshalProfileId: string;
+  marshalInitials: string;
   today: string;
   computedAtISO: string;
   tournaments: MarshalTournamentOption[];
@@ -55,6 +57,8 @@ export async function loadMarshalOpsData(
   if (!activeTournamentId) {
     return {
       marshalName: marshal.name,
+      marshalProfileId: marshal.profileId,
+      marshalInitials: marshal.initials,
       today,
       computedAtISO,
       tournaments,
@@ -72,6 +76,8 @@ export async function loadMarshalOpsData(
   if (!tRow) {
     return {
       marshalName: marshal.name,
+      marshalProfileId: marshal.profileId,
+      marshalInitials: marshal.initials,
       today,
       computedAtISO,
       tournaments,
@@ -165,6 +171,8 @@ export async function loadMarshalOpsData(
 
   return {
     marshalName: marshal.name,
+    marshalProfileId: marshal.profileId,
+    marshalInitials: marshal.initials,
     today,
     computedAtISO,
     tournaments,

@@ -18,8 +18,19 @@ export interface GroupDot {
   positionSource?: "gps" | "capture";
 }
 
+export interface MarshalDot {
+  id: string;
+  lat: number;
+  lon: number;
+  initials: string;
+  name: string;
+  hoyo: number | null;
+  updatedAt: string | null;
+}
+
 interface RitmoMapProps {
   groups: GroupDot[];
+  marshals?: MarshalDot[];
   selectedId?: string | null;
   /** Etiquetas fijas H1–H18 del campo (no son grupos). Default false en vivo. */
   showHoleLabels?: boolean;
@@ -52,6 +63,7 @@ const HOYO_COLORS = [
  */
 export function RitmoMap({
   groups,
+  marshals = [],
   selectedId,
   showHoleLabels = true,
   rotate = true,
@@ -202,6 +214,33 @@ export function RitmoMap({
         marker.on("click", () => onSelectGroupRef.current?.(g.id));
       });
 
+      // Marcadores de marshals (GPS real, iniciales).
+      marshals.forEach((m) => {
+        L.marker([m.lat, m.lon], {
+          icon: L.divIcon({
+            className: "",
+            html: `
+              <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative;" title="${m.name.replace(/"/g, "&quot;")}">
+                <div style="
+                  width:32px; height:32px; border-radius:50%;
+                  background:#2563eb;
+                  border:3px solid #fff;
+                  box-shadow:0 0 0 2px rgba(37,99,235,0.55), 0 2px 10px rgba(0,0,0,0.7);
+                  display:flex; align-items:center; justify-content:center;
+                  color:#fff; font-weight:800; font-size:11px;
+                  font-family:Arial,sans-serif;
+                  letter-spacing:-0.5px;
+                ">${m.initials}</div>
+              </div>
+            `,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16],
+          }),
+          keyboard: false,
+          interactive: false,
+        }).addTo(map);
+      });
+
       // Animación CSS para el anillo pulsante del bloqueador
       if (!document.querySelector("style[data-ritmo-anim]")) {
         const style = document.createElement("style");
@@ -242,7 +281,7 @@ export function RitmoMap({
     })();
 
     return () => cleanup();
-  }, [size.w, size.h, groups, showHoleLabels, rotate]);
+  }, [size.w, size.h, groups, marshals, showHoleLabels, rotate]);
 
   // Reaccionar a selectedId: flyTo al grupo + zoom o volver a vista completa
   useEffect(() => {

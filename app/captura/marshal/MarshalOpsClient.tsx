@@ -16,6 +16,7 @@ import type {
   MarshalTournamentOption,
 } from "@/lib/marshal/loadMarshalOpsData";
 import MarshalRitmoPanel from "./MarshalRitmoPanel";
+import MarshalGpsChip from "@/components/marshal/MarshalGpsChip";
 
 type Tab = "capturas" | "ritmo" | "resultados";
 
@@ -179,6 +180,8 @@ export default function MarshalOpsClient({
       if (json.ok) {
         setData({
           marshalName: json.marshalName,
+          marshalProfileId: json.marshalProfileId,
+          marshalInitials: json.marshalInitials,
           today: json.today,
           computedAtISO: json.computedAtISO,
           tournaments: json.tournaments as MarshalTournamentOption[],
@@ -263,23 +266,31 @@ export default function MarshalOpsClient({
               {data.marshalName} · {data.today}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => refresh()}
-            disabled={loading}
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              padding: "6px 10px",
-              borderRadius: 8,
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            {loading ? "…" : "↻"}
-          </button>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <MarshalGpsChip
+              tg={tg}
+              profileId={data.marshalProfileId}
+              tournamentId={selectedTournamentId}
+              initials={data.marshalInitials}
+            />
+            <button
+              type="button"
+              onClick={() => refresh()}
+              disabled={loading}
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "6px 10px",
+                borderRadius: 8,
+                background: "#2563eb",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              {loading ? "…" : "↻"}
+            </button>
+          </div>
         </div>
 
         {selectedTournament ? (

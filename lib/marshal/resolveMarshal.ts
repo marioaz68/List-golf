@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { profileInitials } from "@/lib/marshal/profileInitials";
 
 export type MarshalProfile = {
   profileId: string;
   name: string;
+  initials: string;
   /** IDs de club donde tiene rol marshal a nivel club. */
   clubIds: string[];
   /** IDs de torneo donde tiene rol marshal solo en ese torneo. */
@@ -115,12 +117,13 @@ export async function resolveMarshal(
     }
   }
 
+  const firstName = (profile as { first_name: string | null }).first_name;
+  const lastName = (profile as { last_name: string | null }).last_name;
+
   return {
     profileId,
-    name: fullName(
-      (profile as { first_name: string | null }).first_name,
-      (profile as { last_name: string | null }).last_name
-    ),
+    name: fullName(firstName, lastName),
+    initials: profileInitials(firstName, lastName),
     clubIds: Array.from(new Set(clubIds)),
     tournamentIds: Array.from(new Set(tournamentIds)),
   };

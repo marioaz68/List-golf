@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GroupDot } from "@/app/ritmo/demo/RitmoMap";
+import type { GroupDot, MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
 import {
   loadCaptureLagGroupsForRound,
   loadRoundIdsWithCaptureActivityToday,
 } from "@/lib/ritmo/loadCaptureLagGroups";
+import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import { getHoleCenter, offsetHolePosition } from "@/lib/ritmo/holeCenters";
 import {
   resolveLiveRoundForTournament,
@@ -39,6 +40,7 @@ export type MarshalRitmoSnapshot = {
   tournamentName: string;
   roundLabel: string;
   mapGroups: GroupDot[];
+  mapMarshals: MarshalDot[];
   counts: {
     atrasado: number;
     en_ritmo: number;
@@ -172,10 +174,13 @@ export async function loadMarshalRitmoSnapshot(
     counts[dot.status as keyof typeof counts] += 1;
   }
 
+  const mapMarshals = await loadMarshalPositions(admin, tid);
+
   return {
     tournamentName,
     roundLabel: `Ronda ${round.round_no ?? "?"}`,
     mapGroups,
+    mapMarshals,
     counts,
   };
 }

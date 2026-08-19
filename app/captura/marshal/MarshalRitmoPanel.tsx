@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
+import { RitmoMap, type GroupDot, type MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 
 type RitmoPayload = {
   tournamentName: string;
   roundLabel: string;
   mapGroups: GroupDot[];
+  mapMarshals: MarshalDot[];
   counts: {
     atrasado: number;
     en_ritmo: number;
@@ -59,6 +60,7 @@ export default function MarshalRitmoPanel({
         tournamentName: json.tournamentName,
         roundLabel: json.roundLabel,
         mapGroups: json.mapGroups as GroupDot[],
+        mapMarshals: (json.mapMarshals ?? []) as MarshalDot[],
         counts: json.counts,
       });
     } finally {
@@ -119,6 +121,9 @@ export default function MarshalRitmoPanel({
       >
         <span>
           {data.roundLabel} · {data.mapGroups.length} en cancha
+          {data.mapMarshals.length > 0
+            ? ` · ${data.mapMarshals.length} marshal${data.mapMarshals.length === 1 ? "" : "s"} GPS`
+            : ""}
         </span>
         <button
           type="button"
@@ -153,6 +158,9 @@ export default function MarshalRitmoPanel({
         <span>🟢 {data.counts.en_ritmo} en ritmo</span>
         <span>🔵 {data.counts.adelantado} adelant.</span>
         <span>⚪ {data.counts.sin_datos} sin ritmo</span>
+        {data.mapMarshals.length > 0 ? (
+          <span>🔵 {data.mapMarshals.length} marshal GPS</span>
+        ) : null}
       </div>
       <div
         style={{
@@ -166,6 +174,7 @@ export default function MarshalRitmoPanel({
         <RitmoMap
           key={`marshal-map-${tournamentId}-${mapEpoch}`}
           groups={data.mapGroups}
+          marshals={data.mapMarshals}
           selectedId={selectedId}
           showHoleLabels={false}
           rotate={vp.shouldRotateMap}
