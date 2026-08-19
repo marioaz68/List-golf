@@ -41,6 +41,8 @@ export type CaptureLagResult = {
   captureHole: number | null;
   /** Hoyo en cancha según ritmo del campo y salida (null si no aplica). */
   expectedHole: number | null;
+  /** Minutos de retraso vs ritmo del campo (positivo = lento). */
+  paceDelayMinutes: number | null;
   /** Texto operativo para el marshal. */
   reason: string;
   /** 0 = peor (ordenado en el board). */
@@ -81,13 +83,37 @@ export function paceExpectedHole(
   return currentHoleFromHolesPlayed(expectedHoles, tee);
 }
 
+function paceDelayMinutesFrom(args: {
+  minutesSinceStart: number | null;
+  holesPlayed: number;
+  startHole: number;
+  perHoleMinutes?: PerHoleMinutes | null;
+}): number | null {
+  if (args.minutesSinceStart == null || args.minutesSinceStart < 0) return null;
+  const expectedMins = expectedMinutesForHolesPlayed(
+    args.holesPlayed,
+    args.startHole,
+    args.perHoleMinutes
+  );
+  const delta = args.minutesSinceStart - expectedMins;
+  if (!Number.isFinite(delta) || delta <= 0) return null;
+  return Math.round(delta);
+}
+
 function lagResult(
   startHole: number,
-  partial: Omit<CaptureLagResult, "expectedHole">
+  partial: Omit<CaptureLagResult, "expectedHole" | "paceDelayMinutes">,
+  perHoleMinutes?: PerHoleMinutes | null
 ): CaptureLagResult {
   return {
     ...partial,
     expectedHole: paceExpectedHole(partial.expectedHoles, startHole),
+    paceDelayMinutes: paceDelayMinutesFrom({
+      minutesSinceStart: partial.minutesSinceStart,
+      holesPlayed: partial.holesPlayed,
+      startHole,
+      perHoleMinutes,
+    }),
   };
 }
 
@@ -108,6 +134,12 @@ export function evaluateCaptureLag(args: {
   now?: Date;
 }): CaptureLagResult {
   const now = args.now ?? new Date();
+  const perHoleMinutes = args.perHoleMinutes;
+  const lag = (
+    startHole: number,
+    partial: Omit<CaptureLagResult, "expectedHole" | "paceDelayMinutes">
+  ) => lagResult(startHole, partial, perHoleMinutes);
+
   const holesPlayed = Math.max(
     0,
     Math.min(18, Math.trunc(Number(args.holesPlayed) || 0))
@@ -154,7 +186,7 @@ export function evaluateCaptureLag(args: {
   // Ronda/torneo de fecha pasada: congelar reloj — no criticar por retraso acumulado.
   if (opsClosed) {
     if (holesPlayed >= 18) {
-      return lagResult(startHole, {
+      return lag(startHole, {
         kind: "terminado",
         expectedHoles: 18,
         holesPlayed: 18,
@@ -166,7 +198,7 @@ export function evaluateCaptureLag(args: {
         priority: 95,
       });
     }
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "cerrado",
       expectedHoles: holesPlayed,
       holesPlayed,
@@ -180,7 +212,7 @@ export function evaluateCaptureLag(args: {
   }
 
   if (holesPlayed >= 18) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "terminado",
       expectedHoles: 18,
       holesPlayed: 18,
@@ -196,7 +228,7 @@ export function evaluateCaptureLag(args: {
   }
 
   if (!teeDate) {
-    const base = lagResult(startHole, {
+    const base = lag(startHole, {
       kind: "sin_hora",
       expectedHoles: 0,
       holesPlayed,
@@ -217,7 +249,7 @@ export function evaluateCaptureLag(args: {
     (now.getTime() - teeDate.getTime()) / 60000;
 
   if (minutesSinceStart < -2) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "no_salido",
       expectedHoles: 0,
       holesPlayed,
@@ -244,7 +276,7 @@ export function evaluateCaptureLag(args: {
     holesPlayed === 0 &&
     minutesSinceStart >= SILENCE_ZERO_CRITICAL_MIN
   ) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "critico",
       expectedHoles,
       holesPlayed: 0,
@@ -259,7 +291,7 @@ export function evaluateCaptureLag(args: {
 
   // 2) Retraso grande en hoyos capturados vs reloj.
   if (holesBehind >= HOLES_BEHIND_CRITICO) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "critico",
       expectedHoles,
       holesPlayed,
@@ -273,7 +305,7 @@ export function evaluateCaptureLag(args: {
   }
 
   if (holesBehind >= HOLES_BEHIND_ATRASADO) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "atrasado",
       expectedHoles,
       holesPlayed,
@@ -292,7 +324,7 @@ export function evaluateCaptureLag(args: {
     minsSilent >= SILENCE_CAPTURE_ALERT_MIN &&
     minutesSinceStart >= SILENCE_CAPTURE_ALERT_MIN
   ) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "silencioso",
       expectedHoles,
       holesPlayed,
@@ -306,7 +338,7 @@ export function evaluateCaptureLag(args: {
   }
 
   if (holesPlayed === 0 && minutesSinceStart >= 8) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "silencioso",
       expectedHoles,
       holesPlayed: 0,
@@ -320,7 +352,7 @@ export function evaluateCaptureLag(args: {
   }
 
   if (holesBehind >= HOLES_BEHIND_ALERT) {
-    return lagResult(startHole, {
+    return lag(startHole, {
       kind: "atrasado",
       expectedHoles,
       holesPlayed,
@@ -333,7 +365,7 @@ export function evaluateCaptureLag(args: {
     });
   }
 
-  return lagResult(startHole, {
+  return lag(startHole, {
     kind: "ok",
     expectedHoles,
     holesPlayed,

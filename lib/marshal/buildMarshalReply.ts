@@ -29,10 +29,10 @@ export async function buildMarshalReply(
     text: [
       `Hola ${marshal.name} 👋`,
       "",
-      "Panel marshal: capturas retrasadas del día y resultados en vivo.",
+      "Panel marshal: capturas retrasadas, ritmo del campo y resultados en vivo.",
       "",
       "Toca el botón para abrir la mini app.",
     ].join("\n"),
-    buttons: [[{ text: "📋 Capturas y resultados", url }]],
+    buttons: [[{ text: "📋 Panel marshal", url }]],
   };
 }

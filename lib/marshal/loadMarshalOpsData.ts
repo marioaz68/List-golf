@@ -2,13 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadCaptureLagGroupsForRound,
   loadTodayRoundsAcrossTournaments,
+  loadRoundIdsWithCaptureActivityToday,
   type CaptureLagGroupRow,
 } from "@/lib/ritmo/loadCaptureLagGroups";
 import {
   loadPerHoleMinutes,
   type PerHoleMinutes,
 } from "@/lib/telegram/ritmo/paceCalculator";
-import { todayMexicoDate } from "@/lib/ritmo/opsDay";
+import {
+  todayMexicoDate,
+  resolveLiveRoundForTournament,
+  resolveOpsRoundDate,
+} from "@/lib/ritmo/opsDay";
 import {
   marshalAccessibleTournamentIds,
   type MarshalProfile,
@@ -52,6 +57,29 @@ export async function loadMarshalOpsData(
       settings: unknown;
     }
   >();
+
+  // Torneos del club accesibles al marshal (oficial + prueba, etc.).
+  const accessibleIds = Array.from(accessible);
+  if (accessibleIds.length > 0) {
+    const { data: accessibleRows } = await admin
+      .from("tournaments")
+      .select("id, name, short_name, settings, is_archived")
+      .in("id", accessibleIds)
+      .neq("is_archived", true);
+    for (const row of accessibleRows ?? []) {
+      const id = String((row as { id?: string }).id ?? "");
+      if (!id) continue;
+      tournamentMap.set(id, {
+        id,
+        name:
+          (row as { short_name?: string | null }).short_name ??
+          (row as { name?: string | null }).name ??
+          "Torneo",
+        settings: (row as { settings?: unknown }).settings ?? null,
+      });
+    }
+  }
+
   for (const slot of slots) {
     if (!tournamentMap.has(slot.tournament.id)) {
       tournamentMap.set(slot.tournament.id, {
@@ -63,11 +91,14 @@ export async function loadMarshalOpsData(
   }
 
   const tournamentIds = Array.from(tournamentMap.keys());
-  if (tournamentIds.length > 0) {
+  const needsSettings = tournamentIds.filter(
+    (id) => tournamentMap.get(id)?.settings == null
+  );
+  if (needsSettings.length > 0) {
     const { data: formatRows } = await admin
       .from("tournaments")
       .select("id, settings")
-      .in("id", tournamentIds);
+      .in("id", needsSettings);
     for (const row of formatRows ?? []) {
       const id = String((row as { id?: string }).id ?? "");
       const existing = tournamentMap.get(id);
@@ -94,6 +125,14 @@ export async function loadMarshalOpsData(
   if (!activeTournamentId && tournaments.length === 1) {
     activeTournamentId = tournaments[0].id;
   }
+  // Preferir torneo oficial Calcuta si hay varios y no eligió uno.
+  if (!activeTournamentId && tournaments.length > 1) {
+    const official = tournaments.find((t) =>
+      /calcuta de parejas varonil/i.test(t.name) &&
+      !/^prueba/i.test(t.name)
+    );
+    if (official) activeTournamentId = official.id;
+  }
 
   const paceCache = new Map<string, PerHoleMinutes>();
   const groups: CaptureLagGroupRow[] = [];
@@ -102,7 +141,7 @@ export async function loadMarshalOpsData(
     ? slots.filter((s) => s.tournament.id === activeTournamentId)
     : slots;
 
-  for (const slot of slotsToLoad) {
+  async function appendLagForSlot(slot: (typeof slots)[number]) {
     const cacheKey = slot.tournament.courseId ?? `__${slot.tournament.id}`;
     let per = paceCache.get(cacheKey);
     if (!per) {
@@ -124,6 +163,73 @@ export async function loadMarshalOpsData(
       perHoleMinutes: per,
     });
     groups.push(...rows);
+  }
+
+  for (const slot of slotsToLoad) {
+    await appendLagForSlot(slot);
+  }
+
+  // Torneo elegido por URL pero sin ronda calendarizada hoy: carga ronda viva.
+  if (activeTournamentId && slotsToLoad.length === 0) {
+    const meta = tournamentMap.get(activeTournamentId);
+    const { data: tRow } = await admin
+      .from("tournaments")
+      .select("id, name, short_name, course_name, course_id, start_date, end_date")
+      .eq("id", activeTournamentId)
+      .maybeSingle();
+    const { data: roundsRaw } = await admin
+      .from("rounds")
+      .select("id, round_no, round_date")
+      .eq("tournament_id", activeTournamentId)
+      .order("round_no", { ascending: true });
+    const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(
+      admin,
+      today
+    );
+    const round = resolveLiveRoundForTournament({
+      rounds: (roundsRaw ?? []) as Array<{
+        id: string;
+        round_no: number | null;
+        round_date: string | null;
+      }>,
+      today,
+      tournamentEndDate: (tRow?.end_date as string | null) ?? null,
+      tournamentStartDate: (tRow?.start_date as string | null) ?? null,
+      activityRoundIds,
+    });
+    if (round && tRow) {
+      const courseId = (tRow.course_id as string | null) ?? null;
+      let per = paceCache.get(courseId ?? `__${activeTournamentId}`);
+      if (!per) {
+        per = await loadPerHoleMinutes(admin, courseId);
+        paceCache.set(courseId ?? `__${activeTournamentId}`, per);
+      }
+      const opsRoundDate =
+        resolveOpsRoundDate({
+          roundDate: round.round_date,
+          today,
+          liveCaptureToday: activityRoundIds.has(round.id),
+        }) ?? today;
+      const rows = await loadCaptureLagGroupsForRound(admin, {
+        tournamentId: activeTournamentId,
+        tournamentName:
+          meta?.name ??
+          (tRow.short_name as string | null) ??
+          (tRow.name as string | null) ??
+          "Torneo",
+        courseName: (tRow.course_name as string | null) ?? null,
+        courseId,
+        roundId: round.id,
+        roundNo: round.round_no,
+        roundDate: round.round_date,
+        opsRoundDate,
+        tournamentEndDate: (tRow.end_date as string | null) ?? null,
+        tournamentStartDate: (tRow.start_date as string | null) ?? null,
+        now,
+        perHoleMinutes: per,
+      });
+      groups.push(...rows);
+    }
   }
 
   const byId = new Map<string, CaptureLagGroupRow>();

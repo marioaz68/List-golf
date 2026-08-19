@@ -44,6 +44,8 @@ export type CaptureLagGroupRow = {
   minutesSinceLastCapture: number | null;
   captureHole: number | null;
   expectedHole: number | null;
+  /** Minutos de retraso vs ritmo del campo (positivo = lento). */
+  paceDelayMinutes: number | null;
   reason: string;
   priority: number;
   capturaHref: string;
@@ -218,6 +220,7 @@ export async function loadCaptureLagGroupsForRound(
       minutesSinceLastCapture: lag.minutesSinceLastCapture,
       captureHole: lag.captureHole,
       expectedHole: lag.expectedHole,
+      paceDelayMinutes: lag.paceDelayMinutes,
       reason: lag.reason,
       priority: lag.priority,
       capturaHref: `/captura/grupo?group_id=${encodeURIComponent(g.id)}`,

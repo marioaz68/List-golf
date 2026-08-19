@@ -15,7 +15,7 @@ import {
   assertRegistrationClosedForTeeSheet,
   fetchTournamentRegistrationStatus,
 } from "@/lib/tournaments/registrationGate";
-import { roundsInSameSession, type SessionRoundFields } from "./sessionBlock";
+import { roundsInSameSession, type SessionRoundFields, normalizeStartTypeForSession } from "./sessionBlock";
 import { repairCutRulesTargetFinalRound } from "@/lib/convocatoria/upgradeTournamentRules";
 import {
   backfillConsolationLosersFromRound,
@@ -23,6 +23,7 @@ import {
   loadConsolationMpRule,
   reconcileRoundGroupOrder,
 } from "@/lib/matchplay/consolationMatchPlay";
+import { compactAndSyncRoundGroups } from "@/lib/matchplay/pairingGroupOrder";
 import {
   CCQ_PAR3_HOLES,
   CCQ_PAR4_HOLES,
@@ -548,7 +549,7 @@ async function recalcStartsForRound(supabase: any, round_id: string) {
 
   const list = (groups ?? []) as Array<{ id: string; group_no: number }>;
 
-  if (r.start_type === "tee_times") {
+  if (normalizeStartTypeForSession(r.start_type) === "tee_times") {
     const baseMinutes = typeof r.start_time === "string" ? parseHHMM(r.start_time) : null;
     const interval = r.interval_minutes == null ? null : Number(r.interval_minutes);
 
@@ -651,7 +652,7 @@ async function _recalculateTeeTimes(formData: FormData) {
 
   if (rErr || !r) throw new Error("No se pudo leer round: " + (rErr?.message ?? ""));
   if (r.tournament_id !== tournament_id) throw new Error("El round no pertenece al torneo seleccionado.");
-  if (r.start_type !== "tee_times") throw new Error("Este round no es tee_times.");
+  if (normalizeStartTypeForSession(r.start_type) !== "tee_times") throw new Error("Este round no es tee_times.");
 
   const baseMinutes = typeof r.start_time === "string" ? parseHHMM(r.start_time) : null;
   const interval = r.interval_minutes == null ? null : Number(r.interval_minutes);
@@ -1641,6 +1642,22 @@ async function _generateMatchPlayTeeSheet(formData: FormData) {
       await reconcileRoundGroupOrder(admin, tournament_id, targetRoundNo);
     } catch (err) {
       console.error("[tee-sheet] regen consolation groups:", err);
+    }
+  }
+
+  const adminSync = tryCreateAdminClient();
+  if (adminSync) {
+    try {
+      await compactAndSyncRoundGroups(adminSync, round_id);
+    } catch (err) {
+      console.error("[tee-sheet] compact/sync match play groups:", err);
+    }
+  } else {
+    try {
+      await compactGroupsForRound(supabase, round_id);
+      await recalcStartsForRound(supabase, round_id);
+    } catch (err) {
+      console.error("[tee-sheet] compact/sync match play groups:", err);
     }
   }
 

@@ -15,8 +15,9 @@ import type {
   MarshalOpsPayload,
   MarshalTournamentOption,
 } from "@/lib/marshal/loadMarshalOpsData";
+import MarshalRitmoPanel from "./MarshalRitmoPanel";
 
-type Tab = "capturas" | "resultados";
+type Tab = "capturas" | "ritmo" | "resultados";
 
 const KIND_META: Record<
   CaptureLagKind,
@@ -57,6 +58,54 @@ function holeLine(g: CaptureLagGroupRow): string {
   if (g.captureHole != null) return `van en H${g.captureHole}`;
   if (g.expectedHole != null) return `deberían H${g.expectedHole}`;
   return `salida H${g.startingHole}`;
+}
+
+function PaceDelayBadge({
+  minutes,
+  holesBehind,
+}: {
+  minutes: number | null;
+  holesBehind: number;
+}) {
+  if (minutes == null || minutes <= 0) {
+    if (holesBehind <= 0) return null;
+    return (
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          color: "#9a3412",
+          background: "#fff7ed",
+          padding: "4px 8px",
+          borderRadius: 8,
+          whiteSpace: "nowrap",
+          textAlign: "right",
+        }}
+      >
+        {holesBehind} hoyo{holesBehind === 1 ? "" : "s"} atrás
+      </span>
+    );
+  }
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 800,
+        color: minutes >= 20 ? "#991b1b" : "#9a3412",
+        background: minutes >= 20 ? "#fef2f2" : "#fff7ed",
+        padding: "4px 8px",
+        borderRadius: 8,
+        whiteSpace: "nowrap",
+        textAlign: "right",
+        lineHeight: 1.25,
+      }}
+    >
+      ~{minutes} min
+      <span style={{ display: "block", fontSize: 9, fontWeight: 700, opacity: 0.85 }}>
+        ritmo campo
+      </span>
+    </span>
+  );
 }
 
 function CapturerChips({ capturers }: { capturers: ActiveCapturer[] }) {
@@ -278,8 +327,8 @@ export default function MarshalOpsClient({
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            display: "flex",
+            flexDirection: "column",
             gap: 6,
             marginTop: 10,
           }}
@@ -300,6 +349,22 @@ export default function MarshalOpsClient({
           >
             Capturas retrasadas
             {problemN > 0 ? ` (${problemN})` : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("ritmo")}
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: "none",
+              cursor: "pointer",
+              background: tab === "ritmo" ? "#2563eb" : "#1e293b",
+              color: tab === "ritmo" ? "#fff" : "#94a3b8",
+            }}
+          >
+            Ritmo del campo
           </button>
           <button
             type="button"
@@ -442,10 +507,50 @@ export default function MarshalOpsClient({
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                             Salida {formatTime(g.teeTime)} · {g.reason}
                           </div>
+                          {g.paceDelayMinutes != null && g.paceDelayMinutes > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: g.paceDelayMinutes >= 20 ? "#fca5a5" : "#fdba74",
+                                marginTop: 4,
+                              }}
+                            >
+                              Retraso en ritmo del campo: ~{g.paceDelayMinutes} min
+                              {g.holesBehind > 0
+                                ? ` · ${g.holesBehind} hoyo${g.holesBehind === 1 ? "" : "s"} de captura atrás`
+                                : ""}
+                            </div>
+                          ) : g.holesBehind > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: "#fdba74",
+                                marginTop: 4,
+                              }}
+                            >
+                              {g.holesBehind} hoyo{g.holesBehind === 1 ? "" : "s"} de captura atrás vs ritmo
+                            </div>
+                          ) : null}
                         </div>
-                        <span style={{ fontSize: 18, color: "#64748b" }}>
-                          {expanded ? "▾" : "▸"}
-                        </span>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "flex-end",
+                            gap: 6,
+                            flexShrink: 0,
+                          }}
+                        >
+                          <PaceDelayBadge
+                            minutes={g.paceDelayMinutes}
+                            holesBehind={g.holesBehind}
+                          />
+                          <span style={{ fontSize: 18, color: "#64748b" }}>
+                            {expanded ? "▾" : "▸"}
+                          </span>
+                        </div>
                       </div>
                     </button>
 
@@ -470,6 +575,9 @@ export default function MarshalOpsClient({
                           }}
                         >
                           Última captura: {agoLabel(g.lastCaptureTs)}
+                          {g.paceDelayMinutes != null && g.paceDelayMinutes > 0
+                            ? ` · retraso ritmo ~${g.paceDelayMinutes} min`
+                            : ""}
                         </div>
                         <div
                           style={{
@@ -517,6 +625,8 @@ export default function MarshalOpsClient({
             )}
           </div>
         </>
+      ) : tab === "ritmo" ? (
+        <MarshalRitmoPanel tg={tg} tournamentId={selectedTournamentId} />
       ) : (
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           {!selectedTournament || !livePath ? (
@@ -528,7 +638,7 @@ export default function MarshalOpsClient({
                 fontSize: 13,
               }}
             >
-              Elige un torneo con ronda hoy para ver resultados en vivo.
+              Elige un torneo para ver resultados en vivo.
             </div>
           ) : (
             <>

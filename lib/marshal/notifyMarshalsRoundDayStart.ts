@@ -24,7 +24,7 @@ function buildDayStartText(args: {
   if (args.roundDate) lines.push(`Fecha: ${args.roundDate}`);
   lines.push("");
   lines.push(
-    "Abre el panel marshal para ver capturas retrasadas y resultados en vivo del día:"
+    "Abre el panel marshal para ver capturas retrasadas, ritmo del campo y resultados en vivo:"
   );
   return lines.join("\n");
 }
