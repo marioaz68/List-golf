@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadGroupPairSides } from "./loadGroupPairSides";
+import {
+  assignmentsAreOpposing,
+  buildOpposingWitnessAssignments,
+} from "./pairWitness";
 
 export type WitnessAssignment = {
   entryId: string;
@@ -9,6 +14,10 @@ export type WitnessAssignment = {
  * Devuelve los testigos asignados al grupo. Si no existen, los genera al
  * azar (cada jugador ⇒ un testigo distinto del propio grupo, jamás el
  * mismo jugador) y los persiste. Grupos de 1 jugador → no se asigna nada.
+ *
+ * En torneo de parejas: el testigo es siempre de la pareja rival (nunca el
+ * compañero). Si ya había asignaciones inválidas (compañero como testigo),
+ * se regeneran.
  */
 export async function ensureGroupWitnesses(
   admin: SupabaseClient,
@@ -16,6 +25,8 @@ export async function ensureGroupWitnesses(
 ): Promise<WitnessAssignment[]> {
   const gid = groupId.trim();
   if (!gid) return [];
+
+  const pairSides = await loadGroupPairSides(admin, gid);
 
   const { data: existing } = await admin
     .from("score_witnesses")
@@ -26,13 +37,6 @@ export async function ensureGroupWitnesses(
     entry_id: string;
     witness_entry_id: string;
   }>;
-
-  if (existingRows.length > 0) {
-    return existingRows.map((r) => ({
-      entryId: r.entry_id,
-      witnessEntryId: r.witness_entry_id,
-    }));
-  }
 
   const { data: members } = await admin
     .from("pairing_group_members")
@@ -49,25 +53,30 @@ export async function ensureGroupWitnesses(
 
   if (entryIds.length < 2) return [];
 
-  // Asignación derangement (random sin self-match). Algoritmo: shuffle del
-  // arreglo "candidatos"; si algún índice coincide con su entry, swap con
-  // el siguiente.
-  const assignments = buildRandomDerangement(entryIds);
-
-  const rows = assignments.map((a) => ({
-    group_id: gid,
-    entry_id: a.entryId,
-    witness_entry_id: a.witnessEntryId,
+  const mappedExisting: WitnessAssignment[] = existingRows.map((r) => ({
+    entryId: r.entry_id,
+    witnessEntryId: r.witness_entry_id,
   }));
 
-  const { error } = await admin
-    .from("score_witnesses")
-    .upsert(rows, { onConflict: "group_id,entry_id" });
-
-  if (error) {
+  if (pairSides) {
+    const covering = mappedExisting.filter((r) => entryIds.includes(r.entryId));
+    if (
+      covering.length === entryIds.length &&
+      assignmentsAreOpposing(covering, pairSides)
+    ) {
+      return covering;
+    }
+    const assignments = buildOpposingWitnessAssignments(entryIds, pairSides);
+    await persistAssignments(admin, gid, assignments, { replace: true });
     return assignments;
   }
 
+  if (existingRows.length > 0) {
+    return mappedExisting;
+  }
+
+  const assignments = buildRandomDerangement(entryIds);
+  await persistAssignments(admin, gid, assignments, { replace: false });
   return assignments;
 }
 
@@ -90,6 +99,26 @@ export async function getGroupWitnesses(
     entryId: r.entry_id,
     witnessEntryId: r.witness_entry_id,
   }));
+}
+
+async function persistAssignments(
+  admin: SupabaseClient,
+  groupId: string,
+  assignments: WitnessAssignment[],
+  opts: { replace: boolean }
+): Promise<void> {
+  if (assignments.length === 0) return;
+  if (opts.replace) {
+    await admin.from("score_witnesses").delete().eq("group_id", groupId);
+  }
+  const rows = assignments.map((a) => ({
+    group_id: groupId,
+    entry_id: a.entryId,
+    witness_entry_id: a.witnessEntryId,
+  }));
+  await admin
+    .from("score_witnesses")
+    .upsert(rows, { onConflict: "group_id,entry_id" });
 }
 
 function buildRandomDerangement(entryIds: string[]): WitnessAssignment[] {

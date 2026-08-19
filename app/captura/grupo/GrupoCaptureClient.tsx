@@ -38,6 +38,7 @@ import {
   PAR_BY_HOLE,
 } from "@/lib/captura/loadGroupCapture";
 import { analyzePlayoffCapture } from "@/lib/captura/playoffCaptureState";
+import { opposingOf } from "@/lib/captura/pairWitness";
 import {
   PICKED_UP_STROKES,
   type GroupCapturePayload,
@@ -1175,13 +1176,15 @@ export default function GrupoCaptureClient({
     };
   }, [allowPickupGrid]);
 
-  const witnessTargetForMe = useMemo(() => {
-    if (!meta.myEntryId) return null;
+  const witnessTargetIdsForMe = useMemo(() => {
+    if (!meta.myEntryId) return [] as string[];
+    if (meta.pairSides) return opposingOf(meta.myEntryId, meta.pairSides);
+    const ids: string[] = [];
     for (const w of meta.witnesses ?? []) {
-      if (w.witnessEntryId === meta.myEntryId) return w.entryId;
+      if (w.witnessEntryId === meta.myEntryId) ids.push(w.entryId);
     }
-    return null;
-  }, [meta.myEntryId, meta.witnesses]);
+    return ids;
+  }, [meta.myEntryId, meta.pairSides, meta.witnesses]);
 
   const progressionMap = useMemo(() => {
     const map = new Map<
@@ -1449,7 +1452,7 @@ export default function GrupoCaptureClient({
                   const highlight: "me" | "witness" | null =
                     meta.myEntryId === player.entryId
                       ? "me"
-                      : witnessTargetForMe === player.entryId
+                      : witnessTargetIdsForMe.includes(player.entryId)
                         ? "witness"
                         : null;
                   return (
@@ -1513,7 +1516,7 @@ export default function GrupoCaptureClient({
                     const highlight: "me" | "witness" | null =
                       meta.myEntryId === player.entryId
                         ? "me"
-                        : witnessTargetForMe === player.entryId
+                        : witnessTargetIdsForMe.includes(player.entryId)
                           ? "witness"
                           : null;
                     return (

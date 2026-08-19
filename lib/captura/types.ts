@@ -92,6 +92,12 @@ export type WitnessAssignmentPayload = {
   witnessEntryId: string;
 };
 
+/** Las dos parejas de un grupo (2×2). Null si el grupo no es de parejas. */
+export type PairSidesPayload = {
+  a: string[];
+  b: string[];
+};
+
 /** Progresión hoyo por hoyo del match (puntos acumulados después de cada
  *  hoyo). Solo incluye hoyos que ya están capturados. */
 export type GroupMatchPlayProgressionRow = {
@@ -168,6 +174,8 @@ export type GroupCapturePayload = {
   bracketRoundLabel: string | null;
   players: GroupCapturePlayer[];
   witnesses: WitnessAssignmentPayload[];
+  /** Presente cuando el grupo es un partido de parejas (2 vs 2). */
+  pairSides?: PairSidesPayload | null;
   /** entryId del jugador identificado por el link (?me=...). Null si el
    *  visitante abrió un link genérico. */
   myEntryId: string | null;

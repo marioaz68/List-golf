@@ -7,8 +7,12 @@ import type {
 } from "./types";
 import { ensureGroupWitnesses } from "./witnesses";
 import { loadPrivateScoresForGroup } from "./privateScores";
-import { loadCardSignaturesForGroup } from "./cardSignatures";
+import {
+  healPairCardSignatures,
+  loadCardSignaturesForGroup,
+} from "./cardSignatures";
 import { loadGroupMatchPlayStatus } from "./matchPlayGroupDecision";
+import { loadGroupPairSides } from "./loadGroupPairSides";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import {
   roundCountForBracketSize,
@@ -191,6 +195,7 @@ export async function loadGroupCapture(
       bracketRoundLabel: null,
       players: [],
       witnesses: [],
+      pairSides: null,
       myEntryId: null,
       caddieForEntryIds: [],
     };
@@ -280,6 +285,7 @@ export async function loadGroupCapture(
   }
 
   // Asignar / cargar testigos del grupo.
+  const pairSides = await loadGroupPairSides(supabase, gid);
   const witnessRows = await ensureGroupWitnesses(supabase, gid);
 
   // Tarjetas privadas: cargamos todas y luego decidimos a quién las
@@ -291,11 +297,19 @@ export async function loadGroupCapture(
   );
 
   // Firmas de tarjeta por entry.
-  const signaturesByEntry = await loadCardSignaturesForGroup(
+  let signaturesByEntry = await loadCardSignaturesForGroup(
     supabase,
     gid,
     entryIds
   );
+  if (pairSides) {
+    await healPairCardSignatures(supabase, gid, entryIds, pairSides);
+    signaturesByEntry = await loadCardSignaturesForGroup(
+      supabase,
+      gid,
+      entryIds
+    );
+  }
 
   const lockedAtByEntry = new Map<string, string | null>();
   if (roundId && entryIds.length > 0) {
@@ -461,6 +475,7 @@ export async function loadGroupCapture(
       entryId: w.entryId,
       witnessEntryId: w.witnessEntryId,
     })),
+    pairSides,
     myEntryId: meEntryId,
     caddieForEntryIds,
     matchPlay,

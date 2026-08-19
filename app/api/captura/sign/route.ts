@@ -5,6 +5,8 @@ import {
   saveCardSignature,
 } from "@/lib/captura/cardSignatures";
 import { loadGroupMatchPlayStatus } from "@/lib/captura/matchPlayGroupDecision";
+import { loadGroupPairSides } from "@/lib/captura/loadGroupPairSides";
+import { isOpposingWitness, samePair } from "@/lib/captura/pairWitness";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +22,10 @@ export const dynamic = "force-dynamic";
  *                          // verificar identidad
  *   }
  *
- * - role="player": only quien capture con ?me=entry_id que coincida con
- *   entry_id puede firmar.
- * - role="witness": only quien capture con ?me=entry_id donde
- *   entry_id sea el witness asignado al jugador objetivo.
+ * - role="player": el propio jugador (o, en parejas, su compañero cubierto
+ *   por esa firma).
+ * - role="witness": el testigo asignado; en parejas, cualquiera de la
+ *   pareja rival (nunca el compañero).
  */
 export async function POST(req: Request) {
   let body: unknown;
@@ -62,19 +64,35 @@ export async function POST(req: Request) {
 
   try {
     const admin = createAdminClient();
+    const pairSides = await loadGroupPairSides(admin, groupId);
 
     if (role === "player") {
-      if (meEntryId !== entryId) {
+      const allowed = pairSides
+        ? samePair(meEntryId, entryId, pairSides)
+        : meEntryId === entryId;
+      if (!allowed) {
         return NextResponse.json(
           {
             ok: false,
-            error: "Sólo el propio jugador puede firmar su tarjeta.",
+            error: pairSides
+              ? "Sólo un jugador de la pareja puede firmar esta tarjeta."
+              : "Sólo el propio jugador puede firmar su tarjeta.",
+          },
+          { status: 403 }
+        );
+      }
+    } else if (pairSides) {
+      if (!isOpposingWitness(meEntryId, entryId, pairSides)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "El testigo tiene que ser de la pareja rival, no tu compañero.",
           },
           { status: 403 }
         );
       }
     } else {
-      // role === "witness": verificar que me sea el testigo asignado.
       const { data: witnessRow } = await admin
         .from("score_witnesses")
         .select("witness_entry_id")
@@ -96,6 +114,7 @@ export async function POST(req: Request) {
       groupId,
       entryId,
       role,
+      actorEntryId: meEntryId,
       witnessEntryId: role === "witness" ? meEntryId : null,
     });
 
@@ -103,18 +122,19 @@ export async function POST(req: Request) {
       return NextResponse.json(result, { status: 400 });
     }
 
-    // Si ya quedaron ambas firmas + hoyos requeridos, cerrar la tarjeta
-    // automáticamente (18 hoyos, o hasta el hoyo de decisión en match play).
+    const matchPlay = await loadGroupMatchPlayStatus(admin, groupId);
+    const holesRequired = matchPlay?.holesRequired ?? 18;
+    const lockIds = new Set<string>([entryId]);
+    for (const row of result.updated) lockIds.add(row.entryId);
+
     let scorecardLocked = false;
-    if (result.signedByPlayerAt && result.signedByWitnessAt) {
-      const matchPlay = await loadGroupMatchPlayStatus(admin, groupId);
-      const holesRequired = matchPlay?.holesRequired ?? 18;
+    for (const id of lockIds) {
       const lockRes = await lockScorecardIfSignedAndComplete(admin, {
         groupId,
-        entryId,
+        entryId: id,
         holesRequired,
       });
-      if (lockRes.ok) scorecardLocked = lockRes.locked;
+      if (lockRes.ok && lockRes.locked) scorecardLocked = true;
     }
 
     return NextResponse.json({ ...result, scorecardLocked });

@@ -26,8 +26,27 @@ import {
   type HoleNumber,
   type HoleScores,
 } from "@/lib/captura/types";
+import { opposingOf, pairMatesOf } from "@/lib/captura/pairWitness";
 
 type SignaturesByEntry = Record<string, CardSignaturePayload>;
+
+function isWitnessCaddieFor(
+  entryId: string,
+  caddieForEntries: string[],
+  pairSides: GroupCapturePayload["pairSides"],
+  witnesses: GroupCapturePayload["witnesses"]
+): boolean {
+  if (pairSides) {
+    return opposingOf(entryId, pairSides).some((id) =>
+      caddieForEntries.includes(id)
+    );
+  }
+  const witnessOfTarget = (witnesses ?? []).find((w) => w.entryId === entryId)
+    ?.witnessEntryId;
+  return (
+    witnessOfTarget != null && caddieForEntries.includes(witnessOfTarget)
+  );
+}
 
 function signaturesFromPlayers(
   players: GroupCapturePlayer[]
@@ -143,7 +162,7 @@ function PublicSection({
   activeCell,
   savingKey,
   onCellTap,
-  witnessEntryIdForMe,
+  witnessEntryIdsForMe,
   myEntryId,
   toneClass = "bg-[#0d2747]",
   labelForHole,
@@ -162,7 +181,7 @@ function PublicSection({
   activeCell: ActiveCell | null;
   savingKey: string | null;
   onCellTap: (entryId: string, hole: HoleNumber, table: TableKind) => void;
-  witnessEntryIdForMe: string | null;
+  witnessEntryIdsForMe: string[];
   myEntryId: string | null;
   /** Color del header (para distinguir el tramo de desempate). */
   toneClass?: string;
@@ -255,9 +274,9 @@ function PublicSection({
             {players.map((player) => {
               const scores = scoresByEntry[player.entryId] ?? player.scores;
               const pending = pendingByEntry[player.entryId] ?? {};
-              const isMyWitnessTarget =
-                witnessEntryIdForMe != null &&
-                witnessEntryIdForMe === player.entryId;
+              const isMyWitnessTarget = witnessEntryIdsForMe.includes(
+                player.entryId
+              );
               const isMe = myEntryId != null && myEntryId === player.entryId;
               const total = holes.reduce(
                 (acc, hole) => acc + (scores[hole] ?? 0),
@@ -592,14 +611,20 @@ export default function TarjetaCaptureClient({
     return ids.filter((eid) => playersById.has(eid));
   }, [meta.myEntryId, meta.caddieForEntryIds, playersById]);
 
-  /** A quién atestigua el visitante (si es jugador). */
-  const witnessTargetForMe = useMemo(() => {
-    if (!meta.myEntryId) return null;
-    for (const w of meta.witnesses ?? []) {
-      if (w.witnessEntryId === meta.myEntryId) return w.entryId;
+  /** A quién atestigua el visitante (si es jugador). En parejas: la pareja rival. */
+  const witnessTargetIdsForMe = useMemo(() => {
+    if (!meta.myEntryId) return [] as string[];
+    if (meta.pairSides) {
+      return opposingOf(meta.myEntryId, meta.pairSides);
     }
-    return null;
-  }, [meta.myEntryId, meta.witnesses]);
+    const ids: string[] = [];
+    for (const w of meta.witnesses ?? []) {
+      if (w.witnessEntryId === meta.myEntryId) ids.push(w.entryId);
+    }
+    return ids;
+  }, [meta.myEntryId, meta.pairSides, meta.witnesses]);
+
+  const witnessTargetForMe = witnessTargetIdsForMe[0] ?? null;
 
   /** Quién es MI testigo (otro jugador). */
   const myWitnessEntryId = useMemo(() => {
@@ -825,13 +850,13 @@ export default function TarjetaCaptureClient({
     const caddieForEntries = meta.caddieForEntryIds ?? [];
     const iAmThePlayer = meta.myEntryId === entryId;
     const iAmTheirCaddie = caddieForEntries.includes(entryId);
-    const iAmTheirWitness =
-      witnessTargetForMe != null && witnessTargetForMe === entryId;
-    const witnessOfTarget = (meta.witnesses ?? []).find(
-      (w) => w.entryId === entryId
-    )?.witnessEntryId;
-    const iAmTheWitnessCaddie =
-      witnessOfTarget != null && caddieForEntries.includes(witnessOfTarget);
+    const iAmTheirWitness = witnessTargetIdsForMe.includes(entryId);
+    const iAmTheWitnessCaddie = isWitnessCaddieFor(
+      entryId,
+      caddieForEntries,
+      meta.pairSides,
+      meta.witnesses
+    );
     const role: "player" | "caddie" | "witness" | null = iAmThePlayer
       ? "player"
       : iAmTheirCaddie
@@ -945,14 +970,13 @@ export default function TarjetaCaptureClient({
     const caddieForEntries = meta.caddieForEntryIds ?? [];
     const iAmThePlayer = meta.myEntryId === entryId;
     const iAmTheirCaddie = caddieForEntries.includes(entryId);
-    const iAmTheirWitness =
-      witnessTargetForMe != null && witnessTargetForMe === entryId;
-    // Testigo del jugador objetivo P (entry de W).
-    const witnessOfTarget = (meta.witnesses ?? []).find(
-      (w) => w.entryId === entryId
-    )?.witnessEntryId;
-    const iAmTheWitnessCaddie =
-      witnessOfTarget != null && caddieForEntries.includes(witnessOfTarget);
+    const iAmTheirWitness = witnessTargetIdsForMe.includes(entryId);
+    const iAmTheWitnessCaddie = isWitnessCaddieFor(
+      entryId,
+      caddieForEntries,
+      meta.pairSides,
+      meta.witnesses
+    );
 
     return iAmThePlayer ||
       iAmTheirCaddie ||
@@ -1073,17 +1097,29 @@ export default function TarjetaCaptureClient({
 
   // Cantidad de pendientes que ME tocan aprobar
   const pendingForMeCount = useMemo(() => {
-    if (!witnessTargetForMe) return 0;
-    const pendingMap = pendingByEntry[witnessTargetForMe] ?? {};
-    return Object.values(pendingMap).filter(Boolean).length;
-  }, [witnessTargetForMe, pendingByEntry]);
+    let n = 0;
+    for (const eid of witnessTargetIdsForMe) {
+      const pendingMap = pendingByEntry[eid] ?? {};
+      n += Object.values(pendingMap).filter(Boolean).length;
+    }
+    return n;
+  }, [witnessTargetIdsForMe, pendingByEntry]);
 
-  const witnessTargetPlayer = witnessTargetForMe
-    ? playersById.get(witnessTargetForMe) ?? null
-    : null;
-  const myWitnessPlayer = myWitnessEntryId
-    ? playersById.get(myWitnessEntryId) ?? null
-    : null;
+  const witnessTargetPlayers = witnessTargetIdsForMe
+    .map((id) => playersById.get(id) ?? null)
+    .filter((p): p is GroupCapturePlayer => p != null);
+  const witnessTargetPlayer = witnessTargetPlayers[0] ?? null;
+  const myWitnessPlayers = useMemo(() => {
+    if (!meta.myEntryId) return [] as GroupCapturePlayer[];
+    if (meta.pairSides) {
+      return opposingOf(meta.myEntryId, meta.pairSides)
+        .map((id) => playersById.get(id) ?? null)
+        .filter((p): p is GroupCapturePlayer => p != null);
+    }
+    const w = myWitnessEntryId ? playersById.get(myWitnessEntryId) ?? null : null;
+    return w ? [w] : [];
+  }, [meta.myEntryId, meta.pairSides, myWitnessEntryId, playersById]);
+  const myWitnessPlayer = myWitnessPlayers[0] ?? null;
 
   /** ¿La tarjeta del jugador identificado (yo) está llena (18 hoyos)? */
   const myCardComplete = useMemo(() => {
@@ -1098,15 +1134,17 @@ export default function TarjetaCaptureClient({
 
   /** ¿La tarjeta del jugador al que atestiguo está lista para firmar? */
   const witnessCardComplete = useMemo(() => {
-    if (!witnessTargetForMe) return false;
-    return isCardReadyForSigning(
-      scoresByEntry[witnessTargetForMe],
-      pendingByEntry[witnessTargetForMe],
-      meta.matchPlay,
-      pickedUpByEntry[witnessTargetForMe]
+    if (witnessTargetIdsForMe.length === 0) return false;
+    return witnessTargetIdsForMe.every((eid) =>
+      isCardReadyForSigning(
+        scoresByEntry[eid],
+        pendingByEntry[eid],
+        meta.matchPlay,
+        pickedUpByEntry[eid]
+      )
     );
   }, [
-    witnessTargetForMe,
+    witnessTargetIdsForMe,
     meta.matchPlay,
     scoresByEntry,
     pendingByEntry,
@@ -1119,6 +1157,9 @@ export default function TarjetaCaptureClient({
   const witnessSignatures = witnessTargetForMe
     ? signaturesByEntry[witnessTargetForMe] ?? null
     : null;
+  const opposingWitnessed = witnessTargetIdsForMe.every((eid) =>
+    Boolean(signaturesByEntry[eid]?.signedByWitnessAt)
+  );
 
   /** Notificación "tarjeta entregada y firmada" para una tarjeta dada. */
   function cardFullySigned(entryId: string | null): boolean {
@@ -1127,8 +1168,15 @@ export default function TarjetaCaptureClient({
     return Boolean(s?.signedByPlayerAt && s?.signedByWitnessAt);
   }
 
-  const myCardFullySigned = cardFullySigned(meta.myEntryId);
-  const witnessCardFullySigned = cardFullySigned(witnessTargetForMe);
+  const myPairEntryIds = meta.myEntryId
+    ? pairMatesOf(meta.myEntryId, meta.pairSides ?? null)
+    : [];
+  const myCardFullySigned = meta.pairSides
+    ? myPairEntryIds.every((id) => cardFullySigned(id))
+    : cardFullySigned(meta.myEntryId);
+  const witnessCardFullySigned =
+    witnessTargetIdsForMe.length > 0 &&
+    witnessTargetIdsForMe.every((id) => cardFullySigned(id));
 
   async function signCard(targetEntryId: string, role: "player" | "witness") {
     if (!meta.myEntryId) return;
@@ -1152,20 +1200,36 @@ export default function TarjetaCaptureClient({
         signedByPlayerAt?: string | null;
         signedByWitnessAt?: string | null;
         signedByWitnessEntryId?: string | null;
+        updated?: Array<{
+          entryId: string;
+          signedByPlayerAt: string | null;
+          signedByWitnessAt: string | null;
+          signedByWitnessEntryId: string | null;
+        }>;
       };
       if (!json.ok) {
         setSaveError(json.error ?? "No se pudo firmar la tarjeta.");
         return;
       }
-      // Optimista
-      setSignaturesByEntry((prev) => ({
-        ...prev,
-        [targetEntryId]: {
-          signedByPlayerAt: json.signedByPlayerAt ?? null,
-          signedByWitnessAt: json.signedByWitnessAt ?? null,
-          signedByWitnessEntryId: json.signedByWitnessEntryId ?? null,
-        },
-      }));
+      setSignaturesByEntry((prev) => {
+        const next = { ...prev };
+        if (json.updated && json.updated.length > 0) {
+          for (const row of json.updated) {
+            next[row.entryId] = {
+              signedByPlayerAt: row.signedByPlayerAt ?? null,
+              signedByWitnessAt: row.signedByWitnessAt ?? null,
+              signedByWitnessEntryId: row.signedByWitnessEntryId ?? null,
+            };
+          }
+        } else {
+          next[targetEntryId] = {
+            signedByPlayerAt: json.signedByPlayerAt ?? null,
+            signedByWitnessAt: json.signedByWitnessAt ?? null,
+            signedByWitnessEntryId: json.signedByWitnessEntryId ?? null,
+          };
+        }
+        return next;
+      });
     } catch {
       setSaveError("Error de red al firmar.");
     } finally {
@@ -1257,7 +1321,7 @@ export default function TarjetaCaptureClient({
                 </div>
               ) : null}
 
-              {showMyCard && witnessTargetPlayer ? (
+              {showMyCard && witnessTargetPlayers.length > 0 ? (
                 <div
                   className={[
                     "mt-2 rounded-md border px-2 py-1 text-[10px]",
@@ -1266,21 +1330,35 @@ export default function TarjetaCaptureClient({
                       : "border-emerald-400 bg-emerald-50 text-emerald-900",
                   ].join(" ")}
                 >
-                  Eres testigo de <b>{witnessTargetPlayer.name}</b>.{" "}
+                  Eres testigo de{" "}
+                  <b>
+                    {meta.pairSides
+                      ? `la pareja rival (${witnessTargetPlayers.map((p) => p.name).join(" / ")})`
+                      : witnessTargetPlayer?.name}
+                  </b>
+                  {meta.pairSides
+                    ? ". No puedes atestiguar a tu compañero."
+                    : "."}{" "}
                   {pendingForMeCount > 0
                     ? `Hay ${pendingForMeCount} cambio${pendingForMeCount === 1 ? "" : "s"} por aprobar (celdas rojas). Toca la celda y vuelve a escribir el score para liberarla.`
                     : "Sin cambios pendientes por aprobar."}
                 </div>
               ) : null}
-              {showMyCard && myWitnessPlayer ? (
+              {showMyCard && myWitnessPlayers.length > 0 ? (
                 <div className="mt-1 text-[10px] text-slate-500">
-                  Tu testigo: {myWitnessPlayer.name}
+                  {meta.pairSides
+                    ? `El testigo de tu pareja es la pareja rival (${myWitnessPlayers.map((p) => p.name).join(" / ")}). Basta un jugador de cada pareja.`
+                    : `Tu testigo: ${myWitnessPlayer?.name}`}
                 </div>
               ) : null}
 
               <p className="mt-1 text-[10px] text-slate-500">
                 Toca un score para anotar. Si modificas un score con valor,
-                queda en rojo hasta que el testigo del jugador lo confirme.
+                queda en rojo hasta que el testigo lo confirme
+                {meta.pairSides
+                  ? " (un jugador de la pareja rival, no tu compañero)"
+                  : " del jugador"}
+                .
                 {meta.matchPlay ? (
                   <>
                     {" "}
@@ -1357,13 +1435,15 @@ export default function TarjetaCaptureClient({
                 </div>
               ) : null}
 
-              {/* Firmas: mis iniciales + testigo del jugador que me toca. */}
+              {/* Firmas: jugador (cubre a la pareja) + testigo de la pareja rival. */}
               {meta.myEntryId ? (
                 <div className="mt-2 flex flex-wrap justify-center gap-2">
                   {myCardComplete ? (
                     mySignatures?.signedByPlayerAt ? (
                       <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
-                        ✓ Firmado: {playersById.get(meta.myEntryId)?.initials}
+                        ✓ Firmado
+                        {meta.pairSides ? " (pareja)" : ""}:{" "}
+                        {playersById.get(meta.myEntryId)?.initials}
                       </span>
                     ) : (
                       <button
@@ -1372,16 +1452,17 @@ export default function TarjetaCaptureClient({
                         disabled={signingFor === `${meta.myEntryId}:player`}
                         className="inline-flex rounded-lg border border-sky-500 bg-sky-100 px-3 py-1.5 text-[11px] font-bold text-sky-900 disabled:opacity-60"
                       >
-                        Firmar: {playersById.get(meta.myEntryId)?.initials}
+                        {meta.pairSides ? "Firmar pareja" : "Firmar"}:{" "}
+                        {playersById.get(meta.myEntryId)?.initials}
                       </button>
                     )
                   ) : null}
 
                   {witnessTargetForMe && witnessCardComplete ? (
-                    witnessSignatures?.signedByWitnessAt ? (
+                    opposingWitnessed || witnessSignatures?.signedByWitnessAt ? (
                       <span className="inline-flex rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-1.5 text-[11px] font-bold text-emerald-900">
                         ✓ Testigo:{" "}
-                        {playersById.get(witnessTargetForMe)?.initials}
+                        {witnessTargetPlayers.map((p) => p.initials).join("/")}
                       </span>
                     ) : (
                       <button
@@ -1393,7 +1474,7 @@ export default function TarjetaCaptureClient({
                         className="inline-flex rounded-lg border border-amber-500 bg-amber-100 px-3 py-1.5 text-[11px] font-bold text-amber-900 disabled:opacity-60"
                       >
                         Testigo:{" "}
-                        {playersById.get(witnessTargetForMe)?.initials}
+                        {witnessTargetPlayers.map((p) => p.initials).join("/")}
                       </button>
                     )
                   ) : null}
@@ -1403,13 +1484,18 @@ export default function TarjetaCaptureClient({
               {/* Notificaciones "tarjeta entregada y firmada". */}
               {myCardFullySigned ? (
                 <div className="mt-2 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
-                  ✓ TU TARJETA ESTÁ ENTREGADA Y FIRMADA
+                  ✓ {meta.pairSides
+                    ? "TARJETA DE TU PAREJA ENTREGADA Y FIRMADA"
+                    : "TU TARJETA ESTÁ ENTREGADA Y FIRMADA"}
                 </div>
               ) : null}
-              {witnessTargetForMe && witnessCardFullySigned ? (
+              {witnessTargetIdsForMe.length > 0 && witnessCardFullySigned ? (
                 <div className="mt-1 rounded-md border border-emerald-500 bg-emerald-50 px-2 py-1.5 text-center text-[11px] font-bold text-emerald-900">
-                  ✓ Tarjeta de {playersById.get(witnessTargetForMe)?.name} ·
-                  entregada y firmada
+                  ✓ Tarjeta de{" "}
+                  {meta.pairSides
+                    ? `la pareja rival (${witnessTargetPlayers.map((p) => p.name).join(" / ")})`
+                    : playersById.get(witnessTargetForMe ?? "")?.name}{" "}
+                  · entregada y firmada
                 </div>
               ) : null}
 
@@ -1470,7 +1556,7 @@ export default function TarjetaCaptureClient({
                   activeCell={activeCell}
                   savingKey={savingKey}
                   onCellTap={openCell}
-                  witnessEntryIdForMe={witnessTargetForMe}
+                  witnessEntryIdsForMe={witnessTargetIdsForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
                   matchLabels={matchLabels}
@@ -1486,7 +1572,7 @@ export default function TarjetaCaptureClient({
                   activeCell={activeCell}
                   savingKey={savingKey}
                   onCellTap={openCell}
-                  witnessEntryIdForMe={witnessTargetForMe}
+                  witnessEntryIdsForMe={witnessTargetIdsForMe}
                   myEntryId={meta.myEntryId}
                   matchProgression={matchProgressionMap}
                   matchLabels={matchLabels}
@@ -1519,7 +1605,7 @@ export default function TarjetaCaptureClient({
                       activeCell={activeCell}
                       savingKey={savingKey}
                       onCellTap={openCell}
-                      witnessEntryIdForMe={witnessTargetForMe}
+                      witnessEntryIdsForMe={witnessTargetIdsForMe}
                       myEntryId={meta.myEntryId}
                       toneClass="bg-amber-700"
                       labelForHole={(h) => String(h - 18)}
@@ -1651,7 +1737,7 @@ export default function TarjetaCaptureClient({
                 (Par {PAR_BY_HOLE[activeCell.hole]})
                 {activeCell.table === "private" ? " · Privada" : ""}
                 {activeCell.table === "public" &&
-                witnessTargetForMe === activeCell.entryId &&
+                witnessTargetIdsForMe.includes(activeCell.entryId) &&
                 pendingByEntry[activeCell.entryId]?.[activeCell.hole]
                   ? " · Aprobar"
                   : ""}
@@ -1730,7 +1816,7 @@ export default function TarjetaCaptureClient({
                 className="h-11 rounded-lg bg-emerald-600 text-sm font-bold text-white disabled:opacity-50"
               >
                 {activeCell.table === "public" &&
-                witnessTargetForMe === activeCell.entryId &&
+                witnessTargetIdsForMe.includes(activeCell.entryId) &&
                 pendingByEntry[activeCell.entryId]?.[activeCell.hole]
                   ? "Aprobar"
                   : "Enter"}
