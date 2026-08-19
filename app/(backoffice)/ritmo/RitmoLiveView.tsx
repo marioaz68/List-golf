@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
+import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
 
 export type LiveStatus =
   | "en_ritmo"
@@ -64,6 +65,7 @@ export interface LiveGroup {
 interface RoundOption {
   id: string;
   round_no: number | null;
+  groupCount: number;
 }
 
 interface Props {
@@ -75,6 +77,8 @@ interface Props {
   currentRoundId: string | null;
   roundDate: string | null;
   groups: LiveGroup[];
+  /** Grupos que ya salieron / capturan / GPS en la ronda elegida. */
+  onCourseCount: number;
   /** ISO del momento en que el servidor calculó estos datos. */
   computedAtISO: string;
   /** true cuando el campo del torneo no está soportado por el mapa (no CCQ). */
@@ -124,6 +128,7 @@ export default function RitmoLiveView({
   currentRoundId,
   roundDate,
   groups,
+  onCourseCount,
   computedAtISO,
   mapUnsupported,
 }: Props) {
@@ -132,6 +137,7 @@ export default function RitmoLiveView({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [onlyMissingGps, setOnlyMissingGps] = useState(false);
+  const [onlyOnCourse, setOnlyOnCourse] = useState(true);
   const [showMissingList, setShowMissingList] = useState(true);
   const [showSchedule, setShowSchedule] = useState(false);
 
@@ -151,13 +157,33 @@ export default function RitmoLiveView({
     return () => clearInterval(id);
   }, [computedAtISO]);
 
+  const onCourseGroups = useMemo(() => {
+    const now = new Date();
+    return groups.filter((g) =>
+      isGroupOnCourse({
+        teeTime: g.teeTime,
+        actualStartAt: g.actualStartAt,
+        roundDate,
+        scoreHolesPlayed: g.scoreHolesPlayed,
+        lastScoreTs: g.lastScoreTs,
+        gpsState: g.gpsState,
+        now,
+      })
+    );
+  }, [groups, roundDate]);
+
+  const listGroups = useMemo(() => {
+    if (!onlyOnCourse) return groups;
+    return onCourseGroups;
+  }, [groups, onlyOnCourse, onCourseGroups]);
+
   const sortedGroups = useMemo(() => {
-    return [...groups].sort((a, b) => {
+    return [...listGroups].sort((a, b) => {
       const r = STATUS_RANK[a.status] - STATUS_RANK[b.status];
       if (r !== 0) return r;
       return a.number - b.number;
     });
-  }, [groups]);
+  }, [listGroups]);
 
   const mapGroups: GroupDot[] = useMemo(
     () =>
@@ -185,28 +211,28 @@ export default function RitmoLiveView({
       sin_datos: 0,
       cerrado: 0,
     };
-    for (const g of groups) c[g.status] += 1;
+    for (const g of listGroups) c[g.status] += 1;
     return c;
-  }, [groups]);
+  }, [listGroups]);
 
   const gpsCounts = useMemo(() => {
     let live = 0;
     let stale = 0;
     let none = 0;
-    for (const g of groups) {
+    for (const g of listGroups) {
       if (g.gpsState === "live") live += 1;
       else if (g.gpsState === "stale") stale += 1;
       else none += 1;
     }
-    return { live, stale, none, total: groups.length };
-  }, [groups]);
+    return { live, stale, none, total: listGroups.length };
+  }, [listGroups]);
 
   const missingGpsGroups = useMemo(
     () =>
-      [...groups]
+      [...listGroups]
         .filter((g) => g.gpsState === "none")
         .sort((a, b) => a.number - b.number),
-    [groups]
+    [listGroups]
   );
 
   const visibleGroups = useMemo(() => {
@@ -338,6 +364,7 @@ export default function RitmoLiveView({
                 }}
               >
                 R{r.round_no ?? "?"}
+                {r.groupCount > 0 ? ` · ${r.groupCount}` : ""}
               </Link>
             );
           })}
@@ -405,6 +432,25 @@ export default function RitmoLiveView({
           <SummaryChip color="#6b7280" n={gpsCounts.none} label="sin señal" />
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => setOnlyOnCourse((v) => !v)}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "4px 8px",
+              borderRadius: 5,
+              border: `1px solid ${onlyOnCourse ? "#2563eb" : "#374151"}`,
+              background: onlyOnCourse ? "#1e3a8a" : "#1f2937",
+              color: onlyOnCourse ? "#dbeafe" : "#cbd5e1",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {onlyOnCourse
+              ? `✓ En cancha (${onCourseCount})`
+              : `Ver todos (${groups.length})`}
+          </button>
           <button
             type="button"
             onClick={() => setOnlyMissingGps((v) => !v)}
@@ -479,8 +525,16 @@ export default function RitmoLiveView({
 
       <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
         {sortedGroups.length === 0 ? (
-          <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>
-            No hay grupos en esta ronda.
+          <div style={{ padding: 14, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+            {onlyOnCourse && groups.length > onCourseCount ? (
+              <>
+                Ningún grupo en cancha en esta ronda todavía ({groups.length}{" "}
+                programados). Quita el filtro <b>En cancha</b> o elige otra ronda
+                (p. ej. R1 de hoy).
+              </>
+            ) : (
+              "No hay grupos en esta ronda."
+            )}
           </div>
         ) : withPosition === 0 && withScores === 0 ? (
           <div

@@ -116,3 +116,84 @@ export function resolveOpsRoundDate(args: {
   if (args.liveCaptureToday) return today;
   return roundDate;
 }
+
+export type OpsRoundRow = {
+  id: string;
+  round_no: number | null;
+  round_date: string | null;
+};
+
+/**
+ * Ronda en vivo para ritmo / capturas: hoy, captura activa, o la más cercana
+ * al calendario — no la ronda futura más lejana (p. ej. R2 del cuadro MP).
+ */
+export function resolveLiveRoundForTournament(args: {
+  rounds: OpsRoundRow[];
+  queryRoundId?: string | null;
+  today?: string;
+  tournamentEndDate?: string | null;
+  tournamentStartDate?: string | null;
+  activityRoundIds?: Set<string>;
+}): OpsRoundRow | null {
+  const today = args.today ?? todayMexicoDate();
+  const rounds = args.rounds;
+  if (rounds.length === 0) return null;
+
+  const qid = String(args.queryRoundId ?? "").trim();
+  if (qid) {
+    const picked = rounds.find((r) => r.id === qid);
+    if (picked) return picked;
+  }
+
+  const byToday = rounds.find((r) => toDateOnly(r.round_date) === today);
+  if (byToday) return byToday;
+
+  const activityIds = args.activityRoundIds ?? new Set<string>();
+  const byActivity = rounds.find((r) => activityIds.has(r.id));
+  if (byActivity) return byActivity;
+
+  const open = rounds.filter(
+    (r) =>
+      !isOpsRoundClosed({
+        roundDate: r.round_date,
+        tournamentEndDate: args.tournamentEndDate,
+        tournamentStartDate: args.tournamentStartDate,
+        today,
+      })
+  );
+
+  if (open.length > 0) {
+    return [...open].sort((a, b) => compareOpenRounds(a, b, today))[0] ?? null;
+  }
+
+  return (
+    [...rounds]
+      .filter((r) => (toDateOnly(r.round_date) ?? "") <= today)
+      .sort((a, b) =>
+        (toDateOnly(b.round_date) ?? "").localeCompare(
+          toDateOnly(a.round_date) ?? ""
+        )
+      )[0] ??
+    rounds[0] ??
+    null
+  );
+}
+
+function compareOpenRounds(a: OpsRoundRow, b: OpsRoundRow, today: string): number {
+  const da = toDateOnly(a.round_date) ?? "";
+  const db = toDateOnly(b.round_date) ?? "";
+  const aToday = da === today;
+  const bToday = db === today;
+  if (aToday !== bToday) return aToday ? -1 : 1;
+  const aFuture = da > today;
+  const bFuture = db > today;
+  if (aFuture && bFuture) {
+    const cmp = da.localeCompare(db);
+    if (cmp !== 0) return cmp;
+    return (a.round_no ?? 0) - (b.round_no ?? 0);
+  }
+  if (aFuture !== bFuture) return aFuture ? 1 : -1;
+  const past = db.localeCompare(da);
+  if (past !== 0) return past;
+  return (a.round_no ?? 0) - (b.round_no ?? 0);
+}

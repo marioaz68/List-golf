@@ -22,7 +22,14 @@ import {
   type GroupScoreMeta,
 } from "@/lib/ritmo/scoreProgress";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
-import { isOpsRoundClosed, todayMexicoDate, isGroupCaptureFinished } from "@/lib/ritmo/opsDay";
+import {
+  isOpsRoundClosed,
+  resolveLiveRoundForTournament,
+  todayMexicoDate,
+  isGroupCaptureFinished,
+} from "@/lib/ritmo/opsDay";
+import { loadRoundIdsWithCaptureActivityToday } from "@/lib/ritmo/loadCaptureLagGroups";
+import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -183,38 +190,32 @@ export default async function RitmoPage({
   // del torneo. No anclar a GPS de ayer para que el retraso no “crezca”
   // con el reloj tras terminar la jornada.
   const today = todayMexicoDate();
-  let round: RoundRow | null =
-    rounds.find((r) => r.id === queryRoundId) ?? null;
+  const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(
+    admin,
+    today
+  );
 
-  if (!round) {
-    round = rounds.find((r) => r.round_date === today) ?? null;
-  }
+  let round: RoundRow | null = resolveLiveRoundForTournament({
+    rounds,
+    queryRoundId,
+    today,
+    tournamentEndDate,
+    tournamentStartDate,
+    activityRoundIds,
+  });
 
-  if (!round) {
-    // Preferir la ronda más reciente que aún sea “de hoy o futura”
-    // respecto al calendario México; si todas pasaron, la última (histórica).
-    const openOrToday = rounds.filter(
-      (r) =>
-        !isOpsRoundClosed({
-          roundDate: r.round_date,
-          tournamentEndDate,
-          tournamentStartDate,
-          today,
-        })
-    );
-    if (openOrToday.length > 0) {
-      round = [...openOrToday].sort((a, b) =>
-        (b.round_date ?? "").localeCompare(a.round_date ?? "")
-      )[0]!;
-    } else {
-      round =
-        [...rounds]
-          .filter((r) => (r.round_date ?? "") <= today)
-          .sort((a, b) =>
-            (b.round_date ?? "").localeCompare(a.round_date ?? "")
-          )[0] ??
-        rounds[0] ??
-        null;
+  const groupCountByRound = new Map<string, number>();
+  if (rounds.length > 0) {
+    const { data: countRows } = await admin
+      .from("pairing_groups")
+      .select("round_id")
+      .in(
+        "round_id",
+        rounds.map((r) => r.id)
+      );
+    for (const row of countRows ?? []) {
+      const rid = String((row as { round_id: string }).round_id);
+      groupCountByRound.set(rid, (groupCountByRound.get(rid) ?? 0) + 1);
     }
   }
 
@@ -243,6 +244,7 @@ export default async function RitmoPage({
           currentRoundId={null}
           roundDate={null}
           groups={[]}
+          onCourseCount={0}
           computedAtISO={computedAtISO}
           mapUnsupported={mapUnsupported}
         />
@@ -359,7 +361,7 @@ export default async function RitmoPage({
   );
 
   const now = new Date(computedAtISO);
-  const groups: LiveGroup[] = groupRows.map((g) => {
+  const allGroups: LiveGroup[] = groupRows.map((g) => {
     const players = playersByGroup.get(g.id) ?? [];
     const positions = positionsByGroup.get(g.id) ?? []; // ya viene desc por ts
     const latest = positions[0] ?? null;
@@ -544,6 +546,18 @@ export default async function RitmoPage({
     };
   });
 
+  const onCourseCount = allGroups.filter((g) =>
+    isGroupOnCourse({
+      teeTime: g.teeTime,
+      actualStartAt: g.actualStartAt,
+      roundDate: round!.round_date,
+      scoreHolesPlayed: g.scoreHolesPlayed,
+      lastScoreTs: g.lastScoreTs,
+      gpsState: g.gpsState,
+      now,
+    })
+  ).length;
+
   return (
     <div style={{ height: "calc(100dvh - 90px)", minHeight: 360 }}>
       <RitmoLiveView
@@ -551,10 +565,15 @@ export default async function RitmoPage({
         tournamentName={tournamentName}
         courseName={courseName}
         roundLabel={roundLabel}
-        rounds={rounds.map((r) => ({ id: r.id, round_no: r.round_no }))}
+        rounds={rounds.map((r) => ({
+          id: r.id,
+          round_no: r.round_no,
+          groupCount: groupCountByRound.get(r.id) ?? 0,
+        }))}
         currentRoundId={round.id}
         roundDate={round.round_date}
-        groups={groups}
+        groups={allGroups}
+        onCourseCount={onCourseCount}
         computedAtISO={computedAtISO}
         mapUnsupported={mapUnsupported}
       />
