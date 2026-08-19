@@ -247,6 +247,16 @@ export default async function PublicTournamentPage({
       return mt === "individual" || mt === "pairs";
     })();
 
+  // En la mini-app: para Calcuta, en vez de entrar primero a "Resultados en
+  // vivo" (view=live), vamos directo al bracket en vivo.
+  if (isCalcutaTournament && view === "live" && !isEmbed && fromCapturaMiniApp) {
+    const rc = String(sp.return_captura ?? "").trim();
+    const qs = new URLSearchParams();
+    if (rc) qs.set("return_captura", rc);
+    const qsStr = qs.toString();
+    redirect(`/torneos/${id}/cuadro-vivo${qsStr ? `?${qsStr}` : ""}`);
+  }
+
   if (isRyderTournament && !isEmbed) {
     redirect(`/torneos/${id}/ryder`);
   }
