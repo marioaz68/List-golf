@@ -23,6 +23,7 @@ export type GhinHoleAvgRow = {
 export type ScenarioKey =
   | "hi_torneo"
   | "whs_8_20"
+  | "solo_comp"
   | "best_8_year"
   | "best_10_year"
   | "best_15_year"
@@ -40,6 +41,8 @@ export type ScenarioBar = {
   nUniverse: number | null;
   esHistorico: boolean;
   periodLabel: string | null;
+  /** Muestra de competencia < 8: barra semitransparente, no dispara veredicto. */
+  sampleShort?: boolean;
 };
 
 export type ScenarioTableRow = ScenarioBar & {
@@ -77,7 +80,10 @@ export type GhinLiveReportData = {
   hiBest10Historico: boolean;
   hiSoloTorneos: number | null;
   hiSoloTorneosN: number;
+  hiSoloTorneosNUsed: number;
   hiSoloTorneosNd: boolean;
+  /** false = menos de 8 rondas de competencia en 5 años (gris, no rellenar con WHS). */
+  hiSoloTorneosSuficiente: boolean;
   ch100: number | null;
   hp80: number | null;
 

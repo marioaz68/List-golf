@@ -186,6 +186,7 @@ type Props = { data: GhinLiveReportData };
 export default function GhinLiveReport({ data }: Props) {
   const scenariosRef = useRef<HTMLCanvasElement | null>(null);
   const historyRef = useRef<HTMLCanvasElement | null>(null);
+  const grossRef = useRef<HTMLCanvasElement | null>(null);
   const netRef = useRef<HTMLCanvasElement | null>(null);
 
   const charts = useRef<Chart[]>([]);
@@ -200,12 +201,17 @@ export default function GhinLiveReport({ data }: Props) {
     return {
       labels: rows.map((s) => {
         const hp = s.hp != null ? ` / HP ${s.hp}` : "";
+        const n =
+          s.key === "solo_comp" && s.nUniverse != null
+            ? ` (n=${s.nUniverse})`
+            : "";
         const hist = s.esHistorico ? " ★" : "";
-        return `${s.label}${hist}: ${fmt(s.index)}${hp}`;
+        return `${s.label}${hist}: ${fmt(s.index)}${hp}${n}`;
       }),
       values: rows.map((s) => s.index as number),
       colors: rows.map((s) => s.color),
       historico: rows.map((s) => s.esHistorico),
+      sampleShort: rows.map((s) => Boolean(s.sampleShort)),
     };
   }, [data.scenarios]);
 
@@ -261,12 +267,22 @@ export default function GhinLiveReport({ data }: Props) {
               {
                 data: vals,
                 backgroundColor: scenarioChartData.colors.map((c, i) =>
-                  scenarioChartData.historico[i] ? `${c}99` : c
+                  scenarioChartData.sampleShort[i]
+                    ? `${c}59`
+                    : scenarioChartData.historico[i]
+                      ? `${c}99`
+                      : c
                 ),
                 borderColor: scenarioChartData.historico.map((h, i) =>
-                  h ? "#f5a623" : scenarioChartData.colors[i]!
+                  scenarioChartData.sampleShort[i]
+                    ? scenarioChartData.colors[i]!
+                    : h
+                      ? "#f5a623"
+                      : scenarioChartData.colors[i]!
                 ),
-                borderWidth: scenarioChartData.historico.map((h) => (h ? 2 : 0)),
+                borderWidth: scenarioChartData.historico.map((h, i) =>
+                  scenarioChartData.sampleShort[i] || h ? 2 : 0
+                ),
                 borderSkipped: false,
                 barThickness: 22,
               },
@@ -427,91 +443,106 @@ export default function GhinLiveReport({ data }: Props) {
     }
     });
 
-    // 3. Neto por hoyo
-    trySection("net", () => {
-    if (netRef.current && canNet) {
+    const mountHoleChart = (
+      key: "gross" | "net",
+      canvas: HTMLCanvasElement | null,
+      avgs: number[],
+      best10: number[],
+      holeLabels: boolean
+    ) => {
+      if (!canvas) return;
       const holes = data.holes;
       const pars = holes.map((h) => CCQ_HOLE_PAR[h.hoyo - 1] ?? 4);
       const labels = holes.map((h, i) => {
-        const s = data.strokesByHole[i] ?? 0;
         const par = pars[i]!;
+        if (!holeLabels) return `Hoyo ${h.hoyo} (Par ${par})`;
+        const s = data.strokesByHole[i] ?? 0;
         return s > 0
           ? `Hoyo ${h.hoyo} (Par ${par}) (-${s})`
           : `Hoyo ${h.hoyo} (Par ${par})`;
       });
-      const avgs = data.netAvgs;
-      const best10 = data.netBest10;
       const yMax = Math.ceil(Math.max(...avgs, ...pars) + 0.5);
       if (!Number.isFinite(yMax) || yMax <= 2) {
-        failed.net = true;
-      } else {
-        const cfg: ChartConfiguration = {
-          type: "bar",
-          data: {
-            labels,
-            datasets: [
-              {
-                label: "Neto",
-                data: avgs,
-                backgroundColor: avgs.map((a, i) => colorVsPar(a, pars[i]!)),
-                barPercentage: 0.9,
-                order: 2,
-              },
-              {
-                label: "mejores 10",
-                data: best10,
-                backgroundColor: "#ffffff",
-                barPercentage: 0.42,
-                order: 1,
-              },
-              {
-                type: "line",
-                label: "Par",
-                data: pars,
-                borderColor: "#000000",
-                backgroundColor: "#000000",
-                pointRadius: 5,
-                pointBorderColor: "#fff",
-                pointBorderWidth: 2,
-                showLine: true,
-                order: 0,
-              },
-            ],
-          },
-          options: {
-            ...commonOpts,
-            datasets: {
-              bar: { grouped: false },
-            },
-            plugins: {
-              legend: {
-                labels: { color: MUTED, boxWidth: 12 },
-              },
-            },
-            scales: {
-              y: {
-                min: 2,
-                max: yMax,
-                grid: { color: "#243041" },
-                ticks: { color: MUTED },
-              },
-              x: {
-                grid: { display: false },
-                ticks: {
-                  color: MUTED,
-                  font: { size: 9 },
-                  maxRotation: 60,
-                  minRotation: 40,
-                },
-              },
-            },
-          },
-        };
-        if (!mountChart(netRef.current, cfg, charts.current)) {
-          failed.net = true;
-        }
+        failed[key] = true;
+        return;
       }
-    }
+      const cfg: ChartConfiguration = {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: key === "net" ? "Neto" : "Bruto",
+              data: avgs,
+              backgroundColor: avgs.map((a, i) => colorVsPar(a, pars[i]!)),
+              barPercentage: 0.9,
+              order: 2,
+            },
+            {
+              label: "mejores 10",
+              data: best10,
+              backgroundColor: "#ffffff",
+              barPercentage: 0.42,
+              order: 1,
+            },
+            {
+              type: "line",
+              label: "Par",
+              data: pars,
+              borderColor: "#000000",
+              backgroundColor: "#000000",
+              pointRadius: 5,
+              pointBorderColor: "#fff",
+              pointBorderWidth: 2,
+              showLine: true,
+              order: 0,
+            },
+          ],
+        },
+        options: {
+          ...commonOpts,
+          datasets: {
+            bar: { grouped: false },
+          },
+          plugins: {
+            legend: {
+              labels: { color: MUTED, boxWidth: 12 },
+            },
+          },
+          scales: {
+            y: {
+              min: 2,
+              max: yMax,
+              grid: { color: "#243041" },
+              ticks: { color: MUTED },
+            },
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: MUTED,
+                font: { size: 9 },
+                maxRotation: 60,
+                minRotation: 40,
+              },
+            },
+          },
+        },
+      };
+      if (!mountChart(canvas, cfg, charts.current)) failed[key] = true;
+    };
+
+    // 3. Bruto por hoyo
+    trySection("gross", () => {
+      if (grossRef.current && canGross && grossAvgs && grossBest) {
+        mountHoleChart("gross", grossRef.current, grossAvgs, grossBest, false);
+      }
+    });
+
+    // 4. Neto por hoyo
+    trySection("net", () => {
+      if (netRef.current && canNet && netAvgs && netBest) {
+        mountHoleChart("net", netRef.current, netAvgs, netBest, true);
+      }
     });
 
     setChartFail(failed);
@@ -520,7 +551,7 @@ export default function GhinLiveReport({ data }: Props) {
       charts.current.forEach((c) => c.destroy());
       charts.current = [];
     };
-  }, [data, scenarioChartData, hiRef, canScenarios, canHistory, canNet]);
+  }, [data, scenarioChartData, hiRef, canScenarios, canHistory, canGross, canNet]);
 
   const verdictStyles: Record<string, string> = {
     normal: "border-[#2ecc71] bg-[#2ecc71]/15 text-[#2ecc71]",
@@ -614,13 +645,24 @@ export default function GhinLiveReport({ data }: Props) {
           sub={data.hiBest10Historico ? "histórico" : undefined}
         />
         <Kpi
-          label="HI solo torneos"
+          label="HI solo competencia"
           value={
             data.hiSoloTorneosNd
-              ? `n/d (n=${data.hiSoloTorneosN})`
-              : fmt(data.hiSoloTorneos)
+              ? "n/d"
+              : `${fmt(data.hiSoloTorneos)} (n=${data.hiSoloTorneosN})`
           }
-          color="#8fa3b8"
+          color={
+            data.hiSoloTorneosNd || !data.hiSoloTorneosSuficiente
+              ? "#8fa3b8"
+              : "#e74c3c"
+          }
+          sub={
+            data.hiSoloTorneosNd
+              ? "sin rondas CH/CA"
+              : data.hiSoloTorneosSuficiente
+                ? `mejores ${data.hiSoloTorneosNUsed} / 5 años`
+                : "muestra insuficiente (<8)"
+          }
         />
         <Kpi
           label="CH 100 %"
@@ -722,7 +764,7 @@ export default function GhinLiveReport({ data }: Props) {
       <Section title="1. Escenarios de índice">
         <ChartSectionBoundary>
         {canScenarios && !chartFail.scenarios ? (
-          <div className="relative h-[320px] w-full">
+          <div className="relative h-[360px] w-full">
             <canvas ref={scenariosRef} />
           </div>
         ) : (
@@ -759,6 +801,16 @@ export default function GhinLiveReport({ data }: Props) {
                     {row.esHistorico ? (
                       <span className="ml-1 text-[10px] text-amber-300">
                         histórico
+                      </span>
+                    ) : null}
+                    {row.sampleShort ? (
+                      <span className="ml-1 text-[10px] text-slate-400">
+                        muestra corta
+                      </span>
+                    ) : null}
+                    {row.periodLabel && row.key === "solo_comp" && row.index == null ? (
+                      <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
+                        {row.periodLabel}
                       </span>
                     ) : null}
                   </td>
@@ -815,7 +867,36 @@ export default function GhinLiveReport({ data }: Props) {
       </Section>
 
       <Section
-        title="3. Promedio neto por hoyo"
+        title="3. Promedio bruto por hoyo"
+        sub={
+          data.holes[0]
+            ? [
+                data.holesHistorico ? "Histórico" : null,
+                formatDateRangeEs(data.holes[0].desde, data.holes[0].hasta),
+                `${data.holes[0].n_rondas} rondas`,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
+      >
+        <ChartSectionBoundary>
+        {canGross && !chartFail.gross ? (
+          <div className="relative h-[300px] w-full overflow-x-auto">
+            <div className="relative h-full min-w-[900px]">
+              <canvas ref={grossRef} />
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            {data.holes.length ? EMPTY_CHART_MSG : "Sin rondas para promedios."}
+          </p>
+        )}
+        </ChartSectionBoundary>
+      </Section>
+
+      <Section
+        title="4. Promedio neto por hoyo"
         sub={
           [
             data.holes[0]

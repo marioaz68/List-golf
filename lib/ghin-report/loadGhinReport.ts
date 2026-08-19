@@ -96,7 +96,7 @@ async function rpcEscenario(
 async function loadWhsOfficial(
   supabase: SupabaseClient,
   ghin: string
-): Promise<number | null> {
+): Promise<{ hi: number | null; nLast20: number; nUsed: number }> {
   const { data, error } = await supabase
     .from("ghin_rounds")
     .select("differential, date_played")
@@ -106,62 +106,75 @@ async function loadWhsOfficial(
     .limit(20);
   if (error) {
     console.error("[ghin-report] whs official", error.message);
-    return null;
+    return { hi: null, nLast20: 0, nUsed: 0 };
   }
   const diffs = (data ?? [])
     .map((r) => num((r as { differential: unknown }).differential))
     .filter((x): x is number => x != null);
-  if (diffs.length === 0) return null;
+  if (diffs.length === 0) return { hi: null, nLast20: 0, nUsed: 0 };
   const take = Math.min(8, diffs.length);
   const best = [...diffs].sort((a, b) => a - b).slice(0, take);
   const avg = best.reduce((s, x) => s + x, 0) / best.length;
-  return truncateOneDecimal(avg);
+  return {
+    hi: truncateOneDecimal(avg),
+    nLast20: diffs.length,
+    nUsed: take,
+  };
 }
 
 /**
- * HI solo torneos: mejores 8 de últimas 20 competencia.
- * Si n < 20 → n/d (casi todos los socios).
+ * HI solo competencia: f_ghin_hi_competencia — mejores 8 de CH/CA/ECH/EA
+ * en 5 años. Nunca rellenar con el índice oficial si falta muestra.
+ * Sin filas → n/d. suficiente=false si n < 8.
  */
 async function loadCompetitionHi(
   supabase: SupabaseClient,
   ghin: string
-): Promise<{ hi: number | null; n: number; nd: boolean }> {
-  const { data: summary } = await supabase
-    .from("v_ghin_competition_summary")
-    .select("rondas_comp")
-    .eq("ghin_number", ghin)
-    .maybeSingle();
-
-  let n = num((summary as { rondas_comp?: unknown } | null)?.rondas_comp) ?? 0;
-
-  if (n === 0) {
-    const { count } = await supabase
-      .from("ghin_competition_rounds")
-      .select("id", { count: "exact", head: true })
-      .eq("ghin_number", ghin);
-    n = count ?? 0;
+): Promise<{
+  hi: number | null;
+  n: number;
+  nUsed: number;
+  suficiente: boolean;
+  nd: boolean;
+  desde: string | null;
+  hasta: string | null;
+}> {
+  const empty = {
+    hi: null as number | null,
+    n: 0,
+    nUsed: 0,
+    suficiente: false,
+    nd: true,
+    desde: null as string | null,
+    hasta: null as string | null,
+  };
+  const { data, error } = await supabase.rpc("f_ghin_hi_competencia", {
+    p_ghin: ghin,
+    p_n: 8,
+    p_anios: 5,
+  });
+  if (error) {
+    console.error("[ghin-report] f_ghin_hi_competencia", error.message);
+    return empty;
   }
-
-  if (n < 20) {
-    return { hi: null, n, nd: true };
-  }
-
-  const { data, error } = await supabase
-    .from("ghin_competition_rounds")
-    .select("differential, date_played")
-    .eq("ghin_number", ghin)
-    .not("differential", "is", null)
-    .order("date_played", { ascending: false })
-    .limit(20);
-  if (error || !data?.length) {
-    return { hi: null, n, nd: true };
-  }
-  const diffs = data
-    .map((r) => num((r as { differential: unknown }).differential))
-    .filter((x): x is number => x != null);
-  const best = [...diffs].sort((a, b) => a - b).slice(0, 8);
-  const avg = best.reduce((s, x) => s + x, 0) / best.length;
-  return { hi: truncateOneDecimal(avg), n, nd: false };
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  if (!row) return empty;
+  const n = Number(row.n_disponible ?? 0);
+  const nUsed = Number(row.n_usado ?? 0);
+  const hi = num(row.indice);
+  if ((n <= 0 && hi == null) || Number.isNaN(n)) return empty;
+  return {
+    hi,
+    n,
+    nUsed,
+    suficiente: Boolean(row.suficiente),
+    nd: hi == null,
+    desde: row.desde != null ? String(row.desde) : null,
+    hasta: row.hasta != null ? String(row.hasta) : null,
+  };
 }
 
 async function loadDataCutoffs(
@@ -290,7 +303,8 @@ function buildScenario(
   color: string,
   index: number | null,
   tee: { slope: number; cr: number; par: number },
-  esc: GhinEscenarioRow | null
+  esc: GhinEscenarioRow | null,
+  extra?: { sampleShort?: boolean }
 ): ScenarioBar {
   const { label, period } = scenarioLabel(labelBase, esc);
   const hpParts =
@@ -306,6 +320,7 @@ function buildScenario(
     nUniverse: esc?.universo ?? null,
     esHistorico: Boolean(esc?.es_historico),
     periodLabel: period,
+    sampleShort: extra?.sampleShort,
   };
 }
 
@@ -438,9 +453,14 @@ export async function loadGhinLiveReport(
   }
 
   const tee = CCQ_TEES_MEN[teeCode];
-  const computed = hiTorneo != null ? hiToChHp(hiTorneo, tee.slope, tee.cr, tee.par) : null;
-  const ch100 = computed?.ch ?? (enrolled ? entryCh : null);
-  const hp80 = computed?.hp ?? (enrolled ? entryHp : null);
+  const computed =
+    hiTorneo != null ? hiToChHp(hiTorneo, tee.slope, tee.cr, tee.par) : null;
+  // Inscritos: CH/HP guardados son la fuente de verdad (el 80 % se aplicó
+  // al CH decimal). Recalcular desde el CH entero cambia un golpe.
+  const ch100 =
+    enrolled && entryCh != null ? entryCh : (computed?.ch ?? null);
+  const hp80 =
+    enrolled && entryHp != null ? entryHp : (computed?.hp ?? null);
 
   if (!ghin) {
     return {
@@ -462,7 +482,9 @@ export async function loadGhinLiveReport(
       hiBest10Historico: false,
       hiSoloTorneos: null,
       hiSoloTorneosN: 0,
+      hiSoloTorneosNUsed: 0,
       hiSoloTorneosNd: true,
+      hiSoloTorneosSuficiente: false,
       ch100,
       hp80,
       activity: null,
@@ -616,10 +638,31 @@ export async function loadGhinLiveReport(
       "whs_8_20",
       "Mejores 8 de últimas 20",
       "#2ecc71",
-      whsOfficial,
+      whsOfficial.hi,
       teeParams,
       null
     ),
+    ...(compHi.nd
+      ? []
+      : [
+          buildScenario(
+            "solo_comp",
+            "Solo competencia",
+            "#a29bfe",
+            compHi.hi,
+            teeParams,
+            {
+              n_solicitado: 8,
+              n_usado: compHi.nUsed,
+              indice: compHi.hi,
+              desde: compHi.desde,
+              hasta: compHi.hasta,
+              es_historico: false,
+              universo: compHi.n,
+            },
+            { sampleShort: !compHi.suficiente }
+          ),
+        ]),
     buildScenario(
       "best_8_year",
       "Mejores 8 del año",
@@ -675,19 +718,39 @@ export async function loadGhinLiveReport(
   // Rellenar nUsed/universo WHS
   const whsBar = scenarios.find((s) => s.key === "whs_8_20");
   if (whsBar) {
-    whsBar.nUsed = Math.min(8, 20);
-    whsBar.nUniverse = 20;
+    whsBar.nUsed = whsOfficial.nUsed;
+    whsBar.nUniverse = whsOfficial.nLast20;
   }
 
-  const scenarioTable: ScenarioTableRow[] = scenarios.map((s) => ({
-    ...s,
-    deltaHi:
-      hiTorneo != null && s.index != null
-        ? Math.round((s.index - hiTorneo) * 10) / 10
-        : null,
-    deltaHp:
-      hp80 != null && s.hp != null ? s.hp - hp80 : null,
-  }));
+  const scenarioTable: ScenarioTableRow[] = [
+    ...scenarios.map((s) => ({
+      ...s,
+      deltaHi:
+        hiTorneo != null && s.index != null
+          ? Math.round((s.index - hiTorneo) * 10) / 10
+          : null,
+      deltaHp: hp80 != null && s.hp != null ? s.hp - hp80 : null,
+    })),
+    ...(compHi.nd
+      ? [
+          {
+            key: "solo_comp" as const,
+            label: "Solo competencia",
+            color: "#a29bfe",
+            index: null,
+            ch: null,
+            hp: null,
+            nUsed: 0,
+            nUniverse: 0,
+            esHistorico: false,
+            periodLabel: "Sin rondas de competencia (CH/CA) en 5 años",
+            sampleShort: true,
+            deltaHi: null,
+            deltaHp: null,
+          },
+        ]
+      : []),
+  ];
 
   const strokes = strokesReceivedByHole(hp80 ?? 0, CCQ_STROKE_INDEX);
   const netAvgs = holes.map((h, i) => {
@@ -718,6 +781,7 @@ export async function loadGhinLiveReport(
     const over = scenarioTable.some(
       (s) =>
         s.key !== "hi_torneo" &&
+        !s.sampleShort &&
         s.deltaHi != null &&
         Math.abs(s.deltaHi) > 1
     );
@@ -747,12 +811,14 @@ export async function loadGhinLiveReport(
     teeSlope: tee.slope,
     teePar: tee.par,
     hiTorneo,
-    hiWhsOfficial: whsOfficial,
+    hiWhsOfficial: whsOfficial.hi,
     hiBest10Year: esc10?.indice ?? null,
     hiBest10Historico: Boolean(esc10?.es_historico),
     hiSoloTorneos: compHi.hi,
     hiSoloTorneosN: compHi.n,
+    hiSoloTorneosNUsed: compHi.nUsed,
     hiSoloTorneosNd: compHi.nd,
+    hiSoloTorneosSuficiente: compHi.suficiente,
     ch100,
     hp80,
     activity,
