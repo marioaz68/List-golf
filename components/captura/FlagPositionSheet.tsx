@@ -28,6 +28,9 @@ interface ViewData {
 type SatMap = {
   fitBounds: (bounds: unknown, opts?: { animate?: boolean }) => void;
   setView: (center: [number, number], zoom?: number) => void;
+  panBy: (offset: [number, number], opts?: { animate?: boolean }) => void;
+  latLngToContainerPoint: (latlng: [number, number]) => { x: number; y: number };
+  getSize: () => { x: number; y: number };
   invalidateSize: () => void;
   remove: () => void;
 };
@@ -40,6 +43,7 @@ const COLOR_DOT: Record<string, string> = {
 
 const YARD_M = 0.9144;
 const M_PER_DEG_LAT = 111_320;
+const LABEL_OFFSET_M = 5;
 
 function metersPerDegLon(lat: number): number {
   return M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
@@ -63,6 +67,18 @@ function enToLatLon(origin: LL, e: number, n: number): LL {
 
 function midpoint(a: LL, b: LL): LL {
   return { lat: (a.lat + b.lat) / 2, lon: (a.lon + b.lon) / 2 };
+}
+
+/** Punto medio del segmento, desplazado al exterior para no tapar la escuadra. */
+function labelOutside(a: LL, b: LL, other: LL, meters: number): LL {
+  const mid = midpoint(a, b);
+  const s = latLonToEN(a, b);
+  const len = Math.hypot(s.e, s.n) || 1;
+  const perp = { e: -s.n / len, n: s.e / len };
+  const toOther = latLonToEN(mid, other);
+  const towardOther = perp.e * toOther.e + perp.n * toOther.n;
+  const outward = towardOther > 0 ? { e: -perp.e, n: -perp.n } : perp;
+  return enToLatLon(mid, outward.e * meters, outward.n * meters);
 }
 
 /** Hoja emergente que muestra la posición de la bandera del hoyo (referencia). */
@@ -110,17 +126,26 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
     [flag]
   );
 
+  const mapRotationDeg = useMemo(() => {
+    if (!data?.greenFront || !data?.greenBack) return 0;
+    const axis = latLonToEN(data.greenFront, data.greenBack);
+    const norm = Math.hypot(axis.e, axis.n);
+    if (norm < 0.1) return 0;
+    const screenAngle = (Math.atan2(-axis.n, axis.e) * 180) / Math.PI;
+    return -90 - screenAngle;
+  }, [data?.greenFront, data?.greenBack]);
+
   const escuadraGeo = useMemo(() => {
-    if (!flag || !data?.greenFront || !data?.greenBack) return null;
+    if (!flag || !data?.greenFront || !data?.greenBack || !flagPoint) return null;
     const front = data.greenFront;
     const back = data.greenBack;
-    const f = { lat: flag.lat, lon: flag.lon };
+    const f = flagPoint;
 
     const fb = latLonToEN(front, back);
     const norm = Math.hypot(fb.e, fb.n);
     if (norm < 0.1) return null;
 
-    const axis = { e: fb.e / norm, n: fb.n / norm }; // frente -> atras
+    const axis = { e: fb.e / norm, n: fb.n / norm };
     const right = { e: axis.n, n: -axis.e };
     const left = { e: -axis.n, n: axis.e };
 
@@ -133,15 +158,24 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
     const depthEdge = enToLatLon(f, depthDir.e * depthMeters, depthDir.n * depthMeters);
     const lateralEdge = enToLatLon(f, latDir.e * edgeMeters, latDir.n * edgeMeters);
 
+    const depthLabel =
+      flag.depth_yards != null ? `${flag.depth_yards} yd` : null;
+    const edgeLabel =
+      flag.edge_yards != null ? `${flag.edge_yards} yd` : null;
+
     return {
       depthEdge,
       lateralEdge,
-      depthLabel: flag.depth_yards != null ? `${flag.depth_yards} yd` : null,
-      edgeLabel: flag.edge_yards != null ? `${flag.edge_yards} yd` : null,
-      depthMid: midpoint(f, depthEdge),
-      edgeMid: midpoint(f, lateralEdge),
+      depthLabelPos: depthLabel
+        ? labelOutside(f, depthEdge, lateralEdge, LABEL_OFFSET_M)
+        : null,
+      edgeLabelPos: edgeLabel
+        ? labelOutside(f, lateralEdge, depthEdge, LABEL_OFFSET_M)
+        : null,
+      depthLabel,
+      edgeLabel,
     };
-  }, [flag, data?.greenFront, data?.greenBack]);
+  }, [flag, flagPoint, data?.greenFront, data?.greenBack]);
 
   const refText = flag
     ? `${flag.color ? flag.color[0].toUpperCase() + flag.color.slice(1) : "Bandera"}` +
@@ -208,73 +242,52 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
         fitPoints.push(data.greenCenter);
       }
 
-      const pin = L.circleMarker([flagPoint.lat, flagPoint.lon], {
+      L.circleMarker([flagPoint.lat, flagPoint.lon], {
         radius: 6,
         color: "#111827",
         weight: 1.5,
         fillColor: dot,
         fillOpacity: 1,
       }).addTo(fg);
-      pin.bindTooltip("🚩", {
-        permanent: true,
-        direction: "top",
-        offset: [0, -8],
-        className: "!bg-black/75 !text-amber-100 !border !border-amber-300/40 !rounded px-1 py-0 text-[10px]",
-      });
 
       if (escuadraGeo) {
         L.polyline(
           [
-            [flagPoint.lat, flagPoint.lon],
             [escuadraGeo.depthEdge.lat, escuadraGeo.depthEdge.lon],
-          ],
-          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
-        ).addTo(fg);
-        L.polyline(
-          [
             [flagPoint.lat, flagPoint.lon],
             [escuadraGeo.lateralEdge.lat, escuadraGeo.lateralEdge.lon],
           ],
-          { color: "#fbbf24", weight: 2, dashArray: "6 5" }
+          { color: "#fbbf24", weight: 2.5 }
         ).addTo(fg);
 
-        const sq = 2.8;
-        const c = flagPoint;
-        const d = escuadraGeo.depthEdge;
-        const l = escuadraGeo.lateralEdge;
-        const de = latLonToEN(c, d);
-        const le = latLonToEN(c, l);
-        const dn = Math.hypot(de.e, de.n) || 1;
-        const ln = Math.hypot(le.e, le.n) || 1;
-        const dp = { e: (de.e / dn) * sq, n: (de.n / dn) * sq };
-        const lp = { e: (le.e / ln) * sq, n: (le.n / ln) * sq };
-        const p1 = enToLatLon(c, lp.e, lp.n);
-        const p2 = enToLatLon(c, lp.e + dp.e, lp.n + dp.n);
-        const p3 = enToLatLon(c, dp.e, dp.n);
-        L.polyline(
-          [
-            [p1.lat, p1.lon],
-            [p2.lat, p2.lon],
-            [p3.lat, p3.lon],
-          ],
-          { color: "#fde68a", weight: 2 }
-        ).addTo(fg);
+        const labelHtml = (text: string) =>
+          `<div style="transform:translate(-50%,-50%) rotate(${-mapRotationDeg}deg);transform-origin:center center;font-size:11px;font-weight:800;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;line-height:1">${text}</div>`;
 
-        if (escuadraGeo.depthLabel) {
-          L.marker([escuadraGeo.depthMid.lat, escuadraGeo.depthMid.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.depthLabel}</div>`,
-            }),
-          }).addTo(fg);
+        if (escuadraGeo.depthLabel && escuadraGeo.depthLabelPos) {
+          L.marker(
+            [escuadraGeo.depthLabelPos.lat, escuadraGeo.depthLabelPos.lon],
+            {
+              icon: L.divIcon({
+                className: "",
+                html: labelHtml(escuadraGeo.depthLabel),
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+            }
+          ).addTo(fg);
         }
-        if (escuadraGeo.edgeLabel) {
-          L.marker([escuadraGeo.edgeMid.lat, escuadraGeo.edgeMid.lon], {
-            icon: L.divIcon({
-              className: "",
-              html: `<div style=\"font-size:11px;font-weight:700;color:#fde68a;text-shadow:0 1px 3px rgba(0,0,0,.95)\">${escuadraGeo.edgeLabel}</div>`,
-            }),
-          }).addTo(fg);
+        if (escuadraGeo.edgeLabel && escuadraGeo.edgeLabelPos) {
+          L.marker(
+            [escuadraGeo.edgeLabelPos.lat, escuadraGeo.edgeLabelPos.lon],
+            {
+              icon: L.divIcon({
+                className: "",
+                html: labelHtml(escuadraGeo.edgeLabel),
+                iconSize: [0, 0],
+                iconAnchor: [0, 0],
+              }),
+            }
+          ).addTo(fg);
         }
 
         fitPoints.push(escuadraGeo.depthEdge, escuadraGeo.lateralEdge);
@@ -282,17 +295,53 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
 
       if (fitPoints.length > 1) {
         const bounds = L.latLngBounds(fitPoints.map((p) => [p.lat, p.lon]));
-        map.fitBounds(bounds.pad(0.45), { animate: false });
+        map.fitBounds(bounds.pad(0.12), { animate: false });
       } else {
         map.setView([flagPoint.lat, flagPoint.lon], 20);
       }
+
+      // Fondo del green arriba-centro; entrada queda abajo en pantalla.
+      if (data?.greenBack) {
+        const size = map.getSize();
+        const cx = size.x / 2;
+        const cy = size.y / 2;
+        const targetX = cx;
+        const targetY = Math.max(28, size.y * 0.12);
+        const rad = (mapRotationDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        for (let i = 0; i < 8; i++) {
+          const p = map.latLngToContainerPoint([data.greenBack.lat, data.greenBack.lon]);
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          const rx = cx + dx * cos - dy * sin;
+          const ry = cy + dx * sin + dy * cos;
+          const errX = targetX - rx;
+          const errY = targetY - ry;
+          if (Math.abs(errX) < 1 && Math.abs(errY) < 1) break;
+
+          const ux = errX * cos + errY * sin;
+          const uy = -errX * sin + errY * cos;
+          map.panBy([-ux, -uy], { animate: false });
+        }
+      }
+
       map.invalidateSize();
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [flagPoint, data?.greenRing, data?.greenCenter, escuadraGeo, dot]);
+  }, [
+    flagPoint,
+    data?.greenRing,
+    data?.greenCenter,
+    data?.greenBack,
+    escuadraGeo,
+    dot,
+    mapRotationDeg,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -334,17 +383,26 @@ export function FlagPositionSheet({ hole, courseId, onClose }: Props) {
         ) : (
           <>
             <div className="flex justify-center">
-              <div className="w-full max-w-[260px]">
+              <div className="w-full max-w-[260px] overflow-hidden rounded-xl border border-emerald-400/40">
+                <p className="bg-slate-900/90 px-2 py-0.5 text-center text-[10px] font-bold tracking-wide text-slate-300">
+                  ATRÁS (fondo)
+                </p>
                 <div
-                  ref={mapWrapRef}
-                  className="h-[320px] w-full overflow-hidden rounded-xl border border-emerald-400/40"
-                  role="img"
-                  aria-label="Foto satélite del green con posición de bandera y escuadra"
-                />
-                <div className="mt-1 flex items-center justify-between px-1 text-[10px] font-bold text-slate-300">
-                  <span>FRENTE (entrada)</span>
-                  <span>ATRÁS</span>
+                  style={{
+                    transform: `rotate(${mapRotationDeg}deg)`,
+                    transformOrigin: "center center",
+                  }}
+                >
+                  <div
+                    ref={mapWrapRef}
+                    className="h-[300px] w-full"
+                    role="img"
+                    aria-label="Foto satélite del green con posición de bandera y escuadra"
+                  />
                 </div>
+                <p className="bg-slate-900/90 px-2 py-0.5 text-center text-[10px] font-bold tracking-wide text-slate-300">
+                  FRENTE (entrada)
+                </p>
               </div>
             </div>
             {refText ? (
