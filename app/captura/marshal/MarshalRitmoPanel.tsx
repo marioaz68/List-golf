@@ -17,18 +17,23 @@ type RitmoPayload = {
   };
 };
 
+const MAP_HEIGHT = "calc(100dvh - 210px)";
+
 export default function MarshalRitmoPanel({
   tg,
   tournamentId,
+  active = true,
 }: {
   tg: string;
   tournamentId: string | null;
+  active?: boolean;
 }) {
   const vp = useViewport();
   const [data, setData] = useState<RitmoPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapEpoch, setMapEpoch] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!tournamentId) return;
@@ -62,15 +67,22 @@ export default function MarshalRitmoPanel({
   }, [tg, tournamentId]);
 
   useEffect(() => {
+    if (!active) return;
     refresh();
     const id = setInterval(refresh, 20_000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, active]);
+
+  useEffect(() => {
+    if (!active || !data) return;
+    const id = window.setTimeout(() => setMapEpoch((n) => n + 1), 80);
+    return () => window.clearTimeout(id);
+  }, [active, data?.roundLabel, tournamentId]);
 
   if (!tournamentId) {
     return (
       <div style={{ padding: 24, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
-        Elige un torneo para ver el mapa de ritmo.
+        Sin torneo asignado para hoy.
       </div>
     );
   }
@@ -142,8 +154,17 @@ export default function MarshalRitmoPanel({
         <span>🔵 {data.counts.adelantado} adelant.</span>
         <span>⚪ {data.counts.sin_datos} sin ritmo</span>
       </div>
-      <div style={{ flex: 1, position: "relative", minHeight: "50vh" }}>
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: MAP_HEIGHT,
+          minHeight: 320,
+          flexShrink: 0,
+        }}
+      >
         <RitmoMap
+          key={`marshal-map-${tournamentId}-${mapEpoch}`}
           groups={data.mapGroups}
           selectedId={selectedId}
           showHoleLabels={false}
@@ -152,6 +173,25 @@ export default function MarshalRitmoPanel({
             setSelectedId((prev) => (prev === id ? null : id))
           }
         />
+        {data.mapGroups.length === 0 ? (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 12,
+              left: 12,
+              right: 12,
+              zIndex: 500,
+              background: "rgba(0,0,0,0.72)",
+              color: "#cbd5e1",
+              padding: "8px 10px",
+              borderRadius: 8,
+              fontSize: 11,
+              textAlign: "center",
+            }}
+          >
+            Sin grupos en cancha todavía · el mapa del campo sigue activo
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -231,11 +231,6 @@ export default function MarshalOpsClient({
     [sorted]
   );
 
-  function selectTournament(id: string) {
-    const params = new URLSearchParams({ tg, tournament_id: id });
-    window.location.href = `/captura/marshal?${params.toString()}`;
-  }
-
   const livePath = selectedTournament?.liveResultsPath ?? null;
 
   return (
@@ -287,45 +282,7 @@ export default function MarshalOpsClient({
           </button>
         </div>
 
-        {data.tournaments.length > 1 ? (
-          <div
-            style={{
-              display: "flex",
-              gap: 6,
-              overflowX: "auto",
-              marginTop: 10,
-              paddingBottom: 2,
-            }}
-          >
-            {data.tournaments.map((t) => {
-              const active = t.id === selectedTournamentId;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => selectTournament(t.id)}
-                  style={{
-                    flex: "0 0 auto",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    border: `1px solid ${active ? "#2563eb" : "#334155"}`,
-                    background: active ? "#2563eb" : "#1e293b",
-                    color: active ? "#fff" : "#cbd5e1",
-                    cursor: "pointer",
-                    maxWidth: 160,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {t.name}
-                </button>
-              );
-            })}
-          </div>
-        ) : selectedTournament ? (
+        {selectedTournament ? (
           <div style={{ fontSize: 12, color: "#cbd5e1", marginTop: 8 }}>
             {selectedTournament.name}
           </div>
@@ -632,7 +589,20 @@ export default function MarshalOpsClient({
           </div>
         </>
       ) : tab === "ritmo" ? (
-        <MarshalRitmoPanel tg={tg} tournamentId={selectedTournamentId} />
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <MarshalRitmoPanel
+            tg={tg}
+            tournamentId={selectedTournamentId}
+            active
+          />
+        </div>
       ) : (
         <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
           {!selectedTournament || !livePath ? (

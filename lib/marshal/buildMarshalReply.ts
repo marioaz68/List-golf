@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildMarshalMiniAppUrl } from "@/lib/marshal/marshalMiniAppUrl";
+import { resolveMarshalDayTournamentId } from "@/lib/marshal/resolveMarshalDayTournament";
 import { resolveMarshal } from "@/lib/marshal/resolveMarshal";
 import type { TelegramInlineButton } from "@/lib/telegram/sendMessage";
 
@@ -24,7 +25,11 @@ export async function buildMarshalReply(
     };
   }
 
-  const url = buildMarshalMiniAppUrl({ telegramChatId: telegramUserId });
+  const tournamentId = await resolveMarshalDayTournamentId(admin, marshal);
+  const url = buildMarshalMiniAppUrl({
+    telegramChatId: telegramUserId,
+    tournamentId,
+  });
   return {
     text: [
       `Hola ${marshal.name} 👋`,

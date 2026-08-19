@@ -223,6 +223,11 @@ export function RitmoMap({
         map.fitBounds(bounds, { padding: [8, 8], animate: false });
       };
       fitToCourse();
+      window.setTimeout(() => {
+        if (!mapRef.current) return;
+        map.invalidateSize();
+        fitToCourse();
+      }, 300);
       // Si arranca con un grupo ya seleccionado, hacemos zoom a él.
       if (selectedId) {
         const g = groups.find((x) => x.id === selectedId);
