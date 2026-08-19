@@ -1515,6 +1515,11 @@ function BracketMatchCell({
             ● en juego
           </p>
         ) : null}
+        {realMatch?.status === "completed" ? (
+          <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-emerald-200/90">
+            FINALIZADO
+          </p>
+        ) : null}
         {hasBye ? (
           <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-amber-300/80">
             BYE → R{round + 1}

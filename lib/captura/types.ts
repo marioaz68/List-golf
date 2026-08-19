@@ -159,6 +159,9 @@ export type GroupMatchPlayCapture = {
 export type GroupCapturePayload = {
   groupId: string;
   roundId: string;
+  roundDate?: string | null;
+  /** Ronda cerrada automáticamente por cambio de fecha (día anterior). */
+  captureClosedByDate?: boolean;
   tournamentId: string | null;
   groupNo: number | null;
   startingHole: number | null;

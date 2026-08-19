@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PICKED_UP_STROKES, type HoleNumber } from "./types";
+import { isRoundClosedByDate } from "./roundClosure";
 
 export type ScoreActorRole =
   | "player"
@@ -120,6 +121,18 @@ export async function saveGroupHoleScore(
   const roundId = safeString(groupRow?.round_id);
   if (!roundId) {
     return { ok: false, error: "Grupo no encontrado." };
+  }
+
+  const { data: roundMeta } = await admin
+    .from("rounds")
+    .select("round_date")
+    .eq("id", roundId)
+    .maybeSingle();
+  if (isRoundClosedByDate(roundMeta?.round_date ?? null)) {
+    return {
+      ok: false,
+      error: "Ronda cerrada por fecha: ya no se puede capturar ni editar.",
+    };
   }
 
   const { data: member } = await admin

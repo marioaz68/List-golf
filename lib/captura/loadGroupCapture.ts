@@ -13,6 +13,7 @@ import {
 } from "./cardSignatures";
 import { loadGroupMatchPlayStatus } from "./matchPlayGroupDecision";
 import { loadGroupPairSides } from "./loadGroupPairSides";
+import { isRoundClosedByDate } from "./roundClosure";
 import { derivePairingGroupMatches } from "@/lib/matchplay/derivePairingGroupMatches";
 import {
   roundCountForBracketSize,
@@ -136,13 +137,15 @@ export async function loadGroupCapture(
 
   const { data: roundRow } = await supabase
     .from("rounds")
-    .select("tournament_id, round_no, tournaments(name, settings)")
+    .select("tournament_id, round_no, round_date, tournaments(name, settings)")
     .eq("id", roundId)
     .maybeSingle();
 
   tournamentId = safeString(roundRow?.tournament_id) || null;
   const roundNo =
     typeof roundRow?.round_no === "number" ? roundRow.round_no : null;
+  const roundDate =
+    typeof roundRow?.round_date === "string" ? roundRow.round_date : null;
   const t = roundRow?.tournaments;
   const tRow = Array.isArray(t) ? t[0] : t;
   if (tRow && typeof tRow === "object") {
@@ -181,6 +184,8 @@ export async function loadGroupCapture(
     return {
       groupId: gid,
       roundId,
+      roundDate,
+      captureClosedByDate: isRoundClosedByDate(roundDate),
       tournamentId,
       groupNo:
         typeof groupRow?.group_no === "number" ? groupRow.group_no : null,
@@ -461,6 +466,8 @@ export async function loadGroupCapture(
   return {
     groupId: gid,
     roundId,
+    roundDate,
+    captureClosedByDate: isRoundClosedByDate(roundDate),
     tournamentId,
     groupNo: typeof groupRow?.group_no === "number" ? groupRow.group_no : null,
     startingHole:

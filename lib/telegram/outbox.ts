@@ -4,6 +4,7 @@ import {
   sendTelegramMessage,
   type TelegramInlineButton,
 } from "@/lib/telegram/sendMessage";
+import { isRoundClosedByDate } from "@/lib/captura/roundClosure";
 
 export type OutboxKind =
   | "next_round_group"
@@ -65,6 +66,52 @@ export async function sendAndTrackTelegramMessage(
 
   // 1) Buscar y borrar mensajes previos del mismo kind para este chat.
   try {
+    // Limpieza global por chat: mensajes de rondas viejas (día anterior o más)
+    // se consideran cerrados y se intentan borrar para no acumular historial.
+    if (kind === "next_round_group") {
+      const { data: staleRows } = await admin
+        .from("telegram_outbox")
+        .select("id, message_id, round_id")
+        .eq("chat_id", chatId)
+        .eq("kind", kind);
+      const roundIds = Array.from(
+        new Set(
+          (staleRows ?? [])
+            .map((r) => String((r as { round_id?: string | null }).round_id ?? "").trim())
+            .filter(Boolean)
+        )
+      );
+      const roundDateById = new Map<string, string | null>();
+      if (roundIds.length > 0) {
+        const { data: rounds } = await admin
+          .from("rounds")
+          .select("id, round_date")
+          .in("id", roundIds);
+        for (const r of (rounds ?? []) as Array<{ id: string; round_date: string | null }>) {
+          roundDateById.set(String(r.id), r.round_date ?? null);
+        }
+      }
+      const staleIdsToDelete: string[] = [];
+      for (const row of (staleRows ?? []) as Array<{
+        id: string;
+        message_id: number | string | null;
+        round_id: string | null;
+      }>) {
+        const rid = String(row.round_id ?? "").trim();
+        const rdate = rid ? roundDateById.get(rid) ?? null : null;
+        if (!isRoundClosedByDate(rdate)) continue;
+        const mid = Number(row.message_id);
+        if (Number.isFinite(mid) && mid > 0) {
+          const del = await deleteTelegramMessage(chatId, mid);
+          if (del.ok) deletedMessageIds.push(mid);
+        }
+        staleIdsToDelete.push(row.id);
+      }
+      if (staleIdsToDelete.length > 0) {
+        await admin.from("telegram_outbox").delete().in("id", staleIdsToDelete);
+      }
+    }
+
     const { data: prevRows } = await admin
       .from("telegram_outbox")
       .select("id, message_id")

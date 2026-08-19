@@ -1138,6 +1138,7 @@ function MobileScoreEntryContent() {
   /** Estado de match play del grupo (ventajas + progresión + cierre). */
   const [matchPlayInfo, setMatchPlayInfo] =
     useState<GroupMatchPlayCapture | null>(null);
+  const [captureClosedByDate, setCaptureClosedByDate] = useState(false);
   const hideFingerSignaturePad =
     Boolean(
       matchPlayInfo?.matchType &&
@@ -1227,6 +1228,7 @@ function MobileScoreEntryContent() {
           data?: {
             tournamentId?: string | null;
             matchplayVariant?: string | null;
+            captureClosedByDate?: boolean;
             myEntryId?: string | null;
             caddieForEntryIds?: string[];
             witnesses?: Array<{ entryId: string; witnessEntryId: string }>;
@@ -1265,6 +1267,7 @@ function MobileScoreEntryContent() {
             : null
         );
         setMatchPlayInfo(data.matchPlay ?? null);
+        setCaptureClosedByDate(Boolean(data.captureClosedByDate));
         setCaddieForEntryIds(
           Array.isArray(data.caddieForEntryIds) ? data.caddieForEntryIds : []
         );
@@ -1458,11 +1461,16 @@ function MobileScoreEntryContent() {
       if (!entryId) return false;
       const player = players.find((p) => p.id === entryId);
       if (!player) return false;
-      return ALL_HOLES.every(
-        (h) => player.scores[h] != null || Boolean(player.pickedUp?.[h])
-      );
+      const holesRequired = Math.max(1, Math.min(18, matchPlayInfo?.holesRequired ?? 18));
+      for (let h = 1; h <= holesRequired; h++) {
+        const hh = h as HoleNumber;
+        if (player.scores[hh] == null && !Boolean(player.pickedUp?.[hh])) {
+          return false;
+        }
+      }
+      return true;
     },
-    [players]
+    [players, matchPlayInfo?.holesRequired]
   );
 
   const myCardComplete = isCardComplete(viewerEntryId);
@@ -1491,6 +1499,10 @@ function MobileScoreEntryContent() {
     role: "player" | "witness"
   ) {
     if (!viewerEntryId || !groupId) return;
+    if (captureClosedByDate) {
+      setSignError("Ronda cerrada por fecha: ya no se aceptan firmas.");
+      return;
+    }
     setSigningFor(`${targetEntryId}:${role}`);
     setSignError(null);
     try {
@@ -1589,6 +1601,7 @@ function MobileScoreEntryContent() {
     value: number | null,
     options?: { pickedUp?: boolean }
   ) {
+    if (captureClosedByDate) return;
     const pickedUp = Boolean(options?.pickedUp);
     const strokes = pickedUp
       ? PICKED_UP_STROKES
@@ -2434,6 +2447,11 @@ function MobileScoreEntryContent() {
             {/* Banner de testigo + toggle Mi Score (sólo visible si está identificado el jugador). */}
             {viewerEntryId ? (
               <section className="rounded-xl bg-white px-3 py-2 shadow-sm text-[11px]">
+                {captureClosedByDate ? (
+                  <div className="mb-2 rounded-md border border-amber-400 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-900">
+                    RONDA CERRADA POR FECHA · sólo administrador puede modificar.
+                  </div>
+                ) : null}
                 {showMyCard && witnessTargetName ? (
                   <div
                     className={[

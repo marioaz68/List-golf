@@ -7,6 +7,41 @@ import {
 import { loadGroupMatchPlayStatus } from "@/lib/captura/matchPlayGroupDecision";
 import { loadGroupPairSides } from "@/lib/captura/loadGroupPairSides";
 import { isOpposingWitness, samePair } from "@/lib/captura/pairWitness";
+import { isRoundClosedByDate } from "@/lib/captura/roundClosure";
+
+async function hasRequiredHolesCaptured(
+  admin: ReturnType<typeof createAdminClient>,
+  roundId: string,
+  entryId: string,
+  holesRequired: number
+): Promise<boolean> {
+  const { data: holes } = await admin
+    .from("hole_scores")
+    .select("hole_number, hole_no, strokes, picked_up")
+    .eq("entry_id", entryId)
+    .eq("round_id", roundId);
+
+  const seen = new Set<number>();
+  for (const row of (holes ?? []) as Array<{
+    hole_number?: number | null;
+    hole_no?: number | null;
+    strokes?: number | null;
+    picked_up?: boolean | null;
+  }>) {
+    const h =
+      typeof row.hole_number === "number"
+        ? row.hole_number
+        : typeof row.hole_no === "number"
+          ? row.hole_no
+          : null;
+    if (h == null || h < 1 || h > 18) continue;
+    if (row.strokes != null || row.picked_up) seen.add(h);
+  }
+  for (let h = 1; h <= holesRequired; h++) {
+    if (!seen.has(h)) return false;
+  }
+  return true;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +99,52 @@ export async function POST(req: Request) {
 
   try {
     const admin = createAdminClient();
+    const { data: groupRow } = await admin
+      .from("pairing_groups")
+      .select("round_id")
+      .eq("id", groupId)
+      .maybeSingle();
+    const roundId = String(groupRow?.round_id ?? "").trim();
+    if (!roundId) {
+      return NextResponse.json(
+        { ok: false, error: "Grupo sin ronda válida." },
+        { status: 400 }
+      );
+    }
+    const { data: roundMeta } = await admin
+      .from("rounds")
+      .select("round_date")
+      .eq("id", roundId)
+      .maybeSingle();
+    if (isRoundClosedByDate(roundMeta?.round_date ?? null)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Ronda cerrada por fecha: ya no se aceptan firmas.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const matchPlay = await loadGroupMatchPlayStatus(admin, groupId);
+    const holesRequired = matchPlay?.holesRequired ?? 18;
+    const complete = await hasRequiredHolesCaptured(
+      admin,
+      roundId,
+      entryId,
+      holesRequired
+    );
+    if (!complete) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "La tarjeta aún no está completa para firmar (falta cerrar hoyos requeridos).",
+        },
+        { status: 400 }
+      );
+    }
+
     const pairSides = await loadGroupPairSides(admin, groupId);
 
     if (role === "player") {
@@ -122,8 +203,6 @@ export async function POST(req: Request) {
       return NextResponse.json(result, { status: 400 });
     }
 
-    const matchPlay = await loadGroupMatchPlayStatus(admin, groupId);
-    const holesRequired = matchPlay?.holesRequired ?? 18;
     const lockIds = new Set<string>([entryId]);
     for (const row of result.updated) lockIds.add(row.entryId);
 
