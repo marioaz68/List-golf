@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 
 export type SeedDefinedMatchPlayGroupsResult = {
   ok: true;
@@ -24,10 +25,29 @@ function formatHHMM(totalMinutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
+type PairRow = {
+  id: string;
+  seed: number | null;
+  is_active: boolean | null;
+  player_a_entry_id: string | null;
+  player_b_entry_id: string | null;
+};
+
+function fourEntryIds(top: PairRow, bot: PairRow): string[] | null {
+  const entryIds = [
+    top.player_a_entry_id,
+    top.player_b_entry_id,
+    bot.player_a_entry_id,
+    bot.player_b_entry_id,
+  ].filter((v): v is string => !!v);
+  if (entryIds.length < 4) return null;
+  return entryIds;
+}
+
 /**
- * Arma foursomes sólo para matches que ya tienen ambas parejas
- * (R1 reales + R2 que ya quedaron definidos por BYE). No borra
- * grupos existentes: si la ronda ya tiene salidas, la deja.
+ * Arma foursomes sólo para matches con DOS parejas jugables (4 jugadores).
+ * No crea grupos de 2 contra un BYE o pareja fantasma. Si la ronda ya
+ * tiene salidas, rellena las que falten sin borrar las existentes.
  */
 export async function seedDefinedMatchPlayGroups(
   admin: SupabaseClient,
@@ -90,25 +110,54 @@ export async function seedDefinedMatchPlayGroups(
     const round = roundByNo.get(roundNo);
     if (!round?.id) continue;
 
-    const { count } = await admin
-      .from("pairing_groups")
-      .select("id", { count: "exact", head: true })
-      .eq("round_id", round.id);
-
-    if ((count ?? 0) > 0) {
-      skippedExisting += 1;
-      continue;
-    }
-
     const pairIds = [
       ...new Set(matches.flatMap((m) => [m.top_pair_id, m.bottom_pair_id])),
     ];
     const { data: pairs } = await admin
       .from("matchplay_pair_teams")
-      .select("id, seed, player_a_entry_id, player_b_entry_id")
+      .select("id, seed, is_active, player_a_entry_id, player_b_entry_id")
       .in("id", pairIds);
 
-    const pairById = new Map((pairs ?? []).map((p) => [p.id, p] as const));
+    const pairById = new Map(
+      ((pairs ?? []) as PairRow[]).map((p) => [p.id, p] as const)
+    );
+
+    const { data: existingGroups } = await admin
+      .from("pairing_groups")
+      .select("id, group_no, notes")
+      .eq("round_id", round.id);
+    const groups = existingGroups ?? [];
+    const usedNos = new Set(
+      groups.map((g) => Number(g.group_no)).filter((n) => Number.isFinite(n))
+    );
+    const groupIds = groups.map((g) => g.id);
+    const entriesByGroup = new Map<string, Set<string>>();
+    if (groupIds.length > 0) {
+      const { data: members } = await admin
+        .from("pairing_group_members")
+        .select("group_id, entry_id")
+        .in("group_id", groupIds);
+      for (const row of members ?? []) {
+        const set = entriesByGroup.get(row.group_id) ?? new Set();
+        set.add(row.entry_id);
+        entriesByGroup.set(row.group_id, set);
+      }
+    }
+
+    const alreadyGrouped = (entryIds: string[]) => {
+      for (const set of entriesByGroup.values()) {
+        if (entryIds.every((id) => set.has(id))) return true;
+      }
+      return false;
+    };
+
+    const nextFreeGroupNo = () => {
+      let n = 1;
+      while (usedNos.has(n)) n += 1;
+      usedNos.add(n);
+      return n;
+    };
+
     const baseMinutes = round.start_time
       ? parseHHMM(String(round.start_time))
       : 7 * 60;
@@ -118,12 +167,20 @@ export async function seedDefinedMatchPlayGroups(
         ? Math.trunc(round.interval_minutes)
         : 10;
 
-    let groupNo = 1;
+    let createdThisRound = 0;
     for (const match of matches) {
       const top = pairById.get(match.top_pair_id);
       const bot = pairById.get(match.bottom_pair_id);
       if (!top || !bot) continue;
+      if (!isPlayablePairTeam(top) || !isPlayablePairTeam(bot)) continue;
+      const entryIds = fourEntryIds(top, bot);
+      if (!entryIds) continue;
+      if (alreadyGrouped(entryIds)) {
+        skippedExisting += 1;
+        continue;
+      }
 
+      const groupNo = nextFreeGroupNo();
       const teeTime = formatHHMM(start + (groupNo - 1) * interval);
       const topLabel = top.seed != null ? `#${top.seed}` : "TOP";
       const botLabel = bot.seed != null ? `#${bot.seed}` : "BOT";
@@ -146,33 +203,25 @@ export async function seedDefinedMatchPlayGroups(
         );
       }
 
-      const entryIds = [
-        top.player_a_entry_id,
-        top.player_b_entry_id,
-        bot.player_a_entry_id,
-        bot.player_b_entry_id,
-      ].filter((v): v is string => !!v);
-
-      if (entryIds.length > 0) {
-        const { error: insM } = await admin.from("pairing_group_members").insert(
-          entryIds.map((entry_id, idx) => ({
-            group_id: pg.id,
-            entry_id,
-            position: idx + 1,
-          }))
+      const { error: insM } = await admin.from("pairing_group_members").insert(
+        entryIds.map((entry_id, idx) => ({
+          group_id: pg.id,
+          entry_id,
+          position: idx + 1,
+        }))
+      );
+      if (insM) {
+        throw new Error(
+          `No se pudieron agregar jugadores al foursome R${roundNo} G${groupNo}: ${insM.message}`
         );
-        if (insM) {
-          throw new Error(
-            `No se pudieron agregar jugadores al foursome R${roundNo} G${groupNo}: ${insM.message}`
-          );
-        }
       }
 
-      groupNo += 1;
+      entriesByGroup.set(pg.id, new Set(entryIds));
+      createdThisRound += 1;
       groupsCreated += 1;
     }
 
-    if (groupNo > 1) roundsSeeded += 1;
+    if (createdThisRound > 0) roundsSeeded += 1;
   }
 
   return { ok: true, roundsSeeded, groupsCreated, skippedExisting };

@@ -18,6 +18,7 @@ import {
   roundCountForBracketSize,
 } from "@/lib/matchplay/bracketUtils";
 import { autoPublishOnAuctionComplete } from "@/lib/matchplay/autoPublishOnAuctionComplete";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 import { drawNextAuctionPair, releaseAuctionPairForRedraw } from "@/lib/matchplay/drawNextAuctionPair";
 import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
 import { createClient } from "@/utils/supabase/server";
@@ -993,7 +994,7 @@ export async function generateMatchPlayBracket(formData: FormData) {
 
   const seeding_method = (rulesRow?.seeding_method ??
     "hi_combined") as MatchPlaySeedingMethod;
-  const activeTeams = data.teams.filter((t) => t.is_active);
+  const activeTeams = data.teams.filter((t) => t.is_active && isPlayablePairTeam(t));
   const synced = await syncMatchPlayBracketSizeFromField(admin, tournament_id);
   const maxSize =
     synced.ok && !synced.skipped

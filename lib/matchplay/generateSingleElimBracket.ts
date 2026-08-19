@@ -88,8 +88,13 @@ export function generateSingleElimBracket(params: {
   /** Si viene, no se reduce por debajo del campo (p. ej. 36 parejas → 64). */
   bracket_size?: number | null;
 }): GenerateBracketResult {
-  const { teams, seeding_method } = params;
+  const { seeding_method } = params;
   const maxCap = params.max_bracket_size ?? 64;
+  const teams = params.teams.filter(
+    (t) =>
+      t.is_active !== false &&
+      !!(t.player_a_entry_id || t.player_b_entry_id || t.player_a || t.player_b)
+  );
 
   if (teams.length < 2) {
     throw new Error("Se necesitan al menos 2 equipos para generar el cuadro.");

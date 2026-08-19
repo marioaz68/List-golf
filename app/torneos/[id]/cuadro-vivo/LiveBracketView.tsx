@@ -104,6 +104,37 @@ function money(v: number | null | undefined, currency: string) {
   return `$${Math.round(v).toLocaleString("es-MX")} ${currency}`;
 }
 
+/** Pareja real para el cuadro: activa y con al menos un jugador. */
+function playableTeamFromMap(
+  teamById: Map<string, MatchPlayTeamRow>,
+  pairId: string | null | undefined
+): MatchPlayTeamRow | null {
+  if (!pairId) return null;
+  const t = teamById.get(pairId);
+  if (!t || t.is_active === false) return null;
+  if (!t.player_a && !t.player_b) return null;
+  return t;
+}
+
+/** El feeder ya no puede mandar otra pareja (BYE vacío o ambos vacantes). */
+function feederSlotResolved(slot: {
+  winner: MatchPlayTeamRow | null;
+  top: MatchPlayTeamRow | null;
+  bottom: MatchPlayTeamRow | null;
+  topVacant: boolean;
+  bottomVacant: boolean;
+  byeSide: "top" | "bottom" | null;
+} | undefined): boolean {
+  if (!slot) return true;
+  if (slot.winner) return true;
+  if (slot.topVacant && slot.bottomVacant) return true;
+  if (slot.byeSide && !slot.winner) return true;
+  if (!slot.top && !slot.bottom && (slot.topVacant || slot.bottomVacant)) {
+    return true;
+  }
+  return false;
+}
+
 /** Formatea un diferencial de match play: entero o 1 decimal ("2", "1.5"). */
 function fmtDiff(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
@@ -722,10 +753,14 @@ export default function LiveBracketView({
   const seedOrder = useMemo(() => bracketSeedOrder(targetSize), [targetSize]);
 
   // Total del campo: equipos o parejas/jugadores inscritos (el mayor).
-  const totalInscribed = useMemo(
-    () => Math.max(seededTeams.length, fieldUnitCount),
-    [seededTeams.length, fieldUnitCount]
-  );
+  // Cupo real de parejas en el cuadro (máx. 64). Si el campo trae inscritos
+  // inflados (p. ej. prueba clonada), no se usan para marcar vacantes: si no,
+  // desaparecen todos los BYE de R1.
+  const pairFieldSize = useMemo(() => {
+    const fromField =
+      fieldUnitCount > 0 && fieldUnitCount <= targetSize ? fieldUnitCount : 0;
+    return Math.min(targetSize, Math.max(seededTeams.length, fromField));
+  }, [targetSize, seededTeams.length, fieldUnitCount]);
 
   // Slots por seed → team id.
   // SOLO equipos ya ADJUDICADOS en la subasta ocupan un slot. Los demás
@@ -780,25 +815,27 @@ export default function LiveBracketView({
     for (let p = 0; p < r1Count; p++) {
       const tSeed = seedOrder[p * 2] ?? null;
       const bSeed = seedOrder[p * 2 + 1] ?? null;
-      const topVacant = tSeed != null && tSeed > totalInscribed;
-      const bottomVacant = bSeed != null && bSeed > totalInscribed;
+      const topVacant = tSeed != null && tSeed > pairFieldSize;
+      const bottomVacant = bSeed != null && bSeed > pairFieldSize;
       let top =
         !topVacant && tSeed != null ? teamBySeed.get(tSeed) ?? null : null;
       let bottom =
         !bottomVacant && bSeed != null ? teamBySeed.get(bSeed) ?? null : null;
       const real = matchByPos.get(`1-${p + 1}`);
       if (real) {
-        if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
-        if (real.bottom_pair_id)
-          bottom = teamById.get(real.bottom_pair_id) ?? bottom;
+        const rt = playableTeamFromMap(teamById, real.top_pair_id);
+        const rb = playableTeamFromMap(teamById, real.bottom_pair_id);
+        if (rt) top = rt;
+        if (rb) bottom = rb;
       }
       // BYE: si la posición es VACANTE (basado en totalInscribed) → el otro lado
-      // pasa por BYE (aunque aún no esté adjudicado). El "ganador" del BYE solo
-      // existe si el lado ocupado ya tiene equipo.
+      // pasa por BYE. Un winner_pair_id fantasma (pareja inactiva/vacía) no
+      // debe borrar al ganador calculado.
       let winner: MatchPlayTeamRow | null = null;
       let byeSide: "top" | "bottom" | null = null;
-      if (real?.winner_pair_id) {
-        winner = teamById.get(real.winner_pair_id) ?? null;
+      const dbWinner = playableTeamFromMap(teamById, real?.winner_pair_id);
+      if (dbWinner) {
+        winner = dbWinner;
       } else if (topVacant && !bottomVacant) {
         byeSide = "top";
         if (bottom) winner = bottom;
@@ -825,9 +862,7 @@ export default function LiveBracketView({
     rounds.push(r1);
 
     // Rondas r >= 2: ganador(r-1, 2p) vs ganador(r-1, 2p+1).
-    // IMPORTANTE: a partir de R2 NO hay BYE automático. Si un slot llega vacío,
-    // simplemente queda en "esperando ganador" hasta que se juegue/avance el
-    // match correspondiente. Esto cumple la regla: BYE solo en R1.
+    // BYE de R1 (y de R2 si el rival ya no puede aparecer) sí avanza.
     for (let r = 2; r <= roundCount; r++) {
       const prev = rounds[r - 2];
       const cur = new Map<number, Slot>();
@@ -839,14 +874,23 @@ export default function LiveBracketView({
         let bottom: MatchPlayTeamRow | null = dnMatch?.winner ?? null;
         const real = matchByPos.get(`${r}-${p + 1}`);
         if (real) {
-          if (real.top_pair_id) top = teamById.get(real.top_pair_id) ?? top;
-          if (real.bottom_pair_id)
-            bottom = teamById.get(real.bottom_pair_id) ?? bottom;
+          const rt = playableTeamFromMap(teamById, real.top_pair_id);
+          const rb = playableTeamFromMap(teamById, real.bottom_pair_id);
+          if (rt) top = rt;
+          if (rb) bottom = rb;
         }
-        // Solo el winner viene de la BD; nada de BYE automático en R2+.
-        const winner = real?.winner_pair_id
-          ? teamById.get(real.winner_pair_id) ?? null
-          : null;
+        const dbWinner = playableTeamFromMap(teamById, real?.winner_pair_id);
+        let winner: MatchPlayTeamRow | null = dbWinner;
+        let byeSide: "top" | "bottom" | null = null;
+        const upDone = feederSlotResolved(upMatch);
+        const dnDone = feederSlotResolved(dnMatch);
+        if (!winner && top && !bottom && dnDone) {
+          byeSide = "bottom";
+          winner = top;
+        } else if (!winner && bottom && !top && upDone) {
+          byeSide = "top";
+          winner = bottom;
+        }
         cur.set(p, {
           top,
           bottom,
@@ -855,7 +899,7 @@ export default function LiveBracketView({
           topVacant: false,
           bottomVacant: false,
           winner,
-          byeSide: null,
+          byeSide,
         });
       }
       rounds.push(cur);
@@ -868,23 +912,20 @@ export default function LiveBracketView({
     matchByPos,
     targetSize,
     roundCount,
-    totalInscribed,
+    pairFieldSize,
   ]);
 
-  const totalActive = totalInscribed;
+  const totalActive = pairFieldSize;
   const awardedCount = seededTeams.filter((t) => t.auction_order != null).length;
   const totalRaised = seededTeams.reduce(
     (acc, t) => acc + (t.auction_bid ?? 0),
     0
   );
   const pot = potPercent != null ? (totalRaised * potPercent) / 100 : totalRaised;
-  // R1: cada slot VACANTE (seed > totalInscritos) manda BYE al oponente.
-  // Con N inscritos en cuadro S, hay (S - N) BYEs y (N - (S - N))/2 = N - S/2
-  // matches reales en R1.
-  const byesR1 = Math.max(0, targetSize - totalInscribed);
+  const byesR1 = Math.max(0, targetSize - pairFieldSize);
   const realMatchesR1 = Math.max(
     0,
-    Math.floor((totalInscribed - byesR1) / 2)
+    Math.floor((pairFieldSize - byesR1) / 2)
   );
 
   // Render: cada ronda como columna; cada match con grid-row span 2^k
@@ -1165,7 +1206,7 @@ export default function LiveBracketView({
             </li>
             <li>
               <span className="font-bold text-amber-200">3.</span> Con{" "}
-              <strong className="text-cyan-200">{totalInscribed}</strong>{" "}
+              <strong className="text-cyan-200">{pairFieldSize}</strong>{" "}
               inscritos en cuadro de {targetSize}, hay{" "}
               <strong className="text-amber-200">{byesR1}</strong> slots
               vacantes → <strong>{byesR1} BYEs</strong> pre-definidos en R1 y{" "}
@@ -1181,8 +1222,8 @@ export default function LiveBracketView({
             </li>
             <li>
               <span className="font-bold text-amber-200">5.</span>{" "}
-              <strong>BYE solo en R1.</strong> A partir de R2 nadie pasa por
-              BYE: los ganadores de R1 se enfrentan entre sí.
+              <strong>BYE en R1 y R2.</strong> Si el rival es vacante o una
+              pareja vacía, el ganador del BYE pasa a la siguiente ronda.
             </li>
             <li>
               <span className="font-bold text-amber-200">6.</span> Las
@@ -1474,9 +1515,9 @@ function BracketMatchCell({
             ● en juego
           </p>
         ) : null}
-        {hasBye && !realMatch ? (
+        {hasBye ? (
           <p className="mt-0.5 text-center text-[9px] uppercase tracking-wider text-amber-300/80">
-            BYE → R2
+            BYE → R{round + 1}
           </p>
         ) : null}
         {!hasBye && !realMatch && round === 1 && !topTeam && !bottomTeam ? (

@@ -3,6 +3,7 @@ import {
   ensureMatchPlayCalendarRounds,
   findLastMainRound,
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 
 /**
  * Si el match siguiente del cuadro ya tiene AMBAS parejas asignadas,
@@ -40,6 +41,7 @@ export type MaybeCreateNextRoundGroupResult = {
     | "bye_or_walkover"
     | "round_not_in_calendar"
     | "pairs_missing"
+    | "pairs_incomplete"
     | "insert_failed";
 };
 
@@ -173,7 +175,7 @@ export async function maybeCreateNextRoundGroup(
 
   const { data: pairs } = await admin
     .from("matchplay_pair_teams")
-    .select("id, player_a_entry_id, player_b_entry_id, seed")
+    .select("id, player_a_entry_id, player_b_entry_id, seed, is_active")
     .in("id", [nextMatch.top_pair_id, nextMatch.bottom_pair_id]);
   const topPair = (pairs ?? []).find((p) => p.id === nextMatch.top_pair_id);
   const botPair = (pairs ?? []).find((p) => p.id === nextMatch.bottom_pair_id);
@@ -187,6 +189,16 @@ export async function maybeCreateNextRoundGroup(
       reason: "pairs_missing",
     };
   }
+  if (!isPlayablePairTeam(topPair) || !isPlayablePairTeam(botPair)) {
+    return {
+      ok: true,
+      created: false,
+      groupNo: null,
+      roundId: nextRoundId,
+      teeTime,
+      reason: "waiting_other_pair",
+    };
+  }
 
   const entryIds: string[] = [
     topPair.player_a_entry_id,
@@ -194,6 +206,16 @@ export async function maybeCreateNextRoundGroup(
     botPair.player_a_entry_id,
     botPair.player_b_entry_id,
   ].filter((v): v is string => !!v);
+  if (entryIds.length < 4) {
+    return {
+      ok: true,
+      created: false,
+      groupNo: null,
+      roundId: nextRoundId,
+      teeTime,
+      reason: "pairs_incomplete",
+    };
+  }
 
   const topLabel = topPair.seed != null ? `#${topPair.seed}` : "TOP";
   const botLabel = botPair.seed != null ? `#${botPair.seed}` : "BOT";

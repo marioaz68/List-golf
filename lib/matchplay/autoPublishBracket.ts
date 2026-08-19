@@ -3,6 +3,7 @@ import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { generateSingleElimBracket } from "@/lib/matchplay/generateSingleElimBracket";
 import { fieldBracketSize } from "@/lib/matchplay/bracketUtils";
 import { syncMatchPlayBracketSizeFromField } from "@/lib/matchplay/syncFieldBracketSize";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 import type { MatchPlaySeedingMethod } from "@/lib/matchplay/types";
 
 export type AutoPublishBracketResult =
@@ -49,7 +50,7 @@ export async function autoPublishBracket(
 
   const seeding_method = (rulesRow?.seeding_method ??
     "hi_combined") as MatchPlaySeedingMethod;
-  const activeTeams = data.teams.filter((t) => t.is_active);
+  const activeTeams = data.teams.filter((t) => t.is_active && isPlayablePairTeam(t));
   const synced = await syncMatchPlayBracketSizeFromField(admin, tournamentId);
   const computedSize =
     synced.ok && !synced.skipped

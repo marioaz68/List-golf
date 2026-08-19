@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { autoPublishBracket } from "@/lib/matchplay/autoPublishBracket";
 import { ensureMatchPlayCalendarRounds } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
+import { resolveUnplayableMatchByes } from "@/lib/matchplay/resolveUnplayableMatchByes";
 import { seedDefinedMatchPlayGroups } from "@/lib/matchplay/seedDefinedMatchPlayGroups";
 
 export type AutoPublishOnAuctionCompleteResult =
@@ -34,15 +36,16 @@ export async function autoPublishOnAuctionComplete(
 ): Promise<AutoPublishOnAuctionCompleteResult> {
   const { data: teams } = await admin
     .from("matchplay_pair_teams")
-    .select("id, auction_order")
+    .select("id, auction_order, is_active, player_a_entry_id, player_b_entry_id")
     .eq("tournament_id", tournamentId)
     .eq("is_active", true);
 
-  if (!teams || teams.length === 0) {
+  const playable = (teams ?? []).filter((t) => isPlayablePairTeam(t));
+  if (playable.length === 0) {
     return { status: "no_teams" };
   }
 
-  const pending = teams.filter((t) => t.auction_order == null).length;
+  const pending = playable.filter((t) => t.auction_order == null).length;
   if (pending > 0) {
     return { status: "incomplete", pending };
   }
@@ -73,6 +76,7 @@ export async function autoPublishOnAuctionComplete(
   }
 
   const rounds = await ensureMatchPlayCalendarRounds(admin, tournamentId);
+  await resolveUnplayableMatchByes(admin, tournamentId);
   const groups = await seedDefinedMatchPlayGroups(admin, tournamentId);
 
   if (published.status === "published") {

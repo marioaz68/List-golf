@@ -3,6 +3,7 @@ import {
   maybeCreateNextRoundGroup,
   type MaybeCreateNextRoundGroupResult,
 } from "@/lib/matchplay/maybeCreateNextRoundGroup";
+import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 
 export type AdvanceWinnerResult = {
   advanced: boolean;
@@ -202,10 +203,8 @@ export async function advanceWinnerInBracket(
     .eq("id", nextMatchId)
     .maybeSingle();
 
-  // Cascada BYE: si el siguiente partido queda con un solo lado, ya cuenta
-  // como BYE y debe avanzar a su propio siguiente match. Lo manejamos antes
-  // de intentar crear salidas (porque un BYE no necesita salida).
-  if (nextRow && nextRow.status === "bye") {
+  // Cascada BYE: un lado vacío o una pareja fantasma cuenta como BYE.
+  if (nextRow) {
     await resolveNextMatchBye(admin, nextRow, autoCreate);
   }
 
@@ -256,6 +255,19 @@ export async function advanceWinnerInBracket(
   };
 }
 
+async function playablePairId(
+  admin: SupabaseClient,
+  pairId: string | null
+): Promise<string | null> {
+  if (!pairId) return null;
+  const { data: team } = await admin
+    .from("matchplay_pair_teams")
+    .select("id, is_active, player_a_entry_id, player_b_entry_id")
+    .eq("id", pairId)
+    .maybeSingle();
+  return isPlayablePairTeam(team) ? pairId : null;
+}
+
 async function resolveNextMatchBye(
   admin: SupabaseClient,
   m: {
@@ -267,38 +279,42 @@ async function resolveNextMatchBye(
   },
   autoCreate: boolean
 ) {
-  const top = m.top_pair_id;
-  const bottom = m.bottom_pair_id;
+  const origTop = m.top_pair_id;
+  const origBottom = m.bottom_pair_id;
+  const top = await playablePairId(admin, origTop);
+  const bottom = await playablePairId(admin, origBottom);
+  const strippedGhost = Boolean((origTop && !top) || (origBottom && !bottom));
 
-  if (top && !bottom) {
+  if (top !== origTop || bottom !== origBottom) {
     await admin
       .from("matchplay_matches")
       .update({
-        winner_pair_id: top,
-        status: "bye",
-        result_text: "BYE",
+        top_pair_id: top,
+        bottom_pair_id: bottom,
         updated_at: new Date().toISOString(),
       })
       .eq("id", m.id);
-    await advanceWinnerInBracket(admin, {
-      match_id: m.id,
-      winner_pair_id: top,
-      autoCreateNextGroup: autoCreate,
-    });
-  } else if (!top && bottom) {
-    await admin
-      .from("matchplay_matches")
-      .update({
-        winner_pair_id: bottom,
-        status: "bye",
-        result_text: "BYE",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", m.id);
-    await advanceWinnerInBracket(admin, {
-      match_id: m.id,
-      winner_pair_id: bottom,
-      autoCreateNextGroup: autoCreate,
-    });
   }
+
+  if (top && bottom) return;
+  if (!top && !bottom) return;
+  // Un slot vacío puede estar esperando al otro ganador. Solo es BYE si
+  // el hueco era una pareja fantasma o el partido ya venía marcado BYE.
+  if (!strippedGhost && m.status !== "bye") return;
+
+  const winner = (top ?? bottom) as string;
+  await admin
+    .from("matchplay_matches")
+    .update({
+      winner_pair_id: winner,
+      status: "bye",
+      result_text: "BYE",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", m.id);
+  await advanceWinnerInBracket(admin, {
+    match_id: m.id,
+    winner_pair_id: winner,
+    autoCreateNextGroup: autoCreate,
+  });
 }

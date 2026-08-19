@@ -81,7 +81,7 @@ export async function autoPublishBracketFromPairings(
   // 3. Todas las parejas activas
   const { data: pairsRaw } = await admin
     .from("matchplay_pair_teams")
-    .select("id, player_a_entry_id, player_b_entry_id, seed")
+    .select("id, player_a_entry_id, player_b_entry_id, seed, is_active")
     .eq("tournament_id", tournamentId)
     .eq("is_active", true);
   type Pair = {
@@ -89,8 +89,13 @@ export async function autoPublishBracketFromPairings(
     player_a_entry_id: string | null;
     player_b_entry_id: string | null;
     seed: number | null;
+    is_active?: boolean | null;
   };
-  const allPairs = (pairsRaw ?? []) as Pair[];
+  const allPairs = ((pairsRaw ?? []) as Pair[]).filter(
+    (p) =>
+      p.is_active !== false &&
+      !!(p.player_a_entry_id || p.player_b_entry_id)
+  );
   if (allPairs.length < 2) {
     return { ok: false, error: "Se necesitan al menos 2 parejas activas." };
   }
