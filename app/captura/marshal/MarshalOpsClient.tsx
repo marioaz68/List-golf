@@ -210,8 +210,15 @@ export default function MarshalOpsClient({
   }, [data.computedAtISO]);
 
   const sorted = useMemo(
-    () => [...data.groups].sort(compareGroupsForMarshalRoute),
-    [data.groups]
+    () =>
+      [...data.groups]
+        .filter((g) =>
+          selectedTournamentId
+            ? g.tournamentId === selectedTournamentId
+            : true
+        )
+        .sort(compareGroupsForMarshalRoute),
+    [data.groups, selectedTournamentId]
   );
 
   const visible = useMemo(() => {
@@ -220,9 +227,8 @@ export default function MarshalOpsClient({
   }, [sorted, onlyProblems]);
 
   const problemN = useMemo(
-    () =>
-      data.groups.filter((g) => isCaptureProblem(g.kind)).length,
-    [data.groups]
+    () => sorted.filter((g) => isCaptureProblem(g.kind)).length,
+    [sorted]
   );
 
   function selectTournament(id: string) {

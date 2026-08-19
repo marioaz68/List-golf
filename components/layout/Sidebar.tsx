@@ -211,12 +211,10 @@ export default function Sidebar() {
       },
       {
         // Debajo de captura de tarjetas: tablero ops de grupos sin anotar.
-        // Visible sin torneo seleccionado — lista todos los torneos con ronda hoy.
+        // Con torneo activo → solo ese torneo; sin torneo → todos con ronda hoy.
         nameKey: "seguimientoCaptura",
         href: "/seguimiento-captura",
         icon: Radio,
-        query: { scope: "all" },
-        ignoreTournament: true,
       },
       {
         nameKey: "scorecards",
@@ -436,10 +434,17 @@ export default function Sidebar() {
   function buildHref(item: MenuItem) {
     const params = new URLSearchParams();
 
-    // Mantener torneo activo en la URL en todo el backoffice (p. ej. /clubs, /courses).
-    // Si no, al salir de pantallas "catálogo" se pierde tournament_id y en modo Operación
-    // desaparecen inscripciones, salidas, etc. (solo quedan ítems sin requiresTournament).
-    if (tournamentId && !item.ignoreTournament) {
+    if (item.href === "/seguimiento-captura") {
+      if (tournamentId) {
+        params.set("scope", "one");
+        params.set("tournament_id", tournamentId);
+      } else {
+        params.set("scope", "all");
+      }
+    } else if (tournamentId && !item.ignoreTournament) {
+      // Mantener torneo activo en la URL en todo el backoffice (p. ej. /clubs, /courses).
+      // Si no, al salir de pantallas "catálogo" se pierde tournament_id y en modo Operación
+      // desaparecen inscripciones, salidas, etc. (solo quedan ítems sin requiresTournament).
       params.set("tournament_id", tournamentId);
     }
 

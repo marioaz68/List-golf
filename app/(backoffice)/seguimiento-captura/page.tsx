@@ -52,8 +52,11 @@ export default async function SeguimientoCapturaPage({
   const sp = await searchParams;
   const filterTournamentId = getParam(sp, "tournament_id");
   const queryRoundId = getParam(sp, "round_id");
-  // scope=one → un torneo; por defecto (sin scope o scope=all) → todos de hoy.
-  const scopeAll = getParam(sp, "scope") !== "one" || !filterTournamentId;
+  const scopeParam = getParam(sp, "scope");
+  // Con tournament_id → un torneo salvo scope=all explícito; sin id → todos hoy.
+  const scopeAll = filterTournamentId
+    ? scopeParam === "all"
+    : scopeParam !== "one" || !filterTournamentId;
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
