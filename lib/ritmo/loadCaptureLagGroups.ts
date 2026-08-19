@@ -18,6 +18,10 @@ import {
 } from "@/lib/ritmo/opsDay";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
+import {
+  loadActiveCapturersByGroup,
+  type ActiveCapturer,
+} from "@/lib/ritmo/activeCapturers";
 
 export type CaptureLagGroupRow = {
   id: string;
@@ -28,6 +32,8 @@ export type CaptureLagGroupRow = {
   actualStartAt: string | null;
   players: string[];
   caddies: string[];
+  /** Quién está capturando en esta ronda (bitácora, no Telegram). */
+  capturers: ActiveCapturer[];
   holesPlayed: number;
   lastHole: number | null;
   lastCaptureTs: string | null;
@@ -164,6 +170,12 @@ export async function loadCaptureLagGroupsForRound(
     groupMeta
   );
 
+  const capturersByGroup = await loadActiveCapturersByGroup(
+    admin,
+    args.roundId,
+    entryIdsByGroup
+  );
+
   return groupRows.map((g) => {
     const players = playersByGroup.get(g.id) ?? [];
     const score = scoreByGroup.get(g.id);
@@ -195,6 +207,7 @@ export async function loadCaptureLagGroupsForRound(
       actualStartAt: g.actual_start_at,
       players,
       caddies: (coverage?.caddies ?? []).map((c) => c.name),
+      capturers: capturersByGroup.get(g.id) ?? [],
       holesPlayed,
       lastHole: score?.lastHole ?? null,
       lastCaptureTs: score?.lastCaptureTs ?? null,

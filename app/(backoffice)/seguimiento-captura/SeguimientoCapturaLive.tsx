@@ -11,6 +11,11 @@ import {
 } from "react";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
 import { isCaptureProblem } from "@/lib/ritmo/captureLag";
+import {
+  capturerRoleLabel,
+  compareGroupsForMarshalRoute,
+  type ActiveCapturer,
+} from "@/lib/ritmo/activeCapturers";
 
 export type SegGroup = {
   id: string;
@@ -21,6 +26,7 @@ export type SegGroup = {
   actualStartAt: string | null;
   players: string[];
   caddies: string[];
+  capturers: ActiveCapturer[];
   holesPlayed: number;
   lastHole: number | null;
   lastCaptureTs: string | null;
@@ -240,16 +246,7 @@ export default function SeguimientoCapturaLive({
   }, [groups]);
 
   const sorted = useMemo(() => {
-    return [...groups].sort((a, b) => {
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      if (b.holesBehind !== a.holesBehind) return b.holesBehind - a.holesBehind;
-      const silentA = a.minutesSinceLastCapture ?? 9999;
-      const silentB = b.minutesSinceLastCapture ?? 9999;
-      if (silentB !== silentA) return silentB - silentA;
-      const tn = a.tournamentName.localeCompare(b.tournamentName, "es");
-      if (tn !== 0) return tn;
-      return a.number - b.number;
-    });
+    return [...groups].sort(compareGroupsForMarshalRoute);
   }, [groups]);
 
   const visible = useMemo(() => {
@@ -340,8 +337,8 @@ export default function SeguimientoCapturaLive({
                 : `${tournamentName}${courseName ? ` · ${courseName}` : ""} · ${roundLabel}`}
             </div>
             <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>
-              Grupos que no capturan a tiempo · actualiza cada 20 s · mandar
-              marshal a pedir que anoten
+              Grupos que no capturan a tiempo · actualiza cada 20 s · orden por
+              ritmo del campo (atrás → adelante) para ruta de marshal
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -553,7 +550,7 @@ export default function SeguimientoCapturaLive({
           </EmptyBox>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {visible.map((g) => {
+            {visible.map((g, routeIndex) => {
               const meta = KIND_META[g.kind];
               const open = expandedId === g.id;
               const holeInfo = captureHoleDisplay(g);
@@ -608,6 +605,20 @@ export default function SeguimientoCapturaLive({
                             }}
                           >
                             G{g.number}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color: "#64748b",
+                              background: "#f1f5f9",
+                              border: "1px solid #cbd5e1",
+                              padding: "2px 6px",
+                              borderRadius: 999,
+                            }}
+                            title="Orden sugerido de ruta (de atrás hacia adelante)"
+                          >
+                            #{routeIndex + 1}
                           </span>
                           {mode === "all" ||
                           (tournamentId &&
@@ -689,6 +700,55 @@ export default function SeguimientoCapturaLive({
                         >
                           {g.reason}
                         </div>
+                        {g.capturers.length > 0 ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 6,
+                              marginTop: 6,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: "#166534",
+                                alignSelf: "center",
+                              }}
+                            >
+                              Pedir captura a:
+                            </span>
+                            {g.capturers.map((c) => (
+                              <span
+                                key={`${c.role}-${c.name}`}
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 800,
+                                  color: "#14532d",
+                                  background: "#dcfce7",
+                                  border: "1px solid #86efac",
+                                  padding: "3px 9px",
+                                  borderRadius: 999,
+                                }}
+                              >
+                                {c.name} · {capturerRoleLabel(c.role)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "#b45309",
+                              marginTop: 6,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Sin capturador identificado en bitácora — revisar
+                            quién lleva la tarjeta
+                          </div>
+                        )}
                         <div
                           style={{
                             fontSize: 12,
@@ -838,13 +898,24 @@ export default function SeguimientoCapturaLive({
                           ? ` · ${g.minutesSinceStart} min desde salida`
                           : ""}
                       </div>
-                      {g.caddies.length > 0 ? (
+                      {g.capturers.length > 0 ? (
                         <div>
-                          <b>Caddies:</b> {g.caddies.join(", ")}
+                          <b>Capturan en esta ronda:</b>{" "}
+                          {g.capturers
+                            .map(
+                              (c) =>
+                                `${c.name} (${capturerRoleLabel(c.role)}, ${c.captureCount} acciones)`
+                            )
+                            .join(" · ")}
+                        </div>
+                      ) : g.caddies.length > 0 ? (
+                        <div style={{ color: "#b45309" }}>
+                          Sin bitácora de jugador/caddie — asignados:{" "}
+                          {g.caddies.join(", ")}
                         </div>
                       ) : (
                         <div style={{ color: "#b45309" }}>
-                          Sin caddie asignado en la ronda
+                          Sin capturador identificado en bitácora
                         </div>
                       )}
                       <div style={{ marginTop: 4 }}>
