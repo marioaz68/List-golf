@@ -4,6 +4,10 @@ import {
   CONSOLATION_BRACKET_NAME,
   getConsolationBracketId,
 } from "@/lib/matchplay/consolationMatchPlay";
+import {
+  CALCUTA_SUNDAY_SCHEDULE,
+  CALCUTA_TEE_INTERVAL_MINUTES,
+} from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
 
 export const STROKE_AGG_NOTES_PREFIX = "STROKE AGREGADO · ";
 
@@ -241,13 +245,13 @@ export async function createStrokeAggregateGroups(
     };
   }
   const roundId = String(roundRow.id);
-  const baseMinutes = roundRow.start_time
-    ? parseHHMM(String(roundRow.start_time))
-    : null;
+  const strokeBase =
+    parseHHMM(CALCUTA_SUNDAY_SCHEDULE.strokeStart) ??
+    (roundRow.start_time ? parseHHMM(String(roundRow.start_time)) : null);
   const interval =
     typeof roundRow.interval_minutes === "number" && roundRow.interval_minutes > 0
       ? Math.trunc(roundRow.interval_minutes)
-      : 10;
+      : CALCUTA_TEE_INTERVAL_MINUTES;
 
   // Si replace: borrar salidas stroke previas en esta ronda.
   if (opts?.replace) {
@@ -286,9 +290,10 @@ export async function createStrokeAggregateGroups(
   const created: StrokeGroupResult["groups"] = [];
   for (const chunk of chunks) {
     const groupNo = nextGroupNo++;
+    const strokeIdx = created.length;
     const teeTime =
-      baseMinutes != null
-        ? formatHHMM(baseMinutes + (groupNo - 1) * interval)
+      strokeBase != null
+        ? formatHHMM(strokeBase + strokeIdx * interval)
         : null;
     const notes = `${STROKE_AGG_NOTES_PREFIX}${chunk.label}`;
 
@@ -298,7 +303,7 @@ export async function createStrokeAggregateGroups(
         round_id: roundId,
         group_no: groupNo,
         tee_time: teeTime,
-        starting_hole: 10,
+        starting_hole: CALCUTA_SUNDAY_SCHEDULE.strokeStartingHole,
         notes,
       })
       .select("id")
@@ -321,6 +326,13 @@ export async function createStrokeAggregateGroups(
       teeTime,
       entryIds: chunk.members,
     });
+  }
+
+  if (created.length > 0) {
+    const { reconcileRoundGroupOrder } = await import(
+      "@/lib/matchplay/consolationMatchPlay"
+    );
+    await reconcileRoundGroupOrder(admin, tournamentId, lastRoundNo);
   }
 
   return {

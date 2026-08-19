@@ -7,8 +7,10 @@ import type { MaybeCreateNextRoundGroupResult } from "@/lib/matchplay/maybeCreat
 import {
   findLastMainRound,
   findLatestAfternoonRound,
+  syncCalcutaFinalRoundTeeTimes,
   syncPairingGroupTeeTimes,
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 
 export const CONSOLATION_BRACKET_NAME = "Consolación Match Play";
@@ -120,18 +122,23 @@ export async function reconcileRoundGroupOrder(
   const consol = (groups ?? []).filter((g) =>
     String(g.notes ?? "").startsWith(CONSOLATION_NOTES_PREFIX)
   );
+  const stroke = (groups ?? []).filter((g) =>
+    String(g.notes ?? "").startsWith(STROKE_AGG_NOTES_PREFIX)
+  );
   const third = (groups ?? []).filter((g) =>
     String(g.notes ?? "").startsWith("3ER LUGAR MP")
   );
   const rest = (groups ?? []).filter((g) => {
     const n = String(g.notes ?? "");
     return (
-      !n.startsWith(CONSOLATION_NOTES_PREFIX) && !n.startsWith("3ER LUGAR MP")
+      !n.startsWith(CONSOLATION_NOTES_PREFIX) &&
+      !n.startsWith(STROKE_AGG_NOTES_PREFIX) &&
+      !n.startsWith("3ER LUGAR MP")
     );
   });
-  if (consol.length === 0 && third.length === 0) return;
+  if (stroke.length === 0 && consol.length === 0 && third.length === 0) return;
 
-  const ordered = [...consol, ...third, ...rest];
+  const ordered = [...stroke, ...consol, ...third, ...rest];
   let tmp = -1000;
   for (const g of ordered) {
     await admin
@@ -155,7 +162,16 @@ export async function reconcileRoundGroupOrder(
       : 10;
   const startType =
     roundRow.start_type === "shotgun" ? "shotgun" : "tee_time";
-  await syncPairingGroupTeeTimes(admin, roundId, start, interval, startType);
+
+  const lastMain = await findLastMainRound(admin, tournamentId);
+  const isFinalRound =
+    lastMain != null && Number(lastMain.round_no) === Number(roundNo);
+
+  if (isFinalRound) {
+    await syncCalcutaFinalRoundTeeTimes(admin, roundId, interval);
+  } else {
+    await syncPairingGroupTeeTimes(admin, roundId, start, interval, startType);
+  }
 }
 
 export async function getConsolationBracketId(
