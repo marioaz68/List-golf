@@ -10,7 +10,12 @@ import {
 } from "@/lib/ritmo/scoreProgress";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 import { evaluateCaptureLag } from "@/lib/ritmo/captureLag";
-import { isOpsRoundClosed } from "@/lib/ritmo/opsDay";
+import {
+  isOpsRoundClosed,
+  mexicoDayUtcBounds,
+  resolveOpsRoundDate,
+  todayMexicoDate,
+} from "@/lib/ritmo/opsDay";
 import { buildScoreEntryHref } from "@/lib/score-entry/scoreEntryUrl";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
 
@@ -32,6 +37,7 @@ export type CaptureLagGroupRow = {
   minutesSinceStart: number | null;
   minutesSinceLastCapture: number | null;
   captureHole: number | null;
+  expectedHole: number | null;
   reason: string;
   priority: number;
   capturaHref: string;
@@ -75,6 +81,8 @@ export async function loadCaptureLagGroupsForRound(
     roundId: string;
     roundNo: number | null;
     roundDate: string | null;
+    /** Fecha para tee times / reloj (p. ej. hoy si hay captura en vivo). */
+    opsRoundDate?: string | null;
     tournamentEndDate?: string | null;
     tournamentStartDate?: string | null;
     now?: Date;
@@ -82,6 +90,14 @@ export async function loadCaptureLagGroupsForRound(
   }
 ): Promise<CaptureLagGroupRow[]> {
   const now = args.now ?? new Date();
+  const today = todayMexicoDate(now);
+  const lagRoundDate =
+    args.opsRoundDate ??
+    resolveOpsRoundDate({
+      roundDate: args.roundDate,
+      today,
+      liveCaptureToday: false,
+    });
   const perHoleMinutes =
     args.perHoleMinutes ??
     (await loadPerHoleMinutes(admin, args.courseId));
@@ -157,10 +173,11 @@ export async function loadCaptureLagGroupsForRound(
     const lag = evaluateCaptureLag({
       holesPlayed,
       lastCaptureTs: score?.lastCaptureTs ?? null,
+      firstCaptureTs: score?.firstCaptureTs ?? null,
       teeTimeISO: g.tee_time,
       actualStartISO: g.actual_start_at,
       startHole,
-      roundDate: args.roundDate,
+      roundDate: lagRoundDate,
       tournamentEndDate: args.tournamentEndDate,
       tournamentStartDate: args.tournamentStartDate,
       perHoleMinutes,
@@ -187,6 +204,7 @@ export async function loadCaptureLagGroupsForRound(
       minutesSinceStart: lag.minutesSinceStart,
       minutesSinceLastCapture: lag.minutesSinceLastCapture,
       captureHole: lag.captureHole,
+      expectedHole: lag.expectedHole,
       reason: lag.reason,
       priority: lag.priority,
       capturaHref: `/captura/grupo?group_id=${encodeURIComponent(g.id)}`,
@@ -213,10 +231,97 @@ export type TournamentBrief = {
   endDate: string | null;
 };
 
+type RoundWithTournamentRow = {
+  id: string;
+  round_no: number | null;
+  round_date: string | null;
+  tournament_id: string;
+  tournaments:
+    | {
+        id: string;
+        name: string | null;
+        short_name: string | null;
+        course_name: string | null;
+        course_id: string | null;
+        is_archived: boolean | null;
+        status: string | null;
+        start_date: string | null;
+        end_date: string | null;
+      }
+    | {
+        id: string;
+        name: string | null;
+        short_name: string | null;
+        course_name: string | null;
+        course_id: string | null;
+        is_archived: boolean | null;
+        status: string | null;
+        start_date: string | null;
+        end_date: string | null;
+      }[]
+    | null;
+};
+
+function tournamentFromRoundRow(
+  row: RoundWithTournamentRow
+): TournamentBrief | null {
+  const t = Array.isArray(row.tournaments)
+    ? row.tournaments[0]
+    : row.tournaments;
+  if (!t?.id) return null;
+  if (t.is_archived) return null;
+  const name =
+    (t.short_name && String(t.short_name).trim()) ||
+    (t.name && String(t.name).trim()) ||
+    "Torneo";
+  return {
+    id: t.id,
+    name,
+    courseName: t.course_name ?? null,
+    courseId: t.course_id ?? null,
+    startDate: t.start_date ?? null,
+    endDate: t.end_date ?? null,
+  };
+}
+
+function isRoundSlotClosed(
+  row: Pick<RoundWithTournamentRow, "round_date">,
+  tournament: TournamentBrief,
+  today: string
+): boolean {
+  return isOpsRoundClosed({
+    roundDate: row.round_date,
+    tournamentEndDate: tournament.endDate,
+    tournamentStartDate: tournament.startDate,
+    today,
+  });
+}
+
+/** Rondas con al menos una captura hoy (México), p. ej. prueba con round_date futuro. */
+export async function loadRoundIdsWithCaptureActivityToday(
+  admin: SupabaseClient,
+  today: string
+): Promise<Set<string>> {
+  const { startIso, endIso } = mexicoDayUtcBounds(today);
+  const { data } = await admin
+    .from("hole_score_audit")
+    .select("round_id")
+    .gte("created_at", startIso)
+    .lte("created_at", endIso)
+    .not("round_id", "is", null)
+    .limit(5000);
+  const ids = new Set<string>();
+  for (const row of (data ?? []) as { round_id: string | null }[]) {
+    if (row.round_id) ids.add(row.round_id);
+  }
+  return ids;
+}
+
 /**
  * Rondas con juego "hoy" (México): una ronda por torneo (preferida la de
  * round_date = hoy; si hay varias categorías el mismo día, todas con
- * groups).
+ * groups). También incluye rondas con capturas en vivo hoy aunque round_date
+ * sea futuro (torneos de prueba o salida adelantada).
  */
 export async function loadTodayRoundsAcrossTournaments(
   admin: SupabaseClient,
@@ -228,6 +333,7 @@ export async function loadTodayRoundsAcrossTournaments(
     roundId: string;
     roundNo: number | null;
     roundDate: string | null;
+    opsRoundDate: string;
   }>
 > {
   let q = admin
@@ -242,77 +348,66 @@ export async function loadTodayRoundsAcrossTournaments(
     q = q.eq("tournament_id", onlyTournamentId);
   }
 
-  const { data } = await q;
+  const { data: calendarRows } = await q;
+  const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(
+    admin,
+    today
+  );
+
   const out: Array<{
     tournament: TournamentBrief;
     roundId: string;
     roundNo: number | null;
     roundDate: string | null;
+    opsRoundDate: string;
   }> = [];
+  const seenRoundIds = new Set<string>();
 
-  for (const row of (data ?? []) as unknown as {
-    id: string;
-    round_no: number | null;
-    round_date: string | null;
-    tournament_id: string;
-    tournaments:
-      | {
-          id: string;
-          name: string | null;
-          short_name: string | null;
-          course_name: string | null;
-          course_id: string | null;
-          is_archived: boolean | null;
-          status: string | null;
-          start_date: string | null;
-          end_date: string | null;
-        }
-      | {
-          id: string;
-          name: string | null;
-          short_name: string | null;
-          course_name: string | null;
-          course_id: string | null;
-          is_archived: boolean | null;
-          status: string | null;
-          start_date: string | null;
-          end_date: string | null;
-        }[]
-      | null;
-  }[]) {
-    const t = Array.isArray(row.tournaments)
-      ? row.tournaments[0]
-      : row.tournaments;
-    if (!t?.id) continue;
-    if (t.is_archived) continue;
-    // Torneo con end_date ya pasado no entra al tablero en vivo.
-    if (
-      isOpsRoundClosed({
-        roundDate: row.round_date,
-        tournamentEndDate: t.end_date,
-        tournamentStartDate: t.start_date,
-        today,
-      })
-    ) {
-      continue;
-    }
-    const name =
-      (t.short_name && String(t.short_name).trim()) ||
-      (t.name && String(t.name).trim()) ||
-      "Torneo";
+  for (const row of (calendarRows ?? []) as unknown as RoundWithTournamentRow[]) {
+    const tournament = tournamentFromRoundRow(row);
+    if (!tournament) continue;
+    if (isRoundSlotClosed(row, tournament, today)) continue;
+    seenRoundIds.add(row.id);
     out.push({
-      tournament: {
-        id: t.id,
-        name,
-        courseName: t.course_name ?? null,
-        courseId: t.course_id ?? null,
-        startDate: t.start_date ?? null,
-        endDate: t.end_date ?? null,
-      },
+      tournament,
       roundId: row.id,
       roundNo: row.round_no,
       roundDate: row.round_date,
+      opsRoundDate: today,
     });
+  }
+
+  const missingActivityIds = Array.from(activityRoundIds).filter(
+    (id) => !seenRoundIds.has(id)
+  );
+  if (missingActivityIds.length > 0) {
+    let aq = admin
+      .from("rounds")
+      .select(
+        "id, round_no, round_date, tournament_id, tournaments ( id, name, short_name, course_name, course_id, is_archived, status, start_date, end_date )"
+      )
+      .in("id", missingActivityIds);
+    if (onlyTournamentId) {
+      aq = aq.eq("tournament_id", onlyTournamentId);
+    }
+    const { data: activityRows } = await aq;
+    for (const row of (activityRows ?? []) as unknown as RoundWithTournamentRow[]) {
+      const tournament = tournamentFromRoundRow(row);
+      if (!tournament) continue;
+      if (isRoundSlotClosed(row, tournament, today)) continue;
+      seenRoundIds.add(row.id);
+      out.push({
+        tournament,
+        roundId: row.id,
+        roundNo: row.round_no,
+        roundDate: row.round_date,
+        opsRoundDate: resolveOpsRoundDate({
+          roundDate: row.round_date,
+          today,
+          liveCaptureToday: true,
+        }) ?? today,
+      });
+    }
   }
 
   return out;

@@ -5,8 +5,10 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessModule } from "@/lib/auth/permissions";
 import {
   loadCaptureLagGroupsForRound,
+  loadRoundIdsWithCaptureActivityToday,
   loadTodayRoundsAcrossTournaments,
 } from "@/lib/ritmo/loadCaptureLagGroups";
+import { resolveOpsRoundDate } from "@/lib/ritmo/opsDay";
 import {
   loadPerHoleMinutes,
   type PerHoleMinutes,
@@ -115,11 +117,16 @@ export default async function SeguimientoCapturaPage({
 
     let round: RoundRow | null =
       rounds.find((r) => r.id === queryRoundId) ?? null;
+    const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(
+      admin,
+      today
+    );
     if (!round) {
       round = rounds.find((r) => r.round_date === today) ?? null;
     }
     if (!round) {
       round =
+        rounds.find((r) => activityRoundIds.has(r.id)) ??
         [...rounds]
           .filter((r) => (r.round_date ?? "") <= today)
           .sort((a, b) =>
@@ -130,6 +137,14 @@ export default async function SeguimientoCapturaPage({
     }
 
     const roundLabel = round ? `Ronda ${round.round_no ?? "?"}` : "Sin ronda";
+    const opsRoundDate =
+      round == null
+        ? today
+        : resolveOpsRoundDate({
+            roundDate: round.round_date,
+            today,
+            liveCaptureToday: activityRoundIds.has(round.id),
+          }) ?? today;
     let groups: SegGroup[] = [];
     if (round) {
       groups = await loadCaptureLagGroupsForRound(admin, {
@@ -140,6 +155,7 @@ export default async function SeguimientoCapturaPage({
         roundId: round.id,
         roundNo: round.round_no,
         roundDate: round.round_date,
+        opsRoundDate,
         tournamentEndDate,
         tournamentStartDate,
         now,
@@ -184,6 +200,7 @@ export default async function SeguimientoCapturaPage({
       roundId: slot.roundId,
       roundNo: slot.roundNo,
       roundDate: slot.roundDate,
+      opsRoundDate: slot.opsRoundDate,
       tournamentEndDate: slot.tournament.endDate,
       tournamentStartDate: slot.tournament.startDate,
       now,

@@ -30,6 +30,7 @@ export type SegGroup = {
   minutesSinceStart: number | null;
   minutesSinceLastCapture: number | null;
   captureHole: number | null;
+  expectedHole: number | null;
   reason: string;
   priority: number;
   capturaHref: string;
@@ -131,6 +132,59 @@ function agoLabel(iso: string | null): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `hace ${h} h${m ? ` ${m} m` : ""}`;
+}
+
+/** Hoyo visible para marshals: captura vs ritmo del campo. */
+function captureHoleDisplay(g: SegGroup): {
+  headline: string;
+  detail: string;
+  paceLabel: string | null;
+} {
+  const paceLabel =
+    g.expectedHole != null ? `deberían ir H${g.expectedHole}` : null;
+
+  if (g.kind === "terminado" || g.holesPlayed >= 18) {
+    return { headline: "H18", detail: "captura completa", paceLabel: null };
+  }
+  if (g.holesPlayed <= 0) {
+    return {
+      headline: g.expectedHole != null ? `H${g.expectedHole}` : `H${g.startingHole}`,
+      detail: "sin captura aún",
+      paceLabel,
+    };
+  }
+  const last = g.lastHole;
+  const current = g.captureHole;
+  if (last != null && current != null) {
+    return {
+      headline: `H${current}`,
+      detail: `captura hasta H${last}`,
+      paceLabel,
+    };
+  }
+  if (last != null) {
+    return { headline: `H${last}`, detail: "último capturado", paceLabel };
+  }
+  if (current != null) {
+    return { headline: `H${current}`, detail: "van en cancha", paceLabel };
+  }
+  return { headline: "—", detail: "sin dato de hoyo", paceLabel };
+}
+
+function captureProgressBadge(g: SegGroup): string {
+  if (g.holesPlayed <= 0) {
+    return `H${g.startingHole} sin anotar`;
+  }
+  if (g.lastHole != null && g.captureHole != null) {
+    return `capt. H${g.lastHole} · van H${g.captureHole}`;
+  }
+  if (g.captureHole != null) {
+    return `van en H${g.captureHole}`;
+  }
+  if (g.lastHole != null) {
+    return `capt. H${g.lastHole}`;
+  }
+  return "sin dato de captura";
 }
 
 export default function SeguimientoCapturaLive({
@@ -502,6 +556,7 @@ export default function SeguimientoCapturaLive({
             {visible.map((g) => {
               const meta = KIND_META[g.kind];
               const open = expandedId === g.id;
+              const holeInfo = captureHoleDisplay(g);
               return (
                 <article
                   key={g.id}
@@ -592,9 +647,37 @@ export default function SeguimientoCapturaLive({
                           </span>
                           <span style={{ fontSize: 11, color: "#475569" }}>
                             tee {formatTime(g.teeTime)}
-                            {g.actualStartAt ? " · salida real" : ""} · H
-                            {g.startingHole}
+                            {g.actualStartAt ? " · salida real" : ""} · salida
+                            H{g.startingHole}
                           </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: "#0f172a",
+                              background: "#fef9c3",
+                              border: "1px solid #fde047",
+                              padding: "2px 8px",
+                              borderRadius: 6,
+                            }}
+                          >
+                            {captureProgressBadge(g)}
+                          </span>
+                          {g.expectedHole != null ? (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 800,
+                                color: "#1e3a8a",
+                                background: "#dbeafe",
+                                border: "1px solid #93c5fd",
+                                padding: "2px 8px",
+                                borderRadius: 6,
+                              }}
+                            >
+                              ritmo del campo → H{g.expectedHole}
+                            </span>
+                          ) : null}
                         </div>
                         <div
                           style={{
@@ -624,24 +707,61 @@ export default function SeguimientoCapturaLive({
                         style={{
                           textAlign: "right",
                           flexShrink: 0,
-                          minWidth: 88,
+                          minWidth: 96,
                         }}
                       >
                         <div
                           style={{
-                            fontSize: 20,
+                            fontSize: 28,
                             fontWeight: 900,
                             fontVariantNumeric: "tabular-nums",
                             color: meta.color,
+                            lineHeight: 1,
+                          }}
+                        >
+                          {holeInfo.headline}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: "#64748b",
+                            fontWeight: 700,
+                            marginTop: 2,
+                          }}
+                        >
+                          {holeInfo.detail}
+                        </div>
+                        {holeInfo.paceLabel ? (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "#1d4ed8",
+                              fontWeight: 800,
+                              marginTop: 4,
+                            }}
+                          >
+                            {holeInfo.paceLabel}
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: 800,
+                            fontVariantNumeric: "tabular-nums",
+                            color: "#334155",
+                            marginTop: 6,
                           }}
                         >
                           {g.holesPlayed}
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>
-                            /{g.expectedHoles || "–"}
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: "#64748b",
+                            }}
+                          >
+                            /{g.expectedHoles || "–"} hoyos
                           </span>
-                        </div>
-                        <div style={{ fontSize: 10, color: "#64748b" }}>
-                          capt / esp
                         </div>
                         <div
                           style={{
@@ -706,7 +826,10 @@ export default function SeguimientoCapturaLive({
                         <b>Último hoyo capturado (secuencia):</b>{" "}
                         {g.lastHole ?? "—"}
                         {g.captureHole != null
-                          ? ` · deberían ir en H${g.captureHole}`
+                          ? ` · captura va en H${g.captureHole}`
+                          : ""}
+                        {g.expectedHole != null
+                          ? ` · ritmo del campo H${g.expectedHole}`
                           : ""}
                       </div>
                       <div>
@@ -751,7 +874,9 @@ export default function SeguimientoCapturaLive({
           Criterio: compara hoyos capturados en secuencia vs el ritmo del campo
           (minutos por hoyo). Crítico = sin captura &gt;22 min o ≥3 hoyos
           atrasados. Atrasado = 1–2 hoyos. Silencio = sin captura &gt;20 min.
-          Comparte con marshals para que pidan anotar en el grupo.
+          Match play sin tee time: la salida se toma de la primera captura (o
+          salida real marcada en Ritmo). Comparte con marshals para que pidan
+          anotar en el grupo.
         </p>
       </main>
     </div>

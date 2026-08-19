@@ -87,3 +87,32 @@ export function isOpsRoundLive(args: {
 }): boolean {
   return !isOpsRoundClosed(args);
 }
+
+/** Inicio/fin del día YYYY-MM-DD (México) como ISO UTC. */
+export function mexicoDayUtcBounds(ymd: string): {
+  startIso: string;
+  endIso: string;
+} {
+  return {
+    startIso: new Date(`${ymd}T00:00:00-06:00`).toISOString(),
+    endIso: new Date(`${ymd}T23:59:59.999-06:00`).toISOString(),
+  };
+}
+
+/**
+ * Fecha de calendario para resolver salidas en ops en vivo.
+ * Torneos de prueba (o salida adelantada) pueden tener round_date futuro
+ * pero capturas hoy: en ese caso usamos hoy para el reloj de retraso.
+ */
+export function resolveOpsRoundDate(args: {
+  roundDate?: string | null;
+  today?: string;
+  liveCaptureToday?: boolean;
+}): string | null {
+  const today = args.today ?? todayMexicoDate();
+  const roundDate = toDateOnly(args.roundDate);
+  if (!roundDate) return today;
+  if (roundDate <= today) return roundDate;
+  if (args.liveCaptureToday) return today;
+  return roundDate;
+}

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PICKED_UP_STROKES, type HoleNumber } from "./types";
 import { isRoundClosedByDate } from "./roundClosure";
+import { markGroupStarted } from "@/lib/ritmo/groupStart";
 
 export type ScoreActorRole =
   | "player"
@@ -114,7 +115,7 @@ export async function saveGroupHoleScore(
 
   const { data: groupRow } = await admin
     .from("pairing_groups")
-    .select("id, round_id")
+    .select("id, round_id, tee_time, actual_start_at")
     .eq("id", groupId)
     .maybeSingle();
 
@@ -286,6 +287,10 @@ export async function saveGroupHoleScore(
     });
     if (insErr) return { ok: false, error: insErr.message };
     auditAction = "create";
+    // Match play R2+ (sin tee time): la primera captura marca salida real.
+    if (!groupRow?.actual_start_at && !groupRow?.tee_time) {
+      void markGroupStarted(admin, groupId).catch(() => {});
+    }
   }
 
   const { data: allHoles } = await admin

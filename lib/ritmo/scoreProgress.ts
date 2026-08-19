@@ -18,6 +18,8 @@ export type GroupScoreProgress = {
   startHole: number;
   /** Timestamp de la última captura del grupo (de la bitácora) o null. */
   lastCaptureTs: string | null;
+  /** Primera captura del grupo (salida inferida sin tee time). */
+  firstCaptureTs: string | null;
 };
 
 type HoleRow = {
@@ -80,15 +82,16 @@ export async function loadGroupScoreProgress(
     }
   }
 
-  // Última captura por entry, de la bitácora (hole_score_audit).
+  // Última / primera captura por entry, de la bitácora (hole_score_audit).
   const lastTsByEntry = new Map<string, string>();
+  const firstTsByEntry = new Map<string, string>();
   {
     const { data } = await admin
       .from("hole_score_audit")
       .select("entry_id, created_at")
       .eq("round_id", roundId)
       .in("entry_id", allEntryIds)
-      .order("created_at", { ascending: false })
+      .order("created_at", { ascending: true })
       .limit(3000);
     for (const row of (data ?? []) as {
       entry_id: string | null;
@@ -96,7 +99,8 @@ export async function loadGroupScoreProgress(
     }[]) {
       const eid = row.entry_id;
       if (!eid || !row.created_at) continue;
-      if (!lastTsByEntry.has(eid)) lastTsByEntry.set(eid, row.created_at);
+      if (!firstTsByEntry.has(eid)) firstTsByEntry.set(eid, row.created_at);
+      lastTsByEntry.set(eid, row.created_at);
     }
   }
 
@@ -105,10 +109,15 @@ export async function loadGroupScoreProgress(
     const meta = groupMeta?.get(gid);
     const captured = new Set<number>();
     let lastCaptureTs: string | null = null;
+    let firstCaptureTs: string | null = null;
     for (const eid of eids) {
       for (const h of holesByEntry.get(eid) ?? []) captured.add(h);
       const ts = lastTsByEntry.get(eid) ?? null;
       if (ts && (!lastCaptureTs || ts > lastCaptureTs)) lastCaptureTs = ts;
+      const first = firstTsByEntry.get(eid) ?? null;
+      if (first && (!firstCaptureTs || first < firstCaptureTs)) {
+        firstCaptureTs = first;
+      }
     }
     const startHole = resolveGroupStartHole(
       meta?.starting_hole,
@@ -120,7 +129,7 @@ export async function loadGroupScoreProgress(
       holesPlayed > 0
         ? ((startHole - 1 + holesPlayed - 1) % 18) + 1
         : null;
-    out.set(gid, { holesPlayed, lastHole, startHole, lastCaptureTs });
+    out.set(gid, { holesPlayed, lastHole, startHole, lastCaptureTs, firstCaptureTs });
   }
 
   return out;

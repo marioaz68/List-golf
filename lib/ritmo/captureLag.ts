@@ -39,6 +39,8 @@ export type CaptureLagResult = {
   minutesSinceLastCapture: number | null;
   /** Hoyo "actual" derivado de captura (null si no hay / terminó). */
   captureHole: number | null;
+  /** Hoyo en cancha según ritmo del campo y salida (null si no aplica). */
+  expectedHole: number | null;
   /** Texto operativo para el marshal. */
   reason: string;
   /** 0 = peor (ordenado en el board). */
@@ -68,9 +70,32 @@ export function expectedHolesCompleted(args: {
   return n;
 }
 
+/** Hoyo en cancha que el ritmo del campo permite a esta hora desde la salida. */
+export function paceExpectedHole(
+  expectedHoles: number,
+  startHole: number
+): number | null {
+  const tee = startHole >= 1 && startHole <= 18 ? startHole : 1;
+  if (expectedHoles >= 18) return null;
+  if (expectedHoles <= 0) return tee;
+  return currentHoleFromHolesPlayed(expectedHoles, tee);
+}
+
+function lagResult(
+  startHole: number,
+  partial: Omit<CaptureLagResult, "expectedHole">
+): CaptureLagResult {
+  return {
+    ...partial,
+    expectedHole: paceExpectedHole(partial.expectedHoles, startHole),
+  };
+}
+
 export function evaluateCaptureLag(args: {
   holesPlayed: number;
   lastCaptureTs: string | null;
+  /** Primera captura: salida inferida (match play R2 sin tee time). */
+  firstCaptureTs?: string | null;
   teeTimeISO: string | null;
   actualStartISO?: string | null;
   startHole: number;
@@ -90,11 +115,18 @@ export function evaluateCaptureLag(args: {
   const startHole =
     args.startHole >= 1 && args.startHole <= 18 ? args.startHole : 1;
 
-  const teeDate = resolveTeeDate({
-    teeTimeISO: args.teeTimeISO,
-    actualStartISO: args.actualStartISO,
-    roundDate: args.roundDate,
-  });
+  const teeDate =
+    resolveTeeDate({
+      teeTimeISO: args.teeTimeISO,
+      actualStartISO: args.actualStartISO,
+      roundDate: args.roundDate,
+    }) ??
+    (args.firstCaptureTs
+      ? (() => {
+          const d = new Date(args.firstCaptureTs!);
+          return Number.isNaN(d.getTime()) ? null : d;
+        })()
+      : null);
 
   const captureHole = currentHoleFromHolesPlayed(holesPlayed, startHole);
 
@@ -122,7 +154,7 @@ export function evaluateCaptureLag(args: {
   // Ronda/torneo de fecha pasada: congelar reloj — no criticar por retraso acumulado.
   if (opsClosed) {
     if (holesPlayed >= 18) {
-      return {
+      return lagResult(startHole, {
         kind: "terminado",
         expectedHoles: 18,
         holesPlayed: 18,
@@ -132,9 +164,9 @@ export function evaluateCaptureLag(args: {
         captureHole: null,
         reason: "18 hoyos · ronda cerrada",
         priority: 95,
-      };
+      });
     }
-    return {
+    return lagResult(startHole, {
       kind: "cerrado",
       expectedHoles: holesPlayed,
       holesPlayed,
@@ -144,11 +176,11 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `Ronda cerrada (fecha pasada) · ${holesPlayed}/18 capturados`,
       priority: 92,
-    };
+    });
   }
 
   if (holesPlayed >= 18) {
-    return {
+    return lagResult(startHole, {
       kind: "terminado",
       expectedHoles: 18,
       holesPlayed: 18,
@@ -160,11 +192,11 @@ export function evaluateCaptureLag(args: {
       captureHole: null,
       reason: "18 hoyos capturados",
       priority: 90,
-    };
+    });
   }
 
   if (!teeDate) {
-    return {
+    const base = lagResult(startHole, {
       kind: "sin_hora",
       expectedHoles: 0,
       holesPlayed,
@@ -175,16 +207,17 @@ export function evaluateCaptureLag(args: {
       reason:
         holesPlayed > 0
           ? `${holesPlayed} hoyos capturados · sin hora de salida`
-          : "Sin hora de salida (programada ni real)",
+          : "Sin hora de salida · pendiente de salir al campo",
       priority: holesPlayed > 0 ? 40 : 50,
-    };
+    });
+    return { ...base, expectedHole: null };
   }
 
   const minutesSinceStart =
     (now.getTime() - teeDate.getTime()) / 60000;
 
   if (minutesSinceStart < -2) {
-    return {
+    return lagResult(startHole, {
       kind: "no_salido",
       expectedHoles: 0,
       holesPlayed,
@@ -194,7 +227,7 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `Sale en ~${Math.abs(Math.round(minutesSinceStart))} min`,
       priority: 80,
-    };
+    });
   }
 
   const expectedHoles = expectedHolesCompleted({
@@ -211,7 +244,7 @@ export function evaluateCaptureLag(args: {
     holesPlayed === 0 &&
     minutesSinceStart >= SILENCE_ZERO_CRITICAL_MIN
   ) {
-    return {
+    return lagResult(startHole, {
       kind: "critico",
       expectedHoles,
       holesPlayed: 0,
@@ -221,12 +254,12 @@ export function evaluateCaptureLag(args: {
       captureHole: null,
       reason: `Sin ningún hoyo capturado · ${minsStart} min en cancha`,
       priority: 0,
-    };
+    });
   }
 
   // 2) Retraso grande en hoyos capturados vs reloj.
   if (holesBehind >= HOLES_BEHIND_CRITICO) {
-    return {
+    return lagResult(startHole, {
       kind: "critico",
       expectedHoles,
       holesPlayed,
@@ -236,11 +269,11 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `Captura ${holesBehind} hoyos atrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
       priority: 1,
-    };
+    });
   }
 
   if (holesBehind >= HOLES_BEHIND_ATRASADO) {
-    return {
+    return lagResult(startHole, {
       kind: "atrasado",
       expectedHoles,
       holesPlayed,
@@ -250,7 +283,7 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `Captura ${holesBehind} hoyos atrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
       priority: 5,
-    };
+    });
   }
 
   // 3) Silencio largo en captura (dejaron de anotar).
@@ -259,7 +292,7 @@ export function evaluateCaptureLag(args: {
     minsSilent >= SILENCE_CAPTURE_ALERT_MIN &&
     minutesSinceStart >= SILENCE_CAPTURE_ALERT_MIN
   ) {
-    return {
+    return lagResult(startHole, {
       kind: "silencioso",
       expectedHoles,
       holesPlayed,
@@ -269,11 +302,11 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `Sin capturas desde hace ${minsSilent} min (último hoyo seq. ${holesPlayed})`,
       priority: 10,
-    };
+    });
   }
 
   if (holesPlayed === 0 && minutesSinceStart >= 8) {
-    return {
+    return lagResult(startHole, {
       kind: "silencioso",
       expectedHoles,
       holesPlayed: 0,
@@ -283,11 +316,11 @@ export function evaluateCaptureLag(args: {
       captureHole: null,
       reason: `Aún sin primer hoyo capturado · ${minsStart} min desde salida`,
       priority: 12,
-    };
+    });
   }
 
   if (holesBehind >= HOLES_BEHIND_ALERT) {
-    return {
+    return lagResult(startHole, {
       kind: "atrasado",
       expectedHoles,
       holesPlayed,
@@ -297,10 +330,10 @@ export function evaluateCaptureLag(args: {
       captureHole,
       reason: `1 hoyo de captura retrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
       priority: 15,
-    };
+    });
   }
 
-  return {
+  return lagResult(startHole, {
     kind: "ok",
     expectedHoles,
     holesPlayed,
@@ -314,7 +347,7 @@ export function evaluateCaptureLag(args: {
         : `Captura al día · ${holesPlayed}/18` +
           (captureHole ? ` · en hoyo ${captureHole}` : ""),
     priority: 40,
-  };
+  });
 }
 
 export function isCaptureProblem(kind: CaptureLagKind): boolean {
