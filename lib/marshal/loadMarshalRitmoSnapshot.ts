@@ -96,7 +96,8 @@ export async function loadMarshalRitmoSnapshot(
 
   const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
     admin,
-    (tournament.course_id as string | null) ?? null
+    (tournament.course_id as string | null) ?? null,
+    tid
   );
   const opsRoundDate =
     resolveOpsRoundDate({

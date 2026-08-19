@@ -410,7 +410,11 @@ export async function handleRitmoLocationUpdate(
     ? (await smoothedHoleForGroup(supabase, ctx.groupId)) ?? hoyoInstantaneo
     : hoyoInstantaneo;
 
-  const perHoleMinutes = await loadPerHoleMinutes(supabase, ctx.courseId);
+  const perHoleMinutes = await loadPerHoleMinutes(
+    supabase,
+    ctx.courseId,
+    ctx.tournamentId
+  );
   const pace = computePace({
     hoyoActual: hoyoSuavizado,
     teeTimeISO: ctx.groupTeeTime,

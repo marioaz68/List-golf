@@ -96,7 +96,11 @@ export async function buildRitmoStatusReply(
   }
 
   const hoyo = await smoothedHoleForGroup(supabase, ctx.groupId);
-  const perHoleMinutes = await loadPerHoleMinutes(supabase, ctx.courseId);
+  const perHoleMinutes = await loadPerHoleMinutes(
+    supabase,
+    ctx.courseId,
+    ctx.tournamentId
+  );
   const pace = computePace({
     hoyoActual: hoyo,
     teeTimeISO: ctx.groupTeeTime,

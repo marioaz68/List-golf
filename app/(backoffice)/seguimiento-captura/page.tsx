@@ -108,7 +108,8 @@ export default async function SeguimientoCapturaPage({
 
     const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
       admin,
-      courseId
+      courseId,
+      filterTournamentId
     );
 
     const { data: roundsRaw } = await admin
@@ -189,10 +190,14 @@ export default async function SeguimientoCapturaPage({
   const allGroups: SegGroup[] = [];
 
   for (const slot of todaySlots) {
-    const cacheKey = slot.tournament.courseId ?? `__${slot.tournament.id}`;
+    const cacheKey = `${slot.tournament.id}:${slot.tournament.courseId ?? ""}`;
     let per = paceCache.get(cacheKey);
     if (!per) {
-      per = await loadPerHoleMinutes(admin, slot.tournament.courseId);
+      per = await loadPerHoleMinutes(
+        admin,
+        slot.tournament.courseId,
+        slot.tournament.id
+      );
       paceCache.set(cacheKey, per);
     }
     const rows = await loadCaptureLagGroupsForRound(admin, {

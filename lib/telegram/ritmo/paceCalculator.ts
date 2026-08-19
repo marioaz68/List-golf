@@ -12,6 +12,46 @@ const UMBRAL_ADELANTO_MIN = 5;      // < -5 min adelantado = 🟢
 /** Minutos objetivo por número de hoyo (1..18). Viene de course_holes. */
 export type PerHoleMinutes = Record<number, number>;
 
+/** Match play Calcuta: 5 horas por ronda de 18 hoyos. */
+export const CALCUTA_MATCH_DURATION_MINUTES = 300;
+
+export const CALCUTA_PACE_RULES_TEXT =
+  "Ritmo del campo: 5 horas (300 min) por match de 18 hoyos. " +
+  "Minutos objetivo por hoyo escalados desde el campo (par 3 ≈ 15,6 min, par 4 ≈ 16,7 min, par 5 ≈ 17,6 min).";
+
+function defaultPaceForPar(par: number): number {
+  if (par <= 3) return 13.5;
+  if (par >= 5) return 15.25;
+  return 14.5;
+}
+
+/** Escala minutos por hoyo del campo para que la suma de 18 hoyos = targetMinutes. */
+export function scalePerHoleMinutesToDuration(
+  perHole: PerHoleMinutes,
+  pars: Record<number, number>,
+  targetMinutes: number
+): PerHoleMinutes {
+  if (!Number.isFinite(targetMinutes) || targetMinutes <= 0) return perHole;
+
+  const scaled: PerHoleMinutes = {};
+  let total = 0;
+  const effective: PerHoleMinutes = {};
+
+  for (let hn = 1; hn <= 18; hn++) {
+    const m = perHole[hn] ?? defaultPaceForPar(pars[hn] ?? 4);
+    effective[hn] = m;
+    total += m;
+  }
+  if (total <= 0) return perHole;
+
+  const factor = targetMinutes / total;
+  for (let hn = 1; hn <= 18; hn++) {
+    scaled[hn] =
+      Math.round((effective[hn] ?? MIN_POR_HOYO) * factor * 100) / 100;
+  }
+  return scaled;
+}
+
 /** Suma de minutos esperados para `hoyosJugados` hoyos empezando en `teeStartHole`,
  *  usando los tiempos por hoyo del campo (con wrap 1..18). Si falta el dato de
  *  algún hoyo, usa `fallback`. */
@@ -153,25 +193,54 @@ export function computePace(args: ComputePaceArgs): PaceStatus {
 }
 
 /** Carga los minutos objetivo por hoyo de un campo (course_holes.pace_minutes).
+ *  Si el torneo define `settings.pace.match_duration_minutes`, escala hoyo por
+ *  hoyo para que 18 hoyos sumen esa duración (ej. 300 min = 5 h).
  *  Devuelve un mapa { hole_number: minutos } solo con los hoyos que tengan
  *  valor configurado. Si el campo no tiene datos, devuelve {}. */
 export async function loadPerHoleMinutes(
   supabase: SupabaseClient,
-  courseId: string | null | undefined
+  courseId: string | null | undefined,
+  tournamentId?: string | null
 ): Promise<PerHoleMinutes> {
   const out: PerHoleMinutes = {};
+  const pars: Record<number, number> = {};
   if (!courseId) return out;
+
   const { data, error } = await supabase
     .from("course_holes")
-    .select("hole_number, pace_minutes")
+    .select("hole_number, par, pace_minutes")
     .eq("course_id", courseId);
   if (error || !data) return out;
-  for (const r of data as { hole_number: number; pace_minutes: number | null }[]) {
-    if (r.pace_minutes == null) continue;
-    const m = Number(r.pace_minutes);
-    if (Number.isFinite(m) && m > 0) out[Number(r.hole_number)] = m;
+
+  for (const r of data as {
+    hole_number: number;
+    par: number;
+    pace_minutes: number | null;
+  }[]) {
+    const hn = Number(r.hole_number);
+    pars[hn] = Number(r.par);
+    if (r.pace_minutes != null) {
+      const m = Number(r.pace_minutes);
+      if (Number.isFinite(m) && m > 0) out[hn] = m;
+    }
   }
-  return out;
+
+  if (!tournamentId) return out;
+
+  const { data: tRow } = await supabase
+    .from("tournaments")
+    .select("settings")
+    .eq("id", tournamentId)
+    .maybeSingle();
+  const settings = (tRow?.settings ?? {}) as {
+    pace?: { match_duration_minutes?: number };
+  };
+  const target = settings.pace?.match_duration_minutes;
+  if (typeof target !== "number" || !Number.isFinite(target) || target <= 0) {
+    return out;
+  }
+
+  return scalePerHoleMinutesToDuration(out, pars, target);
 }
 
 function parseTeeDateTime(roundDate: string, teeTime: string): Date | null {

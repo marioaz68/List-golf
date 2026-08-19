@@ -27,6 +27,12 @@ export type TournamentSettings = {
     interval_minutes?: number;
   };
 
+  /** Ritmo del campo: escala los minutos por hoyo del campo al total indicado. */
+  pace?: {
+    /** Duración objetivo de un match de 18 hoyos (ej. 300 = 5 h). */
+    match_duration_minutes?: number;
+  };
+
   /** ISO timestamps keyed by round number string, e.g. { "1": "2026-05-17T12:00:00.000Z" } */
   round_closures?: Record<string, string>;
 };

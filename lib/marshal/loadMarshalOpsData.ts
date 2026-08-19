@@ -104,7 +104,8 @@ export async function loadMarshalOpsData(
   const slot = allSlots.find((s) => s.tournament.id === activeTournamentId);
   const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
     admin,
-    (tRow.course_id as string | null) ?? null
+    (tRow.course_id as string | null) ?? null,
+    activeTournamentId
   );
 
   if (slot) {

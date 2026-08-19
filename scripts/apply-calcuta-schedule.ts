@@ -9,6 +9,10 @@ import {
   CALCUTA_SCHEDULE_RULES_TEXT,
   ensureMatchPlayCalendarRounds,
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import {
+  CALCUTA_MATCH_DURATION_MINUTES,
+  CALCUTA_PACE_RULES_TEXT,
+} from "@/lib/telegram/ritmo/paceCalculator";
 
 const OFFICIAL_ID = "5d88f527-35e4-4aa1-a778-2a336bf2bc2f";
 const TEST_ID = "03b3dde9-fa40-4604-ac10-bb433e3086a2";
@@ -46,6 +50,21 @@ async function main() {
   const result = await ensureMatchPlayCalendarRounds(admin, tid);
   console.log("ensureMatchPlayCalendarRounds:", result);
 
+  const { data: tRow } = await admin
+    .from("tournaments")
+    .select("settings")
+    .eq("id", tid)
+    .maybeSingle();
+  const settings = {
+    ...((tRow?.settings as object) ?? {}),
+    pace: { match_duration_minutes: CALCUTA_MATCH_DURATION_MINUTES },
+  };
+  await admin.from("tournaments").update({ settings }).eq("id", tid);
+  console.log("Pace settings:", settings.pace);
+
+  const combinedRulesText =
+    `${CALCUTA_SCHEDULE_RULES_TEXT}\n\n${CALCUTA_PACE_RULES_TEXT}`;
+
   await admin
     .from("tournaments")
     .update({ end_date: "2026-08-23" })
@@ -61,12 +80,12 @@ async function main() {
   if (rulesRow) {
     const cfg = {
       ...((rulesRow.config_json as object) ?? {}),
-      rules_text: CALCUTA_SCHEDULE_RULES_TEXT,
-      reference_notes: CALCUTA_SCHEDULE_RULES_TEXT,
+      rules_text: combinedRulesText,
+      reference_notes: combinedRulesText,
     };
     await admin
       .from("tournament_matchplay_rules")
-      .update({ config_json: cfg, notes: CALCUTA_SCHEDULE_RULES_TEXT })
+      .update({ config_json: cfg, notes: combinedRulesText })
       .eq("tournament_id", tid);
   }
 
@@ -79,8 +98,8 @@ async function main() {
   if (conv?.draft_json && typeof conv.draft_json === "object") {
     const draft = conv.draft_json as { matchplay?: Record<string, unknown> };
     if (draft.matchplay) {
-      draft.matchplay.rules_text = CALCUTA_SCHEDULE_RULES_TEXT;
-      draft.matchplay.reference_notes = CALCUTA_SCHEDULE_RULES_TEXT;
+      draft.matchplay.rules_text = combinedRulesText;
+      draft.matchplay.reference_notes = combinedRulesText;
       await admin
         .from("tournament_convocatoria")
         .update({ draft_json: draft })

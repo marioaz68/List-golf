@@ -175,7 +175,8 @@ export default async function RitmoPage({
   // Minutos objetivo por hoyo del campo (ritmo del torneo, editable).
   const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
     admin,
-    courseId
+    courseId,
+    tournamentId
   );
 
   // Rondas del torneo.

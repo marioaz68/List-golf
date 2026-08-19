@@ -108,7 +108,7 @@ export async function loadCaptureLagGroupsForRound(
     });
   const perHoleMinutes =
     args.perHoleMinutes ??
-    (await loadPerHoleMinutes(admin, args.courseId));
+    (await loadPerHoleMinutes(admin, args.courseId, args.tournamentId));
 
   const { data: groupsRaw } = await admin
     .from("pairing_groups")
