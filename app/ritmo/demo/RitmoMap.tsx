@@ -166,6 +166,12 @@ export function RitmoMap({
       }
 
       // Bolas numeradas = grupos (GPS o captura).
+      // Tamaño al 30% del original (36→11) para no tapar el campo.
+      const DOT = 11;
+      const DOT_BORDER = 1;
+      const DOT_FONT = 7;
+      const RING = 15;
+      const RING_OFF = Math.round((RING - DOT) / 2);
       groups.forEach((g) => {
         const isBlocker = g.role === "blocker";
         const isBlocked = g.role === "blocked";
@@ -173,19 +179,19 @@ export function RitmoMap({
         const color = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
         const ring = isBlocker
           ? `<div style="
-              position:absolute; left:-7px; top:-7px;
-              width:50px; height:50px; border-radius:50%;
-              border:3px solid ${color};
+              position:absolute; left:-${RING_OFF}px; top:-${RING_OFF}px;
+              width:${RING}px; height:${RING}px; border-radius:50%;
+              border:1px solid ${color};
               animation: pulse-ring 1.5s ease-out infinite;
               pointer-events:none;
             "></div>`
           : "";
         const blockerIcon = isBlocker
-          ? `<div style="position:absolute; left:30px; top:-26px; font-size:22px;">🚦</div>`
+          ? `<div style="position:absolute; left:9px; top:-8px; font-size:7px;">🚦</div>`
           : "";
         const captureRing = fromCapture
-          ? `box-shadow:0 0 0 3px rgba(255,255,255,0.95), 0 0 0 6px rgba(59,130,246,0.85);`
-          : "box-shadow:0 2px 10px rgba(0,0,0,0.7);";
+          ? `box-shadow:0 0 0 1px rgba(255,255,255,0.95), 0 0 0 2px rgba(59,130,246,0.85);`
+          : "box-shadow:0 1px 3px rgba(0,0,0,0.7);";
 
         const marker = L.marker([g.lat, g.lon], {
           icon: L.divIcon({
@@ -194,19 +200,20 @@ export function RitmoMap({
               <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative; cursor: pointer;">
                 ${ring}
                 <div style="
-                  width:36px; height:36px; border-radius:50%;
+                  width:${DOT}px; height:${DOT}px; border-radius:50%;
                   background:${color};
-                  border:3px ${fromCapture ? "dashed" : "solid"} #fff;
+                  border:${DOT_BORDER}px ${fromCapture ? "dashed" : "solid"} #fff;
                   ${captureRing}
                   display:flex; align-items:center; justify-content:center;
-                  color:#fff; font-weight:800; font-size:16px;
+                  color:#fff; font-weight:800; font-size:${DOT_FONT}px;
                   font-family:Arial,sans-serif;
-                ">G${g.number}</div>
+                  letter-spacing:-0.5px;
+                ">${g.number}</div>
                 ${blockerIcon}
               </div>
             `,
-            iconSize: [36, 36],
-            iconAnchor: [18, 18],
+            iconSize: [DOT, DOT],
+            iconAnchor: [DOT / 2, DOT / 2],
           }),
           keyboard: false,
         }).addTo(map);
