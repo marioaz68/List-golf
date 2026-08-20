@@ -62,6 +62,7 @@ import {
   buildMarshalReply,
   isMarshalCommand,
 } from "@/lib/marshal/buildMarshalReply";
+import { telegramAppUrl } from "@/lib/telegram/appUrl";
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -78,15 +79,14 @@ function formatPlayerName(firstName: string | null, lastName: string | null) {
 }
 
 function buildUnlinkedTelegramReply(telegramUserId: string) {
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  // Nunca mostrar localhost en producción (NEXT_PUBLIC_APP_URL mal puesto).
+  const appUrl = telegramAppUrl();
   const botUser = getTelegramBotUsername();
   const botLine = botUser
     ? `Bot del torneo: @${botUser}`
     : "Pide al comité el nombre de usuario del bot de Telegram del torneo.";
 
-  const webHint = appUrl
-    ? `\nWeb: ${appUrl}\nJugador: Inscripciones → Inscritos → KIT.\nCaddie: Caddies → tu ficha → pegar el ID.`
-    : "\nJugador: Inscripciones → Inscritos → KIT.\nCaddie: Caddies → tu ficha → pegar el ID.";
+  const webHint = `\nWeb: ${appUrl}\nJugador: Inscripciones → Inscritos → KIT.\nCaddie: Caddies → tu ficha → pegar el ID.`;
 
   const idLine = telegramUserId.trim();
 
