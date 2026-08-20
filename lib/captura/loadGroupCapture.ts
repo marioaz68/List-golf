@@ -274,7 +274,12 @@ export async function loadGroupCapture(
     if (!entryId || !hole) continue;
     const scores = scoresByEntryId.get(entryId);
     if (!scores) continue;
-    scores[hole] = typeof row.strokes === "number" ? row.strokes : null;
+    scores[hole] =
+      typeof row.strokes === "number"
+        ? row.strokes
+        : row.strokes != null && Number.isFinite(Number(row.strokes))
+          ? Number(row.strokes)
+          : null;
     const r = row as {
       pending_witness?: boolean | null;
       picked_up?: boolean | null;

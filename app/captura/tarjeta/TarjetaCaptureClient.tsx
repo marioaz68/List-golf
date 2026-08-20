@@ -354,18 +354,22 @@ function PublicSection({
                             }
                             className={[
                               "inline-flex h-6 w-6 items-center justify-center text-[10px] font-bold",
-                              getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
+                              // Pendiente: rojo forzado para que el número siempre se lea
+                              // (evita choque Tailwind bg-white + text-white = “celda vacía”).
                               isPending
-                                ? "bg-red-500 text-white"
-                                : vent > 0
-                                  ? "bg-amber-50 text-slate-900"
-                                  : "text-slate-900",
+                                ? "!bg-red-500 !text-white !border-red-700 border-2"
+                                : [
+                                    getScoreClass(val ?? null, PAR_BY_HOLE[hole]),
+                                    vent > 0
+                                      ? "bg-amber-50 text-slate-900"
+                                      : "text-slate-900",
+                                  ].join(" "),
                               isActive ? "ring-2 ring-sky-500 ring-offset-1" : "",
                               isSaving ? "opacity-60" : "",
                               disabled ? "cursor-not-allowed opacity-30" : "",
                             ].join(" ")}
                           >
-                            {val ?? ""}
+                            {val != null ? val : isPending ? "·" : ""}
                           </button>
                         )}
                       </td>
@@ -724,7 +728,17 @@ export default function TarjetaCaptureClient({
               editing.table === "public"
             )
               continue;
-            next[entryId][h] = remote[entryId]?.[h] ?? null;
+            const remoteVal = remote[entryId]?.[h];
+            // Nunca borrar un valor local si el remoto viene vacío pero la
+            // celda sigue pendiente (rojo): el usuario debe ver el último score.
+            if (
+              remoteVal == null &&
+              remotePending[entryId]?.[h] &&
+              next[entryId][h] != null
+            ) {
+              continue;
+            }
+            next[entryId][h] = remoteVal ?? null;
           }
         }
         return next;

@@ -280,27 +280,29 @@ function ScoreCell({
   }, [serverDisplay]);
 
   // Marca circular para birdies/eagles, cuadrada para bogeys/dobles.
+  // Si está pendiente (rojo), NO usar bg-white del marco vs-par: en Tailwind
+  // ese conflicto deja texto blanco sobre fondo blanco y la celda “se ve vacía”.
   const diff = value == null ? null : value - par;
-  let frame = "border-gray-300 bg-white";
+  let frame = "border-gray-300 bg-white text-gray-900";
   if (pickedUp) {
     frame = "border-amber-500 bg-amber-50 text-amber-700";
+  } else if (isPending && !pickedUp) {
+    frame = "border-red-700 bg-red-500 text-white";
   } else if (value != null) {
     if (diff != null && diff <= -2) {
       frame =
-        "border-rose-500 bg-white shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(244_63_94)] rounded-full";
+        "border-rose-500 bg-white text-gray-900 shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(244_63_94)] rounded-full";
     } else if (diff === -1) {
-      frame = "border-rose-500 bg-white rounded-full";
+      frame = "border-rose-500 bg-white text-gray-900 rounded-full";
     } else if (diff === 1) {
-      frame = "border-slate-800 bg-white";
+      frame = "border-slate-800 bg-white text-gray-900";
     } else if (diff != null && diff >= 2) {
       frame =
-        "border-slate-800 bg-white shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(15_23_42)]";
+        "border-slate-800 bg-white text-gray-900 shadow-[inset_0_0_0_2px_white,inset_0_0_0_3px_rgb(15_23_42)]";
     }
   } else if (strokeDots > 0) {
-    frame = "border-amber-300 bg-amber-50/60";
+    frame = "border-amber-300 bg-amber-50/60 text-gray-900";
   }
-  const pendingClass =
-    isPending && !pickedUp ? "bg-red-500 text-white border-red-700" : "";
   const savingClass = isSaving ? "opacity-60" : "";
 
   return (
@@ -326,15 +328,17 @@ function ScoreCell({
             strokeDots > 0
               ? `Recibe ${strokeDots} golpe${strokeDots === 1 ? "" : "s"} de ventaja.`
               : null,
+            isPending && !pickedUp
+              ? "Pendiente de aprobación del testigo."
+              : null,
           ]
             .filter(Boolean)
             .join(" ")
         }
         onFocus={(e) => e.currentTarget.select()}
         className={[
-          "box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold text-gray-900 outline-none focus:ring-2 focus:ring-green-300",
+          "box-border h-7 w-8 min-w-[32px] max-w-[40px] rounded border-2 px-0 py-0 text-center text-[11px] font-bold outline-none focus:ring-2 focus:ring-green-300",
           frame,
-          pendingClass,
           savingClass,
           disabled ? "cursor-not-allowed opacity-40" : "",
         ].join(" ")}
