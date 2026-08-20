@@ -598,12 +598,24 @@ export default function PlayerEditModal({
       }
 
       if (selectedCategoryId && entryId && tournamentId) {
-        const categoryForm = new FormData();
-        categoryForm.set("entry_id", entryId);
-        categoryForm.set("tournament_id", tournamentId);
-        categoryForm.set("category_id", selectedCategoryId);
+        try {
+          const categoryForm = new FormData();
+          categoryForm.set("entry_id", entryId);
+          categoryForm.set("tournament_id", tournamentId);
+          categoryForm.set("category_id", selectedCategoryId);
 
-        await updateEntryCategory(categoryForm);
+          await updateEntryCategory(categoryForm);
+        } catch (catErr: any) {
+          // Con inscripciones cerradas el HI ya se guardó; no deshacerlo.
+          const msg = String(catErr?.message ?? catErr ?? "");
+          if (/inscripciones cerradas|registration.*closed/i.test(msg)) {
+            alert(
+              "HI y datos del jugador guardados. La categoría no se pudo cambiar porque las inscripciones están cerradas (reabre para cambiar categoría)."
+            );
+          } else {
+            throw catErr;
+          }
+        }
       }
 
       onClose();
@@ -805,11 +817,12 @@ export default function PlayerEditModal({
                 placeholder="Ej. 12.4 o -1.2"
                 inputMode="decimal"
                 style={fieldStyle}
-                title="HI: handicap WHS del jugador. Define la categoría del torneo. Es el único campo editable; CH y PH se recalculan al guardar."
+                title="HI del torneo. Al guardar se actualiza la inscripción y el HI maestro del jugador."
               />
               <span style={{ fontWeight: 400, color: "#6b7280", fontSize: 10 }}>
-                Editable. Determina la categoría del jugador. CH y PH se
-                recalculan al guardar.
+                {entryId
+                  ? "HI de esta inscripción (y del jugador). CH y PH se recalculan al guardar."
+                  : "Editable. Determina la categoría del jugador. CH y PH se recalculan al guardar."}
               </span>
             </label>
 

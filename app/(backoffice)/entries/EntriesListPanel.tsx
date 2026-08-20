@@ -666,10 +666,18 @@ function EntryRowActions({
                 last_name: target.players.last_name,
                 initials: target.players.initials ?? null,
                 gender: target.players.gender ?? null,
-                handicap_index: target.players.handicap_index ?? null,
+                // HI del torneo (inscripción) manda en este modal; si no hay,
+                // caemos al HI maestro del jugador. Antes se pasaba solo
+                // players.handicap_index y al Guardar se pisaba el HI de la
+                // inscripción con el valor viejo del jugador.
+                handicap_index:
+                  target.handicap_index ??
+                  target.players.handicap_index ??
+                  null,
                 handicap_torneo:
                   target.handicap_index ??
                   target.players.handicap_torneo ??
+                  target.players.handicap_index ??
                   null,
                 phone: target.players.phone ?? null,
                 email: target.players.email ?? null,

@@ -1377,6 +1377,22 @@ export async function updateEntryHandicapIndexInline(formData: FormData) {
     .eq("tournament_id", tournament_id);
   if (updErr) throw new Error(updErr.message);
 
+  // Mantener el HI maestro del jugador alineado. Si solo se actualiza la
+  // inscripción, el modal de Editar (que lee players.handicap_index) puede
+  // volver a pisar el HI del torneo con el valor viejo al Guardar.
+  if (entryRow.player_id) {
+    const { error: playerErr } = await admin
+      .from("players")
+      .update({ handicap_index: hi, handicap_torneo: hi })
+      .eq("id", entryRow.player_id);
+    if (playerErr) {
+      console.error(
+        "[updateEntryHandicapIndexInline] players sync:",
+        playerErr.message
+      );
+    }
+  }
+
   await syncEntryDisplayPlayerNumbers(admin, tournament_id);
 
   revalidatePath("/entries");
