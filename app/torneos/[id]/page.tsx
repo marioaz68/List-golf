@@ -235,19 +235,10 @@ export default async function PublicTournamentPage({
       ?.format?.matchplay_variant === "ryder";
   /** Match play Calcuta (no Ryder): no hay clasificación stroke pública que mostrar. */
   const isCalcutaTournament = isMatchPlayTournament && !isRyderTournament;
+  /** Calcuta prueba y oficial: ocultar Resultados en vivo, Favoritos y Más cerca. */
+  const hideCalcutaPublicExtras = isCalcutaTournament;
   const calcutaLiveMiniAppSimplifyNav =
-    isCalcutaTournament &&
-    view === "live" &&
-    !isEmbed &&
-    fromCapturaMiniApp &&
-    (() => {
-      // En la mini-app, sólo simplificamos para Calcuta individual o por parejas.
-      const mt = (typedTournament.settings as
-        | { matchplay?: { match_type?: string } }
-        | null
-        | undefined)?.matchplay?.match_type;
-      return mt === "individual" || mt === "pairs";
-    })();
+    hideCalcutaPublicExtras && view === "live" && !isEmbed && fromCapturaMiniApp;
 
   // En la mini-app: para Calcuta, en vez de entrar primero a "Resultados en
   // vivo" (view=live), vamos directo al bracket en vivo.
@@ -1568,17 +1559,19 @@ export default async function PublicTournamentPage({
             ) : null}
 
             <div className={publicTournamentPrimaryNavGridClass}>
-              <Link
-                scroll={false}
-                href={tHref({
-                  categoryId: selectedCategoryId || null,
-                  roundId: selectedRound?.id ?? null,
-                  view: "live",
-                })}
-                className={publicTournamentViewPillClasses(view === "live")}
-              >
-                {pub.live}
-              </Link>
+              {!hideCalcutaPublicExtras ? (
+                <Link
+                  scroll={false}
+                  href={tHref({
+                    categoryId: selectedCategoryId || null,
+                    roundId: selectedRound?.id ?? null,
+                    view: "live",
+                  })}
+                  className={publicTournamentViewPillClasses(view === "live")}
+                >
+                  {pub.live}
+                </Link>
+              ) : null}
 
               {!isCalcutaTournament ? (
                 <Link
@@ -1613,7 +1606,7 @@ export default async function PublicTournamentPage({
                 {pub.teeSheet}
               </Link>
 
-              {!calcutaLiveMiniAppSimplifyNav ? (
+              {!hideCalcutaPublicExtras ? (
                 <Link
                   scroll={false}
                   href={tHref({
@@ -1627,7 +1620,7 @@ export default async function PublicTournamentPage({
                 </Link>
               ) : null}
 
-              {!calcutaLiveMiniAppSimplifyNav ? (
+              {!hideCalcutaPublicExtras ? (
                 <Link
                   href={`/torneos/${id}/cercanos`}
                   className={publicTournamentViewPillClasses(false)}
