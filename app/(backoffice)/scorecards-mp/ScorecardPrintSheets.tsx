@@ -90,6 +90,10 @@ function AdvantageCell({
       />
     );
   }
+  // Círculos CSS (no glifo •): tamaño ~3× el original, anclados dentro de la
+  // casilla (arriba-derecha, un poco hacia la izquierda) para que no caigan
+  // sobre la raya inferior al imprimir.
+  const DOT = 9;
   return (
     <td
       className="relative border border-black/40 align-top"
@@ -98,7 +102,7 @@ function AdvantageCell({
         height: "16px",
         minHeight: "16px",
         padding: "1px 3px",
-        overflow: "visible",
+        overflow: "hidden",
         verticalAlign: "top",
       }}
     >
@@ -108,14 +112,26 @@ function AdvantageCell({
           className="pointer-events-none absolute select-none"
           style={{
             position: "absolute",
-            top: -4,
-            right: -1,
-            fontSize: 24,
+            top: 1,
+            right: 3,
+            display: "flex",
+            gap: 1,
             lineHeight: 1,
-            letterSpacing: -3,
           }}
         >
-          {"•".repeat(n)}
+          {Array.from({ length: n }, (_, i) => (
+            <span
+              key={i}
+              style={{
+                width: DOT,
+                height: DOT,
+                borderRadius: "50%",
+                background: "#000",
+                display: "block",
+                flexShrink: 0,
+              }}
+            />
+          ))}
         </span>
       ) : null}
     </td>
@@ -310,10 +326,17 @@ function CardHeader({
         </span>
         {showAdvantageLegend ? (
           <span className="flex items-center gap-1">
-            <span style={{ fontSize: 24, lineHeight: 1, letterSpacing: -3 }}>
-              •
-            </span>
-            = 1 golpe de ventaja (esquina casilla; •• = 2)
+            <span
+              aria-hidden
+              style={{
+                width: 9,
+                height: 9,
+                borderRadius: "50%",
+                background: "#000",
+                display: "inline-block",
+              }}
+            />
+            = 1 golpe de ventaja (esquina casilla; ●● = 2)
           </span>
         ) : null}
       </div>
@@ -329,6 +352,26 @@ export function MatchPlayScorecardSheet({
   meta: PrintableScorecardsBundle;
 }) {
   const isRyder = meta.matchplayVariant === "ryder";
+
+  // Cada pareja: PH más bajo arriba (bola baja), más alto abajo (bola alta).
+  const orderByPh = (players: PrintablePlayerRow[]): PrintablePlayerRow[] =>
+    [...players]
+      .sort((a, b) => {
+        const d = (a.ph ?? 999) - (b.ph ?? 999);
+        if (d !== 0) return d;
+        return a.hi - b.hi;
+      })
+      .map((p, i, arr) =>
+        arr.length >= 2
+          ? {
+              ...p,
+              ballRole: (i === 0 ? "baja" : "alta") as PrintablePlayerRow["ballRole"],
+            }
+          : p
+      );
+
+  const topPlayers = orderByPh(card.topPlayers);
+  const bottomPlayers = orderByPh(card.bottomPlayers);
 
   // Calcutta: etiquetas de ronda (Dieciseisavos, Octavos…) intactas.
   // Ryder: "Parejas · 1a · G3" / "Salida HH:MM" (sin Match # del cuadro).
@@ -368,7 +411,7 @@ export function MatchPlayScorecardSheet({
   const baseRowH = isRyder ? "5mm" : "6.2mm";
   const matchRowH = isRyder ? "12mm" : baseRowH;
   const scoreRows: ExtraRow[] = [];
-  for (const p of card.topPlayers) {
+  for (const p of topPlayers) {
     scoreRows.push({
       label: isSingles
         ? `A ${p.name.split(" ")[0]}`
@@ -376,7 +419,7 @@ export function MatchPlayScorecardSheet({
       dotsByHole: p.strokesByHole,
     });
   }
-  for (const p of card.bottomPlayers) {
+  for (const p of bottomPlayers) {
     scoreRows.push({
       label: isSingles
         ? `B ${p.name.split(" ")[0]}`
@@ -450,7 +493,7 @@ export function MatchPlayScorecardSheet({
           <div className="mb-0.5 text-[9px] font-bold uppercase text-cyan-800">
             {topSide} — {card.topLabel}
           </div>
-          {card.topPlayers.map((p, i) => (
+          {topPlayers.map((p, i) => (
             <PlayerLine key={i} p={p} />
           ))}
         </div>
@@ -458,7 +501,7 @@ export function MatchPlayScorecardSheet({
           <div className="mb-0.5 text-[9px] font-bold uppercase text-violet-800">
             {bottomSide} — {card.bottomLabel}
           </div>
-          {card.bottomPlayers.map((p, i) => (
+          {bottomPlayers.map((p, i) => (
             <PlayerLine key={i} p={p} />
           ))}
         </div>

@@ -352,10 +352,15 @@ async function applyRyderHeadersToCards(
       // Mantener el orden ya resuelto (baja/alta); mapear por nombre corto o entry order.
       if (entries.length === 0) return players;
 
-      // Por índice de entries si mismo conteo; si no, por HI orden.
-      const orderedEntries = [...entries].sort(
-        (a, b) => hiForMatchEntry(entryPhRow(a)) - hiForMatchEntry(entryPhRow(b))
-      );
+      // Mismo criterio que la tarjeta: PH más bajo primero (empate → HI).
+      // handicapCtx null: usa PH guardado/override (ya calculado en la entry).
+      const orderedEntries = [...entries].sort((a, b) => {
+        const phA = effectivePhForMatchEntry(entryPhRow(a), null);
+        const phB = effectivePhForMatchEntry(entryPhRow(b), null);
+        const dPh = (phA ?? 999) - (phB ?? 999);
+        if (dPh !== 0) return dPh;
+        return hiForMatchEntry(entryPhRow(a)) - hiForMatchEntry(entryPhRow(b));
+      });
 
       return players.map((p, i) => {
         const entry = orderedEntries[i] ?? null;
@@ -447,18 +452,22 @@ function teamToPrintablePlayers(
   const rows = entries.map((entry) => {
     const tee = resolveTee(entry);
     const gender = (entry.player.gender ?? "X") as "M" | "F" | "X";
+    const ph = effectivePhForMatchEntry(entryPhRow(entry), handicapCtx);
+    const hi = hiForMatchEntry(entryPhRow(entry));
     return {
       name: formatPlayerName(entry.player),
       gender,
-      hi: hiForMatchEntry(entryPhRow(entry)),
-      ph: effectivePhForMatchEntry(entryPhRow(entry), handicapCtx),
+      hi,
+      ph,
       teeName: tee.teeName,
       teeColor: tee.teeColor,
       ballRole: "baja" as const,
-      _sortHi: hiForMatchEntry(entryPhRow(entry)),
+      // Orden de tarjeta: PH más bajo arriba (bola baja), más alto abajo.
+      _sortPh: ph ?? Number.POSITIVE_INFINITY,
+      _sortHi: hi,
     };
   });
-  rows.sort((a, b) => a._sortHi - b._sortHi);
+  rows.sort((a, b) => a._sortPh - b._sortPh || a._sortHi - b._sortHi);
   return rows.map((r, i) => ({
     name: r.name,
     gender: r.gender,
