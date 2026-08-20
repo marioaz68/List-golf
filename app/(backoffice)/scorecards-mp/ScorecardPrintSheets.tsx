@@ -27,6 +27,20 @@ function sumPar(par: Record<number, number>, holes: number[]) {
   return holes.reduce((s, h) => s + (par[h] ?? 0), 0);
 }
 
+/** Primer nombre + primer apellido (p. ej. "Luis Fernando Sánchez Piña" → "Luis Sánchez"). */
+function shortPlayerName(full: string): string {
+  const base = String(full ?? "")
+    .replace(/\s*\([^)]*\)\s*/g, " ")
+    .trim();
+  const parts = base.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  if (parts.length === 1) return parts[0]!;
+  if (parts.length === 2) return `${parts[0]} ${parts[1]}`;
+  if (parts.length === 3) return `${parts[0]} ${parts[1]}`;
+  // 4+: suele ser nombre + nombre2 + apellido1 + apellido2
+  return `${parts[0]} ${parts[2]}`;
+}
+
 function GenderIcon({ g }: { g: "M" | "F" | "X" }) {
   if (g === "M") return <span className="text-blue-700">♂</span>;
   if (g === "F") return <span className="text-pink-700">♀</span>;
@@ -46,10 +60,12 @@ function TeeDot({ color, name }: { color: string | null; name: string | null }) 
 
 function PlayerLine({ p }: { p: PrintablePlayerRow }) {
   return (
-    <div className="flex items-center gap-1 text-[10px] leading-tight">
+    <div className="flex items-baseline gap-1.5 py-0.5 text-[11px] leading-snug">
       <GenderIcon g={p.gender} />
       <TeeDot color={p.teeColor} name={p.teeName} />
-      <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+      <span className="min-w-0 flex-1 font-semibold whitespace-nowrap">
+        {shortPlayerName(p.name)}
+      </span>
       <span className="shrink-0 tabular-nums text-[9px]">
         HI {p.hi.toFixed(1)} · PH {p.ph ?? "—"}
       </span>
@@ -156,26 +172,57 @@ function HoleGrid({
   const front = holes.slice(0, 9);
   const back = holes.slice(9);
 
+  // Ancho fijo: etiqueta de jugador + 18 hoyos iguales + OUT/IN/TOT.
+  const LABEL_W = "30mm";
+  const SUM_W = "8mm";
+
   return (
-    <table className="w-full border-collapse text-[9px]">
+    <table
+      className="w-full border-collapse text-[9px]"
+      style={{ tableLayout: "fixed" }}
+    >
+      <colgroup>
+        <col style={{ width: LABEL_W }} />
+        {front.map((h) => (
+          <col key={`cf-${h}`} />
+        ))}
+        <col style={{ width: SUM_W }} />
+        {back.map((h) => (
+          <col key={`cb-${h}`} />
+        ))}
+        <col style={{ width: SUM_W }} />
+        <col style={{ width: SUM_W }} />
+      </colgroup>
       <thead>
         <tr>
-          <th className="w-14 border border-black/40 bg-black/5 px-1 text-left">
+          <th className="border border-black/40 bg-black/5 px-1 text-left">
             Hoyo
           </th>
           {front.map((h) => (
-            <th key={h} className="border border-black/40 px-0.5 text-center">
+            <th
+              key={h}
+              className="border border-black/40 px-0 text-center tabular-nums"
+            >
               {h}
             </th>
           ))}
-          <th className="border border-black/40 bg-black/5 px-0.5">OUT</th>
+          <th className="border border-black/40 bg-black/5 px-0 text-center">
+            OUT
+          </th>
           {back.map((h) => (
-            <th key={h} className="border border-black/40 px-0.5 text-center">
+            <th
+              key={h}
+              className="border border-black/40 px-0 text-center tabular-nums"
+            >
               {h}
             </th>
           ))}
-          <th className="border border-black/40 bg-black/5 px-0.5">IN</th>
-          <th className="border border-black/40 bg-black/5 px-0.5">TOT</th>
+          <th className="border border-black/40 bg-black/5 px-0 text-center">
+            IN
+          </th>
+          <th className="border border-black/40 bg-black/5 px-0 text-center">
+            TOT
+          </th>
         </tr>
         <tr>
           <td className="border border-black/40 px-1 font-semibold">Par</td>
@@ -225,10 +272,11 @@ function HoleGrid({
           return (
             <tr key={row.label}>
               <td
-                className={`border border-black/40 px-1 align-middle font-semibold ${row.className ?? ""}`}
+                className={`border border-black/40 px-0.5 align-middle font-semibold whitespace-nowrap overflow-hidden text-ellipsis ${row.className ?? ""}`}
                 style={{
                   height: isPlayerScoreRow ? "16px" : h,
                   minHeight: isPlayerScoreRow ? "16px" : h,
+                  fontSize: isPlayerScoreRow ? "8px" : undefined,
                   ...cellPad,
                 }}
               >
@@ -412,18 +460,20 @@ export function MatchPlayScorecardSheet({
   const matchRowH = isRyder ? "12mm" : baseRowH;
   const scoreRows: ExtraRow[] = [];
   for (const p of topPlayers) {
+    const nm = shortPlayerName(p.name);
     scoreRows.push({
       label: isSingles
-        ? `A ${p.name.split(" ")[0]}`
-        : `A ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+        ? `A ${nm}`
+        : `A ${p.ballRole === "baja" ? "↓" : "↑"} ${nm}`,
       dotsByHole: p.strokesByHole,
     });
   }
   for (const p of bottomPlayers) {
+    const nm = shortPlayerName(p.name);
     scoreRows.push({
       label: isSingles
-        ? `B ${p.name.split(" ")[0]}`
-        : `B ${p.ballRole === "baja" ? "↓" : "↑"} ${p.name.split(" ")[0]}`,
+        ? `B ${nm}`
+        : `B ${p.ballRole === "baja" ? "↓" : "↑"} ${nm}`,
       dotsByHole: p.strokesByHole,
     });
   }
@@ -488,8 +538,8 @@ export function MatchPlayScorecardSheet({
         formatLegend={formatLegend}
         showAdvantageLegend={showAdvantageLegend}
       />
-      <div className="mt-1 shrink-0 grid grid-cols-2 gap-3">
-        <div>
+      <div className="mt-1 shrink-0 grid grid-cols-2 gap-4">
+        <div className="min-w-0">
           <div className="mb-0.5 text-[9px] font-bold uppercase text-cyan-800">
             {topSide} — {card.topLabel}
           </div>
@@ -497,7 +547,7 @@ export function MatchPlayScorecardSheet({
             <PlayerLine key={i} p={p} />
           ))}
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="mb-0.5 text-[9px] font-bold uppercase text-violet-800">
             {bottomSide} — {card.bottomLabel}
           </div>
@@ -539,7 +589,7 @@ export function StrokeAggregateScorecardSheet({
   const groupLine = `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`;
 
   const scoreRows: ExtraRow[] = card.players.map((p, i) => ({
-    label: `J${i + 1} ${p.name.split(" ")[0]}`,
+    label: `J${i + 1} ${shortPlayerName(p.name)}`,
   }));
   scoreRows.push({ label: "Neto pareja 1", className: "bg-emerald-50 font-bold" });
   scoreRows.push({ label: "Neto pareja 2", className: "bg-emerald-50 font-bold" });
