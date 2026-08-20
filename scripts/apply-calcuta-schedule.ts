@@ -13,6 +13,7 @@ import {
   CALCUTA_MATCH_DURATION_MINUTES,
   CALCUTA_PACE_RULES_TEXT,
 } from "@/lib/telegram/ritmo/paceCalculator";
+import { publishMatchPlaySalidasForTournament } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
 
 const OFFICIAL_ID = "5d88f527-35e4-4aa1-a778-2a336bf2bc2f";
 const TEST_ID = "03b3dde9-fa40-4604-ac10-bb433e3086a2";
@@ -64,6 +65,9 @@ async function main() {
 
   const combinedRulesText =
     `${CALCUTA_SCHEDULE_RULES_TEXT}\n\n${CALCUTA_PACE_RULES_TEXT}`;
+
+  const published = await publishMatchPlaySalidasForTournament(admin, tid);
+  console.log("Published match play salidas:", published);
 
   await admin
     .from("tournaments")

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
 import { compactAndSyncRoundGroups } from "@/lib/matchplay/pairingGroupOrder";
+import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
 
 export type SeedDefinedMatchPlayGroupsResult = {
   ok: true;
@@ -223,6 +224,19 @@ export async function seedDefinedMatchPlayGroups(
     }
 
     if (createdThisRound > 0) roundsSeeded += 1;
+
+    const totalGroupsThisRound =
+      groups.length + createdThisRound;
+    if (totalGroupsThisRound > 0) {
+      try {
+        await confirmStartingOrderForRound(admin, round.id);
+      } catch (err) {
+        console.error(
+          `[seedDefinedMatchPlayGroups] publish R${roundNo}:`,
+          err
+        );
+      }
+    }
 
     // Sin huecos en group_no ni tee_time (p. ej. si G2 quedó vacío y se borró).
     try {

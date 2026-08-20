@@ -13,6 +13,7 @@ import CapturaTelegramPanel, {
   type MemberRow,
   type CaddieRow,
 } from "./CapturaTelegramPanel";
+import { resolveDefaultSalidasRoundId } from "@/lib/rounds/resolveDefaultSalidasRound";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -113,8 +114,11 @@ export default async function CapturaTelegramPage(props: {
     );
   }
 
-  const roundId = roundIdParam || rounds[rounds.length - 1].id;
-  const round = rounds.find((r) => r.id === roundId) ?? rounds[rounds.length - 1];
+  const roundId =
+    (await resolveDefaultSalidasRoundId(admin, rounds, roundIdParam)) ??
+    rounds[0]?.id ??
+    "";
+  const round = rounds.find((r) => r.id === roundId) ?? rounds[0];
 
   const { data: groupsRaw } = await admin
     .from("pairing_groups")
