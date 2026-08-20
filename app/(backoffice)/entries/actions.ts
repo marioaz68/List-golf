@@ -1642,7 +1642,15 @@ export async function updateEntryCategory(formData: FormData) {
   await ensureEntriesAccess(tournament_id);
 
   const supabase = await createClient();
-  await ensureRegistrationOpen(supabase, tournament_id, "entries");
+  // No usar ensureRegistrationOpen aquí: hace redirect() y el modal de
+  // Editar jugador lo interpreta como "Error al guardar: NEXT_REDIRECT"
+  // aunque el HI ya se haya guardado.
+  const reg = await getTournamentRegistrationState(supabase, tournament_id);
+  if (reg.registration_status === "closed") {
+    throw new Error(
+      "Inscripciones cerradas. Reabre el torneo para cambiar categoría."
+    );
+  }
   const cats = await getTournamentCats(supabase, tournament_id);
 
   await validateCategoryCapacity({

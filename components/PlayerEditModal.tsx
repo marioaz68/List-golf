@@ -597,7 +597,13 @@ export default function PlayerEditModal({
         await updateEntryHandicapIndexInline(handicapForm);
       }
 
-      if (selectedCategoryId && entryId && tournamentId) {
+      // Solo tocar categoría si el usuario la cambió. Con inscripciones
+      // cerradas updateEntryCategory hace redirect() → NEXT_REDIRECT y el
+      // modal lo mostraba como "Error al guardar" aunque el HI ya estaba OK.
+      const categoryChanged =
+        Boolean(selectedCategoryId) &&
+        selectedCategoryId !== (currentCategoryId ?? "");
+      if (categoryChanged && entryId && tournamentId) {
         try {
           const categoryForm = new FormData();
           categoryForm.set("entry_id", entryId);
@@ -605,10 +611,23 @@ export default function PlayerEditModal({
           categoryForm.set("category_id", selectedCategoryId);
 
           await updateEntryCategory(categoryForm);
-        } catch (catErr: any) {
-          // Con inscripciones cerradas el HI ya se guardó; no deshacerlo.
-          const msg = String(catErr?.message ?? catErr ?? "");
-          if (/inscripciones cerradas|registration.*closed/i.test(msg)) {
+        } catch (catErr: unknown) {
+          const digest =
+            catErr &&
+            typeof catErr === "object" &&
+            "digest" in catErr &&
+            typeof (catErr as { digest?: unknown }).digest === "string"
+              ? String((catErr as { digest: string }).digest)
+              : "";
+          const msg = String(
+            catErr instanceof Error ? catErr.message : (catErr ?? "")
+          );
+          if (
+            digest.startsWith("NEXT_REDIRECT") ||
+            /inscripciones cerradas|registration.*closed|NEXT_REDIRECT/i.test(
+              msg
+            )
+          ) {
             alert(
               "HI y datos del jugador guardados. La categoría no se pudo cambiar porque las inscripciones están cerradas (reabre para cambiar categoría)."
             );
@@ -621,6 +640,16 @@ export default function PlayerEditModal({
       onClose();
       startTransition(() => router.refresh());
     } catch (err: any) {
+      const digest =
+        err && typeof err === "object" && "digest" in err
+          ? String((err as { digest?: string }).digest ?? "")
+          : "";
+      if (digest.startsWith("NEXT_REDIRECT")) {
+        // El HI ya se guardó; el redirect es ruido de categoría bloqueada.
+        onClose();
+        startTransition(() => router.refresh());
+        return;
+      }
       alert("Error al guardar: " + (err?.message ?? "Error desconocido"));
     } finally {
       setSaving(false);
