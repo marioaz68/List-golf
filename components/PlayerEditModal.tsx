@@ -337,8 +337,21 @@ export default function PlayerEditModal({
   ]);
 
   const canUpdateEntryCategory = Boolean(entryId && tournamentId);
+  const formHydratedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (!open) {
+      formHydratedKeyRef.current = null;
+      return;
+    }
+    if (!player?.id) return;
+
+    // Solo hidratar al abrir (o al cambiar de jugador). No pisar lo que el
+    // usuario ya tecleó si el padre re-renderiza con props stale.
+    const hydrateKey = `${player.id}|${entryId ?? ""}|${currentCategoryId ?? ""}`;
+    if (formHydratedKeyRef.current === hydrateKey) return;
+    formHydratedKeyRef.current = hydrateKey;
+
     async function loadInitialData() {
       setFirstName(player?.first_name ?? "");
       setLastName(player?.last_name ?? "");
@@ -346,6 +359,8 @@ export default function PlayerEditModal({
       setGender(
         player?.gender === "F" ? "F" : player?.gender === "X" ? "X" : "M"
       );
+      // Desde Inscripciones, handicap_index / handicap_torneo ya vienen con el
+      // HI de la inscripción (EntriesListPanel).
       setHandicapIndex(
         player?.handicap_index == null ? "" : String(player.handicap_index)
       );
@@ -366,7 +381,7 @@ export default function PlayerEditModal({
       setClubDropdownOpen(false);
       setSelectedClubIndex(-1);
 
-      if (!open || !player?.club_id) return;
+      if (!player?.club_id) return;
 
       const supabase = createClient();
       const { data, error } = await supabase
@@ -382,8 +397,8 @@ export default function PlayerEditModal({
       }
     }
 
-    loadInitialData();
-  }, [player, open, currentCategoryId]);
+    void loadInitialData();
+  }, [player, open, currentCategoryId, entryId]);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -564,14 +579,24 @@ export default function PlayerEditModal({
         finalClubId = ensured?.id ?? finalClubId ?? null;
       }
 
-      const result = await savePlayerAction({
+      const editingTournamentEntry = Boolean(entryId && tournamentId);
+
+      // HI del torneo PRIMERO (inscripción + sync a players). Así no puede
+      // quedar pisado por un savePlayer con valor viejo del maestro.
+      if (editingTournamentEntry && hi !== null) {
+        const handicapForm = new FormData();
+        handicapForm.set("id", entryId!);
+        handicapForm.set("tournament_id", tournamentId!);
+        handicapForm.set("handicap_index", String(hi));
+        await updateEntryHandicapIndexInline(handicapForm);
+      }
+
+      const playerPayload: Parameters<typeof savePlayerAction>[0] = {
         id: player.id,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         initials: cleanInitials || null,
         gender,
-        handicap_index: hi,
-        handicap_torneo: ht,
         phone: phone.trim() || null,
         whatsapp_phone_e164: normalizedWhatsappPhone,
         email: cleanEmail,
@@ -582,24 +607,23 @@ export default function PlayerEditModal({
         birth_year: birthYear.trim() ? Number(birthYear) : null,
         telegram_user_id: tgUid || null,
         telegram_chat_id: tgCid || null,
-      });
+      };
+      // Solo tocar HI maestro del jugador si NO estamos en Inscripciones
+      // (allí el HI ya se guardó arriba en la inscripción).
+      if (!editingTournamentEntry) {
+        playerPayload.handicap_index = hi;
+        playerPayload.handicap_torneo = ht;
+      }
+
+      const result = await savePlayerAction(playerPayload);
 
       if (!result.ok) {
         alert("Error al guardar: " + result.message);
         return;
       }
 
-      if (entryId && tournamentId && hi !== null) {
-        const handicapForm = new FormData();
-        handicapForm.set("id", entryId);
-        handicapForm.set("tournament_id", tournamentId);
-        handicapForm.set("handicap_index", String(hi));
-        await updateEntryHandicapIndexInline(handicapForm);
-      }
-
       // Solo tocar categoría si el usuario la cambió. Con inscripciones
-      // cerradas updateEntryCategory hace redirect() → NEXT_REDIRECT y el
-      // modal lo mostraba como "Error al guardar" aunque el HI ya estaba OK.
+      // cerradas updateEntryCategory lanza error claro (sin NEXT_REDIRECT).
       const categoryChanged =
         Boolean(selectedCategoryId) &&
         selectedCategoryId !== (currentCategoryId ?? "");

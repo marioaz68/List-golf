@@ -56,8 +56,6 @@ function buildPlayerPayload(input: SavePlayerInput) {
     last_name: toNullableString(input.last_name),
     initials: toNullableUpperString(input.initials),
     gender: normalizeGender(input.gender),
-    handicap_index: toNullableNumber(input.handicap_index),
-    handicap_torneo: toNullableNumber(input.handicap_torneo),
     birth_year: toNullableNumber(input.birth_year),
     phone: toNullableString(input.phone),
     whatsapp_phone_e164: toNullableString(input.whatsapp_phone_e164),
@@ -67,6 +65,15 @@ function buildPlayerPayload(input: SavePlayerInput) {
     ghin_number: toNullableString(input.ghin_number),
     action_number: toNullableString(input.action_number),
   };
+
+  // HI opcional: desde Inscripciones el HI del torneo se guarda aparte
+  // (updateEntryHandicapIndexInline) para no pisarlo con un valor viejo.
+  if (Object.prototype.hasOwnProperty.call(input, "handicap_index")) {
+    payload.handicap_index = toNullableNumber(input.handicap_index);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "handicap_torneo")) {
+    payload.handicap_torneo = toNullableNumber(input.handicap_torneo);
+  }
 
   const shirtSize = toNullableUpperString(input.shirt_size);
   const shoeSize = toNullableString(input.shoe_size);
