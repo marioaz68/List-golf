@@ -12,6 +12,7 @@ import type {
   MatchPlayPrizeShare,
 } from "@/lib/matchplay/types";
 import AutoRefresh from "@/components/public/AutoRefresh";
+import ReturnToCaptureBanner from "@/components/captura/ReturnToCaptureBanner";
 import LiveBracketView, { type TeeRuleLite, type TeeSetLite } from "./LiveBracketView";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,11 @@ export default async function PublicLiveBracketPage(props: {
   const focusMatchId = String(
     Array.isArray(focusParam) ? focusParam[0] : focusParam ?? ""
   ).trim();
+  const fromCapturaMiniApp = String(
+    Array.isArray(sp.return_captura)
+      ? sp.return_captura[0]
+      : sp.return_captura ?? ""
+  ).trim().length > 0;
   const tournamentId = params.id;
   if (!tournamentId) notFound();
 
@@ -74,7 +80,7 @@ export default async function PublicLiveBracketPage(props: {
     .maybeSingle();
 
   if (!tournament) notFound();
-  if (tournament.is_public === false) notFound();
+  if (tournament.is_public === false && !fromCapturaMiniApp) notFound();
 
   const settings = (tournament.settings ?? {}) as TournamentSettings;
   const isMatchPlay = isMatchPlayFormat(settings);
@@ -251,6 +257,7 @@ export default async function PublicLiveBracketPage(props: {
 
   return (
     <main className="min-h-dvh bg-gradient-to-br from-[#020617] via-[#0b132b] to-[#0a1220] p-3 text-white sm:p-5">
+      <ReturnToCaptureBanner />
       <AutoRefresh intervalMs={10000} />
       <LiveBracketView
         tournamentId={tournamentId}

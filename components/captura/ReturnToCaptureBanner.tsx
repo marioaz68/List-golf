@@ -17,6 +17,13 @@ export function sanitizeCapturaReturnPath(raw: string | null | undefined): strin
   return s;
 }
 
+export function hasCapturaMiniAppReturn(
+  raw: string | string[] | null | undefined
+): boolean {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return String(v ?? "").trim().length > 0;
+}
+
 /** Query param en páginas públicas → path de regreso a captura. */
 export const CAPTURA_RETURN_PARAM = "return_captura";
 

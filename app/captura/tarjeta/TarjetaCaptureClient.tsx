@@ -1060,6 +1060,12 @@ export default function TarjetaCaptureClient({
   const liveLeaderboardUrl = useMemo(() => {
     const tid = meta.tournamentId?.trim();
     if (!tid) return null;
+    const isCalcutaMatchPlay =
+      meta.matchplayVariant !== "ryder" &&
+      (Boolean(meta.pairSides) ||
+        Boolean(meta.matchPlay) ||
+        Boolean(meta.bracketRoundLabel));
+    if (isCalcutaMatchPlay) return null;
     let href: string;
     if (meta.matchplayVariant === "ryder") {
       href = `/torneos/${tid}/ryder`;
@@ -1088,6 +1094,9 @@ export default function TarjetaCaptureClient({
   }, [
     meta.tournamentId,
     meta.matchplayVariant,
+    meta.pairSides,
+    meta.matchPlay,
+    meta.bracketRoundLabel,
     meta.myEntryId,
     meta.caddieForEntryIds,
     meta.players,

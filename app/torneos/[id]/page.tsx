@@ -201,20 +201,24 @@ export default async function PublicTournamentPage({
   const common = messages[locale].common;
   const sb = messages[locale].sidebar;
 
-  const tournamentResponse = isLoggedIn
-    ? await supabase
-        .from("tournaments")
-        .select("id,name,start_date,is_public,poster_path,settings")
-        .eq("id", id)
-        .maybeSingle()
-    : await supabase
-        .from("tournaments")
-        .select("id,name,start_date,is_public,poster_path,settings")
-        .eq("id", id)
-        .eq("is_public", true)
-        // Rondas privadas (kind='daily_round' del club) nunca por URL pública
-        .eq("is_private", false)
-        .maybeSingle();
+  // Mini app de captura: el torneo de prueba puede estar oculto del sitio
+  // público (is_public=false) y aun así debe abrirse para el jugador.
+  const adminForHidden = fromCapturaMiniApp ? tryCreateAdminClient() : null;
+  const tournamentResponse =
+    isLoggedIn || adminForHidden
+      ? await (adminForHidden ?? supabase)
+          .from("tournaments")
+          .select("id,name,start_date,is_public,poster_path,settings")
+          .eq("id", id)
+          .maybeSingle()
+      : await supabase
+          .from("tournaments")
+          .select("id,name,start_date,is_public,poster_path,settings")
+          .eq("id", id)
+          .eq("is_public", true)
+          // Rondas privadas (kind='daily_round' del club) nunca por URL pública
+          .eq("is_private", false)
+          .maybeSingle();
 
   const { data: tournament, error: tournamentError } = tournamentResponse;
 

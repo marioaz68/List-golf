@@ -66,6 +66,11 @@ export default async function PublicMatchesLivePage(props: {
     "bracket";
   const tournamentId = params.id;
   if (!tournamentId) notFound();
+  const fromCapturaMiniApp = String(
+    Array.isArray(sp.return_captura)
+      ? sp.return_captura[0]
+      : sp.return_captura ?? ""
+  ).trim().length > 0;
 
   const supabase = createAdminClient();
 
@@ -76,7 +81,7 @@ export default async function PublicMatchesLivePage(props: {
     .maybeSingle();
 
   if (!tournament) notFound();
-  if (tournament.is_public === false) notFound();
+  if (tournament.is_public === false && !fromCapturaMiniApp) notFound();
 
   const settings = (tournament.settings ?? {}) as TournamentSettings;
   if (!isMatchPlayFormat(settings)) {
