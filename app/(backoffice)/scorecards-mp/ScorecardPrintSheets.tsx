@@ -108,11 +108,11 @@ function AdvantageCell({
           className="pointer-events-none absolute select-none"
           style={{
             position: "absolute",
-            top: -1,
-            right: 0,
-            fontSize: 8,
+            top: -4,
+            right: -1,
+            fontSize: 24,
             lineHeight: 1,
-            letterSpacing: -1,
+            letterSpacing: -3,
           }}
         >
           {"•".repeat(n)}
@@ -310,7 +310,7 @@ function CardHeader({
         </span>
         {showAdvantageLegend ? (
           <span className="flex items-center gap-1">
-            <span style={{ fontSize: 8, lineHeight: 1, letterSpacing: -1 }}>
+            <span style={{ fontSize: 24, lineHeight: 1, letterSpacing: -3 }}>
               •
             </span>
             = 1 golpe de ventaja (esquina casilla; •• = 2)
