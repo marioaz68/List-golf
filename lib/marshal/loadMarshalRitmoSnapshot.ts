@@ -53,7 +53,8 @@ export type MarshalRitmoSnapshot = {
 /** Mapa de ritmo para marshals (posición por GPS o hoyo capturado). */
 export async function loadMarshalRitmoSnapshot(
   admin: SupabaseClient,
-  tournamentId: string
+  tournamentId: string,
+  selectedRoundId?: string | null
 ): Promise<MarshalRitmoSnapshot | null> {
   const tid = String(tournamentId ?? "").trim();
   if (!tid) return null;
@@ -75,7 +76,7 @@ export async function loadMarshalRitmoSnapshot(
 
   const { data: roundsRaw } = await admin
     .from("rounds")
-    .select("id, round_no, round_date")
+    .select("id, round_no, round_date, start_time")
     .eq("tournament_id", tid)
     .order("round_no", { ascending: true });
 
@@ -83,11 +84,14 @@ export async function loadMarshalRitmoSnapshot(
     id: string;
     round_no: number | null;
     round_date: string | null;
+    start_time: string | null;
   }>;
   const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(admin, today);
   const round = resolveLiveRoundForTournament({
     rounds,
+    queryRoundId: selectedRoundId,
     today,
+    now,
     tournamentEndDate: (tournament.end_date as string | null) ?? null,
     tournamentStartDate: (tournament.start_date as string | null) ?? null,
     activityRoundIds,

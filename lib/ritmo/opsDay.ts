@@ -121,21 +121,91 @@ export type OpsRoundRow = {
   id: string;
   round_no: number | null;
   round_date: string | null;
+  /** Hora de salida de la ronda (HH:MM o HH:MM:SS), opcional. */
+  start_time?: string | null;
 };
+
+/** Minutos desde medianoche en America/Mexico_City. */
+export function mexicoNowMinutes(now = new Date()): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Mexico_City",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+export function parseStartTimeMinutes(
+  startTime: string | null | undefined
+): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(startTime ?? "").trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null;
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
+/**
+ * Cuando hay varias rondas el mismo día (Calcuta R1 AM + R2 PM), elige la
+ * que ya arrancó según `start_time` (la de mayor round_no entre las
+ * iniciadas). Si ninguna ha arrancado, la de salida más temprana.
+ */
+export function pickLiveRoundSameDay(
+  rounds: OpsRoundRow[],
+  now = new Date()
+): OpsRoundRow | null {
+  if (rounds.length === 0) return null;
+  if (rounds.length === 1) return rounds[0] ?? null;
+
+  const nowMin = mexicoNowMinutes(now);
+  const withStart = rounds.map((r) => ({
+    round: r,
+    startMin: parseStartTimeMinutes(r.start_time ?? null),
+  }));
+
+  const started = withStart.filter(
+    (x) => x.startMin != null && x.startMin <= nowMin
+  );
+  if (started.length > 0) {
+    started.sort((a, b) => {
+      const rn = (b.round.round_no ?? 0) - (a.round.round_no ?? 0);
+      if (rn !== 0) return rn;
+      return (b.startMin ?? 0) - (a.startMin ?? 0);
+    });
+    return started[0]?.round ?? null;
+  }
+
+  const upcoming = withStart
+    .filter((x) => x.startMin != null)
+    .sort((a, b) => (a.startMin ?? 0) - (b.startMin ?? 0));
+  if (upcoming.length > 0) return upcoming[0]?.round ?? null;
+
+  return (
+    [...rounds].sort((a, b) => (b.round_no ?? 0) - (a.round_no ?? 0))[0] ?? null
+  );
+}
 
 /**
  * Ronda en vivo para ritmo / capturas: hoy, captura activa, o la más cercana
- * al calendario — no la ronda futura más lejana (p. ej. R2 del cuadro MP).
+ * al calendario. Si hay varias rondas el mismo día, usa hora de salida
+ * (no la R1 por defecto).
  */
 export function resolveLiveRoundForTournament(args: {
   rounds: OpsRoundRow[];
   queryRoundId?: string | null;
   today?: string;
+  now?: Date;
   tournamentEndDate?: string | null;
   tournamentStartDate?: string | null;
   activityRoundIds?: Set<string>;
 }): OpsRoundRow | null {
   const today = args.today ?? todayMexicoDate();
+  const now = args.now ?? new Date();
   const rounds = args.rounds;
   if (rounds.length === 0) return null;
 
@@ -145,8 +215,14 @@ export function resolveLiveRoundForTournament(args: {
     if (picked) return picked;
   }
 
-  const byToday = rounds.find((r) => toDateOnly(r.round_date) === today);
-  if (byToday) return byToday;
+  const todayRounds = rounds.filter(
+    (r) => toDateOnly(r.round_date) === today
+  );
+  if (todayRounds.length === 1) return todayRounds[0] ?? null;
+  if (todayRounds.length > 1) {
+    // Calcuta R1 AM + R2 PM: elegir por hora de salida, no la primera R1.
+    return pickLiveRoundSameDay(todayRounds, now);
+  }
 
   const activityIds = args.activityRoundIds ?? new Set<string>();
   const byActivity = rounds.find((r) => activityIds.has(r.id));

@@ -23,10 +23,12 @@ const MAP_HEIGHT = "calc(100dvh - 210px)";
 export default function MarshalRitmoPanel({
   tg,
   tournamentId,
+  roundId = null,
   active = true,
 }: {
   tg: string;
   tournamentId: string | null;
+  roundId?: string | null;
   active?: boolean;
 }) {
   const vp = useViewport();
@@ -41,6 +43,7 @@ export default function MarshalRitmoPanel({
     setLoading(true);
     try {
       const params = new URLSearchParams({ tg, tournament_id: tournamentId });
+      if (roundId) params.set("round_id", roundId);
       const res = await fetch(`/api/marshal/ritmo?${params.toString()}`, {
         cache: "no-store",
       });
@@ -66,7 +69,7 @@ export default function MarshalRitmoPanel({
     } finally {
       setLoading(false);
     }
-  }, [tg, tournamentId]);
+  }, [tg, tournamentId, roundId]);
 
   useEffect(() => {
     if (!active) return;

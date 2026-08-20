@@ -82,7 +82,7 @@ export async function POST(req: Request) {
   const today = todayMexicoDate();
   const { data: roundsRaw } = await admin
     .from("rounds")
-    .select("id, round_no, round_date")
+    .select("id, round_no, round_date, start_time")
     .eq("tournament_id", tournamentId)
     .order("round_no", { ascending: true });
 
@@ -92,6 +92,7 @@ export async function POST(req: Request) {
       id: string;
       round_no: number | null;
       round_date: string | null;
+      start_time: string | null;
     }>,
     today,
     tournamentEndDate: (tournament.end_date as string | null) ?? null,

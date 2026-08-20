@@ -182,7 +182,7 @@ export default async function RitmoPage({
   // Rondas del torneo.
   const { data: roundsRaw } = await admin
     .from("rounds")
-    .select("id, round_no, round_date")
+    .select("id, round_no, round_date, start_time")
     .eq("tournament_id", tournamentId)
     .order("round_no", { ascending: true });
   const rounds = (roundsRaw ?? []) as RoundRow[];

@@ -10,6 +10,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const tg = url.searchParams.get("tg")?.trim() ?? "";
   const tournamentId = url.searchParams.get("tournament_id")?.trim() ?? "";
+  const roundId = url.searchParams.get("round_id")?.trim() ?? "";
 
   if (!tg) {
     return NextResponse.json({ ok: false, error: "missing tg" }, { status: 400 });
@@ -30,7 +31,8 @@ export async function GET(req: Request) {
   const payload = await loadMarshalOpsData(
     admin,
     marshal,
-    tournamentId || null
+    tournamentId || null,
+    roundId || null
   );
   return NextResponse.json({ ok: true, ...payload });
 }

@@ -13,6 +13,7 @@ import {
 import type { CaptureLagGroupRow } from "@/lib/ritmo/loadCaptureLagGroups";
 import type {
   MarshalOpsPayload,
+  MarshalRoundOption,
   MarshalTournamentOption,
 } from "@/lib/marshal/loadMarshalOpsData";
 import MarshalRitmoPanel from "./MarshalRitmoPanel";
@@ -148,14 +149,21 @@ export default function MarshalOpsClient({
   initialTournamentId,
 }: Props) {
   const [tab, setTab] = useState<Tab>("capturas");
-  const [data, setData] = useState<MarshalOpsPayload>(initial);
+  const [data, setData] = useState<MarshalOpsPayload>({
+    ...initial,
+    rounds: initial.rounds ?? [],
+    selectedRoundId: initial.selectedRoundId ?? null,
+  });
   const [onlyProblems, setOnlyProblems] = useState(true);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [roundOverride, setRoundOverride] = useState<string | null>(null);
 
   const selectedTournamentId =
     data.selectedTournamentId ?? initialTournamentId ?? null;
+  const selectedRoundId =
+    roundOverride ?? data.selectedRoundId ?? null;
 
   const selectedTournament = useMemo(
     () =>
@@ -165,12 +173,17 @@ export default function MarshalOpsClient({
     [data.tournaments, selectedTournamentId]
   );
 
+  const rounds = (data.rounds ?? []) as MarshalRoundOption[];
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ tg });
       if (selectedTournamentId) {
         params.set("tournament_id", selectedTournamentId);
+      }
+      if (selectedRoundId) {
+        params.set("round_id", selectedRoundId);
       }
       const res = await fetch(`/api/marshal/capture-lag?${params.toString()}`, {
         cache: "no-store",
@@ -186,17 +199,23 @@ export default function MarshalOpsClient({
           computedAtISO: json.computedAtISO,
           tournaments: json.tournaments as MarshalTournamentOption[],
           selectedTournamentId: json.selectedTournamentId,
+          rounds: (json.rounds ?? []) as MarshalRoundOption[],
+          selectedRoundId: json.selectedRoundId ?? null,
           groups: json.groups as CaptureLagGroupRow[],
         });
       }
     } finally {
       setLoading(false);
     }
-  }, [tg, selectedTournamentId]);
+  }, [tg, selectedTournamentId, selectedRoundId]);
 
   useEffect(() => {
     initTelegramWebApp();
   }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [selectedRoundId]); // eslint-disable-line react-hooks/exhaustive-deps -- refresh al cambiar ronda
 
   useEffect(() => {
     const id = setInterval(refresh, 20_000);
@@ -296,6 +315,44 @@ export default function MarshalOpsClient({
         {selectedTournament ? (
           <div style={{ fontSize: 12, color: "#cbd5e1", marginTop: 8 }}>
             {selectedTournament.name}
+          </div>
+        ) : null}
+
+        {rounds.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              marginTop: 10,
+            }}
+          >
+            {rounds.map((r) => {
+              const active = r.id === selectedRoundId;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => {
+                    setRoundOverride(r.id);
+                  }}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: active
+                      ? "1px solid #38bdf8"
+                      : "1px solid #334155",
+                    background: active ? "#0c4a6e" : "#1e293b",
+                    color: active ? "#e0f2fe" : "#94a3b8",
+                    cursor: "pointer",
+                  }}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
           </div>
         ) : null}
 
@@ -611,6 +668,7 @@ export default function MarshalOpsClient({
           <MarshalRitmoPanel
             tg={tg}
             tournamentId={selectedTournamentId}
+            roundId={selectedRoundId}
             active
           />
         </div>

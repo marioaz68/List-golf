@@ -10,6 +10,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const tg = url.searchParams.get("tg")?.trim() ?? "";
   const tournamentId = url.searchParams.get("tournament_id")?.trim() ?? "";
+  const roundId = url.searchParams.get("round_id")?.trim() ?? "";
 
   if (!tg || !tournamentId) {
     return NextResponse.json(
@@ -35,7 +36,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
   }
 
-  const snapshot = await loadMarshalRitmoSnapshot(admin, tournamentId);
+  const snapshot = await loadMarshalRitmoSnapshot(
+    admin,
+    tournamentId,
+    roundId || null
+  );
   if (!snapshot) {
     return NextResponse.json(
       { ok: false, error: "no round data" },
