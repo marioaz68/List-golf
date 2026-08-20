@@ -567,14 +567,31 @@ async function loadTeeContext(admin: SupabaseClient, tournamentId: string) {
 async function loadTeeTimesByRound(
   admin: SupabaseClient,
   tournamentId: string
-): Promise<Map<string, { groupNo: number; teeTime: string | null }>> {
-  const map = new Map<string, { groupNo: number; teeTime: string | null }>();
+): Promise<{
+  /** Fallback: `${roundNo}-${group_no}` ≈ position_no del cuadro. */
+  byRoundPosition: Map<string, { groupNo: number; teeTime: string | null }>;
+  /**
+   * Preferido: pareja de teams del grupo de salidas → hora real.
+   * Evita el desfase cuando group_no ≠ position_no (p. ej. R2 G1=11:00 es
+   * el match #2 del cuadro porque el #1 aún espera rival).
+   */
+  byTeamPair: Map<string, { groupNo: number; teeTime: string | null }>;
+}> {
+  const byRoundPosition = new Map<
+    string,
+    { groupNo: number; teeTime: string | null }
+  >();
+  const byTeamPair = new Map<
+    string,
+    { groupNo: number; teeTime: string | null }
+  >();
+
   const { data: rounds } = await admin
     .from("rounds")
     .select("id, round_no")
     .eq("tournament_id", tournamentId);
   const roundIds = (rounds ?? []).map((r) => String(r.id));
-  if (roundIds.length === 0) return map;
+  if (roundIds.length === 0) return { byRoundPosition, byTeamPair };
 
   const { data: groups } = await admin
     .from("pairing_groups")
@@ -588,13 +605,90 @@ async function loadTeeTimesByRound(
   for (const g of groups ?? []) {
     const roundNo = roundNoById.get(String(g.round_id));
     if (roundNo == null) continue;
-    const key = `${roundNo}-${g.group_no}`;
-    map.set(key, {
+    const info = {
       groupNo: Number(g.group_no),
       teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
+    };
+    byRoundPosition.set(`${roundNo}-${g.group_no}`, info);
+  }
+
+  const groupIds = (groups ?? []).map((g) => String(g.id));
+  if (groupIds.length === 0) return { byRoundPosition, byTeamPair };
+
+  const [{ data: members }, { data: teams }] = await Promise.all([
+    admin
+      .from("pairing_group_members")
+      .select("group_id, entry_id")
+      .in("group_id", groupIds),
+    admin
+      .from("matchplay_pair_teams")
+      .select("id, player_a_entry_id, player_b_entry_id")
+      .eq("tournament_id", tournamentId)
+      .eq("is_active", true),
+  ]);
+
+  const teamIdByEntry = new Map<string, string>();
+  for (const t of teams ?? []) {
+    const tid = String(t.id);
+    if (t.player_a_entry_id) teamIdByEntry.set(String(t.player_a_entry_id), tid);
+    if (t.player_b_entry_id) teamIdByEntry.set(String(t.player_b_entry_id), tid);
+  }
+
+  const groupMeta = new Map(
+    (groups ?? []).map((g) => [
+      String(g.id),
+      {
+        roundNo: roundNoById.get(String(g.round_id)) ?? null,
+        groupNo: Number(g.group_no),
+        teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
+      },
+    ])
+  );
+
+  const teamsByGroup = new Map<string, Set<string>>();
+  for (const m of members ?? []) {
+    const gid = String(m.group_id);
+    const teamId = teamIdByEntry.get(String(m.entry_id));
+    if (!teamId) continue;
+    let set = teamsByGroup.get(gid);
+    if (!set) {
+      set = new Set();
+      teamsByGroup.set(gid, set);
+    }
+    set.add(teamId);
+  }
+
+  for (const [gid, teamIds] of teamsByGroup) {
+    if (teamIds.size < 2) continue;
+    const meta = groupMeta.get(gid);
+    if (!meta || meta.roundNo == null) continue;
+    const sorted = [...teamIds].sort();
+    // Si hay >2 teams (datos raros), tomar los 2 primeros ordenados.
+    const key = `${meta.roundNo}:${sorted[0]}|${sorted[1]}`;
+    byTeamPair.set(key, {
+      groupNo: meta.groupNo,
+      teeTime: meta.teeTime,
     });
   }
-  return map;
+
+  return { byRoundPosition, byTeamPair };
+}
+
+function teeInfoForMatch(
+  teeMaps: Awaited<ReturnType<typeof loadTeeTimesByRound>>,
+  roundNo: number,
+  positionNo: number,
+  topPairId: string | null | undefined,
+  bottomPairId: string | null | undefined
+): { groupNo: number; teeTime: string | null } | null {
+  if (topPairId && bottomPairId) {
+    const [a, b] = [String(topPairId), String(bottomPairId)].sort();
+    const byTeams = teeMaps.byTeamPair.get(`${roundNo}:${a}|${b}`);
+    if (byTeams) return byTeams;
+  }
+  return (
+    teeMaps.byRoundPosition.get(`${roundNo}-${positionNo}`) ?? null
+  );
 }
 
 function buildMatchCard(params: {
@@ -612,6 +706,8 @@ function buildMatchCard(params: {
   handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>;
   strokeIndexByHole: StrokeIndexByHole;
   teeTime: string | null;
+  /** Nº de grupo en salidas (puede diferir del position_no del cuadro). */
+  groupNo?: number | null;
 }): PrintableMatchPlayCard | null {
   if (!params.topTeam || !params.bottomTeam) return null;
   const topPlayers = teamToPrintablePlayers(
@@ -635,7 +731,7 @@ function buildMatchCard(params: {
         ? "Perdedores de semifinal"
         : roundLabel(params.roundNo, params.roundCount, params.bracketSize),
     positionNo: params.positionNo,
-    groupNo: params.positionNo,
+    groupNo: params.groupNo ?? params.positionNo,
     teeTime: params.teeTime,
     topLabel: params.topLabel,
     bottomLabel: params.bottomLabel,
@@ -728,7 +824,13 @@ export async function loadPrintableMpScorecards(
     for (const m of bracketView.matches) {
       if (m.status === "bye") continue;
       if (!m.top_pair_id || !m.bottom_pair_id) continue;
-      const tee = teeTimes.get(`${m.round_no}-${m.position_no}`);
+      const tee = teeInfoForMatch(
+        teeTimes,
+        m.round_no,
+        m.position_no,
+        m.top_pair_id,
+        m.bottom_pair_id
+      );
       const card = buildMatchCard({
         kind: "main",
         matchId: m.id,
@@ -744,6 +846,7 @@ export async function loadPrintableMpScorecards(
         handicapCtx,
         strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
+        groupNo: tee?.groupNo ?? m.position_no,
       });
       if (card) matchPlayCards.push(card);
     }
@@ -753,8 +856,12 @@ export async function loadPrintableMpScorecards(
       if (thirdPlace?.top_pair_id && thirdPlace.bottom_pair_id) {
         const top = teamById.get(thirdPlace.top_pair_id);
         const bottom = teamById.get(thirdPlace.bottom_pair_id);
-        const tee = teeTimes.get(
-          `${thirdPlace.round_no}-${thirdPlace.position_no}`
+        const tee = teeInfoForMatch(
+          teeTimes,
+          thirdPlace.round_no,
+          thirdPlace.position_no,
+          thirdPlace.top_pair_id,
+          thirdPlace.bottom_pair_id
         );
         const card = buildMatchCard({
           kind: "third_place",
@@ -774,6 +881,7 @@ export async function loadPrintableMpScorecards(
           handicapCtx,
           strokeIndexByHole: layout.strokeIndexByHole,
           teeTime: tee?.teeTime ?? null,
+          groupNo: tee?.groupNo ?? thirdPlace.position_no,
         });
         if (card) matchPlayCards.push(card);
       }
@@ -804,7 +912,13 @@ export async function loadPrintableMpScorecards(
       if (!m.top_pair_id || !m.bottom_pair_id) continue;
       const top = teamById.get(m.top_pair_id);
       const bottom = teamById.get(m.bottom_pair_id);
-      const tee = teeTimes.get(`${m.round_no}-${m.position_no}`);
+      const tee = teeInfoForMatch(
+        teeTimes,
+        Number(m.round_no),
+        Number(m.position_no),
+        m.top_pair_id != null ? String(m.top_pair_id) : null,
+        m.bottom_pair_id != null ? String(m.bottom_pair_id) : null
+      );
       const card = buildMatchCard({
         kind: "consolation_mp",
         matchId: String(m.id),
@@ -821,6 +935,7 @@ export async function loadPrintableMpScorecards(
         handicapCtx,
         strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
+        groupNo: tee?.groupNo ?? Number(m.position_no),
       });
       if (card) matchPlayCards.push(card);
     }
