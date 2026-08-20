@@ -819,7 +819,7 @@ function PlayoffTable({
                       className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(playoffNo)}`}
                     >
                       <StrokeMarkInline
-                        strokes={netOf(h, p.key)}
+                        strokes={grossOf(h, p.key)}
                         par={h.par}
                         handicapReceived={strokesReceivedOnHole(h, p.key)}
                         gross={grossOf(h, p.key)}
@@ -1483,7 +1483,7 @@ function HoleTable({
           del hoyo (stroke index, 1 = más difícil). Los altos reciben golpe
           empezando por SI 1 ·{" "}
           <span className="font-semibold text-amber-300">Amarillo</span> =
-          neto con golpe de ventaja recibido ·{" "}
+          bruto con golpe de ventaja recibido (el número es el bruto) ·{" "}
           <span className="font-semibold text-emerald-300">Verde</span> =
           bola baja (mejor neto de la pareja) ·{" "}
           <span className="font-semibold text-orange-300">Naranja</span> =
@@ -1737,7 +1737,7 @@ function HoleTable({
                       className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 1)}`}
                     >
                       <StrokeMark
-                        strokes={netOf(h, p.key)}
+                        strokes={grossOf(h, p.key)}
                         par={h.par}
                         handicapReceived={strokesReceivedOnHole(h, p.key)}
                         gross={grossOf(h, p.key)}
@@ -1757,7 +1757,7 @@ function HoleTable({
                       className={`${cellTd} ${stripe} ${roleTint(r)} ${decisionTint(i + 10)}`}
                     >
                       <StrokeMark
-                        strokes={netOf(h, p.key)}
+                        strokes={grossOf(h, p.key)}
                         par={h.par}
                         handicapReceived={strokesReceivedOnHole(h, p.key)}
                         gross={grossOf(h, p.key)}
@@ -1796,7 +1796,7 @@ function HoleTable({
                         >
                           {ph ? (
                             <StrokeMark
-                              strokes={netOf(ph, p.key)}
+                              strokes={grossOf(ph, p.key)}
                               par={ph.par ?? holes[i]?.par ?? null}
                               handicapReceived={strokesReceivedOnHole(ph, p.key)}
                               gross={grossOf(ph, p.key)}
@@ -1917,15 +1917,16 @@ function HoleTable({
           </span>
           <span className="inline-flex items-center gap-1">
             <span className="font-bold text-amber-300">5</span>
-            Neto con ventaja (amarillo)
+            Bruto con ventaja (amarillo)
           </span>
         </div>
         {hasPar ? (
           <p>
-            Cada hoyo muestra el <strong>neto</strong> (bruto menos ventajas del
-            match). OUT / IN / TOT = <strong>neto vs par</strong> (+5, E, −2).
+            Cada hoyo muestra el <strong>bruto</strong> (igual que reportes y
+            tarjeta). OUT / IN / TOT = <strong>neto vs par</strong> (+5, E, −2).
             Número en <strong className="text-amber-300">amarillo</strong> =
-            recibió golpe de ventaja en ese hoyo.
+            recibió golpe de ventaja en ese hoyo (el neto se usa para bola
+            baja/alta y puntos del match).
           </p>
         ) : null}
       </div>
