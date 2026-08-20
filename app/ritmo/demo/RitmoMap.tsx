@@ -221,7 +221,10 @@ export function RitmoMap({
         marker.on("click", () => onSelectGroupRef.current?.(g.id));
       });
 
-      // Marcadores de marshals (GPS real, iniciales).
+      // Marcadores de marshals (GPS real, iniciales) — 50% del tamaño original (32→16).
+      const M_DOT = 16;
+      const M_BORDER = 2;
+      const M_FONT = 7;
       marshals.forEach((m) => {
         L.marker([m.lat, m.lon], {
           icon: L.divIcon({
@@ -229,19 +232,19 @@ export function RitmoMap({
             html: `
               <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative;" title="${m.name.replace(/"/g, "&quot;")}">
                 <div style="
-                  width:32px; height:32px; border-radius:50%;
+                  width:${M_DOT}px; height:${M_DOT}px; border-radius:50%;
                   background:#2563eb;
-                  border:3px solid #fff;
-                  box-shadow:0 0 0 2px rgba(37,99,235,0.55), 0 2px 10px rgba(0,0,0,0.7);
+                  border:${M_BORDER}px solid #fff;
+                  box-shadow:0 0 0 1px rgba(37,99,235,0.55), 0 1px 4px rgba(0,0,0,0.7);
                   display:flex; align-items:center; justify-content:center;
-                  color:#fff; font-weight:800; font-size:11px;
+                  color:#fff; font-weight:800; font-size:${M_FONT}px;
                   font-family:Arial,sans-serif;
                   letter-spacing:-0.5px;
                 ">${m.initials}</div>
               </div>
             `,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
+            iconSize: [M_DOT, M_DOT],
+            iconAnchor: [M_DOT / 2, M_DOT / 2],
           }),
           keyboard: false,
           interactive: false,
