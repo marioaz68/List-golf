@@ -56,6 +56,79 @@ const HOYO_COLORS = [
   "#FFAB40","#EEFF41","#FF6E40","#69F0AE","#FFFF8D","#FFD180",
 ];
 
+/** Distancia aproximada en metros entre dos lat/lon (plano local). */
+function approxMeters(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number }
+): number {
+  const dLat = (a.lat - b.lat) * 111_320;
+  const cos = Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180);
+  const dLon = (a.lon - b.lon) * 111_320 * cos;
+  return Math.hypot(dLat, dLon);
+}
+
+/**
+ * Si varios puntos caen casi en el mismo sitio, los abre en un círculo
+ * pequeño alrededor del centro (siguen juntos, pero se distinguen).
+ */
+function spiderfyPositions<T extends { lat: number; lon: number }>(
+  items: T[],
+  /** Umbral en metros para considerar "encimados". */
+  overlapMeters = 12,
+  /** Radio base del abanico en metros. */
+  baseRadiusMeters = 10
+): Array<T & { displayLat: number; displayLon: number }> {
+  if (items.length === 0) return [];
+
+  const used = new Set<number>();
+  const clusters: number[][] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    if (used.has(i)) continue;
+    const cluster = [i];
+    used.add(i);
+    // BFS: todo lo que esté cerca de alguien del cluster.
+    for (let qi = 0; qi < cluster.length; qi++) {
+      const a = items[cluster[qi]];
+      for (let j = 0; j < items.length; j++) {
+        if (used.has(j)) continue;
+        if (approxMeters(a, items[j]) <= overlapMeters) {
+          used.add(j);
+          cluster.push(j);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+
+  const out: Array<T & { displayLat: number; displayLon: number }> = [];
+  for (const idxs of clusters) {
+    if (idxs.length === 1) {
+      const it = items[idxs[0]];
+      out.push({ ...it, displayLat: it.lat, displayLon: it.lon });
+      continue;
+    }
+    const n = idxs.length;
+    const cLat = idxs.reduce((s, i) => s + items[i].lat, 0) / n;
+    const cLon = idxs.reduce((s, i) => s + items[i].lon, 0) / n;
+    // Un poco más de radio si hay muchos, para que no se toquen.
+    const radiusM = baseRadiusMeters + Math.max(0, n - 2) * 3;
+    const cosLat = Math.cos((cLat * Math.PI) / 180) || 1e-6;
+    for (let k = 0; k < n; k++) {
+      const it = items[idxs[k]];
+      const angle = (2 * Math.PI * k) / n - Math.PI / 2;
+      const dLat = (radiusM * Math.sin(angle)) / 111_320;
+      const dLon = (radiusM * Math.cos(angle)) / (111_320 * cosLat);
+      out.push({
+        ...it,
+        displayLat: cLat + dLat,
+        displayLon: cLon + dLon,
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * Mapa rotado 90° con CSS para que el eje largo del campo quede horizontal
  * y aproveche mejor la pantalla landscape. El contenido visible (markers,
@@ -172,6 +245,38 @@ export function RitmoMap({
       const DOT_FONT = 7;
       const RING = 15;
       const RING_OFF = Math.round((RING - DOT) / 2);
+
+      // Si grupos/marshals se enciman, abrirlos en abanico (juntos pero visibles).
+      type PlotPt =
+        | { kind: "group"; key: string; lat: number; lon: number; g: GroupDot }
+        | {
+            kind: "marshal";
+            key: string;
+            lat: number;
+            lon: number;
+            m: MarshalDot;
+          };
+      const plotPts: PlotPt[] = [
+        ...groups.map((g) => ({
+          kind: "group" as const,
+          key: `g:${g.id}`,
+          lat: g.lat,
+          lon: g.lon,
+          g,
+        })),
+        ...marshals.map((m) => ({
+          kind: "marshal" as const,
+          key: `m:${m.id}`,
+          lat: m.lat,
+          lon: m.lon,
+          m,
+        })),
+      ];
+      const spread = spiderfyPositions(plotPts);
+      const posByKey = new Map(
+        spread.map((p) => [p.key, { lat: p.displayLat, lon: p.displayLon }])
+      );
+
       groups.forEach((g) => {
         const isBlocker = g.role === "blocker";
         const isBlocked = g.role === "blocked";
@@ -193,7 +298,8 @@ export function RitmoMap({
           ? `box-shadow:0 0 0 1px rgba(255,255,255,0.95), 0 0 0 2px rgba(59,130,246,0.85);`
           : "box-shadow:0 1px 3px rgba(0,0,0,0.7);";
 
-        const marker = L.marker([g.lat, g.lon], {
+        const pos = posByKey.get(`g:${g.id}`) ?? { lat: g.lat, lon: g.lon };
+        const marker = L.marker([pos.lat, pos.lon], {
           icon: L.divIcon({
             className: "",
             html: `
@@ -226,7 +332,8 @@ export function RitmoMap({
       const M_BORDER = 2;
       const M_FONT = 7;
       marshals.forEach((m) => {
-        L.marker([m.lat, m.lon], {
+        const pos = posByKey.get(`m:${m.id}`) ?? { lat: m.lat, lon: m.lon };
+        L.marker([pos.lat, pos.lon], {
           icon: L.divIcon({
             className: "",
             html: `
