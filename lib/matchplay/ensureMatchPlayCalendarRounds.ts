@@ -129,12 +129,14 @@ export async function syncPairingGroupTeeTimes(
   if (!groups?.length) return;
 
   const base = parseHHMM(startTime) ?? 7 * 60;
-  for (const g of groups) {
-    const n = Number(g.group_no ?? 1);
+  // Índice denso 0..n-1 (no group_no-1): si hay huecos en group_no
+  // (p. ej. falta el match #1), la primera salida sigue siendo start_time.
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i]!;
     const tee_time =
       startType === "shotgun"
         ? formatHHMM(base)
-        : formatHHMM(base + Math.max(0, n - 1) * intervalMinutes);
+        : formatHHMM(base + i * intervalMinutes);
     await admin.from("pairing_groups").update({ tee_time }).eq("id", g.id);
   }
 }

@@ -556,9 +556,9 @@ async function recalcStartsForRound(supabase: any, round_id: string) {
     if (baseMinutes == null) return;
     if (interval == null || !Number.isFinite(interval) || interval <= 0) return;
 
-    for (const g of list) {
-      const groupNo = Number(g.group_no);
-      const tee_time = formatHHMM(baseMinutes + (groupNo - 1) * interval);
+    for (let i = 0; i < list.length; i++) {
+      const g = list[i]!;
+      const tee_time = formatHHMM(baseMinutes + i * interval);
 
       const { error } = await supabase
         .from("pairing_groups")
@@ -672,9 +672,9 @@ async function _recalculateTeeTimes(formData: FormData) {
 
   const list = (groups ?? []) as any[];
 
-  for (const g of list) {
-    const groupNo = Number(g.group_no);
-    const tee_time = formatHHMM(baseMinutes + (groupNo - 1) * interval);
+  for (let i = 0; i < list.length; i++) {
+    const g = list[i]!;
+    const tee_time = formatHHMM(baseMinutes + i * interval);
 
     const { error } = await supabase
       .from("pairing_groups")

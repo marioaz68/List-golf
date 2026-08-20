@@ -671,6 +671,29 @@ async function loadTeeTimesByRound(
     });
   }
 
+  // Alinea también por position_no del cuadro: si el group_no del tee-sheet
+  // no coincide con el slot del bracket (hueco por BYE/pendiente), el fallback
+  // `${round}-${position}` debe apuntar al grupo real de esas parejas.
+  const { data: matches } = await admin
+    .from("matchplay_matches")
+    .select("round_no, position_no, top_pair_id, bottom_pair_id")
+    .eq("tournament_id", tournamentId)
+    .not("top_pair_id", "is", null)
+    .not("bottom_pair_id", "is", null);
+
+  for (const m of matches ?? []) {
+    const roundNo = Number(m.round_no);
+    const pos = Number(m.position_no);
+    if (!Number.isFinite(roundNo) || !Number.isFinite(pos)) continue;
+    const top = m.top_pair_id != null ? String(m.top_pair_id) : "";
+    const bot = m.bottom_pair_id != null ? String(m.bottom_pair_id) : "";
+    if (!top || !bot) continue;
+    const [a, b] = [top, bot].sort();
+    const info = byTeamPair.get(`${roundNo}:${a}|${b}`);
+    if (!info) continue;
+    byRoundPosition.set(`${roundNo}-${pos}`, info);
+  }
+
   return { byRoundPosition, byTeamPair };
 }
 

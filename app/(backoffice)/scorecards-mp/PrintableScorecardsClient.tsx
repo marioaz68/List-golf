@@ -32,19 +32,26 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
   });
 
   const filteredMp = useMemo(() => {
-    return bundle.matchPlayCards.filter((c) => {
-      if (roundFilter !== "all" && c.roundNo !== roundFilter) return false;
-      if (kindFilter === "stroke_aggregate") return false;
-      if (
-        kindFilter === "main" &&
-        c.kind !== "main" &&
-        c.kind !== "third_place"
-      )
-        return false;
-      if (kindFilter === "consolation_mp" && c.kind !== "consolation_mp")
-        return false;
-      return true;
-    });
+    return bundle.matchPlayCards
+      .filter((c) => {
+        if (roundFilter !== "all" && c.roundNo !== roundFilter) return false;
+        if (kindFilter === "stroke_aggregate") return false;
+        if (
+          kindFilter === "main" &&
+          c.kind !== "main" &&
+          c.kind !== "third_place"
+        )
+          return false;
+        if (kindFilter === "consolation_mp" && c.kind !== "consolation_mp")
+          return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const ta = a.teeTime ?? "99:99";
+        const tb = b.teeTime ?? "99:99";
+        if (ta !== tb) return ta.localeCompare(tb);
+        return (a.groupNo ?? a.positionNo) - (b.groupNo ?? b.positionNo);
+      });
   }, [bundle.matchPlayCards, roundFilter, kindFilter]);
 
   const filteredStroke = useMemo(() => {
