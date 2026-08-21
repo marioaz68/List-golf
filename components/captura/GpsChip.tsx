@@ -2,11 +2,15 @@
 
 /**
  * Chip GPS para jugador/caddie en Mini App de captura.
- * Misma UX que MarshalGpsChip: tocar para encender/apagar, auto-start si
- * el permiso ya está granted, pings a POST /api/captura/position.
  *
- * Nota: el navegador solo manda GPS con la pestaña abierta. Con pantalla
- * bloqueada, Live Location de Telegram sigue siendo el respaldo de 8 h.
+ * - Tocar = encender / apagar.
+ * - Queda “armado” ~8 h en localStorage para reabrir sola al volver a captura.
+ * - Mientras la Mini App esté abierta (aunque cambies de pantalla dentro),
+ *   manda pings a POST /api/captura/position para el ritmo del campo.
+ *
+ * Límite del navegador/iOS: con pantalla bloqueada o Mini App cerrada,
+ * watchPosition se suspende. Para GPS real de 8 h en segundo plano hace
+ * falta Live Location de Telegram en el chat del bot.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,6 +20,8 @@ const MIN_DELTA_M = 8;
 const HIGH_ACCURACY = true;
 const MAX_AGE_MS = 10_000;
 const TIMEOUT_MS = 15_000;
+/** Tiempo que recordamos “GPS armado” entre aperturas de captura. */
+const ARMED_TTL_MS = 8 * 60 * 60 * 1000;
 
 type ChipState = "off" | "asking" | "on" | "error";
 
@@ -30,6 +36,37 @@ function storageKey(args: {
       ? `e=${args.entryId}`
       : "anon";
   return `lg.gps.${args.groupId ?? "_"}.${a}`;
+}
+
+function readArmed(key: string): { armed: boolean; off: boolean } {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === "off") return { armed: false, off: true };
+    if (!raw) return { armed: false, off: false };
+    if (raw === "1") return { armed: true, off: false };
+    const until = Number(raw);
+    if (Number.isFinite(until) && until > Date.now()) {
+      return { armed: true, off: false };
+    }
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+  return { armed: false, off: false };
+}
+
+function writeArmed(key: string, on: boolean) {
+  try {
+    if (on) {
+      localStorage.setItem(key, String(Date.now() + ARMED_TTL_MS));
+      sessionStorage.setItem(key, "1");
+    } else {
+      localStorage.setItem(key, "off");
+      sessionStorage.setItem(key, "off");
+    }
+  } catch {
+    // ignore
+  }
 }
 
 function distM(
@@ -72,6 +109,7 @@ export default function GpsChip({
   const lastSentAtRef = useRef<number>(0);
   const lastSentPosRef = useRef<{ lat: number; lon: number } | null>(null);
   const inFlightRef = useRef<boolean>(false);
+  const wantOnRef = useRef(false);
 
   const key = storageKey({ groupId, entryId, caddieId });
   const canSend = Boolean(entryId || caddieId);
@@ -126,9 +164,13 @@ export default function GpsChip({
       setState("error");
       return;
     }
+    // Evita watches duplicados al rearmar por visibility.
+    stopWatching();
+    wantOnRef.current = true;
     setState("asking");
     const id = navigator.geolocation.watchPosition(
       (pos) => {
+        if (!wantOnRef.current) return;
         setState("on");
         const { latitude: lat, longitude: lon, accuracy } = pos.coords;
         const now = Date.now();
@@ -140,8 +182,9 @@ export default function GpsChip({
         }
       },
       (err) => {
+        if (!wantOnRef.current) return;
         if (err.code === 1) setState("error");
-        else if (state !== "on") setState("error");
+        else setState("error");
       },
       {
         enableHighAccuracy: HIGH_ACCURACY,
@@ -150,39 +193,31 @@ export default function GpsChip({
       }
     );
     watchIdRef.current = id;
-  }, [canSend, sendPing, state]);
+  }, [canSend, sendPing, stopWatching]);
 
   const toggle = useCallback(() => {
     if (state === "on" || state === "asking") {
+      wantOnRef.current = false;
       stopWatching();
       setState("off");
-      try {
-        sessionStorage.setItem(key, "off");
-      } catch {
-        // ignore
-      }
+      writeArmed(key, false);
       return;
     }
-    try {
-      sessionStorage.setItem(key, "1");
-    } catch {
-      // ignore
-    }
+    writeArmed(key, true);
     startWatching();
   }, [state, key, startWatching, stopWatching]);
 
+  // Auto-start + rearmar al volver a la pestaña (pantalla encendida de nuevo).
   useEffect(() => {
     if (typeof window === "undefined" || !canSend) return;
 
     let cancelled = false;
 
     async function tryAutoStart() {
+      const { armed, off } = readArmed(key);
       let armedBySession = false;
-      let offBySession = false;
       try {
-        const flag = sessionStorage.getItem(key);
-        armedBySession = flag === "1";
-        offBySession = flag === "off";
+        armedBySession = sessionStorage.getItem(key) === "1";
       } catch {
         armedBySession = false;
       }
@@ -207,17 +242,31 @@ export default function GpsChip({
       }
 
       if (cancelled) return;
-      if (offBySession) return;
-      if (granted || armedBySession) {
-        startWatching();
-      } else if (autoStart) {
-        // Sin permiso previo: no forzar prompt (requiere gesto). Queda OFF azul.
+      if (off) return;
+      if (granted || armed || armedBySession || autoStart) {
+        if (granted || armed || armedBySession) startWatching();
       }
     }
 
     void tryAutoStart();
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!wantOnRef.current) {
+        const { armed, off } = readArmed(key);
+        if (off || !armed) return;
+      }
+      if (wantOnRef.current || readArmed(key).armed) {
+        startWatching();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
       stopWatching();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,12 +287,12 @@ export default function GpsChip({
   const title = disabled
     ? "Abre la captura como jugador o caddie para activar GPS"
     : state === "on"
-      ? `GPS activo${hoyo != null ? ` · hoyo ${hoyo}` : ""} — tócalo para apagar`
+      ? `GPS activo para ritmo${hoyo != null ? ` · hoyo ${hoyo}` : ""}. Mantén la Mini App abierta. Para 8 h con pantalla bloqueada: Live Location 8 h en el bot de Telegram. Toca para apagar.`
       : state === "asking"
         ? "Pidiendo permiso de ubicación..."
         : state === "error"
           ? "Permiso denegado o GPS no disponible. Toca para reintentar."
-          : "GPS apagado — tócalo para compartir tu posición en el mapa de ritmo";
+          : "GPS apagado — tócalo para mandar tu posición al ritmo del campo (~8 h mientras uses captura)";
 
   return (
     <button
@@ -256,13 +305,22 @@ export default function GpsChip({
       title={title}
     >
       <span className="font-extrabold tracking-tight">{label}</span>
-      {state === "on" && hoyo != null ? (
-        <span className="ml-0.5 rounded bg-emerald-100 px-1 text-[10px] font-bold text-emerald-800">
-          H{hoyo}
-        </span>
+      {state === "on" ? (
+        <>
+          <span className="text-[10px] font-bold text-emerald-800">ON</span>
+          {hoyo != null ? (
+            <span className="ml-0.5 rounded bg-emerald-100 px-1 text-[10px] font-bold text-emerald-800">
+              H{hoyo}
+            </span>
+          ) : null}
+        </>
       ) : state === "off" ? (
         <span className="text-[10px] font-bold opacity-80">OFF</span>
-      ) : null}
+      ) : state === "asking" ? (
+        <span className="text-[10px] font-bold">…</span>
+      ) : (
+        <span className="text-[10px] font-bold">!</span>
+      )}
     </button>
   );
 }
