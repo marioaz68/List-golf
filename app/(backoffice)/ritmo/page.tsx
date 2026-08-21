@@ -30,6 +30,7 @@ import {
 } from "@/lib/ritmo/opsDay";
 import { loadRoundIdsWithCaptureActivityToday } from "@/lib/ritmo/loadCaptureLagGroups";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
 
 export const dynamic = "force-dynamic";
@@ -559,6 +560,8 @@ export default async function RitmoPage({
     })
   ).length;
 
+  const marshals = await loadMarshalPositions(admin, tournamentId);
+
   return (
     <div style={{ height: "calc(100dvh - 90px)", minHeight: 360 }}>
       <RitmoLiveView
@@ -575,6 +578,7 @@ export default async function RitmoPage({
         roundDate={round.round_date}
         groups={allGroups}
         onCourseCount={onCourseCount}
+        marshals={marshals}
         computedAtISO={computedAtISO}
         mapUnsupported={mapUnsupported}
       />

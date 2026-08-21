@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { RitmoMap, type GroupDot } from "@/app/ritmo/demo/RitmoMap";
+import { RitmoMap, type GroupDot, type MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
@@ -80,6 +80,8 @@ interface Props {
   groups: LiveGroup[];
   /** Grupos que ya salieron / capturan / GPS en la ronda elegida. */
   onCourseCount: number;
+  /** Marshals con GPS reciente (mismas bolas azules que el panel marshal). */
+  marshals?: MarshalDot[];
   /** ISO del momento en que el servidor calculó estos datos. */
   computedAtISO: string;
   /** true cuando el campo del torneo no está soportado por el mapa (no CCQ). */
@@ -130,6 +132,7 @@ export default function RitmoLiveView({
   roundDate,
   groups,
   onCourseCount,
+  marshals = [],
   computedAtISO,
   mapUnsupported,
 }: Props) {
@@ -463,6 +466,13 @@ export default function RitmoLiveView({
           <SummaryChip color="#22c55e" n={gpsCounts.live} label="en vivo" />
           <SummaryChip color="#f59e0b" n={gpsCounts.stale} label="GPS viejo" />
           <SummaryChip color="#6b7280" n={gpsCounts.none} label="sin señal" />
+          {marshals.length > 0 ? (
+            <SummaryChip
+              color="#2563eb"
+              n={marshals.length}
+              label="marshal GPS"
+            />
+          ) : null}
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button
@@ -695,6 +705,7 @@ export default function RitmoLiveView({
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <RitmoMap
         groups={mapGroups}
+        marshals={marshals}
         selectedId={selectedId}
         showHoleLabels={false}
         rotate={vp.shouldRotateMap}
@@ -718,13 +729,15 @@ export default function RitmoLiveView({
         }}
       >
         <div style={{ fontWeight: 800, marginBottom: 4 }}>
-          Mapa: {mapGroups.length} grupo{mapGroups.length === 1 ? "" : "s"} ·{" "}
-          {listGroups.length} en lista
+          Mapa: {mapGroups.length} grupo{mapGroups.length === 1 ? "" : "s"}
+          {marshals.length > 0
+            ? ` · ${marshals.length} marshal${marshals.length === 1 ? "" : "s"}`
+            : ""}{" "}
+          · {listGroups.length} en lista
         </div>
         <div>
-          <b>G1, G3…</b> = salidas reales. Borde punteado = posición por captura
-          (sin GPS). Los números pequeños del campo ya no se muestran para evitar
-          confundirlos con grupos.
+          <b>G1, G3…</b> = salidas. Azules con iniciales = marshals GPS. Borde
+          punteado = posición por captura (sin GPS).
         </div>
       </div>
       {mapUnsupported ? (
