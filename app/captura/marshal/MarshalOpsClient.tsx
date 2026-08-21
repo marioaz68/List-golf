@@ -168,14 +168,16 @@ interface Props {
   tg: string;
   initial: MarshalOpsPayload;
   initialTournamentId: string | null;
+  initialTab?: Tab;
 }
 
 export default function MarshalOpsClient({
   tg,
   initial,
   initialTournamentId,
+  initialTab = "capturas",
 }: Props) {
-  const [tab, setTab] = useState<Tab>("capturas");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [data, setData] = useState<MarshalOpsPayload>({
     ...initial,
     rounds: initial.rounds ?? [],
@@ -184,6 +186,7 @@ export default function MarshalOpsClient({
   const [onlyProblems, setOnlyProblems] = useState(true);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [focusFromMapId, setFocusFromMapId] = useState<string | null>(null);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [roundOverride, setRoundOverride] = useState<string | null>(null);
 
@@ -271,9 +274,36 @@ export default function MarshalOpsClient({
   );
 
   const visible = useMemo(() => {
+    if (focusFromMapId) {
+      const hit = sorted.find((g) => g.id === focusFromMapId);
+      if (hit) {
+        const rest = onlyProblems
+          ? sorted.filter(
+              (g) => g.id !== focusFromMapId && isCaptureProblem(g.kind)
+            )
+          : sorted.filter((g) => g.id !== focusFromMapId);
+        return [hit, ...rest];
+      }
+    }
     if (!onlyProblems) return sorted;
     return sorted.filter((g) => isCaptureProblem(g.kind));
-  }, [sorted, onlyProblems]);
+  }, [sorted, onlyProblems, focusFromMapId]);
+
+  useEffect(() => {
+    if (!focusFromMapId) return;
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`marshal-cap-${focusFromMapId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [focusFromMapId, tab]);
+
+  const openGroupFromMap = useCallback((groupId: string) => {
+    setFocusFromMapId(groupId);
+    setExpandedId(groupId);
+    setOnlyProblems(false);
+    setTab("capturas");
+  }, []);
 
   const problemN = useMemo(
     () => sorted.filter((g) => isCaptureProblem(g.kind)).length,
@@ -499,14 +529,19 @@ export default function MarshalOpsClient({
               visible.map((g, idx) => {
                 const meta = KIND_META[g.kind];
                 const expanded = expandedId === g.id;
+                const capturaFromMarshal = `${g.capturaHref}${
+                  g.capturaHref.includes("?") ? "&" : "?"
+                }marshal_tg=${encodeURIComponent(tg)}&from=marshal`;
                 return (
                   <div
                     key={g.id}
+                    id={`marshal-cap-${g.id}`}
                     style={{
                       marginBottom: 12,
                       borderRadius: 14,
                       border: `1px solid ${meta.color}55`,
-                      background: "#0b1220",
+                      background:
+                        focusFromMapId === g.id ? "#12203a" : "#0b1220",
                       overflow: "hidden",
                     }}
                   >
@@ -662,7 +697,7 @@ export default function MarshalOpsClient({
                           }}
                         >
                           <Link
-                            href={g.capturaHref}
+                            href={capturaFromMarshal}
                             style={{
                               fontSize: 11,
                               fontWeight: 700,
@@ -713,6 +748,7 @@ export default function MarshalOpsClient({
             tournamentId={selectedTournamentId}
             roundId={selectedRoundId}
             active
+            onOpenGroup={openGroupFromMap}
           />
         </div>
       ) : (

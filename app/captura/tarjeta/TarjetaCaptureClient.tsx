@@ -554,11 +554,35 @@ export default function TarjetaCaptureClient({
   // UUID del caddie en el URL (?caddie=...) para el chip GPS.
   // meta.myEntryId ya viene resuelto del query ?me=...
   const [caddieIdParam, setCaddieIdParam] = useState<string | null>(null);
+  const [ritmoHref, setRitmoHref] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
     setCaddieIdParam(sp.get("caddie")?.trim() || null);
-  }, []);
+    const marshalTg = sp.get("marshal_tg")?.trim() || null;
+    const from = sp.get("from")?.trim() || null;
+    const tid =
+      sp.get("tournament_id")?.trim() || meta.tournamentId || null;
+    const rid = sp.get("round_id")?.trim() || null;
+    if (marshalTg) {
+      setRitmoHref(
+        `/captura/marshal?tg=${encodeURIComponent(marshalTg)}${
+          tid ? `&tournament_id=${encodeURIComponent(tid)}` : ""
+        }&tab=ritmo`
+      );
+    } else if (
+      tid &&
+      (from === "ritmo" || from === "marshal" || sp.get("tournament_id"))
+    ) {
+      setRitmoHref(
+        `/ritmo?tournament_id=${encodeURIComponent(tid)}${
+          rid ? `&round_id=${encodeURIComponent(rid)}` : ""
+        }`
+      );
+    } else {
+      setRitmoHref(null);
+    }
+  }, [meta.tournamentId]);
   const [scoresByEntry, setScoresByEntry] = useState<ScoresByEntry>(() =>
     scoresFromPlayers(initial.players)
   );
@@ -1295,6 +1319,14 @@ export default function TarjetaCaptureClient({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {ritmoHref ? (
+                <Link
+                  href={ritmoHref}
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-300/60 bg-emerald-400/20 px-2 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-400/30"
+                >
+                  🗺️ Ritmo
+                </Link>
+              ) : null}
               <GpsChip
                 entryId={meta.myEntryId}
                 caddieId={caddieIdParam}

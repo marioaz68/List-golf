@@ -428,16 +428,16 @@ export default function SeguimientoCapturaLive({
                 }`}
                 style={{
                   fontSize: 12,
-                  fontWeight: 700,
-                  padding: "6px 12px",
+                  fontWeight: 800,
+                  padding: "8px 14px",
                   borderRadius: 8,
-                  background: "#1e293b",
-                  color: "#e2e8f0",
+                  background: "#065f46",
+                  color: "#ecfdf5",
                   textDecoration: "none",
-                  border: "1px solid #334155",
+                  border: "1px solid #10b981",
                 }}
               >
-                Mapa ritmo
+                🗺️ Ritmo del campo
               </Link>
             ) : null}
             <button

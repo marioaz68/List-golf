@@ -299,7 +299,7 @@ export async function loadCaptureLagGroupsForRound(
       paceDelayMinutes: lag.paceDelayMinutes,
       reason: lag.reason,
       priority: lag.priority,
-      capturaHref: `/captura/grupo?group_id=${encodeURIComponent(g.id)}`,
+      capturaHref: `/captura/grupo?group_id=${encodeURIComponent(g.id)}&tournament_id=${encodeURIComponent(args.tournamentId)}&round_id=${encodeURIComponent(args.roundId)}&from=ritmo`,
       scoreEntryHref: buildScoreEntryHref({
         tournamentId: args.tournamentId,
         entryId: firstEntry,

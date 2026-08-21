@@ -711,6 +711,24 @@ export default function GrupoCaptureClient({
   const searchParams = useSearchParams();
   const backParam = searchParams.get("back");
   const backQs = backParam ? `&back=${encodeURIComponent(backParam)}` : "";
+  // Vuelta a mapa de ritmo (comité) o panel marshal (mini app).
+  const marshalTg = searchParams.get("marshal_tg")?.trim() || null;
+  const fromParam = searchParams.get("from")?.trim() || null;
+  const ritmoTournamentId =
+    searchParams.get("tournament_id")?.trim() || meta.tournamentId || null;
+  const ritmoRoundId = searchParams.get("round_id")?.trim() || null;
+  const ritmoHref = marshalTg
+    ? `/captura/marshal?tg=${encodeURIComponent(marshalTg)}${
+        ritmoTournamentId
+          ? `&tournament_id=${encodeURIComponent(ritmoTournamentId)}`
+          : ""
+      }&tab=ritmo`
+    : ritmoTournamentId
+      ? `/ritmo?tournament_id=${encodeURIComponent(ritmoTournamentId)}${
+          ritmoRoundId ? `&round_id=${encodeURIComponent(ritmoRoundId)}` : ""
+        }`
+      : null;
+  const showRitmoBtn = Boolean(ritmoHref);
   // UUIDs del URL para el chip GPS — ?me=<entry_id> | ?caddie=<caddie_id>
   const meEntryIdParam = searchParams.get("me");
   const caddieIdParam = searchParams.get("caddie");
@@ -1258,6 +1276,14 @@ export default function GrupoCaptureClient({
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <BackButton fallbackHref={scoreEntryBackHref} />
+              {showRitmoBtn && ritmoHref ? (
+                <Link
+                  href={ritmoHref}
+                  className="rounded-md border border-emerald-500 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-900 hover:bg-emerald-100"
+                >
+                  🗺️ Ritmo del campo
+                </Link>
+              ) : null}
               <GpsChip
                 entryId={meEntryIdParam}
                 caddieId={caddieIdParam}
@@ -1280,7 +1306,19 @@ export default function GrupoCaptureClient({
                 🍔 Menú
               </Link>
               <Link
-                href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}`}
+                href={`/captura/tarjeta?group_id=${meta.groupId}${backQs}${
+                  ritmoTournamentId
+                    ? `&tournament_id=${encodeURIComponent(ritmoTournamentId)}`
+                    : ""
+                }${
+                  ritmoRoundId
+                    ? `&round_id=${encodeURIComponent(ritmoRoundId)}`
+                    : ""
+                }${fromParam ? `&from=${encodeURIComponent(fromParam)}` : ""}${
+                  marshalTg
+                    ? `&marshal_tg=${encodeURIComponent(marshalTg)}`
+                    : ""
+                }`}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Tarjeta completa →

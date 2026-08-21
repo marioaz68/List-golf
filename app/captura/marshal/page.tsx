@@ -26,6 +26,11 @@ export default async function MarshalPage(props: {
   const sp = props.searchParams ? await props.searchParams : {};
   const tg = getParam(sp, "tg");
   const tournamentId = getParam(sp, "tournament_id");
+  const tabParam = getParam(sp, "tab");
+  const initialTab =
+    tabParam === "ritmo" || tabParam === "resultados" || tabParam === "capturas"
+      ? tabParam
+      : "capturas";
 
   const admin = tryCreateAdminClient();
   const marshal = admin && tg ? await resolveMarshal(admin, tg) : null;
@@ -66,6 +71,7 @@ export default async function MarshalPage(props: {
         tg={tg}
         initial={initial}
         initialTournamentId={tournamentId || initial.selectedTournamentId}
+        initialTab={initialTab as "capturas" | "ritmo" | "resultados"}
       />
     </Suspense>
   );
