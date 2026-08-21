@@ -8,6 +8,7 @@ import {
   CALCUTA_SUNDAY_SCHEDULE,
   CALCUTA_TEE_INTERVAL_MINUTES,
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
+import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
 
 export const STROKE_AGG_NOTES_PREFIX = "STROKE AGREGADO · ";
 
