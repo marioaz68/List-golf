@@ -25,6 +25,9 @@ export async function recomputeReportHandicaps(formData: FormData) {
   const result = await recomputeTournamentHandicaps(admin, tournament_id);
 
   revalidatePath("/reports");
+  revalidatePath("/scorecards-mp");
+  revalidatePath("/entries");
+  revalidatePath("/matchplay");
 
   const params = new URLSearchParams({
     tournament_id,

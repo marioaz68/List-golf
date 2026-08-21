@@ -1398,6 +1398,9 @@ export async function updateEntryHandicapIndexInline(formData: FormData) {
   revalidatePath("/entries");
   revalidatePath("/comite-handicap");
   revalidatePath("/players");
+  revalidatePath("/scorecards-mp");
+  revalidatePath("/matchplay");
+  revalidatePath(`/torneos/${tournament_id}`);
 
   return {
     ok: true,

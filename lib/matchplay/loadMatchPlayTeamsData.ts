@@ -89,6 +89,7 @@ function mapEntry(raw: RawEntry): MatchPlayEntryRow {
       last_name: player?.last_name ?? null,
       gender: (player?.gender?.toUpperCase() ?? "X") as "M" | "F" | "X",
       handicap_index: player?.handicap_index ?? null,
+      handicap_torneo: player?.handicap_torneo ?? null,
     },
     category_id: cat?.id ?? null,
     category_code: cat?.code ?? null,

@@ -159,8 +159,48 @@ export async function savePlayerAction(input: SavePlayerInput) {
         return { ok: false, message: error.message };
       }
 
+      // Si cambió el índice, alinear HI de torneo en inscripciones activas
+      // (sin override de comité) y recalcular PH para que impresión lo tome.
+      const hiChanged =
+        Object.prototype.hasOwnProperty.call(payload, "handicap_index") ||
+        Object.prototype.hasOwnProperty.call(payload, "handicap_torneo");
+      if (hiChanged) {
+        const newHi =
+          toNullableNumber(payload.handicap_torneo) ??
+          toNullableNumber(payload.handicap_index);
+        if (newHi != null) {
+          const { data: entries } = await supabase
+            .from("tournament_entries")
+            .select("id, tournament_id, playing_handicap_override")
+            .eq("player_id", playerId)
+            .neq("status", "cancelled");
+          const byTournament = new Map<string, string[]>();
+          for (const e of entries ?? []) {
+            if (e.playing_handicap_override != null) continue;
+            const tid = String(e.tournament_id);
+            const list = byTournament.get(tid) ?? [];
+            list.push(String(e.id));
+            byTournament.set(tid, list);
+          }
+          for (const [tid, ids] of byTournament) {
+            await supabase
+              .from("tournament_entries")
+              .update({ handicap_index: newHi })
+              .in("id", ids);
+            const { recomputeTournamentHandicaps } = await import(
+              "@/lib/handicap/recomputeTournamentHandicaps"
+            );
+            await recomputeTournamentHandicaps(supabase, tid, {
+              entryIds: ids,
+            });
+          }
+        }
+      }
+
       revalidatePath("/players");
       revalidatePath("/entries");
+      revalidatePath("/scorecards-mp");
+      revalidatePath("/matchplay");
 
       return {
         ok: true,

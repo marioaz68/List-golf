@@ -172,6 +172,8 @@ export async function setEntryPlayingHandicapOverride(formData: FormData) {
   }
 
   revalidatePath("/matchplay");
+  revalidatePath("/scorecards-mp");
+  revalidatePath("/entries");
   backTo(tournament_id, {
     whs_status: "ok",
     whs_message: "Override manual aplicado.",
@@ -206,6 +208,8 @@ export async function clearEntryPlayingHandicapOverride(formData: FormData) {
   await recomputeMatchplayHandicapsInternal(tournament_id);
 
   revalidatePath("/matchplay");
+  revalidatePath("/scorecards-mp");
+  revalidatePath("/entries");
   backTo(tournament_id, {
     whs_status: "ok",
     whs_message: "Override eliminado; PH recalculado automáticamente.",

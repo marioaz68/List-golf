@@ -5,6 +5,7 @@ import {
   resolveTournamentEntryHandicap,
   type EntryForHandicap,
 } from "@/lib/handicap/resolveTournamentEntryHandicap";
+import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
 import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { loadBracketView } from "@/lib/matchplay/loadBracketView";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
@@ -419,12 +420,12 @@ function entryPhRow(entry: MatchPlayEntryRow): MatchEntryPhRow {
     player: {
       gender: entry.player.gender,
       handicap_index: entry.player.handicap_index,
-      handicap_torneo: null,
+      handicap_torneo: entry.player.handicap_torneo ?? null,
     },
   };
 }
 
-/** PH en tarjeta impresa: override → WHS vivo (CH × %) → PH guardado. */
+/** PH en tarjeta impresa: override de comité → WHS vivo con HI actual → PH guardado. */
 function phForPrintableCard(
   entry: MatchPlayEntryRow,
   handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>
@@ -442,7 +443,10 @@ function phForPrintableCard(
     player: {
       gender: entry.player.gender,
       handicap_index: entry.player.handicap_index,
-      handicap_torneo: null,
+      // Incluir handicap_torneo para que un HI recién actualizado
+      // en el jugador se refleje en la impresión aunque la entry
+      // aún no se haya sincronizado.
+      handicap_torneo: entry.player.handicap_torneo ?? null,
     },
   };
   const calc = resolveTournamentEntryHandicap(payload, handicapCtx);
@@ -499,8 +503,8 @@ function teamToPrintablePlayers(
   const rows = entries.map((entry) => {
     const tee = resolveTee(entry);
     const gender = (entry.player.gender ?? "X") as "M" | "F" | "X";
-    // Impresión: prioriza cálculo WHS vivo (CH × %) para no imprimir PH
-    // desfasado respecto al handicap de torneo al 80 % del sistema.
+    // Impresión: WHS vivo con el HI actual (CH × %). Si el índice cambió,
+    // la tarjeta refleja el PH nuevo sin depender de un valor cacheado.
     const ph = phForPrintableCard(entry, handicapCtx);
     const hi = hiForMatchEntry(entryPhRow(entry));
     return {
@@ -791,8 +795,25 @@ function teeInfoForMatch(
   if (topPairId && bottomPairId) {
     const [a, b] = [String(topPairId), String(bottomPairId)].sort();
     const byTeams = teeMaps.byTeamPair.get(`${roundNo}:${a}|${b}`);
-    if (byTeams) return byTeams;
     const anyRound = teeMaps.byTeamPairAnyRound.get(`${a}|${b}`);
+    // Preferir la salida con hora / fecha más reciente (p. ej. rematch R2
+    // colocado en salidas R3 a las 07:00 gana sobre un grupo R2 vacío).
+    if (byTeams && anyRound) {
+      if (!byTeams.teeTime && anyRound.teeTime) return anyRound;
+      if (byTeams.teeTime && !anyRound.teeTime) return byTeams;
+      if ((anyRound.playDate ?? "") > (byTeams.playDate ?? "")) return anyRound;
+      if ((byTeams.playDate ?? "") > (anyRound.playDate ?? "")) return byTeams;
+      // Misma fecha: preferir la ronda de salidas distinta si trae hora.
+      if (
+        anyRound.roundNo != null &&
+        anyRound.roundNo !== roundNo &&
+        anyRound.teeTime
+      ) {
+        return anyRound;
+      }
+      return byTeams;
+    }
+    if (byTeams) return byTeams;
     if (anyRound) return anyRound;
   }
   return (
@@ -913,6 +934,15 @@ export async function loadPrintableMpScorecards(
     rules.handicap_allowance_pct != null
   ) {
     allowancePct = Number(rules.handicap_allowance_pct);
+  }
+
+  // Antes de armar tarjetas: recalcular CH/PH con el HI vigente del
+  // torneo. Así cualquier cambio de índice se refleja al imprimir
+  // (respetando overrides de comité).
+  try {
+    await recomputeTournamentHandicaps(admin, tournamentId);
+  } catch (err) {
+    console.error("[loadPrintableMpScorecards] recompute handicaps:", err);
   }
 
   const [layout, teamsData, handicapCtx, teeCtx, teeTimes, bracketView] =

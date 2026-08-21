@@ -4,6 +4,7 @@ export type MatchPlayEntryPlayer = {
   last_name: string | null;
   gender: "M" | "F" | "X" | null;
   handicap_index: number | null;
+  handicap_torneo?: number | null;
 };
 
 export type MatchPlayEntryRow = {
