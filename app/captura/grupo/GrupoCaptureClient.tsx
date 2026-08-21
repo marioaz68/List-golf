@@ -1262,6 +1262,8 @@ export default function GrupoCaptureClient({
                 entryId={meEntryIdParam}
                 caddieId={caddieIdParam}
                 groupId={meta.groupId}
+                label={caddieIdParam ? "CAD" : "GPS"}
+                autoStart
               />
               <Link
                 href={`/captura/menu?${[

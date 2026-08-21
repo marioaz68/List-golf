@@ -158,11 +158,18 @@ export default function MatchDetailModal({
   const [error, setError] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
 
   const fetchDetail = useCallback(
     async (opts?: { showSpinner?: boolean }) => {
       if (!matchId) return;
-      if (inFlightRef.current) return;
+      // Si ya hay un fetch en vuelo, marcamos pendiente y reintentamos al
+      // terminar. Sin esto, cada modificación de captura durante un refresh
+      // se perdía y la tarjeta quedaba desfasada (p.ej. Luis sin H14).
+      if (inFlightRef.current) {
+        pendingRefreshRef.current = true;
+        return;
+      }
       inFlightRef.current = true;
       if (opts?.showSpinner) setLoading(true);
       try {
@@ -196,6 +203,10 @@ export default function MatchDetailModal({
       } finally {
         inFlightRef.current = false;
         if (opts?.showSpinner) setLoading(false);
+        if (pendingRefreshRef.current) {
+          pendingRefreshRef.current = false;
+          void fetchDetail();
+        }
       }
     },
     [matchId, tournamentId]
@@ -226,11 +237,9 @@ export default function MatchDetailModal({
     void fetchDetail();
   }, [liveTick, open, matchId, fetchDetail]);
 
-  // Respaldo: para matches oficiales (no derivados) suscribimos al
-  // realtime de `matchplay_hole_results` por si el grid no está polling
-  // (puede pasar si los matches no son strokeLive, p.ej. matchplay sin
-  // captura rápida). El modal y el grid siguen coherentes porque el
-  // tick del padre dispara también el refetch del detalle.
+  // Realtime propio del modal: hole_scores (captura rápida / Calcutta) y
+  // matchplay_hole_results (marcador oficial). El tick del grid cubre el
+  // resto; esto evita depender solo del poll si una edición llega entre ticks.
   useEffect(() => {
     if (!open || !matchId) return;
     const supabase = createClient();
@@ -243,13 +252,18 @@ export default function MatchDetailModal({
         debounceRef.id = null;
         if (typeof document !== "undefined" && document.hidden) return;
         void fetchDetail();
-      }, 600);
+      }, 400);
     };
     const ch = supabase
       .channel(`mp-modal-${tournamentId}-${matchId}`)
       .on(
         "postgres_changes" as never,
         { event: "*", schema: "public", table: "matchplay_hole_results" },
+        scheduleRefresh
+      )
+      .on(
+        "postgres_changes" as never,
+        { event: "*", schema: "public", table: "hole_scores" },
         scheduleRefresh
       )
       .subscribe();

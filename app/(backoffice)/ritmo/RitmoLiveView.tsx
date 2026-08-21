@@ -506,45 +506,84 @@ export default function RitmoLiveView({
             label="marshal GPS"
           />
         </div>
-        {liveMarshals.length > 0 ? (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 4,
-              marginBottom: 8,
-            }}
-          >
-            {liveMarshals.map((m) => (
-              <span
-                key={m.id}
-                title={m.name}
+        {/* Mismo lugar que marshals: chips de grupos con GPS de jugador/caddie */}
+        {(() => {
+          const withGps = listGroups.filter(
+            (g) => g.gpsState === "live" || g.gpsState === "stale"
+          );
+          if (withGps.length === 0 && liveMarshals.length === 0) {
+            return (
+              <div
                 style={{
                   fontSize: 10,
-                  fontWeight: 700,
-                  padding: "2px 7px",
-                  borderRadius: 999,
-                  background: "#1e3a8a",
-                  color: "#dbeafe",
-                  border: "1px solid #2563eb",
+                  color: "#64748b",
+                  marginBottom: 8,
                 }}
               >
-                {m.initials}
-                {m.hoyo != null ? ` · H${m.hoyo}` : ""}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div
-            style={{
-              fontSize: 10,
-              color: "#64748b",
-              marginBottom: 8,
-            }}
-          >
-            Sin marshals con GPS reciente (&lt;90 min).
-          </div>
-        )}
+                Sin GPS de grupos ni marshals. El caddie/jugador activa el chip
+                GPS en captura (igual que marshals).
+              </div>
+            );
+          }
+          return (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                marginBottom: 8,
+                alignItems: "center",
+              }}
+            >
+              {withGps.map((g) => (
+                <span
+                  key={g.id}
+                  title={`${g.label} · ${g.gpsState === "live" ? "GPS en vivo" : "GPS viejo"}${g.hoyo != null ? ` · H${g.hoyo}` : ""}`}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    padding: "3px 8px",
+                    borderRadius: 999,
+                    background: g.gpsState === "live" ? "#064e3b" : "#78350f",
+                    color: g.gpsState === "live" ? "#a7f3d0" : "#fde68a",
+                    border: `1px solid ${g.gpsState === "live" ? "#10b981" : "#f59e0b"}`,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      scope: "one",
+                      tournament_id: tournamentId,
+                      group_id: g.id,
+                    });
+                    if (currentRoundId) params.set("round_id", currentRoundId);
+                    router.push(`/seguimiento-captura?${params.toString()}`);
+                  }}
+                >
+                  G{g.number}
+                  {g.hoyo != null ? ` · H${g.hoyo}` : ""}
+                </span>
+              ))}
+              {liveMarshals.map((m) => (
+                <span
+                  key={m.id}
+                  title={m.name}
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 7px",
+                    borderRadius: 999,
+                    background: "#1e3a8a",
+                    color: "#dbeafe",
+                    border: "1px solid #2563eb",
+                  }}
+                >
+                  {m.initials}
+                  {m.hoyo != null ? ` · H${m.hoyo}` : ""}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button
             type="button"

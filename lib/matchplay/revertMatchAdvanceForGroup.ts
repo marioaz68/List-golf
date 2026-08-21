@@ -95,11 +95,28 @@ export async function revertMatchAdvanceForGroup(
     .eq("bracket_id", bracket.id)
     .eq("round_no", currentRoundNo);
 
-  const realMatch = (candidateMatches ?? []).find(
+  let realMatch = (candidateMatches ?? []).find(
     (m) =>
       (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
       (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
   );
+
+  // Rematch reprogramado en otra ronda del calendario (p. ej. R2 jugado en día de R3).
+  if (!realMatch) {
+    const { data: anyRound } = await admin
+      .from("matchplay_matches")
+      .select(
+        "id, round_no, position_no, top_pair_id, bottom_pair_id, winner_pair_id, status, next_match_id"
+      )
+      .eq("bracket_id", bracket.id)
+      .in("status", ["scheduled", "in_progress", "completed"])
+      .order("round_no", { ascending: true });
+    realMatch = (anyRound ?? []).find(
+      (m) =>
+        (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
+        (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
+    );
+  }
   if (!realMatch?.id) {
     return {
       ok: true,

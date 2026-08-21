@@ -21,6 +21,7 @@ import Link from "next/link";
 
 import { formatPrice, ORDER_STATUS_LABELS, type DeliveryType, type FbVenue } from "@/lib/fb/types";
 import { iconForCategory, iconForMenuItem } from "@/lib/fb/icons";
+import GpsChip from "@/components/captura/GpsChip";
 
 interface MenuItem {
   id: string;
@@ -474,12 +475,24 @@ export default function MenuClient({
               {selectedVenue?.name ?? "Cargando…"}
             </div>
           </div>
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
-          >
-            ← Volver
-          </Link>
+          <div className="flex items-center gap-2">
+            {hasIdentity ? (
+              <GpsChip
+                entryId={meEntryId}
+                caddieId={caddieId}
+                groupId={null}
+                label={caddieId ? "CAD" : "GPS"}
+                autoStart
+                className="!text-[11px]"
+              />
+            ) : null}
+            <Link
+              href={backHref}
+              className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/20"
+            >
+              ← Volver
+            </Link>
+          </div>
         </header>
 
         {/* Selector de venue */}

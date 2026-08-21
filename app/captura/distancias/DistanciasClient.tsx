@@ -3964,6 +3964,11 @@ export default function DistanciasClient({
               entryId={searchParams.get("me") || searchParams.get("entry_id")}
               caddieId={searchParams.get("caddie") || searchParams.get("caddie_id")}
               groupId={searchParams.get("group_id")}
+              label={
+                searchParams.get("caddie") || searchParams.get("caddie_id")
+                  ? "CAD"
+                  : "GPS"
+              }
               autoStart
             />
           </div>

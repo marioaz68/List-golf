@@ -198,12 +198,15 @@ export async function closeMatchAndAdvanceForGroup(
     roundNo: currentRoundNo,
     topPairId,
     bottomPairId,
+    allowOtherRounds: true,
   });
   if (!realMatchRef) {
     return {
       ok: false,
       error:
-        `No hay partido en R${currentRoundNo} del cuadro (principal ni consolación) con estas dos parejas. ` +
+        `No hay partido en el cuadro (principal ni consolación) con estas dos parejas` +
+        (currentRoundNo ? ` (calendario R${currentRoundNo})` : "") +
+        ". " +
         "Usa “Reparar cuadro y cerrar R1” para regenerar el bracket desde los grupos del calendario.",
     };
   }

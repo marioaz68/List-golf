@@ -135,19 +135,17 @@ export async function GET(req: Request) {
   let viaPlayoff = false;
   const isSingles = match.scoring_format === "singles";
   const lineByHole = match.holes.map((h) => {
-    const tpRaw = Number(h.top_points ?? 0);
-    const bpRaw = Number(h.bottom_points ?? 0);
+    // Solo cuenta como hoyo del match cuando ya hay puntos (los 4
+    // jugadores / ambos sides). Golpes parciales de 1–3 jugadores NO
+    // deben avanzar diferencial, gráfica ni "Va en hoyo N".
     const hasScore =
-      h.top_points != null ||
-      h.bottom_points != null ||
-      h.top_player_a_strokes != null ||
-      h.top_player_b_strokes != null ||
-      h.bottom_player_a_strokes != null ||
-      h.bottom_player_b_strokes != null;
+      h.top_points != null || h.bottom_points != null;
 
     const afterDecision = decidedAtHole != null;
     // Si el match ya está decidido, los hoyos posteriores no aportan
     // puntos al match (se siguen capturando para stroke play).
+    const tpRaw = Number(h.top_points ?? 0);
+    const bpRaw = Number(h.bottom_points ?? 0);
     const tp = afterDecision ? 0 : tpRaw;
     const bp = afterDecision ? 0 : bpRaw;
     if (hasScore && !afterDecision) {
