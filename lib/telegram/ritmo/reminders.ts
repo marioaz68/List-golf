@@ -14,6 +14,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendAndTrackTelegramMessage } from "@/lib/telegram/outbox";
 import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
+import { refreshLiveGroupSalida } from "@/lib/telegram/refreshLiveGroupSalida";
 
 const PRE_TEE_WINDOW_MIN = 25;    // mandar invite cuando faltan ≤25 min
 const PRE_TEE_MIN_MIN = 15;       // pero solo si faltan ≥15 min
@@ -89,7 +90,19 @@ export async function runRitmoReminders(
     // sentido invitar "antes del tee" ni avisar "tarde respecto al tee".
     if (group.actual_start_at) continue;
 
-    const teeDate = parseTeeDateTime(today, group.tee_time);
+    // Siempre revalidar salidas en vivo antes de decidir / enviar.
+    const refreshed = await refreshLiveGroupSalida(supabase, {
+      groupId: group.id,
+      roundId: group.round_id,
+      proposedTeeTime: group.tee_time,
+    });
+    if (!refreshed) continue;
+    const liveTee = refreshed.live.teeTime;
+    const liveStartingHole = resolveGroupStartHole(
+      refreshed.live.startingHole,
+      refreshed.live.notes
+    );
+    const teeDate = parseTeeDateTime(today, liveTee);
     if (!teeDate) continue;
 
     const diffMin = (teeDate.getTime() - now.getTime()) / 60000;
@@ -99,9 +112,9 @@ export async function runRitmoReminders(
       const sent = await sendInviteToGroup(supabase, {
         tournamentId,
         groupId: group.id,
-        roundId: group.round_id,
-        teeTime: group.tee_time,
-        startingHole: resolveGroupStartHole(group.starting_hole, group.notes),
+        roundId: refreshed.live.roundId || group.round_id,
+        teeTime: liveTee,
+        startingHole: liveStartingHole,
         minutesLeft: Math.round(diffMin),
       });
       invitedCount += sent;
@@ -110,14 +123,18 @@ export async function runRitmoReminders(
 
     // CASO B: pasaron 10-30 min de la salida y nadie compartió posición → late
     const minutesSinceTee = -diffMin;
-    if (minutesSinceTee >= POST_TEE_LATE_MIN && minutesSinceTee <= POST_TEE_LATE_MAX_MIN) {
+    if (
+      minutesSinceTee >= POST_TEE_LATE_MIN &&
+      minutesSinceTee <= POST_TEE_LATE_MAX_MIN
+    ) {
       const hasPositions = await groupHasRecentPositions(supabase, group.id);
       if (!hasPositions) {
         const sent = await sendLateToGroup(supabase, {
           tournamentId,
           groupId: group.id,
-          roundId: group.round_id,
+          roundId: refreshed.live.roundId || group.round_id,
           minutesLate: Math.round(minutesSinceTee),
+          teeTime: liveTee,
         });
         lateCount += sent;
       }
@@ -209,16 +226,22 @@ async function sendInviteToGroup(
 
 async function sendLateToGroup(
   supabase: SupabaseClient,
-  args: { tournamentId: string; groupId: string; roundId: string;
-          minutesLate: number; }
+  args: {
+    tournamentId: string;
+    groupId: string;
+    roundId: string;
+    minutesLate: number;
+    teeTime?: string | null;
+  }
 ): Promise<number> {
   let sent = 0;
+  const teeLabel = args.teeTime ? ` (tee ${args.teeTime})` : "";
 
   const players = await loadGroupPlayers(supabase, args.groupId);
   for (const p of players) {
     if (!p.chatId) continue;
     const text = [
-      `⏰ Ya pasaron ~${args.minutesLate} min de tu salida y aún no recibo tu ubicación.`,
+      `⏰ Ya pasaron ~${args.minutesLate} min de tu salida${teeLabel} y aún no recibo tu ubicación.`,
       "",
       "Si ya estás en el campo, comparte tu Live Location:",
       "📎 Adjuntar → Ubicación → *Compartir mi ubicación en tiempo real* → 8 horas",
@@ -244,7 +267,7 @@ async function sendLateToGroup(
   );
   for (const c of caddies) {
     const text = [
-      `⏰ Ya pasaron ~${args.minutesLate} min de la salida de tu grupo y aún no recibo ubicación.`,
+      `⏰ Ya pasaron ~${args.minutesLate} min de la salida de tu grupo${teeLabel} y aún no recibo ubicación.`,
       "",
       "Si ya estás en el campo, comparte tu Live Location:",
       "📎 Adjuntar → Ubicación → *Compartir mi ubicación en tiempo real* → 8 horas",

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendAndTrackTelegramMessage } from "@/lib/telegram/outbox";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
+import { refreshLiveGroupSalida } from "@/lib/telegram/refreshLiveGroupSalida";
 
 /**
  * Tras crear el `pairing_group` de la siguiente ronda de un cuadro de
@@ -9,6 +10,9 @@ import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
  *   - resultado del match recién cerrado,
  *   - próxima salida (ronda, grupo, tee time),
  *   - botón que abre /captura/tarjeta del nuevo grupo.
+ *
+ * Antes de cada envío relee salidas en vivo: si el comité ya movió el
+ * tee, manda el horario actual (y avisa ajuste si el caller traía otro).
  *
  * Es best-effort: errores de envío no rompen el cierre del match. Las
  * filas sin telegram_chat_id se ignoran silenciosamente.
@@ -89,35 +93,39 @@ export async function notifyNextRoundGroupCreated(
   }
   if (!groupId) return result;
 
-  // 2. Datos del grupo + torneo
-  const [{ data: tournament }, { data: group }, { data: round }] =
-    await Promise.all([
-      admin
-        .from("tournaments")
-        .select("name, short_name")
-        .eq("id", args.tournamentId)
-        .maybeSingle(),
-      admin
-        .from("pairing_groups")
-        .select("id, group_no, starting_hole, tee_time")
-        .eq("id", groupId)
-        .maybeSingle(),
-      admin
-        .from("rounds")
-        .select("id, round_no, round_date")
-        .eq("id", args.nextRoundId)
-        .maybeSingle(),
-    ]);
+  // 2. Datos del grupo + torneo — siempre relectura en vivo de salidas
+  //    (no confiar en nextTeeTime/groupNo del caller si el comité ya movió).
+  const refreshed = await refreshLiveGroupSalida(admin, {
+    groupId,
+    roundId: args.nextRoundId,
+    proposedTeeTime: args.nextTeeTime ?? args.previousTeeTime ?? null,
+  });
+  if (!refreshed) return result;
 
-  const groupNo =
-    typeof group?.group_no === "number"
-      ? group.group_no
-      : args.nextGroupNo ?? null;
-  const startingHole =
-    typeof group?.starting_hole === "number" ? group.starting_hole : null;
-  const teeTime =
-    String(group?.tee_time ?? args.nextTeeTime ?? "").trim() || null;
-  const roundNo = typeof round?.round_no === "number" ? round.round_no : null;
+  const live = refreshed.live;
+  const roundId = live.roundId || String(args.nextRoundId).trim();
+
+  const { data: tournament } = await admin
+    .from("tournaments")
+    .select("name, short_name")
+    .eq("id", args.tournamentId)
+    .maybeSingle();
+
+  let reason = args.reason ?? "created";
+  let prevTee =
+    String(args.previousTeeTime ?? "").trim().slice(0, 5) || null;
+
+  // Si el caller traía un tee distinto al de salidas → usar el vivo y
+  // avisar ajuste (salvo que ya veníamos en modo tee_adjusted).
+  if (refreshed.teeWasStale) {
+    if (!prevTee) prevTee = refreshed.proposedTeeTime;
+    if (reason === "created") reason = "tee_adjusted";
+  }
+
+  const groupNo = live.groupNo ?? args.nextGroupNo ?? null;
+  const startingHole = live.startingHole;
+  const teeTime = live.teeTime;
+  const roundNo = live.roundNo;
   const tournamentName =
     tournament?.short_name?.toString().trim() ||
     tournament?.name?.toString().trim() ||
@@ -200,7 +208,7 @@ export async function notifyNextRoundGroupCreated(
       .from("caddie_assignments")
       .select("caddie_id, entry_id, pairing_group_id, round_id, is_active")
       .eq("tournament_id", args.tournamentId)
-      .eq("round_id", args.nextRoundId)
+      .eq("round_id", roundId)
       .in("entry_id", playerEntryIds);
 
     const caddieIds = Array.from(
@@ -242,10 +250,24 @@ export async function notifyNextRoundGroupCreated(
     }
   }
 
-  // 5. Mensaje + envío
-  const reason = args.reason ?? "created";
-  const prevTee = String(args.previousTeeTime ?? "").trim().slice(0, 5) || null;
-  const curTee = teeTime ? teeTime.slice(0, 5) : null;
+  // 5. Mensaje + envío (segunda relectura por si movieron el tee mientras
+  //    armábamos destinatarios).
+  const refreshedAgain = await refreshLiveGroupSalida(admin, {
+    groupId,
+    roundId,
+    proposedTeeTime: teeTime,
+  });
+  const finalLive = refreshedAgain?.live ?? live;
+  if (refreshedAgain?.teeWasStale) {
+    if (!prevTee) prevTee = refreshedAgain.proposedTeeTime;
+    reason = "tee_adjusted";
+  }
+
+  const finalGroupNo = finalLive.groupNo ?? groupNo;
+  const finalStartingHole = finalLive.startingHole ?? startingHole;
+  const curTee = finalLive.teeTime;
+  const finalRoundNo = finalLive.roundNo ?? roundNo;
+  const finalRoundId = finalLive.roundId || roundId;
 
   function buildText(greeting: string): string {
     const lines: string[] = [];
@@ -266,13 +288,17 @@ export async function notifyNextRoundGroupCreated(
       }
     }
     if (tournamentName) lines.push(`Torneo: ${tournamentName}`);
-    if (roundNo != null) {
+    if (finalRoundNo != null) {
       lines.push(
-        reason === "tee_adjusted" ? `Ronda: R${roundNo}` : `Próxima ronda: R${roundNo}`
+        reason === "tee_adjusted"
+          ? `Ronda: R${finalRoundNo}`
+          : `Próxima ronda: R${finalRoundNo}`
       );
     }
-    if (groupNo != null) lines.push(`Grupo: #${groupNo}`);
-    if (startingHole != null) lines.push(`Hoyo de salida: ${startingHole}`);
+    if (finalGroupNo != null) lines.push(`Grupo: #${finalGroupNo}`);
+    if (finalStartingHole != null) {
+      lines.push(`Hoyo de salida: ${finalStartingHole}`);
+    }
     if (curTee) lines.push(`Tee time: ${curTee}`);
     lines.push("");
     lines.push(
@@ -283,12 +309,12 @@ export async function notifyNextRoundGroupCreated(
     return lines.join("\n");
   }
 
-  const buttonLabel = `📝 Capturar Grupo ${groupNo ?? ""}`.trim();
+  const buttonLabel = `📝 Capturar Grupo ${finalGroupNo ?? ""}`.trim();
 
   for (const p of players) {
     const url = buildGroupCaptureUrl({
       tournamentId: args.tournamentId,
-      roundId: args.nextRoundId,
+      roundId: finalRoundId,
       groupId,
       meEntryId: p.entryId,
     });
@@ -299,7 +325,7 @@ export async function notifyNextRoundGroupCreated(
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
       kind: "next_round_group",
-      roundId: args.nextRoundId,
+      roundId: finalRoundId,
       groupId,
     });
     if (res.ok) {
@@ -325,7 +351,7 @@ export async function notifyNextRoundGroupCreated(
   for (const c of caddieRecipients) {
     const url = buildGroupCaptureUrl({
       tournamentId: args.tournamentId,
-      roundId: args.nextRoundId,
+      roundId: finalRoundId,
       groupId,
       caddieId: c.caddieId,
     });
@@ -336,7 +362,7 @@ export async function notifyNextRoundGroupCreated(
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
       kind: "next_round_group",
-      roundId: args.nextRoundId,
+      roundId: finalRoundId,
       groupId,
     });
     if (res.ok) {

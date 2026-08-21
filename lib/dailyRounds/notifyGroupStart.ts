@@ -1,12 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendAndTrackTelegramMessage } from "@/lib/telegram/outbox";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
+import { refreshLiveGroupSalida } from "@/lib/telegram/refreshLiveGroupSalida";
 
 /**
  * Notifica por Telegram el inicio de una salida de la ronda del día a los
  * jugadores del grupo y a sus caddies asignados, con un botón que abre la
  * tarjeta de captura del grupo. Best-effort: los errores de envío no rompen
  * el flujo y las filas sin chat_id se ignoran.
+ *
+ * Antes de enviar releemos salidas en vivo por si el tee ya cambió.
  */
 export type DailyNotifyResult = {
   sent: number;
@@ -45,32 +48,26 @@ export async function notifyDailyRoundGroupStart(
   const groupId = String(args.groupId ?? "").trim();
   if (!groupId) return result;
 
-  const [{ data: tournament }, { data: group }, { data: round }] =
-    await Promise.all([
-      admin
-        .from("tournaments")
-        .select("name")
-        .eq("id", args.tournamentId)
-        .maybeSingle(),
-      admin
-        .from("pairing_groups")
-        .select("id, group_no, starting_hole, tee_time")
-        .eq("id", groupId)
-        .maybeSingle(),
-      admin
-        .from("rounds")
-        .select("id, round_date")
-        .eq("id", args.roundId)
-        .maybeSingle(),
-    ]);
+  const refreshed = await refreshLiveGroupSalida(admin, {
+    groupId,
+    roundId: args.roundId,
+  });
+  if (!refreshed) return result;
+  const live = refreshed.live;
+  const roundId = live.roundId || String(args.roundId).trim();
 
-  const groupNo =
-    typeof group?.group_no === "number" ? group.group_no : null;
-  const startingHole =
-    typeof group?.starting_hole === "number" ? group.starting_hole : null;
-  const teeTime = String(group?.tee_time ?? "").slice(0, 5) || null;
+  const { data: tournament } = await admin
+    .from("tournaments")
+    .select("name")
+    .eq("id", args.tournamentId)
+    .maybeSingle();
+
+  let groupNo = live.groupNo;
+  let startingHole = live.startingHole;
+  let teeTime = live.teeTime;
   const tournamentName =
     tournament?.name?.toString().trim() || "Ronda del día";
+  let roundDate = live.roundDate;
 
   // Jugadores del grupo con su chat de Telegram.
   const { data: membersRaw } = await admin
@@ -152,7 +149,7 @@ export async function notifyDailyRoundGroupStart(
             (a) =>
               a.is_active !== false &&
               a.caddie_id &&
-              (a.round_id == null || a.round_id === args.roundId)
+              (a.round_id == null || a.round_id === roundId)
           )
           .map((a) => String(a.caddie_id))
       )
@@ -180,13 +177,26 @@ export async function notifyDailyRoundGroupStart(
     }
   }
 
+  // Releer salidas una vez más justo antes de armar el texto.
+  const again = await refreshLiveGroupSalida(admin, {
+    groupId,
+    roundId,
+    proposedTeeTime: teeTime,
+  });
+  if (again) {
+    groupNo = again.live.groupNo ?? groupNo;
+    startingHole = again.live.startingHole ?? startingHole;
+    teeTime = again.live.teeTime ?? teeTime;
+    roundDate = again.live.roundDate ?? roundDate;
+  }
+
   function buildText(greeting: string): string {
     const lines: string[] = [];
     lines.push(`${greeting},`);
     lines.push("");
     lines.push("⛳ ¡Tu ronda del día está por comenzar!");
     lines.push(`Club / ronda: ${tournamentName}`);
-    if (round?.round_date) lines.push(`Fecha: ${round.round_date}`);
+    if (roundDate) lines.push(`Fecha: ${roundDate}`);
     if (groupNo != null) lines.push(`Salida: Grupo #${groupNo}`);
     if (teeTime) lines.push(`Hora: ${teeTime}`);
     if (startingHole != null) lines.push(`Hoyo de salida: ${startingHole}`);
@@ -196,11 +206,12 @@ export async function notifyDailyRoundGroupStart(
   }
 
   const buttonLabel = `📝 Capturar Grupo ${groupNo ?? ""}`.trim();
+  const finalRoundId = again?.live.roundId || roundId;
 
   for (const p of players) {
     const url = buildGroupCaptureUrl({
       tournamentId: args.tournamentId,
-      roundId: args.roundId,
+      roundId: finalRoundId,
       groupId,
       meEntryId: p.entryId,
     });
@@ -211,7 +222,7 @@ export async function notifyDailyRoundGroupStart(
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
       kind: "next_round_group",
-      roundId: args.roundId,
+      roundId: finalRoundId,
       groupId,
     });
     if (res.ok) result.sent += 1;
@@ -221,7 +232,7 @@ export async function notifyDailyRoundGroupStart(
   for (const c of caddieRecipients) {
     const url = buildGroupCaptureUrl({
       tournamentId: args.tournamentId,
-      roundId: args.roundId,
+      roundId: finalRoundId,
       groupId,
       caddieId: c.caddieId,
     });
@@ -232,7 +243,7 @@ export async function notifyDailyRoundGroupStart(
       buttons: [[{ text: buttonLabel, url }]],
       disablePreview: true,
       kind: "next_round_group",
-      roundId: args.roundId,
+      roundId: finalRoundId,
       groupId,
     });
     if (res.ok) result.sent += 1;

@@ -6,6 +6,7 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessModule } from "@/lib/auth/permissions";
 import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
 import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
+import { refreshLiveGroupSalida } from "@/lib/telegram/refreshLiveGroupSalida";
 
 export type RecipientOutcome = {
   name: string;
@@ -84,20 +85,18 @@ async function loadGroupRecipients(args: {
     .eq("id", args.tournamentId)
     .maybeSingle();
 
-  const { data: group } = await admin
-    .from("pairing_groups")
-    .select("id, group_no, starting_hole, tee_time")
-    .eq("id", args.groupId)
-    .eq("round_id", args.roundId)
-    .maybeSingle();
-
-  const groupRow = group
-    ? (group as {
-        id: string;
-        group_no: number | null;
-        starting_hole: number | null;
-        tee_time: string | null;
-      })
+  // Siempre leer salidas en vivo antes de citar tee/grupo en Telegram.
+  const refreshed = await refreshLiveGroupSalida(admin, {
+    groupId: args.groupId,
+    roundId: args.roundId,
+  });
+  const groupRow = refreshed
+    ? {
+        id: refreshed.live.groupId,
+        group_no: refreshed.live.groupNo,
+        starting_hole: refreshed.live.startingHole,
+        tee_time: refreshed.live.teeTime,
+      }
     : null;
 
   const recipients: Recipient[] = [];
