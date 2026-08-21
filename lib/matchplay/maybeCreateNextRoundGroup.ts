@@ -222,12 +222,21 @@ export async function maybeCreateNextRoundGroup(
   const botLabel = botPair.seed != null ? `#${botPair.seed}` : "BOT";
   const notes = `MATCH PLAY · ${topLabel} vs ${botLabel}`;
 
-  const { data: existing } = await admin
+  // Preferir grupo ya ligado a ESTE enfrentamiento (notas con ambos seeds).
+  // No reutilizar group_no=position_no si ese slot ya es otro partido
+  // (p. ej. R3 con extraordinaria en G1: pos 3 ≠ G3 de #25 vs #24).
+  const { data: roundGroups } = await admin
     .from("pairing_groups")
-    .select("id")
-    .eq("round_id", nextRoundId)
-    .eq("group_no", groupNo)
-    .maybeSingle();
+    .select("id, group_no, tee_time, notes")
+    .eq("round_id", nextRoundId);
+
+  const notesMatch = (roundGroups ?? []).find((g) => {
+    const n = String(g.notes ?? "");
+    return (
+      n.includes(`${topLabel} vs ${botLabel}`) ||
+      n.includes(`${botLabel} vs ${topLabel}`)
+    );
+  });
 
   let groupRecordId: string;
   let created = false;
@@ -236,14 +245,14 @@ export async function maybeCreateNextRoundGroup(
   // (p. ej. ola de 11:00 + extraordinaria a las 07:00). Solo asignar
   // fórmula al crear el grupo o si aún no tiene tee_time.
   let effectiveTeeTime = teeTime;
-  if (existing?.id) {
-    groupRecordId = String(existing.id);
-    const { data: existingRow } = await admin
-      .from("pairing_groups")
-      .select("tee_time")
-      .eq("id", groupRecordId)
-      .maybeSingle();
-    const kept = String(existingRow?.tee_time ?? "").trim() || null;
+  let effectiveGroupNo = groupNo;
+  if (notesMatch?.id) {
+    groupRecordId = String(notesMatch.id);
+    effectiveGroupNo =
+      typeof notesMatch.group_no === "number"
+        ? notesMatch.group_no
+        : groupNo;
+    const kept = String(notesMatch.tee_time ?? "").trim() || null;
     if (kept) effectiveTeeTime = kept.slice(0, 8);
     await admin
       .from("pairing_groups")
@@ -260,21 +269,24 @@ export async function maybeCreateNextRoundGroup(
   } else {
     // Grupo nuevo: si la ronda ya tiene salidas, encolar después del
     // último tee (evita 07:00+(n-1)·iv cuando start_time es la extra).
-    const { data: peerTees } = await admin
-      .from("pairing_groups")
-      .select("tee_time")
-      .eq("round_id", nextRoundId);
-    const peerMins = (peerTees ?? [])
+    // Si group_no=position_no ya está ocupado por otro partido, usar max+1.
+    const peerMins = (roundGroups ?? [])
       .map((g) => parseHHMM(String(g.tee_time ?? "")))
       .filter((n): n is number => n != null);
     if (peerMins.length > 0) {
       effectiveTeeTime = formatHHMM(Math.max(...peerMins) + interval);
     }
+    const takenNos = new Set(
+      (roundGroups ?? []).map((g) => Number(g.group_no)).filter(Number.isFinite)
+    );
+    if (takenNos.has(effectiveGroupNo)) {
+      effectiveGroupNo = Math.max(0, ...takenNos) + 1;
+    }
     const { data: inserted, error: insErr } = await admin
       .from("pairing_groups")
       .insert({
         round_id: nextRoundId,
-        group_no: groupNo,
+        group_no: effectiveGroupNo,
         tee_time: effectiveTeeTime ?? null,
         starting_hole: null,
         notes,
@@ -285,7 +297,7 @@ export async function maybeCreateNextRoundGroup(
       return {
         ok: false,
         created: false,
-        groupNo,
+        groupNo: effectiveGroupNo,
         roundId: nextRoundId,
         teeTime: effectiveTeeTime,
         reason: "insert_failed",
@@ -318,7 +330,7 @@ export async function maybeCreateNextRoundGroup(
     ok: true,
     created,
     updated,
-    groupNo,
+    groupNo: effectiveGroupNo,
     roundId: nextRoundId,
     teeTime: effectiveTeeTime,
   };
