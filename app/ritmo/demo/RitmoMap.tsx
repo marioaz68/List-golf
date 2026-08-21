@@ -56,43 +56,54 @@ const HOYO_COLORS = [
   "#FFAB40","#EEFF41","#FF6E40","#69F0AE","#FFFF8D","#FFD180",
 ];
 
-/** Distancia aproximada en metros entre dos lat/lon (plano local). */
-function approxMeters(
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number }
-): number {
-  const dLat = (a.lat - b.lat) * 111_320;
-  const cos = Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180);
-  const dLon = (a.lon - b.lon) * 111_320 * cos;
-  return Math.hypot(dLat, dLon);
-}
+type SpiderfyItem = { key: string; lat: number; lon: number };
 
 /**
- * Si varios puntos caen casi en el mismo sitio, los abre en un círculo
- * pequeño alrededor del centro (siguen juntos, pero se distinguen).
+ * Abre en abanico los puntos que a este zoom se ven encimados.
+ * Solo mueve posición (mismo tamaño de bola); radio en px del mapa
+ * para que en vista completa se distingan sin agrandar iconos.
  */
-function spiderfyPositions<T extends { lat: number; lon: number }>(
-  items: T[],
-  /** Umbral en metros para considerar "encimados". */
-  overlapMeters = 12,
-  /** Radio base del abanico en metros. */
-  baseRadiusMeters = 10
-): Array<T & { displayLat: number; displayLon: number }> {
+function spiderfyOnMap(
+  map: {
+    latLngToLayerPoint: (ll: [number, number]) => { x: number; y: number };
+    layerPointToLatLng: (p: { x: number; y: number }) => {
+      lat: number;
+      lng: number;
+    };
+  },
+  items: SpiderfyItem[],
+  /** Distancia en px para considerar “encimados” (≈ tamaño del marshal). */
+  overlapPx = 18,
+  /** Radio del abanico en px: justo para no solaparse, sin abrir mucho. */
+  baseRadiusPx = 16
+): Array<
+  SpiderfyItem & {
+    displayLat: number;
+    displayLon: number;
+    /** true si se movió respecto al GPS real. */
+    offset: boolean;
+  }
+> {
   if (items.length === 0) return [];
+
+  const pts = items.map((it, i) => {
+    const p = map.latLngToLayerPoint([it.lat, it.lon]);
+    return { i, x: p.x, y: p.y };
+  });
 
   const used = new Set<number>();
   const clusters: number[][] = [];
 
-  for (let i = 0; i < items.length; i++) {
+  for (let i = 0; i < pts.length; i++) {
     if (used.has(i)) continue;
     const cluster = [i];
     used.add(i);
-    // BFS: todo lo que esté cerca de alguien del cluster.
     for (let qi = 0; qi < cluster.length; qi++) {
-      const a = items[cluster[qi]];
-      for (let j = 0; j < items.length; j++) {
+      const a = pts[cluster[qi]]!;
+      for (let j = 0; j < pts.length; j++) {
         if (used.has(j)) continue;
-        if (approxMeters(a, items[j]) <= overlapMeters) {
+        const b = pts[j]!;
+        if (Math.hypot(a.x - b.x, a.y - b.y) <= overlapPx) {
           used.add(j);
           cluster.push(j);
         }
@@ -101,28 +112,41 @@ function spiderfyPositions<T extends { lat: number; lon: number }>(
     clusters.push(cluster);
   }
 
-  const out: Array<T & { displayLat: number; displayLon: number }> = [];
+  const out: Array<
+    SpiderfyItem & {
+      displayLat: number;
+      displayLon: number;
+      offset: boolean;
+    }
+  > = [];
+
   for (const idxs of clusters) {
     if (idxs.length === 1) {
-      const it = items[idxs[0]];
-      out.push({ ...it, displayLat: it.lat, displayLon: it.lon });
+      const it = items[idxs[0]!]!;
+      out.push({
+        ...it,
+        displayLat: it.lat,
+        displayLon: it.lon,
+        offset: false,
+      });
       continue;
     }
     const n = idxs.length;
-    const cLat = idxs.reduce((s, i) => s + items[i].lat, 0) / n;
-    const cLon = idxs.reduce((s, i) => s + items[i].lon, 0) / n;
-    // Un poco más de radio si hay muchos, para que no se toquen.
-    const radiusM = baseRadiusMeters + Math.max(0, n - 2) * 3;
-    const cosLat = Math.cos((cLat * Math.PI) / 180) || 1e-6;
+    const cx = idxs.reduce((s, i) => s + pts[i]!.x, 0) / n;
+    const cy = idxs.reduce((s, i) => s + pts[i]!.y, 0) / n;
+    // Separación mínima entre centros ≈ tamaño bola; no abrir de más.
+    const radiusPx = baseRadiusPx + Math.max(0, n - 2) * 3;
     for (let k = 0; k < n; k++) {
-      const it = items[idxs[k]];
+      const it = items[idxs[k]!]!;
       const angle = (2 * Math.PI * k) / n - Math.PI / 2;
-      const dLat = (radiusM * Math.sin(angle)) / 111_320;
-      const dLon = (radiusM * Math.cos(angle)) / (111_320 * cosLat);
+      const x = cx + radiusPx * Math.cos(angle);
+      const y = cy + radiusPx * Math.sin(angle);
+      const ll = map.layerPointToLatLng({ x, y });
       out.push({
         ...it,
-        displayLat: cLat + dLat,
-        displayLon: cLon + dLon,
+        displayLat: ll.lat,
+        displayLon: ll.lng,
+        offset: true,
       });
     }
   }
@@ -245,8 +269,10 @@ export function RitmoMap({
       const DOT_FONT = 7;
       const RING = 15;
       const RING_OFF = Math.round((RING - DOT) / 2);
+      const M_DOT = 16;
+      const M_BORDER = 2;
+      const M_FONT = 7;
 
-      // Si grupos/marshals se enciman, abrirlos en abanico (juntos pero visibles).
       type PlotPt =
         | { kind: "group"; key: string; lat: number; lon: number; g: GroupDot }
         | {
@@ -256,53 +282,88 @@ export function RitmoMap({
             lon: number;
             m: MarshalDot;
           };
-      const plotPts: PlotPt[] = [
-        ...groups.map((g) => ({
-          kind: "group" as const,
-          key: `g:${g.id}`,
-          lat: g.lat,
-          lon: g.lon,
-          g,
-        })),
-        ...marshals.map((m) => ({
-          kind: "marshal" as const,
-          key: `m:${m.id}`,
-          lat: m.lat,
-          lon: m.lon,
-          m,
-        })),
-      ];
-      const spread = spiderfyPositions(plotPts);
-      const posByKey = new Map(
-        spread.map((p) => [p.key, { lat: p.displayLat, lon: p.displayLon }])
-      );
 
-      groups.forEach((g) => {
-        const isBlocker = g.role === "blocker";
-        const isBlocked = g.role === "blocked";
-        const fromCapture = g.positionSource === "capture";
-        const color = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
-        const ring = isBlocker
-          ? `<div style="
-              position:absolute; left:-${RING_OFF}px; top:-${RING_OFF}px;
-              width:${RING}px; height:${RING}px; border-radius:50%;
-              border:1px solid ${color};
-              animation: pulse-ring 1.5s ease-out infinite;
-              pointer-events:none;
-            "></div>`
-          : "";
-        const blockerIcon = isBlocker
-          ? `<div style="position:absolute; left:9px; top:-8px; font-size:7px;">🚦</div>`
-          : "";
-        const captureRing = fromCapture
-          ? `box-shadow:0 0 0 1px rgba(255,255,255,0.95), 0 0 0 2px rgba(59,130,246,0.85);`
-          : "box-shadow:0 1px 3px rgba(0,0,0,0.7);";
+      const dotsLayer = L.layerGroup().addTo(map);
+      let zoomRedrawTimer: number | null = null;
 
-        const pos = posByKey.get(`g:${g.id}`) ?? { lat: g.lat, lon: g.lon };
-        const marker = L.marker([pos.lat, pos.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: `
+      const renderDots = () => {
+        dotsLayer.clearLayers();
+
+        const plotPts: PlotPt[] = [
+          ...groups.map((g) => ({
+            kind: "group" as const,
+            key: `g:${g.id}`,
+            lat: g.lat,
+            lon: g.lon,
+            g,
+          })),
+          ...marshals.map((m) => ({
+            kind: "marshal" as const,
+            key: `m:${m.id}`,
+            lat: m.lat,
+            lon: m.lon,
+            m,
+          })),
+        ];
+
+        // Abanico compacto: mismas bolas (11 / 16 px), solo separa centros.
+        const spread = spiderfyOnMap(map, plotPts, 18, 16);
+        const byKey = new Map(spread.map((p) => [p.key, p]));
+
+        // Patitas GPS real → posición en abanico.
+        for (const p of spread) {
+          if (!p.offset) continue;
+          L.polyline(
+            [
+              [p.lat, p.lon],
+              [p.displayLat, p.displayLon],
+            ],
+            {
+              color: "#93c5fd",
+              weight: 1,
+              opacity: 0.7,
+              interactive: false,
+            }
+          ).addTo(dotsLayer);
+          L.circleMarker([p.lat, p.lon], {
+            radius: 1.5,
+            color: "#fff",
+            weight: 1,
+            fillColor: "#38bdf8",
+            fillOpacity: 0.9,
+            interactive: false,
+          }).addTo(dotsLayer);
+        }
+
+        groups.forEach((g) => {
+          const isBlocker = g.role === "blocker";
+          const isBlocked = g.role === "blocked";
+          const fromCapture = g.positionSource === "capture";
+          const color = isBlocked ? BLOCKED_COLOR : STATUS_COLOR[g.status];
+          const ring = isBlocker
+            ? `<div style="
+                position:absolute; left:-${RING_OFF}px; top:-${RING_OFF}px;
+                width:${RING}px; height:${RING}px; border-radius:50%;
+                border:1px solid ${color};
+                animation: pulse-ring 1.5s ease-out infinite;
+                pointer-events:none;
+              "></div>`
+            : "";
+          const blockerIcon = isBlocker
+            ? `<div style="position:absolute; left:9px; top:-8px; font-size:7px;">🚦</div>`
+            : "";
+          const captureRing = fromCapture
+            ? `box-shadow:0 0 0 1px rgba(255,255,255,0.95), 0 0 0 2px rgba(59,130,246,0.85);`
+            : "box-shadow:0 1px 3px rgba(0,0,0,0.7);";
+
+          const sp = byKey.get(`g:${g.id}`);
+          const pos = sp
+            ? { lat: sp.displayLat, lon: sp.displayLon }
+            : { lat: g.lat, lon: g.lon };
+          const marker = L.marker([pos.lat, pos.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: `
               <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative; cursor: pointer;">
                 ${ring}
                 <div style="
@@ -318,25 +379,24 @@ export function RitmoMap({
                 ${blockerIcon}
               </div>
             `,
-            iconSize: [DOT, DOT],
-            iconAnchor: [DOT / 2, DOT / 2],
-          }),
-          keyboard: false,
-        }).addTo(map);
-        // Tocar la bola: el padre alterna (zoom al grupo / volver a completo).
-        marker.on("click", () => onSelectGroupRef.current?.(g.id));
-      });
+              iconSize: [DOT, DOT],
+              iconAnchor: [DOT / 2, DOT / 2],
+            }),
+            keyboard: false,
+            zIndexOffset: 400,
+          }).addTo(dotsLayer);
+          marker.on("click", () => onSelectGroupRef.current?.(g.id));
+        });
 
-      // Marcadores de marshals (GPS real, iniciales) — 50% del tamaño original (32→16).
-      const M_DOT = 16;
-      const M_BORDER = 2;
-      const M_FONT = 7;
-      marshals.forEach((m) => {
-        const pos = posByKey.get(`m:${m.id}`) ?? { lat: m.lat, lon: m.lon };
-        L.marker([pos.lat, pos.lon], {
-          icon: L.divIcon({
-            className: "",
-            html: `
+        marshals.forEach((m) => {
+          const sp = byKey.get(`m:${m.id}`);
+          const pos = sp
+            ? { lat: sp.displayLat, lon: sp.displayLon }
+            : { lat: m.lat, lon: m.lon };
+          L.marker([pos.lat, pos.lon], {
+            icon: L.divIcon({
+              className: "",
+              html: `
               <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative;" title="${m.name.replace(/"/g, "&quot;")}">
                 <div style="
                   width:${M_DOT}px; height:${M_DOT}px; border-radius:50%;
@@ -350,13 +410,26 @@ export function RitmoMap({
                 ">${m.initials}</div>
               </div>
             `,
-            iconSize: [M_DOT, M_DOT],
-            iconAnchor: [M_DOT / 2, M_DOT / 2],
-          }),
-          keyboard: false,
-          interactive: false,
-        }).addTo(map);
-      });
+              iconSize: [M_DOT, M_DOT],
+              iconAnchor: [M_DOT / 2, M_DOT / 2],
+            }),
+            keyboard: false,
+            interactive: false,
+            zIndexOffset: 500,
+          }).addTo(dotsLayer);
+        });
+      };
+
+      const scheduleRenderDots = () => {
+        if (zoomRedrawTimer != null) window.clearTimeout(zoomRedrawTimer);
+        zoomRedrawTimer = window.setTimeout(() => {
+          zoomRedrawTimer = null;
+          if (!mapRef.current) return;
+          renderDots();
+        }, 80);
+      };
+      map.on("zoomend", scheduleRenderDots);
+      map.on("moveend", scheduleRenderDots);
 
       // Animación CSS para el anillo pulsante del bloqueador
       if (!document.querySelector("style[data-ritmo-anim]")) {
@@ -379,18 +452,24 @@ export function RitmoMap({
         map.fitBounds(bounds, { padding: [8, 8], animate: false });
       };
       fitToCourse();
+      renderDots();
       window.setTimeout(() => {
         if (!mapRef.current) return;
         map.invalidateSize();
         fitToCourse();
+        renderDots();
       }, 300);
       // Si arranca con un grupo ya seleccionado, hacemos zoom a él.
       if (selectedId) {
         const g = groups.find((x) => x.id === selectedId);
         if (g) map.setView([g.lat, g.lon], 19, { animate: false });
+        renderDots();
       }
 
       cleanup = () => {
+        if (zoomRedrawTimer != null) window.clearTimeout(zoomRedrawTimer);
+        map.off("zoomend", scheduleRenderDots);
+        map.off("moveend", scheduleRenderDots);
         mapRef.current = null;
         holesLayerRef.current = null;
         map.remove();
