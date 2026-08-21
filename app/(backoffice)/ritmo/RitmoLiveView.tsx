@@ -326,6 +326,9 @@ export default function RitmoLiveView({
         borderRight: "1px solid #222",
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
+        position: "relative",
+        zIndex: 2,
       }}
     >
       <div style={{ padding: "12px 14px", borderBottom: "1px solid #222" }}>
@@ -713,13 +716,19 @@ export default function RitmoLiveView({
           fontSize: 10,
           color: "#6b7280",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          flexDirection: "column",
           gap: 8,
+          flexShrink: 0,
         }}
       >
         <span>Actualizado hace {secondsAgo}s</span>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 6,
+          }}
+        >
           {currentRoundId ? (
             <button
               type="button"
@@ -727,8 +736,8 @@ export default function RitmoLiveView({
               style={{
                 fontSize: 10,
                 fontWeight: 700,
-                padding: "3px 9px",
-                borderRadius: 5,
+                padding: "7px 8px",
+                borderRadius: 6,
                 background: "#0c4a6e",
                 color: "#bae6fd",
                 border: "1px solid #075985",
@@ -745,8 +754,8 @@ export default function RitmoLiveView({
             style={{
               fontSize: 10,
               fontWeight: 700,
-              padding: "3px 9px",
-              borderRadius: 5,
+              padding: "7px 8px",
+              borderRadius: 6,
               background: "#1f2937",
               color: "#e5e7eb",
               border: "1px solid #374151",
@@ -759,15 +768,18 @@ export default function RitmoLiveView({
           <Link
             href={`/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`}
             style={{
-              fontSize: 10,
-              fontWeight: 700,
-              padding: "3px 9px",
-              borderRadius: 5,
+              gridColumn: "1 / -1",
+              fontSize: 11,
+              fontWeight: 800,
+              padding: "8px 10px",
+              borderRadius: 6,
               background: "#1e3a8a",
               color: "#dbeafe",
               border: "1px solid #2563eb",
               textDecoration: "none",
               fontFamily: "inherit",
+              textAlign: "center",
+              display: "block",
             }}
           >
             📍 Recorrido marshals
