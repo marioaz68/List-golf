@@ -116,24 +116,6 @@ function playableTeamFromMap(
   return t;
 }
 
-/** El feeder ya produjo un ganador real (jugado o BYE estructural de R1).
- *  Casillas vacías pendientes NO cuentan como resueltas. */
-function feederSlotResolved(slot: {
-  winner: MatchPlayTeamRow | null;
-  top: MatchPlayTeamRow | null;
-  bottom: MatchPlayTeamRow | null;
-  topVacant: boolean;
-  bottomVacant: boolean;
-  byeSide: "top" | "bottom" | null;
-} | undefined): boolean {
-  if (!slot) return false;
-  // Solo un ganador real (DB o BYE estructural de R1 con pareja presente).
-  if (slot.winner) return true;
-  // Ambos lados vacantes estructurales (seed fuera del campo) → nadie vendrá.
-  if (slot.topVacant && slot.bottomVacant) return true;
-  return false;
-}
-
 /** Formatea un diferencial de match play: entero o 1 decimal ("2", "1.5"). */
 function fmtDiff(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
@@ -860,8 +842,9 @@ export default function LiveBracketView({
     }
     rounds.push(r1);
 
-    // Rondas r >= 2: ganador(r-1, 2p) vs ganador(r-1, 2p+1).
-    // BYE de R1 (y de R2 si el rival ya no puede aparecer) sí avanza.
+    // Rondas r >= 2: la BD manda quién está en cada casilla.
+    // No inventar ganadores en el cliente (eso metía parejas en semis/final
+    // antes de que se jugara el partido anterior).
     for (let r = 2; r <= roundCount; r++) {
       const prev = rounds[r - 2];
       const cur = new Map<number, Slot>();
@@ -869,60 +852,63 @@ export default function LiveBracketView({
       for (let p = 0; p < count; p++) {
         const upMatch = prev.get(p * 2);
         const dnMatch = prev.get(p * 2 + 1);
-        let top: MatchPlayTeamRow | null = upMatch?.winner ?? null;
-        let bottom: MatchPlayTeamRow | null = dnMatch?.winner ?? null;
         const real = matchByPos.get(`${r}-${p + 1}`);
+
+        let top: MatchPlayTeamRow | null = null;
+        let bottom: MatchPlayTeamRow | null = null;
         if (real) {
-          const rt = playableTeamFromMap(teamById, real.top_pair_id);
-          const rb = playableTeamFromMap(teamById, real.bottom_pair_id);
-          if (rt) top = rt;
-          if (rb) bottom = rb;
+          // Publicado: solo lo que diga la fila (null = Vacío, esperando).
+          top = playableTeamFromMap(teamById, real.top_pair_id);
+          bottom = playableTeamFromMap(teamById, real.bottom_pair_id);
+        } else {
+          // Aún no hay fila: preview suave solo con ganadores ya reales.
+          top = upMatch?.winner ?? null;
+          bottom = dnMatch?.winner ?? null;
         }
+
         const dbWinner = playableTeamFromMap(teamById, real?.winner_pair_id);
         const realTop = playableTeamFromMap(teamById, real?.top_pair_id);
         const realBot = playableTeamFromMap(teamById, real?.bottom_pair_id);
-        // Ganador DB solo si el match realmente terminó (completed) o es BYE
-        // válido (una sola pareja). BYE con dos parejas = dato corrupto.
         const byeIsValid =
           real?.status === "bye" &&
           !!dbWinner &&
           ((!!realTop && !realBot) || (!realTop && !!realBot));
         let winner: MatchPlayTeamRow | null =
           real?.status === "completed" || byeIsValid ? dbWinner : null;
-        // No inventar BYE en R≥2 si el oponente solo está pendiente
-        // (feeder aún sin ganador). Solo BYE estructural de R1 (vacante).
         let byeSide: "top" | "bottom" | null = null;
-        const upDone = feederSlotResolved(upMatch);
-        const dnDone = feederSlotResolved(dnMatch);
-        const dnStructuralEmpty =
-          !!dnMatch &&
-          dnMatch.topVacant &&
-          dnMatch.bottomVacant &&
-          !dnMatch.winner;
-        const upStructuralEmpty =
-          !!upMatch &&
-          upMatch.topVacant &&
-          upMatch.bottomVacant &&
-          !upMatch.winner;
-        if (!winner && top && !bottom && (dnDone || dnStructuralEmpty)) {
-          // Solo si el feeder inferior ya no puede producir rival.
-          if (dnStructuralEmpty || (dnDone && !dnMatch?.top && !dnMatch?.bottom)) {
+
+        // BYE estructural solo si un lado es vacante de R1 (ambos vacantes en
+        // el feeder) y el otro ya tiene pareja — sin inventar avance a R+1
+        // salvo que la BD ya lo haya marcado.
+        if (!winner && !real) {
+          const dnStructuralEmpty =
+            !!dnMatch &&
+            dnMatch.topVacant &&
+            dnMatch.bottomVacant &&
+            !dnMatch.top &&
+            !dnMatch.bottom;
+          const upStructuralEmpty =
+            !!upMatch &&
+            upMatch.topVacant &&
+            upMatch.bottomVacant &&
+            !upMatch.top &&
+            !upMatch.bottom;
+          if (top && !bottom && dnStructuralEmpty) {
             byeSide = "bottom";
             winner = top;
-          }
-        } else if (!winner && bottom && !top && (upDone || upStructuralEmpty)) {
-          if (upStructuralEmpty || (upDone && !upMatch?.top && !upMatch?.bottom)) {
+          } else if (bottom && !top && upStructuralEmpty) {
             byeSide = "top";
             winner = bottom;
           }
+        } else if (byeIsValid) {
+          byeSide = realTop && !realBot ? "bottom" : "top";
         }
-        // Si hay match en BD con ambas parejas, nunca marcar byeSide en cliente.
+
         if (top && bottom) {
           byeSide = null;
-          if (real?.status !== "completed" && real?.status !== "bye") {
-            winner = null;
-          }
+          if (real?.status !== "completed") winner = null;
         }
+
         cur.set(p, {
           top,
           bottom,
