@@ -51,6 +51,8 @@ export default function BackofficeLayoutClient({
 }) {
   const pathname = usePathname() ?? "";
   const isMobileCapture = pathname.startsWith("/score-entry/mobile");
+  const isRitmoLive =
+    pathname === "/ritmo" || pathname.startsWith("/ritmo/");
   const isAuctionProjection =
     pathname.startsWith("/matchplay/auction/proyeccion") ||
     pathname.includes("/proyeccion-cuadro");
@@ -105,7 +107,13 @@ export default function BackofficeLayoutClient({
                 </div>
               </header>
 
-              <main className="min-h-0 flex-1 overflow-auto overscroll-x-none p-3 sm:p-4 md:p-6">
+              <main
+                className={
+                  isRitmoLive
+                    ? "min-h-0 flex-1 overflow-hidden p-0"
+                    : "min-h-0 flex-1 overflow-auto overscroll-x-none p-3 sm:p-4 md:p-6"
+                }
+              >
                 {children}
               </main>
             </div>

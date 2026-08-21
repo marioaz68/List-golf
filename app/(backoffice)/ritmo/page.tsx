@@ -564,7 +564,7 @@ export default async function RitmoPage({
   const marshals = await loadMarshalPositions(admin, tournamentId);
 
   return (
-    <div style={{ height: "calc(100dvh - 90px)", minHeight: 360 }}>
+    <div style={{ height: "100%", minHeight: 0 }}>
       <RitmoLiveView
         tournamentId={tournamentId}
         tournamentName={tournamentName}

@@ -452,6 +452,7 @@ export default function RitmoLiveView({
           display: "flex",
           gap: 6,
           flexWrap: "wrap",
+          flexShrink: 0,
         }}
       >
         <SummaryChip color={STATUS_COLOR.atrasado} n={counts.atrasado} label="lentos" />
@@ -467,6 +468,8 @@ export default function RitmoLiveView({
         ) : null}
       </div>
 
+      {/* Cuerpo con scroll: GPS + lista. El pie de acciones queda siempre visible. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
       {/* Cobertura GPS por grupo */}
       <div
         style={{
@@ -569,7 +572,22 @@ export default function RitmoLiveView({
               {liveMarshals.map((m) => (
                 <span
                   key={m.id}
-                  title={m.name}
+                  title={`${m.name} — ver recorrido`}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => {
+                    router.push(
+                      `/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`
+                    );
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(
+                        `/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`
+                      );
+                    }
+                  }}
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
@@ -578,6 +596,7 @@ export default function RitmoLiveView({
                     background: "#1e3a8a",
                     color: "#dbeafe",
                     border: "1px solid #2563eb",
+                    cursor: "pointer",
                   }}
                 >
                   {m.initials}
@@ -679,7 +698,7 @@ export default function RitmoLiveView({
         ) : null}
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
+      <div style={{ padding: "6px 8px" }}>
         {sortedGroups.length === 0 ? (
           <div style={{ padding: 14, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
             {onlyOnCourse && groups.length > onCourseCount ? (
@@ -752,6 +771,7 @@ export default function RitmoLiveView({
           </>
         )}
       </div>
+      </div>
 
       <div
         style={{
@@ -763,6 +783,7 @@ export default function RitmoLiveView({
           flexDirection: "column",
           gap: 8,
           flexShrink: 0,
+          background: "#111",
         }}
       >
         <span>Actualizado hace {secondsAgo}s</span>
@@ -1029,6 +1050,7 @@ export default function RitmoLiveView({
           width: vp.isMobile ? 200 : 280,
           minWidth: vp.isMobile ? 200 : 280,
           height: "100%",
+          minHeight: 0,
         }}
       >
         {sidebar}

@@ -566,7 +566,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex min-h-0 flex-col border-r border-white/10 bg-[#1C252D] text-white shadow-2xl transition-transform duration-200 ease-out md:shadow-none w-[min(19rem,88vw)] shrink-0 md:w-64 fixed inset-y-0 left-0 z-40 h-dvh overflow-y-auto overscroll-y-contain md:static md:z-auto md:h-auto md:min-h-screen md:max-h-none ${
+      className={`flex min-h-0 flex-col border-r border-white/10 bg-[#1C252D] text-white shadow-2xl transition-transform duration-200 ease-out md:shadow-none w-[min(19rem,88vw)] shrink-0 md:w-64 fixed inset-y-0 left-0 z-40 h-dvh overflow-y-auto overscroll-y-contain md:static md:z-auto md:h-dvh md:max-h-dvh ${
         open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       }`}
     >

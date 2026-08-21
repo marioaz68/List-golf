@@ -132,14 +132,14 @@ export default function MarshalTrailReport({
       style={{
         display: "grid",
         gridTemplateColumns: "minmax(280px, 340px) 1fr",
-        height: "calc(100dvh - 90px)",
-        minHeight: 420,
+        height: "100%",
+        minHeight: 0,
         gap: 0,
         background: "#0a0f14",
         color: "#e5e7eb",
-        borderRadius: 10,
+        borderRadius: 0,
         overflow: "hidden",
-        border: "1px solid #1f2937",
+        border: "none",
       }}
     >
       <aside
