@@ -116,7 +116,8 @@ function playableTeamFromMap(
   return t;
 }
 
-/** El feeder ya no puede mandar otra pareja (BYE vacío o ambos vacantes). */
+/** El feeder ya produjo un ganador real (jugado o BYE estructural de R1).
+ *  Casillas vacías pendientes NO cuentan como resueltas. */
 function feederSlotResolved(slot: {
   winner: MatchPlayTeamRow | null;
   top: MatchPlayTeamRow | null;
@@ -125,13 +126,11 @@ function feederSlotResolved(slot: {
   bottomVacant: boolean;
   byeSide: "top" | "bottom" | null;
 } | undefined): boolean {
-  if (!slot) return true;
+  if (!slot) return false;
+  // Solo un ganador real (DB o BYE estructural de R1 con pareja presente).
   if (slot.winner) return true;
+  // Ambos lados vacantes estructurales (seed fuera del campo) → nadie vendrá.
   if (slot.topVacant && slot.bottomVacant) return true;
-  if (slot.byeSide && !slot.winner) return true;
-  if (!slot.top && !slot.bottom && (slot.topVacant || slot.bottomVacant)) {
-    return true;
-  }
   return false;
 }
 
@@ -880,16 +879,49 @@ export default function LiveBracketView({
           if (rb) bottom = rb;
         }
         const dbWinner = playableTeamFromMap(teamById, real?.winner_pair_id);
-        let winner: MatchPlayTeamRow | null = dbWinner;
+        const realTop = playableTeamFromMap(teamById, real?.top_pair_id);
+        const realBot = playableTeamFromMap(teamById, real?.bottom_pair_id);
+        // Ganador DB solo si el match realmente terminó (completed) o es BYE
+        // válido (una sola pareja). BYE con dos parejas = dato corrupto.
+        const byeIsValid =
+          real?.status === "bye" &&
+          !!dbWinner &&
+          ((!!realTop && !realBot) || (!realTop && !!realBot));
+        let winner: MatchPlayTeamRow | null =
+          real?.status === "completed" || byeIsValid ? dbWinner : null;
+        // No inventar BYE en R≥2 si el oponente solo está pendiente
+        // (feeder aún sin ganador). Solo BYE estructural de R1 (vacante).
         let byeSide: "top" | "bottom" | null = null;
         const upDone = feederSlotResolved(upMatch);
         const dnDone = feederSlotResolved(dnMatch);
-        if (!winner && top && !bottom && dnDone) {
-          byeSide = "bottom";
-          winner = top;
-        } else if (!winner && bottom && !top && upDone) {
-          byeSide = "top";
-          winner = bottom;
+        const dnStructuralEmpty =
+          !!dnMatch &&
+          dnMatch.topVacant &&
+          dnMatch.bottomVacant &&
+          !dnMatch.winner;
+        const upStructuralEmpty =
+          !!upMatch &&
+          upMatch.topVacant &&
+          upMatch.bottomVacant &&
+          !upMatch.winner;
+        if (!winner && top && !bottom && (dnDone || dnStructuralEmpty)) {
+          // Solo si el feeder inferior ya no puede producir rival.
+          if (dnStructuralEmpty || (dnDone && !dnMatch?.top && !dnMatch?.bottom)) {
+            byeSide = "bottom";
+            winner = top;
+          }
+        } else if (!winner && bottom && !top && (upDone || upStructuralEmpty)) {
+          if (upStructuralEmpty || (upDone && !upMatch?.top && !upMatch?.bottom)) {
+            byeSide = "top";
+            winner = bottom;
+          }
+        }
+        // Si hay match en BD con ambas parejas, nunca marcar byeSide en cliente.
+        if (top && bottom) {
+          byeSide = null;
+          if (real?.status !== "completed" && real?.status !== "bye") {
+            winner = null;
+          }
         }
         cur.set(p, {
           top,
@@ -1501,7 +1533,10 @@ function BracketMatchCell({
           liveAhead={bottomAhead}
         />
 
-        {realMatch?.result_text ? (
+        {realMatch?.result_text &&
+        realMatch.status !== "bye" &&
+        realMatch.result_text !== "BYE" &&
+        realMatch.result_text !== "Vacío" ? (
           <p className="mt-0.5 text-center text-[10px] font-semibold text-emerald-300/90">
             {realMatch.result_text}
           </p>
@@ -1673,7 +1708,7 @@ function SidePill({
         ) : isPending ? (
           <span className="text-[11px]">Por adjudicar</span>
         ) : (
-          <span className="text-[11px]">Por definir</span>
+          <span className="text-[11px]">Vacío</span>
         )}
       </div>
       {liveLabel ? (

@@ -24,8 +24,22 @@ function feederFinished(m: MatchRow | undefined, playable: Set<string>): boolean
   const top = m.top_pair_id && playable.has(m.top_pair_id) ? m.top_pair_id : null;
   const bot =
     m.bottom_pair_id && playable.has(m.bottom_pair_id) ? m.bottom_pair_id : null;
-  if (m.status === "scheduled" && (top || bot)) return false;
-  return true;
+  // Match aún jugable: scheduled/in_progress con al menos una pareja.
+  if (
+    (m.status === "scheduled" || m.status === "in_progress") &&
+    (top || bot)
+  ) {
+    return false;
+  }
+  // Completado o BYE real con ganador.
+  if (m.winner_pair_id && playable.has(m.winner_pair_id)) return true;
+  // Shell vacío (nadie vendrá de este feeder).
+  if (!top && !bot && (m.status === "bye" || m.result_text === "Vacío")) {
+    return true;
+  }
+  // BYE con una pareja y winner.
+  if (m.status === "bye" && ((top && !bot) || (!top && bot))) return true;
+  return false;
 }
 
 /**
@@ -116,16 +130,19 @@ export async function resolveUnplayableMatchByes(
         const waiting =
           !feederFinished(srcTop, playable) || !feederFinished(srcBot, playable);
         if (waiting) {
-          if (top !== raw.top_pair_id || bot !== raw.bottom_pair_id) {
-            await admin
-              .from("matchplay_matches")
-              .update({
-                top_pair_id: top,
-                bottom_pair_id: bot,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", raw.id);
-          }
+          // Casilla pendiente: una pareja puede estar, la otra Vacío.
+          // Nunca BYE ni ganador hasta que ambos feeders terminen.
+          await admin
+            .from("matchplay_matches")
+            .update({
+              top_pair_id: top,
+              bottom_pair_id: bot,
+              status: "scheduled",
+              result_text: null,
+              winner_pair_id: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", raw.id);
           continue;
         }
       }
@@ -143,9 +160,11 @@ export async function resolveUnplayableMatchByes(
           patch.bottom_pair_id = bot;
           changed = true;
         }
-        if (raw.status === "bye" && !winner) {
+        // Dos parejas reales nunca deben ser BYE (dato corrupto / cascada).
+        if (raw.status === "bye" || raw.winner_pair_id) {
           patch.status = "scheduled";
           patch.result_text = null;
+          patch.winner_pair_id = null;
           changed = true;
         }
         if (changed) {
@@ -155,6 +174,27 @@ export async function resolveUnplayableMatchByes(
       }
 
       if (top || bot) {
+        // Si el feeder hermano aún no terminó, no marcar BYE ni avanzar.
+        if (roundNo > 1) {
+          const pos = Number(raw.position_no);
+          const srcTop = prevByPos.get(pos * 2 - 1);
+          const srcBot = prevByPos.get(pos * 2);
+          const waiting =
+            !feederFinished(srcTop, playable) ||
+            !feederFinished(srcBot, playable);
+          if (waiting) {
+            const patch: Record<string, unknown> = {
+              top_pair_id: top,
+              bottom_pair_id: bot,
+              status: "scheduled",
+              result_text: null,
+              winner_pair_id: null,
+              updated_at: new Date().toISOString(),
+            };
+            await admin.from("matchplay_matches").update(patch).eq("id", raw.id);
+            continue;
+          }
+        }
         const w = (top ?? bot) as string;
         if (
           raw.status === "bye" &&

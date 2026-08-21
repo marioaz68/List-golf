@@ -65,17 +65,30 @@ function advanceWinners(
     }
   }
 
-  // Sólo aplica resolveBye() (que marca el siguiente match como BYE y
-  // cascadea al ganador) cuando AMBOS partidos fuente ya están finalizados.
-  // Si uno es `scheduled` (real, aún por jugarse), el siguiente match debe
-  // quedar `scheduled` esperando ese ganador, NO marcarse como BYE.
+  // Sólo aplica resolveBye() cuando AMBOS feeders ya tienen ganador real
+  // (completed/bye con winner). Un shell "Vacío" (bye sin winner) NO cuenta:
+  // el siguiente match espera al otro ganador y no se marca BYE.
   for (let np = 0; np < next.length; np++) {
     const nm = next[np];
     const srcTop = current[np * 2];
     const srcBottom = current[np * 2 + 1];
-    const srcTopDetermined = !srcTop || srcTop.status !== "scheduled";
-    const srcBottomDetermined = !srcBottom || srcBottom.status !== "scheduled";
-    if (srcTopDetermined && srcBottomDetermined) {
+    const feederDone = (m: GeneratedMatch | undefined) => {
+      if (!m) return true;
+      if (m.winner_pair_id) return true;
+      // Vacío total estructural (nadie en ambos lados y marcado vacío).
+      if (
+        m.status === "bye" &&
+        !m.top_pair_id &&
+        !m.bottom_pair_id &&
+        m.result_text === "Vacío"
+      ) {
+        return true;
+      }
+      return false;
+    };
+    if (feederDone(srcTop) && feederDone(srcBottom)) {
+      // Si uno es Vacío sin winner y el otro tiene winner → resolveBye OK.
+      // Si ambos Vacío → resolveBye deja Vacío.
       resolveBye(nm);
     }
   }

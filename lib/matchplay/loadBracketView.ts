@@ -32,7 +32,7 @@ function teamLabel(
   teamId: string | null,
   teamById: Map<string, MatchPlayTeamRow>
 ): string {
-  if (!teamId) return "BYE";
+  if (!teamId) return "Vacío";
   const t = teamById.get(teamId);
   if (!t) return "—";
   const seed = t.seed != null ? `#${t.seed} ` : "";
