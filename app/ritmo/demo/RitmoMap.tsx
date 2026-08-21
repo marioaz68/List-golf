@@ -587,7 +587,13 @@ export function RitmoMap({
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative", background: "#000" }}
+      style={{
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        position: "relative",
+        background: "#000",
+      }}
     >
       {size.w > 0 && size.h > 0 && (
         rotate ? (
@@ -597,16 +603,15 @@ export function RitmoMap({
               position: "absolute",
               top: 0,
               left: 0,
-              // dimensiones invertidas: el map "cree" que es retrato
               width: size.h,
               height: size.w,
-              // rotar -90deg, luego trasladar para que entre en el viewport
               transformOrigin: "0 0",
               transform: `translate(0, ${size.h}px) rotate(-90deg)`,
+              // El mapa solo pinta; los taps van al overlay.
+              pointerEvents: onSelectGroup ? "none" : "auto",
             }}
           />
         ) : (
-          // Modo portrait: sin rotación, dimensiones naturales
           <div
             ref={mapDivRef}
             style={{
@@ -615,41 +620,61 @@ export function RitmoMap({
               left: 0,
               width: size.w,
               height: size.h,
+              pointerEvents: onSelectGroup ? "none" : "auto",
             }}
           />
         )
       )}
-      {/* Overlay táctil fuera del CSS rotate: tap fiable en mobile landscape. */}
-      {onSelectGroup
-        ? hitTargets.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              aria-label={`Grupo ${t.number}: capturas retrasadas`}
-              title={`G${t.number} → capturas retrasadas`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onSelectGroupRef.current?.(t.id);
-              }}
-              style={{
-                position: "absolute",
-                left: t.left,
-                top: t.top,
-                width: 36,
-                height: 36,
-                transform: "translate(-50%, -50%)",
-                borderRadius: "50%",
-                border: "none",
-                background: "transparent",
-                cursor: "pointer",
-                zIndex: 1200,
-                padding: 0,
-                WebkitTapHighlightColor: "transparent",
-              }}
-            />
-          ))
-        : null}
+      {onSelectGroup ? (
+        <div
+          role="presentation"
+          aria-label="Toca un grupo numerado para capturas retrasadas"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const MAX_D = 56;
+            let best: (typeof hitTargets)[number] | null = null;
+            let bestD = MAX_D;
+            for (const t of hitTargets) {
+              const d = Math.hypot(t.left - x, t.top - y);
+              if (d <= bestD) {
+                bestD = d;
+                best = t;
+              }
+            }
+            if (best) onSelectGroupRef.current?.(best.id);
+          }}
+          onTouchEnd={(e) => {
+            if (e.changedTouches.length === 0) return;
+            const touch = e.changedTouches[0]!;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            const MAX_D = 56;
+            let best: (typeof hitTargets)[number] | null = null;
+            let bestD = MAX_D;
+            for (const t of hitTargets) {
+              const d = Math.hypot(t.left - x, t.top - y);
+              if (d <= bestD) {
+                bestD = d;
+                best = t;
+              }
+            }
+            if (!best) return;
+            e.preventDefault();
+            onSelectGroupRef.current?.(best.id);
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 1300,
+            cursor: hitTargets.length ? "pointer" : "default",
+            background: "transparent",
+            touchAction: "manipulation",
+          }}
+        />
+      ) : null}
     </div>
   );
 }

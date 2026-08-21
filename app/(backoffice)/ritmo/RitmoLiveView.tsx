@@ -845,7 +845,7 @@ export default function RitmoLiveView({
         marshals={liveMarshals}
         selectedId={selectedId}
         showHoleLabels={false}
-        rotate={vp.shouldRotateMap}
+        rotate={false}
         onSelectGroup={(id) => {
           const params = new URLSearchParams({
             scope: "one",
@@ -853,7 +853,8 @@ export default function RitmoLiveView({
             group_id: id,
           });
           if (currentRoundId) params.set("round_id", currentRoundId);
-          router.push(`/seguimiento-captura?${params.toString()}`);
+          // Navegación dura: en mobile/webview router.push a veces no hace nada.
+          window.location.assign(`/seguimiento-captura?${params.toString()}`);
         }}
       />
       <div
@@ -861,7 +862,8 @@ export default function RitmoLiveView({
           position: "absolute",
           bottom: 10,
           left: 10,
-          zIndex: 1000,
+          zIndex: 900,
+          pointerEvents: "none",
           background: "rgba(0,0,0,0.78)",
           color: "#e2e8f0",
           padding: "8px 10px",
@@ -1199,24 +1201,29 @@ function GroupCard({
 
       <GroupStartControl groupId={g.id} actualStartAt={g.actualStartAt} roundDate={roundDate} />
 
-      <a
-        href={lagHref}
+      <button
+        type="button"
+        onClick={() => {
+          window.location.assign(lagHref);
+        }}
         style={{
           display: "block",
+          width: "calc(100% - 16px)",
           margin: "0 8px 8px",
-          padding: "7px 10px",
+          padding: "10px 10px",
           borderRadius: 6,
-          background: "#1e3a8a",
-          border: "1px solid #2563eb",
-          color: "#dbeafe",
-          fontSize: 11,
+          background: "#1d4ed8",
+          border: "1px solid #3b82f6",
+          color: "#eff6ff",
+          fontSize: 12,
           fontWeight: 800,
           textAlign: "center",
-          textDecoration: "none",
+          cursor: "pointer",
+          fontFamily: "inherit",
         }}
       >
         Capturas retrasadas G{g.number} →
-      </a>
+      </button>
 
       {open ? (
         <div
