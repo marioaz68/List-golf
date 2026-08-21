@@ -73,6 +73,8 @@ type Props = {
   groups: SegGroup[];
   computedAtISO: string;
   todayLabel: string;
+  /** Desde el mapa de ritmo: abrir y destacar este group_id. */
+  focusGroupId?: string | null;
 };
 
 const KIND_META: Record<
@@ -248,11 +250,33 @@ export default function SeguimientoCapturaLive({
   groups,
   computedAtISO,
   todayLabel,
+  focusGroupId = null,
 }: Props) {
   const router = useRouter();
   const [secondsAgo, setSecondsAgo] = useState(0);
-  const [onlyProblems, setOnlyProblems] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const focus = String(focusGroupId ?? "").trim() || null;
+  const focusGroup = useMemo(
+    () => (focus ? groups.find((g) => g.id === focus) ?? null : null),
+    [groups, focus]
+  );
+  const [onlyProblems, setOnlyProblems] = useState(() => !focusGroup);
+  const [expandedId, setExpandedId] = useState<string | null>(() => focus);
+
+  useEffect(() => {
+    if (!focus) return;
+    setExpandedId(focus);
+    // Si el grupo no es “problema”, quitar filtro para que se vea.
+    if (focusGroup && !isCaptureProblem(focusGroup.kind)) {
+      setOnlyProblems(false);
+    } else if (focusGroup) {
+      setOnlyProblems(true);
+    }
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(`seg-group-${focus}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [focus, focusGroup]);
 
   useEffect(() => {
     const id = setInterval(() => router.refresh(), 20_000);
@@ -293,9 +317,19 @@ export default function SeguimientoCapturaLive({
   }, [groups]);
 
   const visible = useMemo(() => {
+    if (focus) {
+      const hit = sorted.find((g) => g.id === focus);
+      if (hit) {
+        // Siempre mostrar el grupo pedido desde ritmo, más el resto según filtro.
+        const rest = onlyProblems
+          ? sorted.filter((g) => g.id !== focus && isCaptureProblem(g.kind))
+          : sorted.filter((g) => g.id !== focus);
+        return [hit, ...rest];
+      }
+    }
     if (!onlyProblems) return sorted;
     return sorted.filter((g) => isCaptureProblem(g.kind));
-  }, [sorted, onlyProblems]);
+  }, [sorted, onlyProblems, focus]);
 
   const problemN = counts.critico + counts.atrasado + counts.silencioso;
 
@@ -571,6 +605,33 @@ export default function SeguimientoCapturaLive({
       </header>
 
       <main style={{ flex: 1, padding: "12px 12px 28px", maxWidth: 920, width: "100%", margin: "0 auto" }}>
+        {focusGroup ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#1e3a8a",
+              border: "1px solid #3b82f6",
+              color: "#dbeafe",
+              fontSize: 13,
+              fontWeight: 700,
+              lineHeight: 1.4,
+            }}
+          >
+            Desde ritmo · G{focusGroup.number}
+            {focusGroup.players.length
+              ? ` · ${focusGroup.players
+                  .slice(0, 2)
+                  .map((n) => n.split(/\s+/)[0])
+                  .join(", ")}…`
+              : ""}
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, opacity: 0.95 }}>
+              Revisa abajo si el problema es{" "}
+              <b>ritmo de juego</b>, <b>captura de tarjeta</b> o ambas.
+            </div>
+          </div>
+        ) : null}
         {groups.length === 0 ? (
           <EmptyBox>
             {mode === "all"
@@ -600,9 +661,16 @@ export default function SeguimientoCapturaLive({
               return (
                 <article
                   key={g.id}
+                  id={`seg-group-${g.id}`}
                   style={{
                     borderRadius: 14,
-                    border: `2px solid ${meta.border}`,
+                    border: `2px solid ${
+                      focus === g.id ? "#2563eb" : meta.border
+                    }`,
+                    boxShadow:
+                      focus === g.id
+                        ? "0 0 0 3px rgba(37,99,235,0.35)"
+                        : undefined,
                     background: meta.bg,
                     color: "#0f172a",
                     overflow: "hidden",

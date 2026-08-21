@@ -52,6 +52,7 @@ export default async function SeguimientoCapturaPage({
   const sp = await searchParams;
   const filterTournamentId = getParam(sp, "tournament_id");
   const queryRoundId = getParam(sp, "round_id");
+  const focusGroupId = getParam(sp, "group_id");
   const scopeParam = getParam(sp, "scope");
   // Con tournament_id → un torneo salvo scope=all explícito; sin id → todos hoy.
   const scopeAll = filterTournamentId
@@ -180,6 +181,7 @@ export default async function SeguimientoCapturaPage({
         groups={groups}
         computedAtISO={computedAtISO}
         todayLabel={today}
+        focusGroupId={focusGroupId || null}
       />
     );
   }
@@ -234,6 +236,7 @@ export default async function SeguimientoCapturaPage({
       groups={Array.from(byId.values())}
       computedAtISO={computedAtISO}
       todayLabel={today}
+      focusGroupId={focusGroupId || null}
     />
   );
 }

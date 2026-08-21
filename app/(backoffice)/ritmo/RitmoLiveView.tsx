@@ -805,9 +805,15 @@ export default function RitmoLiveView({
         selectedId={selectedId}
         showHoleLabels={false}
         rotate={vp.shouldRotateMap}
-        onSelectGroup={(id) =>
-          setSelectedId((prev) => (prev === id ? null : id))
-        }
+        onSelectGroup={(id) => {
+          const params = new URLSearchParams({
+            scope: "one",
+            tournament_id: tournamentId,
+            group_id: id,
+          });
+          if (currentRoundId) params.set("round_id", currentRoundId);
+          router.push(`/seguimiento-captura?${params.toString()}`);
+        }}
       />
       <div
         style={{
@@ -830,7 +836,8 @@ export default function RitmoLiveView({
           · {listGroups.length} en lista
         </div>
         <div>
-          <b>G1, G3…</b> = salidas. Azules grandes con iniciales = marshals GPS.
+          <b>G1, G3…</b> = salidas. Azules con iniciales = marshals GPS.
+          Toca un grupo → capturas retrasadas (ritmo vs captura).
           Borde punteado = posición por captura (sin GPS).
         </div>
       </div>
