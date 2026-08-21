@@ -166,9 +166,14 @@ export async function sendAndTrackTelegramMessage(
         currentRoundNo != null &&
         prevRoundNo != null &&
         prevRoundNo < currentRoundNo;
+      // Misma ronda: reemplazar (p. ej. ajuste de tee time).
+      const deleteBySameRound =
+        kind === "next_round_group" &&
+        Boolean(params.roundId) &&
+        prevRoundId === String(params.roundId).trim();
       const deleteBySameKindFallback =
         kind !== "next_round_group" || currentRoundNo == null;
-      if (!deleteByRoundNo && !deleteBySameKindFallback) {
+      if (!deleteByRoundNo && !deleteBySameRound && !deleteBySameKindFallback) {
         continue;
       }
 

@@ -58,6 +58,13 @@ export async function notifyNextRoundGroupCreated(
     nextTeeTime?: string | null;
     /** Texto del resultado del match que se acaba de cerrar (para anunciar). */
     closedMatchResult?: string | null;
+    /**
+     * `created` = avance de cuadro (default).
+     * `tee_adjusted` = el comité cambió el tee; avisa y reemplaza el mensaje previo.
+     */
+    reason?: "created" | "tee_adjusted";
+    /** Tee anterior (HH:MM), solo para mensaje de ajuste. */
+    previousTeeTime?: string | null;
   }
 ): Promise<NotifyResult> {
   const result: NotifyResult = {
@@ -236,21 +243,43 @@ export async function notifyNextRoundGroupCreated(
   }
 
   // 5. Mensaje + envío
+  const reason = args.reason ?? "created";
+  const prevTee = String(args.previousTeeTime ?? "").trim().slice(0, 5) || null;
+  const curTee = teeTime ? teeTime.slice(0, 5) : null;
+
   function buildText(greeting: string): string {
     const lines: string[] = [];
     lines.push(`${greeting},`);
     lines.push("");
-    lines.push("🏌️ ¡Avanzaste a la siguiente ronda del cuadro!");
-    if (args.closedMatchResult) {
-      lines.push(`Match cerrado: ${args.closedMatchResult}`);
+    if (reason === "tee_adjusted") {
+      lines.push("⚠️ Ajuste de horario de salida");
+      lines.push(
+        "Hubo un cambio en las salidas. Este mensaje reemplaza el anterior: la hora de abajo es la correcta."
+      );
+      if (prevTee && curTee && prevTee !== curTee) {
+        lines.push(`Antes: ${prevTee} → Ahora: ${curTee}`);
+      }
+    } else {
+      lines.push("🏌️ ¡Avanzaste a la siguiente ronda del cuadro!");
+      if (args.closedMatchResult) {
+        lines.push(`Match cerrado: ${args.closedMatchResult}`);
+      }
     }
     if (tournamentName) lines.push(`Torneo: ${tournamentName}`);
-    if (roundNo != null) lines.push(`Próxima ronda: R${roundNo}`);
+    if (roundNo != null) {
+      lines.push(
+        reason === "tee_adjusted" ? `Ronda: R${roundNo}` : `Próxima ronda: R${roundNo}`
+      );
+    }
     if (groupNo != null) lines.push(`Grupo: #${groupNo}`);
     if (startingHole != null) lines.push(`Hoyo de salida: ${startingHole}`);
-    if (teeTime) lines.push(`Tee time: ${teeTime.slice(0, 5)}`);
+    if (curTee) lines.push(`Tee time: ${curTee}`);
     lines.push("");
-    lines.push("Toca el botón para abrir la tarjeta de la próxima ronda:");
+    lines.push(
+      reason === "tee_adjusted"
+        ? "Toca el botón para abrir la tarjeta actualizada:"
+        : "Toca el botón para abrir la tarjeta de la próxima ronda:"
+    );
     return lines.join("\n");
   }
 

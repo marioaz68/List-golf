@@ -624,12 +624,38 @@ export async function updateGroup(formData: FormData) {
     throw new Error("tee_time inválido. Usa HH:MM (ej. 07:30)");
   }
 
+  const { data: before } = await supabase
+    .from("pairing_groups")
+    .select("tee_time")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("pairing_groups")
     .update({ tee_time, starting_hole, notes })
     .eq("id", id);
 
   if (error) throw new Error("Error actualizando grupo: " + error.message);
+
+  const prevTee = before?.tee_time != null ? String(before.tee_time) : null;
+  const nextTee = tee_time != null ? tee_time : prevTee;
+  if (prevTee !== nextTee) {
+    try {
+      const admin = tryCreateAdminClient() ?? createAdminClient();
+      const { notifyIfGroupTeeTimeChanged } = await import(
+        "@/lib/matchplay/notifyGroupTeeTimeChanged"
+      );
+      await notifyIfGroupTeeTimeChanged(admin, {
+        tournamentId: tournament_id,
+        roundId: round_id,
+        groupId: id,
+        previousTeeTime: prevTee,
+        nextTeeTime: nextTee,
+      });
+    } catch (err) {
+      console.error("[updateGroup] notify tee adjust:", err);
+    }
+  }
 
   revalidatePath("/tee-sheet");
   redirectToTeeSheet({ tournament_id, round_id, group_size, cat });
@@ -672,6 +698,19 @@ async function _recalculateTeeTimes(formData: FormData) {
 
   const list = (groups ?? []) as any[];
 
+  const { data: beforeTees } = await supabase
+    .from("pairing_groups")
+    .select("id, tee_time")
+    .eq("round_id", round_id);
+  const prevById = new Map(
+    (beforeTees ?? []).map((g) => [
+      String(g.id),
+      g.tee_time != null ? String(g.tee_time) : null,
+    ])
+  );
+
+  const changed: Array<{ id: string; prev: string | null; next: string }> = [];
+
   for (let i = 0; i < list.length; i++) {
     const g = list[i]!;
     const tee_time = formatHHMM(baseMinutes + i * interval);
@@ -685,6 +724,32 @@ async function _recalculateTeeTimes(formData: FormData) {
       .eq("id", g.id);
 
     if (error) throw new Error("Error actualizando tee_time: " + error.message);
+
+    const prev = prevById.get(String(g.id)) ?? null;
+    const prevNorm = prev ? prev.slice(0, 5) : null;
+    if (prevNorm !== tee_time) {
+      changed.push({ id: String(g.id), prev, next: tee_time });
+    }
+  }
+
+  if (changed.length > 0) {
+    try {
+      const admin = tryCreateAdminClient() ?? createAdminClient();
+      const { notifyIfGroupTeeTimeChanged } = await import(
+        "@/lib/matchplay/notifyGroupTeeTimeChanged"
+      );
+      for (const c of changed) {
+        await notifyIfGroupTeeTimeChanged(admin, {
+          tournamentId: tournament_id,
+          roundId: round_id,
+          groupId: c.id,
+          previousTeeTime: c.prev,
+          nextTeeTime: c.next,
+        });
+      }
+    } catch (err) {
+      console.error("[recalculateTeeTimes] notify:", err);
+    }
   }
 
   revalidatePath("/tee-sheet");
