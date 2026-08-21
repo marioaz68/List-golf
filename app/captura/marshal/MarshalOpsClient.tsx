@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { initTelegramWebApp } from "@/lib/telegram/miniapp";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
-import { isCaptureProblem } from "@/lib/ritmo/captureLag";
+import {
+  classifyDelayCause,
+  delayCauseLabel,
+  formatCaptureVsPaceLine,
+  isCaptureProblem,
+} from "@/lib/ritmo/captureLag";
 import {
   capturerRoleLabel,
   compareGroupsForMarshalRoute,
@@ -52,60 +57,82 @@ function agoLabel(iso: string | null): string {
   return `hace ${h} h${m ? ` ${m} m` : ""}`;
 }
 
-function holeLine(g: CaptureLagGroupRow): string {
-  if (g.kind === "terminado" || g.holesPlayed >= 18) return "H18 · completo";
-  if (g.captureHole != null && g.expectedHole != null) {
-    return `H${g.captureHole} · deberían H${g.expectedHole}`;
-  }
-  if (g.captureHole != null) return `van en H${g.captureHole}`;
-  if (g.expectedHole != null) return `deberían H${g.expectedHole}`;
-  return `salida H${g.startingHole}`;
+function shortPlayerName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return full.trim() || "—";
+  return `${parts[0]} ${parts[1]}`;
 }
 
 function PaceDelayBadge({
   minutes,
   holesBehind,
+  kind,
 }: {
   minutes: number | null;
   holesBehind: number;
+  kind: CaptureLagKind;
 }) {
-  if (minutes == null || minutes <= 0) {
+  const cause = classifyDelayCause({
+    paceDelayMinutes: minutes,
+    holesBehind,
+    kind,
+  });
+  const label = delayCauseLabel(cause);
+  if (!label) {
     if (holesBehind <= 0) return null;
     return (
       <span
         style={{
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 800,
           color: "#9a3412",
           background: "#fff7ed",
-          padding: "4px 8px",
+          padding: "5px 9px",
           borderRadius: 8,
           whiteSpace: "nowrap",
           textAlign: "right",
         }}
       >
-        {holesBehind} hoyo{holesBehind === 1 ? "" : "s"} atrás
+        {holesBehind} hoyo{holesBehind === 1 ? "" : "s"} captura
       </span>
     );
   }
   return (
     <span
       style={{
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 800,
-        color: minutes >= 20 ? "#991b1b" : "#9a3412",
-        background: minutes >= 20 ? "#fef2f2" : "#fff7ed",
-        padding: "4px 8px",
+        color:
+          cause === "ambas"
+            ? "#991b1b"
+            : cause === "ritmo"
+              ? "#9a3412"
+              : "#854d0e",
+        background:
+          cause === "ambas"
+            ? "#fef2f2"
+            : cause === "ritmo"
+              ? "#fff7ed"
+              : "#fefce8",
+        padding: "5px 9px",
         borderRadius: 8,
-        whiteSpace: "nowrap",
+        whiteSpace: "normal",
         textAlign: "right",
-        lineHeight: 1.25,
+        lineHeight: 1.3,
+        maxWidth: 140,
       }}
     >
-      ~{minutes} min
-      <span style={{ display: "block", fontSize: 9, fontWeight: 700, opacity: 0.85 }}>
-        ritmo campo
-      </span>
+      {label}
+      {minutes != null && minutes > 0 ? (
+        <span style={{ display: "block", fontSize: 11, opacity: 0.9 }}>
+          ritmo ~{minutes} min
+        </span>
+      ) : null}
+      {holesBehind > 0 ? (
+        <span style={{ display: "block", fontSize: 11, opacity: 0.9 }}>
+          captura {holesBehind}h
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -476,8 +503,8 @@ export default function MarshalOpsClient({
                   <div
                     key={g.id}
                     style={{
-                      marginBottom: 10,
-                      borderRadius: 12,
+                      marginBottom: 12,
+                      borderRadius: 14,
                       border: `1px solid ${meta.color}55`,
                       background: "#0b1220",
                       overflow: "hidden",
@@ -491,7 +518,7 @@ export default function MarshalOpsClient({
                       style={{
                         width: "100%",
                         textAlign: "left",
-                        padding: "10px 12px",
+                        padding: "12px 14px",
                         background: "transparent",
                         border: "none",
                         color: "inherit",
@@ -503,11 +530,11 @@ export default function MarshalOpsClient({
                         style={{
                           display: "flex",
                           justifyContent: "space-between",
-                          gap: 8,
+                          gap: 10,
                           alignItems: "flex-start",
                         }}
                       >
-                        <div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
                           <div
                             style={{
                               display: "flex",
@@ -516,54 +543,69 @@ export default function MarshalOpsClient({
                               flexWrap: "wrap",
                             }}
                           >
-                            <span style={{ fontWeight: 800, fontSize: 15 }}>
+                            <span style={{ fontWeight: 800, fontSize: 17 }}>
                               #{idx + 1} · G{g.number}
                             </span>
                             <span
                               style={{
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: 800,
                                 color: meta.color,
                                 background: meta.bg,
-                                padding: "2px 6px",
+                                padding: "3px 7px",
                                 borderRadius: 6,
                               }}
                             >
                               {meta.label}
                             </span>
                           </div>
-                          <div style={{ fontSize: 12, color: "#cbd5e1", marginTop: 4 }}>
-                            {holeLine(g)}
+                          <div
+                            style={{
+                              fontSize: 15,
+                              fontWeight: 800,
+                              color: "#f1f5f9",
+                              marginTop: 6,
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {g.players.map(shortPlayerName).join(" · ") ||
+                              "Sin jugadores"}
                           </div>
-                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                            Salida {formatTime(g.teeTime)} · {g.reason}
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: "#93c5fd",
+                              marginTop: 5,
+                            }}
+                          >
+                            {formatCaptureVsPaceLine({
+                              holesPlayed: g.holesPlayed,
+                              captureHole: g.captureHole,
+                              expectedHole: g.expectedHole,
+                              expectedHoles: g.expectedHoles,
+                            })}
                           </div>
-                          {g.paceDelayMinutes != null && g.paceDelayMinutes > 0 ? (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: g.paceDelayMinutes >= 20 ? "#fca5a5" : "#fdba74",
-                                marginTop: 4,
-                              }}
-                            >
-                              Retraso en ritmo del campo: ~{g.paceDelayMinutes} min
-                              {g.holesBehind > 0
-                                ? ` · ${g.holesBehind} hoyo${g.holesBehind === 1 ? "" : "s"} de captura atrás`
-                                : ""}
-                            </div>
-                          ) : g.holesBehind > 0 ? (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: "#fdba74",
-                                marginTop: 4,
-                              }}
-                            >
-                              {g.holesBehind} hoyo{g.holesBehind === 1 ? "" : "s"} de captura atrás vs ritmo
-                            </div>
-                          ) : null}
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#94a3b8",
+                              marginTop: 4,
+                            }}
+                          >
+                            Salida {formatTime(g.teeTime)} · {agoLabel(g.lastCaptureTs)}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: meta.color,
+                              marginTop: 4,
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {g.reason}
+                          </div>
                         </div>
                         <div
                           style={{
@@ -577,8 +619,9 @@ export default function MarshalOpsClient({
                           <PaceDelayBadge
                             minutes={g.paceDelayMinutes}
                             holesBehind={g.holesBehind}
+                            kind={g.kind}
                           />
-                          <span style={{ fontSize: 18, color: "#64748b" }}>
+                          <span style={{ fontSize: 20, color: "#64748b" }}>
                             {expanded ? "▾" : "▸"}
                           </span>
                         </div>

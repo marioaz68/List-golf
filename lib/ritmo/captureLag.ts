@@ -289,6 +289,16 @@ export function evaluateCaptureLag(args: {
     });
   }
 
+  const expectedOnHole = paceExpectedHole(expectedHoles, startHole);
+  const progressHint =
+    captureHole != null && expectedOnHole != null
+      ? `van H${captureHole}, ritmo H${expectedOnHole}`
+      : captureHole != null
+        ? `van H${captureHole}`
+        : expectedOnHole != null
+          ? `ritmo H${expectedOnHole}`
+          : `${holesPlayed} capt. / ~${expectedHoles} esp.`;
+
   // 2) Retraso grande en hoyos capturados vs reloj.
   if (holesBehind >= HOLES_BEHIND_CRITICO) {
     return lag(startHole, {
@@ -299,7 +309,7 @@ export function evaluateCaptureLag(args: {
       minutesSinceStart: minsStart,
       minutesSinceLastCapture: minsSilent,
       captureHole,
-      reason: `Captura ${holesBehind} hoyos atrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
+      reason: `Captura ${holesBehind} hoyos atrasada (${progressHint})`,
       priority: 1,
     });
   }
@@ -313,7 +323,7 @@ export function evaluateCaptureLag(args: {
       minutesSinceStart: minsStart,
       minutesSinceLastCapture: minsSilent,
       captureHole,
-      reason: `Captura ${holesBehind} hoyos atrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
+      reason: `Captura ${holesBehind} hoyos atrasada (${progressHint})`,
       priority: 5,
     });
   }
@@ -332,7 +342,12 @@ export function evaluateCaptureLag(args: {
       minutesSinceStart: minsStart,
       minutesSinceLastCapture: minsSilent,
       captureHole,
-      reason: `Sin capturas desde hace ${minsSilent} min (último hoyo seq. ${holesPlayed})`,
+      reason: `Sin capturas desde hace ${minsSilent} min` +
+        (captureHole != null
+          ? ` · van en H${captureHole}`
+          : holesPlayed > 0
+            ? ` · ${holesPlayed} hoyos capt.`
+            : ""),
       priority: 10,
     });
   }
@@ -360,7 +375,7 @@ export function evaluateCaptureLag(args: {
       minutesSinceStart: minsStart,
       minutesSinceLastCapture: minsSilent,
       captureHole,
-      reason: `1 hoyo de captura retrasada (va ${holesPlayed}, debería ~${expectedHoles})`,
+      reason: `1 hoyo de captura retrasada (${progressHint})`,
       priority: 15,
     });
   }
@@ -386,4 +401,58 @@ export function isCaptureProblem(kind: CaptureLagKind): boolean {
   return (
     kind === "critico" || kind === "atrasado" || kind === "silencioso"
   );
+}
+
+/** Origen del retraso operativo (ritmo en cancha vs anotar tarjeta). */
+export type DelayCause = "ritmo" | "captura" | "ambas" | "ninguno";
+
+export function classifyDelayCause(args: {
+  paceDelayMinutes: number | null | undefined;
+  holesBehind: number;
+  kind?: CaptureLagKind;
+}): DelayCause {
+  const paceLate = (args.paceDelayMinutes ?? 0) > 0;
+  const captureLate =
+    args.holesBehind > 0 || args.kind === "silencioso";
+  if (paceLate && captureLate) return "ambas";
+  if (paceLate) return "ritmo";
+  if (captureLate) return "captura";
+  return "ninguno";
+}
+
+export function delayCauseLabel(cause: DelayCause): string | null {
+  switch (cause) {
+    case "ritmo":
+      return "Retraso de ritmo de juego";
+    case "captura":
+      return "Retraso en captura de tarjeta";
+    case "ambas":
+      return "Ritmo lento + captura atrasada";
+    default:
+      return null;
+  }
+}
+
+/** Texto corto de progreso: hoyo en cancha (no “hoyos completados”). */
+export function formatCaptureVsPaceLine(args: {
+  holesPlayed: number;
+  captureHole: number | null;
+  expectedHole: number | null;
+  expectedHoles: number;
+}): string {
+  const { holesPlayed, captureHole, expectedHole, expectedHoles } = args;
+  if (holesPlayed >= 18) return "18 hoyos · completo";
+  const van =
+    captureHole != null
+      ? `van en H${captureHole}`
+      : holesPlayed <= 0
+        ? "sin captura"
+        : `${holesPlayed} hoyos capt.`;
+  if (expectedHole != null) {
+    return `${van} · ritmo debería H${expectedHole}`;
+  }
+  if (expectedHoles > 0) {
+    return `${van} · deberían ~${expectedHoles} hoyos capt.`;
+  }
+  return van;
 }

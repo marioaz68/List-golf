@@ -10,7 +10,12 @@ import {
   type ReactNode,
 } from "react";
 import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
-import { isCaptureProblem } from "@/lib/ritmo/captureLag";
+import {
+  classifyDelayCause,
+  delayCauseLabel,
+  formatCaptureVsPaceLine,
+  isCaptureProblem,
+} from "@/lib/ritmo/captureLag";
 import {
   capturerRoleLabel,
   compareGroupsForMarshalRoute,
@@ -37,6 +42,7 @@ export type SegGroup = {
   minutesSinceLastCapture: number | null;
   captureHole: number | null;
   expectedHole: number | null;
+  paceDelayMinutes: number | null;
   reason: string;
   priority: number;
   capturaHref: string;
@@ -140,14 +146,14 @@ function agoLabel(iso: string | null): string {
   return `hace ${h} h${m ? ` ${m} m` : ""}`;
 }
 
-/** Hoyo visible para marshals: captura vs ritmo del campo. */
+/** Hoyo visible para marshals: captura vs ritmo del campo (hoyo EN cancha). */
 function captureHoleDisplay(g: SegGroup): {
   headline: string;
   detail: string;
   paceLabel: string | null;
 } {
   const paceLabel =
-    g.expectedHole != null ? `deberían ir H${g.expectedHole}` : null;
+    g.expectedHole != null ? `ritmo debería H${g.expectedHole}` : null;
 
   if (g.kind === "terminado" || g.holesPlayed >= 18) {
     return { headline: "H18", detail: "captura completa", paceLabel: null };
@@ -159,38 +165,75 @@ function captureHoleDisplay(g: SegGroup): {
       paceLabel,
     };
   }
-  const last = g.lastHole;
   const current = g.captureHole;
-  if (last != null && current != null) {
+  if (current != null) {
     return {
       headline: `H${current}`,
-      detail: `captura hasta H${last}`,
+      detail:
+        g.lastHole != null
+          ? `último anotado H${g.lastHole}`
+          : "hoyo en cancha (captura)",
       paceLabel,
     };
   }
-  if (last != null) {
-    return { headline: `H${last}`, detail: "último capturado", paceLabel };
-  }
-  if (current != null) {
-    return { headline: `H${current}`, detail: "van en cancha", paceLabel };
+  if (g.lastHole != null) {
+    return { headline: `H${g.lastHole}`, detail: "último capturado", paceLabel };
   }
   return { headline: "—", detail: "sin dato de hoyo", paceLabel };
 }
 
-function captureProgressBadge(g: SegGroup): string {
-  if (g.holesPlayed <= 0) {
-    return `H${g.startingHole} sin anotar`;
+function shortPlayerName(full: string): string {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return full.trim() || "—";
+  return `${parts[0]} ${parts[1]}`;
+}
+
+function DelayCauseBanner({ g }: { g: SegGroup }) {
+  const cause = classifyDelayCause({
+    paceDelayMinutes: g.paceDelayMinutes,
+    holesBehind: g.holesBehind,
+    kind: g.kind,
+  });
+  const label = delayCauseLabel(cause);
+  if (!label) return null;
+  const bits: string[] = [label];
+  if (g.paceDelayMinutes != null && g.paceDelayMinutes > 0) {
+    bits.push(`ritmo ~${g.paceDelayMinutes} min`);
   }
-  if (g.lastHole != null && g.captureHole != null) {
-    return `capt. H${g.lastHole} · van H${g.captureHole}`;
+  if (g.holesBehind > 0) {
+    bits.push(
+      `captura ${g.holesBehind} hoyo${g.holesBehind === 1 ? "" : "s"}`
+    );
   }
-  if (g.captureHole != null) {
-    return `van en H${g.captureHole}`;
-  }
-  if (g.lastHole != null) {
-    return `capt. H${g.lastHole}`;
-  }
-  return "sin dato de captura";
+  const color =
+    cause === "ambas"
+      ? "#991b1b"
+      : cause === "ritmo"
+        ? "#9a3412"
+        : "#854d0e";
+  const bg =
+    cause === "ambas"
+      ? "#fef2f2"
+      : cause === "ritmo"
+        ? "#fff7ed"
+        : "#fefce8";
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        fontSize: 13,
+        fontWeight: 800,
+        color,
+        background: bg,
+        border: `1px solid ${color}44`,
+        padding: "6px 10px",
+        borderRadius: 8,
+        lineHeight: 1.35,
+      }}
+    >
+      {bits.join(" · ")}
+    </div>
+  );
 }
 
 export default function SeguimientoCapturaLive({
@@ -549,7 +592,7 @@ export default function SeguimientoCapturaLive({
             )}
           </EmptyBox>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {visible.map((g, routeIndex) => {
               const meta = KIND_META[g.kind];
               const open = expandedId === g.id;
@@ -558,7 +601,7 @@ export default function SeguimientoCapturaLive({
                 <article
                   key={g.id}
                   style={{
-                    borderRadius: 12,
+                    borderRadius: 14,
                     border: `2px solid ${meta.border}`,
                     background: meta.bg,
                     color: "#0f172a",
@@ -571,7 +614,7 @@ export default function SeguimientoCapturaLive({
                     style={{
                       width: "100%",
                       textAlign: "left",
-                      padding: "10px 12px",
+                      padding: "14px 14px 10px",
                       border: "none",
                       background: "transparent",
                       cursor: "pointer",
@@ -582,7 +625,7 @@ export default function SeguimientoCapturaLive({
                     <div
                       style={{
                         display: "flex",
-                        gap: 10,
+                        gap: 12,
                         alignItems: "flex-start",
                         justifyContent: "space-between",
                       }}
@@ -594,12 +637,12 @@ export default function SeguimientoCapturaLive({
                             flexWrap: "wrap",
                             gap: 6,
                             alignItems: "center",
-                            marginBottom: 4,
+                            marginBottom: 6,
                           }}
                         >
                           <span
                             style={{
-                              fontSize: 18,
+                              fontSize: 22,
                               fontWeight: 900,
                               letterSpacing: -0.5,
                             }}
@@ -608,12 +651,12 @@ export default function SeguimientoCapturaLive({
                           </span>
                           <span
                             style={{
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: 800,
                               color: "#64748b",
                               background: "#f1f5f9",
                               border: "1px solid #cbd5e1",
-                              padding: "2px 6px",
+                              padding: "3px 8px",
                               borderRadius: 999,
                             }}
                             title="Orden sugerido de ruta (de atrás hacia adelante)"
@@ -625,14 +668,14 @@ export default function SeguimientoCapturaLive({
                             g.tournamentId !== tournamentId) ? (
                             <span
                               style={{
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: 800,
                                 color: "#1e3a8a",
                                 background: "#dbeafe",
                                 border: "1px solid #93c5fd",
-                                padding: "2px 7px",
+                                padding: "3px 8px",
                                 borderRadius: 999,
-                                maxWidth: 160,
+                                maxWidth: 180,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
@@ -645,57 +688,63 @@ export default function SeguimientoCapturaLive({
                           ) : null}
                           <span
                             style={{
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: 800,
                               color: meta.color,
                               background: "#fff",
                               border: `1px solid ${meta.border}`,
-                              padding: "2px 7px",
+                              padding: "3px 8px",
                               borderRadius: 999,
                             }}
                           >
                             {meta.label}
                           </span>
-                          <span style={{ fontSize: 11, color: "#475569" }}>
+                          <span style={{ fontSize: 13, color: "#475569", fontWeight: 600 }}>
                             tee {formatTime(g.teeTime)}
                             {g.actualStartAt ? " · salida real" : ""} · salida
                             H{g.startingHole}
                           </span>
-                          <span
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: "#0f172a",
-                              background: "#fef9c3",
-                              border: "1px solid #fde047",
-                              padding: "2px 8px",
-                              borderRadius: 6,
-                            }}
-                          >
-                            {captureProgressBadge(g)}
-                          </span>
-                          {g.expectedHole != null ? (
-                            <span
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 800,
-                                color: "#1e3a8a",
-                                background: "#dbeafe",
-                                border: "1px solid #93c5fd",
-                                padding: "2px 8px",
-                                borderRadius: 6,
-                              }}
-                            >
-                              ritmo del campo → H{g.expectedHole}
-                            </span>
-                          ) : null}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 800,
+                            color: "#0f172a",
+                            lineHeight: 1.35,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {g.players.map(shortPlayerName).join(" · ") ||
+                            "Sin jugadores"}
                         </div>
                         <div
                           style={{
                             fontSize: 13,
+                            fontWeight: 800,
+                            color: "#1e3a8a",
+                            background: "#eff6ff",
+                            border: "1px solid #93c5fd",
+                            padding: "4px 10px",
+                            borderRadius: 8,
+                            display: "inline-block",
+                            marginBottom: 4,
+                          }}
+                        >
+                          {formatCaptureVsPaceLine({
+                            holesPlayed: g.holesPlayed,
+                            captureHole: g.captureHole,
+                            expectedHole: g.expectedHole,
+                            expectedHoles: g.expectedHoles,
+                          })}
+                        </div>
+                        <DelayCauseBanner g={g} />
+                        <div
+                          style={{
+                            fontSize: 14,
                             fontWeight: 700,
                             color: meta.color,
-                            lineHeight: 1.3,
+                            lineHeight: 1.35,
+                            marginTop: 6,
                           }}
                         >
                           {g.reason}
@@ -706,12 +755,12 @@ export default function SeguimientoCapturaLive({
                               display: "flex",
                               flexWrap: "wrap",
                               gap: 6,
-                              marginTop: 6,
+                              marginTop: 8,
                             }}
                           >
                             <span
                               style={{
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: 800,
                                 color: "#166534",
                                 alignSelf: "center",
@@ -723,12 +772,12 @@ export default function SeguimientoCapturaLive({
                               <span
                                 key={`${c.role}-${c.name}`}
                                 style={{
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontWeight: 800,
                                   color: "#14532d",
                                   background: "#dcfce7",
                                   border: "1px solid #86efac",
-                                  padding: "3px 9px",
+                                  padding: "4px 10px",
                                   borderRadius: 999,
                                 }}
                               >
@@ -739,7 +788,7 @@ export default function SeguimientoCapturaLive({
                         ) : (
                           <div
                             style={{
-                              fontSize: 11,
+                              fontSize: 12,
                               color: "#b45309",
                               marginTop: 6,
                               fontWeight: 600,
@@ -749,30 +798,17 @@ export default function SeguimientoCapturaLive({
                             quién lleva la tarjeta
                           </div>
                         )}
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#334155",
-                            marginTop: 4,
-                            lineHeight: 1.35,
-                          }}
-                        >
-                          {g.players.slice(0, 4).join(" · ")}
-                          {g.players.length > 4
-                            ? ` +${g.players.length - 4}`
-                            : ""}
-                        </div>
                       </div>
                       <div
                         style={{
                           textAlign: "right",
                           flexShrink: 0,
-                          minWidth: 96,
+                          minWidth: 110,
                         }}
                       >
                         <div
                           style={{
-                            fontSize: 28,
+                            fontSize: 34,
                             fontWeight: 900,
                             fontVariantNumeric: "tabular-nums",
                             color: meta.color,
@@ -783,10 +819,10 @@ export default function SeguimientoCapturaLive({
                         </div>
                         <div
                           style={{
-                            fontSize: 10,
+                            fontSize: 11,
                             color: "#64748b",
                             fontWeight: 700,
-                            marginTop: 2,
+                            marginTop: 3,
                           }}
                         >
                           {holeInfo.detail}
@@ -794,10 +830,10 @@ export default function SeguimientoCapturaLive({
                         {holeInfo.paceLabel ? (
                           <div
                             style={{
-                              fontSize: 11,
+                              fontSize: 12,
                               color: "#1d4ed8",
                               fontWeight: 800,
-                              marginTop: 4,
+                              marginTop: 5,
                             }}
                           >
                             {holeInfo.paceLabel}
@@ -805,17 +841,17 @@ export default function SeguimientoCapturaLive({
                         ) : null}
                         <div
                           style={{
-                            fontSize: 14,
+                            fontSize: 15,
                             fontWeight: 800,
                             fontVariantNumeric: "tabular-nums",
                             color: "#334155",
-                            marginTop: 6,
+                            marginTop: 8,
                           }}
                         >
                           {g.holesPlayed}
                           <span
                             style={{
-                              fontSize: 11,
+                              fontSize: 12,
                               fontWeight: 600,
                               color: "#64748b",
                             }}
@@ -825,7 +861,7 @@ export default function SeguimientoCapturaLive({
                         </div>
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: 12,
                             color: "#475569",
                             marginTop: 4,
                             fontWeight: 600,
@@ -942,12 +978,10 @@ export default function SeguimientoCapturaLive({
             lineHeight: 1.45,
           }}
         >
-          Criterio: compara hoyos capturados en secuencia vs el ritmo del campo
-          (minutos por hoyo). Crítico = sin captura &gt;22 min o ≥3 hoyos
-          atrasados. Atrasado = 1–2 hoyos. Silencio = sin captura &gt;20 min.
-          Match play sin tee time: la salida se toma de la primera captura (o
-          salida real marcada en Ritmo). Comparte con marshals para que pidan
-          anotar en el grupo.
+          Criterio: compara hoyos capturados vs el ritmo del campo. El número
+          grande es el <b>hoyo en cancha</b> (si anotaron hasta H7 → van en H8).
+          La etiqueta aclara si el problema es <b>ritmo de juego</b>,{" "}
+          <b>captura de tarjeta</b> o <b>ambas</b>.
         </p>
       </main>
     </div>
