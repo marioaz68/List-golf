@@ -248,7 +248,7 @@ export async function notifyNextRoundGroupCreated(
     if (roundNo != null) lines.push(`Próxima ronda: R${roundNo}`);
     if (groupNo != null) lines.push(`Grupo: #${groupNo}`);
     if (startingHole != null) lines.push(`Hoyo de salida: ${startingHole}`);
-    if (teeTime) lines.push(`Tee time: ${teeTime}`);
+    if (teeTime) lines.push(`Tee time: ${teeTime.slice(0, 5)}`);
     lines.push("");
     lines.push("Toca el botón para abrir la tarjeta de la próxima ronda:");
     return lines.join("\n");

@@ -232,12 +232,23 @@ export async function maybeCreateNextRoundGroup(
   let groupRecordId: string;
   let created = false;
   let updated = false;
+  // Tee efectivo: no pisar horarios que el comité ya ajustó en salidas
+  // (p. ej. ola de 11:00 + extraordinaria a las 07:00). Solo asignar
+  // fórmula al crear el grupo o si aún no tiene tee_time.
+  let effectiveTeeTime = teeTime;
   if (existing?.id) {
     groupRecordId = String(existing.id);
+    const { data: existingRow } = await admin
+      .from("pairing_groups")
+      .select("tee_time")
+      .eq("id", groupRecordId)
+      .maybeSingle();
+    const kept = String(existingRow?.tee_time ?? "").trim() || null;
+    if (kept) effectiveTeeTime = kept.slice(0, 8);
     await admin
       .from("pairing_groups")
       .update({
-        tee_time: teeTime ?? null,
+        ...(kept ? {} : { tee_time: teeTime ?? null }),
         notes,
       })
       .eq("id", groupRecordId);
@@ -247,12 +258,24 @@ export async function maybeCreateNextRoundGroup(
       .eq("group_id", groupRecordId);
     updated = true;
   } else {
+    // Grupo nuevo: si la ronda ya tiene salidas, encolar después del
+    // último tee (evita 07:00+(n-1)·iv cuando start_time es la extra).
+    const { data: peerTees } = await admin
+      .from("pairing_groups")
+      .select("tee_time")
+      .eq("round_id", nextRoundId);
+    const peerMins = (peerTees ?? [])
+      .map((g) => parseHHMM(String(g.tee_time ?? "")))
+      .filter((n): n is number => n != null);
+    if (peerMins.length > 0) {
+      effectiveTeeTime = formatHHMM(Math.max(...peerMins) + interval);
+    }
     const { data: inserted, error: insErr } = await admin
       .from("pairing_groups")
       .insert({
         round_id: nextRoundId,
         group_no: groupNo,
-        tee_time: teeTime ?? null,
+        tee_time: effectiveTeeTime ?? null,
         starting_hole: null,
         notes,
       })
@@ -264,7 +287,7 @@ export async function maybeCreateNextRoundGroup(
         created: false,
         groupNo,
         roundId: nextRoundId,
-        teeTime,
+        teeTime: effectiveTeeTime,
         reason: "insert_failed",
       };
     }
@@ -297,6 +320,6 @@ export async function maybeCreateNextRoundGroup(
     updated,
     groupNo,
     roundId: nextRoundId,
-    teeTime,
+    teeTime: effectiveTeeTime,
   };
 }
