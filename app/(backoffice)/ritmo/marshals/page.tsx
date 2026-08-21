@@ -73,12 +73,14 @@ export default async function MarshalTrailsPage({
   });
 
   return (
-    <MarshalTrailReport
-      tournamentId={tournamentId}
-      tournamentName={String(tournament.name ?? "Torneo")}
-      day={day}
-      initialTrails={trails}
-      computedAtISO={new Date().toISOString()}
-    />
+    <div style={{ height: "100%", minHeight: 0 }}>
+      <MarshalTrailReport
+        tournamentId={tournamentId}
+        tournamentName={String(tournament.name ?? "Torneo")}
+        day={day}
+        initialTrails={trails}
+        computedAtISO={new Date().toISOString()}
+      />
+    </div>
   );
 }

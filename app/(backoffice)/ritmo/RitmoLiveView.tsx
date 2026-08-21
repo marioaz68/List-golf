@@ -331,7 +331,8 @@ export default function RitmoLiveView({
         flexDirection: "column",
         overflow: "hidden",
         position: "relative",
-        zIndex: 2,
+        zIndex: 30,
+        isolation: "isolate",
       }}
     >
       <div style={{ padding: "12px 14px", borderBottom: "1px solid #222" }}>
@@ -576,14 +577,14 @@ export default function RitmoLiveView({
                   role="link"
                   tabIndex={0}
                   onClick={() => {
-                    router.push(
+                    window.location.assign(
                       `/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`
                     );
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      router.push(
+                      window.location.assign(
                         `/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`
                       );
                     }
@@ -784,6 +785,8 @@ export default function RitmoLiveView({
           gap: 8,
           flexShrink: 0,
           background: "#111",
+          position: "relative",
+          zIndex: 20,
         }}
       >
         <span>Actualizado hace {secondsAgo}s</span>
@@ -830,8 +833,14 @@ export default function RitmoLiveView({
           >
             ↻ Actualizar
           </button>
-          <Link
-            href={`/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`}
+          <button
+            type="button"
+            onClick={() => {
+              const href = `/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`;
+              // Navegación completa: el Link de Next a veces no responde
+              // bajo el mapa Leaflet en este layout.
+              window.location.assign(href);
+            }}
             style={{
               gridColumn: "1 / -1",
               fontSize: 11,
@@ -841,14 +850,15 @@ export default function RitmoLiveView({
               background: "#1e3a8a",
               color: "#dbeafe",
               border: "1px solid #2563eb",
-              textDecoration: "none",
+              cursor: "pointer",
               fontFamily: "inherit",
               textAlign: "center",
               display: "block",
+              width: "100%",
             }}
           >
             📍 Recorrido marshals
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -1051,11 +1061,15 @@ export default function RitmoLiveView({
           minWidth: vp.isMobile ? 200 : 280,
           height: "100%",
           minHeight: 0,
+          position: "relative",
+          zIndex: 30,
         }}
       >
         {sidebar}
       </div>
-      <div style={{ flex: 1, height: "100%" }}>{map}</div>
+      <div style={{ flex: 1, height: "100%", minWidth: 0, overflow: "hidden", position: "relative", zIndex: 1 }}>
+        {map}
+      </div>
     </div>
   );
 }
