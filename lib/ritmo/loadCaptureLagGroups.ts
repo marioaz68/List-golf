@@ -82,12 +82,14 @@ function entrySetKey(entryIds: string[]): string {
   return [...entryIds].filter(Boolean).sort().join("|");
 }
 
+export { entrySetKey as matchplayEntrySetKey };
+
 /**
  * Claves de 4 entry_ids cuyos partidos en el cuadro ya están cerrados
  * (completed / halved / walkover). Sirve para no marcar retraso de captura
  * en match play que terminó antes del H18.
  */
-async function loadCompletedMatchplayEntryKeys(
+export async function loadCompletedMatchplayEntryKeys(
   admin: SupabaseClient,
   tournamentId: string
 ): Promise<Map<string, string | null>> {

@@ -28,7 +28,11 @@ import {
   todayMexicoDate,
   isGroupCaptureFinished,
 } from "@/lib/ritmo/opsDay";
-import { loadRoundIdsWithCaptureActivityToday } from "@/lib/ritmo/loadCaptureLagGroups";
+import {
+  loadRoundIdsWithCaptureActivityToday,
+  loadCompletedMatchplayEntryKeys,
+  matchplayEntrySetKey,
+} from "@/lib/ritmo/loadCaptureLagGroups";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
 import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import RitmoLiveView, { type LiveGroup, type LiveStatus } from "./RitmoLiveView";
@@ -363,6 +367,12 @@ export default async function RitmoPage({
     groupMeta
   );
 
+  // Match play ya cerrado en cuadro (completed / halved / walkover).
+  const completedMatchByEntries = await loadCompletedMatchplayEntryKeys(
+    admin,
+    tournamentId
+  );
+
   const now = new Date(computedAtISO);
   const allGroups: LiveGroup[] = groupRows.map((g) => {
     const players = playersByGroup.get(g.id) ?? [];
@@ -386,10 +396,13 @@ export default async function RitmoPage({
     const scoreHole = score
       ? currentHoleFromHolesPlayed(scoreHolesPlayed, startHole)
       : null;
+    const groupEntryKey = matchplayEntrySetKey(entryIdsByGroup.get(g.id) ?? []);
+    const matchResult = completedMatchByEntries.get(groupEntryKey) ?? null;
+    const matchplayCompleted = completedMatchByEntries.has(groupEntryKey);
 
-    // Ronda/torneo cerrado por fecha, O salida con 18 hoyos capturados:
-    // congelar ritmo (no “lentos” eternos; reloj detenido para esa salida).
-    if (opsClosed || scoreFinished) {
+    // Ronda/torneo cerrado, 18 hoyos, O match cerrado en cuadro:
+    // congelar ritmo y ocultar botón de captura.
+    if (opsClosed || scoreFinished || matchplayCompleted) {
       const coverage = coverageByGroup.get(g.id);
       const gpsState: GroupGpsState = gpsStateFromTimestamp(
         lastTs,
@@ -404,9 +417,11 @@ export default async function RitmoPage({
           caddieHasTelegram: caddie?.hasTelegram ?? false,
         };
       });
-      const detail = scoreFinished
-        ? "🏁 18 hoyos capturados — salida cerrada, ritmo detenido"
-        : `Ronda/torneo cerrado · ${scoreHolesPlayed}/18 capturados (ritmo no se actualiza)`;
+      const detail = matchplayCompleted
+        ? `🏁 Match cerrado${matchResult ? ` · ${matchResult}` : ""} — ritmo detenido`
+        : scoreFinished
+          ? "🏁 18 hoyos capturados — salida cerrada, ritmo detenido"
+          : `Ronda/torneo cerrado · ${scoreHolesPlayed}/18 capturados (ritmo no se actualiza)`;
       return {
         id: g.id,
         number: g.group_no ?? 0,
@@ -428,7 +443,7 @@ export default async function RitmoPage({
         gpsState,
         activeSources: 0,
         scoreHolesPlayed,
-        scoreFinished,
+        scoreFinished: scoreFinished || matchplayCompleted,
         lastScoreTs: score?.lastCaptureTs ?? null,
         caddies: coverage?.caddies ?? [],
         playersWithTelegram: coverage?.playersWithTelegram ?? 0,

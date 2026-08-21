@@ -1178,30 +1178,53 @@ function GroupCard({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <a
-              href={lagHref}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: "50%",
-                background: accent,
-                color: "#fff",
-                fontSize: 13,
-                fontWeight: 800,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                textDecoration: "none",
-                border: "2px solid #fff",
-              }}
-              title={`Ver ritmo y captura G${g.number}`}
-            >
-              {g.number}
-            </a>
+            {g.status === "cerrado" || g.scoreFinished ? (
+              <span
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: accent,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  border: "2px solid #fff",
+                  opacity: 0.85,
+                }}
+                title={`G${g.number} cerrado`}
+              >
+                {g.number}
+              </span>
+            ) : (
+              <a
+                href={lagHref}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: accent,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                  textDecoration: "none",
+                  border: "2px solid #fff",
+                }}
+                title={`Ver ritmo y captura G${g.number}`}
+              >
+                {g.number}
+              </a>
+            )}
             <div style={{ fontSize: 12, fontWeight: 700 }}>
-              {g.scoreFinished
+              {g.scoreFinished || g.status === "cerrado"
                 ? "🏁 Final"
                 : g.hoyo != null
                   ? `Hoyo ${g.hoyo}`
@@ -1329,27 +1352,29 @@ function GroupCard({
 
       <GroupStartControl groupId={g.id} actualStartAt={g.actualStartAt} roundDate={roundDate} />
 
-      <a
-        href={lagHref}
-        style={{
-          display: "block",
-          width: "calc(100% - 16px)",
-          margin: "0 8px 8px",
-          padding: "10px 10px",
-          borderRadius: 6,
-          background: "#1d4ed8",
-          border: "1px solid #3b82f6",
-          color: "#eff6ff",
-          fontSize: 12,
-          fontWeight: 800,
-          textAlign: "center",
-          textDecoration: "none",
-          fontFamily: "inherit",
-          boxSizing: "border-box",
-        }}
-      >
-        Ver ritmo y captura G{g.number} →
-      </a>
+      {g.status !== "cerrado" && !g.scoreFinished ? (
+        <a
+          href={lagHref}
+          style={{
+            display: "block",
+            width: "calc(100% - 16px)",
+            margin: "0 8px 8px",
+            padding: "10px 10px",
+            borderRadius: 6,
+            background: "#1d4ed8",
+            border: "1px solid #3b82f6",
+            color: "#eff6ff",
+            fontSize: 12,
+            fontWeight: 800,
+            textAlign: "center",
+            textDecoration: "none",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+          }}
+        >
+          Ver ritmo y captura G{g.number} →
+        </a>
+      ) : null}
 
       {open ? (
         <div
