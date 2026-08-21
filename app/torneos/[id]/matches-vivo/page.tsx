@@ -9,6 +9,7 @@ import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
 import { buildLiveStrokeSnapshot } from "@/lib/matchplay/buildLiveStrokeSnapshot";
 import AutoRefresh from "@/components/public/AutoRefresh";
 import type { TournamentSettings } from "@/types/tournament";
+import { todayMexicoDate } from "@/lib/ritmo/opsDay";
 import MatchesLiveGrid from "./MatchesLiveGrid";
 import ReturnToCaptureBanner from "@/components/captura/ReturnToCaptureBanner";
 
@@ -112,6 +113,24 @@ export default async function PublicMatchesLivePage(props: {
 
   const snapshot = await buildLiveStrokeSnapshot(supabase, tournamentId);
 
+  // Ronda “de hoy” (México) para el filtro inicial de matches en vivo.
+  let focusRoundNo: number | null = null;
+  try {
+    const today = todayMexicoDate();
+    const { data: todayRounds } = await supabase
+      .from("rounds")
+      .select("round_no, round_date")
+      .eq("tournament_id", tournamentId)
+      .eq("round_date", today)
+      .order("round_no", { ascending: true });
+    const nos = (todayRounds ?? [])
+      .map((r) => Number(r.round_no))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (nos.length > 0) focusRoundNo = Math.max(...nos);
+  } catch {
+    focusRoundNo = null;
+  }
+
   // Salidas (pairing_groups) → tee_time / group_no por cruce de parejas.
   const matchSchedule: Record<
     string,
@@ -207,6 +226,7 @@ export default async function PublicMatchesLivePage(props: {
         matchSchedule={matchSchedule}
         initialOpenMatchId={initialOpenMatchId || null}
         openedFromBracket={openedFromBracket}
+        focusRoundNo={focusRoundNo}
       />
     </main>
   );

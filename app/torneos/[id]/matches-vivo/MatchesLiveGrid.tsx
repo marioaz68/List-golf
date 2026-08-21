@@ -60,6 +60,11 @@ type Props = {
   initialOpenMatchId?: string | null;
   /** True si se llegó desde el bracket (?from=bracket): al cerrar regresa allá. */
   openedFromBracket?: boolean;
+  /**
+   * Ronda del calendario con fecha de hoy (México). El filtro arranca en
+   * esta ronda + cualquier ronda anterior con partidos aún abiertos.
+   */
+  focusRoundNo?: number | null;
 };
 
 /** Devuelve [hombre, mujer] cuando es posible; mantiene A,B en otros casos. */
@@ -102,6 +107,7 @@ export default function MatchesLiveGrid({
   matchSchedule = {},
   initialOpenMatchId = null,
   openedFromBracket = false,
+  focusRoundNo = null,
 }: Props) {
   const router = useRouter();
   const { teams } = useMatchPlayTeamsRealtime(tournamentId, initialTeams);
@@ -344,23 +350,87 @@ export default function MatchesLiveGrid({
 
   const [selectedRounds, setSelectedRounds] = useState<Set<number>>(new Set());
   const [showRoundFilter, setShowRoundFilter] = useState(false);
+  /** Si el usuario tocó el filtro, no pisar su selección al refrescar. */
+  const userTouchedRoundsRef = useRef(false);
 
-  // Auto-selección: cuando los partidos cambian (p. ej. se publica nueva
-  // ronda), si todavía no hay nada seleccionado o quedaron rondas
-  // inválidas, marcamos las rondas con al menos 1 partido.
+  function computeDefaultSelectedRounds(
+    rounds: typeof availableRounds,
+    matchList: MatchRow[],
+    focus: number | null
+  ): Set<number> {
+    const withMatches = rounds.filter((r) => r.count > 0).map((r) => r.roundNo);
+    if (withMatches.length === 0) return new Set();
+
+    const openRoundNos = new Set<number>();
+    for (const m of matchList) {
+      if (m.status === "bye") continue;
+      if (m.status === "completed" || m.status === "walkover") continue;
+      // scheduled / in_progress / vacío: partido aún no cerrado
+      openRoundNos.add(m.round_no);
+    }
+
+    // Ronda de hoy (calendario); si no hay, la más alta con partidos.
+    let focal =
+      focus != null && withMatches.includes(focus)
+        ? focus
+        : Math.max(...withMatches);
+
+    // Si la focal aún no tiene partidos pero hay abiertos antes, subir/bajar
+    // al mayor open ≤ focal, o al mayor con partidos.
+    if (!withMatches.includes(focal)) {
+      const openAtOrBefore = [...openRoundNos].filter((n) => n <= focal);
+      focal =
+        openAtOrBefore.length > 0
+          ? Math.max(...openAtOrBefore)
+          : Math.max(...withMatches);
+    }
+
+    const next = new Set<number>();
+    next.add(focal);
+    for (const n of openRoundNos) {
+      // Rondas previas (o la misma) con match vivo / pendiente
+      if (n <= focal) next.add(n);
+    }
+    return next;
+  }
+
+  // Auto-selección inicial / al aparecer rondas nuevas: ronda de hoy +
+  // rondas con partidos aún abiertos (ej. R3 hoy + rematch R2).
   useEffect(() => {
     const validNos = new Set(
       availableRounds.filter((r) => r.count > 0).map((r) => r.roundNo)
     );
+    if (userTouchedRoundsRef.current) {
+      setSelectedRounds((prev) => {
+        const pruned = new Set<number>();
+        for (const n of prev) if (validNos.has(n)) pruned.add(n);
+        if (pruned.size === prev.size) {
+          let same = true;
+          for (const n of prev) if (!pruned.has(n)) same = false;
+          if (same) return prev;
+        }
+        return pruned;
+      });
+      return;
+    }
     setSelectedRounds((prev) => {
-      const next = new Set<number>();
-      for (const n of prev) if (validNos.has(n)) next.add(n);
-      if (next.size > 0) return prev.size === next.size ? prev : next;
-      return validNos;
+      const desired = computeDefaultSelectedRounds(
+        availableRounds,
+        matches,
+        focusRoundNo
+      );
+      if (
+        prev.size === desired.size &&
+        [...desired].every((n) => prev.has(n))
+      ) {
+        return prev;
+      }
+      return desired;
     });
-  }, [availableRounds]);
+  }, [availableRounds, matches, focusRoundNo]);
 
   function toggleRound(roundNo: number) {
+    userTouchedRoundsRef.current = true;
     setSelectedRounds((prev) => {
       const next = new Set(prev);
       if (next.has(roundNo)) next.delete(roundNo);
@@ -369,11 +439,13 @@ export default function MatchesLiveGrid({
     });
   }
   function selectAllRounds() {
+    userTouchedRoundsRef.current = true;
     setSelectedRounds(
       new Set(availableRounds.filter((r) => r.count > 0).map((r) => r.roundNo))
     );
   }
   function clearRounds() {
+    userTouchedRoundsRef.current = true;
     setSelectedRounds(new Set());
   }
 
