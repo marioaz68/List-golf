@@ -4,6 +4,7 @@ import {
   findLastMainRound,
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
 import { isPlayablePairTeam } from "@/lib/matchplay/playablePairTeam";
+import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
 
 /**
  * Si el match siguiente del cuadro ya tiene AMBAS parejas asignadas,
@@ -278,6 +279,16 @@ export async function maybeCreateNextRoundGroup(
       position: idx + 1,
     }));
     await admin.from("pairing_group_members").insert(members);
+  }
+
+  // Visible en página pública sin paso manual de "confirmar orden".
+  try {
+    await confirmStartingOrderForRound(admin, nextRoundId);
+  } catch (err) {
+    console.error(
+      `[maybeCreateNextRoundGroup] publish R${nextRoundNo}:`,
+      err
+    );
   }
 
   return {

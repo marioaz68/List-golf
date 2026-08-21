@@ -12,6 +12,7 @@ import {
 } from "@/lib/matchplay/ensureMatchPlayCalendarRounds";
 import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
+import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
 
 export const CONSOLATION_BRACKET_NAME = "Consolación Match Play";
 export const CONSOLATION_NOTES_PREFIX = "CONSOLACIÓN MP · ";
@@ -504,6 +505,15 @@ export async function maybeCreateConsolationRoundGroup(
     );
   }
 
+  try {
+    await confirmStartingOrderForRound(admin, nextRoundId);
+  } catch (err) {
+    console.error(
+      `[consolationMatchPlay] publish salidas round ${nextRoundId}:`,
+      err
+    );
+  }
+
   return {
     ok: true,
     created,
@@ -785,6 +795,17 @@ export function isConsolationMpEntryRound(
  * Busca el match del cuadro (principal o consolación) con estas parejas en la
  * ronda indicada.
  */
+function pairsMatch(
+  m: { top_pair_id: string | null; bottom_pair_id: string | null },
+  topPairId: string,
+  bottomPairId: string
+): boolean {
+  return (
+    (m.top_pair_id === topPairId && m.bottom_pair_id === bottomPairId) ||
+    (m.top_pair_id === bottomPairId && m.bottom_pair_id === topPairId)
+  );
+}
+
 export async function findBracketMatchForPairs(
   admin: SupabaseClient,
   params: {
@@ -793,8 +814,13 @@ export async function findBracketMatchForPairs(
     roundNo: number;
     topPairId: string;
     bottomPairId: string;
+    /**
+     * Si no hay partido en `roundNo`, busca el mismo cruce en otra ronda
+     * (p. ej. rematch reprogramado en el calendario de R3 pero aún es R2 del cuadro).
+     */
+    allowOtherRounds?: boolean;
   }
-): Promise<{ id: string; bracket_id: string } | null> {
+): Promise<{ id: string; bracket_id: string; round_no?: number } | null> {
   const bracketIds = [params.mainBracketId];
   const consolId = await getConsolationBracketId(admin, params.tournamentId);
   if (consolId) bracketIds.push(consolId);
@@ -802,18 +828,43 @@ export async function findBracketMatchForPairs(
   for (const bid of bracketIds) {
     const { data: rows } = await admin
       .from("matchplay_matches")
-      .select("id, bracket_id, top_pair_id, bottom_pair_id")
+      .select("id, bracket_id, round_no, top_pair_id, bottom_pair_id, status")
       .eq("bracket_id", bid)
       .eq("round_no", params.roundNo);
 
-    const hit = (rows ?? []).find(
-      (m) =>
-        (m.top_pair_id === params.topPairId &&
-          m.bottom_pair_id === params.bottomPairId) ||
-        (m.top_pair_id === params.bottomPairId &&
-          m.bottom_pair_id === params.topPairId)
+    const hit = (rows ?? []).find((m) =>
+      pairsMatch(m, params.topPairId, params.bottomPairId)
     );
-    if (hit) return { id: String(hit.id), bracket_id: String(hit.bracket_id) };
+    if (hit) {
+      return {
+        id: String(hit.id),
+        bracket_id: String(hit.bracket_id),
+        round_no: Number(hit.round_no),
+      };
+    }
+  }
+
+  if (!params.allowOtherRounds) return null;
+
+  // Rematch / salida movida de día: localizar el cruce pendiente en el cuadro.
+  for (const bid of bracketIds) {
+    const { data: rows } = await admin
+      .from("matchplay_matches")
+      .select("id, bracket_id, round_no, top_pair_id, bottom_pair_id, status")
+      .eq("bracket_id", bid)
+      .in("status", ["scheduled", "in_progress"])
+      .order("round_no", { ascending: true });
+
+    const hit = (rows ?? []).find((m) =>
+      pairsMatch(m, params.topPairId, params.bottomPairId)
+    );
+    if (hit) {
+      return {
+        id: String(hit.id),
+        bracket_id: String(hit.bracket_id),
+        round_no: Number(hit.round_no),
+      };
+    }
   }
   return null;
 }
