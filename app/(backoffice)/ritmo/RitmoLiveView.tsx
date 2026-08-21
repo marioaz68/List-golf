@@ -688,6 +688,22 @@ export default function RitmoLiveView({
           >
             ↻ Actualizar
           </button>
+          <Link
+            href={`/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`}
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "3px 9px",
+              borderRadius: 5,
+              background: "#1e3a8a",
+              color: "#dbeafe",
+              border: "1px solid #2563eb",
+              textDecoration: "none",
+              fontFamily: "inherit",
+            }}
+          >
+            📍 Recorrido marshals
+          </Link>
         </div>
       </div>
 

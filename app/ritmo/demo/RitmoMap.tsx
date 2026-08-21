@@ -28,9 +28,20 @@ export interface MarshalDot {
   updatedAt: string | null;
 }
 
+/** Ruta del día de un marshal (línea sobre el campo). */
+export interface MarshalTrailPath {
+  id: string;
+  color: string;
+  /** Si false, se dibuja tenue (marshal no seleccionado). */
+  active?: boolean;
+  points: Array<{ lat: number; lon: number }>;
+}
+
 interface RitmoMapProps {
   groups: GroupDot[];
   marshals?: MarshalDot[];
+  /** Trazos GPS del día (reporte marshals). */
+  trails?: MarshalTrailPath[];
   selectedId?: string | null;
   /** Etiquetas fijas H1–H18 del campo (no son grupos). Default false en vivo. */
   showHoleLabels?: boolean;
@@ -161,6 +172,7 @@ function spiderfyOnMap(
 export function RitmoMap({
   groups,
   marshals = [],
+  trails = [],
   selectedId,
   showHoleLabels = true,
   rotate = true,
@@ -284,7 +296,41 @@ export function RitmoMap({
           };
 
       const dotsLayer = L.layerGroup().addTo(map);
+      const trailsLayer = L.layerGroup().addTo(map);
       let zoomRedrawTimer: number | null = null;
+
+      const renderTrails = () => {
+        trailsLayer.clearLayers();
+        for (const trail of trails) {
+          if (!trail.points || trail.points.length < 2) continue;
+          const active = trail.active !== false;
+          const latlngs = trail.points.map((p) => [p.lat, p.lon]);
+          L.polyline(latlngs, {
+            color: trail.color,
+            weight: active ? 3 : 1.5,
+            opacity: active ? 0.9 : 0.25,
+            interactive: false,
+          }).addTo(trailsLayer);
+          const last = trail.points[trail.points.length - 1]!;
+          const first = trail.points[0]!;
+          L.circleMarker([first.lat, first.lon], {
+            radius: active ? 3 : 2,
+            color: "#fff",
+            weight: 1,
+            fillColor: trail.color,
+            fillOpacity: active ? 0.95 : 0.4,
+            interactive: false,
+          }).addTo(trailsLayer);
+          L.circleMarker([last.lat, last.lon], {
+            radius: active ? 4 : 2,
+            color: "#fff",
+            weight: 1,
+            fillColor: trail.color,
+            fillOpacity: active ? 1 : 0.4,
+            interactive: false,
+          }).addTo(trailsLayer);
+        }
+      };
 
       const renderDots = () => {
         dotsLayer.clearLayers();
@@ -425,6 +471,7 @@ export function RitmoMap({
         zoomRedrawTimer = window.setTimeout(() => {
           zoomRedrawTimer = null;
           if (!mapRef.current) return;
+          renderTrails();
           renderDots();
         }, 80);
       };
@@ -452,17 +499,20 @@ export function RitmoMap({
         map.fitBounds(bounds, { padding: [8, 8], animate: false });
       };
       fitToCourse();
+      renderTrails();
       renderDots();
       window.setTimeout(() => {
         if (!mapRef.current) return;
         map.invalidateSize();
         fitToCourse();
+        renderTrails();
         renderDots();
       }, 300);
       // Si arranca con un grupo ya seleccionado, hacemos zoom a él.
       if (selectedId) {
         const g = groups.find((x) => x.id === selectedId);
         if (g) map.setView([g.lat, g.lon], 19, { animate: false });
+        renderTrails();
         renderDots();
       }
 
@@ -477,7 +527,7 @@ export function RitmoMap({
     })();
 
     return () => cleanup();
-  }, [size.w, size.h, groups, marshals, showHoleLabels, rotate]);
+  }, [size.w, size.h, groups, marshals, trails, showHoleLabels, rotate]);
 
   // Reaccionar a selectedId: flyTo al grupo + zoom o volver a vista completa
   useEffect(() => {
