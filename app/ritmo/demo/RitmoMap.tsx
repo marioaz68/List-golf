@@ -182,14 +182,20 @@ export function RitmoMap({
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const holesLayerRef = useRef<any>(null);
+  const redrawRef = useRef<() => void>(() => {});
   const [size, setSize] = useState({ w: 0, h: 0 });
 
-  // Ref siempre fresco para que el click del marker llame al último callback
-  // sin necesidad de reconstruir el mapa.
+  // Datos siempre frescos sin remount del mapa (el remount perdía marshals).
+  const groupsRef = useRef(groups);
+  const marshalsRef = useRef(marshals);
+  const trailsRef = useRef(trails);
+  groupsRef.current = groups;
+  marshalsRef.current = marshals;
+  trailsRef.current = trails;
+
   const onSelectGroupRef = useRef<RitmoMapProps["onSelectGroup"]>(undefined);
   onSelectGroupRef.current = onSelectGroup;
 
-  // Medir el container y reaccionar a resize/rotación
   useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -200,13 +206,13 @@ export function RitmoMap({
     return () => ro.disconnect();
   }, []);
 
-  // Inicializar/reiniciar Leaflet cuando hay tamaño válido
+  // Solo reinicia Leaflet al cambiar tamaño / rotación / etiquetas.
   useEffect(() => {
     if (!mapDivRef.current || size.w === 0 || size.h === 0) return;
+    let cancelled = false;
     let cleanup = () => {};
 
     (async () => {
-      // Cargar Leaflet desde CDN sin agregar dep
       if (!document.querySelector('link[data-leaflet]')) {
         const css = document.createElement("link");
         css.rel = "stylesheet";
@@ -223,11 +229,9 @@ export function RitmoMap({
           document.head.appendChild(s);
         });
       }
+      if (cancelled || !mapDivRef.current) return;
       const L = (window as any).L;
 
-      // Mapa "fijo": sin paneo ni zoom manual para que el campo nunca se
-      // salga de la pantalla. La cámara se controla solo por código
-      // (vista completa por defecto, zoom al grupo seleccionado).
       const map = L.map(mapDivRef.current, {
         center: [20.5625, -100.4078],
         zoom: 17,
@@ -242,27 +246,23 @@ export function RitmoMap({
         tap: false,
       });
 
-      // Satélite "puro" (sin labels de calle) para que la rotación no las muestre sideways
       L.tileLayer(
         "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
         { subdomains: ["0", "1", "2", "3"], maxZoom: 21, maxNativeZoom: 20, attribution: "© Google" }
       ).addTo(map);
 
-      // Capa invisible solo para calcular bounds del campo (no se dibuja)
       const holesLayer = L.geoJSON(CCQ_HOLES, {
         style: () => ({ opacity: 0, fillOpacity: 0, weight: 0 }),
       });
       holesLayerRef.current = holesLayer;
       mapRef.current = map;
-      // (No la agregamos al mapa — solo la usamos para fitBounds más abajo)
 
-      // Etiquetas de hoyos del campo (referencia, NO son grupos).
       if (showHoleLabels) {
         CCQ_HOLES.features.forEach((f: any) => {
           const center = L.geoJSON(f).getBounds().getCenter();
           L.marker(center, {
             icon: L.divIcon({
-              className: "",
+              className: "ritmo-dot-icon",
               html: `<div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center;">
               <div style="background:rgba(0,0,0,0.45);color:#cbd5e1;border:1px solid ${HOYO_COLORS[(f.properties.hoyo - 1) % HOYO_COLORS.length]};padding:0 5px;border-radius:8px;font-weight:600;font-size:9px;font-family:Arial,sans-serif;display:inline-block;opacity:0.85;">${f.properties.hoyo}</div>
             </div>`,
@@ -274,16 +274,15 @@ export function RitmoMap({
         });
       }
 
-      // Bolas numeradas = grupos (GPS o captura).
-      // Tamaño al 30% del original (36→11) para no tapar el campo.
       const DOT = 11;
       const DOT_BORDER = 1;
       const DOT_FONT = 7;
       const RING = 15;
       const RING_OFF = Math.round((RING - DOT) / 2);
-      const M_DOT = 16;
+      // Marshals más grandes que grupos para distinguirlos en desktop.
+      const M_DOT = 22;
       const M_BORDER = 2;
-      const M_FONT = 7;
+      const M_FONT = 9;
 
       type PlotPt =
         | { kind: "group"; key: string; lat: number; lon: number; g: GroupDot }
@@ -301,7 +300,7 @@ export function RitmoMap({
 
       const renderTrails = () => {
         trailsLayer.clearLayers();
-        for (const trail of trails) {
+        for (const trail of trailsRef.current) {
           if (!trail.points || trail.points.length < 2) continue;
           const active = trail.active !== false;
           const latlngs = trail.points.map((p) => [p.lat, p.lon]);
@@ -333,17 +332,19 @@ export function RitmoMap({
       };
 
       const renderDots = () => {
+        const liveGroups = groupsRef.current;
+        const liveMarshals = marshalsRef.current;
         dotsLayer.clearLayers();
 
         const plotPts: PlotPt[] = [
-          ...groups.map((g) => ({
+          ...liveGroups.map((g) => ({
             kind: "group" as const,
             key: `g:${g.id}`,
             lat: g.lat,
             lon: g.lon,
             g,
           })),
-          ...marshals.map((m) => ({
+          ...liveMarshals.map((m) => ({
             kind: "marshal" as const,
             key: `m:${m.id}`,
             lat: m.lat,
@@ -352,11 +353,9 @@ export function RitmoMap({
           })),
         ];
 
-        // Abanico compacto: mismas bolas (11 / 16 px), solo separa centros.
-        const spread = spiderfyOnMap(map, plotPts, 18, 16);
+        const spread = spiderfyOnMap(map, plotPts, 22, 18);
         const byKey = new Map(spread.map((p) => [p.key, p]));
 
-        // Patitas GPS real → posición en abanico.
         for (const p of spread) {
           if (!p.offset) continue;
           L.polyline(
@@ -381,7 +380,7 @@ export function RitmoMap({
           }).addTo(dotsLayer);
         }
 
-        groups.forEach((g) => {
+        liveGroups.forEach((g) => {
           const isBlocker = g.role === "blocker";
           const isBlocked = g.role === "blocked";
           const fromCapture = g.positionSource === "capture";
@@ -408,7 +407,7 @@ export function RitmoMap({
             : { lat: g.lat, lon: g.lon };
           const marker = L.marker([pos.lat, pos.lon], {
             icon: L.divIcon({
-              className: "",
+              className: "ritmo-dot-icon",
               html: `
               <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative; cursor: pointer;">
                 ${ring}
@@ -434,23 +433,27 @@ export function RitmoMap({
           marker.on("click", () => onSelectGroupRef.current?.(g.id));
         });
 
-        marshals.forEach((m) => {
+        liveMarshals.forEach((m) => {
           const sp = byKey.get(`m:${m.id}`);
           const pos = sp
             ? { lat: sp.displayLat, lon: sp.displayLon }
             : { lat: m.lat, lon: m.lon };
+          const safeName = m.name
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;");
           L.marker([pos.lat, pos.lon], {
             icon: L.divIcon({
-              className: "",
+              className: "ritmo-dot-icon",
               html: `
-              <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative;" title="${m.name.replace(/"/g, "&quot;")}">
+              <div style="transform: ${rotate ? "rotate(90deg)" : "none"}; transform-origin: center; position: relative;" title="${safeName}">
                 <div style="
                   width:${M_DOT}px; height:${M_DOT}px; border-radius:50%;
-                  background:#2563eb;
+                  background:#1d4ed8;
                   border:${M_BORDER}px solid #fff;
-                  box-shadow:0 0 0 1px rgba(37,99,235,0.55), 0 1px 4px rgba(0,0,0,0.7);
+                  box-shadow:0 0 0 2px rgba(37,99,235,0.85), 0 2px 6px rgba(0,0,0,0.85);
                   display:flex; align-items:center; justify-content:center;
-                  color:#fff; font-weight:800; font-size:${M_FONT}px;
+                  color:#fff; font-weight:900; font-size:${M_FONT}px;
                   font-family:Arial,sans-serif;
                   letter-spacing:-0.5px;
                 ">${m.initials}</div>
@@ -461,24 +464,28 @@ export function RitmoMap({
             }),
             keyboard: false,
             interactive: false,
-            zIndexOffset: 500,
+            zIndexOffset: 900,
           }).addTo(dotsLayer);
         });
       };
+
+      const redraw = () => {
+        if (!mapRef.current) return;
+        renderTrails();
+        renderDots();
+      };
+      redrawRef.current = redraw;
 
       const scheduleRenderDots = () => {
         if (zoomRedrawTimer != null) window.clearTimeout(zoomRedrawTimer);
         zoomRedrawTimer = window.setTimeout(() => {
           zoomRedrawTimer = null;
-          if (!mapRef.current) return;
-          renderTrails();
-          renderDots();
+          redraw();
         }, 80);
       };
       map.on("zoomend", scheduleRenderDots);
       map.on("moveend", scheduleRenderDots);
 
-      // Animación CSS para el anillo pulsante del bloqueador
       if (!document.querySelector("style[data-ritmo-anim]")) {
         const style = document.createElement("style");
         style.setAttribute("data-ritmo-anim", "1");
@@ -487,62 +494,63 @@ export function RitmoMap({
             0%   { transform: scale(0.85); opacity: 1; }
             100% { transform: scale(1.5);  opacity: 0; }
           }
+          .ritmo-dot-icon {
+            background: transparent !important;
+            border: none !important;
+          }
         `;
         document.head.appendChild(style);
       }
 
-      // Vista fija por defecto: el campo COMPLETO al tamaño máximo que cabe
-      // en pantalla (sin recortar los extremos).
       const fitToCourse = () => {
         map.invalidateSize();
         const bounds = holesLayer.getBounds();
         map.fitBounds(bounds, { padding: [8, 8], animate: false });
       };
       fitToCourse();
-      renderTrails();
-      renderDots();
+      redraw();
       window.setTimeout(() => {
-        if (!mapRef.current) return;
+        if (!mapRef.current || cancelled) return;
         map.invalidateSize();
         fitToCourse();
-        renderTrails();
-        renderDots();
+        redraw();
       }, 300);
-      // Si arranca con un grupo ya seleccionado, hacemos zoom a él.
-      if (selectedId) {
-        const g = groups.find((x) => x.id === selectedId);
-        if (g) map.setView([g.lat, g.lon], 19, { animate: false });
-        renderTrails();
-        renderDots();
-      }
 
       cleanup = () => {
         if (zoomRedrawTimer != null) window.clearTimeout(zoomRedrawTimer);
         map.off("zoomend", scheduleRenderDots);
         map.off("moveend", scheduleRenderDots);
+        if (redrawRef.current === redraw) redrawRef.current = () => {};
         mapRef.current = null;
         holesLayerRef.current = null;
         map.remove();
       };
     })();
 
-    return () => cleanup();
-  }, [size.w, size.h, groups, marshals, trails, showHoleLabels, rotate]);
+    return () => {
+      cancelled = true;
+      cleanup();
+    };
+  }, [size.w, size.h, showHoleLabels, rotate]);
 
-  // Reaccionar a selectedId: flyTo al grupo + zoom o volver a vista completa
+  // Actualizar bolas/trazos sin destruir el mapa.
+  useEffect(() => {
+    redrawRef.current();
+  }, [groups, marshals, trails]);
+
   useEffect(() => {
     const map = mapRef.current;
     const holesLayer = holesLayerRef.current;
     if (!map || !holesLayer) return;
     if (selectedId) {
-      const g = groups.find((x) => x.id === selectedId);
+      const g = groupsRef.current.find((x) => x.id === selectedId);
       if (g) {
         map.flyTo([g.lat, g.lon], 19, { duration: 0.8 });
       }
     } else {
       map.flyToBounds(holesLayer.getBounds(), { padding: [8, 8], duration: 0.8 });
     }
-  }, [selectedId, groups]);
+  }, [selectedId]);
 
   return (
     <div

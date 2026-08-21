@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import { profileInitials } from "@/lib/marshal/profileInitials";
 
-const FRESH_MINUTES = 30;
+/** Ventana amplia: el panel desktop puede quedar abierto sin GPS cada minuto. */
+const FRESH_MINUTES = 90;
 
 type PositionRow = {
   profile_id: string;
@@ -44,8 +45,10 @@ export async function loadMarshalPositions(
   for (const row of (rows ?? []) as PositionRow[]) {
     const pid = String(row.profile_id ?? "").trim();
     if (!pid || latestByProfile.has(pid)) continue;
-    if (!Number.isFinite(row.lat) || !Number.isFinite(row.lon)) continue;
-    latestByProfile.set(pid, row);
+    const lat = Number(row.lat);
+    const lon = Number(row.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    latestByProfile.set(pid, { ...row, lat, lon });
   }
 
   if (latestByProfile.size === 0) return [];

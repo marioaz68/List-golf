@@ -247,6 +247,7 @@ export default async function RitmoPage({
           roundDate={null}
           groups={[]}
           onCourseCount={0}
+          marshals={[]}
           computedAtISO={computedAtISO}
           mapUnsupported={mapUnsupported}
         />

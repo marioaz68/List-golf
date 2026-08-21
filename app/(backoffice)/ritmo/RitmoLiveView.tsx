@@ -144,6 +144,37 @@ export default function RitmoLiveView({
   const [onlyOnCourse, setOnlyOnCourse] = useState(true);
   const [showMissingList, setShowMissingList] = useState(true);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [liveMarshals, setLiveMarshals] = useState<MarshalDot[]>(marshals);
+
+  // Sync marshals del SSR cuando el server refresh trae datos nuevos.
+  useEffect(() => {
+    setLiveMarshals(marshals);
+  }, [marshals]);
+
+  // Poll dedicado de marshals (independiente del refresh completo de grupos).
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const res = await fetch(
+          `/api/ritmo/marshals?tournament_id=${encodeURIComponent(tournamentId)}`,
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled || !json?.ok || !Array.isArray(json.marshals)) return;
+        setLiveMarshals(json.marshals as MarshalDot[]);
+      } catch {
+        // silencioso: el SSR / refresh sigue como respaldo
+      }
+    };
+    pull();
+    const id = setInterval(pull, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [tournamentId]);
 
   // Auto-refresco cada 30 s (re-render del Server Component con datos frescos).
   useEffect(() => {
@@ -466,14 +497,51 @@ export default function RitmoLiveView({
           <SummaryChip color="#22c55e" n={gpsCounts.live} label="en vivo" />
           <SummaryChip color="#f59e0b" n={gpsCounts.stale} label="GPS viejo" />
           <SummaryChip color="#6b7280" n={gpsCounts.none} label="sin señal" />
-          {marshals.length > 0 ? (
-            <SummaryChip
-              color="#2563eb"
-              n={marshals.length}
-              label="marshal GPS"
-            />
-          ) : null}
+          <SummaryChip
+            color="#2563eb"
+            n={liveMarshals.length}
+            label="marshal GPS"
+          />
         </div>
+        {liveMarshals.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 4,
+              marginBottom: 8,
+            }}
+          >
+            {liveMarshals.map((m) => (
+              <span
+                key={m.id}
+                title={m.name}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "2px 7px",
+                  borderRadius: 999,
+                  background: "#1e3a8a",
+                  color: "#dbeafe",
+                  border: "1px solid #2563eb",
+                }}
+              >
+                {m.initials}
+                {m.hoyo != null ? ` · H${m.hoyo}` : ""}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div
+            style={{
+              fontSize: 10,
+              color: "#64748b",
+              marginBottom: 8,
+            }}
+          >
+            Sin marshals con GPS reciente (&lt;90 min).
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button
             type="button"
@@ -721,7 +789,7 @@ export default function RitmoLiveView({
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <RitmoMap
         groups={mapGroups}
-        marshals={marshals}
+        marshals={liveMarshals}
         selectedId={selectedId}
         showHoleLabels={false}
         rotate={vp.shouldRotateMap}
@@ -746,14 +814,12 @@ export default function RitmoLiveView({
       >
         <div style={{ fontWeight: 800, marginBottom: 4 }}>
           Mapa: {mapGroups.length} grupo{mapGroups.length === 1 ? "" : "s"}
-          {marshals.length > 0
-            ? ` · ${marshals.length} marshal${marshals.length === 1 ? "" : "s"}`
-            : ""}{" "}
+          {` · ${liveMarshals.length} marshal${liveMarshals.length === 1 ? "" : "s"}`}{" "}
           · {listGroups.length} en lista
         </div>
         <div>
-          <b>G1, G3…</b> = salidas. Azules con iniciales = marshals GPS. Borde
-          punteado = posición por captura (sin GPS).
+          <b>G1, G3…</b> = salidas. Azules grandes con iniciales = marshals GPS.
+          Borde punteado = posición por captura (sin GPS).
         </div>
       </div>
       {mapUnsupported ? (
