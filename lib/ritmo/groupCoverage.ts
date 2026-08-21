@@ -48,10 +48,14 @@ export async function loadLatestGpsByGroup(
 export function gpsStateFromTimestamp(
   lastTs: string | null | undefined,
   staleMinutes = 12,
-  now = new Date()
+  now = new Date(),
+  /** Tras este tiempo el ping ya no cuenta como presencia en cancha. */
+  expireMinutes = 45
 ): GroupGpsState {
   if (!lastTs) return "none";
   const ageMs = now.getTime() - new Date(lastTs).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0) return "none";
+  if (ageMs > expireMinutes * 60 * 1000) return "none";
   if (ageMs > staleMinutes * 60 * 1000) return "stale";
   return "live";
 }
