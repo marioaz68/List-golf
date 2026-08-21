@@ -245,24 +245,52 @@ export async function buildLiveStrokeSnapshot(
       }
     }
 
-    if (holes.length === 0 && matches.length > 0) {
+    const matchesWithOfficialHoles = new Set(
+      holes.map((h) => String(h.match_id))
+    );
+    const needsStrokeLive = matches.filter(
+      (m) =>
+        m.top_pair_id &&
+        m.bottom_pair_id &&
+        !matchesWithOfficialHoles.has(String(m.id)) &&
+        m.status !== "bye" &&
+        m.status !== "completed"
+    );
+
+    if (needsStrokeLive.length > 0) {
       const derivedAll = await derivePairingGroupMatches(admin, tournamentId);
+      /** Pareja de teams → salida con scores (cualquier ronda del tee-sheet). */
       const derivedByPairKey = new Map<string, DerivedMatchRow>();
       for (const d of derivedAll.matches) {
         if (!d.top_pair_id || !d.bottom_pair_id) continue;
         const k = [d.top_pair_id, d.bottom_pair_id].sort().join("|");
-        derivedByPairKey.set(`${d.round_no}:${k}`, d);
+        const prev = derivedByPairKey.get(k);
+        // Preferir la salida de ronda más alta (p. ej. rematch R2 jugado en R3).
+        if (!prev || d.round_no >= prev.round_no) {
+          derivedByPairKey.set(k, d);
+        }
       }
 
       const inputs: DerivedMatchRow[] = [];
       const idMap = new Map<string, string>();
-      for (const m of matches) {
-        if (!m.top_pair_id || !m.bottom_pair_id) continue;
-        const k = [m.top_pair_id, m.bottom_pair_id].sort().join("|");
-        const d = derivedByPairKey.get(`${m.round_no}:${k}`);
+      for (const m of needsStrokeLive) {
+        const k = [String(m.top_pair_id), String(m.bottom_pair_id)]
+          .sort()
+          .join("|");
+        // 1) Misma ronda del cuadro  2) Cualquier salida con esas parejas
+        const dSame = derivedAll.matches.find(
+          (x) =>
+            x.round_no === m.round_no &&
+            x.top_pair_id &&
+            x.bottom_pair_id &&
+            [x.top_pair_id, x.bottom_pair_id].sort().join("|") === k
+        );
+        const d = dSame ?? derivedByPairKey.get(k);
         if (!d) continue;
-        inputs.push({ ...d, status: "scheduled" });
-        idMap.set(d.id, m.id);
+        // id sintético único por match oficial (varias salidas podrían chocar).
+        const syntheticId = `stroke-live-${m.id}`;
+        inputs.push({ ...d, id: syntheticId, status: "scheduled" });
+        idMap.set(syntheticId, m.id);
       }
 
       if (inputs.length > 0) {
@@ -271,7 +299,8 @@ export async function buildLiveStrokeSnapshot(
           tournamentId,
           inputs
         );
-        holes = holesFromDerived(derivedResult, idMap);
+        const derivedHoles = holesFromDerived(derivedResult, idMap);
+        holes = [...holes, ...derivedHoles];
         liveFromStrokeScores = true;
         matches = applyDerivedToMatches(
           matches,

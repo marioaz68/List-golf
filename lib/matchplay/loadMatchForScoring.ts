@@ -227,6 +227,8 @@ export async function loadMatchForScoring(
   if (puedeDerivar) {
     // Ryder: la sesión apunta a la ronda correcta (hay 2 rondas con el mismo
     // round_no, una por categoría). Calcutta: sin session_id → busca por round_no.
+    // Rematch extraordinario: el partido puede ser R2 del cuadro pero las
+    // tarjetas están en la salida de R3 (u otra) → buscar la ronda con scores.
     let roundId: string | null = sessionRoundId ? String(sessionRoundId) : null;
     if (!roundId) {
       const { data: roundRow } = await supabase
@@ -237,6 +239,70 @@ export async function loadMatchForScoring(
         .maybeSingle();
       roundId = roundRow?.id ? String(roundRow.id) : null;
     }
+
+    const entryIdsForLookup = [
+      topAEntry?.id,
+      topBEntry?.id,
+      bottomAEntry?.id,
+      bottomBEntry?.id,
+    ].filter((x): x is string => Boolean(x));
+
+    async function roundHasStrokeScores(rid: string): Promise<boolean> {
+      if (entryIdsForLookup.length === 0) return false;
+      const { data: rs } = await supabase
+        .from("round_scores")
+        .select("id, player_id")
+        .eq("round_id", rid)
+        .in(
+          "player_id",
+          [
+            topAEntry?.player_id,
+            topBEntry?.player_id,
+            bottomAEntry?.player_id,
+            bottomBEntry?.player_id,
+          ].filter((x): x is string => Boolean(x))
+        )
+        .limit(4);
+      if (!rs || rs.length === 0) return false;
+      const { count } = await supabase
+        .from("hole_scores")
+        .select("id", { count: "exact", head: true })
+        .in(
+          "round_score_id",
+          rs.map((r) => String(r.id))
+        );
+      return (count ?? 0) > 0;
+    }
+
+    if (roundId && !(await roundHasStrokeScores(roundId))) {
+      // Buscar salida del tee-sheet con estas parejas (cualquier ronda).
+      const { data: memberRows } = await supabase
+        .from("pairing_group_members")
+        .select("group_id, entry_id")
+        .in("entry_id", entryIdsForLookup);
+      const countByGroup = new Map<string, number>();
+      for (const row of memberRows ?? []) {
+        const gid = String(row.group_id);
+        countByGroup.set(gid, (countByGroup.get(gid) ?? 0) + 1);
+      }
+      const candidateGroupIds = [...countByGroup.entries()]
+        .filter(([, n]) => n >= 2)
+        .map(([gid]) => gid);
+      if (candidateGroupIds.length > 0) {
+        const { data: pgs } = await supabase
+          .from("pairing_groups")
+          .select("id, round_id")
+          .in("id", candidateGroupIds);
+        for (const pg of pgs ?? []) {
+          const rid = String(pg.round_id);
+          if (rid && (await roundHasStrokeScores(rid))) {
+            roundId = rid;
+            break;
+          }
+        }
+      }
+    }
+
     if (roundId) {
       // Singles: golpes A vs A + puntos con scoreSinglesHole (nunca lowHigh).
       if (isSingles) {
