@@ -226,9 +226,24 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
                     </>
                   )}
                 </div>
-                {(card as { teeTime?: string | null }).teeTime ? (
+                {(card as { teeTime?: string | null; playDate?: string | null })
+                  .teeTime ||
+                (card as { playDate?: string | null }).playDate ? (
                   <span className="text-[11px] text-amber-200">
-                    {(card as { teeTime: string }).teeTime}
+                    {[
+                      (card as { playDate?: string | null }).playDate
+                        ? String(
+                            (card as { playDate?: string | null }).playDate
+                          )
+                            .slice(0, 10)
+                            .split("-")
+                            .reverse()
+                            .join("/")
+                        : null,
+                      (card as { teeTime?: string | null }).teeTime ?? null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 ) : null}
               </label>

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
+import {
+  resolveTournamentEntryHandicap,
+  type EntryForHandicap,
+} from "@/lib/handicap/resolveTournamentEntryHandicap";
 import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { loadBracketView } from "@/lib/matchplay/loadBracketView";
 import { loadMatchPlayTeamsData } from "@/lib/matchplay/loadMatchPlayTeamsData";
@@ -48,6 +52,8 @@ export type PrintableMatchPlayCard = {
   positionNo: number;
   groupNo: number | null;
   teeTime: string | null;
+  /** Fecha de la salida en tee-sheet (YYYY-MM-DD), si existe. */
+  playDate: string | null;
   topLabel: string;
   bottomLabel: string;
   topPlayers: PrintablePlayerRow[];
@@ -81,8 +87,15 @@ export type PrintableStrokeCard = {
   roundNo: number;
   groupNo: number;
   teeTime: string | null;
+  playDate: string | null;
   groupLabel: string;
   players: PrintablePlayerRow[];
+};
+
+export type TeePrintInfo = {
+  groupNo: number;
+  teeTime: string | null;
+  playDate: string | null;
 };
 
 export type PrintableScorecardsBundle = {
@@ -403,6 +416,32 @@ function entryPhRow(entry: MatchPlayEntryRow): MatchEntryPhRow {
   };
 }
 
+/** PH en tarjeta impresa: override → WHS vivo (CH × %) → PH guardado. */
+function phForPrintableCard(
+  entry: MatchPlayEntryRow,
+  handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>
+): number | null {
+  if (entry.playing_handicap_override != null) {
+    return Math.round(Number(entry.playing_handicap_override));
+  }
+  const payload: EntryForHandicap = {
+    id: entry.id,
+    player_id: entry.player_id,
+    category_id: entry.category_id ?? null,
+    handicap_index: entry.handicap_index,
+    playing_handicap_override: null,
+    tee_set_id_override: entry.tee_set_id_override ?? null,
+    player: {
+      gender: entry.player.gender,
+      handicap_index: entry.player.handicap_index,
+      handicap_torneo: null,
+    },
+  };
+  const calc = resolveTournamentEntryHandicap(payload, handicapCtx);
+  if (calc?.playing_handicap != null) return calc.playing_handicap;
+  return effectivePhForMatchEntry(entryPhRow(entry), handicapCtx);
+}
+
 function buildResolveTee(
   teeSetById: Map<string, TeeSetLite>,
   teeRules: TeeRuleLite[],
@@ -452,7 +491,9 @@ function teamToPrintablePlayers(
   const rows = entries.map((entry) => {
     const tee = resolveTee(entry);
     const gender = (entry.player.gender ?? "X") as "M" | "F" | "X";
-    const ph = effectivePhForMatchEntry(entryPhRow(entry), handicapCtx);
+    // Impresión: prioriza cálculo WHS vivo (CH × %) para no imprimir PH
+    // desfasado respecto al handicap de torneo al 80 % del sistema.
+    const ph = phForPrintableCard(entry, handicapCtx);
     const hi = hiForMatchEntry(entryPhRow(entry));
     return {
       name: formatPlayerName(entry.player),
@@ -569,29 +610,31 @@ async function loadTeeTimesByRound(
   tournamentId: string
 ): Promise<{
   /** Fallback: `${roundNo}-${group_no}` ≈ position_no del cuadro. */
-  byRoundPosition: Map<string, { groupNo: number; teeTime: string | null }>;
+  byRoundPosition: Map<string, TeePrintInfo>;
   /**
    * Preferido: pareja de teams del grupo de salidas → hora real.
    * Evita el desfase cuando group_no ≠ position_no (p. ej. R2 G1=11:00 es
    * el match #2 del cuadro porque el #1 aún espera rival).
    */
-  byTeamPair: Map<string, { groupNo: number; teeTime: string | null }>;
+  byTeamPair: Map<string, TeePrintInfo>;
+  /**
+   * Misma pareja sin exigir la ronda del cuadro. Sirve cuando el partido
+   * sigue en R2 del bracket pero ya está colocado en salidas de R3.
+   */
+  byTeamPairAnyRound: Map<string, TeePrintInfo>;
 }> {
-  const byRoundPosition = new Map<
-    string,
-    { groupNo: number; teeTime: string | null }
-  >();
-  const byTeamPair = new Map<
-    string,
-    { groupNo: number; teeTime: string | null }
-  >();
+  const byRoundPosition = new Map<string, TeePrintInfo>();
+  const byTeamPair = new Map<string, TeePrintInfo>();
+  const byTeamPairAnyRound = new Map<string, TeePrintInfo>();
 
   const { data: rounds } = await admin
     .from("rounds")
-    .select("id, round_no")
+    .select("id, round_no, round_date")
     .eq("tournament_id", tournamentId);
   const roundIds = (rounds ?? []).map((r) => String(r.id));
-  if (roundIds.length === 0) return { byRoundPosition, byTeamPair };
+  if (roundIds.length === 0) {
+    return { byRoundPosition, byTeamPair, byTeamPairAnyRound };
+  }
 
   const { data: groups } = await admin
     .from("pairing_groups")
@@ -601,19 +644,28 @@ async function loadTeeTimesByRound(
   const roundNoById = new Map(
     (rounds ?? []).map((r) => [String(r.id), Number(r.round_no)])
   );
+  const roundDateById = new Map(
+    (rounds ?? []).map((r) => [
+      String(r.id),
+      r.round_date ? String(r.round_date).slice(0, 10) : null,
+    ])
+  );
 
   for (const g of groups ?? []) {
     const roundNo = roundNoById.get(String(g.round_id));
     if (roundNo == null) continue;
-    const info = {
+    const info: TeePrintInfo = {
       groupNo: Number(g.group_no),
       teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
+      playDate: roundDateById.get(String(g.round_id)) ?? null,
     };
     byRoundPosition.set(`${roundNo}-${g.group_no}`, info);
   }
 
   const groupIds = (groups ?? []).map((g) => String(g.id));
-  if (groupIds.length === 0) return { byRoundPosition, byTeamPair };
+  if (groupIds.length === 0) {
+    return { byRoundPosition, byTeamPair, byTeamPairAnyRound };
+  }
 
   const [{ data: members }, { data: teams }] = await Promise.all([
     admin
@@ -641,6 +693,7 @@ async function loadTeeTimesByRound(
         roundNo: roundNoById.get(String(g.round_id)) ?? null,
         groupNo: Number(g.group_no),
         teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
+        playDate: roundDateById.get(String(g.round_id)) ?? null,
       },
     ])
   );
@@ -658,17 +711,36 @@ async function loadTeeTimesByRound(
     set.add(teamId);
   }
 
+  function preferTeeInfo(
+    prev: TeePrintInfo | undefined,
+    next: TeePrintInfo
+  ): TeePrintInfo {
+    if (!prev) return next;
+    // Preferir la salida que ya tiene hora (p. ej. R3 07:00 vs R2 sin hora).
+    if (!prev.teeTime && next.teeTime) return next;
+    if (prev.teeTime && !next.teeTime) return prev;
+    // Si ambas tienen hora, quedarse con la de fecha más reciente.
+    if ((next.playDate ?? "") > (prev.playDate ?? "")) return next;
+    return prev;
+  }
+
   for (const [gid, teamIds] of teamsByGroup) {
     if (teamIds.size < 2) continue;
     const meta = groupMeta.get(gid);
     if (!meta || meta.roundNo == null) continue;
     const sorted = [...teamIds].sort();
     // Si hay >2 teams (datos raros), tomar los 2 primeros ordenados.
-    const key = `${meta.roundNo}:${sorted[0]}|${sorted[1]}`;
-    byTeamPair.set(key, {
+    const pairKey = `${sorted[0]}|${sorted[1]}`;
+    const info: TeePrintInfo = {
       groupNo: meta.groupNo,
       teeTime: meta.teeTime,
-    });
+      playDate: meta.playDate,
+    };
+    byTeamPair.set(`${meta.roundNo}:${pairKey}`, info);
+    byTeamPairAnyRound.set(
+      pairKey,
+      preferTeeInfo(byTeamPairAnyRound.get(pairKey), info)
+    );
   }
 
   // Alinea también por position_no del cuadro: si el group_no del tee-sheet
@@ -689,12 +761,14 @@ async function loadTeeTimesByRound(
     const bot = m.bottom_pair_id != null ? String(m.bottom_pair_id) : "";
     if (!top || !bot) continue;
     const [a, b] = [top, bot].sort();
-    const info = byTeamPair.get(`${roundNo}:${a}|${b}`);
+    const info =
+      byTeamPair.get(`${roundNo}:${a}|${b}`) ??
+      byTeamPairAnyRound.get(`${a}|${b}`);
     if (!info) continue;
     byRoundPosition.set(`${roundNo}-${pos}`, info);
   }
 
-  return { byRoundPosition, byTeamPair };
+  return { byRoundPosition, byTeamPair, byTeamPairAnyRound };
 }
 
 function teeInfoForMatch(
@@ -703,11 +777,13 @@ function teeInfoForMatch(
   positionNo: number,
   topPairId: string | null | undefined,
   bottomPairId: string | null | undefined
-): { groupNo: number; teeTime: string | null } | null {
+): TeePrintInfo | null {
   if (topPairId && bottomPairId) {
     const [a, b] = [String(topPairId), String(bottomPairId)].sort();
     const byTeams = teeMaps.byTeamPair.get(`${roundNo}:${a}|${b}`);
     if (byTeams) return byTeams;
+    const anyRound = teeMaps.byTeamPairAnyRound.get(`${a}|${b}`);
+    if (anyRound) return anyRound;
   }
   return (
     teeMaps.byRoundPosition.get(`${roundNo}-${positionNo}`) ?? null
@@ -729,6 +805,7 @@ function buildMatchCard(params: {
   handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>;
   strokeIndexByHole: StrokeIndexByHole;
   teeTime: string | null;
+  playDate?: string | null;
   /** Nº de grupo en salidas (puede diferir del position_no del cuadro). */
   groupNo?: number | null;
 }): PrintableMatchPlayCard | null {
@@ -756,6 +833,7 @@ function buildMatchCard(params: {
     positionNo: params.positionNo,
     groupNo: params.groupNo ?? params.positionNo,
     teeTime: params.teeTime,
+    playDate: params.playDate ?? null,
     topLabel: params.topLabel,
     bottomLabel: params.bottomLabel,
     topPlayers,
@@ -869,6 +947,7 @@ export async function loadPrintableMpScorecards(
         handicapCtx,
         strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
+        playDate: tee?.playDate ?? null,
         groupNo: tee?.groupNo ?? m.position_no,
       });
       if (card) matchPlayCards.push(card);
@@ -904,6 +983,7 @@ export async function loadPrintableMpScorecards(
           handicapCtx,
           strokeIndexByHole: layout.strokeIndexByHole,
           teeTime: tee?.teeTime ?? null,
+          playDate: tee?.playDate ?? null,
           groupNo: tee?.groupNo ?? thirdPlace.position_no,
         });
         if (card) matchPlayCards.push(card);
@@ -958,6 +1038,7 @@ export async function loadPrintableMpScorecards(
         handicapCtx,
         strokeIndexByHole: layout.strokeIndexByHole,
         teeTime: tee?.teeTime ?? null,
+        playDate: tee?.playDate ?? null,
         groupNo: tee?.groupNo ?? Number(m.position_no),
       });
       if (card) matchPlayCards.push(card);
@@ -998,6 +1079,10 @@ export async function loadPrintableMpScorecards(
           roundNo: strokeData.roundNo ?? 0,
           groupNo: g.groupNo,
           teeTime: g.teeTime ? String(g.teeTime).slice(0, 5) : null,
+          playDate:
+            teeTimes.byRoundPosition.get(
+              `${strokeData.roundNo ?? 0}-${g.groupNo}`
+            )?.playDate ?? null,
           groupLabel: g.label,
           players,
         });

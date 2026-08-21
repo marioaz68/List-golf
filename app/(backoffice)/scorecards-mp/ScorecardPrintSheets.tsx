@@ -327,6 +327,30 @@ function HoleGrid({
   );
 }
 
+function formatPlayDateEs(isoDate: string | null | undefined): string | null {
+  if (!isoDate) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  if (!m) return isoDate;
+  const months = [
+    "ene",
+    "feb",
+    "mar",
+    "abr",
+    "may",
+    "jun",
+    "jul",
+    "ago",
+    "sep",
+    "oct",
+    "nov",
+    "dic",
+  ];
+  const day = Number(m[3]);
+  const month = months[Number(m[2]) - 1] ?? m[2];
+  const year = m[1];
+  return `${day} ${month} ${year}`;
+}
+
 function CardHeader({
   meta,
   subtitle,
@@ -423,13 +447,17 @@ export function MatchPlayScorecardSheet({
 
   // Calcutta: etiquetas de ronda (Dieciseisavos, Octavos…) intactas.
   // Ryder: "Parejas · 1a · G3" / "Salida HH:MM" (sin Match # del cuadro).
+  const playDateLabel = formatPlayDateEs(card.playDate);
   let subtitle: string;
   let groupLine: string;
   if (isRyder && card.ryderHeaderLine) {
     subtitle = card.ryderHeaderLine;
-    groupLine = card.teeTime
-      ? `Salida ${card.teeTime}`
-      : "Salida por definir";
+    groupLine = [
+      playDateLabel,
+      card.teeTime ? `Salida ${card.teeTime}` : "Salida por definir",
+    ]
+      .filter(Boolean)
+      .join(" · ");
   } else {
     const kindLabel =
       card.kind === "consolation_mp"
@@ -443,10 +471,14 @@ export function MatchPlayScorecardSheet({
         : `${kindLabel} · ${card.roundLabel} · G${card.groupNo ?? card.positionNo}`;
     groupLine =
       card.kind === "third_place"
-        ? card.teeTime
-          ? `Salida ${card.teeTime}`
-          : "Salida por definir"
+        ? [
+            playDateLabel,
+            card.teeTime ? `Salida ${card.teeTime}` : "Salida por definir",
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : [
+            playDateLabel,
             card.teeTime ? `Salida ${card.teeTime}` : null,
             `Match #${card.positionNo}`,
           ]
@@ -586,7 +618,12 @@ export function StrokeAggregateScorecardSheet({
   meta: PrintableScorecardsBundle;
 }) {
   const subtitle = `Consolación Stroke Play · R${card.roundNo}`;
-  const groupLine = `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`;
+  const groupLine = [
+    formatPlayDateEs(card.playDate),
+    `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const scoreRows: ExtraRow[] = card.players.map((p, i) => ({
     label: `J${i + 1} ${shortPlayerName(p.name)}`,
