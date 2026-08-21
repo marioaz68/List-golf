@@ -78,6 +78,71 @@ function fullName(p: EntryRow["players"]): string {
   return full || "Jugador";
 }
 
+function entrySetKey(entryIds: string[]): string {
+  return [...entryIds].filter(Boolean).sort().join("|");
+}
+
+/**
+ * Claves de 4 entry_ids cuyos partidos en el cuadro ya están cerrados
+ * (completed / halved / walkover). Sirve para no marcar retraso de captura
+ * en match play que terminó antes del H18.
+ */
+async function loadCompletedMatchplayEntryKeys(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  const { data: matches } = await admin
+    .from("matchplay_matches")
+    .select("top_pair_id, bottom_pair_id, status, result_text")
+    .eq("tournament_id", tournamentId)
+    .in("status", ["completed", "halved", "walkover"]);
+  const rows = (matches ?? []) as Array<{
+    top_pair_id: string | null;
+    bottom_pair_id: string | null;
+    status: string;
+    result_text: string | null;
+  }>;
+  if (rows.length === 0) return out;
+
+  const pairIds = Array.from(
+    new Set(
+      rows
+        .flatMap((m) => [m.top_pair_id, m.bottom_pair_id])
+        .filter((id): id is string => !!id)
+    )
+  );
+  if (pairIds.length === 0) return out;
+
+  const { data: pairsRaw } = await admin
+    .from("matchplay_pair_teams")
+    .select("id, player_a_entry_id, player_b_entry_id")
+    .in("id", pairIds);
+  const pairById = new Map(
+    ((pairsRaw ?? []) as Array<{
+      id: string;
+      player_a_entry_id: string | null;
+      player_b_entry_id: string | null;
+    }>).map((p) => [p.id, p])
+  );
+
+  for (const m of rows) {
+    if (!m.top_pair_id || !m.bottom_pair_id) continue;
+    const top = pairById.get(m.top_pair_id);
+    const bot = pairById.get(m.bottom_pair_id);
+    if (!top || !bot) continue;
+    const entries = [
+      top.player_a_entry_id,
+      top.player_b_entry_id,
+      bot.player_a_entry_id,
+      bot.player_b_entry_id,
+    ].filter((id): id is string => !!id);
+    if (entries.length < 2) continue;
+    out.set(entrySetKey(entries), m.result_text ?? m.status);
+  }
+  return out;
+}
+
 /** Carga grupos + retraso de captura para una ronda de un torneo. */
 export async function loadCaptureLagGroupsForRound(
   admin: SupabaseClient,
@@ -178,12 +243,21 @@ export async function loadCaptureLagGroupsForRound(
     entryIdsByGroup
   );
 
+  const completedMatchByEntries = await loadCompletedMatchplayEntryKeys(
+    admin,
+    args.tournamentId
+  );
+
   return groupRows.map((g) => {
     const players = playersByGroup.get(g.id) ?? [];
     const score = scoreByGroup.get(g.id);
     const startHole =
       score?.startHole ?? resolveGroupStartHole(g.starting_hole, g.notes);
     const holesPlayed = score?.holesPlayed ?? 0;
+    const groupEntries = entryIdsByGroup.get(g.id) ?? [];
+    const groupEntryKey = entrySetKey(groupEntries);
+    const matchResult = completedMatchByEntries.get(groupEntryKey);
+    const matchplayCompleted = completedMatchByEntries.has(groupEntryKey);
     const lag = evaluateCaptureLag({
       holesPlayed,
       lastCaptureTs: score?.lastCaptureTs ?? null,
@@ -196,6 +270,8 @@ export async function loadCaptureLagGroupsForRound(
       tournamentStartDate: args.tournamentStartDate,
       perHoleMinutes,
       now,
+      matchplayCompleted,
+      matchplayResultText: matchResult,
     });
     const coverage = coverageByGroup.get(g.id);
     const firstEntry = entryIdsByGroup.get(g.id)?.[0] ?? null;

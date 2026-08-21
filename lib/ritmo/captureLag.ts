@@ -130,6 +130,13 @@ export function evaluateCaptureLag(args: {
   tournamentStartDate?: string | null;
   /** Si true (o se deduce por fechas), no acumula retraso de reloj. */
   opsClosed?: boolean;
+  /**
+   * Match play ya cerrado en el cuadro (p. ej. 5&4 en H16).
+   * No exige 18 hoyos capturados para marcar terminado.
+   */
+  matchplayCompleted?: boolean;
+  /** Texto del resultado del match (H16 · 5 arriba…). */
+  matchplayResultText?: string | null;
   perHoleMinutes?: PerHoleMinutes | null;
   now?: Date;
 }): CaptureLagResult {
@@ -171,6 +178,24 @@ export function evaluateCaptureLag(args: {
         Math.round((now.getTime() - t) / 60000)
       );
     }
+  }
+
+  // Match play cerrado en cuadro (aunque falten hoyos por no jugarse).
+  if (args.matchplayCompleted) {
+    const result =
+      String(args.matchplayResultText ?? "").trim() ||
+      (holesPlayed > 0 ? `${holesPlayed} hoyos` : "cerrado");
+    return lag(startHole, {
+      kind: "terminado",
+      expectedHoles: holesPlayed > 0 ? holesPlayed : 18,
+      holesPlayed,
+      holesBehind: 0,
+      minutesSinceStart: null,
+      minutesSinceLastCapture,
+      captureHole: null,
+      reason: `Match cerrado · ${result}`,
+      priority: 95,
+    });
   }
 
   const today = todayMexicoDate(now);
