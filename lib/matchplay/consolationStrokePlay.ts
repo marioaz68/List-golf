@@ -334,6 +334,11 @@ export async function createStrokeAggregateGroups(
       "@/lib/matchplay/consolationMatchPlay"
     );
     await reconcileRoundGroupOrder(admin, tournamentId, lastRoundNo);
+    try {
+      await confirmStartingOrderForRound(admin, roundId);
+    } catch (err) {
+      console.error("[strokeAggregate] publish salidas:", err);
+    }
   }
 
   return {
