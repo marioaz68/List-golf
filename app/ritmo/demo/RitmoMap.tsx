@@ -196,6 +196,16 @@ export function RitmoMap({
   const onSelectGroupRef = useRef<RitmoMapProps["onSelectGroup"]>(undefined);
   onSelectGroupRef.current = onSelectGroup;
 
+  /** Botones HTML encima del mapa (coordenadas de pantalla). Con CSS
+   *  rotate(-90deg) Leaflet no acierta el tap; el overlay sí. */
+  const [hitTargets, setHitTargets] = useState<
+    Array<{ id: string; number: number; left: number; top: number }>
+  >([]);
+  const rotateRef = useRef(rotate);
+  rotateRef.current = rotate;
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
   useEffect(() => {
     if (!containerRef.current) return;
     const ro = new ResizeObserver((entries) => {
@@ -274,10 +284,10 @@ export function RitmoMap({
         });
       }
 
-      const DOT = 11;
-      const DOT_BORDER = 1;
-      const DOT_FONT = 7;
-      const RING = 15;
+      const DOT = 16;
+      const DOT_BORDER = 2;
+      const DOT_FONT = 9;
+      const RING = 22;
       const RING_OFF = Math.round((RING - DOT) / 2);
       // Marshals más grandes que grupos para distinguirlos en desktop.
       const M_DOT = 22;
@@ -335,6 +345,12 @@ export function RitmoMap({
         const liveGroups = groupsRef.current;
         const liveMarshals = marshalsRef.current;
         dotsLayer.clearLayers();
+        const nextHits: Array<{
+          id: string;
+          number: number;
+          left: number;
+          top: number;
+        }> = [];
 
         const plotPts: PlotPt[] = [
           ...liveGroups.map((g) => ({
@@ -428,9 +444,22 @@ export function RitmoMap({
               iconAnchor: [DOT / 2, DOT / 2],
             }),
             keyboard: false,
+            interactive: false,
             zIndexOffset: 400,
           }).addTo(dotsLayer);
-          marker.on("click", () => onSelectGroupRef.current?.(g.id));
+
+          // Coordenadas de pantalla para el overlay táctil (compensa rotate CSS).
+          const pt = map.latLngToContainerPoint([pos.lat, pos.lon]);
+          const sz = sizeRef.current;
+          const isRot = rotateRef.current;
+          const screenLeft = isRot ? pt.y : pt.x;
+          const screenTop = isRot ? sz.h - pt.x : pt.y;
+          nextHits.push({
+            id: g.id,
+            number: g.number,
+            left: screenLeft,
+            top: screenTop,
+          });
         });
 
         liveMarshals.forEach((m) => {
@@ -467,6 +496,8 @@ export function RitmoMap({
             zIndexOffset: 900,
           }).addTo(dotsLayer);
         });
+
+        setHitTargets(nextHits);
       };
 
       const redraw = () => {
@@ -497,6 +528,7 @@ export function RitmoMap({
           .ritmo-dot-icon {
             background: transparent !important;
             border: none !important;
+            pointer-events: none !important;
           }
         `;
         document.head.appendChild(style);
@@ -587,6 +619,37 @@ export function RitmoMap({
           />
         )
       )}
+      {/* Overlay táctil fuera del CSS rotate: tap fiable en mobile landscape. */}
+      {onSelectGroup
+        ? hitTargets.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-label={`Grupo ${t.number}: capturas retrasadas`}
+              title={`G${t.number} → capturas retrasadas`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelectGroupRef.current?.(t.id);
+              }}
+              style={{
+                position: "absolute",
+                left: t.left,
+                top: t.top,
+                width: 36,
+                height: 36,
+                transform: "translate(-50%, -50%)",
+                borderRadius: "50%",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                zIndex: 1200,
+                padding: 0,
+                WebkitTapHighlightColor: "transparent",
+              }}
+            />
+          ))
+        : null}
     </div>
   );
 }

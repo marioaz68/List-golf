@@ -738,6 +738,8 @@ export default function RitmoLiveView({
                 key={g.id}
                 g={g}
                 roundDate={roundDate}
+                tournamentId={tournamentId}
+                currentRoundId={currentRoundId}
                 open={selectedId === g.id}
                 onToggle={() =>
                   setSelectedId(selectedId === g.id ? null : g.id)
@@ -875,9 +877,9 @@ export default function RitmoLiveView({
           · {listGroups.length} en lista
         </div>
         <div>
-          <b>G1, G3…</b> = salidas. Azules con iniciales = marshals GPS.
-          Toca un grupo → capturas retrasadas (ritmo vs captura).
-          Borde punteado = posición por captura (sin GPS).
+          <b>G1, G3…</b> = salidas (tócalas → capturas retrasadas). Azules
+          con iniciales = marshals GPS. Borde punteado = posición por captura
+          (sin GPS).
         </div>
       </div>
       {mapUnsupported ? (
@@ -996,16 +998,27 @@ const GPS_BADGE: Record<
 function GroupCard({
   g,
   roundDate,
+  tournamentId,
+  currentRoundId,
   open,
   onToggle,
 }: {
   g: LiveGroup;
   roundDate: string | null;
+  tournamentId: string;
+  currentRoundId: string | null;
   open: boolean;
   onToggle: () => void;
 }) {
   const accent = STATUS_COLOR[g.status];
   const gpsBadge = GPS_BADGE[g.gpsState];
+  const lagParams = new URLSearchParams({
+    scope: "one",
+    tournament_id: tournamentId,
+    group_id: g.id,
+  });
+  if (currentRoundId) lagParams.set("round_id", currentRoundId);
+  const lagHref = `/seguimiento-captura?${lagParams.toString()}`;
   return (
     <div
       style={{
@@ -1185,6 +1198,25 @@ function GroupCard({
       </button>
 
       <GroupStartControl groupId={g.id} actualStartAt={g.actualStartAt} roundDate={roundDate} />
+
+      <a
+        href={lagHref}
+        style={{
+          display: "block",
+          margin: "0 8px 8px",
+          padding: "7px 10px",
+          borderRadius: 6,
+          background: "#1e3a8a",
+          border: "1px solid #2563eb",
+          color: "#dbeafe",
+          fontSize: 11,
+          fontWeight: 800,
+          textAlign: "center",
+          textDecoration: "none",
+        }}
+      >
+        Capturas retrasadas G{g.number} →
+      </a>
 
       {open ? (
         <div
