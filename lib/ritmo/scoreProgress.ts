@@ -10,9 +10,9 @@ export type GroupScoreMeta = {
 };
 
 export type GroupScoreProgress = {
-  /** Hoyos completados en secuencia desde el tee de salida. */
+  /** Hoyos avanzados desde el tee (hasta el último capturado del recorrido). */
   holesPlayed: number;
-  /** Último hoyo completado en esa secuencia, o null. */
+  /** Último hoyo capturado en el recorrido desde el tee, o null. */
   lastHole: number | null;
   /** Hoyo de salida usado para el cálculo (BD / notas / capturas). */
   startHole: number;
@@ -104,7 +104,8 @@ export async function loadGroupScoreProgress(
     }
   }
 
-  // Agregar por grupo: hoyos en secuencia desde el tee de salida.
+  // Agregar por grupo: avance desde el tee (último hoyo del recorrido,
+  // aunque falte un hoyo intermedio en la captura).
   for (const [gid, eids] of entryIdsByGroup) {
     const meta = groupMeta?.get(gid);
     const captured = new Set<number>();

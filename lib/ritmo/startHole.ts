@@ -4,8 +4,28 @@
  * sin esto el ritmo asume salida en el 1 y marca atraso falso en salidas del 10.
  */
 
-/** Cuenta hoyos completados en orden desde el tee (con wrap 1..18). */
+/**
+ * Cuenta hoyos avanzados desde el tee (con wrap 1..18).
+ *
+ * Usa el último hoyo capturado del recorrido, aunque falte alguno intermedio
+ * (p. ej. sin H7 pero con H8–H11). Si se cortara en el primer hueco, el ritmo
+ * se atasca (H7 + “66 min atrasados”) mientras la captura ya va en H10+.
+ */
 export function countSequentialHolesFromStart(
+  captured: ReadonlySet<number>,
+  startHole: number
+): number {
+  if (captured.size === 0) return 0;
+  let farthest = 0;
+  for (let i = 0; i < 18; i++) {
+    const hole = ((startHole - 1 + i) % 18) + 1;
+    if (captured.has(hole)) farthest = i + 1;
+  }
+  return farthest;
+}
+
+/** Solo hoyos consecutivos sin huecos (auditoría / integridad de tarjeta). */
+export function countContiguousHolesFromStart(
   captured: ReadonlySet<number>,
   startHole: number
 ): number {
