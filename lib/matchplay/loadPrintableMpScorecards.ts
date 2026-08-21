@@ -47,7 +47,13 @@ export type PrintableMatchPlayCard = {
   cardId: string;
   kind: "main" | "consolation_mp" | "third_place";
   matchId: string;
+  /** Ronda del cuadro MP. */
   roundNo: number;
+  /**
+   * Ronda de la hoja de salidas (puede diferir del cuadro, p. ej. rematch
+   * R2 colocado en salidas R3 a las 07:00). El filtro de impresión usa esta.
+   */
+  teeSheetRoundNo: number | null;
   roundLabel: string;
   positionNo: number;
   groupNo: number | null;
@@ -96,6 +102,8 @@ export type TeePrintInfo = {
   groupNo: number;
   teeTime: string | null;
   playDate: string | null;
+  /** Ronda de la hoja de salidas donde está el grupo. */
+  roundNo: number | null;
 };
 
 export type PrintableScorecardsBundle = {
@@ -658,6 +666,7 @@ async function loadTeeTimesByRound(
       groupNo: Number(g.group_no),
       teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
       playDate: roundDateById.get(String(g.round_id)) ?? null,
+      roundNo,
     };
     byRoundPosition.set(`${roundNo}-${g.group_no}`, info);
   }
@@ -735,6 +744,7 @@ async function loadTeeTimesByRound(
       groupNo: meta.groupNo,
       teeTime: meta.teeTime,
       playDate: meta.playDate,
+      roundNo: meta.roundNo,
     };
     byTeamPair.set(`${meta.roundNo}:${pairKey}`, info);
     byTeamPairAnyRound.set(
@@ -808,6 +818,8 @@ function buildMatchCard(params: {
   playDate?: string | null;
   /** Nº de grupo en salidas (puede diferir del position_no del cuadro). */
   groupNo?: number | null;
+  /** Ronda de la hoja de salidas (filtro de impresión). */
+  teeSheetRoundNo?: number | null;
 }): PrintableMatchPlayCard | null {
   if (!params.topTeam || !params.bottomTeam) return null;
   const topPlayers = teamToPrintablePlayers(
@@ -826,6 +838,10 @@ function buildMatchCard(params: {
     kind: params.kind,
     matchId: params.matchId,
     roundNo: params.roundNo,
+    teeSheetRoundNo:
+      params.teeSheetRoundNo != null && Number.isFinite(params.teeSheetRoundNo)
+        ? Number(params.teeSheetRoundNo)
+        : null,
     roundLabel:
       params.kind === "third_place"
         ? "Perdedores de semifinal"
@@ -949,6 +965,7 @@ export async function loadPrintableMpScorecards(
         teeTime: tee?.teeTime ?? null,
         playDate: tee?.playDate ?? null,
         groupNo: tee?.groupNo ?? m.position_no,
+        teeSheetRoundNo: tee?.roundNo ?? null,
       });
       if (card) matchPlayCards.push(card);
     }
@@ -985,6 +1002,7 @@ export async function loadPrintableMpScorecards(
           teeTime: tee?.teeTime ?? null,
           playDate: tee?.playDate ?? null,
           groupNo: tee?.groupNo ?? thirdPlace.position_no,
+          teeSheetRoundNo: tee?.roundNo ?? null,
         });
         if (card) matchPlayCards.push(card);
       }
@@ -1040,6 +1058,7 @@ export async function loadPrintableMpScorecards(
         teeTime: tee?.teeTime ?? null,
         playDate: tee?.playDate ?? null,
         groupNo: tee?.groupNo ?? Number(m.position_no),
+        teeSheetRoundNo: tee?.roundNo ?? null,
       });
       if (card) matchPlayCards.push(card);
     }
@@ -1101,6 +1120,7 @@ export async function loadPrintableMpScorecards(
 
   const roundNos = [
     ...new Set([
+      ...matchPlayCards.map((c) => c.teeSheetRoundNo ?? c.roundNo),
       ...matchPlayCards.map((c) => c.roundNo),
       ...strokeCards.map((c) => c.roundNo),
     ]),
