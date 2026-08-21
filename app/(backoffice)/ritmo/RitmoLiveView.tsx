@@ -139,6 +139,9 @@ export default function RitmoLiveView({
   const router = useRouter();
   const vp = useViewport();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapHits, setMapHits] = useState<
+    Array<{ id: string; number: number; left: number; top: number }>
+  >([]);
   const [secondsAgo, setSecondsAgo] = useState(0);
   const [onlyMissingGps, setOnlyMissingGps] = useState(false);
   const [onlyOnCourse, setOnlyOnCourse] = useState(true);
@@ -838,6 +841,31 @@ export default function RitmoLiveView({
     </div>
   );
 
+  const lagHrefFor = (groupId: string) => {
+    const params = new URLSearchParams({
+      scope: "one",
+      tournament_id: tournamentId,
+      group_id: groupId,
+    });
+    if (currentRoundId) params.set("round_id", currentRoundId);
+    return `/seguimiento-captura?${params.toString()}`;
+  };
+
+  const chipGroups = useMemo(() => {
+    const rank: Record<LiveStatus, number> = {
+      atrasado: 0,
+      sin_datos: 1,
+      en_ritmo: 2,
+      adelantado: 3,
+      cerrado: 4,
+    };
+    return [...listGroups].sort((a, b) => {
+      const r = rank[a.status] - rank[b.status];
+      if (r !== 0) return r;
+      return a.number - b.number;
+    });
+  }, [listGroups]);
+
   const map = (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       <RitmoMap
@@ -846,17 +874,76 @@ export default function RitmoLiveView({
         selectedId={selectedId}
         showHoleLabels={false}
         rotate={false}
-        onSelectGroup={(id) => {
-          const params = new URLSearchParams({
-            scope: "one",
-            tournament_id: tournamentId,
-            group_id: id,
-          });
-          if (currentRoundId) params.set("round_id", currentRoundId);
-          // Navegación dura: en mobile/webview router.push a veces no hace nada.
-          window.location.assign(`/seguimiento-captura?${params.toString()}`);
-        }}
+        onHitsChange={setMapHits}
       />
+
+      {/* Barra de grupos: links nativos (rojo=atrasado, verde=ritmo, azul=adelantado). */}
+      <div
+        style={{
+          position: "absolute",
+          top: 8,
+          left: 8,
+          right: 8,
+          zIndex: 5000,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          pointerEvents: "auto",
+        }}
+      >
+        {chipGroups.map((g) => (
+          <a
+            key={g.id}
+            href={lagHrefFor(g.id)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 36,
+              height: 32,
+              padding: "0 10px",
+              borderRadius: 999,
+              background: STATUS_COLOR[g.status],
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 900,
+              textDecoration: "none",
+              border: "2px solid #fff",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
+              fontFamily: "inherit",
+            }}
+            title={`${g.label} · ${g.status} → capturas`}
+          >
+            G{g.number}
+          </a>
+        ))}
+      </div>
+
+      {/* Hits sobre cada bola del mapa (también links nativos). */}
+      {mapHits.map((t) => {
+        const g = listGroups.find((x) => x.id === t.id);
+        return (
+          <a
+            key={t.id}
+            href={lagHrefFor(t.id)}
+            aria-label={`Grupo ${t.number}`}
+            title={`G${t.number} → ver ritmo y captura`}
+            style={{
+              position: "absolute",
+              left: t.left,
+              top: t.top,
+              width: 44,
+              height: 44,
+              transform: "translate(-50%, -50%)",
+              borderRadius: "50%",
+              zIndex: 5000,
+              background: "transparent",
+              border: g?.status === "atrasado" ? "2px solid rgba(255,255,255,0.35)" : "none",
+            }}
+          />
+        );
+      })}
+
       <div
         style={{
           position: "absolute",
@@ -879,18 +966,18 @@ export default function RitmoLiveView({
           · {listGroups.length} en lista
         </div>
         <div>
-          <b>G1, G3…</b> = salidas (tócalas → capturas retrasadas). Azules
-          con iniciales = marshals GPS. Borde punteado = posición por captura
-          (sin GPS).
+          Toca <b>G#</b> arriba (rojo atrasado · verde ritmo · azul adelantado)
+          o la bola en el mapa → ritmo y captura de ese grupo.
         </div>
       </div>
       {mapUnsupported ? (
         <div
           style={{
             position: "absolute",
-            top: 10,
+            top: 48,
             left: 10,
-            zIndex: 1000,
+            zIndex: 900,
+            pointerEvents: "none",
             background: "rgba(0,0,0,0.75)",
             color: "#fbbf24",
             padding: "6px 10px",
@@ -1055,23 +1142,28 @@ function GroupCard({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <div
+            <a
+              href={lagHref}
+              onClick={(e) => e.stopPropagation()}
               style={{
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 borderRadius: "50%",
                 background: accent,
                 color: "#fff",
                 fontSize: 13,
-                fontWeight: 700,
+                fontWeight: 800,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
+                textDecoration: "none",
+                border: "2px solid #fff",
               }}
+              title={`Ver ritmo y captura G${g.number}`}
             >
               {g.number}
-            </div>
+            </a>
             <div style={{ fontSize: 12, fontWeight: 700 }}>
               {g.scoreFinished
                 ? "🏁 Final"
@@ -1201,11 +1293,8 @@ function GroupCard({
 
       <GroupStartControl groupId={g.id} actualStartAt={g.actualStartAt} roundDate={roundDate} />
 
-      <button
-        type="button"
-        onClick={() => {
-          window.location.assign(lagHref);
-        }}
+      <a
+        href={lagHref}
         style={{
           display: "block",
           width: "calc(100% - 16px)",
@@ -1218,12 +1307,13 @@ function GroupCard({
           fontSize: 12,
           fontWeight: 800,
           textAlign: "center",
-          cursor: "pointer",
+          textDecoration: "none",
           fontFamily: "inherit",
+          boxSizing: "border-box",
         }}
       >
-        Capturas retrasadas G{g.number} →
-      </button>
+        Ver ritmo y captura G{g.number} →
+      </a>
 
       {open ? (
         <div

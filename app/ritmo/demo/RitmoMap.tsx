@@ -47,9 +47,12 @@ interface RitmoMapProps {
   showHoleLabels?: boolean;
   /** Si true, rota el mapa 90° (mejor para landscape). Default true. */
   rotate?: boolean;
-  /** Al tocar la bola de un grupo en el mapa. El padre decide alternar
-   *  (mismo id → null para volver a vista completa). */
+  /** @deprecated Preferir onHitsChange + links HTML en el padre. */
   onSelectGroup?: (id: string) => void;
+  /** Posiciones en px del contenedor para poner links HTML encima del mapa. */
+  onHitsChange?: (
+    hits: Array<{ id: string; number: number; left: number; top: number }>
+  ) => void;
 }
 
 const STATUS_COLOR: Record<GroupDot["status"], string> = {
@@ -177,6 +180,7 @@ export function RitmoMap({
   showHoleLabels = true,
   rotate = true,
   onSelectGroup,
+  onHitsChange,
 }: RitmoMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -195,12 +199,9 @@ export function RitmoMap({
 
   const onSelectGroupRef = useRef<RitmoMapProps["onSelectGroup"]>(undefined);
   onSelectGroupRef.current = onSelectGroup;
+  const onHitsChangeRef = useRef<RitmoMapProps["onHitsChange"]>(undefined);
+  onHitsChangeRef.current = onHitsChange;
 
-  /** Botones HTML encima del mapa (coordenadas de pantalla). Con CSS
-   *  rotate(-90deg) Leaflet no acierta el tap; el overlay sí. */
-  const [hitTargets, setHitTargets] = useState<
-    Array<{ id: string; number: number; left: number; top: number }>
-  >([]);
   const rotateRef = useRef(rotate);
   rotateRef.current = rotate;
   const sizeRef = useRef(size);
@@ -497,7 +498,7 @@ export function RitmoMap({
           }).addTo(dotsLayer);
         });
 
-        setHitTargets(nextHits);
+        onHitsChangeRef.current?.(nextHits);
       };
 
       const redraw = () => {
@@ -607,8 +608,6 @@ export function RitmoMap({
               height: size.w,
               transformOrigin: "0 0",
               transform: `translate(0, ${size.h}px) rotate(-90deg)`,
-              // El mapa solo pinta; los taps van al overlay.
-              pointerEvents: onSelectGroup ? "none" : "auto",
             }}
           />
         ) : (
@@ -620,61 +619,10 @@ export function RitmoMap({
               left: 0,
               width: size.w,
               height: size.h,
-              pointerEvents: onSelectGroup ? "none" : "auto",
             }}
           />
         )
       )}
-      {onSelectGroup ? (
-        <div
-          role="presentation"
-          aria-label="Toca un grupo numerado para capturas retrasadas"
-          onClick={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const MAX_D = 56;
-            let best: (typeof hitTargets)[number] | null = null;
-            let bestD = MAX_D;
-            for (const t of hitTargets) {
-              const d = Math.hypot(t.left - x, t.top - y);
-              if (d <= bestD) {
-                bestD = d;
-                best = t;
-              }
-            }
-            if (best) onSelectGroupRef.current?.(best.id);
-          }}
-          onTouchEnd={(e) => {
-            if (e.changedTouches.length === 0) return;
-            const touch = e.changedTouches[0]!;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-            const MAX_D = 56;
-            let best: (typeof hitTargets)[number] | null = null;
-            let bestD = MAX_D;
-            for (const t of hitTargets) {
-              const d = Math.hypot(t.left - x, t.top - y);
-              if (d <= bestD) {
-                bestD = d;
-                best = t;
-              }
-            }
-            if (!best) return;
-            e.preventDefault();
-            onSelectGroupRef.current?.(best.id);
-          }}
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 1300,
-            cursor: hitTargets.length ? "pointer" : "default",
-            background: "transparent",
-            touchAction: "manipulation",
-          }}
-        />
-      ) : null}
     </div>
   );
 }
