@@ -31,6 +31,10 @@ export type PlayerRow = {
 export interface LiveGroup {
   id: string;
   number: number;
+  /** Ronda del calendario (cuando se mezclan R4+R5 en la misma vista). */
+  roundId?: string | null;
+  roundNo?: number | null;
+  roundDate?: string | null;
   label: string;
   startingHole: number;
   teeTime: string | null;
@@ -86,6 +90,8 @@ interface Props {
   computedAtISO: string;
   /** true cuando el campo del torneo no está soportado por el mapa (no CCQ). */
   mapUnsupported: boolean;
+  /** Muestra chip "Todas" para ver R4+R5 juntas. */
+  showAllRoundsOption?: boolean;
 }
 
 const STATUS_COLOR: Record<LiveStatus, string> = {
@@ -135,6 +141,7 @@ export default function RitmoLiveView({
   marshals = [],
   computedAtISO,
   mapUnsupported,
+  showAllRoundsOption = false,
 }: Props) {
   const router = useRouter();
   const vp = useViewport();
@@ -201,7 +208,7 @@ export default function RitmoLiveView({
       isGroupOnCourse({
         teeTime: g.teeTime,
         actualStartAt: g.actualStartAt,
-        roundDate,
+        roundDate: g.roundDate ?? roundDate,
         scoreHolesPlayed: g.scoreHolesPlayed,
         lastScoreTs: g.lastScoreTs,
         gpsState: g.gpsState,
@@ -397,7 +404,7 @@ export default function RitmoLiveView({
       </div>
 
       {/* Selector de ronda */}
-      {rounds.length > 1 ? (
+      {rounds.length > 1 || showAllRoundsOption ? (
         <div
           style={{
             padding: "8px 12px",
@@ -418,6 +425,23 @@ export default function RitmoLiveView({
           >
             Ronda
           </span>
+          {showAllRoundsOption ? (
+            <Link
+              href={`/ritmo?tournament_id=${encodeURIComponent(tournamentId)}`}
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "2px 9px",
+                borderRadius: 6,
+                textDecoration: "none",
+                background: !currentRoundId ? "#2563eb" : "#1f2937",
+                color: !currentRoundId ? "#fff" : "#cbd5e1",
+                border: `1px solid ${!currentRoundId ? "#2563eb" : "#374151"}`,
+              }}
+            >
+              Todas
+            </Link>
+          ) : null}
           {rounds.map((r) => {
             const active = r.id === currentRoundId;
             return (
@@ -1143,6 +1167,7 @@ function GroupCard({
     group_id: g.id,
   });
   if (currentRoundId) lagParams.set("round_id", currentRoundId);
+  else if (g.roundId) lagParams.set("round_id", g.roundId);
   const lagHref = `/seguimiento-captura?${lagParams.toString()}`;
   return (
     <div

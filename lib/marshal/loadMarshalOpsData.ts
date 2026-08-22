@@ -10,7 +10,7 @@ import {
 } from "@/lib/telegram/ritmo/paceCalculator";
 import {
   todayMexicoDate,
-  resolveLiveRoundForTournament,
+  resolveLiveRoundsForTournament,
   resolveOpsRoundDate,
   toDateOnly,
   type OpsRoundRow,
@@ -138,7 +138,7 @@ export async function loadMarshalOpsData(
   const roundOptionsSource =
     selectable.length > 0 ? selectable : rounds.slice(0, 3);
 
-  const round = resolveLiveRoundForTournament({
+  const liveRounds = resolveLiveRoundsForTournament({
     rounds,
     queryRoundId: selectedRoundId,
     today,
@@ -156,47 +156,59 @@ export async function loadMarshalOpsData(
     label: formatRoundLabel(r),
   }));
 
-  // Asegurar que la ronda activa aparezca en el selector.
-  if (round && !roundsOut.some((r) => r.id === round.id)) {
-    roundsOut.unshift({
-      id: round.id,
-      roundNo: round.round_no,
-      roundDate: round.round_date,
-      startTime: round.start_time
-        ? String(round.start_time).slice(0, 5)
-        : null,
-      label: formatRoundLabel(round),
-    });
+  // Asegurar que las rondas en vivo aparezcan en el selector.
+  for (const round of liveRounds) {
+    if (!roundsOut.some((r) => r.id === round.id)) {
+      roundsOut.push({
+        id: round.id,
+        roundNo: round.round_no,
+        roundDate: round.round_date,
+        startTime: round.start_time
+          ? String(round.start_time).slice(0, 5)
+          : null,
+        label: formatRoundLabel(round),
+      });
+    }
   }
+  roundsOut.sort((a, b) => (a.roundNo ?? 0) - (b.roundNo ?? 0));
 
   const groups: CaptureLagGroupRow[] = [];
-  if (round) {
+  if (liveRounds.length > 0) {
     const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
       admin,
       (tRow.course_id as string | null) ?? null,
       activeTournamentId
     );
-    const opsRoundDate =
-      resolveOpsRoundDate({
+    const multi = !selectedRoundId && liveRounds.length > 1;
+    for (const round of liveRounds) {
+      const opsRoundDate =
+        resolveOpsRoundDate({
+          roundDate: round.round_date,
+          today,
+          liveCaptureToday: activityRoundIds.has(round.id),
+        }) ?? today;
+      const rows = await loadCaptureLagGroupsForRound(admin, {
+        tournamentId: activeTournamentId,
+        tournamentName,
+        courseName: (tRow.course_name as string | null) ?? null,
+        courseId: (tRow.course_id as string | null) ?? null,
+        roundId: round.id,
+        roundNo: round.round_no,
         roundDate: round.round_date,
-        today,
-        liveCaptureToday: activityRoundIds.has(round.id),
-      }) ?? today;
-    const rows = await loadCaptureLagGroupsForRound(admin, {
-      tournamentId: activeTournamentId,
-      tournamentName,
-      courseName: (tRow.course_name as string | null) ?? null,
-      courseId: (tRow.course_id as string | null) ?? null,
-      roundId: round.id,
-      roundNo: round.round_no,
-      roundDate: round.round_date,
-      opsRoundDate,
-      tournamentEndDate: (tRow.end_date as string | null) ?? null,
-      tournamentStartDate: (tRow.start_date as string | null) ?? null,
-      now,
-      perHoleMinutes,
-    });
-    groups.push(...rows);
+        opsRoundDate,
+        tournamentEndDate: (tRow.end_date as string | null) ?? null,
+        tournamentStartDate: (tRow.start_date as string | null) ?? null,
+        now,
+        perHoleMinutes,
+      });
+      for (const row of rows) {
+        groups.push(
+          multi && row.roundNo != null
+            ? { ...row, label: `R${row.roundNo} · ${row.label}` }
+            : row
+        );
+      }
+    }
   }
 
   return {
@@ -208,7 +220,9 @@ export async function loadMarshalOpsData(
     tournaments,
     selectedTournamentId: activeTournamentId,
     rounds: roundsOut,
-    selectedRoundId: round?.id ?? null,
+    selectedRoundId: selectedRoundId?.trim()
+      ? selectedRoundId
+      : null,
     groups,
   };
 }

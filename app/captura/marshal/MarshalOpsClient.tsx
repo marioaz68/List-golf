@@ -384,6 +384,29 @@ export default function MarshalOpsClient({
               marginTop: 10,
             }}
           >
+            {rounds.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRoundOverride("");
+                }}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border:
+                    !selectedRoundId
+                      ? "1px solid #38bdf8"
+                      : "1px solid #334155",
+                  background: !selectedRoundId ? "#0c4a6e" : "#1e293b",
+                  color: !selectedRoundId ? "#e0f2fe" : "#94a3b8",
+                  cursor: "pointer",
+                }}
+              >
+                Todas
+              </button>
+            ) : null}
             {rounds.map((r) => {
               const active = r.id === selectedRoundId;
               return (
@@ -746,7 +769,7 @@ export default function MarshalOpsClient({
           <MarshalRitmoPanel
             tg={tg}
             tournamentId={selectedTournamentId}
-            roundId={selectedRoundId}
+            roundId={selectedRoundId || null}
             active
             onOpenGroup={openGroupFromMap}
           />

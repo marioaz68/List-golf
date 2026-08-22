@@ -191,9 +191,43 @@ export function pickLiveRoundSameDay(
 }
 
 /**
+ * Todas las rondas del día que ya arrancaron (o tienen captura/GPS hoy).
+ * Así R4 sigue visible en ritmo cuando R5 ya empezó y aún hay grupos en cancha.
+ */
+export function resolveLiveRoundsSameDay(
+  rounds: OpsRoundRow[],
+  now = new Date(),
+  activityRoundIds?: Set<string>
+): OpsRoundRow[] {
+  if (rounds.length === 0) return [];
+  if (rounds.length === 1) return rounds[0] ? [rounds[0]] : [];
+
+  const nowMin = mexicoNowMinutes(now);
+  const activity = activityRoundIds ?? new Set<string>();
+  const startedOrActive = rounds.filter((r) => {
+    if (activity.has(r.id)) return true;
+    const startMin = parseStartTimeMinutes(r.start_time ?? null);
+    return startMin != null && startMin <= nowMin;
+  });
+
+  if (startedOrActive.length > 0) {
+    return [...startedOrActive].sort(
+      (a, b) => (a.round_no ?? 0) - (b.round_no ?? 0)
+    );
+  }
+
+  // Ninguna ha arrancado: la más temprana (misma lógica que pickLiveRoundSameDay).
+  const picked = pickLiveRoundSameDay(rounds, now);
+  return picked ? [picked] : [];
+}
+
+/**
  * Ronda en vivo para ritmo / capturas: hoy, captura activa, o la más cercana
  * al calendario. Si hay varias rondas el mismo día, usa hora de salida
  * (no la R1 por defecto).
+ *
+ * Preferir `resolveLiveRoundsForTournament` cuando la UI debe mostrar todos
+ * los grupos aún en cancha (R4 + R5 el mismo día).
  */
 export function resolveLiveRoundForTournament(args: {
   rounds: OpsRoundRow[];
@@ -204,29 +238,57 @@ export function resolveLiveRoundForTournament(args: {
   tournamentStartDate?: string | null;
   activityRoundIds?: Set<string>;
 }): OpsRoundRow | null {
+  const multi = resolveLiveRoundsForTournament(args);
+  if (multi.length === 0) return null;
+  // Compat: devolver la más reciente (mayor round_no) como "principal".
+  return [...multi].sort(
+    (a, b) => (b.round_no ?? 0) - (a.round_no ?? 0)
+  )[0] ?? null;
+}
+
+/**
+ * Rondas a mostrar en ritmo / marshal: filtro explícito, o todas las del día
+ * que ya van en cancha (no solo la última).
+ */
+export function resolveLiveRoundsForTournament(args: {
+  rounds: OpsRoundRow[];
+  queryRoundId?: string | null;
+  today?: string;
+  now?: Date;
+  tournamentEndDate?: string | null;
+  tournamentStartDate?: string | null;
+  activityRoundIds?: Set<string>;
+}): OpsRoundRow[] {
   const today = args.today ?? todayMexicoDate();
   const now = args.now ?? new Date();
   const rounds = args.rounds;
-  if (rounds.length === 0) return null;
+  if (rounds.length === 0) return [];
 
   const qid = String(args.queryRoundId ?? "").trim();
   if (qid) {
     const picked = rounds.find((r) => r.id === qid);
-    if (picked) return picked;
+    return picked ? [picked] : [];
   }
 
   const todayRounds = rounds.filter(
     (r) => toDateOnly(r.round_date) === today
   );
-  if (todayRounds.length === 1) return todayRounds[0] ?? null;
+  if (todayRounds.length === 1) return todayRounds[0] ? [todayRounds[0]] : [];
   if (todayRounds.length > 1) {
-    // Calcuta R1 AM + R2 PM: elegir por hora de salida, no la primera R1.
-    return pickLiveRoundSameDay(todayRounds, now);
+    return resolveLiveRoundsSameDay(
+      todayRounds,
+      now,
+      args.activityRoundIds
+    );
   }
 
   const activityIds = args.activityRoundIds ?? new Set<string>();
-  const byActivity = rounds.find((r) => activityIds.has(r.id));
-  if (byActivity) return byActivity;
+  const byActivity = rounds.filter((r) => activityIds.has(r.id));
+  if (byActivity.length > 0) {
+    return [...byActivity].sort(
+      (a, b) => (a.round_no ?? 0) - (b.round_no ?? 0)
+    );
+  }
 
   const open = rounds.filter(
     (r) =>
@@ -239,20 +301,18 @@ export function resolveLiveRoundForTournament(args: {
   );
 
   if (open.length > 0) {
-    return [...open].sort((a, b) => compareOpenRounds(a, b, today))[0] ?? null;
+    return [...open].sort((a, b) => compareOpenRounds(a, b, today));
   }
 
-  return (
+  const past =
     [...rounds]
       .filter((r) => (toDateOnly(r.round_date) ?? "") <= today)
       .sort((a, b) =>
         (toDateOnly(b.round_date) ?? "").localeCompare(
           toDateOnly(a.round_date) ?? ""
         )
-      )[0] ??
-    rounds[0] ??
-    null
-  );
+      )[0] ?? null;
+  return past ? [past] : rounds[0] ? [rounds[0]] : [];
 }
 
 function compareOpenRounds(a: OpsRoundRow, b: OpsRoundRow, today: string): number {

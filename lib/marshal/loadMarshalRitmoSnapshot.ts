@@ -8,7 +8,7 @@ import {
 import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import { getHoleCenter, offsetHolePosition } from "@/lib/ritmo/holeCenters";
 import {
-  resolveLiveRoundForTournament,
+  resolveLiveRoundsForTournament,
   resolveOpsRoundDate,
   todayMexicoDate,
 } from "@/lib/ritmo/opsDay";
@@ -87,7 +87,7 @@ export async function loadMarshalRitmoSnapshot(
     start_time: string | null;
   }>;
   const activityRoundIds = await loadRoundIdsWithCaptureActivityToday(admin, today);
-  const round = resolveLiveRoundForTournament({
+  const liveRounds = resolveLiveRoundsForTournament({
     rounds,
     queryRoundId: selectedRoundId,
     today,
@@ -96,46 +96,78 @@ export async function loadMarshalRitmoSnapshot(
     tournamentStartDate: (tournament.start_date as string | null) ?? null,
     activityRoundIds,
   });
-  if (!round) return null;
+  if (liveRounds.length === 0) return null;
 
   const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
     admin,
     (tournament.course_id as string | null) ?? null,
     tid
   );
-  const opsRoundDate =
-    resolveOpsRoundDate({
-      roundDate: round.round_date,
-      today,
-      liveCaptureToday: activityRoundIds.has(round.id),
-    }) ?? today;
 
-  const lagGroups = await loadCaptureLagGroupsForRound(admin, {
-    tournamentId: tid,
-    tournamentName,
-    courseName: (tournament.course_name as string | null) ?? null,
-    courseId: (tournament.course_id as string | null) ?? null,
-    roundId: round.id,
-    roundNo: round.round_no,
-    roundDate: round.round_date,
-    opsRoundDate,
-    tournamentEndDate: (tournament.end_date as string | null) ?? null,
-    tournamentStartDate: (tournament.start_date as string | null) ?? null,
-    now,
-    perHoleMinutes,
-  });
+  const multi = !selectedRoundId && liveRounds.length > 1;
+  const onCourse: Array<{
+    id: string;
+    number: number;
+    label: string;
+    kind: CaptureLagKind;
+    reason: string;
+    captureHole: number | null;
+    lastHole: number | null;
+    expectedHole: number | null;
+  }> = [];
 
-  const onCourse = lagGroups.filter((g) =>
-    isGroupOnCourse({
-      teeTime: g.teeTime,
-      actualStartAt: g.actualStartAt,
+  for (const round of liveRounds) {
+    const opsRoundDate =
+      resolveOpsRoundDate({
+        roundDate: round.round_date,
+        today,
+        liveCaptureToday: activityRoundIds.has(round.id),
+      }) ?? today;
+
+    const lagGroups = await loadCaptureLagGroupsForRound(admin, {
+      tournamentId: tid,
+      tournamentName,
+      courseName: (tournament.course_name as string | null) ?? null,
+      courseId: (tournament.course_id as string | null) ?? null,
+      roundId: round.id,
+      roundNo: round.round_no,
       roundDate: round.round_date,
-      scoreHolesPlayed: g.holesPlayed,
-      lastScoreTs: g.lastCaptureTs,
-      gpsState: "none",
+      opsRoundDate,
+      tournamentEndDate: (tournament.end_date as string | null) ?? null,
+      tournamentStartDate: (tournament.start_date as string | null) ?? null,
       now,
-    })
-  );
+      perHoleMinutes,
+    });
+
+    for (const g of lagGroups) {
+      if (
+        !isGroupOnCourse({
+          teeTime: g.teeTime,
+          actualStartAt: g.actualStartAt,
+          roundDate: round.round_date,
+          scoreHolesPlayed: g.holesPlayed,
+          lastScoreTs: g.lastCaptureTs,
+          gpsState: "none",
+          now,
+        })
+      ) {
+        continue;
+      }
+      onCourse.push({
+        id: g.id,
+        number: g.number,
+        label:
+          multi && g.roundNo != null
+            ? `R${g.roundNo} · ${g.label}`
+            : g.label,
+        kind: g.kind,
+        reason: g.reason,
+        captureHole: g.captureHole,
+        lastHole: g.lastHole,
+        expectedHole: g.expectedHole,
+      });
+    }
+  }
 
   const byHole = new Map<number, typeof onCourse>();
   for (const g of onCourse) {
@@ -180,10 +212,15 @@ export async function loadMarshalRitmoSnapshot(
   }
 
   const mapMarshals = await loadMarshalPositions(admin, tid);
+  const roundNos = liveRounds
+    .map((r) => r.round_no)
+    .filter((n): n is number => n != null);
 
   return {
     tournamentName,
-    roundLabel: `Ronda ${round.round_no ?? "?"}`,
+    roundLabel: multi
+      ? `En cancha · R${roundNos.join("+R")}`
+      : `Ronda ${liveRounds[0]?.round_no ?? "?"}`,
     mapGroups,
     mapMarshals,
     counts,
