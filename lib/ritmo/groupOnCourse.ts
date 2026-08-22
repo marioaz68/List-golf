@@ -1,5 +1,13 @@
 import { parseTeeDateTime } from "@/lib/telegram/ritmo/paceCalculator";
 
+/** Match cerrado, 18 hoyos o ronda congelada — ya no en ritmo en vivo. */
+export function isGroupFinishedForRitmo(args: {
+  status?: string | null;
+  scoreFinished?: boolean | null;
+}): boolean {
+  return args.status === "cerrado" || args.scoreFinished === true;
+}
+
 /** Grupo que ya salió, captura o comparte GPS (visible en ritmo en vivo). */
 export function isGroupOnCourse(args: {
   teeTime: string | null;
@@ -30,4 +38,15 @@ export function isGroupOnCourse(args: {
   if (args.lastScoreTs && nearOrPastTee) return true;
   if (nearOrPastTee) return true;
   return false;
+}
+
+/** En cancha y aún no terminó (ritmo / marshal en vivo). */
+export function isGroupActiveInRitmo(
+  args: Parameters<typeof isGroupOnCourse>[0] & {
+    status?: string | null;
+    scoreFinished?: boolean | null;
+  }
+): boolean {
+  if (isGroupFinishedForRitmo(args)) return false;
+  return isGroupOnCourse(args);
 }

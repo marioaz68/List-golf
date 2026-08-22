@@ -11,7 +11,7 @@ import {
   todayMexicoDate,
 } from "@/lib/ritmo/opsDay";
 import { loadRoundIdsWithCaptureActivityToday } from "@/lib/ritmo/loadCaptureLagGroups";
-import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import { isGroupActiveInRitmo } from "@/lib/ritmo/groupOnCourse";
 import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import { buildRitmoLiveGroupsForRound } from "@/lib/ritmo/buildRitmoLiveGroups";
 import RitmoLiveView, { type LiveGroup } from "./RitmoLiveView";
@@ -202,13 +202,15 @@ export default async function RitmoPage({
   });
 
   const onCourseCount = allGroups.filter((g) =>
-    isGroupOnCourse({
+    isGroupActiveInRitmo({
       teeTime: g.teeTime,
       actualStartAt: g.actualStartAt,
       roundDate: g.roundDate ?? liveRounds[0]?.round_date ?? null,
       scoreHolesPlayed: g.scoreHolesPlayed,
       lastScoreTs: g.lastScoreTs,
       gpsState: g.gpsState,
+      status: g.status,
+      scoreFinished: g.scoreFinished,
       now,
     })
   ).length;

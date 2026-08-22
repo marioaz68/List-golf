@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RitmoMap, type GroupDot, type MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
-import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import { isGroupOnCourse, isGroupFinishedForRitmo } from "@/lib/ritmo/groupOnCourse";
 import {
   formatCapturerGpsLine,
   type GpsSourceInfo,
@@ -208,9 +208,14 @@ export default function RitmoLiveView({
     return () => clearInterval(id);
   }, [computedAtISO]);
 
+  const activeGroups = useMemo(
+    () => groups.filter((g) => !isGroupFinishedForRitmo(g)),
+    [groups]
+  );
+
   const onCourseGroups = useMemo(() => {
     const now = new Date();
-    return groups.filter((g) =>
+    return activeGroups.filter((g) =>
       isGroupOnCourse({
         teeTime: g.teeTime,
         actualStartAt: g.actualStartAt,
@@ -221,12 +226,12 @@ export default function RitmoLiveView({
         now,
       })
     );
-  }, [groups, roundDate]);
+  }, [activeGroups, roundDate]);
 
   const listGroups = useMemo(() => {
-    if (!onlyOnCourse) return groups;
+    if (!onlyOnCourse) return activeGroups;
     return onCourseGroups;
-  }, [groups, onlyOnCourse, onCourseGroups]);
+  }, [activeGroups, onlyOnCourse, onCourseGroups]);
 
   const sortedGroups = useMemo(() => {
     return [...listGroups].sort((a, b) => {
@@ -684,7 +689,7 @@ export default function RitmoLiveView({
           >
             {onlyOnCourse
               ? `✓ En cancha (${onCourseCount})`
-              : `Ver todos (${groups.length})`}
+              : `Ver todos (${activeGroups.length})`}
           </button>
           <button
             type="button"
@@ -760,7 +765,7 @@ export default function RitmoLiveView({
       <div style={{ padding: "6px 8px" }}>
         {sortedGroups.length === 0 ? (
           <div style={{ padding: 14, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
-            {onlyOnCourse && groups.length > onCourseCount ? (
+            {onlyOnCourse && activeGroups.length > onCourseCount ? (
               <>
                 Ningún grupo en cancha en esta ronda todavía ({groups.length}{" "}
                 programados). Quita el filtro <b>En cancha</b> o elige otra ronda

@@ -10,7 +10,7 @@ import {
   todayMexicoDate,
 } from "@/lib/ritmo/opsDay";
 import { loadPerHoleMinutes } from "@/lib/telegram/ritmo/paceCalculator";
-import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import { isGroupActiveInRitmo } from "@/lib/ritmo/groupOnCourse";
 
 export type MarshalRitmoSnapshot = {
   tournamentName: string;
@@ -150,13 +150,15 @@ export async function loadMarshalRitmoSnapshot(
   }
 
   const onCourse = allGroups.filter((g) =>
-    isGroupOnCourse({
+    isGroupActiveInRitmo({
       teeTime: g.teeTime,
       actualStartAt: g.actualStartAt,
       roundDate: g.roundDate ?? liveRounds[0]?.round_date ?? null,
       scoreHolesPlayed: g.scoreHolesPlayed,
       lastScoreTs: g.lastScoreTs,
       gpsState: g.gpsState,
+      status: g.status,
+      scoreFinished: g.scoreFinished,
       now,
     })
   );
