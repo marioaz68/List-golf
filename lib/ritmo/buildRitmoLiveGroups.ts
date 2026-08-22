@@ -24,6 +24,11 @@ import {
   matchplayEntrySetKey,
 } from "@/lib/ritmo/loadCaptureLagGroups";
 import type { LiveGroup, LiveStatus } from "@/app/(backoffice)/ritmo/RitmoLiveView";
+import {
+  loadGpsActorLookup,
+  resolveGpsSources,
+  type GpsSourceInfo,
+} from "@/lib/ritmo/gpsSources";
 
 type GroupRow = {
   id: string;
@@ -212,6 +217,13 @@ export async function buildRitmoLiveGroupsForRound(
     tournamentId
   );
 
+  const gpsLookup = await loadGpsActorLookup(
+    admin,
+    tournamentId,
+    round.id,
+    allEntryIds
+  );
+
   const roundPrefix =
     args.labelWithRound && round.round_no != null
       ? `R${round.round_no} · `
@@ -287,6 +299,7 @@ export async function buildRitmoLiveGroupsForRound(
         stale,
         gpsState,
         activeSources: 0,
+        gpsSources: [],
         scoreHolesPlayed,
         scoreFinished: scoreFinished || matchplayCompleted,
         lastScoreTs: score?.lastCaptureTs ?? null,
@@ -347,6 +360,13 @@ export async function buildRitmoLiveGroupsForRound(
       if (key) recentDevices.add(key);
     }
 
+    const gpsSources: GpsSourceInfo[] = resolveGpsSources(
+      positions,
+      gpsLookup,
+      now,
+      STALE_MINUTES
+    );
+
     const detail =
       holeSource === "scores" || holeSource === "gps"
         ? pace.msg
@@ -379,6 +399,7 @@ export async function buildRitmoLiveGroupsForRound(
       stale,
       gpsState,
       activeSources: recentDevices.size,
+      gpsSources,
       scoreHolesPlayed,
       scoreFinished,
       lastScoreTs: score?.lastCaptureTs ?? null,

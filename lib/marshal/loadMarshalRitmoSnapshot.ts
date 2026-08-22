@@ -1,40 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GroupDot, MarshalDot } from "@/app/ritmo/demo/RitmoMap";
-import type { CaptureLagKind } from "@/lib/ritmo/captureLag";
-import {
-  loadCaptureLagGroupsForRound,
-  loadRoundIdsWithCaptureActivityToday,
-} from "@/lib/ritmo/loadCaptureLagGroups";
+import type { LiveGroup } from "@/app/(backoffice)/ritmo/RitmoLiveView";
+import { buildRitmoLiveGroupsForRound } from "@/lib/ritmo/buildRitmoLiveGroups";
+import { loadRoundIdsWithCaptureActivityToday } from "@/lib/ritmo/loadCaptureLagGroups";
 import { loadMarshalPositions } from "@/lib/marshal/loadMarshalPositions";
 import { getHoleCenter, offsetHolePosition } from "@/lib/ritmo/holeCenters";
 import {
   resolveLiveRoundsForTournament,
-  resolveOpsRoundDate,
   todayMexicoDate,
 } from "@/lib/ritmo/opsDay";
-import {
-  loadPerHoleMinutes,
-  type PerHoleMinutes,
-} from "@/lib/telegram/ritmo/paceCalculator";
+import { loadPerHoleMinutes } from "@/lib/telegram/ritmo/paceCalculator";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
-
-function lagKindToMapStatus(
-  kind: CaptureLagKind
-): GroupDot["status"] {
-  switch (kind) {
-    case "critico":
-    case "atrasado":
-    case "silencioso":
-      return "atrasado";
-    case "ok":
-    case "terminado":
-      return "en_ritmo";
-    case "cerrado":
-      return "cerrado";
-    default:
-      return "sin_datos";
-  }
-}
 
 export type MarshalRitmoSnapshot = {
   tournamentName: string;
@@ -50,7 +26,57 @@ export type MarshalRitmoSnapshot = {
   };
 };
 
-/** Mapa de ritmo para marshals (posición por GPS o hoyo capturado). */
+/** Misma lógica de posición en mapa que RitmoLiveView (GPS real o hoyo capturado). */
+function liveGroupsToMapDots(groups: LiveGroup[]): GroupDot[] {
+  const byHole = new Map<number, LiveGroup[]>();
+  for (const g of groups) {
+    const h = g.hoyo;
+    if (h != null && h >= 1 && h <= 18) {
+      const arr = byHole.get(h) ?? [];
+      arr.push(g);
+      byHole.set(h, arr);
+    }
+  }
+
+  const out: GroupDot[] = [];
+  for (const g of groups) {
+    if (g.lat != null && g.lon != null) {
+      out.push({
+        id: g.id,
+        number: g.number,
+        lat: g.lat,
+        lon: g.lon,
+        hoyo: g.hoyo ?? 0,
+        status: g.status,
+        label: g.label,
+        detail: g.detail,
+        positionSource: "gps",
+      });
+      continue;
+    }
+    const h = g.hoyo;
+    if (h == null || h < 1 || h > 18) continue;
+    const center = getHoleCenter(h);
+    if (!center) continue;
+    const peers = byHole.get(h) ?? [g];
+    const idx = peers.findIndex((p) => p.id === g.id);
+    const pos = offsetHolePosition(center, idx, peers.length);
+    out.push({
+      id: g.id,
+      number: g.number,
+      lat: pos.lat,
+      lon: pos.lon,
+      hoyo: h,
+      status: g.status,
+      label: g.label,
+      detail: g.detail,
+      positionSource: "capture",
+    });
+  }
+  return out;
+}
+
+/** Mapa de ritmo para marshals — mismos datos que /ritmo backoffice. */
 export async function loadMarshalRitmoSnapshot(
   admin: SupabaseClient,
   tournamentId: string,
@@ -73,6 +99,8 @@ export async function loadMarshalRitmoSnapshot(
     (tournament.short_name as string | null) ??
     (tournament.name as string | null) ??
     "Torneo";
+  const tournamentEndDate = (tournament.end_date as string | null) ?? null;
+  const tournamentStartDate = (tournament.start_date as string | null) ?? null;
 
   const { data: roundsRaw } = await admin
     .from("rounds")
@@ -92,113 +120,48 @@ export async function loadMarshalRitmoSnapshot(
     queryRoundId: selectedRoundId,
     today,
     now,
-    tournamentEndDate: (tournament.end_date as string | null) ?? null,
-    tournamentStartDate: (tournament.start_date as string | null) ?? null,
+    tournamentEndDate,
+    tournamentStartDate,
     activityRoundIds,
   });
   if (liveRounds.length === 0) return null;
 
-  const perHoleMinutes: PerHoleMinutes = await loadPerHoleMinutes(
+  const perHoleMinutes = await loadPerHoleMinutes(
     admin,
     (tournament.course_id as string | null) ?? null,
     tid
   );
 
   const multi = !selectedRoundId && liveRounds.length > 1;
-  const onCourse: Array<{
-    id: string;
-    number: number;
-    label: string;
-    kind: CaptureLagKind;
-    reason: string;
-    captureHole: number | null;
-    lastHole: number | null;
-    expectedHole: number | null;
-  }> = [];
+  const allGroups: LiveGroup[] = [];
 
   for (const round of liveRounds) {
-    const opsRoundDate =
-      resolveOpsRoundDate({
-        roundDate: round.round_date,
-        today,
-        liveCaptureToday: activityRoundIds.has(round.id),
-      }) ?? today;
-
-    const lagGroups = await loadCaptureLagGroupsForRound(admin, {
+    const groups = await buildRitmoLiveGroupsForRound(admin, {
       tournamentId: tid,
-      tournamentName,
-      courseName: (tournament.course_name as string | null) ?? null,
-      courseId: (tournament.course_id as string | null) ?? null,
-      roundId: round.id,
-      roundNo: round.round_no,
-      roundDate: round.round_date,
-      opsRoundDate,
-      tournamentEndDate: (tournament.end_date as string | null) ?? null,
-      tournamentStartDate: (tournament.start_date as string | null) ?? null,
+      round,
+      tournamentEndDate,
+      tournamentStartDate,
+      today,
       now,
       perHoleMinutes,
+      labelWithRound: multi,
     });
-
-    for (const g of lagGroups) {
-      if (
-        !isGroupOnCourse({
-          teeTime: g.teeTime,
-          actualStartAt: g.actualStartAt,
-          roundDate: round.round_date,
-          scoreHolesPlayed: g.holesPlayed,
-          lastScoreTs: g.lastCaptureTs,
-          gpsState: "none",
-          now,
-        })
-      ) {
-        continue;
-      }
-      onCourse.push({
-        id: g.id,
-        number: g.number,
-        label:
-          multi && g.roundNo != null
-            ? `R${g.roundNo} · ${g.label}`
-            : g.label,
-        kind: g.kind,
-        reason: g.reason,
-        captureHole: g.captureHole,
-        lastHole: g.lastHole,
-        expectedHole: g.expectedHole,
-      });
-    }
+    allGroups.push(...groups);
   }
 
-  const byHole = new Map<number, typeof onCourse>();
-  for (const g of onCourse) {
-    const h = g.captureHole ?? g.lastHole ?? g.expectedHole;
-    if (h == null || h < 1 || h > 18) continue;
-    const arr = byHole.get(h) ?? [];
-    arr.push(g);
-    byHole.set(h, arr);
-  }
+  const onCourse = allGroups.filter((g) =>
+    isGroupOnCourse({
+      teeTime: g.teeTime,
+      actualStartAt: g.actualStartAt,
+      roundDate: g.roundDate ?? liveRounds[0]?.round_date ?? null,
+      scoreHolesPlayed: g.scoreHolesPlayed,
+      lastScoreTs: g.lastScoreTs,
+      gpsState: g.gpsState,
+      now,
+    })
+  );
 
-  const mapGroups: GroupDot[] = [];
-  for (const g of onCourse) {
-    const h = g.captureHole ?? g.lastHole ?? g.expectedHole;
-    if (h == null || h < 1 || h > 18) continue;
-    const center = getHoleCenter(h);
-    if (!center) continue;
-    const peers = byHole.get(h) ?? [g];
-    const idx = peers.findIndex((p) => p.id === g.id);
-    const pos = offsetHolePosition(center, idx, peers.length);
-    mapGroups.push({
-      id: g.id,
-      number: g.number,
-      lat: pos.lat,
-      lon: pos.lon,
-      hoyo: h,
-      status: lagKindToMapStatus(g.kind),
-      label: g.label,
-      detail: g.reason,
-      positionSource: "capture",
-    });
-  }
+  const mapGroups = liveGroupsToMapDots(onCourse);
 
   const counts = {
     atrasado: 0,

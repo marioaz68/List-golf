@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RitmoMap, type GroupDot, type MarshalDot } from "@/app/ritmo/demo/RitmoMap";
 import { useViewport } from "@/app/ritmo/demo/useViewport";
 import { formatStartTimeMexico } from "@/lib/ritmo/groupStart";
 import { isGroupOnCourse } from "@/lib/ritmo/groupOnCourse";
+import {
+  formatCapturerGpsLine,
+  type GpsSourceInfo,
+} from "@/lib/ritmo/gpsSources";
 import { getHoleCenter, offsetHolePosition } from "@/lib/ritmo/holeCenters";
 
 export type LiveStatus =
@@ -56,6 +60,8 @@ export interface LiveGroup {
    *  en los últimos 5 minutos. 0 = sin tracking; 1 = un solo punto de falla;
    *  2-3+ = redundancia robusta. */
   activeSources: number;
+  /** Quién mandó GPS recientemente (caddie o jugador). */
+  gpsSources: GpsSourceInfo[];
   /** Hoyos capturados por el grupo (máximo entre jugadores). */
   scoreHolesPlayed: number;
   /** True si ya capturaron los 18 hoyos. */
@@ -292,32 +298,48 @@ export default function RitmoLiveView({
     return c;
   }, [listGroups]);
 
+  const capturerGpsLive = useCallback(
+    (g: LiveGroup) =>
+      (g.gpsSources ?? []).some(
+        (s) => s.role === "caddie" && s.state === "live"
+      ),
+    []
+  );
+
   const gpsCounts = useMemo(() => {
     let live = 0;
     let stale = 0;
     let none = 0;
+    let caddieLive = 0;
     for (const g of listGroups) {
       if (g.gpsState === "live") live += 1;
       else if (g.gpsState === "stale") stale += 1;
       else none += 1;
+      if (capturerGpsLive(g)) caddieLive += 1;
     }
-    return { live, stale, none, total: listGroups.length };
-  }, [listGroups]);
+    return { live, stale, none, caddieLive, total: listGroups.length };
+  }, [listGroups, capturerGpsLive]);
 
   const missingGpsGroups = useMemo(
     () =>
       [...listGroups]
-        .filter((g) => g.gpsState === "none")
+        .filter(
+          (g) =>
+            g.caddies.length > 0 &&
+            !capturerGpsLive(g) &&
+            g.status !== "cerrado" &&
+            !g.scoreFinished
+        )
         .sort((a, b) => a.number - b.number),
-    [listGroups]
+    [listGroups, capturerGpsLive]
   );
 
   const visibleGroups = useMemo(() => {
     const base = onlyMissingGps
-      ? sortedGroups.filter((g) => g.gpsState !== "live")
+      ? sortedGroups.filter((g) => !capturerGpsLive(g))
       : sortedGroups;
     return base;
-  }, [sortedGroups, onlyMissingGps]);
+  }, [sortedGroups, onlyMissingGps, capturerGpsLive]);
 
   // ¿Algún grupo tiene captura de escores? Permite mostrar ritmo sin GPS.
   const withScores = useMemo(
@@ -524,13 +546,18 @@ export default function RitmoLiveView({
             Live Location (GPS)
           </span>
           <span style={{ fontSize: 11, fontWeight: 800, color: "#e5e7eb" }}>
-            {gpsCounts.live}/{gpsCounts.total} activos
+            {gpsCounts.caddieLive}/{gpsCounts.total} caddies con GPS
           </span>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-          <SummaryChip color="#22c55e" n={gpsCounts.live} label="en vivo" />
+          <SummaryChip
+            color="#22c55e"
+            n={gpsCounts.caddieLive}
+            label="caddie GPS"
+          />
+          <SummaryChip color="#22c55e" n={gpsCounts.live} label="grupo en vivo" />
           <SummaryChip color="#f59e0b" n={gpsCounts.stale} label="GPS viejo" />
-          <SummaryChip color="#6b7280" n={gpsCounts.none} label="sin señal" />
+          <SummaryChip color="#ef4444" n={missingGpsGroups.length} label="sin GPS caddie" />
           <SummaryChip
             color="#2563eb"
             n={liveMarshals.length}
@@ -566,10 +593,17 @@ export default function RitmoLiveView({
                 alignItems: "center",
               }}
             >
-              {withGps.map((g) => (
+              {withGps.map((g) => {
+                const caddie = (g.gpsSources ?? []).find((s) => s.role === "caddie");
+                const tip = caddie
+                  ? `Caddie ${caddie.label} · GPS ${
+                      caddie.state === "live" ? "en vivo" : "viejo"
+                    }${g.hoyo != null ? ` · H${g.hoyo}` : ""}`
+                  : `${g.label} · GPS jugador${g.hoyo != null ? ` · H${g.hoyo}` : ""}`;
+                return (
                 <span
                   key={g.id}
-                  title={`${g.label} · ${g.gpsState === "live" ? "GPS en vivo" : "GPS viejo"}${g.hoyo != null ? ` · H${g.hoyo}` : ""}`}
+                  title={tip}
                   style={{
                     fontSize: 10,
                     fontWeight: 800,
@@ -593,7 +627,8 @@ export default function RitmoLiveView({
                   G{g.number}
                   {g.hoyo != null ? ` · H${g.hoyo}` : ""}
                 </span>
-              ))}
+              );
+              })}
               {liveMarshals.map((m) => (
                 <span
                   key={m.id}
@@ -666,7 +701,7 @@ export default function RitmoLiveView({
               fontFamily: "inherit",
             }}
           >
-            {onlyMissingGps ? "✓ Solo sin GPS" : "Ver sin GPS"}
+            {onlyMissingGps ? "✓ Sin GPS caddie" : "Ver sin GPS caddie"}
           </button>
           {missingGpsGroups.length > 0 ? (
             <button
@@ -702,23 +737,22 @@ export default function RitmoLiveView({
             }}
           >
             <div style={{ color: "#fbbf24", fontWeight: 700, marginBottom: 4 }}>
-              Pendientes de activar Live Location (8 h):
+              Caddies sin GPS en vivo (activar en Telegram):
             </div>
-            {missingGpsGroups.map((g) => (
+            {missingGpsGroups.map((g) => {
+              const line = formatCapturerGpsLine({
+                gpsSources: g.gpsSources ?? [],
+                caddieNames: g.caddies.map((c) => c.name),
+                caddiesWithTelegram: g.caddies.filter((c) => c.hasTelegram)
+                  .length,
+                scoreHolesPlayed: g.scoreHolesPlayed,
+              });
+              return (
               <div key={g.id} style={{ marginBottom: 3 }}>
-                <b>G{g.number}</b> · tee {formatTime(g.teeTime)}
-                {g.caddies.length > 0 ? (
-                  <>
-                    {" "}
-                    · caddie{" "}
-                    {g.caddies.map((c) => c.name).join(", ")}
-                    {g.caddies.some((c) => c.hasTelegram) ? "" : " ⚠ sin ID Telegram"}
-                  </>
-                ) : (
-                  <span style={{ color: "#f87171" }}> · sin caddie asignado</span>
-                )}
+                <b>G{g.number}</b> · tee {formatTime(g.teeTime)} · {line.text}
               </div>
-            ))}
+            );
+            })}
           </div>
         ) : null}
       </div>
@@ -759,7 +793,7 @@ export default function RitmoLiveView({
           </div>
         ) : visibleGroups.length === 0 ? (
           <div style={{ padding: 14, fontSize: 12, color: "#9ca3af" }}>
-            Todos los grupos tienen GPS activo.
+            Todos los caddies tienen GPS en vivo.
           </div>
         ) : (
           <>
@@ -1144,6 +1178,61 @@ const GPS_BADGE: Record<
   none: { label: "Sin GPS", bg: "#450a0a", fg: "#fca5a5" },
 };
 
+const CAPTURER_GPS_STYLE: Record<
+  "live" | "stale" | "off" | "na",
+  { bg: string; border: string; fg: string; icon: string }
+> = {
+  live: { bg: "#064e3b", border: "#10b981", fg: "#a7f3d0", icon: "📡" },
+  stale: { bg: "#78350f", border: "#f59e0b", fg: "#fde68a", icon: "📡" },
+  off: { bg: "#450a0a", border: "#ef4444", fg: "#fecaca", icon: "📡" },
+  na: { bg: "#1f2937", border: "#4b5563", fg: "#9ca3af", icon: "—" },
+};
+
+function CapturerGpsStrip({ g }: { g: LiveGroup }) {
+  const caddieNames = g.caddies.map((c) => c.name);
+  const caddiesWithTelegram = g.caddies.filter((c) => c.hasTelegram).length;
+  const line = formatCapturerGpsLine({
+    gpsSources: g.gpsSources ?? [],
+    caddieNames,
+    caddiesWithTelegram,
+    scoreHolesPlayed: g.scoreHolesPlayed,
+  });
+  const style = CAPTURER_GPS_STYLE[line.tone];
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        padding: "6px 8px",
+        borderRadius: 6,
+        background: style.bg,
+        border: `1px solid ${style.border}`,
+        color: style.fg,
+        fontSize: 11,
+        fontWeight: 700,
+        lineHeight: 1.35,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 6,
+      }}
+      title={
+        (g.gpsSources ?? []).length > 0
+          ? (g.gpsSources ?? [])
+              .map(
+                (s) =>
+                  `${s.role === "caddie" ? "Caddie" : "Jugador"} ${s.label} · ${
+                    s.state === "live" ? "en vivo" : "viejo"
+                  }${s.lastAgoMin != null ? ` (${s.lastAgoMin} min)` : ""}`
+              )
+              .join(" · ")
+          : line.text
+      }
+    >
+      <span style={{ flexShrink: 0 }}>{style.icon}</span>
+      <span>{line.text}</span>
+    </div>
+  );
+}
+
 function GroupCard({
   g,
   roundDate,
@@ -1307,7 +1396,9 @@ function GroupCard({
           {g.detail}
         </div>
 
-        <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+        <CapturerGpsStrip g={g} />
+
+        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
           <span
             style={{
               fontSize: 9,
@@ -1325,33 +1416,21 @@ function GroupCard({
                 }`
               : "📝 sin captura"}
           </span>
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              padding: "1px 6px",
-              borderRadius: 3,
-              background: g.gpsState === "live" ? "#0c4a6e" : "#3f3f46",
-              color: g.gpsState === "live" ? "#7dd3fc" : "#a1a1aa",
-            }}
-            title={
-              g.gpsState === "live" && g.activeSources >= 2
-                ? `${g.activeSources} dispositivos del grupo mandando GPS — tracking redundante`
-                : g.gpsState === "live" && g.activeSources === 1
-                  ? "Solo 1 dispositivo mandando GPS — si se cae, perdemos el grupo"
-                  : undefined
-            }
-          >
-            {g.gpsState === "live"
-              ? `📡 GPS${
-                  g.activeSources >= 2 ? ` · ${g.activeSources} fuentes` : ""
-                }${agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""}`
-              : g.gpsState === "stale"
-                ? `📡 GPS viejo${
-                    agoLabel(g.lastTs) ? ` · ${agoLabel(g.lastTs)}` : ""
-                  }`
-                : "📡 sin GPS"}
-          </span>
+          {(g.gpsSources ?? []).length > 1 ? (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                padding: "1px 6px",
+                borderRadius: 3,
+                background: "#0c4a6e",
+                color: "#7dd3fc",
+              }}
+              title="Dispositivos distintos mandando GPS en los últimos minutos"
+            >
+              {g.activeSources} dispositivos GPS
+            </span>
+          ) : null}
         </div>
         {g.caddies.length > 0 ? (
           <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
