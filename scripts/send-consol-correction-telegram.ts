@@ -72,6 +72,31 @@ async function main() {
     if (t.player_b_entry_id) entryIds.add(String(t.player_b_entry_id));
   }
 
+  // Nadie que siga vivo en el cuadro principal (p. ej. cuartos R4).
+  const { data: r4Round } = await admin
+    .from("rounds")
+    .select("id")
+    .eq("tournament_id", TOURNAMENT_ID)
+    .eq("round_no", 4)
+    .maybeSingle();
+
+  if (r4Round?.id) {
+    const { data: aliveRows } = await admin
+      .from("pairing_group_members")
+      .select("entry_id, pairing_groups!inner(round_id, notes)")
+      .eq("pairing_groups.round_id", r4Round.id)
+      .like("pairing_groups.notes", "MATCH PLAY%");
+
+    for (const row of aliveRows ?? []) {
+      if (row.entry_id) entryIds.delete(String(row.entry_id));
+    }
+  }
+
+  if (entryIds.size === 0) {
+    console.log("No hay perdedores R1–R3 fuera del cuadro vivo");
+    return;
+  }
+
   const { data: entries } = await admin
     .from("tournament_entries")
     .select(
