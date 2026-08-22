@@ -22,7 +22,10 @@ import {
   strokesReceivedOnHole,
   type StrokeIndexByHole,
 } from "@/lib/leaderboard/handicapStrokes";
-import { getConsolationBracketId } from "@/lib/matchplay/consolationMatchPlay";
+import {
+  CONSOLATION_NOTES_PREFIX,
+  getConsolationBracketId,
+} from "@/lib/matchplay/consolationMatchPlay";
 import {
   getThirdPlaceMatch,
   syncThirdPlaceMatchFromSemis,
@@ -785,6 +788,50 @@ async function loadTeeTimesByRound(
   return { byRoundPosition, byTeamPair, byTeamPairAnyRound };
 }
 
+/** Salidas de consolación MP por notas del grupo (fuente fiable para impresión). */
+async function loadConsolationTeeByNotes(
+  admin: SupabaseClient,
+  tournamentId: string
+): Promise<Map<string, TeePrintInfo>> {
+  const map = new Map<string, TeePrintInfo>();
+  const { data: rounds } = await admin
+    .from("rounds")
+    .select("id, round_no, round_date")
+    .eq("tournament_id", tournamentId);
+  const roundIds = (rounds ?? []).map((r) => String(r.id));
+  if (roundIds.length === 0) return map;
+
+  const roundNoById = new Map(
+    (rounds ?? []).map((r) => [String(r.id), Number(r.round_no)])
+  );
+  const roundDateById = new Map(
+    (rounds ?? []).map((r) => [
+      String(r.id),
+      r.round_date ? String(r.round_date).slice(0, 10) : null,
+    ])
+  );
+
+  const { data: groups } = await admin
+    .from("pairing_groups")
+    .select("round_id, group_no, tee_time, notes")
+    .in("round_id", roundIds)
+    .like("notes", `${CONSOLATION_NOTES_PREFIX}%`);
+
+  for (const g of groups ?? []) {
+    const notes = String(g.notes ?? "").trim();
+    if (!notes) continue;
+    const roundNo = roundNoById.get(String(g.round_id));
+    if (roundNo == null) continue;
+    map.set(notes, {
+      groupNo: Number(g.group_no),
+      teeTime: g.tee_time ? String(g.tee_time).slice(0, 5) : null,
+      playDate: roundDateById.get(String(g.round_id)) ?? null,
+      roundNo,
+    });
+  }
+  return map;
+}
+
 function teeInfoForMatch(
   teeMaps: Awaited<ReturnType<typeof loadTeeTimesByRound>>,
   roundNo: number,
@@ -1044,6 +1091,10 @@ export async function loadPrintableMpScorecards(
     ? null
     : await getConsolationBracketId(admin, tournamentId);
   if (consolBracketId) {
+    const consolTeeByNotes = await loadConsolationTeeByNotes(
+      admin,
+      tournamentId
+    );
     const { data: consolMatches } = await admin
       .from("matchplay_matches")
       .select(
@@ -1063,13 +1114,24 @@ export async function loadPrintableMpScorecards(
       if (!m.top_pair_id || !m.bottom_pair_id) continue;
       const top = teamById.get(m.top_pair_id);
       const bottom = teamById.get(m.bottom_pair_id);
-      const tee = teeInfoForMatch(
-        teeTimes,
-        Number(m.round_no),
-        Number(m.position_no),
-        m.top_pair_id != null ? String(m.top_pair_id) : null,
-        m.bottom_pair_id != null ? String(m.bottom_pair_id) : null
-      );
+      const topSeed = top?.seed;
+      const botSeed = bottom?.seed;
+      const consolNotes =
+        topSeed != null && botSeed != null
+          ? `${CONSOLATION_NOTES_PREFIX}#${topSeed} vs #${botSeed}`
+          : null;
+      const teeFromNotes = consolNotes
+        ? (consolTeeByNotes.get(consolNotes) ?? null)
+        : null;
+      const tee =
+        teeFromNotes ??
+        teeInfoForMatch(
+          teeTimes,
+          Number(m.round_no),
+          Number(m.position_no),
+          m.top_pair_id != null ? String(m.top_pair_id) : null,
+          m.bottom_pair_id != null ? String(m.bottom_pair_id) : null
+        );
       const card = buildMatchCard({
         kind: "consolation_mp",
         matchId: String(m.id),

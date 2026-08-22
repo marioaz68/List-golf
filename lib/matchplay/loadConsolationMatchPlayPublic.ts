@@ -172,27 +172,27 @@ export async function loadConsolationMatchPlayPublic(
     snapshot.matches.map((m) => [m.id, m.result_text])
   );
 
-  const { data: roundRows } = await admin
+  const { data: allRoundRows } = await admin
     .from("rounds")
     .select("id, round_no")
-    .eq("tournament_id", tournamentId)
-    .in("round_no", consolRoundNos);
+    .eq("tournament_id", tournamentId);
 
-  const roundIdByNo = new Map<number, string>();
   const roundNoById = new Map<string, number>();
-  for (const r of roundRows ?? []) {
-    if (r.id == null || r.round_no == null) continue;
-    roundIdByNo.set(Number(r.round_no), String(r.id));
-    roundNoById.set(String(r.id), Number(r.round_no));
+  const allRoundIds: string[] = [];
+  for (const r of allRoundRows ?? []) {
+    if (!r.id) continue;
+    allRoundIds.push(String(r.id));
+    if (r.round_no != null) {
+      roundNoById.set(String(r.id), Number(r.round_no));
+    }
   }
-  const roundIds = [...roundIdByNo.values()];
 
   const lockedEntryIds = new Set<string>();
-  if (roundIds.length > 0) {
+  if (allRoundIds.length > 0) {
     const { data: lockedRows } = await admin
       .from("scorecards")
       .select("entry_id, locked_at")
-      .in("round_id", roundIds)
+      .in("round_id", allRoundIds)
       .not("locked_at", "is", null);
     for (const row of lockedRows ?? []) {
       if (row.entry_id) lockedEntryIds.add(String(row.entry_id));
@@ -246,11 +246,11 @@ export async function loadConsolationMatchPlayPublic(
 
   const groups: ConsolationLiveGroup[] = [];
 
-  if (roundIds.length > 0) {
+  if (allRoundIds.length > 0) {
     const { data: pgRows } = await admin
       .from("pairing_groups")
       .select("id, group_no, tee_time, notes, round_id")
-      .in("round_id", roundIds)
+      .in("round_id", allRoundIds)
       .like("notes", `${CONSOLATION_NOTES_PREFIX}%`)
       .order("group_no", { ascending: true });
 

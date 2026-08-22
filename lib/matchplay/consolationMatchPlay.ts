@@ -13,6 +13,7 @@ import {
 import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySalidasPublished";
+import { sendCaptureLinksToGroup } from "@/lib/telegram/sendGroupCaptureLinks";
 
 export const CONSOLATION_BRACKET_NAME = "Consolación Match Play";
 export const CONSOLATION_NOTES_PREFIX = "CONSOLACIÓN MP · ";
@@ -283,15 +284,13 @@ async function resolveConsolationCalendarRound(
   const mainRoundCount = roundCountForBracketSize(
     Math.max(2, mainBracketSize)
   );
-  // Consolación MP siempre en bloque PM (R5) o domingo (R6), no en R4 AM.
+  // Consolación MP: semifinales en bloque PM (R5); final en domingo (R6).
+  // Antes las semis (ronda consol = mainRoundCount-1) caían en R6 por error.
   let calendarRoundNo: number;
-  if (consolMatchRoundNo >= mainRoundCount - 1) {
+  if (consolMatchRoundNo >= mainRoundCount) {
     calendarRoundNo = mainRoundCount;
   } else {
-    calendarRoundNo = Math.min(
-      Math.max(consolMatchRoundNo + 1, 5),
-      mainRoundCount
-    );
+    calendarRoundNo = Math.max(mainRoundCount - 1, 5);
   }
 
   const { data } = await admin
@@ -433,13 +432,21 @@ export async function maybeCreateConsolationRoundGroup(
   const botLabel = botPair.seed != null ? `#${botPair.seed}` : "BOT";
   const notes = `${CONSOLATION_NOTES_PREFIX}${topLabel} vs ${botLabel}`;
 
+  const { data: tournamentRounds } = await admin
+    .from("rounds")
+    .select("id")
+    .eq("tournament_id", params.tournamentId);
+  const tournamentRoundIds = (tournamentRounds ?? [])
+    .map((r) => String(r.id))
+    .filter(Boolean);
+
   // Buscamos un grupo de consolación ya creado para este enfrentamiento por
-  // sus notas (estables aunque cambie el group_no), no por group_no — así no
-  // pisamos una salida del cuadro principal que esté ocupando ese slot.
+  // sus notas (estables aunque cambie el group_no), en cualquier ronda del
+  // calendario — así migramos si quedó en R6 por error de mapeo.
   const { data: existingByNotes } = await admin
     .from("pairing_groups")
-    .select("id")
-    .eq("round_id", nextRoundId)
+    .select("id, round_id")
+    .in("round_id", tournamentRoundIds.length > 0 ? tournamentRoundIds : [nextRoundId])
     .eq("notes", notes)
     .maybeSingle();
 
@@ -482,6 +489,7 @@ export async function maybeCreateConsolationRoundGroup(
     await admin
       .from("pairing_groups")
       .update({
+        round_id: nextRoundId,
         group_no: groupNo,
         tee_time: teeTime,
         starting_hole: startingHole,
@@ -537,6 +545,31 @@ export async function maybeCreateConsolationRoundGroup(
       `[consolationMatchPlay] publish salidas round ${nextRoundId}:`,
       err
     );
+  }
+
+  if (created || updated) {
+    try {
+      const notify = await sendCaptureLinksToGroup(admin, {
+        tournamentId: params.tournamentId,
+        roundId: nextRoundId,
+        groupId: groupRecordId,
+      });
+      if (!notify.ok) {
+        console.error(
+          `[consolationMatchPlay] telegram group ${groupRecordId}:`,
+          notify.error
+        );
+      } else if (notify.sent > 0) {
+        console.log(
+          `[consolationMatchPlay] telegram group ${groupRecordId}: ${notify.sent} enviado(s)`
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[consolationMatchPlay] telegram group ${groupRecordId}:`,
+        err
+      );
+    }
   }
 
   return {

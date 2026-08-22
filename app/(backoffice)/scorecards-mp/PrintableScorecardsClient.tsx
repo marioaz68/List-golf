@@ -34,8 +34,13 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
   const filteredMp = useMemo(() => {
     return bundle.matchPlayCards
       .filter((c) => {
-        const filterRound = c.teeSheetRoundNo ?? c.roundNo;
-        if (roundFilter !== "all" && filterRound !== roundFilter) return false;
+        if (roundFilter !== "all") {
+          const teeRound = c.teeSheetRoundNo ?? c.roundNo;
+          const matchesRound =
+            teeRound === roundFilter ||
+            (c.kind === "consolation_mp" && c.roundNo === roundFilter);
+          if (!matchesRound) return false;
+        }
         if (kindFilter === "stroke_aggregate") return false;
         if (
           kindFilter === "main" &&
