@@ -298,10 +298,12 @@ export async function loadConsolationMatchPlayPublic(
     }
   }
 
-  // Partidos de consolación (cualquier ronda) sin salida aún.
+  // Partidos de consolación sin salida aún. Solo la ronda activa (no rondas
+  // viejas de un from_round_no anterior ni cruces prematuros).
   for (const m of consolMatches ?? []) {
     const mRound = Number(m.round_no);
     if (!consolRoundNos.includes(mRound)) continue;
+    if (mRound < firstActiveRoundNo) continue;
     if (!m.top_pair_id || !m.bottom_pair_id) continue;
     if (groups.some((g) => g.matchId === m.id)) continue;
     const memberEntryIds = [
