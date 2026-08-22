@@ -265,9 +265,55 @@ async function ensureConsolationMatch(
 }
 
 /**
- * Crea/actualiza la salida de consolación en la ronda destino.
- * group_no = position_no de la consolación (G1, G2, …) — salen ANTES que
- * las semifinales del cuadro principal (G3, G4 en R4 con 16 parejas).
+ * Ronda del calendario donde van las salidas de consolación MP.
+ * Nunca la misma ronda AM del cuadro principal (p. ej. cuartos R4 07:00):
+ * Calcuta → consol MP en R5 11:00 o domingo R6 09:30.
+ */
+async function resolveConsolationCalendarRound(
+  admin: SupabaseClient,
+  tournamentId: string,
+  consolMatchRoundNo: number,
+  mainBracketSize: number
+): Promise<{
+  id: string;
+  start_time: string | null;
+  interval_minutes: number | null;
+  start_type: string | null;
+} | null> {
+  const mainRoundCount = roundCountForBracketSize(
+    Math.max(2, mainBracketSize)
+  );
+  // Consolación MP siempre en bloque PM (R5) o domingo (R6), no en R4 AM.
+  let calendarRoundNo: number;
+  if (consolMatchRoundNo >= mainRoundCount - 1) {
+    calendarRoundNo = mainRoundCount;
+  } else {
+    calendarRoundNo = Math.min(
+      Math.max(consolMatchRoundNo + 1, 5),
+      mainRoundCount
+    );
+  }
+
+  const { data } = await admin
+    .from("rounds")
+    .select("id, start_time, interval_minutes, start_type, round_no")
+    .eq("tournament_id", tournamentId)
+    .eq("round_no", calendarRoundNo)
+    .maybeSingle();
+
+  if (!data?.id) return null;
+  return {
+    id: String(data.id),
+    start_time: data.start_time ? String(data.start_time) : null,
+    interval_minutes:
+      typeof data.interval_minutes === "number" ? data.interval_minutes : null,
+    start_type: data.start_type ? String(data.start_type) : null,
+  };
+}
+
+/**
+ * Crea/actualiza la salida de consolación en la ronda de calendario correcta
+ * (R5 PM o domingo R6 — nunca mezclada con cuartos R4 AM).
  */
 export async function maybeCreateConsolationRoundGroup(
   admin: SupabaseClient,
@@ -305,33 +351,12 @@ export async function maybeCreateConsolationRoundGroup(
   );
   const isFinal = nextRoundNo >= mainRoundCount;
 
-  const dedicated = isFinal
-    ? await findLastMainRound(admin, params.tournamentId)
-    : await findLatestAfternoonRound(admin, params.tournamentId);
-
-  let roundRow: {
-    id: string;
-    start_time: string | null;
-    interval_minutes: number | null;
-    start_type?: string | null;
-  } | null = dedicated
-    ? {
-        id: dedicated.id,
-        start_time: dedicated.start_time,
-        interval_minutes: dedicated.interval_minutes,
-        start_type: dedicated.start_type,
-      }
-    : null;
-
-  if (!roundRow?.id) {
-    const { data } = await admin
-      .from("rounds")
-      .select("id, start_time, interval_minutes, start_type")
-      .eq("tournament_id", params.tournamentId)
-      .eq("round_no", nextRoundNo)
-      .maybeSingle();
-    roundRow = data;
-  }
+  const roundRow = await resolveConsolationCalendarRound(
+    admin,
+    params.tournamentId,
+    nextRoundNo,
+    params.mainBracketSize
+  );
 
   if (!roundRow?.id) {
     return {

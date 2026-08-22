@@ -17,12 +17,6 @@ import {
 } from "@/lib/tournaments/registrationGate";
 import { roundsInSameSession, type SessionRoundFields, normalizeStartTypeForSession } from "./sessionBlock";
 import { repairCutRulesTargetFinalRound } from "@/lib/convocatoria/upgradeTournamentRules";
-import {
-  backfillConsolationLosersFromRound,
-  countConsolationMatchesInRound,
-  loadConsolationMpRule,
-  reconcileRoundGroupOrder,
-} from "@/lib/matchplay/consolationMatchPlay";
 import { compactAndSyncRoundGroups } from "@/lib/matchplay/pairingGroupOrder";
 import {
   CCQ_PAR3_HOLES,
@@ -1614,30 +1608,10 @@ async function _generateMatchPlayTeeSheet(formData: FormData) {
   // Borramos cualquier grupo previo del round.
   await deletePairingGroupsForRoundIds(supabase, [round_id]);
 
-  // Si esta ronda también recibe parejas de consolación Match Play, las
-  // salidas de consolación van ARRIBA (G1..n) y el cuadro principal después.
-  // Reservamos los primeros group_no para la consolación. Los matchplay_matches
-  // del cuadro de consolación persisten aunque hayamos borrado los grupos.
-  const admin = tryCreateAdminClient();
-  let consolCount = 0;
-  let consolFromRoundNo: number | null = null;
-  if (admin) {
-    try {
-      const rule = await loadConsolationMpRule(admin, tournament_id);
-      if (rule && targetRoundNo > rule.from_round_no) {
-        consolFromRoundNo = rule.from_round_no;
-        consolCount = await countConsolationMatchesInRound(
-          admin,
-          tournament_id,
-          targetRoundNo
-        );
-      }
-    } catch (err) {
-      console.error("[tee-sheet] consolation pre-count:", err);
-    }
-  }
-
-  let groupNo = consolCount + 1;
+  // Solo salidas del cuadro principal en esta ronda (cuartos/semis/final).
+  // La consolación MP va en R5/R6 del calendario; los perdedores acumulan
+  // consolación stroke el domingo — no mezclar CONSOL en R4 AM.
+  let groupNo = 1;
   for (const match of realMatches) {
     const top = match.top_pair_id ? teamById.get(match.top_pair_id) : null;
     const bot = match.bottom_pair_id ? teamById.get(match.bottom_pair_id) : null;
@@ -1692,22 +1666,6 @@ async function _generateMatchPlayTeeSheet(formData: FormData) {
     }
 
     groupNo += 1;
-  }
-
-  // Regeneramos las salidas de consolación Match Play para esta ronda (las
-  // borró deletePairingGroupsForRoundIds). Quedan en G1..n, antes de las
-  // semifinales del cuadro principal.
-  if (admin && consolCount > 0 && consolFromRoundNo != null) {
-    try {
-      await backfillConsolationLosersFromRound(
-        admin,
-        tournament_id,
-        consolFromRoundNo
-      );
-      await reconcileRoundGroupOrder(admin, tournament_id, targetRoundNo);
-    } catch (err) {
-      console.error("[tee-sheet] regen consolation groups:", err);
-    }
   }
 
   const adminSync = tryCreateAdminClient();
