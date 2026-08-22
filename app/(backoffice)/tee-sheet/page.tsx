@@ -46,6 +46,11 @@ import { roundCountForBracketSize } from "@/lib/matchplay/bracketUtils";
 import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import TeeSheetDnD from "./TeeSheetDnDLoader";
 import StrokeAggregateSalidasPanel from "./StrokeAggregateSalidasPanel";
+import ConsolationMpSalidasPanel from "./ConsolationMpSalidasPanel";
+import {
+  loadCapturaGroupRows,
+  loadConsolationMpGroupsForDate,
+} from "@/lib/salidas/loadCapturaGroupRows";
 import type { TournamentSettings } from "@/types/tournament";
 import { classifyTelegramLinkStatus } from "@/lib/telegram/linkToken";
 import type { TelegramCoveragePerson } from "@/lib/telegram/coverageStatus";
@@ -1098,6 +1103,25 @@ for (const row of membersRaw) {
     (g) => !String(g.notes ?? "").startsWith(STROKE_AGG_NOTES_PREFIX)
   );
 
+  let consolMpCapturaGroups: Awaited<ReturnType<typeof loadCapturaGroupRows>> =
+    [];
+  if (isMatchPlay && effectiveTournamentId && sessionRoundDate) {
+    const adminForConsol = tryCreateAdminClient();
+    if (adminForConsol) {
+      const consolRaw = await loadConsolationMpGroupsForDate(adminForConsol, {
+        tournamentId: effectiveTournamentId,
+        roundDate: sessionRoundDate,
+      });
+      if (consolRaw.length > 0) {
+        consolMpCapturaGroups = await loadCapturaGroupRows(adminForConsol, {
+          tournamentId: effectiveTournamentId,
+          groups: consolRaw,
+          assignmentRoundIds: consolRaw.map((g) => g.round_id),
+        });
+      }
+    }
+  }
+
   const telegramCoverage: TelegramCoveragePerson[] = [];
   const seenCoverage = new Set<string>();
   for (const g of groupsForMainDnD) {
@@ -1493,6 +1517,14 @@ for (const row of membersRaw) {
           tournamentId={effectiveTournamentId}
           roundNo={targetRoundNo}
           initialGroupCount={strokeAggregateGroupCount}
+        />
+      ) : null}
+
+      {consolMpCapturaGroups.length > 0 ? (
+        <ConsolationMpSalidasPanel
+          tournamentId={effectiveTournamentId}
+          roundDate={sessionRoundDate}
+          groups={consolMpCapturaGroups}
         />
       ) : null}
 

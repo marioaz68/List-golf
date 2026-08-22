@@ -6,14 +6,15 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { canAccessModule } from "@/lib/auth/permissions";
 import { getLocale } from "@/lib/i18n/server";
 import { messages } from "@/lib/i18n/messages";
-import { buildGroupCaptureUrl } from "@/lib/score-entry/groupCaptureUrl";
 import { getTelegramBotUrl, getTelegramBotUsername } from "@/lib/telegram/sendMessage";
-import CapturaTelegramPanel, {
-  type GroupRow,
-  type MemberRow,
-  type CaddieRow,
-} from "./CapturaTelegramPanel";
+import CapturaTelegramPanel from "./CapturaTelegramPanel";
 import { resolveDefaultSalidasRoundId } from "@/lib/rounds/resolveDefaultSalidasRound";
+import {
+  loadCapturaGroupRows,
+  loadSameDayConsolationMpGroups,
+  type CapturaGroupRow,
+} from "@/lib/salidas/loadCapturaGroupRows";
+import { CONSOLATION_NOTES_PREFIX } from "@/lib/matchplay/consolationMatchPlay";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,12 +25,11 @@ function s(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function fullName(
-  first: string | null | undefined,
-  last: string | null | undefined
-): string {
-  return [first, last].map((p) => String(p ?? "").trim()).filter(Boolean).join(" ") ||
-    "(sin nombre)";
+function isConsolationMpNotes(notes: string | null | undefined): boolean {
+  return String(notes ?? "")
+    .trim()
+    .toUpperCase()
+    .startsWith(CONSOLATION_NOTES_PREFIX.trim().toUpperCase());
 }
 
 export default async function CapturaTelegramPage(props: {
@@ -77,7 +77,6 @@ export default async function CapturaTelegramPage(props: {
     );
   }
 
-  // Cliente admin para evitar problemas de RLS al leer entries/players.
   const admin = tryCreateAdminClient() ?? supabase;
 
   const { data: tournament } = await admin
@@ -122,204 +121,46 @@ export default async function CapturaTelegramPage(props: {
 
   const { data: groupsRaw } = await admin
     .from("pairing_groups")
-    .select("id, group_no, starting_hole, tee_time, notes")
+    .select("id, round_id, group_no, starting_hole, tee_time, notes")
     .eq("round_id", round.id)
     .order("group_no", { ascending: true });
 
-  const groups = (groupsRaw ?? []) as Array<{
+  const mainGroups = (groupsRaw ?? []) as Array<{
     id: string;
+    round_id: string;
     group_no: number | null;
     starting_hole: number | null;
     tee_time: string | null;
     notes: string | null;
   }>;
 
-  const groupIds = groups.map((g) => g.id);
-
-  type MemberRaw = {
-    id: string;
-    group_id: string;
-    position: number | null;
-    entry_id: string | null;
-    tournament_entries:
-      | {
-          id: string;
-          player_number: number | null;
-          players:
-            | {
-                id: string;
-                first_name: string | null;
-                last_name: string | null;
-                telegram_user_id?: string | null;
-                telegram_chat_id?: string | null;
-              }
-            | null;
-        }
-      | null;
-  };
-  let members: MemberRaw[] = [];
-
-  if (groupIds.length > 0) {
-    const { data: membersRaw } = await admin
-      .from("pairing_group_members")
-      .select(
-        `
-        id, group_id, position, entry_id,
-        tournament_entries (
-          id, player_number,
-          players ( id, first_name, last_name, telegram_user_id, telegram_chat_id )
-        )
-      `
-      )
-      .in("group_id", groupIds)
-      .order("position", { ascending: true });
-    members = (membersRaw ?? []) as unknown as MemberRaw[];
-  }
-
-  // Caddies asignados al torneo + ronda + grupo
-  type CaddieAssignRow = {
-    id: string;
-    pairing_group_id: string | null;
-    entry_id: string | null;
-    caddie_id: string | null;
-    is_active: boolean | null;
-    role: string | null;
-  };
-  let assignments: CaddieAssignRow[] = [];
-  if (groupIds.length > 0) {
-    const { data: assignsRaw } = await admin
-      .from("caddie_assignments")
-      .select("id, pairing_group_id, entry_id, caddie_id, is_active, role")
-      .eq("tournament_id", tournamentId)
-      .or(`round_id.eq.${round.id},round_id.is.null`);
-    // Emparejamos por entry_id (no por pairing_group_id): las asignaciones
-    // suelen guardarse sin pairing_group_id, así que filtrar por él las perdía.
-    assignments = ((assignsRaw ?? []) as CaddieAssignRow[]).filter(
-      (a) => a.is_active !== false && a.entry_id
-    );
-  }
-
-  // Cargar caddies referenciados con telegram_user_id si la columna existe
-  const caddieIds = Array.from(
-    new Set(
-      assignments
-        .map((a) => a.caddie_id)
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-
-  type CaddieMini = {
-    id: string;
-    first_name: string | null;
-    last_name: string | null;
-    telegram?: string | null;
-    telegram_username?: string | null;
-  };
-  const caddieMap = new Map<string, CaddieMini>();
-  if (caddieIds.length > 0) {
-    // El ID numérico de Telegram del caddie se guarda en la columna `telegram`.
-    const { data: caddiesRaw } = await admin
-      .from("caddies")
-      .select("id, first_name, last_name, telegram, telegram_username")
-      .in("id", caddieIds);
-    for (const c of (caddiesRaw ?? []) as CaddieMini[]) {
-      caddieMap.set(c.id, c);
-    }
-  }
-
-  // Caddie por inscrito (entry) para mostrarlo junto a cada jugador.
-  function caddieTelegramLinked(c: CaddieMini): boolean {
-    return /^\d+$/.test(String(c.telegram ?? "").trim());
-  }
-  const caddieByEntry = new Map<string, { name: string; linked: boolean }>();
-  for (const a of assignments) {
-    if (!a.entry_id || !a.caddie_id) continue;
-    if (caddieByEntry.has(a.entry_id)) continue;
-    const c = caddieMap.get(a.caddie_id);
-    if (!c) continue;
-    caddieByEntry.set(a.entry_id, {
-      name: fullName(c.first_name, c.last_name),
-      linked: caddieTelegramLinked(c),
-    });
-  }
-
-  // Dejamos que buildGroupCaptureUrl resuelva la base: ignora localhost en server
-  // y cae a VERCEL_PROJECT_PRODUCTION_URL / www.listgolf.club si NEXT_PUBLIC_APP_URL apunta a localhost.
-
-  const groupRows: GroupRow[] = groups.map((g) => {
-    const gMembers = members.filter((m) => m.group_id === g.id);
-    const memberRows: MemberRow[] = gMembers.map((m) => {
-      const entry = Array.isArray(m.tournament_entries)
-        ? m.tournament_entries[0]
-        : m.tournament_entries;
-      const player = entry?.players
-        ? Array.isArray(entry.players)
-          ? entry.players[0]
-          : entry.players
-        : null;
-      const caddie = m.entry_id ? caddieByEntry.get(m.entry_id) ?? null : null;
-      return {
-        id: m.id,
-        position: m.position,
-        playerNumber: entry?.player_number ?? null,
-        playerName: fullName(player?.first_name, player?.last_name),
-        telegramLinked: Boolean(
-          (player?.telegram_chat_id ?? player?.telegram_user_id ?? "").toString().trim()
-        ),
-        caddieName: caddie?.name ?? null,
-        caddieTelegramLinked: caddie?.linked ?? false,
-      };
-    });
-
-    // Caddies del grupo: por los entry_id de sus integrantes (no por
-    // pairing_group_id, que muchas asignaciones no traen).
-    const groupEntryIds = new Set(
-      gMembers.map((m) => m.entry_id).filter((id): id is string => Boolean(id))
-    );
-    const gAssigns = assignments.filter(
-      (a) => a.entry_id && groupEntryIds.has(a.entry_id)
-    );
-    const caddieRowsForGroup: CaddieRow[] = gAssigns
-      .map((a): CaddieRow | null => {
-        if (!a.caddie_id) return null;
-        const c = caddieMap.get(a.caddie_id);
-        if (!c) return null;
-        return {
-          id: c.id,
-          name: fullName(c.first_name, c.last_name),
-          telegramLinked: caddieTelegramLinked(c),
-          role: a.role ?? null,
-        };
-      })
-      .filter((x): x is CaddieRow => x !== null);
-
-    // Dedupe caddies por id (un caddie puede estar listado dos veces si tiene varias asignaciones)
-    const seen = new Set<string>();
-    const uniqCaddies = caddieRowsForGroup.filter((c) => {
-      if (seen.has(c.id)) return false;
-      seen.add(c.id);
-      return true;
-    });
-
-    const captureUrl = buildGroupCaptureUrl({
-      tournamentId,
-      roundId: round.id,
-      groupId: g.id,
-    });
-
-    return {
-      id: g.id,
-      groupNo: g.group_no,
-      startingHole: g.starting_hole,
-      teeTime: g.tee_time,
-      notes: g.notes ?? null,
-      members: memberRows,
-      caddies: uniqCaddies,
-      captureUrl,
-    };
+  const extraConsolGroups = await loadSameDayConsolationMpGroups(admin, {
+    tournamentId,
+    roundDate: round.round_date,
+    excludeRoundId: round.id,
   });
 
-  // Estadísticas
+  const allGroupsRaw = [...mainGroups, ...extraConsolGroups];
+  const assignmentRoundIds = Array.from(
+    new Set(allGroupsRaw.map((g) => g.round_id))
+  );
+
+  const groupRows: CapturaGroupRow[] = await loadCapturaGroupRows(admin, {
+    tournamentId,
+    groups: allGroupsRaw,
+    assignmentRoundIds,
+  });
+
+  groupRows.sort((a, b) => {
+    const ta = a.teeTime ?? "";
+    const tb = b.teeTime ?? "";
+    if (ta !== tb) return ta.localeCompare(tb);
+    return (a.groupNo ?? 0) - (b.groupNo ?? 0);
+  });
+
+  const mainGroupRows = groupRows.filter((g) => !isConsolationMpNotes(g.notes));
+  const consolGroupRows = groupRows.filter((g) => isConsolationMpNotes(g.notes));
+
   const totalPlayers = groupRows.reduce((acc, g) => acc + g.members.length, 0);
   const linkedPlayers = groupRows.reduce(
     (acc, g) => acc + g.members.filter((m) => m.telegramLinked).length,
@@ -339,15 +180,14 @@ export default async function CapturaTelegramPage(props: {
           <p className="mt-1 text-sm text-slate-600">{t.subtitle}</p>
           {tournament?.name ? (
             <p className="mt-1 text-xs text-slate-500">
-              {tournament.name} · {tNav.teeSheet}: {t.pickRound} #{round.round_no ?? "?"}
+              {tournament.name} · {tNav.teeSheet}: {t.pickRound} #
+              {round.round_no ?? "?"}
+              {round.round_date ? ` · ${round.round_date}` : ""}
             </p>
           ) : null}
         </div>
 
-        <form
-          method="get"
-          className="flex flex-wrap items-end gap-2"
-        >
+        <form method="get" className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="tournament_id" value={tournamentId} />
           <label className="flex flex-col text-xs text-slate-600">
             <span className="mb-0.5">{t.pickRound}</span>
@@ -372,7 +212,6 @@ export default async function CapturaTelegramPage(props: {
         </form>
       </header>
 
-      {/* Stats */}
       <section className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded border border-slate-200 bg-white p-3">
           <div className="text-[11px] uppercase tracking-wide text-slate-500">
@@ -425,10 +264,16 @@ export default async function CapturaTelegramPage(props: {
         </div>
       </section>
 
-      {/* Legend */}
       <section className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
         <div className="font-medium">{t.legendTitle}</div>
         <div className="mt-1 text-xs">{t.legendBody}</div>
+        {consolGroupRows.length > 0 ? (
+          <div className="mt-2 text-xs text-violet-800">
+            También se muestran salidas de{" "}
+            <strong>Consolación Match Play</strong> del mismo día (aunque estén
+            en otra ronda del calendario).
+          </div>
+        ) : null}
       </section>
 
       {groupRows.length === 0 ? (
@@ -436,11 +281,30 @@ export default async function CapturaTelegramPage(props: {
           {t.noGroups}
         </p>
       ) : (
-        <CapturaTelegramPanel
-          tournamentId={tournamentId}
-          roundId={round.id}
-          groups={groupRows}
-        />
+        <div className="mt-4 space-y-6">
+          {mainGroupRows.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold text-slate-800">
+                Cuadro principal · R{round.round_no ?? "?"}
+              </h2>
+              <CapturaTelegramPanel
+                tournamentId={tournamentId}
+                groups={mainGroupRows}
+              />
+            </section>
+          ) : null}
+          {consolGroupRows.length > 0 ? (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold text-violet-900">
+                Consolación Match Play
+              </h2>
+              <CapturaTelegramPanel
+                tournamentId={tournamentId}
+                groups={consolGroupRows}
+              />
+            </section>
+          ) : null}
+        </div>
       )}
     </div>
   );

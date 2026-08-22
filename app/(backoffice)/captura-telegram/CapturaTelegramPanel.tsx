@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import {
   sendCaptureLinkToGroupAction,
-  sendCaptureLinkToAllGroupsAction,
   type SendResult,
   type RecipientOutcome,
 } from "./actions";
@@ -29,6 +28,7 @@ export type CaddieRow = {
 
 export type GroupRow = {
   id: string;
+  roundId: string;
   groupNo: number | null;
   startingHole: number | null;
   teeTime: string | null;
@@ -141,7 +141,6 @@ function OutcomeList({ outcomes }: { outcomes: RecipientOutcome[] }) {
 
 export default function CapturaTelegramPanel(props: {
   tournamentId: string;
-  roundId: string;
   groups: GroupRow[];
 }) {
   const { t } = useAppLocale();
@@ -186,19 +185,19 @@ export default function CapturaTelegramPanel(props: {
     }
   }
 
-  async function handleSendGroup(groupId: string) {
-    setBusyGroupId(groupId);
+  async function handleSendGroup(group: GroupRow) {
+    setBusyGroupId(group.id);
     setFeedback(null);
     const fd = new FormData();
     fd.set("tournament_id", props.tournamentId);
-    fd.set("round_id", props.roundId);
-    fd.set("group_id", groupId);
+    fd.set("round_id", group.roundId);
+    fd.set("group_id", group.id);
     try {
       const result = await sendCaptureLinkToGroupAction(fd);
       const fb = formatRecipientResult(sendTpl, result);
-      setFeedback({ groupId, ...fb });
+      setFeedback({ groupId: group.id, ...fb });
     } catch {
-      setFeedback({ groupId, kind: "error", text: tt.sendResultError });
+      setFeedback({ groupId: group.id, kind: "error", text: tt.sendResultError });
     } finally {
       setBusyGroupId(null);
     }
@@ -209,12 +208,40 @@ export default function CapturaTelegramPanel(props: {
     setBulkBusy(true);
     setBulkFeedback(null);
     setShowBulkDetail(true);
-    const fd = new FormData();
-    fd.set("tournament_id", props.tournamentId);
-    fd.set("round_id", props.roundId);
+    let sent = 0;
+    let failed = 0;
+    let skipped = 0;
+    const outcomes: RecipientOutcome[] = [];
     try {
-      const result = await sendCaptureLinkToAllGroupsAction(fd);
-      setBulkFeedback(formatRecipientResult(sendTpl, result));
+      for (const g of props.groups) {
+        const fd = new FormData();
+        fd.set("tournament_id", props.tournamentId);
+        fd.set("round_id", g.roundId);
+        fd.set("group_id", g.id);
+        const result = await sendCaptureLinkToGroupAction(fd);
+        if (result.ok) {
+          sent += result.sent;
+          failed += result.failed;
+          skipped += result.skipped;
+          outcomes.push(...result.outcomes);
+        } else {
+          failed += 1;
+          outcomes.push({
+            name: result.error,
+            role: "player",
+            groupNo: g.groupNo,
+            status: "failed",
+            detail: result.error,
+          });
+        }
+      }
+      setBulkFeedback(formatRecipientResult(sendTpl, {
+        ok: true,
+        sent,
+        failed,
+        skipped,
+        outcomes,
+      }));
     } catch {
       setBulkFeedback({ kind: "error", text: tt.sendResultError });
     } finally {
@@ -400,7 +427,7 @@ export default function CapturaTelegramPanel(props: {
                             ? tt.sendResultEmpty
                             : undefined
                         }
-                        onClick={() => startTx(() => handleSendGroup(g.id))}
+                        onClick={() => startTx(() => handleSendGroup(g))}
                         className="rounded bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-800 disabled:opacity-50"
                       >
                         {busyGroupId === g.id ? tt.btnSending : tt.btnSend}
