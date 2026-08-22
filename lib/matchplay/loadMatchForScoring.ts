@@ -8,6 +8,7 @@ import { effectivePhForMatchEntry } from "@/lib/matchplay/resolveEntryPhForMatch
 import { resolveMatchHandicapPct } from "./scoring/resolveHandicapPct";
 import { deriveMatchHolesFromStrokes } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import type { DerivedMatchRow } from "@/lib/matchplay/derivePairingGroupMatches";
+import { rematchStrokeRoundCandidates } from "@/lib/matchplay/pickStrokeRoundForMatch";
 import type { MatchPlayEntryRow } from "./teamTypes";
 import type {
   LowHighPlayerGross,
@@ -274,8 +275,10 @@ export async function loadMatchForScoring(
       return (count ?? 0) > 0;
     }
 
-    if (roundId && !(await roundHasStrokeScores(roundId))) {
-      // Buscar salida del tee-sheet con estas parejas (cualquier ronda).
+    // Resolver ronda de captura. Sin esto, un fallback “cualquier ronda /
+    // ≥2 jugadores” mezclaba tarjetas de R3 en el detalle de cuartos (R4).
+    // Ver rematchStrokeRoundCandidates / pickStrokeRoundForMatch.
+    if (!roundId || !(await roundHasStrokeScores(roundId))) {
       const { data: memberRows } = await supabase
         .from("pairing_group_members")
         .select("group_id, entry_id")
@@ -285,25 +288,54 @@ export async function loadMatchForScoring(
         const gid = String(row.group_id);
         countByGroup.set(gid, (countByGroup.get(gid) ?? 0) + 1);
       }
-      const candidateGroupIds = [...countByGroup.entries()]
-        .filter(([, n]) => n >= 2)
-        .map(([gid]) => gid);
-      if (candidateGroupIds.length > 0) {
+      const groupIds = [...countByGroup.keys()];
+      const groups: Array<{
+        roundId: string;
+        roundNo: number;
+        memberCount: number;
+      }> = [];
+      if (groupIds.length > 0) {
         const { data: pgs } = await supabase
           .from("pairing_groups")
-          .select("id, round_id")
-          .in("id", candidateGroupIds);
+          .select("id, round_id, rounds:round_id(round_no)")
+          .in("id", groupIds);
         for (const pg of pgs ?? []) {
-          const rid = String(pg.round_id);
-          if (rid && (await roundHasStrokeScores(rid))) {
-            roundId = rid;
-            break;
-          }
+          const roundsRaw = (
+            pg as {
+              rounds?:
+                | { round_no?: number }
+                | { round_no?: number }[]
+                | null;
+            }
+          ).rounds;
+          const roundMeta = Array.isArray(roundsRaw)
+            ? roundsRaw[0]
+            : roundsRaw;
+          groups.push({
+            roundId: String(pg.round_id ?? "").trim(),
+            roundNo: Number(roundMeta?.round_no) || 0,
+            memberCount: countByGroup.get(String(pg.id)) ?? 0,
+          });
         }
       }
+
+      let picked: string | null = null;
+      for (const c of rematchStrokeRoundCandidates({
+        matchRoundNo: Number(match.round_no) || 0,
+        requiredMembers: entryIdsForLookup.length,
+        groups,
+      })) {
+        if (await roundHasStrokeScores(c.roundId)) {
+          picked = c.roundId;
+          break;
+        }
+      }
+      roundId = picked;
     }
 
-    if (roundId) {
+    // Sin golpes en la ronda del match (ni rematch posterior): no inventar
+    // tarjeta. Dejar holes oficiales vacíos / null.
+    if (roundId && (await roundHasStrokeScores(roundId))) {
       // Singles: golpes A vs A + puntos con scoreSinglesHole (nunca lowHigh).
       if (isSingles) {
         const playerIds = [topAEntry.player_id, bottomAEntry.player_id];

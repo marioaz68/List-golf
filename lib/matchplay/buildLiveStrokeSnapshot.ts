@@ -11,6 +11,7 @@ import {
   type DerivedMatchHolesResult,
 } from "@/lib/matchplay/deriveMatchHolesFromStrokes";
 import type { DerivedMatchRow } from "@/lib/matchplay/derivePairingGroupMatches";
+import { pickDerivedMatchByRound } from "@/lib/matchplay/pickStrokeRoundForMatch";
 
 export type LiveMatchPlayMatchRow = {
   id: string;
@@ -259,17 +260,6 @@ export async function buildLiveStrokeSnapshot(
 
     if (needsStrokeLive.length > 0) {
       const derivedAll = await derivePairingGroupMatches(admin, tournamentId);
-      /** Pareja de teams → salida con scores (cualquier ronda del tee-sheet). */
-      const derivedByPairKey = new Map<string, DerivedMatchRow>();
-      for (const d of derivedAll.matches) {
-        if (!d.top_pair_id || !d.bottom_pair_id) continue;
-        const k = [d.top_pair_id, d.bottom_pair_id].sort().join("|");
-        const prev = derivedByPairKey.get(k);
-        // Preferir la salida de ronda más alta (p. ej. rematch R2 jugado en R3).
-        if (!prev || d.round_no >= prev.round_no) {
-          derivedByPairKey.set(k, d);
-        }
-      }
 
       const inputs: DerivedMatchRow[] = [];
       const idMap = new Map<string, string>();
@@ -277,15 +267,21 @@ export async function buildLiveStrokeSnapshot(
         const k = [String(m.top_pair_id), String(m.bottom_pair_id)]
           .sort()
           .join("|");
-        // 1) Misma ronda del cuadro  2) Cualquier salida con esas parejas
-        const dSame = derivedAll.matches.find(
-          (x) =>
-            x.round_no === m.round_no &&
-            x.top_pair_id &&
-            x.bottom_pair_id &&
-            [x.top_pair_id, x.bottom_pair_id].sort().join("|") === k
-        );
-        const d = dSame ?? derivedByPairKey.get(k);
+        const sameKey = (x: DerivedMatchRow) =>
+          Boolean(x.top_pair_id) &&
+          Boolean(x.bottom_pair_id) &&
+          [x.top_pair_id, x.bottom_pair_id].sort().join("|") === k;
+        // Misma ronda del cuadro, o rematch en salida posterior.
+        // Nunca ronda anterior (pintaba R3 en cuartos). Ver pickDerivedMatchByRound.
+        const d = pickDerivedMatchByRound({
+          matchRoundNo: m.round_no,
+          sameRound: derivedAll.matches.find(
+            (x) => x.round_no === m.round_no && sameKey(x)
+          ),
+          laterOrSame: derivedAll.matches.filter(
+            (x) => x.round_no >= m.round_no && sameKey(x)
+          ),
+        });
         if (!d) continue;
         // id sintético único por match oficial (varias salidas podrían chocar).
         const syntheticId = `stroke-live-${m.id}`;
