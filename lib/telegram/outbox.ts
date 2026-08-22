@@ -3,8 +3,13 @@ import {
   deleteTelegramMessage,
   sendTelegramMessage,
   type TelegramInlineButton,
+  type TelegramSendErrorKind,
 } from "@/lib/telegram/sendMessage";
 import { isRoundClosedByDate } from "@/lib/captura/roundClosure";
+import {
+  isFatalTelegramChatError,
+  markTelegramChatInvalid,
+} from "@/lib/telegram/markChatInvalid";
 
 export type OutboxKind =
   | "next_round_group"
@@ -37,6 +42,7 @@ export type SendAndTrackResult =
   | {
       ok: false;
       error: string;
+      errorKind?: TelegramSendErrorKind;
       deletedMessageIds: number[];
     };
 
@@ -200,7 +206,23 @@ export async function sendAndTrackTelegramMessage(
     disablePreview: params.disablePreview,
   });
   if (!sent.ok) {
-    return { ok: false, error: sent.error, deletedMessageIds };
+    if (isFatalTelegramChatError(sent.errorKind)) {
+      try {
+        await markTelegramChatInvalid(admin, {
+          chatId,
+          reason: sent.errorKind,
+          detail: sent.error,
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+    return {
+      ok: false,
+      error: sent.error,
+      errorKind: sent.errorKind,
+      deletedMessageIds,
+    };
   }
 
   // 3) Registrar el nuevo mensaje.

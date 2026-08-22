@@ -18,7 +18,12 @@ import {
   sendTelegramMessage,
   setTelegramWebhook,
 } from "@/lib/telegram/sendMessage";
-import { isTelegramIdRequest, parseTelegramCommand } from "@/lib/telegram/parseCommand";
+import {
+  isTelegramIdRequest,
+  parseTelegramCommand,
+  parseTelegramStartPayload,
+} from "@/lib/telegram/parseCommand";
+import { redeemTelegramLinkToken } from "@/lib/telegram/linkToken";
 import { resolveTelegramUserId } from "@/lib/telegram/resolveUserId";
 import { handleRitmoLocationUpdate } from "@/lib/telegram/ritmo/handleLocationUpdate";
 import {
@@ -366,6 +371,8 @@ export async function POST(req: Request) {
 
     let replyText = "No pude procesar tu mensaje.";
 
+    const startPayload = parseTelegramStartPayload(text);
+
     if (!TELEGRAM_TOKEN?.trim()) {
       replyText = "Error: bot sin token en el servidor (TELEGRAM_BOT_TOKEN).";
     } else if (!supabase) {
@@ -373,6 +380,38 @@ export async function POST(req: Request) {
     } else if (!userId) {
       replyText =
         "No pude leer tu ID de Telegram. Abre chat privado con el bot (no un grupo) o usa @userinfobot.";
+    } else if (startPayload) {
+      // Deep link: /start <token> — vincula jugador o caddie y sobrescribe chat_id.
+      const redeemed = await redeemTelegramLinkToken(supabase, {
+        token: startPayload,
+        telegramUserId: userId,
+        telegramChatId: chatId || userId,
+        username,
+      });
+      if (redeemed.ok) {
+        const role = redeemed.kind === "caddie" ? "caddie" : "jugador";
+        replyText = [
+          `✅ Listo ${redeemed.displayName}, ya estás vinculado como ${role}.`,
+          "",
+          "Aquí recibirás avisos de salida, ritmo y captura.",
+          "Si cambias de teléfono, pide un enlace nuevo al comité.",
+        ].join("\n");
+      } else {
+        replyText = [
+          `No pude vincularte: ${redeemed.error}`,
+          "",
+          `Tu ID de Telegram es: ${userId}`,
+          "Pide al comité un enlace nuevo o escribe HOLA si ya te dieron de alta.",
+        ].join("\n");
+        await recordPendingTelegramLink({
+          telegramUserId: userId,
+          telegramChatId: chatId,
+          firstName,
+          lastName,
+          username,
+          lastMessage: text || command,
+        });
+      }
     } else if (isTelegramIdRequest(command)) {
       replyText = buildTelegramIdOnlyReply(userId);
       await recordPendingTelegramLink({
@@ -554,6 +593,16 @@ export async function POST(req: Request) {
           .maybeSingle();
         if (!caddieLookup.error && caddieLookup.data) {
           caddieRow = caddieLookup.data as unknown as CaddieMatch;
+        } else {
+          // Fallback columna legacy `telegram`.
+          const legacy = await supabase
+            .from("caddies")
+            .select("id, first_name, last_name, telegram_chat_id")
+            .eq("telegram", userId)
+            .maybeSingle();
+          if (!legacy.error && legacy.data) {
+            caddieRow = legacy.data as unknown as CaddieMatch;
+          }
         }
       }
 
@@ -568,7 +617,13 @@ export async function POST(req: Request) {
         ) {
           await supabase
             .from("caddies")
-            .update({ telegram_chat_id: chatId })
+            .update({
+              telegram_chat_id: chatId,
+              telegram_user_id: userId,
+              telegram: userId,
+              telegram_chat_invalid_at: null,
+              telegram_chat_invalid_reason: null,
+            })
             .eq("id", caddieRow.id);
         }
         await supabase
@@ -608,7 +663,11 @@ export async function POST(req: Request) {
         if (chatId && (!player.telegram_chat_id || player.telegram_chat_id !== chatId)) {
           await supabase
             .from("players")
-            .update({ telegram_chat_id: chatId })
+            .update({
+              telegram_chat_id: chatId,
+              telegram_chat_invalid_at: null,
+              telegram_chat_invalid_reason: null,
+            })
             .eq("id", player.id);
         }
 

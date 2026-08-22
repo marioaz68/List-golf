@@ -76,7 +76,7 @@ export async function notifyDailyRoundGroupStart(
       `id, position, entry_id,
        tournament_entries (
          id,
-         players ( first_name, last_name, telegram_user_id, telegram_chat_id )
+         players ( first_name, last_name, telegram_user_id, telegram_chat_id, telegram_chat_invalid_at )
        )`
     )
     .eq("group_id", groupId)
@@ -93,6 +93,7 @@ export async function notifyDailyRoundGroupStart(
                 last_name: string | null;
                 telegram_user_id?: string | null;
                 telegram_chat_id?: string | null;
+                telegram_chat_invalid_at?: string | null;
               }
             | null;
         }
@@ -110,10 +111,15 @@ export async function notifyDailyRoundGroupStart(
         : entry.players
       : null;
     if (!player || !entry?.id) continue;
+    const name = fullName(player.first_name, player.last_name);
+    if (player.telegram_chat_invalid_at) {
+      result.skipped += 1;
+      result.skippedNames.push({ role: "player", name });
+      continue;
+    }
     const chatId = String(
       player.telegram_chat_id ?? player.telegram_user_id ?? ""
     ).trim();
-    const name = fullName(player.first_name, player.last_name);
     if (!chatId) {
       result.skipped += 1;
       result.skippedNames.push({ role: "player", name });
@@ -157,16 +163,28 @@ export async function notifyDailyRoundGroupStart(
     if (caddieIds.length > 0) {
       const { data: caddieRows } = await admin
         .from("caddies")
-        .select("id, first_name, last_name, telegram")
+        .select(
+          "id, first_name, last_name, telegram, telegram_user_id, telegram_chat_id, telegram_chat_invalid_at"
+        )
         .in("id", caddieIds);
       for (const c of (caddieRows ?? []) as Array<{
         id: string;
         first_name: string | null;
         last_name: string | null;
         telegram?: string | null;
+        telegram_user_id?: string | null;
+        telegram_chat_id?: string | null;
+        telegram_chat_invalid_at?: string | null;
       }>) {
-        const chatId = String(c.telegram ?? "").trim();
         const name = fullName(c.first_name, c.last_name);
+        if (c.telegram_chat_invalid_at) {
+          result.skipped += 1;
+          result.skippedNames.push({ role: "caddie", name });
+          continue;
+        }
+        const chatId = String(
+          c.telegram_chat_id ?? c.telegram_user_id ?? c.telegram ?? ""
+        ).trim();
         if (!/^\d+$/.test(chatId)) {
           result.skipped += 1;
           result.skippedNames.push({ role: "caddie", name });

@@ -6,9 +6,44 @@ export function getTelegramBotUsername() {
   );
 }
 
-export function getTelegramBotUrl() {
+export function getTelegramBotUrl(startPayload?: string | null) {
   const user = getTelegramBotUsername();
-  return user ? `https://t.me/${user}` : null;
+  if (!user) return null;
+  const base = `https://t.me/${user}`;
+  const payload = String(startPayload ?? "").trim();
+  if (!payload) return base;
+  return `${base}?start=${encodeURIComponent(payload)}`;
+}
+
+export type TelegramSendErrorKind =
+  | "chat_not_found"
+  | "bot_blocked"
+  | "other";
+
+/** Clasifica errores fatales de chat (no reintentar; marcar inválido). */
+export function classifyTelegramSendError(
+  description: string | null | undefined,
+  httpStatus?: number | null
+): TelegramSendErrorKind {
+  const d = String(description ?? "").toLowerCase();
+  if (
+    d.includes("chat not found") ||
+    d.includes("chat_id is empty") ||
+    d.includes("user not found") ||
+    (httpStatus === 400 && d.includes("chat"))
+  ) {
+    return "chat_not_found";
+  }
+  if (
+    d.includes("bot was blocked by the user") ||
+    d.includes("user is deactivated") ||
+    d.includes("forbidden: bot was blocked") ||
+    (httpStatus === 403 && (d.includes("blocked") || d.includes("forbidden")))
+  ) {
+    return "bot_blocked";
+  }
+  if (httpStatus === 403) return "bot_blocked";
+  return "other";
 }
 
 export type TelegramInlineButton = {
@@ -28,16 +63,24 @@ export async function sendTelegramMessage(params: {
   disablePreview?: boolean;
 }): Promise<
   | { ok: true; messageId: number | null }
-  | { ok: false; error: string }
+  | { ok: false; error: string; errorKind: TelegramSendErrorKind }
 > {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) {
-    return { ok: false as const, error: "Falta TELEGRAM_BOT_TOKEN en el servidor." };
+    return {
+      ok: false as const,
+      error: "Falta TELEGRAM_BOT_TOKEN en el servidor.",
+      errorKind: "other",
+    };
   }
 
   const chatId = params.chatId.trim();
   if (!chatId) {
-    return { ok: false as const, error: "Falta chat ID de Telegram." };
+    return {
+      ok: false as const,
+      error: "Falta chat ID de Telegram.",
+      errorKind: "other",
+    };
   }
 
   const body: Record<string, unknown> = {
@@ -74,9 +117,11 @@ export async function sendTelegramMessage(params: {
   } | null;
 
   if (!res.ok || response?.ok === false) {
+    const error = response?.description ?? `Telegram API HTTP ${res.status}`;
     return {
       ok: false as const,
-      error: response?.description ?? `Telegram API HTTP ${res.status}`,
+      error,
+      errorKind: classifyTelegramSendError(error, res.status),
     };
   }
 

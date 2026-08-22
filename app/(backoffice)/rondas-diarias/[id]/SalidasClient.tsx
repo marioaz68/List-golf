@@ -14,6 +14,12 @@ import {
   formatStartTimeMexico,
   type RitmoStartMode,
 } from "@/lib/ritmo/groupStart";
+import TelegramCoveragePanel, {
+  TelegramStatusChip,
+} from "@/components/telegram/TelegramCoveragePanel";
+import type { TelegramCoveragePerson } from "@/lib/telegram/coverageStatus";
+import { generateTelegramDeepLink } from "@/app/(backoffice)/telegram/link-actions";
+import { telegramStatusLabel } from "@/lib/telegram/linkToken";
 
 export type SalidaPlayer = {
   memberId: string;
@@ -21,9 +27,14 @@ export type SalidaPlayer = {
   playerId: string;
   name: string;
   handicapIndex: number | null;
+  phone: string | null;
+  telegramStatus: "linked" | "unlinked" | "invalid";
+  /** @deprecated use telegramStatus */
   hasTelegram: boolean;
   caddieId: string | null;
   caddieName: string | null;
+  caddiePhone: string | null;
+  caddieTelegramStatus: "linked" | "unlinked" | "invalid" | null;
   caddieLinked: boolean;
 };
 
@@ -99,6 +110,48 @@ export default function SalidasClient({
 
   const occupied = salidas.filter((s) => s.players.length > 0).length;
   const totalPlayers = salidas.reduce((a, s) => a + s.players.length, 0);
+
+  const telegramCoverage = useMemo(() => {
+    const people: TelegramCoveragePerson[] = [];
+    const seen = new Set<string>();
+    for (const s of salidas) {
+      for (const p of s.players) {
+        if (p.playerId && !seen.has(`p:${p.playerId}`)) {
+          seen.add(`p:${p.playerId}`);
+          const status = p.telegramStatus ?? (p.hasTelegram ? "linked" : "unlinked");
+          people.push({
+            role: "player",
+            id: p.playerId,
+            name: p.name,
+            phone: p.phone ?? null,
+            status,
+            statusLabel: telegramStatusLabel(status),
+            groupNo: s.groupNo,
+            teeTime: s.teeTime,
+            subjectId: p.playerId,
+          });
+        }
+        if (p.caddieId && !seen.has(`c:${p.caddieId}`)) {
+          seen.add(`c:${p.caddieId}`);
+          const status =
+            p.caddieTelegramStatus ??
+            (p.caddieLinked ? "linked" : "unlinked");
+          people.push({
+            role: "caddie",
+            id: p.caddieId,
+            name: p.caddieName || "Caddie",
+            phone: p.caddiePhone ?? null,
+            status,
+            statusLabel: telegramStatusLabel(status),
+            groupNo: s.groupNo,
+            teeTime: s.teeTime,
+            subjectId: p.caddieId,
+          });
+        }
+      }
+    }
+    return people;
+  }, [salidas]);
 
   const visible = onlyWithPlayers
     ? salidas.filter((s) => s.players.length > 0)
@@ -255,6 +308,16 @@ export default function SalidasClient({
               lista, <strong>Avisar Telegram</strong> manda el link de captura.
               Todo se guarda al instante.
             </div>
+
+            {telegramCoverage.length > 0 ? (
+              <div className="mb-3">
+                <TelegramCoveragePanel
+                  people={telegramCoverage}
+                  generateLink={generateTelegramDeepLink}
+                  title="Telegram — avisos de la ronda"
+                />
+              </div>
+            ) : null}
 
             {salidas.length > 0 && (
               <div className="mb-3 flex items-center justify-end">
@@ -636,16 +699,13 @@ function PlayerRow({
           <span className="shrink-0 text-xs text-slate-500">
             HI {fmtHi(player.handicapIndex)}
           </span>
-          <span
-            title={
-              player.hasTelegram ? "Recibirá Telegram" : "Sin Telegram vinculado"
+          <TelegramStatusChip
+            status={
+              player.telegramStatus ??
+              (player.hasTelegram ? "linked" : "unlinked")
             }
-            className={`shrink-0 text-xs ${
-              player.hasTelegram ? "text-sky-500" : "text-slate-300"
-            }`}
-          >
-            ✈
-          </span>
+            compact
+          />
         </span>
         <button
           type="button"
@@ -665,18 +725,13 @@ function PlayerRow({
         {player.caddieName ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
             {player.caddieName}
-            <span
-              title={
-                player.caddieLinked
-                  ? "Recibirá Telegram"
-                  : "Caddie sin Telegram vinculado"
+            <TelegramStatusChip
+              status={
+                player.caddieTelegramStatus ??
+                (player.caddieLinked ? "linked" : "unlinked")
               }
-              className={
-                player.caddieLinked ? "text-sky-500" : "text-slate-300"
-              }
-            >
-              ✈
-            </span>
+              compact
+            />
             <button
               type="button"
               disabled={busy}

@@ -47,6 +47,8 @@ import { STROKE_AGG_NOTES_PREFIX } from "@/lib/matchplay/consolationStrokePlay";
 import TeeSheetDnD from "./TeeSheetDnDLoader";
 import StrokeAggregateSalidasPanel from "./StrokeAggregateSalidasPanel";
 import type { TournamentSettings } from "@/types/tournament";
+import { classifyTelegramLinkStatus } from "@/lib/telegram/linkToken";
+import type { TelegramCoveragePerson } from "@/lib/telegram/coverageStatus";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,10 +92,13 @@ type MemberUI = {
   entry_id: string;
   group_id: string;
   position: number;
+  player_id: string | null;
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
   standing_display: string | null;
+  phone: string | null;
+  telegram_status: "linked" | "unlinked" | "invalid";
   club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
@@ -102,6 +107,10 @@ type MemberUI = {
   club_primary_color: string | null;
   tee_color: string | null;
   tee_name: string | null;
+  caddie_id: string | null;
+  caddie_name: string | null;
+  caddie_phone: string | null;
+  caddie_telegram_status: "linked" | "unlinked" | "invalid" | null;
 };
 
 type GroupUI = GroupRow & {
@@ -424,12 +433,18 @@ async function TeeSheetPageInner(props: {
               handicap_index,
               category_id,
               tee_set_id_override,
+              player_id,
               players (
+                id,
                 first_name,
                 last_name,
                 gender,
                 birth_year,
                 club_id,
+                phone,
+                telegram_user_id,
+                telegram_chat_id,
+                telegram_chat_invalid_at,
                 clubs:clubs (
                   name,
                   short_name,
@@ -452,6 +467,71 @@ async function TeeSheetPageInner(props: {
   }
 
   const membersRaw = (mData ?? []) as any[];
+
+  // Caddies asignados a entries de esta ronda (misma lógica que rondas diarias).
+  const entryIdsForCaddies = Array.from(
+    new Set(
+      membersRaw
+        .map((r: any) => String(r.entry_id ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+  const caddieByEntry = new Map<
+    string,
+    {
+      caddieId: string;
+      name: string;
+      phone: string | null;
+      status: "linked" | "unlinked" | "invalid";
+    }
+  >();
+  if (effectiveTournamentId && entryIdsForCaddies.length > 0) {
+    const { data: caddieAssigns } = await supabase
+      .from("caddie_assignments")
+      .select(
+        `entry_id, caddie_id, round_id, is_active,
+         caddies (
+           id, first_name, last_name, phone, whatsapp_phone,
+           telegram, telegram_user_id, telegram_chat_id, telegram_chat_invalid_at
+         )`
+      )
+      .eq("tournament_id", effectiveTournamentId)
+      .in("entry_id", entryIdsForCaddies)
+      .eq("is_active", true);
+    for (const row of (caddieAssigns ?? []) as any[]) {
+      const entryId = String(row.entry_id ?? "").trim();
+      if (!entryId) continue;
+      const roundId = row.round_id ? String(row.round_id) : null;
+      if (
+        roundId &&
+        effectiveRoundId &&
+        roundId !== effectiveRoundId &&
+        !blockRoundIds.includes(roundId)
+      ) {
+        continue;
+      }
+      const cad = Array.isArray(row.caddies) ? row.caddies[0] : row.caddies;
+      if (!cad) continue;
+      const name =
+        [cad.first_name, cad.last_name]
+          .map((p: any) => String(p ?? "").trim())
+          .filter(Boolean)
+          .join(" ") || "Caddie";
+      const status = classifyTelegramLinkStatus({
+        telegram_user_id: cad.telegram_user_id,
+        telegram_chat_id: cad.telegram_chat_id,
+        telegram: cad.telegram,
+        telegram_chat_invalid_at: cad.telegram_chat_invalid_at,
+      });
+      caddieByEntry.set(entryId, {
+        caddieId: String(cad.id ?? row.caddie_id ?? ""),
+        name,
+        phone:
+          String(cad.whatsapp_phone ?? cad.phone ?? "").trim() || null,
+        status,
+      });
+    }
+  }
 
   // Reglas + sets de salidas para colorear cada jugador por su tee asignado.
   // Defensivo: si las queries fallan (tablas vacías, columnas extra, etc.)
@@ -569,10 +649,23 @@ for (const row of membersRaw) {
     entry_id: row.entry_id,
     group_id: gid,
     position: Number(row.position ?? 0),
+    player_id:
+      (typeof te?.player_id === "string" && te.player_id.trim()
+        ? te.player_id.trim()
+        : null) ||
+      (typeof player?.id === "string" && player.id.trim()
+        ? player.id.trim()
+        : null),
     first_name: player?.first_name ?? null,
     last_name: player?.last_name ?? null,
     handicap_index: te?.handicap_index ?? null,
     standing_display: standingDisplayByEntryId.get(row.entry_id as string) ?? null,
+    phone: player?.phone ? String(player.phone).trim() || null : null,
+    telegram_status: classifyTelegramLinkStatus({
+      telegram_user_id: player?.telegram_user_id,
+      telegram_chat_id: player?.telegram_chat_id,
+      telegram_chat_invalid_at: player?.telegram_chat_invalid_at,
+    }),
     club_id: playerClubId,
     club_name: club?.name ?? null,
     club_short_name: club?.short_name ?? null,
@@ -583,6 +676,11 @@ for (const row of membersRaw) {
     club_primary_color: club?.primary_color ?? null,
     tee_color: teeInfo.color,
     tee_name: teeInfo.name,
+    caddie_id: caddieByEntry.get(String(row.entry_id))?.caddieId ?? null,
+    caddie_name: caddieByEntry.get(String(row.entry_id))?.name ?? null,
+    caddie_phone: caddieByEntry.get(String(row.entry_id))?.phone ?? null,
+    caddie_telegram_status:
+      caddieByEntry.get(String(row.entry_id))?.status ?? null,
   };
 
   if (!membersByGroup.has(gid)) membersByGroup.set(gid, []);
@@ -999,6 +1097,62 @@ for (const row of membersRaw) {
   const groupsForMainDnD = groupsForUI.filter(
     (g) => !String(g.notes ?? "").startsWith(STROKE_AGG_NOTES_PREFIX)
   );
+
+  const telegramCoverage: TelegramCoveragePerson[] = [];
+  const seenCoverage = new Set<string>();
+  for (const g of groupsForMainDnD) {
+    const teeLabel = g.tee_time ? String(g.tee_time).slice(0, 5) : null;
+    for (const m of g.members) {
+      if (m.player_id) {
+        const key = `p:${m.player_id}`;
+        if (!seenCoverage.has(key)) {
+          seenCoverage.add(key);
+          telegramCoverage.push({
+            role: "player",
+            id: m.player_id,
+            name:
+              [m.first_name, m.last_name]
+                .map((p) => String(p ?? "").trim())
+                .filter(Boolean)
+                .join(" ") || "Jugador",
+            phone: m.phone,
+            status: m.telegram_status,
+            statusLabel:
+              m.telegram_status === "linked"
+                ? "Vinculado"
+                : m.telegram_status === "invalid"
+                  ? "Chat inválido"
+                  : "Sin vincular",
+            groupNo: g.group_no,
+            teeTime: teeLabel,
+            subjectId: m.player_id,
+          });
+        }
+      }
+      if (m.caddie_id && m.caddie_telegram_status) {
+        const key = `c:${m.caddie_id}`;
+        if (!seenCoverage.has(key)) {
+          seenCoverage.add(key);
+          telegramCoverage.push({
+            role: "caddie",
+            id: m.caddie_id,
+            name: m.caddie_name || "Caddie",
+            phone: m.caddie_phone,
+            status: m.caddie_telegram_status,
+            statusLabel:
+              m.caddie_telegram_status === "linked"
+                ? "Vinculado"
+                : m.caddie_telegram_status === "invalid"
+                  ? "Chat inválido"
+                  : "Sin vincular",
+            groupNo: g.group_no,
+            teeTime: teeLabel,
+            subjectId: m.caddie_id,
+          });
+        }
+      }
+    }
+  }
 
   if (selectedRound && selectedRound.round_no > 1 && effectiveTournamentId) {
     const categoryIdsToCheck =
@@ -1632,6 +1786,7 @@ for (const row of membersRaw) {
         targetGroupSize={effectiveGroupSize}
         maxGroupSize={MAX_GROUP_SIZE}
         groups={groupsForMainDnD}
+        telegramCoverage={telegramCoverage}
         initialCategory={effectiveCat}
         startingOrderConfirmed={startingOrderConfirmed}
         showPairingScore={targetRoundNo > 1}

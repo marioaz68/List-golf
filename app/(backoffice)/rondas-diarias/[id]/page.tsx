@@ -15,6 +15,7 @@ import { getUserRoles } from "@/lib/auth/getUserRoles";
 import { seedDailyRoundSchedule } from "@/lib/dailyRounds/seedSchedule";
 import { maxPlayersForDate } from "@/lib/dailyRounds/salidaCapacity";
 import SalidasClient, { type SalidaRow } from "./SalidasClient";
+import { classifyTelegramLinkStatus } from "@/lib/telegram/linkToken";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -104,7 +105,13 @@ export default async function RondaDiariaDetailPage({
     const membersByGroup = new Map<string, SalidaRow["players"]>();
     const caddieByEntry = new Map<
       string,
-      { caddieId: string; caddieName: string; caddieLinked: boolean }
+      {
+        caddieId: string;
+        caddieName: string;
+        caddiePhone: string | null;
+        caddieTelegramStatus: "linked" | "unlinked" | "invalid";
+        caddieLinked: boolean;
+      }
     >();
 
     if (groupIds.length > 0) {
@@ -114,19 +121,24 @@ export default async function RondaDiariaDetailPage({
           `id, position, group_id, entry_id,
            tournament_entries (
              id, player_id, handicap_index,
-             players ( first_name, last_name, handicap_index, telegram_user_id, telegram_chat_id )
+             players (
+               first_name, last_name, handicap_index, phone,
+               telegram_user_id, telegram_chat_id, telegram_chat_invalid_at
+             )
            )`
         )
         .in("group_id", groupIds)
         .order("position", { ascending: true });
 
-      // Caddies activos asignados en esta ronda (por entry). El ID de Telegram
-      // del caddie vive en la columna `telegram` (numérico), igual que torneos.
+      // Caddies activos asignados en esta ronda (por entry).
       const { data: caddieRows } = await admin
         .from("caddie_assignments")
         .select(
           `entry_id, caddie_id, is_active,
-           caddies ( id, first_name, last_name, telegram )`
+           caddies (
+             id, first_name, last_name, phone, whatsapp_phone,
+             telegram, telegram_user_id, telegram_chat_id, telegram_chat_invalid_at
+           )`
         )
         .eq("tournament_id", id)
         .eq("round_id", roundId)
@@ -139,13 +151,23 @@ export default async function RondaDiariaDetailPage({
               id: string;
               first_name: string | null;
               last_name: string | null;
+              phone: string | null;
+              whatsapp_phone: string | null;
               telegram: string | null;
+              telegram_user_id?: string | null;
+              telegram_chat_id?: string | null;
+              telegram_chat_invalid_at?: string | null;
             }
           | Array<{
               id: string;
               first_name: string | null;
               last_name: string | null;
+              phone: string | null;
+              whatsapp_phone: string | null;
               telegram: string | null;
+              telegram_user_id?: string | null;
+              telegram_chat_id?: string | null;
+              telegram_chat_invalid_at?: string | null;
             }>
           | null;
       };
@@ -157,11 +179,19 @@ export default async function RondaDiariaDetailPage({
             .map((p) => String(p ?? "").trim())
             .filter(Boolean)
             .join(" ") || "Caddie";
-        const linked = /^\d+$/.test(String(cad?.telegram ?? "").trim());
+        const status = classifyTelegramLinkStatus({
+          telegram_user_id: cad?.telegram_user_id,
+          telegram_chat_id: cad?.telegram_chat_id,
+          telegram: cad?.telegram,
+          telegram_chat_invalid_at: cad?.telegram_chat_invalid_at,
+        });
         caddieByEntry.set(String(c.entry_id), {
           caddieId: String(c.caddie_id ?? cad?.id ?? ""),
           caddieName: cn,
-          caddieLinked: linked,
+          caddiePhone:
+            String(cad?.whatsapp_phone ?? cad?.phone ?? "").trim() || null,
+          caddieTelegramStatus: status,
+          caddieLinked: status === "linked",
         });
       }
 
@@ -180,8 +210,10 @@ export default async function RondaDiariaDetailPage({
                     first_name: string | null;
                     last_name: string | null;
                     handicap_index: number | null;
+                    phone?: string | null;
                     telegram_user_id?: string | null;
                     telegram_chat_id?: string | null;
+                    telegram_chat_invalid_at?: string | null;
                   }
                 | null;
             }
@@ -204,11 +236,11 @@ export default async function RondaDiariaDetailPage({
             .join(" ") || "(sin nombre)";
         const hi =
           entry?.handicap_index ?? player?.handicap_index ?? null;
-        const hasTelegram = Boolean(
-          (player?.telegram_chat_id ?? player?.telegram_user_id ?? "")
-            .toString()
-            .trim()
-        );
+        const telegramStatus = classifyTelegramLinkStatus({
+          telegram_user_id: player?.telegram_user_id,
+          telegram_chat_id: player?.telegram_chat_id,
+          telegram_chat_invalid_at: player?.telegram_chat_invalid_at,
+        });
         const entryId = entry?.id ? String(entry.id) : "";
         const caddie = entryId ? caddieByEntry.get(entryId) : undefined;
         const list = membersByGroup.get(m.group_id) ?? [];
@@ -218,9 +250,13 @@ export default async function RondaDiariaDetailPage({
           playerId: entry?.player_id ? String(entry.player_id) : "",
           name,
           handicapIndex: hi,
-          hasTelegram,
+          phone: player?.phone ? String(player.phone).trim() || null : null,
+          telegramStatus,
+          hasTelegram: telegramStatus === "linked",
           caddieId: caddie?.caddieId ?? null,
           caddieName: caddie?.caddieName ?? null,
+          caddiePhone: caddie?.caddiePhone ?? null,
+          caddieTelegramStatus: caddie?.caddieTelegramStatus ?? null,
           caddieLinked: caddie?.caddieLinked ?? false,
         });
         membersByGroup.set(m.group_id, list);

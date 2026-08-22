@@ -9,6 +9,18 @@ export function parseTelegramCommand(text: unknown) {
   return withoutBotSuffix;
 }
 
+/**
+ * Payload de /start TOKEN (deep link). Null si no es /start o viene sin token.
+ * Telegram limita el payload a 64 caracteres.
+ */
+export function parseTelegramStartPayload(text: unknown): string | null {
+  const raw = String(text ?? "").trim();
+  const m = raw.match(/^\/start(?:@\w+)?(?:\s+(.+))?$/i);
+  if (!m) return null;
+  const payload = String(m[1] ?? "").trim();
+  return payload || null;
+}
+
 export function isTelegramIdRequest(command: string) {
   const c = command.trim();
   return (

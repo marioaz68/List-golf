@@ -5,6 +5,10 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { isMissingCaddieTelegramColumnsError } from "@/lib/caddies/telegramColumns";
 import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
+import {
+  isFatalTelegramChatError,
+  markTelegramChatInvalid,
+} from "@/lib/telegram/markChatInvalid";
 
 function backUrl(caddieId: string, extra?: Record<string, string>) {
   const qs = new URLSearchParams(extra ?? {});
@@ -74,10 +78,13 @@ export async function saveCaddieTelegramAction(formData: FormData) {
 
   const patch = {
     telegram_user_id: telegramUserIdRaw,
+    telegram: telegramUserIdRaw,
     telegram_chat_id:
       telegramChatIdRaw && /^\d+$/.test(telegramChatIdRaw)
         ? telegramChatIdRaw
         : null,
+    telegram_chat_invalid_at: null,
+    telegram_chat_invalid_reason: null,
   };
 
   const { error } = await admin.from("caddies").update(patch).eq("id", caddieId);
@@ -158,13 +165,24 @@ export async function verifyCaddieTelegramAction(formData: FormData) {
 
   const sent = await sendTelegramMessage({ chatId, text: ping });
   if (!sent.ok) {
+    if (isFatalTelegramChatError(sent.errorKind)) {
+      await markTelegramChatInvalid(admin, {
+        chatId,
+        reason: sent.errorKind,
+        detail: sent.error,
+      });
+    }
     redirect(`${backUrl(caddieId, { err: sent.error })}`);
   }
 
   if (!caddie.telegram_chat_id?.trim()) {
     await admin
       .from("caddies")
-      .update({ telegram_chat_id: chatId })
+      .update({
+        telegram_chat_id: chatId,
+        telegram_chat_invalid_at: null,
+        telegram_chat_invalid_reason: null,
+      })
       .eq("id", caddieId);
   }
 

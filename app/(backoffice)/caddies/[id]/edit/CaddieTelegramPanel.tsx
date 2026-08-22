@@ -5,6 +5,7 @@ import {
   saveCaddieTelegramAction,
   verifyCaddieTelegramAction,
 } from "./telegram-actions";
+import { generateCaddieTelegramDeepLink } from "@/app/(backoffice)/telegram/link-actions";
 
 export type CaddiePendingLinkRow = {
   telegram_user_id: string;
@@ -85,6 +86,8 @@ export default function CaddieTelegramPanel({
   pendingLinks,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
   const [userIdField, setUserIdField] = useState(telegramUserId);
   const [chatIdField, setChatIdField] = useState(telegramChatId);
 
@@ -101,6 +104,22 @@ export default function CaddieTelegramPanel({
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // ignore
+    }
+  }
+
+  async function copyDeepLink() {
+    setLinkErr(null);
+    const res = await generateCaddieTelegramDeepLink(caddieId);
+    if (!res.ok) {
+      setLinkErr(res.error);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(res.deepLink);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 1600);
+    } catch {
+      setLinkErr(res.deepLink);
     }
   }
 
@@ -138,6 +157,13 @@ export default function CaddieTelegramPanel({
             >
               {copied ? tg.copied : tg.copyBotUsername}
             </button>
+            <button
+              type="button"
+              onClick={copyDeepLink}
+              className="rounded border border-emerald-600 bg-emerald-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700"
+            >
+              {copiedLink ? "Link copiado" : "Copiar link de vinculación"}
+            </button>
             {botUrl ? (
               <a
                 href={botUrl}
@@ -152,6 +178,9 @@ export default function CaddieTelegramPanel({
         ) : (
           <p className="mt-1">{tg.step1BodyNotConfigured}</p>
         )}
+        {linkErr ? (
+          <p className="mt-2 break-all text-xs text-red-700">{linkErr}</p>
+        ) : null}
         <p className="mt-2 italic">{staffScript}</p>
       </div>
 

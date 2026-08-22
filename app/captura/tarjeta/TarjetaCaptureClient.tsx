@@ -1218,9 +1218,15 @@ export default function TarjetaCaptureClient({
   const myPairEntryIds = meta.myEntryId
     ? pairMatesOf(meta.myEntryId, meta.pairSides ?? null)
     : [];
-  const myCardFullySigned = meta.pairSides
-    ? myPairEntryIds.every((id) => cardFullySigned(id))
-    : cardFullySigned(meta.myEntryId);
+  // Importante: [].every(...) === true en JS. Sin myEntryId (vista anónima /
+  // solo caddie sin ?me=) no debemos marcar la tarjeta como firmada.
+  const myCardFullySigned = Boolean(
+    meta.myEntryId &&
+      (meta.pairSides
+        ? myPairEntryIds.length > 0 &&
+          myPairEntryIds.every((id) => cardFullySigned(id))
+        : cardFullySigned(meta.myEntryId))
+  );
   const witnessCardFullySigned =
     witnessTargetIdsForMe.length > 0 &&
     witnessTargetIdsForMe.every((id) => cardFullySigned(id));

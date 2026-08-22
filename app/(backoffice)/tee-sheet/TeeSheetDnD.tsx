@@ -30,15 +30,24 @@ import {
   parseMatchPlayGroupNotes,
   type MatchPlayPairSide,
 } from "@/lib/tee-sheet/matchPlayPairing";
+import TelegramCoveragePanel, {
+  TelegramStatusChip,
+} from "@/components/telegram/TelegramCoveragePanel";
+import type { TelegramCoveragePerson } from "@/lib/telegram/coverageStatus";
+import { generateTelegramDeepLink } from "@/app/(backoffice)/telegram/link-actions";
+import type { TelegramLinkStatus } from "@/lib/telegram/linkToken";
 
 type MemberUI = {
   entry_id: string;
   group_id: string;
   position: number;
+  player_id: string | null;
   first_name: string | null;
   last_name: string | null;
   handicap_index: number | null;
   standing_display: string | null;
+  phone: string | null;
+  telegram_status: TelegramLinkStatus;
   club_id: string | null;
   club_name: string | null;
   club_short_name: string | null;
@@ -49,6 +58,10 @@ type MemberUI = {
   tee_color: string | null;
   /** Nombre del tee asignado (Azules, Blancas, Doradas, Rojas, etc.). */
   tee_name: string | null;
+  caddie_id: string | null;
+  caddie_name: string | null;
+  caddie_phone: string | null;
+  caddie_telegram_status: TelegramLinkStatus | null;
 };
 
 type GroupGpsState = "live" | "stale" | "none";
@@ -72,6 +85,7 @@ type Props = {
   targetGroupSize: number;
   maxGroupSize: number;
   groups: GroupUI[];
+  telegramCoverage?: TelegramCoveragePerson[];
   initialCategory?: string;
   startingOrderConfirmed?: boolean;
   showPairingScore?: boolean;
@@ -277,6 +291,7 @@ export default function TeeSheetDnD({
   targetGroupSize,
   maxGroupSize,
   groups,
+  telegramCoverage = [],
   initialCategory = "ALL",
   startingOrderConfirmed = false,
   showPairingScore = false,
@@ -624,6 +639,16 @@ export default function TeeSheetDnD({
             Exportar Excel
           </a>
         </div>
+
+        {telegramCoverage.length > 0 ? (
+          <div className="mt-1.5">
+            <TelegramCoveragePanel
+              people={telegramCoverage}
+              generateLink={generateTelegramDeepLink}
+              title="Telegram — avisos de esta ronda"
+            />
+          </div>
+        ) : null}
 
         {lastError ? (
           <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-1.5 py-1 text-[11px] text-red-800">
@@ -1069,6 +1094,16 @@ function PlayerRow({
         <div className="min-w-0 flex-1 truncate font-medium text-slate-900">
           {displayName}
         </div>
+
+        <TelegramStatusChip status={member.telegram_status} compact />
+        {member.caddie_telegram_status ? (
+          <span title={`Caddie: ${member.caddie_name ?? ""}`}>
+            <TelegramStatusChip
+              status={member.caddie_telegram_status}
+              compact
+            />
+          </span>
+        ) : null}
 
         <div className="w-10 shrink-0 text-right font-bold text-green-700">
           {showPairingScore

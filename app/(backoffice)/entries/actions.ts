@@ -13,6 +13,10 @@ import { isMissingTelegramKitColumnsError } from "@/lib/entries/telegramKitColum
 import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
 import { sendTelegramMessage } from "@/lib/telegram/sendMessage";
 import {
+  isFatalTelegramChatError,
+  markTelegramChatInvalid,
+} from "@/lib/telegram/markChatInvalid";
+import {
   buildClaudePromptMarkdown,
   buildPromptDownloadFilename,
   type FlaggedPlayerForPrompt,
@@ -1840,12 +1844,19 @@ export async function savePlayerTelegramFromKit(formData: FormData) {
     );
   }
 
-  const patch: { telegram_user_id: string; telegram_chat_id: string | null } = {
+  const patch: {
+    telegram_user_id: string;
+    telegram_chat_id: string | null;
+    telegram_chat_invalid_at: null;
+    telegram_chat_invalid_reason: null;
+  } = {
     telegram_user_id: telegramUserIdRaw,
     telegram_chat_id:
       telegramChatIdRaw && /^\d+$/.test(telegramChatIdRaw)
         ? telegramChatIdRaw
         : null,
+    telegram_chat_invalid_at: null,
+    telegram_chat_invalid_reason: null,
   };
 
   const { error: upErr } = await admin
@@ -1941,13 +1952,24 @@ export async function verifyTelegramLinkFromKit(formData: FormData) {
 
   const sent = await sendTelegramMessage({ chatId, text: ping });
   if (!sent.ok) {
+    if (isFatalTelegramChatError(sent.errorKind)) {
+      await markTelegramChatInvalid(admin, {
+        chatId,
+        reason: sent.errorKind,
+        detail: sent.error,
+      });
+    }
     redirect(`${backBase}&err=${encodeURIComponent(sent.error)}`);
   }
 
   if (!player?.telegram_chat_id?.trim()) {
     await admin
       .from("players")
-      .update({ telegram_chat_id: chatId })
+      .update({
+        telegram_chat_id: chatId,
+        telegram_chat_invalid_at: null,
+        telegram_chat_invalid_reason: null,
+      })
       .eq("id", playerId);
   }
 
@@ -2041,6 +2063,13 @@ export async function deliverTelegramKit(formData: FormData) {
 
   const sent = await sendTelegramMessage({ chatId, text: kitText });
   if (!sent.ok) {
+    if (isFatalTelegramChatError(sent.errorKind)) {
+      await markTelegramChatInvalid(admin, {
+        chatId,
+        reason: sent.errorKind,
+        detail: sent.error,
+      });
+    }
     redirect(`${backBase}&err=${encodeURIComponent(sent.error)}`);
   }
 

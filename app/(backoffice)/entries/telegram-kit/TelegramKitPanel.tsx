@@ -8,6 +8,7 @@ import {
   verifyTelegramLinkFromKit,
 } from "../actions";
 import { buildTelegramKitMessage } from "@/lib/telegram/kitMessage";
+import { generatePlayerTelegramDeepLink } from "@/app/(backoffice)/telegram/link-actions";
 
 type KitCopy = {
   botUsernameLabel: string;
@@ -115,6 +116,8 @@ export default function TelegramKitPanel({
   pendingLinks,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [linkErr, setLinkErr] = useState<string | null>(null);
   const [extraNote, setExtraNote] = useState("");
   const [partialDelivery, setPartialDelivery] = useState(
     Boolean(kitPendingItems?.trim())
@@ -157,6 +160,22 @@ export default function TelegramKitPanel({
     }
   }
 
+  async function copyDeepLink() {
+    setLinkErr(null);
+    const res = await generatePlayerTelegramDeepLink(playerId);
+    if (!res.ok) {
+      setLinkErr(res.error);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(res.deepLink);
+      setCopiedLink(true);
+      window.setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      setLinkErr(res.deepLink);
+    }
+  }
+
   return (
     <>
       <section className="rounded-lg border-2 border-sky-200 bg-sky-50 p-4 shadow-sm">
@@ -185,7 +204,17 @@ export default function TelegramKitPanel({
               >
                 {copied ? tk.copied : tk.copyBotUsername}
               </button>
+              <button
+                type="button"
+                onClick={copyDeepLink}
+                className="mt-3 inline-flex rounded border border-emerald-700 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 sm:ml-2"
+              >
+                {copiedLink ? "Link copiado" : "Copiar link de vinculación"}
+              </button>
             </div>
+            {linkErr ? (
+              <p className="mt-2 break-all text-xs text-red-700">{linkErr}</p>
+            ) : null}
           </>
         ) : (
           <p className="mt-2 text-sm text-amber-900">{tk.step1BodyNotConfigured}</p>
