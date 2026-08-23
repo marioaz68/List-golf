@@ -191,11 +191,13 @@ export async function loadConsolationMatchPlayPublic(
   if (allRoundIds.length > 0) {
     const { data: lockedRows } = await admin
       .from("scorecards")
-      .select("entry_id, locked_at")
+      .select("entry_id, round_id, locked_at")
       .in("round_id", allRoundIds)
       .not("locked_at", "is", null);
     for (const row of lockedRows ?? []) {
-      if (row.entry_id) lockedEntryIds.add(String(row.entry_id));
+      if (row.entry_id && row.round_id) {
+        lockedEntryIds.add(`${String(row.round_id)}|${String(row.entry_id)}`);
+      }
     }
   }
 
@@ -208,9 +210,9 @@ export async function loadConsolationMatchPlayPublic(
       .filter(Boolean);
   }
 
-  function areCardsClosed(entryIds: string[]): boolean {
-    if (entryIds.length === 0) return false;
-    return entryIds.every((id) => lockedEntryIds.has(id));
+  function areCardsClosed(entryIds: string[], roundId: string | null): boolean {
+    if (entryIds.length === 0 || !roundId) return false;
+    return entryIds.every((id) => lockedEntryIds.has(`${roundId}|${id}`));
   }
 
   function buildGroupRow(params: {
@@ -219,13 +221,14 @@ export async function loadConsolationMatchPlayPublic(
     roundNo: number;
     teeTime: string | null;
     match: ConsolMatchRow | undefined;
+    roundId?: string | null;
     topTeamId: string | null;
     bottomTeamId: string | null;
     memberEntryIds: string[];
   }): ConsolationLiveGroup {
     const { groupId, groupNo, roundNo, teeTime, match, topTeamId, bottomTeamId, memberEntryIds } =
       params;
-    const cardsClosed = areCardsClosed(memberEntryIds);
+    const cardsClosed = areCardsClosed(memberEntryIds, params.roundId ?? null);
     const liveRaw = match?.id ? liveByMatchId.get(match.id) ?? null : null;
     return {
       groupId,
@@ -290,6 +293,7 @@ export async function loadConsolationMatchPlayPublic(
         buildGroupRow({
           groupId: String(pg.id),
           groupNo: Number(pg.group_no ?? 0),
+          roundId: String(pg.round_id),
           roundNo:
             roundNoById.get(String(pg.round_id)) ?? activeRoundNo,
           teeTime: pg.tee_time ? String(pg.tee_time).slice(0, 5) : null,
