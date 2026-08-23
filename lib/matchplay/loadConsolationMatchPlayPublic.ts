@@ -246,11 +246,15 @@ export async function loadConsolationMatchPlayPublic(
 
   const groups: ConsolationLiveGroup[] = [];
 
-  if (allRoundIds.length > 0) {
+  const activeRoundIds = allRoundIds.filter(
+    (id) => roundNoById.get(id) === activeRoundNo
+  );
+
+  if (activeRoundIds.length > 0) {
     const { data: pgRows } = await admin
       .from("pairing_groups")
       .select("id, group_no, tee_time, notes, round_id")
-      .in("round_id", allRoundIds)
+      .in("round_id", activeRoundIds)
       .like("notes", `${CONSOLATION_NOTES_PREFIX}%`)
       .order("group_no", { ascending: true });
 
