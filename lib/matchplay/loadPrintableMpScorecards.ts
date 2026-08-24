@@ -100,6 +100,8 @@ export type PrintableStrokeCard = {
   playDate: string | null;
   groupLabel: string;
   players: PrintablePlayerRow[];
+  /** Resto del grupo, referencia para el marcador. */
+  groupMates?: string[];
 };
 
 export type TeePrintInfo = {
@@ -1183,19 +1185,23 @@ export async function loadPrintableMpScorecards(
             strokesByHole: byHole,
           };
         });
-        strokeCards.push({
-          cardId: `stroke-${g.groupId}`,
-          kind: "stroke_aggregate",
-          groupId: g.groupId,
-          roundNo: strokeData.roundNo ?? 0,
-          groupNo: g.groupNo,
-          teeTime: g.teeTime ? String(g.teeTime).slice(0, 5) : null,
-          playDate:
-            teeTimes.byRoundPosition.get(
-              `${strokeData.roundNo ?? 0}-${g.groupNo}`
-            )?.playDate ?? null,
-          groupLabel: g.label,
-          players,
+        // Stroke play: una tarjeta individual por jugador, con su grupo y salida.
+        players.forEach((player, idx) => {
+          strokeCards.push({
+            cardId: `stroke-${g.groupId}-${idx}`,
+            kind: "stroke_aggregate",
+            groupId: g.groupId,
+            roundNo: strokeData.roundNo ?? 0,
+            groupNo: g.groupNo,
+            teeTime: g.teeTime ? String(g.teeTime).slice(0, 5) : null,
+            playDate:
+              teeTimes.byRoundPosition.get(
+                `${strokeData.roundNo ?? 0}-${g.groupNo}`
+              )?.playDate ?? null,
+            groupLabel: g.label,
+            players: [player],
+            groupMates: players.filter((_, j) => j !== idx).map((p) => p.name),
+          });
         });
       }
     }

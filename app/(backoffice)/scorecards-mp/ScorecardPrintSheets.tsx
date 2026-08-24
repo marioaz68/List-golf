@@ -617,19 +617,25 @@ export function StrokeAggregateScorecardSheet({
   card: PrintableStrokeCard;
   meta: PrintableScorecardsBundle;
 }) {
+  const player = card.players[0] ?? null;
   const subtitle = `Consolación Stroke Play · R${card.roundNo}`;
   const groupLine = [
     formatPlayDateEs(card.playDate),
-    `Grupo ${card.groupNo}${card.teeTime ? ` · ${card.teeTime}` : ""} · ${card.groupLabel}`,
+    `Grupo ${card.groupNo}`,
+    card.teeTime ? `Salida ${card.teeTime}` : "Salida por definir",
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const scoreRows: ExtraRow[] = card.players.map((p, i) => ({
-    label: `J${i + 1} ${shortPlayerName(p.name)}`,
-  }));
-  scoreRows.push({ label: "Neto pareja 1", className: "bg-emerald-50 font-bold" });
-  scoreRows.push({ label: "Neto pareja 2", className: "bg-emerald-50 font-bold" });
+  const scoreRows: ExtraRow[] = [];
+  if (player) {
+    scoreRows.push({
+      label: shortPlayerName(player.name),
+      dotsByHole: player.strokesByHole,
+    });
+  }
+  scoreRows.push({ label: "Gross", className: "bg-black/5 font-bold" });
+  scoreRows.push({ label: "Neto", className: "bg-emerald-50 font-bold" });
 
   return (
     <article className="scorecard-half flex h-[92mm] flex-col overflow-hidden border-2 border-black/60 bg-white p-2 text-black">
@@ -637,15 +643,24 @@ export function StrokeAggregateScorecardSheet({
         meta={meta}
         subtitle={subtitle}
         groupLine={groupLine}
-        showAdvantageLegend={false}
+        formatLegend={`Stroke play individual · Neto ${meta.allowancePct}% HI`}
       />
-      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5">
-        {card.players.map((p, i) => (
-          <div key={i} className="flex items-center gap-2 text-[10px]">
-            <span className="w-4 font-bold">{i + 1}.</span>
-            <PlayerLine p={p} />
+      <div className="mt-1 shrink-0">
+        {player ? (
+          <div className="flex items-center gap-2 text-[12px] font-extrabold">
+            <GenderIcon g={player.gender} />
+            <TeeDot color={player.teeColor} name={player.teeName} />
+            <span className="min-w-0 flex-1 truncate">{player.name}</span>
+            <span className="shrink-0 tabular-nums text-[10px] font-semibold">
+              HI {player.hi.toFixed(1)} · PH {player.ph ?? "—"}
+            </span>
           </div>
-        ))}
+        ) : null}
+        {card.groupMates && card.groupMates.length > 0 ? (
+          <div className="mt-0.5 text-[8px] text-black/60">
+            Grupo: {card.groupMates.map((n) => shortPlayerName(n)).join(" · ")}
+          </div>
+        ) : null}
       </div>
       <div className="mt-1 min-h-0 flex-1">
         <HoleGrid
@@ -655,9 +670,11 @@ export function StrokeAggregateScorecardSheet({
           rowH="6.2mm"
         />
       </div>
-      <footer className="mt-1 border-t border-black/30 pt-1 text-[8px]">
-        Suma neto de los 2 jugadores de cada pareja · Desempate según convocatoria
-        CCQ
+      <footer className="mt-1 shrink-0 border-t border-black/30 pt-1 text-[9px] font-semibold">
+        <div className="flex flex-wrap gap-x-6 gap-y-0.5">
+          <span>Firma jugador: ______________</span>
+          <span>Firma marcador: ______________</span>
+        </div>
       </footer>
     </article>
   );

@@ -226,8 +226,9 @@ export default function PrintableScorecardsClient({ bundle }: Props) {
                       </span>
                       <span className="text-slate-400">
                         {" "}
-                        — {(card as PrintableStrokeCard).groupLabel} ·{" "}
-                        {(card as PrintableStrokeCard).players.length} jugadores
+                        —{" "}
+                        {(card as PrintableStrokeCard).players[0]?.name ??
+                          (card as PrintableStrokeCard).groupLabel}
                       </span>
                     </>
                   )}
