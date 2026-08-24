@@ -213,6 +213,18 @@ function MatchStatusBar({
   const allPhZero = Object.values(matchPlay.phByEntry ?? {}).every(
     (ph) => ph == null || Number(ph) === 0
   );
+  // Stroke play individual: no hay match que reportar. Se conserva solo la
+  // leyenda de ventajas, que ahí sí aplica (juego neto).
+  if (matchPlay.strokeOnly) {
+    if (compact || !anyStrokeGiven) return null;
+    return (
+      <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-center text-[10px] text-amber-800">
+        ● = golpe de ventaja en ese hoyo (aparece en la tarjeta del jugador que
+        recibe).
+      </div>
+    );
+  }
+
   const headline = matchBarHeadline(matchPlay, players);
   const headlineColor =
     headline.lead === "top"

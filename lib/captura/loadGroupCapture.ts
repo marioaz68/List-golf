@@ -124,7 +124,7 @@ export async function loadGroupCapture(
 
   const { data: groupRow } = await supabase
     .from("pairing_groups")
-    .select("id, round_id, group_no, starting_hole, tee_time")
+    .select("id, round_id, group_no, starting_hole, tee_time, notes")
     .eq("id", gid)
     .maybeSingle();
 
@@ -411,6 +411,11 @@ export async function loadGroupCapture(
     });
   }
 
+  const isStrokeAggregateGroup = safeString(groupRow?.notes)
+    .trim()
+    .toUpperCase()
+    .startsWith("STROKE AGREGADO");
+
   let matchPlay = null;
   if (tournamentId) {
     try {
@@ -418,6 +423,89 @@ export async function loadGroupCapture(
     } catch {
       matchPlay = null;
     }
+  }
+
+  if (matchPlay && isStrokeAggregateGroup) {
+    // Cada jugador recibe sus golpes completos segun su PH y el stroke index
+    // del campo, no la ventaja relativa entre parejas del match.
+    // PH desde la inscripcion, no del match: en un grupo de stroke los 4
+    // jugadores vienen de parejas distintas y phByEntry solo trae a los del
+    // match detectado, dejando a los demas sin PH ni ventajas.
+    const phForStroke: Record<string, number | null> = {
+      ...(matchPlay.phByEntry ?? {}),
+    };
+    const absStrokes: Record<string, Partial<Record<number, number>>> = {};
+    try {
+      const { data: phRows } = await supabase
+        .from("tournament_entries")
+        .select("id, playing_handicap, playing_handicap_override")
+        .in("id", entryIds);
+      for (const r of phRows ?? []) {
+        const eid = safeString(r.id);
+        if (!eid) continue;
+        const raw =
+          r.playing_handicap_override != null
+            ? Number(r.playing_handicap_override)
+            : r.playing_handicap != null
+              ? Number(r.playing_handicap)
+              : null;
+        if (raw != null && Number.isFinite(raw)) phForStroke[eid] = raw;
+      }
+
+      const { data: holeRows } = await supabase
+        .from("tournament_holes")
+        .select("hole_number, handicap_index")
+        .eq("tournament_id", tournamentId);
+      const siByHole = new Map<number, number>();
+      for (const h of holeRows ?? []) {
+        const hn = Number(h.hole_number);
+        const si = Number(h.handicap_index);
+        if (hn >= 1 && hn <= 18 && si >= 1) siByHole.set(hn, si);
+      }
+
+      if (siByHole.size > 0) {
+        for (const eid of entryIds) {
+          const ph = Number(phForStroke[eid] ?? 0);
+          if (!Number.isFinite(ph) || ph <= 0) continue;
+          const base = Math.floor(ph / 18);
+          const extra = ph % 18;
+          const byHole: Partial<Record<number, number>> = {};
+          for (let hole = 1; hole <= 18; hole++) {
+            const si = siByHole.get(hole);
+            if (si == null) continue;
+            const received = base + (si <= extra ? 1 : 0);
+            if (received > 0) byHole[hole] = received;
+          }
+          absStrokes[eid] = byHole;
+        }
+      }
+    } catch {
+      // Si algo falla, se conservan las ventajas del match.
+    }
+    matchPlay = {
+      ...matchPlay,
+      strokeOnly: true,
+      phByEntry: phForStroke,
+      strokesByEntry:
+        Object.keys(absStrokes).length > 0
+          ? absStrokes
+          : matchPlay.strokesByEntry,
+      ballRoleByEntry: {},
+      decidedAtHole: null,
+      resultText: "",
+      holesRequired: 18,
+      viaPlayoff: false,
+      needsPlayoff: false,
+      playoffHole: undefined,
+      playoffPendingHole: undefined,
+      progression: [],
+      topLabel: null,
+      bottomLabel: null,
+      topShort: null,
+      bottomShort: null,
+      matchplayMatchId: null,
+      matchplayCompleted: false,
+    };
   }
 
   // Match play (bola baja + alta): pegar PH / rol / ventajas en cada jugador

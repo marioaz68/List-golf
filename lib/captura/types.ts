@@ -154,6 +154,12 @@ export type GroupMatchPlayCapture = {
   matchplayMatchId?: string | null;
   /** True si el match ya está marcado como `completed` en DB. */
   matchplayCompleted?: boolean;
+  /**
+   * True si el grupo se juega stroke play individual (consolación agregada).
+   * Conserva PH y ventajas, pero no hay match que reportar: la UI oculta la
+   * barra de estado, la fila MATCH y las etiquetas de bola baja/alta.
+   */
+  strokeOnly?: boolean;
 };
 
 export type GroupCapturePayload = {
