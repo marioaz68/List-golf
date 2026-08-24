@@ -79,11 +79,11 @@ export default function PublicMatchPlayBracket({
               }}
             >
               {/* Headers */}
-              {bracket.rounds.map(({ roundNo, label }) => (
+              {bracket.rounds.map(({ roundNo, label }, colIdx) => (
                 <div
                   key={`hdr-${roundNo}`}
                   className="text-center text-[10px] font-bold uppercase tracking-[0.25em] text-cyan-300/80"
-                  style={{ gridColumn: roundNo, gridRow: "1 / span 1" }}
+                  style={{ gridColumn: colIdx + 1, gridRow: "1 / span 1" }}
                 >
                   {label || roundLabel(roundNo, roundCount, bracketSize)}
                 </div>
@@ -101,11 +101,14 @@ export default function PublicMatchPlayBracket({
               </div>
 
               {/* Matches */}
-              {bracket.rounds.map(({ roundNo, matches }) => {
-                const span = Math.pow(2, roundNo);
+              {/* Coordenadas por indice de columna: un cuadro puede empezar en
+                  una ronda != 1 (p. ej. consolacion con rondas 5 y 6). */}
+              {bracket.rounds.map(({ matches }, colIdx) => {
+                const col = colIdx + 1;
+                const span = Math.pow(2, colIdx);
                 return matches.map((m, idx) => {
                   const rowStart = span * idx + 2;
-                  const isFinal = roundNo === roundCount;
+                  const isFinal = col === roundCount;
                   const half: "top" | "bottom" | "final" =
                     matches.length === 1
                       ? "final"
@@ -118,7 +121,7 @@ export default function PublicMatchPlayBracket({
                       match={m}
                       pairFormat={bracket.pair_format}
                       labels={labels}
-                      round={roundNo}
+                      round={col}
                       positionIdx={idx}
                       rowStart={rowStart}
                       span={span}

@@ -12,50 +12,44 @@ import { confirmStartingOrderForRound } from "@/lib/matchplay/confirmMatchPlaySa
 
 export const STROKE_AGG_NOTES_PREFIX = "STROKE AGREGADO · ";
 
-/** Parejas perdedoras de R1, R2 y consolación MP (participan stroke agregado). */
+/**
+ * Parejas que juegan el stroke agregado: las que YA perdieron en cualquier
+ * cuadro y NO tienen ningun match pendiente por jugar.
+ *
+ * La regla no depende del numero de ronda ni del tamano del cuadro. Entran
+ * los perdedores de rondas tempranas; los que cayeron a la consolacion MP
+ * entran solo si ya perdieron ahi; y el perdedor de semifinal queda fuera
+ * porque le toca el match por 3er lugar.
+ */
 export async function collectLoserPairIdsForStrokeAggregate(
   admin: SupabaseClient,
   tournamentId: string
 ): Promise<Set<string>> {
   const loserPairIds = new Set<string>();
+  const stillAlivePairIds = new Set<string>();
 
-  const { data: mainBracket } = await admin
-    .from("matchplay_brackets")
-    .select("id")
+  const { data: allMatches } = await admin
+    .from("matchplay_matches")
+    .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
     .eq("tournament_id", tournamentId)
-    .neq("name", CONSOLATION_BRACKET_NAME)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (mainBracket?.id) {
-    const { data: mainDone } = await admin
-      .from("matchplay_matches")
-      .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
-      .eq("bracket_id", mainBracket.id)
-      .in("round_no", [1, 2])
-      .eq("status", "completed");
-    for (const m of mainDone ?? []) {
-      if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
-      const loser =
-        m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
-      if (loser) loserPairIds.add(String(loser));
+    .neq("status", "bye");
+
+  for (const m of allMatches ?? []) {
+    const top = m.top_pair_id ? String(m.top_pair_id) : null;
+    const bottom = m.bottom_pair_id ? String(m.bottom_pair_id) : null;
+
+    if (m.status === "completed" && m.winner_pair_id && top && bottom) {
+      const loser = String(m.winner_pair_id) === top ? bottom : top;
+      loserPairIds.add(loser);
+      continue;
     }
+
+    // Match sin cerrar: las parejas involucradas siguen con juego pendiente.
+    if (top) stillAlivePairIds.add(top);
+    if (bottom) stillAlivePairIds.add(bottom);
   }
 
-  const consolId = await getConsolationBracketId(admin, tournamentId);
-  if (consolId) {
-    const { data: consolDone } = await admin
-      .from("matchplay_matches")
-      .select("top_pair_id, bottom_pair_id, winner_pair_id, status")
-      .eq("bracket_id", consolId)
-      .eq("status", "completed");
-    for (const m of consolDone ?? []) {
-      if (!m.winner_pair_id || !m.top_pair_id || !m.bottom_pair_id) continue;
-      const loser =
-        m.winner_pair_id === m.top_pair_id ? m.bottom_pair_id : m.top_pair_id;
-      if (loser) loserPairIds.add(String(loser));
-    }
-  }
+  for (const id of stillAlivePairIds) loserPairIds.delete(id);
 
   return loserPairIds;
 }
