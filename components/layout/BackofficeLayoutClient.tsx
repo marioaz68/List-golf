@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import BrowserBehaviorFix from "@/components/ui/BrowserBehaviorFix";
@@ -96,9 +97,16 @@ export default function BackofficeLayoutClient({
             lang={locale}
           >
             <MobileBackdrop />
-            <Sidebar />
+            <Suspense
+              fallback={
+                <aside className="hidden w-64 shrink-0 border-r border-white/10 bg-[#1C252D] md:block" />
+              }
+            >
+              <Sidebar />
+            </Suspense>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            {/* isolate: el mapa Leaflet de Ritmo no puede tapar el menú izquierdo */}
+            <div className="relative z-0 flex min-h-0 min-w-0 flex-1 isolate flex-col overflow-hidden">
               <header className="flex shrink-0 items-center gap-2 border-b border-white/10 bg-[#141c26] px-3 py-2 sm:px-4">
                 <MobileMenuButton />
                 <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { useBackofficeNav } from "@/components/layout/BackofficeNavContext";
@@ -71,6 +71,7 @@ const STORAGE_KEY = "listgolf_sidebar_mode";
 export default function Sidebar() {
   const { t } = useAppLocale();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { open, setOpen } = useBackofficeNav();
   const roles = useBackofficeRoles();
 
@@ -93,13 +94,10 @@ export default function Sidebar() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-
     const map: Record<string, string> = {};
-    for (const [key, value] of params.entries()) {
+    for (const [key, value] of searchParams.entries()) {
       map[key] = value;
     }
-
     setSearchMap(map);
 
     // Listado global: sin torneo activo en la barra lateral.
@@ -114,8 +112,8 @@ export default function Sidebar() {
       return;
     }
 
-    setTournamentId(params.get("tournament_id"));
-  }, [pathname]);
+    setTournamentId(searchParams.get("tournament_id"));
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -566,7 +564,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`flex min-h-0 flex-col border-r border-white/10 bg-[#1C252D] text-white shadow-2xl transition-transform duration-200 ease-out md:shadow-none w-[min(19rem,88vw)] shrink-0 md:w-64 fixed inset-y-0 left-0 z-40 h-dvh overflow-y-auto overscroll-y-contain md:static md:z-auto md:h-dvh md:max-h-dvh ${
+      className={`relative z-50 isolate flex min-h-0 flex-col border-r border-white/10 bg-[#1C252D] text-white shadow-2xl transition-transform duration-200 ease-out md:shadow-none w-[min(19rem,88vw)] shrink-0 md:w-64 fixed inset-y-0 left-0 h-dvh overflow-y-auto overscroll-y-contain pointer-events-auto md:static md:h-dvh md:max-h-dvh ${
         open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       }`}
     >

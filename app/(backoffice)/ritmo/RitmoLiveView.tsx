@@ -365,8 +365,9 @@ export default function RitmoLiveView({
         flexDirection: "column",
         overflow: "hidden",
         position: "relative",
-        zIndex: 30,
+        zIndex: 2,
         isolation: "isolate",
+        pointerEvents: "auto",
       }}
     >
       <div style={{ padding: "12px 14px", borderBottom: "1px solid #222" }}>
@@ -453,8 +454,13 @@ export default function RitmoLiveView({
             Ronda
           </span>
           {showAllRoundsOption ? (
-            <Link
-              href={`/ritmo?tournament_id=${encodeURIComponent(tournamentId)}`}
+            <button
+              type="button"
+              onClick={() => {
+                window.location.assign(
+                  `/ritmo?tournament_id=${encodeURIComponent(tournamentId)}`
+                );
+              }}
               style={{
                 fontSize: 11,
                 fontWeight: 700,
@@ -464,19 +470,26 @@ export default function RitmoLiveView({
                 background: !currentRoundId ? "#2563eb" : "#1f2937",
                 color: !currentRoundId ? "#fff" : "#cbd5e1",
                 border: `1px solid ${!currentRoundId ? "#2563eb" : "#374151"}`,
+                cursor: "pointer",
+                fontFamily: "inherit",
               }}
             >
               Todas
-            </Link>
+            </button>
           ) : null}
           {rounds.map((r) => {
             const active = r.id === currentRoundId;
             return (
-              <Link
+              <button
                 key={r.id}
-                href={`/ritmo?tournament_id=${encodeURIComponent(
-                  tournamentId
-                )}&round_id=${encodeURIComponent(r.id)}`}
+                type="button"
+                onClick={() => {
+                  window.location.assign(
+                    `/ritmo?tournament_id=${encodeURIComponent(
+                      tournamentId
+                    )}&round_id=${encodeURIComponent(r.id)}`
+                  );
+                }}
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
@@ -486,11 +499,13 @@ export default function RitmoLiveView({
                   background: active ? "#2563eb" : "#1f2937",
                   color: active ? "#fff" : "#cbd5e1",
                   border: `1px solid ${active ? "#2563eb" : "#374151"}`,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
                 }}
               >
                 R{r.round_no ?? "?"}
                 {r.groupCount > 0 ? ` · ${r.groupCount}` : ""}
-              </Link>
+              </button>
             );
           })}
         </div>
@@ -961,7 +976,16 @@ export default function RitmoLiveView({
   }, [listGroups]);
 
   const map = (
-    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        contain: "layout paint",
+        pointerEvents: "none",
+      }}
+    >
       <RitmoMap
         groups={mapGroups}
         marshals={liveMarshals}
@@ -971,18 +995,18 @@ export default function RitmoLiveView({
         onHitsChange={setMapHits}
       />
 
-      {/* Barra de grupos: links nativos (rojo=atrasado, verde=ritmo, azul=adelantado). */}
+      {/* Barra de grupos: el contenedor no captura clics (solo cada chip). */}
       <div
         style={{
           position: "absolute",
           top: 8,
           left: 8,
           right: 8,
-          zIndex: 5000,
+          zIndex: 4,
           display: "flex",
           flexWrap: "wrap",
           gap: 6,
-          pointerEvents: "auto",
+          pointerEvents: "none",
         }}
       >
         {chipGroups.map((g) => (
@@ -1005,6 +1029,7 @@ export default function RitmoLiveView({
               border: "2px solid #fff",
               boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
               fontFamily: "inherit",
+              pointerEvents: "auto",
             }}
             title={`${g.label} · ${g.status} → capturas`}
           >
@@ -1030,7 +1055,8 @@ export default function RitmoLiveView({
               height: 44,
               transform: "translate(-50%, -50%)",
               borderRadius: "50%",
-              zIndex: 5000,
+              zIndex: 4,
+              pointerEvents: "auto",
               background: "transparent",
               border: g?.status === "atrasado" ? "2px solid rgba(255,255,255,0.35)" : "none",
             }}
@@ -1098,10 +1124,32 @@ export default function RitmoLiveView({
           flexDirection: "column",
           background: "#0a0a0a",
           fontFamily: "-apple-system, system-ui, sans-serif",
+          overflow: "hidden",
         }}
       >
-        <div style={{ height: "48%", minHeight: 240 }}>{map}</div>
-        <div style={{ flex: 1, minHeight: 0 }}>{sidebar}</div>
+        <div
+          style={{
+            height: "48%",
+            minHeight: 240,
+            position: "relative",
+            zIndex: 0,
+            isolation: "isolate",
+            overflow: "hidden",
+          }}
+        >
+          {map}
+        </div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            position: "relative",
+            zIndex: 2,
+            isolation: "isolate",
+          }}
+        >
+          {sidebar}
+        </div>
       </div>
     );
   }
@@ -1116,6 +1164,7 @@ export default function RitmoLiveView({
         flexDirection: "row",
         background: "#0a0a0a",
         fontFamily: "-apple-system, system-ui, sans-serif",
+        overflow: "hidden",
       }}
     >
       <div
@@ -1125,12 +1174,25 @@ export default function RitmoLiveView({
           height: "100%",
           minHeight: 0,
           position: "relative",
-          zIndex: 30,
+          zIndex: 2,
+          isolation: "isolate",
+          pointerEvents: "auto",
         }}
       >
         {sidebar}
       </div>
-      <div style={{ flex: 1, height: "100%", minWidth: 0, overflow: "hidden", position: "relative", zIndex: 1 }}>
+      <div
+        style={{
+          flex: 1,
+          height: "100%",
+          minWidth: 0,
+          overflow: "hidden",
+          position: "relative",
+          zIndex: 0,
+          isolation: "isolate",
+          contain: "paint",
+        }}
+      >
         {map}
       </div>
     </div>
@@ -1397,7 +1459,15 @@ function GroupCard({
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: "#d1d5db", marginTop: 4 }}>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: "#93c5fd",
+            marginTop: 4,
+            lineHeight: 1.35,
+          }}
+        >
           {g.detail}
         </div>
 

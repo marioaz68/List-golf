@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PerHoleMinutes } from "@/lib/telegram/ritmo/paceCalculator";
 import {
-  computePace,
-  type PerHoleMinutes,
-} from "@/lib/telegram/ritmo/paceCalculator";
+  evaluateCaptureLag,
+  formatCaptureVsPaceLine,
+  type CaptureLagKind,
+} from "@/lib/ritmo/captureLag";
 import {
   gpsStateFromTimestamp,
   loadCaddieByEntry,
@@ -18,6 +20,7 @@ import { resolveGroupStartHole } from "@/lib/ritmo/startHole";
 import {
   isOpsRoundClosed,
   isGroupCaptureFinished,
+  resolveOpsRoundDate,
 } from "@/lib/ritmo/opsDay";
 import {
   loadCompletedMatchplayEntryKeys,
@@ -60,6 +63,27 @@ type PositionRow = {
 const STALE_MINUTES = 12;
 const LOOKBACK_MINUTES = 90;
 const ACTIVE_SOURCE_MINUTES = 5;
+
+function captureLagToLiveStatus(lag: {
+  kind: CaptureLagKind;
+  holesPlayed: number;
+  expectedHoles: number;
+}): LiveStatus {
+  switch (lag.kind) {
+    case "critico":
+    case "atrasado":
+    case "silencioso":
+      return "atrasado";
+    case "ok":
+      if (lag.holesPlayed > lag.expectedHoles) return "adelantado";
+      return "en_ritmo";
+    case "terminado":
+    case "cerrado":
+      return "cerrado";
+    default:
+      return "sin_datos";
+  }
+}
 
 function modalHole(holes: (number | null)[]): number | null {
   const counts = new Map<number, number>();
@@ -309,43 +333,52 @@ export async function buildRitmoLiveGroupsForRound(
       };
     }
 
-    let hoyoActual: number | null;
-    let holeSource: "scores" | "gps" | null;
-    if (scoreHole != null) {
-      hoyoActual = scoreHole;
-      holeSource = "scores";
-    } else if (!stale && gpsHole != null) {
-      hoyoActual = gpsHole;
-      holeSource = "gps";
-    } else {
-      hoyoActual = null;
-      holeSource = null;
-    }
+    const lagRoundDate =
+      resolveOpsRoundDate({
+        roundDate: round.round_date,
+        today: args.today,
+        liveCaptureToday:
+          scoreHolesPlayed > 0 &&
+          Boolean(
+            round.round_date &&
+              round.round_date > args.today
+          ),
+      }) ?? round.round_date;
 
-    const pace = computePace({
-      hoyoActual,
+    const lag = evaluateCaptureLag({
+      holesPlayed: scoreHolesPlayed,
+      lastCaptureTs: score?.lastCaptureTs ?? null,
+      firstCaptureTs: score?.firstCaptureTs ?? null,
       teeTimeISO: g.tee_time,
       actualStartISO: g.actual_start_at,
-      teeStartHole: startHole,
-      roundDate: round.round_date,
-      now,
+      startHole,
+      roundDate: lagRoundDate,
+      tournamentEndDate: args.tournamentEndDate,
+      tournamentStartDate: args.tournamentStartDate,
       perHoleMinutes: args.perHoleMinutes,
+      now,
+      matchplayCompleted: false,
+      matchplayResultText: null,
+      opsClosed: false,
     });
 
-    let status: LiveStatus;
-    let deltaMinutes: number | null = null;
-    if (hoyoActual == null) {
-      status = "sin_datos";
-    } else if (
-      pace.kind === "en_ritmo" ||
-      pace.kind === "adelantado" ||
-      pace.kind === "atrasado"
-    ) {
-      status = pace.kind;
-      deltaMinutes = pace.deltaMinutes;
-    } else {
-      status = "en_ritmo";
+    // Misma lectura que mini app marshal: captura vs ritmo esperado.
+    let hoyoActual =
+      lag.captureHole ?? score?.lastHole ?? lag.expectedHole;
+    let holeSource: "scores" | "gps" | null = lag.captureHole != null
+      ? "scores"
+      : score?.lastHole != null
+        ? "scores"
+        : lag.expectedHole != null
+          ? null
+          : null;
+    if (hoyoActual == null && !stale && gpsHole != null) {
+      hoyoActual = gpsHole;
+      holeSource = "gps";
     }
+
+    const status = captureLagToLiveStatus(lag);
+    const deltaMinutes = lag.paceDelayMinutes;
 
     const activeSinceMs =
       now.getTime() - ACTIVE_SOURCE_MINUTES * 60 * 1000;
@@ -367,14 +400,16 @@ export async function buildRitmoLiveGroupsForRound(
       STALE_MINUTES
     );
 
+    const paceLine = formatCaptureVsPaceLine({
+      holesPlayed: lag.holesPlayed,
+      captureHole: lag.captureHole,
+      expectedHole: lag.expectedHole,
+      expectedHoles: lag.expectedHoles,
+    });
     const detail =
-      holeSource === "scores" || holeSource === "gps"
-        ? pace.msg
-        : score && score.lastCaptureTs
-          ? "Captura iniciada, detectando avance…"
-          : gpsState === "none"
-            ? "Sin GPS ni escores aún — el caddie aún no captura y nadie comparte ubicación."
-            : "Sin ubicación ni captura todavía.";
+      lag.reason && lag.reason !== paceLine
+        ? `${paceLine} · ${lag.reason}`
+        : paceLine || lag.reason;
 
     return {
       id: g.id,

@@ -531,6 +531,12 @@ export function RitmoMap({
             border: none !important;
             pointer-events: none !important;
           }
+          .ritmo-map-host .leaflet-container,
+          .ritmo-map-host .leaflet-pane,
+          .ritmo-map-host .leaflet-layer,
+          .ritmo-map-host .leaflet-tile-pane {
+            pointer-events: none !important;
+          }
         `;
         document.head.appendChild(style);
       }
@@ -588,12 +594,16 @@ export function RitmoMap({
   return (
     <div
       ref={containerRef}
+      className="ritmo-map-host"
       style={{
         width: "100%",
         height: "100%",
         overflow: "hidden",
         position: "relative",
+        isolation: "isolate",
+        contain: "paint",
         background: "#000",
+        pointerEvents: "none",
       }}
     >
       {size.w > 0 && size.h > 0 && (

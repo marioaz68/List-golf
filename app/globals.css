@@ -269,3 +269,23 @@ select:focus {
 .yardage-club-confirm-blink {
   animation: yardage-club-confirm-blink 0.95s ease-in-out infinite;
 }
+
+/* Ritmo: Leaflet usa z-index 400–1000 y se sale del mapa; sin esto tapa
+   el menú izquierdo del backoffice y los botones del panel de grupos. */
+.ritmo-map-host {
+  isolation: isolate;
+  overflow: hidden;
+  contain: paint;
+  pointer-events: none;
+}
+.ritmo-map-host .leaflet-container,
+.ritmo-map-host .leaflet-pane,
+.ritmo-map-host .leaflet-layer,
+.ritmo-map-host .leaflet-tile-pane,
+.ritmo-map-host .leaflet-overlay-pane,
+.ritmo-map-host .leaflet-marker-pane,
+.ritmo-map-host .leaflet-tooltip-pane,
+.ritmo-map-host .leaflet-popup-pane,
+.ritmo-map-host .leaflet-control-container {
+  pointer-events: none !important;
+}
