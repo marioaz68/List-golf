@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "deploy:vercel:prod": "npx vercel deploy --prod --yes",
+    "deploy:vercel:prod": "npx vercel deploy --prod --yes --scope marioaz68s-projects",
     "deploy:vercel:staging": "npx vercel deploy --yes",
     "deploy:vercel:both": "bash scripts/deploy-staging-and-main.sh"
   },
