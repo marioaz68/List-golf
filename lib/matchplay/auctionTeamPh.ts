@@ -1,24 +1,31 @@
 import type { MatchPlayEntryRow, MatchPlayTeamRow } from "@/lib/matchplay/teamTypes";
 import { formatPlayerName } from "@/lib/matchplay/entryHi";
+import { effectivePlayingHandicapForEntry } from "@/lib/handicap/resolveTournamentEntryHandicap";
 
-/** Handicap de torneo (PH): override → playing_handicap guardado. */
+/**
+ * Handicap de torneo (PH) de un inscrito.
+ *
+ * Delega en `effectivePlayingHandicapForEntry`, el resolvedor canónico
+ * (override de comité → PH guardado → WHS en vivo). Aquí se pasa `null`
+ * como contexto: en la subasta no hay contexto de handicap cargado, así que
+ * el valor sale de la BD igual que en leaderboard, captura y tarjetas.
+ */
 export function entryTournamentPh(
   entry: MatchPlayEntryRow | null | undefined
 ): number | null {
   if (!entry) return null;
-  if (
-    entry.playing_handicap_override != null &&
-    Number.isFinite(Number(entry.playing_handicap_override))
-  ) {
-    return Math.round(Number(entry.playing_handicap_override));
-  }
-  if (
-    entry.playing_handicap != null &&
-    Number.isFinite(Number(entry.playing_handicap))
-  ) {
-    return Math.round(Number(entry.playing_handicap));
-  }
-  return null;
+  return effectivePlayingHandicapForEntry(
+    {
+      id: entry.id,
+      player_id: entry.player_id,
+      category_id: entry.category_id ?? null,
+      handicap_index: entry.handicap_index,
+      playing_handicap: entry.playing_handicap,
+      playing_handicap_override: entry.playing_handicap_override,
+      player: entry.player ?? null,
+    },
+    null
+  );
 }
 
 export function teamPlayerName(t: MatchPlayTeamRow, which: "a" | "b"): string {

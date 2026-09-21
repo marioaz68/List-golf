@@ -1,5 +1,8 @@
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
-import { resolveTournamentEntryHandicap } from "@/lib/handicap/resolveTournamentEntryHandicap";
+import {
+  effectivePlayingHandicapForEntry,
+  resolveTournamentEntryHandicap,
+} from "@/lib/handicap/resolveTournamentEntryHandicap";
 import { effectiveEntryHi, formatPlayerName } from "@/lib/matchplay/entryHi";
 import { assignTeeSet, type Player } from "@/lib/tee-assignment";
 import { checkTournamentAccess } from "@/lib/auth/requireTournamentAccess";
@@ -186,23 +189,24 @@ export default async function HandicapsByCategoryReport({
       },
     });
 
-    const calc = resolveTournamentEntryHandicap(
-      {
-        id: e.id,
-        player_id: e.player_id,
-        category_id: e.category_id,
-        handicap_index: e.handicap_index,
-        playing_handicap_override: e.playing_handicap_override,
-        tee_set_id_override: e.tee_set_id_override ?? null,
-        player: {
-          gender: e.player.gender,
-          birth_year: e.player.birth_year,
-          handicap_index: e.player.handicap_index,
-          handicap_torneo: e.player.handicap_torneo,
-        },
+    const entryForHcp = {
+      id: e.id,
+      player_id: e.player_id,
+      category_id: e.category_id,
+      handicap_index: e.handicap_index,
+      playing_handicap: e.playing_handicap,
+      playing_handicap_override: e.playing_handicap_override,
+      course_handicap: e.course_handicap,
+      tee_set_id_override: e.tee_set_id_override ?? null,
+      player: {
+        gender: e.player.gender,
+        birth_year: e.player.birth_year,
+        handicap_index: e.player.handicap_index,
+        handicap_torneo: e.player.handicap_torneo,
       },
-      ctx
-    );
+    };
+
+    const calc = resolveTournamentEntryHandicap(entryForHcp, ctx);
 
     const isOverride = e.playing_handicap_override != null;
 
@@ -248,19 +252,22 @@ export default async function HandicapsByCategoryReport({
       }
     }
 
+    // PH canónico: exactamente el mismo valor que usan leaderboard, captura,
+    // tarjetas impresas y hoja de subasta (override → guardado → WHS en vivo).
+    // Este reporte ya NO publica un número propio recalculado en memoria: si
+    // el recálculo difiere del guardado, la fila se marca como desalineada y
+    // se corrige con "Recalcular y guardar CH/PH".
+    const ph = effectivePlayingHandicapForEntry(entryForHcp, ctx);
+    const phRecalc = calc ? calc.playing_handicap : null;
+    const phStale =
+      !isOverride && ph != null && phRecalc != null && ph !== phRecalc;
+
     const ch = isOverride
       ? null
-      : calc
-        ? calc.course_handicap
-        : e.course_handicap != null
-          ? Number(e.course_handicap)
-          : null;
-    const ph = isOverride
-      ? Number(e.playing_handicap_override)
-      : calc
-        ? calc.playing_handicap
-        : e.playing_handicap != null
-          ? Number(e.playing_handicap)
+      : e.course_handicap != null
+        ? Number(e.course_handicap)
+        : calc
+          ? calc.course_handicap
           : null;
 
     const capApplied =
@@ -280,6 +287,8 @@ export default async function HandicapsByCategoryReport({
       hi_cap_source: capSource,
       ch,
       ph,
+      ph_recalc: phRecalc,
+      ph_stale: phStale,
       is_override: isOverride,
       allowance_pct:
         e.category_id != null

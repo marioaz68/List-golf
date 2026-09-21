@@ -1,10 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { loadTournamentHandicapContext } from "@/lib/handicap/loadTournamentHandicapContext";
-import {
-  resolveTournamentEntryHandicap,
-  type EntryForHandicap,
-} from "@/lib/handicap/resolveTournamentEntryHandicap";
 import { recomputeTournamentHandicaps } from "@/lib/handicap/recomputeTournamentHandicaps";
 import { loadCourseLayoutForTournament } from "@/lib/matchplay/loadCourseLayout";
 import { loadBracketView } from "@/lib/matchplay/loadBracketView";
@@ -422,6 +418,7 @@ function entryPhRow(entry: MatchPlayEntryRow): MatchEntryPhRow {
     handicap_index: entry.handicap_index,
     playing_handicap: entry.playing_handicap,
     playing_handicap_override: entry.playing_handicap_override,
+    tee_set_id_override: entry.tee_set_id_override ?? null,
     player: {
       gender: entry.player.gender,
       handicap_index: entry.player.handicap_index,
@@ -430,32 +427,23 @@ function entryPhRow(entry: MatchPlayEntryRow): MatchEntryPhRow {
   };
 }
 
-/** PH en tarjeta impresa: override de comité → WHS vivo con HI actual → PH guardado. */
+/**
+ * PH en la tarjeta impresa.
+ *
+ * MISMO orden canónico que leaderboard, captura, subasta y reportes:
+ * override de comité → PH guardado → WHS en vivo.
+ *
+ * Antes esta función anteponía el WHS en vivo al PH guardado, así que una
+ * tarjeta podía salir impresa con un golpe distinto al que mostraban el
+ * marcador en vivo y la hoja de subasta. Ya no hace falta: justo antes de
+ * armar las tarjetas se corre `recomputeTournamentHandicaps` (más abajo en
+ * este archivo), que persiste el PH con el HI vigente respetando overrides,
+ * de modo que "guardado" ya es el valor recién calculado.
+ */
 function phForPrintableCard(
   entry: MatchPlayEntryRow,
   handicapCtx: Awaited<ReturnType<typeof loadTournamentHandicapContext>>
 ): number | null {
-  if (entry.playing_handicap_override != null) {
-    return Math.round(Number(entry.playing_handicap_override));
-  }
-  const payload: EntryForHandicap = {
-    id: entry.id,
-    player_id: entry.player_id,
-    category_id: entry.category_id ?? null,
-    handicap_index: entry.handicap_index,
-    playing_handicap_override: null,
-    tee_set_id_override: entry.tee_set_id_override ?? null,
-    player: {
-      gender: entry.player.gender,
-      handicap_index: entry.player.handicap_index,
-      // Incluir handicap_torneo para que un HI recién actualizado
-      // en el jugador se refleje en la impresión aunque la entry
-      // aún no se haya sincronizado.
-      handicap_torneo: entry.player.handicap_torneo ?? null,
-    },
-  };
-  const calc = resolveTournamentEntryHandicap(payload, handicapCtx);
-  if (calc?.playing_handicap != null) return calc.playing_handicap;
   return effectivePhForMatchEntry(entryPhRow(entry), handicapCtx);
 }
 

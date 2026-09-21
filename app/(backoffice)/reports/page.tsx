@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { listAccessibleTournaments } from "@/lib/auth/listAccessibleTournaments";
 import HandicapsByCategoryReport from "./HandicapsByCategoryReport";
+import AuctionPairsReport from "./AuctionPairsReport";
 import { recomputeReportHandicaps } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ type ReportTab = {
 
 const REPORT_TABS: ReportTab[] = [
   { id: "handicaps", label: "Handicaps por categoría" },
+  { id: "subasta", label: "Parejas para subasta" },
 ];
 
 export default async function ReportsPage(props: {
@@ -64,7 +66,7 @@ export default async function ReportsPage(props: {
     redirect(`/reports?tournament_id=${effectiveId}&tab=${tab}`);
   }
   if (!tournamentId) {
-    redirect(`/reports?tournament_id=${effectiveId}`);
+    redirect(`/reports?tournament_id=${effectiveId}&tab=${tab}`);
   }
 
   const tournament = list.find((t) => t.id === effectiveId);
@@ -147,8 +149,10 @@ export default async function ReportsPage(props: {
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#0f172a] px-3 py-2 print:hidden">
             <div className="text-[11px] text-slate-300">
               <span className="font-semibold text-white">Persistencia.</span>{" "}
-              El reporte calcula CH/PH en vivo. Si quieres que la leaderboard y
-              la vista pública usen los mismos valores, guárdalos en BD.
+              El reporte muestra el CH/PH guardado: el mismo que usan la
+              leaderboard, la captura, las tarjetas y la subasta. Si un PH
+              aparece en rojo con <span className="font-semibold">≠</span>, el
+              WHS con el HI de hoy daría otro número: recalcula para alinearlo.
             </div>
             <form action={recomputeReportHandicaps}>
               <input type="hidden" name="tournament_id" value={effectiveId} />
@@ -174,6 +178,46 @@ export default async function ReportsPage(props: {
           ) : null}
 
           <HandicapsByCategoryReport
+            tournamentId={effectiveId}
+            tournamentName={tournament?.name ?? "Torneo"}
+          />
+        </>
+      ) : null}
+
+      {tab === "subasta" ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-white/10 bg-[#0f172a] px-3 py-2 print:hidden">
+            <div className="text-[11px] text-slate-300">
+              <span className="font-semibold text-white">Hoja de subasta.</span>{" "}
+              Nombres y handicaps de cada pareja, con el mismo PH que verán la
+              rifa, la proyección, el cuadro en vivo y las tarjetas. Si cambió
+              algún índice, recalcula antes de imprimir.
+            </div>
+            <form action={recomputeReportHandicaps}>
+              <input type="hidden" name="tournament_id" value={effectiveId} />
+              <input type="hidden" name="tab" value="subasta" />
+              <button
+                type="submit"
+                className="rounded border border-emerald-400/40 bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold text-emerald-100 hover:bg-emerald-500/30"
+              >
+                Recalcular y guardar CH/PH
+              </button>
+            </form>
+          </div>
+
+          {hcapMessage ? (
+            <p
+              className={`rounded-md border px-3 py-1.5 text-[11px] print:hidden ${
+                hcapStatus === "ok"
+                  ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                  : "border-amber-400/40 bg-amber-500/10 text-amber-200"
+              }`}
+            >
+              {hcapMessage}
+            </p>
+          ) : null}
+
+          <AuctionPairsReport
             tournamentId={effectiveId}
             tournamentName={tournament?.name ?? "Torneo"}
           />

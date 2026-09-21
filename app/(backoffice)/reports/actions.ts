@@ -15,6 +15,8 @@ export async function recomputeReportHandicaps(formData: FormData) {
   if (!tournament_id) {
     redirect("/reports");
   }
+  const requestedTab = String(formData.get("tab") ?? "").trim();
+  const tab = requestedTab === "subasta" ? "subasta" : "handicaps";
 
   await requireTournamentAccess({
     tournamentId: tournament_id,
@@ -26,12 +28,13 @@ export async function recomputeReportHandicaps(formData: FormData) {
 
   revalidatePath("/reports");
   revalidatePath("/scorecards-mp");
+  revalidatePath("/matchplay/auction");
   revalidatePath("/entries");
   revalidatePath("/matchplay");
 
   const params = new URLSearchParams({
     tournament_id,
-    tab: "handicaps",
+    tab,
     hcap_status: "ok",
     hcap_message: `Recalculados ${result.updated} de ${result.total} inscritos${
       result.skipped_no_tee > 0

@@ -12,7 +12,12 @@ export type HandicapReportRow = {
   hi_effective: number | null;
   hi_cap_source: "rule_max" | "rule_min" | null;
   ch: number | null;
+  /** PH canónico del torneo: el mismo que usan marcador, tarjetas y subasta. */
   ph: number | null;
+  /** Lo que daría el WHS recalculado ahora mismo (solo diagnóstico). */
+  ph_recalc?: number | null;
+  /** true si `ph_recalc` difiere del PH guardado: falta "Recalcular y guardar". */
+  ph_stale?: boolean;
   is_override: boolean;
   allowance_pct: number | null;
   tee: { code: string | null; name: string | null; color: string | null } | null;
@@ -131,20 +136,33 @@ function PhCell({ row }: { row: HandicapReportRow | null }) {
   if (!row) {
     return <span className="text-slate-500">—</span>;
   }
+  const stale = Boolean(row.ph_stale);
   return (
     <span
       className={`tabular-nums text-[13px] font-bold ${
-        row.is_override ? "text-amber-300" : "text-emerald-300"
+        row.is_override
+          ? "text-amber-300"
+          : stale
+            ? "text-rose-300"
+            : "text-emerald-300"
       }`}
       title={
         row.is_override
           ? "Override manual desde panel de match play"
-          : "Handicap del torneo (PH)"
+          : stale
+            ? `PH guardado ${numFmt(row.ph)} · el WHS con el HI de hoy daría ${numFmt(
+                row.ph_recalc ?? null
+              )}. Usa "Recalcular y guardar CH/PH" para alinearlo.`
+            : "Handicap del torneo (PH)"
       }
     >
       {numFmt(row.ph)}
       {row.is_override ? (
         <span className="ml-1 text-[8px] uppercase font-semibold">ovr</span>
+      ) : stale ? (
+        <span className="ml-1 text-[8px] uppercase font-semibold">
+          ≠{numFmt(row.ph_recalc ?? null)}
+        </span>
       ) : null}
     </span>
   );

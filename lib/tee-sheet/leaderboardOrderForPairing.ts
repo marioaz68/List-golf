@@ -274,14 +274,22 @@ export async function buildTeeSheetEntryOrderMap(
     holeScoresByRoundScoreId.set(row.round_score_id, current);
   }
 
+  // PH de torneo por jugador — MISMA convención que la vista pública
+  // (`app/torneos/[id]/page.tsx`): override de comité → PH guardado, y solo
+  // si no hay ninguno se cae al índice. Antes aquí se metía el HI crudo, así
+  // que el mismo desempate daba un resultado en el orden del tee sheet y otro
+  // en la leaderboard pública.
   const handicapByPlayerId = new Map<string, number | null>();
   for (const entry of filteredEntries) {
-    const h =
+    const hi =
       entry.handicap_index ??
       entry.player.handicap_torneo ??
       entry.player.handicap_index ??
       null;
-    handicapByPlayerId.set(entry.player_id, h == null ? null : Number(h));
+    const ph =
+      entry.playing_handicap_override ?? entry.playing_handicap ?? null;
+    const value = ph ?? hi;
+    handicapByPlayerId.set(entry.player_id, value == null ? null : Number(value));
   }
 
   const leaderboardBase = buildLiveLeaderboard({

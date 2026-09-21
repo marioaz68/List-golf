@@ -3,7 +3,7 @@ import type { CategoryCompetitionRule } from "./categoryCompetitionRules";
 import { isStablefordCategory } from "./categoryCompetitionRules";
 import { stablefordPoints } from "./competitionScoring";
 import {
-  playingHandicap,
+  effectivePlayingHandicapForScoring,
   strokeIndexForHole,
   strokesReceivedOnHole,
   type StrokeIndexByHole,
@@ -19,13 +19,27 @@ export type PerHoleCompetitionCell = {
   stablefordPoints: number | null;
 };
 
+/**
+ * Desglose hoyo por hoyo del detalle de una ronda.
+ *
+ * `resolvedPlayingHandicap` YA ES el PH de torneo del inscrito (override de
+ * comité → PH guardado → WHS), no el índice: es el mismo valor que la página
+ * pública mete en `handicapsByPlayerId` y el mismo que usan los totales en
+ * `PublicLeaderboardDetailTable`. Por eso NO se le vuelve a aplicar el % de
+ * la categoría: hacerlo lo bajaba otra vez al 80% y el desglose repartía
+ * menos golpes de los que descontaba el total en la misma pantalla.
+ */
 export function perHoleCompetitionBreakdown(
   detail: RoundDetail,
   rule: CategoryCompetitionRule,
-  handicapIndex: number | null | undefined,
+  resolvedPlayingHandicap: number | null | undefined,
   strokeIndexByHole?: StrokeIndexByHole
 ): PerHoleCompetitionCell[] {
-  const ph = playingHandicap(handicapIndex, rule.handicap_percentage);
+  const ph = effectivePlayingHandicapForScoring(
+    resolvedPlayingHandicap,
+    resolvedPlayingHandicap,
+    rule.handicap_percentage
+  );
   const useStableford = isStablefordCategory(rule);
   const useNet =
     useStableford ||
@@ -61,17 +75,17 @@ export function perHoleCompetitionBreakdown(
   });
 }
 
+/** Igual que arriba: el valor que entra ya es el PH de torneo resuelto. */
 export function formatPlayingHandicapSummary(
-  handicapIndex: number | null | undefined,
+  resolvedPlayingHandicap: number | null | undefined,
   handicapPercentage: number
 ): string {
-  const idx =
-    handicapIndex != null && Number.isFinite(handicapIndex)
-      ? handicapIndex
-      : null;
-  const ph = playingHandicap(handicapIndex, handicapPercentage);
-  if (idx == null) return `PH ${ph}`;
-  return `HCP ${idx} · PH ${ph} (${handicapPercentage}%)`;
+  const ph = effectivePlayingHandicapForScoring(
+    resolvedPlayingHandicap,
+    resolvedPlayingHandicap,
+    handicapPercentage
+  );
+  return `PH ${ph}`;
 }
 
 export type EntryHandicapCardInput = {
@@ -97,10 +111,18 @@ export function formatEntryHandicapCard(
     h.course_handicap != null && Number.isFinite(Number(h.course_handicap))
       ? Math.round(Number(h.course_handicap))
       : null;
-  const ph =
-    h.playing_handicap != null && Number.isFinite(Number(h.playing_handicap))
-      ? Math.round(Number(h.playing_handicap))
-      : null;
+  // Orden canónico: override de comité → PH guardado. Antes se leía solo
+  // `playing_handicap` y el override únicamente pintaba la etiqueta
+  // "(manual)", así que el carnet podía mostrar un golpe distinto al que
+  // usaban el marcador, la tarjeta y la subasta.
+  const phRaw =
+    h.playing_handicap_override != null &&
+    Number.isFinite(Number(h.playing_handicap_override))
+      ? Number(h.playing_handicap_override)
+      : h.playing_handicap != null && Number.isFinite(Number(h.playing_handicap))
+        ? Number(h.playing_handicap)
+        : null;
+  const ph = phRaw != null ? Math.round(phRaw) : null;
 
   if (hi == null && ch == null && ph == null) return null;
 

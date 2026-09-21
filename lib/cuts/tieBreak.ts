@@ -5,7 +5,7 @@ import {
 } from "@/lib/leaderboard/categoryCompetitionRules";
 import { stablefordPoints } from "@/lib/leaderboard/competitionScoring";
 import {
-  playingHandicap,
+  effectivePlayingHandicapForScoring,
   strokeIndexForHole,
   strokesReceivedOnHole,
   type StrokeIndexByHole,
@@ -69,9 +69,13 @@ export function segmentStrokeTotal(
 
   const basis = String(options?.basis ?? "gross").toLowerCase();
   const catRule = options?.catRule;
+  // `handicapIndex` ya viene resuelto como PH de torneo (override → PH
+  // guardado → WHS) desde `handicapByPlayerId`. No se le re-aplica el % de
+  // la categoría: eso lo dejaba al 80% del 80% y movía desempates y cortes.
   const ph =
     catRule != null
-      ? playingHandicap(
+      ? effectivePlayingHandicapForScoring(
+          options?.handicapIndex,
           options?.handicapIndex,
           catRule.handicap_percentage
         )
