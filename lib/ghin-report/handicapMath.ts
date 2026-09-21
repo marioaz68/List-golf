@@ -2,14 +2,19 @@
  * Handicap del reporte comité.
  *
  * CH_exact = HI × (Slope / 113) + (CR − Par)
- * CH 100 % (entero) = redondeo half-up de CH_exact
- * HP 80 % = redondeo half-up de (CH_exact × 0.80)
+ * CH (entero) = redondeo half-up de CH_exact   → el .5 sube, por debajo baja
+ * HP 80 %     = redondeo half-up de (CH × 0.80) → el % se aplica al CH ENTERO
  *
- * Importante: el 80 % se aplica al CH decimal, NO al CH ya redondeado.
- * Recalcular HP desde el CH entero introduce un golpe de error en varios casos.
+ * Es el método de las Rules of Handicapping 6.1: el allowance se aplica al
+ * Course Handicap ya redondeado, no al decimal. Coincide además con
+ * `computeWhsHandicap` (lib/handicap/whs.ts), que es de donde sale el
+ * `playing_handicap` que realmente se juega, se imprime en la tarjeta y se
+ * subasta. Antes aquí el 80 % se aplicaba al CH decimal y el "H torneo" que
+ * veían inscritos y el comité difería un golpe del que se jugaba en 21 de los
+ * 70 del Calcuta 2026.
  *
  * Validación comité: HI 25.6 en Blancas (70.7 / 127 / 72)
- *   → CH_exact ≈ 27.47 → CH 27 → HP round(21.98) = 22
+ *   → CH_exact ≈ 27.47 → CH 27 → HP round(27 × 0.80) = round(21.6) = 22
  */
 
 export function roundHalfUp(n: number): number {
@@ -50,7 +55,7 @@ export function playingHandicap80(
   return hiToChHpAtPct(hi, slope, courseRating, par, 80).hp;
 }
 
-/** HP = roundHalfUp(CH_exact × pct/100). El % se aplica al CH decimal. */
+/** HP = roundHalfUp(CH_entero × pct/100). El % se aplica al CH ya redondeado. */
 export function hiToChHpAtPct(
   hi: number,
   slope: number,
@@ -59,12 +64,13 @@ export function hiToChHpAtPct(
   allowancePct: number
 ): { chExact: number; ch: number; hp: number; allowancePct: number } {
   const chExact = courseHandicapExact(hi, slope, courseRating, par);
+  const ch = roundHalfUp(chExact);
   const pct =
     Number.isFinite(allowancePct) && allowancePct > 0 ? allowancePct : 100;
   return {
     chExact,
-    ch: roundHalfUp(chExact),
-    hp: roundHalfUp(chExact * (pct / 100)),
+    ch,
+    hp: roundHalfUp(ch * (pct / 100)),
     allowancePct: pct,
   };
 }
